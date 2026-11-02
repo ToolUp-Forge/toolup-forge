@@ -1,4 +1,4 @@
-module ToolUp.Platform.PrincipalRegistry
+module ToolUp.Platform.Compose.PrincipalRegistry
 
 open System
 open System.Text

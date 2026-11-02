@@ -68,7 +68,7 @@ module Rules =
             Rationale =
                 "A module that resolves services from the container by hand (`GetService`, `GetRequiredService`, `GetServices`, the keyed forms, or `HttpContext.RequestServices`) reaches substrate its declared seam grant never names, so the grant describes what the module declares rather than what it does."
             Sanctioned =
-                "Resolve inside a registration factory (the lambda handed to `AddSingleton` / `AddScoped` / `AddTransient` / `AddKeyed*` / `TryAdd*` / `AddHostedService`) and pass the dependency to the handler as a value. An `IServiceProvider` implementation delegating from its own `GetService` member is not flagged."
+                "Resolve inside a registration factory (the lambda handed to `AddSingleton` / `AddScoped` / `AddTransient` / `AddKeyed*` / `TryAdd*` / `AddHostedService` / `BackgroundUnit.create` / `Hosting.deferredJobs`) and pass the dependency to the handler as a value. An `IServiceProvider` implementation delegating from its own `GetService` member is not flagged."
             RuntimeHalf =
                 "The seam-aware service provider, which refuses a resolution outside the module's grant at runtime."
             Since = "0.28.0"

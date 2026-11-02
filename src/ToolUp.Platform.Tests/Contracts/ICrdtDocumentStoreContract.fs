@@ -9,6 +9,7 @@ open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Remoting.Json.SystemTextJson
+open ToolUp.Platform.Jobs
 
 // ─── Phase 535 — ICrdtDocumentStore conformance ──────────────────────
 //

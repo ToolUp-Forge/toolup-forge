@@ -2,14 +2,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>
-        <Description>ToolUp.RAG Server — chunking, default in-memory vector store + BM25 index, retrieval pipeline, ingestion + reembedding services, RAGPromptBuilder, RAGCompose. Depends on ToolUp.Platform.Server + ToolUp.AI.Server (RAGCompose wraps AIServerApp).</Description>
+        <Description>ToolUp.RAG Server — chunking, default in-memory vector store + BM25 index, retrieval pipeline, ingestion + reembedding services, RAGPromptBuilder, RAGCompose. Depends on ToolUp.Platform.Server + ToolUp.AI.Server (RAGCompose composes the AI tier).</Description>
         <PackageTags>fsharp;sdk;server;rag</PackageTags>
         <!-- Phase 11.B follow-up cross-tier cutover (2026-05-08): ToolUp.RAG
              Server carries the server-side RAG surface (chunking, vector
              stores, retrieval pipeline, ingestion + reembedding services,
              prompt builder, health handler, RAGCompose). Depends on
              ToolUp.RAG.Core for shared types and ToolUp.AI.Server (RAGCompose
-             wraps AIServerApp). -->
+             composes the AI tier). -->
     </PropertyGroup>
     <ItemGroup>
         <FrameworkReference Include="Microsoft.AspNetCore.App" />

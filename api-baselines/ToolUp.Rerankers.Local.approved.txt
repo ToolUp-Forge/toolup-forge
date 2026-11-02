@@ -4,7 +4,7 @@
 # removal is breaking and must be reviewed; an addition is non-breaking but must
 # still be folded into this file in the same PR.
 ToolUp.Rerankers.Local.LocalReranker (class)
-ToolUp.Rerankers.Local.LocalReranker.create(ToolUp.Rerankers.Local.LocalReranker+LocalRerankerOptions) : ToolUp.Platform.IReranker+IReranker
+ToolUp.Rerankers.Local.LocalReranker.create(ToolUp.Rerankers.Local.LocalReranker+LocalRerankerOptions) : ToolUp.Platform.Infra.IReranker+IReranker
 ToolUp.Rerankers.Local.LocalReranker+LocalRerankerOptions (class)
 ToolUp.Rerankers.Local.LocalReranker+LocalRerankerOptions..ctor(System.String, System.String, System.String, System.Int32, System.Int32, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Rerankers.Local.LocalReranker+LocalRerankerOptions.AttentionMaskName : System.String { get }

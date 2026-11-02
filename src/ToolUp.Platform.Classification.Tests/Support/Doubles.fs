@@ -5,6 +5,7 @@ module ToolUp.Platform.Classification.Tests.Support.Doubles
 
 open System.Collections.Concurrent
 open ToolUp.Platform
+open ToolUp.Platform.Audit
 
 /// In-memory `IAuditLog` recording every event for assertion.
 type InMemoryAuditLog() =

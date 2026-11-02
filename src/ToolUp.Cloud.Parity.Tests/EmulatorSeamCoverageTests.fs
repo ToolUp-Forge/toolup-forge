@@ -2,6 +2,7 @@ module ToolUp.Cloud.Parity.Tests.EmulatorSeamCoverageTests
 
 open Expecto
 open Microsoft.FSharp.Reflection
+open ToolUp.Platform.Audit
 
 // ─── Phase 193 — the emulator-seam ratchet ────────────────────────────
 //

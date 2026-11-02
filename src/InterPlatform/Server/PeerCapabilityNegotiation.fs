@@ -4,6 +4,7 @@
 module ToolUp.InterPlatform.PeerCapabilityNegotiation
 
 open Microsoft.FSharp.Reflection
+open ToolUp.Platform.Compose
 
 // ─── Phase 18d — sophisticated capability negotiation (logic) ────────
 //

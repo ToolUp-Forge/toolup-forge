@@ -1,4 +1,4 @@
-module ToolUp.Platform.ComposeRuntimeServices
+module ToolUp.Platform.Compose.ComposeRuntimeServices
 
 open Microsoft.AspNetCore.Builder
 open Microsoft.AspNetCore.DataProtection
@@ -7,10 +7,16 @@ open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.Auth
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.FileManagement
+open ToolUp.Platform.Files.FileManagement
 open ToolUp.Platform.FileProcessor
-open ToolUp.Platform.Tracing
+open ToolUp.Platform.Infra.Tracing
 open ToolUp.Platform.Usage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Usage
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Files
 
 // ─── compose phase: runtime services ─────────────────────────────────
 //
@@ -267,7 +273,7 @@ let assertCorsCredentialsCompatible (config: ServerConfig) (resolvedLogger: ILog
 /// composition root calls immediately before this — there is no
 /// warn-and-downgrade path here any more.
 let registerCors (services: IServiceCollection) (config: ServerConfig) (resolvedLogger: ILogger) : unit =
-    match config.Cors with
+    match config.SecurityPosture.Cors with
     | None -> ()
     | Some cors ->
         services.AddCors(fun options ->
@@ -333,10 +339,10 @@ let registerPlatformHttpClient (services: IServiceCollection) (auditLog: IAuditL
 
     resolvedLogger.Info(EgressPosture.describe (EgressEnforcement.current ()).Posture)
 
-/// Phase 9d — usage metering substrate. `NoUsageMetering` (default)
+/// Phase 9d — usage metering substrate. `FeatureMode.Disabled` (default)
 /// resolves `IUsageLog` / `ITeamQuotaPolicy` to no-ops and skips the
 /// flusher BackgroundService + the `IUsageQueryApi` route.
-/// `EnabledUsageMetering` registers the blob-backed defaults; the
+/// `FeatureMode.Enabled` registers the blob-backed defaults; the
 /// policy is registered as a factory because
 /// `BlobBackedTeamQuotaPolicy` needs both `IUsageLog` and
 /// `IConfigStore` (the latter is registered later in `compose`, so
@@ -363,8 +369,8 @@ let registerUsageMetering
 
     let (usageLogInstance: IUsageLog), (usageBatchFlusher: UsageLog.UsageBatchFlusher option) =
         match config.UsageMetering with
-        | NoUsageMetering -> NoOpUsageLog() :> IUsageLog, None
-        | EnabledUsageMetering ->
+        | FeatureMode.Disabled -> NoOpUsageLog() :> IUsageLog, None
+        | FeatureMode.Enabled ->
             let flusher =
                 new UsageLog.UsageBatchFlusher(
                     resolvedBlobStorage,
@@ -396,10 +402,10 @@ let registerUsageMetering
     | Some explicit -> services.AddSingleton<ITeamQuotaPolicy>(explicit) |> ignore
     | None ->
         match config.UsageMetering with
-        | NoUsageMetering ->
+        | FeatureMode.Disabled ->
             services.AddSingleton<ITeamQuotaPolicy>(NoOpTeamQuotaPolicy() :> ITeamQuotaPolicy)
             |> ignore
-        | EnabledUsageMetering ->
+        | FeatureMode.Enabled ->
             services.AddSingleton<ITeamQuotaPolicy>(
                 System.Func<System.IServiceProvider, ITeamQuotaPolicy>(fun sp ->
                     let cs = sp.GetService(typeof<IConfigStore>) :?> IConfigStore
@@ -413,23 +419,17 @@ let registerUsageMetering
     | Some flusher ->
         services.AddSingleton<UsageLog.UsageBatchFlusher>(flusher) |> ignore
 
-        // Phase 16 + 16a — gate flusher BackgroundService on the
-        // centralised matrix. ServerlessHost / WebOnly / DispatcherOnly
-        // skip; AllInOne / WorkerOnly register. Usage records still emit
-        // into the in-process queue (the `IUsageLog` singleton stays
-        // registered); a sibling worker silo drains the queue.
-        if ProcessProfileGate.shouldRegisterBackgroundService config UsageBatchFlusherSubsystem then
-            services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(
-                flusher :> Microsoft.Extensions.Hosting.IHostedService
-            )
-            |> ignore
+        // Shared work on a worker silo. Usage records still emit into the
+        // in-process queue (the `IUsageLog` singleton stays registered).
+        Hosting.register services (BackgroundUnit.ofInstance "usage-batch-flusher" SharedWork flusher)
+        |> ignore
 
     usageLogInstance
 
-/// Phase 9e — `IMetricsSink`. `NoMetricsEndpoint` (default) registers
+/// Phase 9e — `IMetricsSink`. `FeatureMode.Disabled` (default) registers
 /// `NoOpMetricsSink` so emission sites in middleware / scheduler / SSE
 /// manager / FileManagement never get `null` when they resolve the
-/// service. `EnabledMetricsEndpoint` registers `PrometheusMetricsSink`
+/// service. `FeatureMode.Enabled` registers `PrometheusMetricsSink`
 /// pre-loaded with the SDK standard metrics. Companion sinks
 /// (OpenTelemetry exporter etc.) self-register an additional
 /// `IMetricsSink` alongside this default; multiple sinks compose
@@ -442,39 +442,46 @@ let registerUsageMetering
 ///
 /// Returns the resolved `IMetricsSink` instance so the outbound
 /// `IRateLimiter` constructor downstream picks up the same instance.
-let registerMetricsAndObservability
-    (services: IServiceCollection)
+/// The deployment's metrics sink, built before the audit log that counts
+/// its write failures through it: the Prometheus default when the
+/// endpoint is enabled (fanned out to any companion sinks), `NoOpMetricsSink`
+/// otherwise. Builds; registers nothing (`registerMetricsAndObservability`).
+let buildMetricsSink
     (config: ServerConfig)
     (companionMetricsSinks: Metrics.IMetricsSink list)
     (moduleMetricRegistrations: Metrics.MetricRegistration list)
-    (resolvedActivitySink: IActivitySink)
     (resolvedLogger: ILogger)
+    : Metrics.IMetricsSink * Metrics.PrometheusMetricsSink option =
+    match config.Observability.MetricsEndpoint with
+    | FeatureMode.Disabled -> Metrics.NoOpMetricsSink() :> Metrics.IMetricsSink, None
+    | FeatureMode.Enabled ->
+        let promSink =
+            Metrics.PrometheusMetricsSink(
+                config.Observability.MetricsSink,
+                Metrics.StandardMetrics.registrations @ moduleMetricRegistrations,
+                resolvedLogger
+            )
+
+        // Companion sinks (e.g. OtelMetricsSink) fold into a
+        // FanOutMetricsSink alongside the in-process default so a
+        // single emission dispatches to every sink. The Prometheus
+        // sink is always at the head of the list so /metrics keeps
+        // returning current values even if a companion sink fails.
+        let consumerSink: Metrics.IMetricsSink =
+            if List.isEmpty companionMetricsSinks then
+                promSink :> Metrics.IMetricsSink
+            else
+                let sinks = (promSink :> Metrics.IMetricsSink) :: companionMetricsSinks
+                Metrics.FanOutMetricsSink(sinks, resolvedLogger) :> Metrics.IMetricsSink
+
+        consumerSink, Some promSink
+
+
+let registerMetricsAndObservability
+    (services: IServiceCollection)
+    (resolvedMetricsSink: Metrics.IMetricsSink, prometheusSink: Metrics.PrometheusMetricsSink option)
+    (resolvedActivitySink: IActivitySink)
     : Metrics.IMetricsSink =
-
-    let (resolvedMetricsSink: Metrics.IMetricsSink), (prometheusSink: Metrics.PrometheusMetricsSink option) =
-        match config.MetricsEndpoint with
-        | NoMetricsEndpoint -> Metrics.NoOpMetricsSink() :> Metrics.IMetricsSink, None
-        | EnabledMetricsEndpoint ->
-            let promSink =
-                Metrics.PrometheusMetricsSink(
-                    config.MetricsSink,
-                    Metrics.StandardMetrics.registrations @ moduleMetricRegistrations,
-                    resolvedLogger
-                )
-
-            // Companion sinks (e.g. OtelMetricsSink) fold into a
-            // FanOutMetricsSink alongside the in-process default so a
-            // single emission dispatches to every sink. The Prometheus
-            // sink is always at the head of the list so /metrics keeps
-            // returning current values even if a companion sink fails.
-            let consumerSink: Metrics.IMetricsSink =
-                if List.isEmpty companionMetricsSinks then
-                    promSink :> Metrics.IMetricsSink
-                else
-                    let sinks = (promSink :> Metrics.IMetricsSink) :: companionMetricsSinks
-                    Metrics.FanOutMetricsSink(sinks, resolvedLogger) :> Metrics.IMetricsSink
-
-            consumerSink, Some promSink
 
     services.AddSingleton<Metrics.IMetricsSink>(resolvedMetricsSink) |> ignore
 
@@ -504,15 +511,15 @@ let registerMetricsAndObservability
 /// `NoOpUsageLog` / `NoOpAuditLog` / `NoOpMetricsSink` pattern so
 /// emission sites resolve the service unconditionally and the call
 /// elides at zero cost when the deployment hasn't opted in.
-/// `NoRateLimiter` (the default) registers `NoOpRateLimiter`;
-/// `EnabledRateLimiter` registers the SDK-shipped sliding-window
+/// `FeatureMode.Disabled` (the default) registers `NoOpRateLimiter`;
+/// `FeatureMode.Enabled` registers the SDK-shipped sliding-window
 /// default fed with the compose-time `rateLimitDescriptors`,
 /// `auditLog`, `resolvedMetricsSink`, and the configured
 /// `SlowRateLimitThreshold`.
 ///
-/// Populates `rateLimiterCell` so the webhook dispatcher's per-attempt
-/// `Wait` calls (registered upstream with the cell's lookup) see the
-/// configured limiter instead of the pass-through default.
+/// Binds `rateLimiterSlot`, so the webhook dispatcher's per-attempt
+/// `Wait` calls (built at an earlier stage, holding the slot) see the
+/// configured limiter instead of the dormant pass-through.
 ///
 /// Returns the resolved `IRateLimiter` so downstream registrations
 /// (e.g. the OAuth refresher in `ComposeJobs`) can capture it.
@@ -523,13 +530,13 @@ let registerOutboundRateLimiter
     (resolvedMetricsSink: Metrics.IMetricsSink)
     (auditLog: IAuditLog)
     (resolvedLogger: ILogger)
-    (rateLimiterCell: IRateLimiter ref)
+    (rateLimiterSlot: LateBound<IRateLimiter>)
     : IRateLimiter =
 
     let rateLimiter: IRateLimiter =
         match config.RateLimiter with
-        | NoRateLimiter -> NoOpRateLimiter() :> IRateLimiter
-        | EnabledRateLimiter ->
+        | FeatureMode.Disabled -> NoOpRateLimiter() :> IRateLimiter
+        | FeatureMode.Enabled ->
             InProcessRateLimiter(
                 rateLimitDescriptors,
                 resolvedMetricsSink,
@@ -539,7 +546,7 @@ let registerOutboundRateLimiter
             )
             :> IRateLimiter
 
-    rateLimiterCell.Value <- rateLimiter
+    rateLimiterSlot.Bind rateLimiter
 
     services.AddSingleton<IRateLimiter>(rateLimiter) |> ignore
 
@@ -559,9 +566,8 @@ let registerOutboundRateLimiter
 /// `auditLog` and `resolvedLogger` (both local instances above) so
 /// the tracker uses the same audit-log impl wired through DI.
 ///
-/// Phase 16 + 16a — gate the tracker BackgroundService on the
-/// centralised matrix. ServerlessHost / WebOnly / DispatcherOnly skip;
-/// AllInOne / WorkerOnly register. The `/health` + `/ready` HTTP
+/// Shared work: AllInOne / WorkerOnly run the tracker; ServerlessHost /
+/// WebOnly / DispatcherOnly skip it. The `/health` + `/ready` HTTP
 /// endpoints still aggregate registered `IHealthCheck` instances
 /// on-demand; only the periodic-poll + audit-emit BackgroundService
 /// is gated.
@@ -571,25 +577,21 @@ let registerHealthStateTracker
     (auditLog: IAuditLog)
     (resolvedLogger: ILogger)
     : unit =
-    if
-        config.HealthStateTracking
-        && ProcessProfileGate.shouldRegisterBackgroundService config HealthStateTrackerSubsystem
-    then
-        services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(
-            System.Func<System.IServiceProvider, Microsoft.Extensions.Hosting.IHostedService>(fun sp ->
+    if config.Observability.HealthStateTracking then
+        Hosting.register
+            services
+            (BackgroundUnit.create "health-state-tracker" SharedWork (fun sp ->
                 new HealthStateTracker.HealthStateTrackerService(sp, auditLog, resolvedLogger)
-                :> Microsoft.Extensions.Hosting.IHostedService)
-        )
+                :> Microsoft.Extensions.Hosting.IHostedService))
         |> ignore
 
 /// Phase 856.C — the remoting audit queue and its drain, which take the
 /// default remoting audit write off the response path (`RemotingAuditQueue`
 /// in Api.fs says what that changes and what it never loses).
 ///
-/// NOT a `BackgroundSubsystem`, and deliberately not gated by that matrix:
-/// the queue is in-memory and fed by THIS process's HTTP requests, so it
-/// must drain wherever HTTP is served — `WebOnly` included, where a sibling
-/// worker could never reach it. Composed when an audit log is (nothing to
+/// Process-local: the queue is in-memory and fed by THIS process's HTTP
+/// requests, so it must drain wherever HTTP is served — `WebOnly` included,
+/// where a sibling worker could never reach it. Composed when an audit log is (nothing to
 /// write otherwise, GP 13), when the failure policy is not `RefuseAction`
 /// (whose caller must see the failure, which a write after the response
 /// cannot give), on a `KestrelHost` (a serverless host keeps no drain
@@ -601,32 +603,32 @@ let internal registerRemotingAuditQueue
     (resolvedLogger: ILogger)
     : unit =
     let composed =
-        config.AuditLog = EnabledAuditLog
+        config.AuditLog = FeatureMode.Enabled
         && config.AuditFailurePolicy <> RefuseAction
-        && config.ServerlessHost = KestrelHost
+        && Hosting.admitsPlacement config ProcessLocal false
         && ProcessProfileGate.shouldRegisterHttpPipeline config
 
     if composed then
         let queue = RemotingAuditQueue(RemotingAuditQueue.DefaultCapacity)
         services.AddSingleton<RemotingAuditQueue>(queue) |> ignore
 
-        services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(
-            System.Func<System.IServiceProvider, Microsoft.Extensions.Hosting.IHostedService>(fun sp ->
+        Hosting.register
+            services
+            (BackgroundUnit.create "remoting-audit-drain" ProcessLocal (fun sp ->
                 let metrics () =
                     match sp.GetService(typeof<Metrics.IMetricsSink>) with
                     | :? Metrics.IMetricsSink as sink -> sink
                     | _ -> Metrics.NoOpMetricsSink() :> Metrics.IMetricsSink
 
                 new RemotingAuditDrainService.RemotingAuditDrainService(queue, resolvedLogger, metrics)
-                :> Microsoft.Extensions.Hosting.IHostedService)
-        )
+                :> Microsoft.Extensions.Hosting.IHostedService))
         |> ignore
 
 /// Phase 178 — opt-in alert-rule / threshold engine BackgroundService.
-/// Hosted only when `config.AlertRules` is non-empty (GP 13 — an empty
-/// set registers no service and pays no tick cost) AND the ProcessProfile
-/// matrix admits it (`AllInOne` / `WorkerOnly` run it; `WebOnly` /
-/// `DispatcherOnly` / `ServerlessHost` skip). The `notificationChannel`
+/// Hosted only when `config.Observability.AlertRules` is non-empty (GP 13 — an empty
+/// set registers no service and pays no tick cost); shared work, so
+/// `AllInOne` / `WorkerOnly` run it and `WebOnly` / `DispatcherOnly` /
+/// `ServerlessHost` skip it. The `notificationChannel`
 /// passed here is the compose-resolved (decorated) channel, so `ViaSink`
 /// deliveries route through `DispatchingNotificationChannel` to the
 /// registered `INotificationSink`. Registered as a factory so the
@@ -638,22 +640,24 @@ let registerAlertRuleEngine
     (notificationChannel: INotificationChannel)
     (resolvedLogger: ILogger)
     : unit =
-    if
-        not (List.isEmpty config.AlertRules)
-        && ProcessProfileGate.shouldRegisterBackgroundService config AlertRuleEngineSubsystem
-    then
-        services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(
-            System.Func<System.IServiceProvider, Microsoft.Extensions.Hosting.IHostedService>(fun sp ->
-                new AlertRuleEngine.AlertRuleEngineService(sp, notificationChannel, config.AlertRules, resolvedLogger)
-                :> Microsoft.Extensions.Hosting.IHostedService)
-        )
+    if not (List.isEmpty config.Observability.AlertRules) then
+        Hosting.register
+            services
+            (BackgroundUnit.create "alert-rule-engine" SharedWork (fun sp ->
+                new AlertRuleEngine.AlertRuleEngineService(
+                    sp,
+                    notificationChannel,
+                    config.Observability.AlertRules,
+                    resolvedLogger
+                )
+                :> Microsoft.Extensions.Hosting.IHostedService))
         |> ignore
 
 /// Phase 9 + Phase 56 — rate-limit middleware substrates. Phase 9 is a
 /// single fixed-window team-keyed policy (opt-in via
 /// `ServerConfig.RateLimit`); Phase 56 is a portable per-route-policy
 /// substrate with pluggable storage (opt-in via
-/// `ServerConfig.RateLimitStore`). The two can coexist — Phase 56
+/// `ServerConfig.Stores.RateLimitStore`). The two can coexist — Phase 56
 /// middleware runs FIRST so a route-specific cap short-circuits before
 /// the Phase 9 limiter consumes a token.
 let registerRateLimitMiddleware (services: IServiceCollection) (config: ServerConfig) : unit =
@@ -683,7 +687,7 @@ let registerRateLimitMiddleware (services: IServiceCollection) (config: ServerCo
     // `ComposeExtensions.ServiceConfig` (or a sub-companion's
     // composition extension) registers the external impl as the
     // `IRateLimitStore` singleton.
-    match config.RateLimitStore with
+    match config.Stores.RateLimitStore with
     | NoRateLimitStore -> ()
     | ToolUp.Platform.RateLimitStoreMode.InMemoryRateLimitStore ->
         services.AddSingleton<IRateLimitStore>(InMemoryRateLimitStore.create ())
@@ -698,8 +702,8 @@ let registerRateLimitMiddleware (services: IServiceCollection) (config: ServerCo
         ()
 
 /// Build the immutable `FileManagementRuntime` consumed by every
-/// `SessionFileStore` instance. Drains companion-registered post-save
-/// hooks (RAG vectorisation in particular), folds in the
+/// `SessionFileStore` instance. Folds in every `PostSaveHook` registered
+/// in DI (RAG vectorisation in particular), the
 /// compose-resolved logger / quota / usage-log, and registers the
 /// record as a DI singleton. Replaces the prior pattern of four
 /// module-level mutables that `compose` set via `configure*` setters.
@@ -742,7 +746,7 @@ let registerFileManagementRuntime
             | false, _ -> FileManagement.FileManagementRuntime.empty.MaxFileBytes
 
     let fileManagementRuntime: FileManagement.FileManagementRuntime = {
-        PostSaveHooks = FileManagement.drainPendingPostSaveHooks ()
+        PostSaveHooks = []
         PostSaveHooksLogger = Some resolvedLogger
         QuotaResolver = quotaResolver
         UsageLog = Some usageLogInstance
@@ -759,7 +763,15 @@ let registerFileManagementRuntime
         AuditLog = Some auditLog
     }
 
-    services.AddSingleton<FileManagement.FileManagementRuntime>(fileManagementRuntime)
+    // The post-save hooks are the `PostSaveHook`s registered in DI, which a
+    // companion builds from the running app's services, so the runtime is
+    // completed by the container.
+    services.AddSingleton<FileManagement.FileManagementRuntime>(
+        System.Func<System.IServiceProvider, FileManagement.FileManagementRuntime>(fun sp -> {
+            fileManagementRuntime with
+                PostSaveHooks = sp.GetServices<FileManagement.PostSaveHook>() |> Seq.map _.Run |> List.ofSeq
+        })
+    )
     |> ignore
 
     FileManagement.configureEvictionMinutes config.EphemeralStoreEvictionMinutes

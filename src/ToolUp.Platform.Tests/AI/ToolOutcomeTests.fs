@@ -28,6 +28,8 @@ open ToolUp.Platform
 open ToolUp.Platform.AI
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.AI
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── The loop harness ────────────────────────────────────────────────
 

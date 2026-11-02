@@ -1,4 +1,4 @@
-module ToolUp.Platform.SmokeTestHandler
+module ToolUp.Platform.Config.SmokeTestHandler
 
 open System
 open System.Diagnostics
@@ -9,6 +9,7 @@ open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.SmokeTests
+open ToolUp.Platform.Infra
 
 // ─── Smoke-test endpoint handler (Phase 9o) ──────────────────────────
 //
@@ -28,7 +29,7 @@ open ToolUp.Platform.SmokeTests
 // comparison defeats timing side-channels.
 //
 // Release-build live, not `#if DEBUG`-gated. Mounted in release
-// builds when `ServerConfig.SmokeTest = EnabledSmokeTest` AND the
+// builds when `ServerConfig.SmokeTest = FeatureMode.Enabled` AND the
 // token is configured — exactly the deploy-pipeline contract.
 //
 // Audit emission: writes directly to `IEventStore` rather than
@@ -213,5 +214,5 @@ let smokeHandler: HttpHandler =
     }
 
 /// Routes table. Mounted by `compose` only when
-/// `ServerConfig.SmokeTest = EnabledSmokeTest`.
+/// `ServerConfig.SmokeTest = FeatureMode.Enabled`.
 let routes: HttpHandler list = [ GET >=> route "/api/_internal/smoke" >=> smokeHandler ]

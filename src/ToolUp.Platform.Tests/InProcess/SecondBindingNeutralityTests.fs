@@ -3,10 +3,13 @@ module ToolUp.Platform.Tests.InProcess.SecondBindingNeutralityTests
 open System.IO
 open Expecto
 open ToolUp.Platform
-open ToolUp.Platform.PermissionStore
+open ToolUp.Platform.Scope.PermissionStore
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.PublicRendering
 open Toolup.Samples.ToyTreeBinding
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 202 — second in-tree reference tree-binding (neutrality) ───
 //

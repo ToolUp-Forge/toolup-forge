@@ -4,18 +4,24 @@ open Expecto
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
 let private cfg (surfaces: SurfaceProfile list) (requireHttps: bool) (headers: Map<string, string>) : ServerConfig = {
     ServerConfig.defaults with
         Surfaces = surfaces
-        RequireHttps = requireHttps
-        // Phase 16d — `TrustForwardedHeaders` flipped default-on. The
-        // `cfg` helper pins it false so the `requireHttps` parameter
-        // is the sole knob controlling the internet-facing heuristic
-        // for these tests; the proxied-topology case below inline-
-        // builds its own `ServerConfig` and doesn't use this helper.
-        TrustForwardedHeaders = false
-        SecurityHeaders = headers
+        SecurityPosture = {
+            ServerConfig.defaults.SecurityPosture with
+                RequireHttps = requireHttps
+                // Phase 16d — `TrustForwardedHeaders` flipped default-on. The
+                // `cfg` helper pins it false so the `requireHttps` parameter
+                // is the sole knob controlling the internet-facing heuristic
+                // for these tests; the proxied-topology case below inline-
+                // builds its own `ServerConfig` and doesn't use this helper.
+                TrustForwardedHeaders = false
+                SecurityHeaders = headers
+        }
 }
 
 let private validate (config: ServerConfig) : ValidationResult =
@@ -42,9 +48,12 @@ let tests =
             let proxied = {
                 ServerConfig.defaults with
                     Surfaces = Surfaces.individual
-                    RequireHttps = false
-                    TrustForwardedHeaders = true
-                    SecurityHeaders = Map.empty
+                    SecurityPosture = {
+                        ServerConfig.defaults.SecurityPosture with
+                            RequireHttps = false
+                            TrustForwardedHeaders = true
+                            SecurityHeaders = Map.empty
+                    }
             }
 
             match validate proxied with
@@ -101,10 +110,13 @@ let tests =
             let hardened = {
                 ServerConfig.defaults with
                     Surfaces = Surfaces.individual
-                    RequireHttps = true
-                    TrustForwardedHeaders = false
-                    SecurityHeaders = Map.empty
-                    SecurityHardening = DefaultSecurityHardening
+                    SecurityPosture = {
+                        ServerConfig.defaults.SecurityPosture with
+                            RequireHttps = true
+                            TrustForwardedHeaders = false
+                            SecurityHeaders = Map.empty
+                            SecurityHardening = DefaultSecurityHardening
+                    }
             }
 
             Expect.equal (validate hardened) Ok "hardening stamps a CSP → no remaining gap"

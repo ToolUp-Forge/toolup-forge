@@ -15,6 +15,11 @@ open ToolUp.Platform.Grounding
 open ToolUp.Facts
 open ToolUp.FactStores.Postgres
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 888 — PostgresFactStore ───────────────────────────────────
 //
@@ -90,8 +95,14 @@ let private composed (replicaCount: int) (knobs: ServerApp -> ServerApp) : Servi
             ServerApp.empty with
                 Config = {
                     ServerConfig.defaults with
-                        FactStore = EnabledFactStore
-                        ReplicaCount = replicaCount
+                        Stores = {
+                            ServerConfig.defaults.Stores with
+                                FactStore = FeatureMode.Enabled
+                        }
+                        MultiInstance = {
+                            ServerConfig.defaults.MultiInstance with
+                                ReplicaCount = replicaCount
+                        }
                 }
         }
         |> knobs
@@ -166,9 +177,9 @@ let private migrationSeed (store: IFactStore) (scope: string) = async {
                     draftFor (sprintf "m%03d" i) "revenue" (sprintf "r%03d-%d" i round) (decimal (i * round))
         ]
 
-        match! store.AssertBatch(scope, drafts) with
+        match! store.AssertBatch(TestScope.resolved scope, drafts) with
         | Ok _ -> ()
-        | Error e -> failtestf "seed round %d refused: %s" round e
+        | Error e -> failtestf "seed round %d refused: %s" round (FactStoreError.describe e)
 
     let competing = [
         for i in 1..20 ->
@@ -183,9 +194,9 @@ let private migrationSeed (store: IFactStore) (scope: string) = async {
     ]
 
     for batch in [ competing; visits ] do
-        match! store.AssertBatch(scope, batch) with
+        match! store.AssertBatch(TestScope.resolved scope, batch) with
         | Ok _ -> ()
-        | Error e -> failtestf "seed refused: %s" e
+        | Error e -> failtestf "seed refused: %s" (FactStoreError.describe e)
 }
 
 [<Literal>]
@@ -210,7 +221,10 @@ let private byTransactionTime (facts: Fact list) =
         | c -> c)
 
 let private visibleIds (store: IFactStore) (scope: string) (t: DateTime) = async {
-    let! facts = store.Query(scope, { FactQuery.all with AsOf = Some t })
+    let! facts =
+        store.Query(TestScope.resolved scope, { FactQuery.all with AsOf = Some t })
+        |> TestScope.ok
+
     return facts |> List.map _.FactId |> List.sort
 }
 
@@ -289,12 +303,12 @@ let private migrationOfflineTests =
             do! migrationSeed source scope
 
             let good = draftFor "x" "revenue" "x1" 1m
-            let! written = (source :> IFactStore).Assert(scope, good)
+            let! written = (source :> IFactStore).Assert(TestScope.resolved scope, good)
 
             let fact =
                 match written with
                 | Ok f -> f
-                | Error e -> failtestf "assert refused: %s" e
+                | Error e -> failtestf "assert refused: %s" (FactStoreError.describe e)
 
             // One blob that is not JSON, and one that holds a fact under
             // another fact's name.
@@ -320,19 +334,22 @@ let private migrationOfflineTests =
             let! listed =
                 (source :> IFactStore)
                     .Query(
-                        scope,
+                        TestScope.resolved scope,
                         {
                             FactQuery.all with
                                 IncludeSuperseded = true
                         }
                     )
-                |> Async.Catch
 
             match listed with
-            | Choice2Of2(FactReadFailed(FactUnparseable(name, _))) ->
-                Expect.equal name "_facts/garbage.json" "the query names the blob it could not parse"
-            | Choice2Of2 other -> failtestf "the query failed untyped: %O" other
-            | Choice1Of2 facts -> failtestf "the query answered over a garbage blob with %d facts" facts.Length
+            | Error(FactStoreError.StorageFault(_, reason)) ->
+                Expect.stringContains
+                    reason
+                    "fact blob '_facts/garbage.json' does not parse"
+                    "the query names the blob it could not parse"
+            | Error other ->
+                failtestf "the query failed as something other than a storage fault: %s" (FactStoreError.describe other)
+            | Ok facts -> failtestf "the query answered over a garbage blob with %d facts" facts.Length
         }
 
         testCaseAsync "the source check passes a valid fact base and names each fact of a broken one"
@@ -600,13 +617,16 @@ let offlineTests =
             | other -> failtestf "expected one guard, got %d" other.Length
         }
 
-        testCase "withFactStoreImplementation under NoFactStore changes nothing"
+        testCase "withFactStoreImplementation under FeatureMode.Disabled changes nothing"
         <| fun _ ->
             let app = {
                 ServerApp.empty with
                     Config = {
                         ServerConfig.defaults with
-                            FactStore = NoFactStore
+                            Stores = {
+                                ServerConfig.defaults.Stores with
+                                    FactStore = FeatureMode.Disabled
+                            }
                     }
             }
 
@@ -897,13 +917,13 @@ let private aggregateTests
         let written = ResizeArray<Fact>()
 
         for draft in aggregateSeed do
-            let! expected = expectedStore.Assert(expectedScope, draft)
-            let! actual = actualStore.Assert(actualScope, draft)
+            let! expected = expectedStore.Assert(TestScope.resolved expectedScope, draft)
+            let! actual = actualStore.Assert(TestScope.resolved actualScope, draft)
             Expect.equal actual expected "both stores wrote the same fact"
 
             match actual with
             | Ok f -> written.Add f
-            | Error e -> failtestf "seed refused: %s" e
+            | Error e -> failtestf "seed refused: %s" (FactStoreError.describe e)
 
         // Instants inside the seed, so a replay sees earlier heads, a
         // superseded predecessor and a freshness window part-elapsed.
@@ -911,8 +931,8 @@ let private aggregateTests
         let mutable freshAndStale = false
 
         for label, query in aggregateQueries instants do
-            let! expected = expectedStore.QueryPopulation(expectedScope, query)
-            let! actual = actualStore.QueryPopulation(actualScope, query)
+            let! expected = expectedStore.QueryPopulation(TestScope.resolved expectedScope, query)
+            let! actual = actualStore.QueryPopulation(TestScope.resolved actualScope, query)
             Expect.equal actual expected (sprintf "population '%s' answers identically" label)
 
             match actual with
@@ -928,7 +948,7 @@ let private aggregateTests
                 Ordering = Descending
         }
 
-        match! actualStore.QueryPopulation(actualScope, precise) with
+        match! actualStore.QueryPopulation(TestScope.resolved actualScope, precise) with
         | Ok r ->
             Expect.equal r.Stats.ComparableCount 20 "the twenty precise members"
             // The fold's rounded sum over twenty, not the exact one's.
@@ -936,7 +956,7 @@ let private aggregateTests
                 r.Stats.Mean
                 (Some(20.000000000000000000000000001m / 20m))
                 "the mean is the left-to-right decimal fold's"
-        | Error e -> failtestf "precise refused: %s" e
+        | Error e -> failtestf "precise refused: %s" (FactStoreError.describe e)
     }
 
 let private migrationLiveTests (dataSource: NpgsqlDataSource) =
@@ -1030,9 +1050,9 @@ let private migrationLiveTests (dataSource: NpgsqlDataSource) =
                         later.Value)
 
             for f in byTransactionTime export.Facts do
-                match! (asserted :> IFactStore).Assert(scope, draftOf f) with
+                match! (asserted :> IFactStore).Assert(TestScope.resolved scope, draftOf f) with
                 | Ok copy -> Expect.equal copy.FactId f.FactId "the content address survives an Assert copy"
-                | Error e -> failtestf "assert copy refused: %s" e
+                | Error e -> failtestf "assert copy refused: %s" (FactStoreError.describe e)
 
             // Between the first and second versions of every chain.
             let t = (byTransactionTime export.Facts |> List.item 199).AsOf
@@ -1333,6 +1353,221 @@ let private migrationLiveTests (dataSource: NpgsqlDataSource) =
 
             Expect.equal raised.Scopes.Head.Outcome Verified "a scope at the bound migrates"
         }
+
+        testCaseAsync "a row's lineage hash is the hash of the fact it stores, whatever the period's kind"
+        <| async {
+            let scope = newScope ()
+            let target = targetOn TestTable (InMemoryEventStore.InMemoryEventStore())
+
+            // A Local period is written as its UTC instant, so it reads back
+            // as Utc: its kind changes on the round trip. An Unspecified
+            // period is read as UTC on every machine.
+            let utc = q2
+
+            let local = {
+                q2 with
+                    From = q2.From.ToLocalTime()
+                    To = q2.To.ToLocalTime()
+            }
+
+            let unspecified = {
+                q2 with
+                    From = DateTime.SpecifyKind(q2.From, DateTimeKind.Unspecified)
+                    To = DateTime.SpecifyKind(q2.To, DateTimeKind.Unspecified)
+            }
+
+            for member', period in [ "local", local; "unspecified", unspecified ] do
+                let draft = {
+                    draftFor member' "revenue" "k1" 1m with
+                        Period = period
+                }
+
+                match! (target :> IFactStore).Assert(TestScope.resolved scope, draft) with
+                | Error e -> failtestf "assert refused: %s" (FactStoreError.describe e)
+                | Ok f ->
+                    let! stored =
+                        scalar
+                            (sprintf "SELECT lineage_hash FROM %s WHERE scope = @scope AND fact_id = @id" TestTable)
+                            (fun cmd ->
+                                bindScope scope cmd
+                                cmd.Parameters.AddWithValue("id", f.FactId) |> ignore)
+
+                    let expected =
+                        Sha256.hexOfUtf8 (Fact.lineageKey draft.Subject draft.Metric utc draft.Method)
+
+                    Expect.equal
+                        (string stored)
+                        expected
+                        (sprintf "the %s period's row hashes as its UTC instant" member')
+        }
+
+        testCaseAsync
+            "the verification recomputes each lineage hash from the stored row, so one keyed an hour off fails"
+        <| async {
+            let source, _ = blobSource ()
+            let scope = newScope ()
+            do! migrationSeed source scope
+            let log = InMemoryEventStore.InMemoryEventStore()
+            let target = targetOn TestTable log
+            let! migrated = FactStoreMigration.migrate source target log options [ scope ]
+            Expect.isTrue migrated.Passed "the clean copy verifies"
+
+            let! export = source.ExportScope scope
+            let f = export.Facts |> List.find (fun f -> f.Metric = MetricRef "visits")
+
+            let correct =
+                Sha256.hexOfUtf8 (Fact.lineageKey f.Subject f.Metric f.Period f.Method)
+
+            // The key a machine an hour ahead of UTC computed for the same fact.
+            let shifted =
+                Sha256.hexOfUtf8 (
+                    Fact.lineageKey
+                        f.Subject
+                        f.Metric
+                        {
+                            f.Period with
+                                From = f.Period.From.AddHours -1.0
+                                To = f.Period.To.AddHours -1.0
+                        }
+                        f.Method
+                )
+
+            let! _ =
+                execute
+                    (sprintf
+                        "UPDATE %s SET lineage_hash = @shifted WHERE scope = @scope AND lineage_hash = @correct"
+                        TestTable)
+                    (fun cmd ->
+                        bindScope scope cmd
+                        cmd.Parameters.AddWithValue("shifted", shifted) |> ignore
+                        cmd.Parameters.AddWithValue("correct", correct) |> ignore)
+
+            let! report = FactStoreMigration.verify source target options [ scope ]
+            let s = report.Scopes.Head
+            Expect.equal s.Outcome VerificationFailed "the verification fails"
+
+            Expect.contains
+                s.Differences
+                (ColumnDiffers(f.FactId, "lineage_hash", correct, shifted))
+                "the shifted lineage hash is named against the recomputed one"
+        }
+
+        testCaseAsync "--ids moves lineage hashes keyed an hour off back onto the recomputed ones, once"
+        <| async {
+            let source, _ = blobSource ()
+            let scope = newScope ()
+            do! migrationSeed source scope
+            let log = InMemoryEventStore.InMemoryEventStore()
+            let target = targetOn TestTable log
+            let! migrated = FactStoreMigration.migrate source target log options [ scope ]
+            Expect.isTrue migrated.Passed "the clean copy verifies"
+
+            // Every lineage keyed as a machine an hour ahead of UTC would have.
+            let! export = source.ExportScope scope
+
+            let lineages =
+                export.Facts
+                |> List.map (fun f ->
+                    let shiftedPeriod = {
+                        f.Period with
+                            From = f.Period.From.AddHours -1.0
+                            To = f.Period.To.AddHours -1.0
+                    }
+
+                    Sha256.hexOfUtf8 (Fact.lineageKey f.Subject f.Metric f.Period f.Method),
+                    Sha256.hexOfUtf8 (Fact.lineageKey f.Subject f.Metric shiftedPeriod f.Method))
+                |> List.distinct
+
+            for correct, shifted in lineages do
+                let! _ =
+                    execute
+                        (sprintf
+                            "UPDATE %s SET lineage_hash = @shifted WHERE scope = @scope AND lineage_hash = @correct"
+                            TestTable)
+                        (fun cmd ->
+                            bindScope scope cmd
+                            cmd.Parameters.AddWithValue("shifted", shifted) |> ignore
+                            cmd.Parameters.AddWithValue("correct", correct) |> ignore)
+
+                ()
+
+            let! broken = FactStoreMigration.verify source target options [ scope ]
+            Expect.isFalse broken.Passed "the shifted copy does not verify"
+
+            let request (dryRun: bool) = {
+                Mode = FactsMigrateMode.Ids dryRun
+                Scopes = FactsMigrateScopes.Named [ scope ]
+                Options = options
+            }
+
+            let! planned, plannedCode = FactsMigrateTask.run source (Some target) log (request true) [ scope ]
+            Expect.equal plannedCode 0 planned
+
+            Expect.stringContains
+                planned
+                (sprintf "would move the lineage hash of %d rows in %d lineages" MigrationSeedFacts lineages.Length)
+                "the dry run plans every row"
+
+            let! still = FactStoreMigration.verify source target options [ scope ]
+            Expect.isFalse still.Passed "the dry run wrote nothing"
+
+            let! moved, movedCode = FactsMigrateTask.run source (Some target) log (request false) [ scope ]
+            Expect.equal movedCode 0 moved
+
+            Expect.stringContains
+                moved
+                (sprintf "moved the lineage hash of %d rows in %d lineages" MigrationSeedFacts lineages.Length)
+                "every row moved"
+
+            let! repaired = FactStoreMigration.verify source target options [ scope ]
+            Expect.isTrue repaired.Passed (FactStoreMigration.render repaired)
+
+            let! again, againCode = FactsMigrateTask.run source (Some target) log (request false) [ scope ]
+            Expect.equal againCode 0 again
+            Expect.stringContains again "moved the lineage hash of 0 rows in 0 lineages" "a second run plans nothing"
+        }
+
+        testCaseAsync "a re-key that would merge two stored lineages is refused and writes nothing"
+        <| async {
+            let source, _ = blobSource ()
+            let scope = newScope ()
+            do! migrationSeed source scope
+            let log = InMemoryEventStore.InMemoryEventStore()
+            let target = targetOn TestTable log
+            let! migrated = FactStoreMigration.migrate source target log options [ scope ]
+            Expect.isTrue migrated.Passed "the clean copy verifies"
+
+            // One lineage stored under two hashes: a superseded version moved
+            // off its head's hash. Re-keying it would merge it into the
+            // lineage its head already holds.
+            let! export = source.ExportScope scope
+
+            let superseded =
+                export.Facts
+                |> List.find (fun f -> export.Facts |> List.exists (fun g -> g.Supersedes = Some f.FactId))
+
+            let! _ =
+                execute
+                    (sprintf "UPDATE %s SET lineage_hash = 'stale' WHERE scope = @scope AND fact_id = @id" TestTable)
+                    (fun cmd ->
+                        bindScope scope cmd
+                        cmd.Parameters.AddWithValue("id", superseded.FactId) |> ignore)
+
+            let! before = rowsOf TestTable scope
+
+            let request = {
+                Mode = FactsMigrateMode.Ids false
+                Scopes = FactsMigrateScopes.Named [ scope ]
+                Options = options
+            }
+
+            let! text, code = FactsMigrateTask.run source (Some target) log request [ scope ]
+            Expect.equal code 1 text
+            Expect.stringContains text "postgres lineages REFUSED" "the refusal is named"
+            Expect.stringContains text "would merge two stored lineages" "the refusal says why"
+            let! after = rowsOf TestTable scope
+            Expect.equal after before "nothing was written"
+        }
     ]
 
 let private liveTests (conn: string) =
@@ -1366,6 +1601,28 @@ let private liveTests (conn: string) =
         // BOTH contract packs, unmodified — the same packs BlobFactStore binds.
         IFactStoreContract.tests "PostgresFactStore" factory
         IFactStoreContract.populationRegistryTests "PostgresFactStore" registryFactory
+
+        // The read-fault law: a store over a table of its own, dropped from
+        // under it once seeded.
+        IFactStoreContract.readFaultTests "PostgresFactStore"
+        <| fun () ->
+            let table = "toolup_facts_fault_" + Guid.NewGuid().ToString("N").Substring(0, 12)
+
+            let target =
+                PostgresFactStore.createWithDataSource
+                    dataSource
+                    { liveOptions with Table = table }
+                    (events ())
+                    None
+                    (fun () -> DateTime.UtcNow)
+
+            {
+                IFactStoreContract.Executor = target
+                InScope = newScope ()
+                Fault = fun () -> execute (sprintf "DROP TABLE %s CASCADE" table) |> Async.RunSynchronously
+                Point = None
+                Population = None
+            }
 
         // The disclosure-taint index pack, the one BlobFactStore binds.
         IDisclosureTaintIndexSourceContract.tests "PostgresFactStore"
@@ -1440,11 +1697,15 @@ let private liveTests (conn: string) =
 
                 let scope = newScope ()
 
-                let! _ = s.Assert(scope, draftFor "uk" "revenue" "h1" 1m)
-                let! _ = s.Assert(scope, draftFor "uk" "revenue" "h2" 2m)
-                let! _ = s.Assert(scope, draftFor "uk" "revenue" "h2" 2m)
+                let! _ = s.Assert(TestScope.resolved scope, draftFor "uk" "revenue" "h1" 1m)
+                let! _ = s.Assert(TestScope.resolved scope, draftFor "uk" "revenue" "h2" 2m)
+                let! _ = s.Assert(TestScope.resolved scope, draftFor "uk" "revenue" "h2" 2m)
 
-                let! _ = s.AssertBatch(scope, [ draftFor "fr" "revenue" "f1" 3m; draftFor "de" "revenue" "d1" 4m ])
+                let! _ =
+                    s.AssertBatch(
+                        TestScope.resolved scope,
+                        [ draftFor "fr" "revenue" "f1" 3m; draftFor "de" "revenue" "d1" 4m ]
+                    )
 
                 let! rows = (log :> IEventStore).ReadBySource(scope, FactEvents.SourceModule)
                 let kinds = rows |> List.map _.EventType |> List.countBy id |> Map.ofList
@@ -1472,7 +1733,12 @@ let private liveTests (conn: string) =
                     for i in 1..8 ->
                         async {
                             let s = store None (fun () -> DateTime.UtcNow) :> IFactStore
-                            return! s.Assert(scope, draftFor "uk" "revenue" (sprintf "race-%d" i) (decimal i))
+
+                            return!
+                                s.Assert(
+                                    TestScope.resolved scope,
+                                    draftFor "uk" "revenue" (sprintf "race-%d" i) (decimal i)
+                                )
                         }
                 ]
 
@@ -1481,13 +1747,14 @@ let private liveTests (conn: string) =
                 for r in results do
                     match r with
                     | Ok _ -> ()
-                    | Error e -> failtestf "a racing writer failed instead of re-deriving: %s" e
+                    | Error e ->
+                        failtestf "a racing writer failed instead of re-deriving: %s" (FactStoreError.describe e)
 
                 let s = store None (fun () -> DateTime.UtcNow) :> IFactStore
 
                 let! heads =
                     s.Query(
-                        scope,
+                        TestScope.resolved scope,
                         FactQuery.forSubjectMetric
                             {
                                 Hierarchy = "geography"
@@ -1495,10 +1762,14 @@ let private liveTests (conn: string) =
                             }
                             (MetricRef "revenue")
                     )
+                    |> TestScope.ok
 
                 Expect.hasLength heads 1 "one current head"
 
-                let! chain = s.QuerySupersessionChain(scope, heads.Head.FactId)
+                let! chain =
+                    s.QuerySupersessionChain(TestScope.resolved scope, heads.Head.FactId)
+                    |> TestScope.ok
+
                 Expect.hasLength chain 8 "every writer's fact is in the lineage"
 
                 let edges =
@@ -1519,16 +1790,18 @@ let private liveTests (conn: string) =
                 let mutable now = base'
                 let s = store None (fun () -> now) :> IFactStore
 
-                let! first = s.Assert(scope, draftFor "uk" "revenue" "f1" 1m)
+                let! first = s.Assert(TestScope.resolved scope, draftFor "uk" "revenue" "f1" 1m)
                 now <- base'.AddDays 10.0
-                let! second = s.Assert(scope, draftFor "uk" "revenue" "f2" 2m)
+                let! second = s.Assert(TestScope.resolved scope, draftFor "uk" "revenue" "f2" 2m)
                 now <- base'.AddDays 1.0
 
                 match first, second with
                 | Ok f1, Ok f2 ->
                     Expect.equal f2.Supersedes (Some f1.FactId) "the second supersedes the first"
 
-                    let! current = s.Query(scope, FactQuery.forSubjectMetric f1.Subject f1.Metric)
+                    let! current =
+                        s.Query(TestScope.resolved scope, FactQuery.forSubjectMetric f1.Subject f1.Metric)
+                        |> TestScope.ok
 
                     Expect.equal
                         (current |> List.map _.FactId)
@@ -1537,7 +1810,7 @@ let private liveTests (conn: string) =
 
                     let! population =
                         s.QueryPopulation(
-                            scope,
+                            TestScope.resolved scope,
                             {
                                 PopulationQuery.create (MetricRef "revenue") "geography" with
                                     Ordering = Descending
@@ -1546,10 +1819,14 @@ let private liveTests (conn: string) =
 
                     match population with
                     | Ok p -> Expect.equal (p.Ranked |> List.map _.FactId) [ f1.FactId ] "the population read agrees"
-                    | Error e -> failtestf "population refused: %s" e
+                    | Error e -> failtestf "population refused: %s" (FactStoreError.describe e)
 
                     let! atSecond =
-                        s.Query(scope, FactQuery.forSubjectMetric f1.Subject f1.Metric |> FactQuery.asOf f2.AsOf)
+                        s.Query(
+                            TestScope.resolved scope,
+                            FactQuery.forSubjectMetric f1.Subject f1.Metric |> FactQuery.asOf f2.AsOf
+                        )
+                        |> TestScope.ok
 
                     Expect.equal (atSecond |> List.map _.FactId) [ f2.FactId ] "as of the second, the second"
                 | other -> failtestf "seed failed: %A" other
@@ -1618,11 +1895,11 @@ let private liveTests (conn: string) =
                             draftFor (sprintf "s%06d" i) "load" (sprintf "h%06d" i) (decimal (i % 1000))
                     ]
 
-                    let! r = facts.AssertBatch(scope, drafts)
+                    let! r = facts.AssertBatch(TestScope.resolved scope, drafts)
 
                     match r with
                     | Ok receipt -> Expect.equal receipt.AssertedCount drafts.Length "the chunk was written"
-                    | Error e -> failtestf "seed chunk at %d failed: %s" start e
+                    | Error e -> failtestf "seed chunk at %d failed: %s" start (FactStoreError.describe e)
 
                 // A supersession inside the population, so the read has
                 // history to skip.
@@ -1631,13 +1908,13 @@ let private liveTests (conn: string) =
                     Path = [ "s150000" ]
                 }
 
-                let! _ = facts.Assert(scope, draftFor "s150000" "load" "h150000-v2" 7m)
+                let! _ = facts.Assert(TestScope.resolved scope, draftFor "s150000" "load" "h150000-v2" 7m)
                 do! execute (sprintf "ANALYZE %s" TestTable)
 
                 let query = FactQuery.forSubjectMetric target (MetricRef "load")
                 let! plan = s.ExplainQuery(scope, query)
                 let touched, sequential = touchedRows plan
-                let! answer = facts.Query(scope, query)
+                let! answer = facts.Query(TestScope.resolved scope, query) |> TestScope.ok
 
                 printfn
                     "Phase 888 scale: %d subjects in one scope — a subject-and-metric point read touched %d rows (%s)"
@@ -1699,9 +1976,9 @@ let private liveTests (conn: string) =
                 ]
 
                 for chunk in List.chunkBySize 5_000 drafts do
-                    match! facts.AssertBatch(scope, chunk) with
+                    match! facts.AssertBatch(TestScope.resolved scope, chunk) with
                     | Ok _ -> ()
-                    | Error e -> failtestf "seed failed: %s" e
+                    | Error e -> failtestf "seed failed: %s" (FactStoreError.describe e)
 
                 // Statistics and the visibility map taken BEFORE the
                 // supersessions below, so the read is planned on a table
@@ -1711,9 +1988,9 @@ let private liveTests (conn: string) =
                 let latest = HistoryWeeks - 1
 
                 for subject in 0..99 do
-                    match! facts.Assert(scope, historyDraft subject latest "revised") with
+                    match! facts.Assert(TestScope.resolved scope, historyDraft subject latest "revised") with
                     | Ok _ -> ()
-                    | Error e -> failtestf "revision failed: %s" e
+                    | Error e -> failtestf "revision failed: %s" (FactStoreError.describe e)
 
                 let query = {
                     PopulationQuery.create (MetricRef "history") "geography" with
@@ -1725,7 +2002,7 @@ let private liveTests (conn: string) =
                 let touched, sequential = touchedRows plan
                 let scans = scanNodes plan
 
-                let! answer = facts.QueryPopulation(scope, query)
+                let! answer = facts.QueryPopulation(TestScope.resolved scope, query)
 
                 printfn
                     "Phase 962: %d subjects x %d weeks, 100 revised after ANALYZE — the latest-week summary touched %d rows; scans %A"
@@ -1736,7 +2013,7 @@ let private liveTests (conn: string) =
 
                 match answer with
                 | Ok result -> Expect.equal result.Stats.SubjectCount HistorySubjects "one head per subject"
-                | Error e -> failtestf "population read refused: %s" e
+                | Error e -> failtestf "population read refused: %s" (FactStoreError.describe e)
 
                 Expect.isFalse sequential "no sequential scan"
 
@@ -1770,11 +2047,11 @@ let private liveTests (conn: string) =
                      |> List.contains ("Index Only Scan", table + "_population_idx"))
                     "the path-filtered heads are read index-only from the covering population index"
 
-                match! facts.QueryPopulation(scope, filtered) with
+                match! facts.QueryPopulation(TestScope.resolved scope, filtered) with
                 | Ok result ->
                     Expect.equal result.Stats.SubjectCount 2 "h0001 and h0003; h0002 is excluded"
                     Expect.equal result.Stats.FactCount 2 "the summary counts the matched heads only"
-                | Error e -> failtestf "path-filtered population read refused: %s" e
+                | Error e -> failtestf "path-filtered population read refused: %s" (FactStoreError.describe e)
             }
         ]
     ]

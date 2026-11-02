@@ -5,6 +5,9 @@ open System.Security.Cryptography
 open System.Text
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 1089 — `Sha256.hex` and `CanonicalFrame` ──────────────────
 //

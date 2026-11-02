@@ -9,6 +9,10 @@ open ToolUp.Elmish
 open ToolUp.Platform
 open ToolUp.Platform.FileProcessor
 open ToolUp.Platform.VectorisationTypes
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 581 — module-surface descriptor ────────────────────────────
 //

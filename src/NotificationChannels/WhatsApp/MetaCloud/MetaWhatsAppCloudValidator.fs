@@ -10,6 +10,7 @@ open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
 open ToolUp.Platform.NotificationChannels.WhatsApp.MetaCloud
 open ToolUp.Platform.Secrets
+open ToolUp.Platform.Config
 
 // ─── Phase 6f.C — Meta WhatsApp Cloud preflight ──────────────────────
 //

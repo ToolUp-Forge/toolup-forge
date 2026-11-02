@@ -10,9 +10,13 @@ open Microsoft.Extensions.DependencyInjection
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.NotificationChannel
-open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Config.NotificationChannel
+open ToolUp.Platform.Config.TeamManagement
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 529 — audit-trail viewer handler ──────────────────────────
 //
@@ -34,7 +38,7 @@ open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 //      audit log writes bursts, `OccurredAt` alone is not unique, and a
 //      cursor over a non-total order silently drops or repeats rows at
 //      the page boundary.
-//   4. **The `NoAuditLog` short-circuit.** The handler reads the event
+//   4. **The `FeatureMode.Disabled` short-circuit.** The handler reads the event
 //      store rather than `IAuditLog`, so the pairing with
 //      `ServerConfig.AuditLog` is restored by hand — and a hand-restored
 //      property is one a test has to hold, because nothing about the
@@ -69,7 +73,7 @@ let private freshTeamStore () =
 let private buildApi
     (accessContext: AccessContext)
     (teamStore: ITeamStore option)
-    (auditLogMode: AuditLogMode)
+    (auditLogMode: FeatureMode)
     (events: ModuleEvent list)
     : IAuditViewApi =
     let services = ServiceCollection()
@@ -121,7 +125,9 @@ let roleGateTests =
             let ctx = AccessContext.unrestricted (AnonymousSession "sess-1")
 
             let api =
-                buildApi ctx None EnabledAuditLog [ auditEvent "_platform" 1.0 "UserLoggedIn" """{"UserId":"alice"}""" ]
+                buildApi ctx None FeatureMode.Enabled [
+                    auditEvent "_platform" 1.0 "UserLoggedIn" """{"UserId":"alice"}"""
+                ]
 
             let! queried = api.Query AuditViewApi.defaultQuery
             let! types = api.ListEventTypes()
@@ -141,7 +147,7 @@ let roleGateTests =
             let! accessContext, teamStore = teamContextWith "team-a" "bob" Member
 
             let api =
-                buildApi accessContext (Some teamStore) EnabledAuditLog [
+                buildApi accessContext (Some teamStore) FeatureMode.Enabled [
                     auditEvent "team-a" 1.0 "UserLoggedIn" """{"UserId":"bob"}"""
                 ]
 
@@ -164,7 +170,7 @@ let roleGateTests =
                 let! accessContext, teamStore = teamContextWith "team-a" "alice" role
 
                 let api =
-                    buildApi accessContext (Some teamStore) EnabledAuditLog [
+                    buildApi accessContext (Some teamStore) FeatureMode.Enabled [
                         auditEvent "team-a" 1.0 "UserLoggedIn" """{"UserId":"alice"}"""
                     ]
 
@@ -181,7 +187,7 @@ let roleGateTests =
             let accessContext = AccessContext.unrestricted (AuthenticatedUser "carol")
 
             let api =
-                buildApi accessContext None EnabledAuditLog [
+                buildApi accessContext None FeatureMode.Enabled [
                     auditEvent "carol" 1.0 "UserLoggedIn" """{"UserId":"carol"}"""
                 ]
 
@@ -201,7 +207,7 @@ let scopeIsolationTests =
             let! accessContext, teamStore = teamContextWith "team-a" "alice" Owner
 
             let api =
-                buildApi accessContext (Some teamStore) EnabledAuditLog [
+                buildApi accessContext (Some teamStore) FeatureMode.Enabled [
                     auditEvent "team-a" 1.0 "UserLoggedIn" """{"UserId":"alice"}"""
                     auditEvent "team-b" 2.0 "UserLoggedIn" """{"UserId":"mallory"}"""
                     auditEvent "team-b" 3.0 "TeamCreated" """{"ChangedBy":"mallory"}"""
@@ -230,7 +236,7 @@ let scopeIsolationTests =
             let! accessContext, teamStore = teamContextWith "team-a" "alice" Owner
 
             let api =
-                buildApi accessContext (Some teamStore) EnabledAuditLog [
+                buildApi accessContext (Some teamStore) FeatureMode.Enabled [
                     auditEvent "team-a" 1.0 "UserLoggedIn" """{"UserId":"alice"}"""
                     auditEvent "team-b" 2.0 "UserLoggedIn" """{"UserId":"mallory"}"""
                 ]
@@ -258,7 +264,7 @@ let filterTests =
         testCaseAsync "the page is newest-first"
         <| async {
             let accessContext = AccessContext.unrestricted (AuthenticatedUser "alice")
-            let api = buildApi accessContext None EnabledAuditLog (trailOf "alice")
+            let api = buildApi accessContext None FeatureMode.Enabled (trailOf "alice")
 
             let! queried = api.Query AuditViewApi.defaultQuery
             let page = expectOk "Query" queried
@@ -270,7 +276,7 @@ let filterTests =
         testCaseAsync "the time window is inclusive at both ends"
         <| async {
             let accessContext = AccessContext.unrestricted (AuthenticatedUser "alice")
-            let api = buildApi accessContext None EnabledAuditLog (trailOf "alice")
+            let api = buildApi accessContext None FeatureMode.Enabled (trailOf "alice")
 
             let! queried =
                 api.Query {
@@ -286,7 +292,7 @@ let filterTests =
         testCaseAsync "the event-type filter is exact, not a prefix"
         <| async {
             let accessContext = AccessContext.unrestricted (AuthenticatedUser "alice")
-            let api = buildApi accessContext None EnabledAuditLog (trailOf "alice")
+            let api = buildApi accessContext None FeatureMode.Enabled (trailOf "alice")
 
             let! queried =
                 api.Query {
@@ -303,7 +309,7 @@ let filterTests =
         testCaseAsync "the actor filter matches a case-insensitive substring of the projected actor"
         <| async {
             let accessContext = AccessContext.unrestricted (AuthenticatedUser "alice")
-            let api = buildApi accessContext None EnabledAuditLog (trailOf "alice")
+            let api = buildApi accessContext None FeatureMode.Enabled (trailOf "alice")
 
             let! queried =
                 api.Query {
@@ -327,7 +333,7 @@ let filterTests =
             let accessContext = AccessContext.unrestricted (AuthenticatedUser "alice")
 
             let api =
-                buildApi accessContext None EnabledAuditLog [
+                buildApi accessContext None FeatureMode.Enabled [
                     auditEvent "alice" 1.0 "OrphanSweepCompleted" """{"Reclaimed":4}"""
                 ]
 
@@ -353,7 +359,7 @@ let filterTests =
             let accessContext = AccessContext.unrestricted (AuthenticatedUser "alice")
 
             let api =
-                buildApi accessContext None EnabledAuditLog [
+                buildApi accessContext None FeatureMode.Enabled [
                     auditEvent "alice" 1.0 "FileUploaded" Erasure.TombstoneMarker
                 ]
 
@@ -378,7 +384,7 @@ let pagingTests =
                 [ 1 .. (AuditViewApi.MaxPageSize + 10) ]
                 |> List.map (fun i -> auditEvent "alice" (float i) "UserLoggedIn" """{"UserId":"alice"}""")
 
-            let api = buildApi accessContext None EnabledAuditLog events
+            let api = buildApi accessContext None FeatureMode.Enabled events
 
             let! queried =
                 api.Query {
@@ -401,7 +407,7 @@ let pagingTests =
                 [ 1..7 ]
                 |> List.map (fun i -> auditEvent "alice" (float i) "UserLoggedIn" """{"UserId":"alice"}""")
 
-            let api = buildApi accessContext None EnabledAuditLog events
+            let api = buildApi accessContext None FeatureMode.Enabled events
 
             let rec walk (cursor: string option) (seen: Guid list) = async {
                 let! queried =
@@ -437,7 +443,7 @@ let pagingTests =
                 [ 1..5 ]
                 |> List.map (fun _ -> auditEvent "alice" 5.0 "UserLoggedIn" """{"UserId":"alice"}""")
 
-            let api = buildApi accessContext None EnabledAuditLog events
+            let api = buildApi accessContext None FeatureMode.Enabled events
 
             let! first =
                 api.Query {
@@ -468,7 +474,7 @@ let pagingTests =
         testCaseAsync "the last page terminates rather than offering an empty next"
         <| async {
             let accessContext = AccessContext.unrestricted (AuthenticatedUser "alice")
-            let api = buildApi accessContext None EnabledAuditLog (trailOf "alice")
+            let api = buildApi accessContext None FeatureMode.Enabled (trailOf "alice")
 
             let! queried =
                 api.Query {
@@ -487,7 +493,7 @@ let pagingTests =
             // that looks like the continuation and is not — a page an
             // operator would read as the older half of the trail.
             let accessContext = AccessContext.unrestricted (AuthenticatedUser "alice")
-            let api = buildApi accessContext None EnabledAuditLog (trailOf "alice")
+            let api = buildApi accessContext None FeatureMode.Enabled (trailOf "alice")
 
             let! queried =
                 api.Query {
@@ -500,7 +506,7 @@ let pagingTests =
         }
     ]
 
-// ─── 4. Export + the NoAuditLog pairing ───────────────────────────────
+// ─── 4. Export + the FeatureMode.Disabled pairing ───────────────────────────────
 
 let exportTests =
     testList "Phase 529 — audit-view CSV export" [
@@ -513,7 +519,7 @@ let exportTests =
                 [ 1..5 ]
                 |> List.map (fun i -> auditEvent "alice" (float i) "UserLoggedIn" """{"UserId":"alice"}""")
 
-            let api = buildApi accessContext None EnabledAuditLog events
+            let api = buildApi accessContext None FeatureMode.Enabled events
 
             let! exported =
                 api.ExportCsv {
@@ -535,7 +541,7 @@ let exportTests =
         testCaseAsync "the export honours the filters"
         <| async {
             let accessContext = AccessContext.unrestricted (AuthenticatedUser "alice")
-            let api = buildApi accessContext None EnabledAuditLog (trailOf "alice")
+            let api = buildApi accessContext None FeatureMode.Enabled (trailOf "alice")
 
             let! exported =
                 api.ExportCsv {
@@ -559,7 +565,7 @@ let exportTests =
             let accessContext = AccessContext.unrestricted (AuthenticatedUser "alice")
 
             let api =
-                buildApi accessContext None EnabledAuditLog [
+                buildApi accessContext None FeatureMode.Enabled [
                     auditEvent "alice" 1.0 "TeamCreated" """{"ChangedBy":"alice","Name":"A, B \"and\" C"}"""
                 ]
 
@@ -578,14 +584,14 @@ let exportTests =
 let substratePairingTests =
     testList "Phase 529 — audit-view / ServerConfig.AuditLog pairing" [
 
-        testCaseAsync "NoAuditLog yields nothing, even over a store that still holds rows"
+        testCaseAsync "FeatureMode.Disabled yields nothing, even over a store that still holds rows"
         <| async {
             // The handler reads the event store, so residue from before
             // the trail was switched off is physically present. A
             // deployment that has turned the audit log off has said it
             // keeps no trail, and the viewer must agree with it.
             let accessContext = AccessContext.unrestricted (AuthenticatedUser "alice")
-            let api = buildApi accessContext None NoAuditLog (trailOf "alice")
+            let api = buildApi accessContext None FeatureMode.Disabled (trailOf "alice")
 
             let! queried = api.Query AuditViewApi.defaultQuery
             let page = expectOk "Query" queried
@@ -600,14 +606,14 @@ let substratePairingTests =
             Expect.isFalse (csv.Contains "UserLoggedIn") "and the export is empty of them"
         }
 
-        testCaseAsync "the role gate still runs under NoAuditLog"
+        testCaseAsync "the role gate still runs under FeatureMode.Disabled"
         <| async {
             // An empty answer is still an answer about a deployment. The
             // short-circuit sits INSIDE the gate, and a refactor that
             // moved it outside would turn the disabled case into an
             // ungated endpoint.
             let ctx = AccessContext.unrestricted (AnonymousSession "sess-1")
-            let api = buildApi ctx None NoAuditLog []
+            let api = buildApi ctx None FeatureMode.Disabled []
 
             let! queried = api.Query AuditViewApi.defaultQuery
             expectError "Query" queried |> ignore

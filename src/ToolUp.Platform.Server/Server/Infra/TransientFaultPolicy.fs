@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.TransientFault
+module ToolUp.Platform.Infra.TransientFault
+
+open ToolUp.Platform
 
 open System
 

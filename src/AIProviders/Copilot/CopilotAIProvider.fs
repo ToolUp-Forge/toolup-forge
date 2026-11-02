@@ -7,6 +7,7 @@ open System.Net.Http
 open System.Threading
 open Azure.Core
 open Azure.Identity
+open ToolUp.Platform.Infra.Transport
 open ToolUp.AI.Wire // JsonHost (portable schema parse)
 open ToolUp.Platform // RetryPolicy
 open ToolUp.Platform.AI
@@ -83,7 +84,7 @@ let SecretKeyName = "AZURE_OPENAI_API_KEY"
 let private sharedClient =
     lazy
         (let c =
-            ToolUp.Platform.PlatformHttpClient.create ToolUp.Platform.EgressSurface.AIProvider
+            ToolUp.Platform.Compose.PlatformHttpClient.create ToolUp.Platform.EgressSurface.AIProvider
 
          c.Timeout <- TimeSpan.FromMinutes(5.0)
          c)

@@ -70,7 +70,7 @@ let validateConfig (config: PasskeyConfig) : ValidationResult =
                 Ok
         | first :: _ -> Error $"Passkey configuration invalid: {first}."
 
-/// Registered via `PasskeyCompose.run` (and `ServerApp.withConfigValidator`).
+/// Registered by `PasskeyCompose.withPasskey` (and `ServerApp.withConfigValidator`).
 type PasskeyConfigValidator(config: PasskeyConfig) =
     interface IConfigValidator with
         member _.Name = $"passkey-auth ({config.RelyingPartyId})"

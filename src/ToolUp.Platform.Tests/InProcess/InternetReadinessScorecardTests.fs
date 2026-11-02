@@ -3,8 +3,12 @@ module ToolUp.Platform.Tests.InProcess.InternetReadinessScorecardTests
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
-open ToolUp.Platform.ConfigValidatorAggregator
-open ToolUp.Platform.InternetReadinessScorecard
+open ToolUp.Platform.Compose.ConfigValidatorAggregator
+open ToolUp.Platform.Compose.InternetReadinessScorecard
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 209 — internet-readiness secure-default scorecard ─────────
 //

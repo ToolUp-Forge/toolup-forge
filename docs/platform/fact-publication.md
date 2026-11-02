@@ -170,7 +170,7 @@ The source's own gate additionally audits every cell it denied at the publicatio
 `FactsCompose.withFactPublication` registers the service and the two job handlers on the composed
 scheduler. It registers handlers only: a publication is scheduled by the source team's owner, and a
 refresh by the target's. A deployment that does not call it is unchanged, and one that calls it but
-records no grant writes nothing anywhere. Under `NoFactStore` it returns the app unchanged.
+records no grant writes nothing anywhere. Under `FeatureMode.Disabled` it returns the app unchanged.
 
 ## Verifying
 

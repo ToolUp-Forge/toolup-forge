@@ -1,4 +1,6 @@
-module ToolUp.Platform.LoggerScope
+module ToolUp.Platform.Infra.LoggerScope
+
+open ToolUp.Platform
 
 open System.Threading
 

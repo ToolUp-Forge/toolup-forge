@@ -8,6 +8,7 @@ open ToolUp.Forms.FormSubmission
 open ToolUp.Forms.PublicFormApi
 open ToolUp.Forms.FormValidator
 open ToolUp.Forms.IFormStore
+open ToolUp.Platform.Scope
 
 // ─── Phase 21b — Public-form ToolUp.Remoting handler ────────────────
 //

@@ -1,10 +1,15 @@
-module ToolUp.Platform.ComposeConfigValidators
+module ToolUp.Platform.Compose.ComposeConfigValidators
 
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.Auth
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.BlobEncryption
+open ToolUp.Platform.Infra.BlobEncryption
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Files
 
 // ─── compose phase: first-party config + health validators ───────────
 //
@@ -70,7 +75,7 @@ let registerFirstPartyConfigValidators
     addConfigValidator (InviteEmailCapabilityValidator.InviteEmailCapabilityValidator(config, services)) // Phase 247 — warn team invite-by-email surface mounted in an auth mode with no IUserDirectory (emails silently never send; acknowledgement knob)
     addConfigValidator (AutoBootstrapDevAdminModeValidator.AutoBootstrapDevAdminModeValidator(config)) // warn (Error on internet-facing) AutoBootstrapDevAdmin left set in an auth-requiring mode (first sign-in becomes Platform Admin)
     addConfigValidator (CsrfDefaultModeValidator.CsrfDefaultModeValidator(config)) // warn cookie auth (SseAuthMode=CookieRequired) without server-side CSRF (NoSecurityHardening)
-    addConfigValidator (AuditLogModeValidator.AuditLogModeValidator(config)) // warn authenticated mode + NoAuditLog
+    addConfigValidator (AuditLogModeValidator.AuditLogModeValidator(config)) // warn authenticated mode + FeatureMode.Disabled
     addConfigValidator (ServiceStatusBoardDepsValidator.ServiceStatusBoardDepsValidator(config)) // warn ServiceStatusBoard composes only disabled substrates (Phase 9p.A)
 
     // Audit chain durability probe (health check, kept interleaved here
@@ -86,10 +91,10 @@ let registerFirstPartyConfigValidators
     addConfigValidator (EncryptedSecretStoreModeValidator.EncryptedSecretStoreModeValidator(config, secretStore)) // refuse plaintext secrets in authenticated modes (KMS/FDE escape hatch)
 
     addConfigValidator (SecretStoreAtRestPostureValidator.SecretStoreAtRestPostureValidator(config, secretStore)) // Phase 457 — refuse an auth-requiring deployment whose COMPOSED store does not encrypt at rest, whatever the store; the validator above reads only the master-key env var, so a raw FileSecretStore passed it while writing plaintext (acknowledgement: TOOLUP_ACCEPT_PLAINTEXT_SECRETS)
-    addConfigValidator (JobSchedulerInstanceValidator.JobSchedulerInstanceValidator(config)) // refuse InProcessJobScheduler in multi-instance deployments
+    addConfigValidator (JobSchedulerInstanceValidator.JobSchedulerInstanceValidator(config, services = services)) // refuse InProcessJobScheduler in multi-instance deployments unless a shared IDistributedLock is composed
     addConfigValidator (DeployPlaneDepsValidator.DeployPlaneDepsValidator(config, services)) // warn SingleNodeDeployPlane with IJobScheduler / IEntityStore / IContainerScheduler unregistered (else first-request 500 when the affected service resolves)
     addConfigValidator (SignedExportDepsValidator.SignedExportDepsValidator(config, services)) // Phase 162 — refuse DataSubjectRequests SignExports=true with no IExportEnvelopeSigner composed
-    addConfigValidator (ModelExecutionDepsValidator.ModelExecutionDepsValidator(config, services)) // Phase 728 — warn ModelExecution = EnabledModelExecutionApi with no IModelRegistry composed (else first-request SubstrateDisabled on every outcome read)
+    addConfigValidator (ModelExecutionDepsValidator.ModelExecutionDepsValidator(config, services)) // Phase 728 — warn ModelExecution = FeatureMode.Enabled with no IModelRegistry composed (else first-request SubstrateDisabled on every outcome read)
     addConfigValidator (PublicBaseUrlFormatValidator.PublicBaseUrlFormatValidator(config)) // warn PublicBaseUrl set to a non-absolute-http(s) URL (breaks sitemap loc / canonical / share-token redirects)
     addConfigValidator (NotificationChannelInstanceValidator.NotificationChannelInstanceValidator(config)) // warn in-memory notification channel under multi-instance
     addConfigValidator (MultiInstanceAdminCoherenceValidator.MultiInstanceAdminCoherenceValidator(config)) // Phase 236 — warn in-process admin subsystems (admin store / permission store / webhook dispatcher / DSR preview cache) under multi-instance
@@ -120,7 +125,7 @@ let registerFirstPartyConfigValidators
             encryptionKeyResolver,
             services
         )
-    ) // refuse per-scope key resolver with an unwired or in-process channel under declared multi-instance (Phase 458 — the replica count now reads ServerConfig.ReplicaCount as well as TOOLUP_REPLICA_COUNT, and the channel is probed from DI as well as the env var)
+    ) // refuse per-scope key resolver with an unwired or in-process channel under declared multi-instance (Phase 458 — the replica count now reads ServerConfig.MultiInstance.ReplicaCount as well as TOOLUP_REPLICA_COUNT, and the channel is probed from DI as well as the env var)
 
     addConfigValidator (KeyDestroyAckCoverageValidator.KeyDestroyAckCoverageValidator(config, services)) // Phase 22b — warn per-scope key resolver + in-proc channel in a Team/MultiTeam shape (crypto-shred fanout reaches no sibling replica; the Error arm above only fires when the replica count is declared)
 

@@ -1,4 +1,4 @@
-module ToolUp.Platform.PerScopeKeyResolver
+module ToolUp.Platform.Config.PerScopeKeyResolver
 
 open System
 open System.Security.Cryptography
@@ -9,7 +9,8 @@ open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.Secrets
 open ToolUp.Platform.EncryptionTypes
-open ToolUp.Platform.BlobEncryption
+open ToolUp.Platform.Infra.BlobEncryption
+open ToolUp.Platform.Infra
 
 // ─── Phase 22 — PerScopeKeyResolver ─────────────────────────────────
 //
@@ -89,7 +90,7 @@ open ToolUp.Platform.BlobEncryption
 //     rows — which reads identically to "there are no siblings", so the
 //     hole does not announce itself.
 //     `PerScopeKeyResolverDistributedValidator` refuses startup with a
-//     security-class `Error` for that shape (`ServerConfig.ReplicaCount
+//     security-class `Error` for that shape (`ServerConfig.MultiInstance.ReplicaCount
 //     > 1` — or the `TOOLUP_REPLICA_COUNT` env declaration — with this
 //     resolver active and either no wiring at all or a channel that
 //     cannot leave the process).

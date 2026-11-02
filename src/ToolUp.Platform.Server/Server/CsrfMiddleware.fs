@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-namespace ToolUp.Platform
+namespace ToolUp.Platform.Scope
 
 open System
 open System.Security.Cryptography
@@ -11,7 +11,9 @@ open Microsoft.AspNetCore.Http
 open Microsoft.AspNetCore.DataProtection
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
-open ToolUp.Platform.SurfaceEnforcement
+open ToolUp.Platform.Scope.SurfaceEnforcement
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
 
 // ─── Phase 9j — CSRF / cross-origin POST guard ───────────────────────
 //
@@ -139,7 +141,7 @@ module Csrf =
     /// `SurfaceRequirementRegistry`: routes whose admit set contains
     /// `AnonymousKind` or `ClaimBearerKind` skip CSRF (no session to
     /// bind the nonce against; share-token flows are HMAC-gated). The
-    /// retiring `config.PeerRoutePrefixes` / `config.AnonymousRoutePrefixes`
+    /// retiring `config.MultiInstance.PeerRoutePrefixes` / `config.AnonymousRoutePrefixes`
     /// based carve-out is preserved via the bridge registry built in
     /// `SDK.Server.fs` — both prefix lists map to `SurfaceRequirement.public_`
     /// whose admit set contains both kinds, so this predicate keeps
@@ -189,7 +191,7 @@ module Csrf =
 
 type CsrfMiddleware(next: RequestDelegate, config: ServerConfig, registry: SurfaceRequirementRegistry) =
     member _.InvokeAsync(ctx: HttpContext) = task {
-        if config.SecurityHardening = NoSecurityHardening then
+        if config.SecurityPosture.SecurityHardening = NoSecurityHardening then
             do! next.Invoke ctx
         elif Csrf.requiresValidation registry ctx then
             if Csrf.isTokenValid ctx then

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-namespace ToolUp.Platform.Teams
+namespace ToolUp.Platform.Scope.Teams
 
 open System
 open ToolUp.Platform
@@ -135,7 +135,7 @@ module BlobPendingInviteStoreOptions =
 /// Construct it over a storage that implements the conditional seam —
 /// the `IConditionalBlobStorage` constructors — or probe an `IBlobStorage`
 /// with `BlobPendingInviteStore.TryCreate`, which is what `compose` does
-/// when it auto-selects this store for `ServerConfig.ReplicaCount > 1`.
+/// when it auto-selects this store for `ServerConfig.MultiInstance.ReplicaCount > 1`.
 /// A backend that cannot do conditional writes cannot be correct here,
 /// so the probe returns `None` rather than degrading to a racy
 /// download-modify-upload.

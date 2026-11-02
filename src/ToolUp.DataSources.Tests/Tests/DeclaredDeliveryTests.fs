@@ -11,11 +11,15 @@ open Expecto
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.StorageScopeResolver
-open ToolUp.Platform.Tracing
+open ToolUp.Platform.Scope.StorageScopeResolver
+open ToolUp.Platform.Infra.Tracing
 open ToolUp.DataSources.Common
 open ToolUp.DataSources.Csv
 open ToolUp.DataSources.Tests.Support
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 1015 — a declared source's data arrives as its principal ───
 //
@@ -60,12 +64,16 @@ type private World(?connectorStorage: IBlobStorage) =
 
     let scheduler =
         JobScheduler.create
-            (JobStore.create blobs events)
-            events
-            silentChannel
-            ServerConfig.defaults
-            silentLogger
-            (NoOpActivitySink() :> IActivitySink)
+            ({
+                Store = (JobStore.create blobs events)
+                EventStore = events
+                NotificationChannel = silentChannel
+                Config = ServerConfig.defaults
+                Logger = silentLogger
+                ActivitySink = (NoOpActivitySink() :> IActivitySink)
+            }
+            : JobScheduler.SchedulerDeps)
+            JobScheduler.SchedulerOptions.defaults
 
     let configs = DataSourceConfigStore.create blobs
     let csv = CsvDataSource.create (defaultArg connectorStorage blobs)
@@ -452,7 +460,7 @@ let tests =
             services.AddSingleton<DeclaredPrincipalResolver>(world.Resolver) |> ignore
 
             services
-            |> DeclaredDelivery.withDeclaredDataSources declared DeclaredDelivery.DefaultWatchPoll
+            |> DeclaredDelivery.withDeclaredDataSources ServerConfig.defaults declared DeclaredDelivery.DefaultWatchPoll
             |> ignore
 
             let service =

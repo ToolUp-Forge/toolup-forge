@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.ObservabilityHandlers
+module ToolUp.Platform.Infra.ObservabilityHandlers
 
 open System
 open System.Text.Json
@@ -110,14 +110,14 @@ let private queryLevels (ctx: HttpContext) : LogLevel list =
 /// table, the `/sources` answer and the compose registration share.
 let sourcesOf (config: ServerConfig) : ObservabilitySources = {
     Logs =
-        match config.LogStore with
+        match config.Observability.LogStore with
         | NoLogStore -> false
         | SqliteLogStore _ -> true
     Metrics =
-        match config.MetricsHistory with
+        match config.Observability.MetricsHistory with
         | NoMetricsHistory -> false
         | EnabledMetricsHistory _ -> true
-    Alerts = not (List.isEmpty config.AlertRules)
+    Alerts = not (List.isEmpty config.Observability.AlertRules)
 }
 
 /// Whether any source is enabled — the condition for mounting anything.
@@ -301,5 +301,5 @@ let routes (config: ServerConfig) : HttpHandler list =
             if sources.Alerts then
                 GET
                 >=> route (ObservabilityReadback.RoutePrefix + "/alerts")
-                >=> alertsHandler config.AlertRules
+                >=> alertsHandler config.Observability.AlertRules
         ]

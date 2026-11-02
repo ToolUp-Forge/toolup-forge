@@ -24,17 +24,21 @@ open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Hosting
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.Tracing
+open ToolUp.Platform.Infra.Tracing
 open ToolUp.Platform.VectorKnowledgeTypes
-open ToolUp.Platform.IVectorStore
-open ToolUp.Platform.ISparseIndex
-open ToolUp.Platform.IEmbeddingProvider
-open ToolUp.Platform.IRetrievalPipeline
+open ToolUp.Platform.Infra.IVectorStore
+open ToolUp.Platform.Infra.ISparseIndex
+open ToolUp.Platform.Infra.IEmbeddingProvider
+open ToolUp.Platform.Infra.IRetrievalPipeline
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.RAG.IngestionTypes
 open ToolUp.RAG.InMemoryBM25Index
 open ToolUp.RAG.InMemoryVectorStore
 open ToolUp.RAG.RAGCompose
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 let private quietLogger =
     { new ILogger with
@@ -102,20 +106,22 @@ let private stubProfile =
         member _.SetEntryHealth(_, _, _) = async { return Ok() }
     }
 
-let private ragApp (storage: IBlobStorage) =
-    RAGServerApp.create stubFactory stubProfile constantEmbedder
-    |> RAGServerApp.withStorage storage
+let private ragApp () =
+    RagOptions.create stubFactory stubProfile constantEmbedder
+
+/// The deployment over `storage` with `rag` composed onto it.
+let private composedOn (storage: IBlobStorage) (rag: RagOptions) : ServerApp =
+    ServerApp.empty |> ServerApp.withStorage storage |> withRAG rag
 
 /// A real generic host over exactly what `composeRAG` registers — so the stop
 /// is the host's own: hosted services stopped in reverse order, then the
 /// lifecycle hooks, inside `HostOptions.ShutdownTimeout`.
-let private ragHost (app: RAGServerApp) : IHost =
-    let composed = composeRAG app
+let private ragHost (storage: IBlobStorage) (app: RagOptions) : IHost =
+    let composed = composedOn storage app
     let builder = Host.CreateEmptyApplicationBuilder(HostApplicationBuilderSettings())
 
-    match ServerApp.serviceConfig composed with
-    | Some f -> f builder.Services |> ignore
-    | None -> ()
+    ToolUp.Platform.Tests.Support.TestSubstrate.applyServiceConfig composed builder.Services
+    |> ignore
 
     builder.Services.Configure<HostOptions>(fun (o: HostOptions) -> o.ShutdownTimeout <- TimeSpan.FromSeconds 10.0)
     |> ignore
@@ -127,14 +133,12 @@ let private chunk: TextChunk = {
     Metadata = Map.empty
 }
 
-let private hostedServiceTypeNames (app: RAGServerApp) =
-    let composed = composeRAG app
+let private hostedServiceTypeNames (app: RagOptions) =
+    let composed = composedOn (InMemoryBlobStorage() :> IBlobStorage) app
     let services = ServiceCollection() :> IServiceCollection
 
     let services =
-        match ServerApp.serviceConfig composed with
-        | Some f -> f services
-        | None -> services
+        ToolUp.Platform.Tests.Support.TestSubstrate.applyServiceConfig composed services
 
     use sp = services.BuildServiceProvider()
     sp.GetServices<IHostedService>() |> Seq.map _.GetType().Name |> List.ofSeq
@@ -160,7 +164,7 @@ let private retrievalStores =
         testCaseAsync "a chunk upserted inside the flush window is present after a graceful stop and a restart"
         <| async {
             let storage = InMemoryBlobStorage() :> IBlobStorage
-            use host = ragHost (ragApp storage)
+            use host = ragHost storage (ragApp ())
             do! host.StartAsync() |> Async.AwaitTask
 
             // Both writes land inside the stores' two-second flush window:
@@ -190,13 +194,13 @@ let private retrievalStores =
         }
 
         test "a composition that constructs no in-process store registers no flush service (GP 13)" {
-            let owned = hostedServiceTypeNames (ragApp (InMemoryBlobStorage() :> IBlobStorage))
+            let owned = hostedServiceTypeNames (ragApp ())
 
             let supplied =
                 hostedServiceTypeNames (
-                    ragApp (InMemoryBlobStorage() :> IBlobStorage)
-                    |> RAGServerApp.withVectorStore (externalVectorStore ())
-                    |> RAGServerApp.withoutSparseIndex
+                    ragApp ()
+                    |> RagOptions.withVectorStore (externalVectorStore ())
+                    |> RagOptions.withoutSparseIndex
                 )
 
             Expect.contains
@@ -253,8 +257,8 @@ let private ingestionService (q: IngestionQueue) (pipeline: IRetrievalPipeline) 
         1
         quietLogger
         (ToolUp.RAG.RagTelemetry.createNoOp ())
-        (ToolUp.Platform.Usage.NoOpUsageLog())
-        (ToolUp.Platform.Usage.NoOpTeamQuotaPolicy())
+        (ToolUp.Platform.Infra.Usage.NoOpUsageLog())
+        (ToolUp.Platform.Infra.Usage.NoOpTeamQuotaPolicy())
         IngestionRetryPolicy.defaults
         None
         (ToolUp.RAG.IngestionService.IngestionAlertState())
@@ -422,7 +426,17 @@ let private scheduler () =
     let eventStore = InMemoryEventStore.InMemoryEventStore() :> IEventStore
     let jobStore = JobStore.create storage eventStore
 
-    JobScheduler.create jobStore eventStore silentChannel ServerConfig.defaults quietLogger (NoOpActivitySink())
+    JobScheduler.create
+        ({
+            Store = jobStore
+            EventStore = eventStore
+            NotificationChannel = silentChannel
+            Config = ServerConfig.defaults
+            Logger = quietLogger
+            ActivitySink = (NoOpActivitySink())
+        }
+        : JobScheduler.SchedulerDeps)
+        JobScheduler.SchedulerOptions.defaults
 
 let private manualJob (handler: string) : JobRegistration = {
     ScopeId = "scope-869"

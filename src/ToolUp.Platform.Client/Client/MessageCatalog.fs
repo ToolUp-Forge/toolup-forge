@@ -1355,7 +1355,7 @@ module MessageCatalog =
             PayloadHeading = "Recorded payload"
             Loading = "Loading…"
             NoEvents =
-                "No audit events recorded for this scope. Events appear once the deployment sets ServerConfig.AuditLog = EnabledAuditLog and an audited action runs."
+                "No audit events recorded for this scope. Events appear once the deployment sets ServerConfig.AuditLog = FeatureMode.Enabled and an audited action runs."
             NoMatches =
                 "No events match these filters. Widen the time window, or clear the event-type and actor filters."
             ShowingCount = fun shown matched -> $"Showing {shown} of {matched} matching events"

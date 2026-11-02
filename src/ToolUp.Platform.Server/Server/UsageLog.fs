@@ -1,4 +1,4 @@
-module ToolUp.Platform.UsageLog
+module ToolUp.Platform.Infra.UsageLog
 
 open System
 open System.Collections.Concurrent
@@ -13,6 +13,7 @@ open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Usage
+open ToolUp.Platform.Infra.Usage
 
 // ─── Storage layout ──────────────────────────────────────────────
 //
@@ -118,7 +119,7 @@ let private fromJson (bytes: byte[]) : UsageRecord list =
 // `InMemoryUsageLog` keeps records in a `ConcurrentDictionary` keyed
 // by `ScopeId`. Used by the contract pack and any test harness that
 // wants the API surface without the durability cost. NOT registered
-// by `compose` — `EnabledUsageMetering` always picks the blob-backed
+// by `compose` — `FeatureMode.Enabled` always picks the blob-backed
 // default; the `IUsageLog` interface accepts any implementation.
 
 type InMemoryUsageLog() =

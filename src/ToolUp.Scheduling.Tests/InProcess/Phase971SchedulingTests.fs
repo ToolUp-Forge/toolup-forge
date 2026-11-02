@@ -4,7 +4,7 @@ open System
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.EntityTypes
-open ToolUp.Platform.IEntityStore
+open ToolUp.Platform.Infra.IEntityStore
 open ToolUp.Scheduling.SchedulingTypes
 open ToolUp.Scheduling.ICalendarBridge
 open ToolUp.Scheduling.IBookingScheduler
@@ -13,6 +13,8 @@ open ToolUp.Scheduling.CalendarSync
 open ToolUp.Scheduling.Tests.InProcess.InMemoryEntityStore
 open ToolUp.Scheduling.Tests.InProcess.InMemoryEventStore
 open ToolUp.Scheduling.Tests.InProcess.InMemoryCalendarBridge
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
 
 // ─── Phase 971 — Scheduling: a refused link delete is reported ───────
 //

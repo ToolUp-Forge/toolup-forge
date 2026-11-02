@@ -1,4 +1,4 @@
-module ToolUp.Platform.PlatformRuntimeConfigStore
+module ToolUp.Platform.Infra.PlatformRuntimeConfigStore
 
 open System
 open System.Text
@@ -37,23 +37,23 @@ module private Json =
 
     type private Dto = { PlatformKnowledgeBase: string }
 
-    let serialize (mode: PlatformKnowledgeBaseMode) : byte[] =
+    let serialize (mode: FeatureMode) : byte[] =
         let value =
             match mode with
-            | EnabledPlatformKnowledgeBase -> enabledLiteral
-            | NoPlatformKnowledgeBase -> disabledLiteral
+            | FeatureMode.Enabled -> enabledLiteral
+            | FeatureMode.Disabled -> disabledLiteral
 
         JsonSerializer.Serialize({ PlatformKnowledgeBase = value }, options)
         |> Encoding.UTF8.GetBytes
 
-    let deserialize (defaultMode: PlatformKnowledgeBaseMode) (bytes: byte[]) : PlatformKnowledgeBaseMode =
+    let deserialize (defaultMode: FeatureMode) (bytes: byte[]) : FeatureMode =
         try
             let json = Encoding.UTF8.GetString bytes
             let dto = JsonSerializer.Deserialize<Dto>(json, options)
 
             match dto.PlatformKnowledgeBase with
-            | s when s = enabledLiteral -> EnabledPlatformKnowledgeBase
-            | s when s = disabledLiteral -> NoPlatformKnowledgeBase
+            | s when s = enabledLiteral -> FeatureMode.Enabled
+            | s when s = disabledLiteral -> FeatureMode.Disabled
             | _ -> defaultMode
         with _ ->
             defaultMode
@@ -65,11 +65,11 @@ module private Json =
 /// loads the persisted value at startup so the cell starts in the
 /// right state without an extra request-time read.
 type private BlobBackedPlatformRuntimeConfigStore
-    (storage: IBlobStorage, defaultMode: PlatformKnowledgeBaseMode, initialValue: PlatformKnowledgeBaseMode) =
+    (storage: IBlobStorage, defaultMode: FeatureMode, initialValue: FeatureMode) =
     let mutable cell = initialValue
     let writeLock = new SemaphoreSlim(1, 1)
 
-    let save (mode: PlatformKnowledgeBaseMode) = async {
+    let save (mode: FeatureMode) = async {
         let bytes = Json.serialize mode
         let! result = storage.Upload(platformContainer, blobName, bytes)
 
@@ -102,7 +102,7 @@ type private BlobBackedPlatformRuntimeConfigStore
 /// or the blob is unreadable. Async because the load happens at
 /// startup — `compose` calls this once via `Async.RunSynchronously`
 /// before the request pipeline starts.
-let create (storage: IBlobStorage) (defaultMode: PlatformKnowledgeBaseMode) : Async<IPlatformRuntimeConfigStore> = async {
+let create (storage: IBlobStorage) (defaultMode: FeatureMode) : Async<IPlatformRuntimeConfigStore> = async {
     let! result = storage.Download(platformContainer, blobName)
 
     let initial =

@@ -38,10 +38,14 @@ open Microsoft.Extensions.Hosting
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Secrets
-open ToolUp.Platform.Tracing
+open ToolUp.Platform.Infra.Tracing
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Tests.Support
 open ToolUp.Platform.Tests.Support.FireAndForgetHarness
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 type StoreDownException(marker: string) =
     inherit Exception(marker)
@@ -410,19 +414,24 @@ let private webhookArm (mode: FailureMode) =
 
         let dispatcher =
             WebhookDispatcher.create
-                registry
-                (WebhookRegistry.createDeliveryLog storage)
-                (healthyEventStore ())
-                (new HttpClient())
-                WebhookRetryPolicy.defaults
-                logger
-                (NoOpActivitySink() :> IActivitySink)
-                (NoSecrets() :> ISecretStore)
-                (fun () ->
-                    { new IRateLimiter with
-                        member _.Wait _ = async { return Proceed }
-                    })
-                { AllowedHosts = [] }
+                ({
+                    Registry = registry
+                    DeliveryLog = (WebhookRegistry.createDeliveryLog storage)
+                    EventStore = (healthyEventStore ())
+                    HttpClient = (new HttpClient())
+                    RetryPolicy = WebhookRetryPolicy.defaults
+                    Logger = logger
+                    ActivitySink = (NoOpActivitySink() :> IActivitySink)
+                    SecretStore = (NoSecrets() :> ISecretStore)
+                    GetRateLimiter =
+                        (fun () ->
+                            { new IRateLimiter with
+                                member _.Wait _ = async { return Proceed }
+                            })
+                    UrlPolicy = { AllowedHosts = [] }
+                }
+                : WebhookDispatcher.WebhookDeps)
+                WebhookDispatcher.WebhookOptions.defaults
 
         let hosted = dispatcher :> IHostedService
         do! hosted.StartAsync CancellationToken.None |> Async.AwaitTask

@@ -21,14 +21,19 @@ open ToolUp.Platform.Secrets
 open ToolUp.Platform.FileProcessor
 open ToolUp.Platform.VectorisationTypes
 open ToolUp.Platform.Providers
-open ToolUp.Platform.PermissionStore
-open ToolUp.Platform.FlagEvaluator
-open ToolUp.Platform.StorageScopeResolver
-open ToolUp.Platform.TeamManagement
-open ToolUp.Platform.IEmbeddingProvider
+open ToolUp.Platform.Scope.PermissionStore
+open ToolUp.Platform.Config.FlagEvaluator
+open ToolUp.Platform.Scope.StorageScopeResolver
+open ToolUp.Platform.Config.TeamManagement
+open ToolUp.Platform.Infra.IEmbeddingProvider
 open ToolUp.AI
 open ToolUp.AI.AICompose
+open ToolUp.RAG
 open ToolUp.RAG.RAGCompose
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 [<AutoOpen>]
 module PageAmbient =
@@ -69,9 +74,6 @@ module PageAmbient =
     let blobStorage: IBlobStorage = failwith "ambient"
 
     let modules: ServerModule list = failwith "ambient"
-
-    /// An already-built base the `AIServerApp.createFrom` block layers on.
-    let baseServerApp: ServerApp = failwith "ambient"
 
     /// The AI / RAG substrate the two upper tiers take at construction.
     let aiProviderFactory: IAIProviderFactory = failwith "ambient"

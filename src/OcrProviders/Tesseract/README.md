@@ -29,23 +29,21 @@ Neither omission fails quietly: `create` probes for both and raises a `Tesseract
 
 ## Composition
 
-The KnowledgeBase extractor resolves `IOcrProvider` from DI, so registering the provider **before** `composeWithRAG` is all that is required — the RAG composition sees a provider is already registered and skips its no-op default.
+The KnowledgeBase extractor resolves `IOcrProvider` from DI, so registering the provider in the deployment's DI (`ServerApp.addServiceConfig`, on either side of `RAGCompose.withRAG`) is all that is required — the RAG composition sees a provider is already registered and skips its no-op default.
 
 ```fsharp skip=fragment
 open ToolUp.RAG.OcrProviders.Tesseract
 
 let ocr = TesseractOcrProvider.createForTessData "/var/lib/tessdata"
 
-ragServerApp
-|> RAGServerApp.withExtensions
-    { ComposeExtensions.empty with
-        ServiceConfig =
-            Some(fun services ->
-                services
-                    .AddSingleton<ToolUp.Platform.IOcrProvider.IOcrProvider>(ocr)
-                    .AddSingleton<ToolUp.Platform.HealthChecks.IHealthCheck>(
-                        Health.create (TesseractOcrOptions.forTessData "/var/lib/tessdata"))) }
-|> RAGServerApp.run
+app
+|> ServerApp.addServiceConfig (fun services ->
+    services
+        .AddSingleton<ToolUp.Platform.IOcrProvider.IOcrProvider>(ocr)
+        .AddSingleton<ToolUp.Platform.HealthChecks.IHealthCheck>(
+            Health.create (TesseractOcrOptions.forTessData "/var/lib/tessdata")))
+|> RAGCompose.withRAG ragOptions
+|> ServerApp.run
 ```
 
 Tuned form:

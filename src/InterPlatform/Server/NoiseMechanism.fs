@@ -124,7 +124,7 @@ open System.Text
 // ── Cost when unused (GP 13) ──
 //
 // Nothing in this file is reachable unless a composition calls
-// `PeerServerApp.withNoisedRelease`. With no policy composed no
+// `PeerOptions.withNoisedRelease`. With no policy composed no
 // `INoiseMechanism` is registered, the gate takes one `option` match,
 // and a gated answer is byte-for-byte the Phase 311 release (GP 11).
 
@@ -325,7 +325,7 @@ module NoiseSpec =
 
     /// Every way a spec is uncalibratable, as data rather than an
     /// exception — the posture `GateDecision` takes for a refusal (GP 12
-    /// rule 3). Run at compose time by `PeerServerApp.run`, so a
+    /// rule 3). Run at compose time by `PeerCompose.withPeer`, so a
     /// deployment cannot boot carrying a spec the sampler would have to
     /// reject on every call.
     let validate (spec: NoiseSpec) : Result<unit, string> =

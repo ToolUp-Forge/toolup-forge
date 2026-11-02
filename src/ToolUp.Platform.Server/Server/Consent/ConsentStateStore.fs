@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.Consent.ConsentStateStore
+module ToolUp.Platform.Audit.Consent.ConsentStateStore
 
 open System
 open System.Collections.Concurrent
 open ToolUp.Platform
 open ToolUp.Platform.EntityTypes
-open ToolUp.Platform.IEntityStore
+open ToolUp.Platform.Infra.IEntityStore
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
 
 // ─── Phase 159 — durable per-subject consent persistence ───────────
 //
@@ -299,7 +301,7 @@ type InMemoryConsentStateStore internal (auditLog: IAuditLog option, logger: ILo
 /// operation reads/writes through `IEntityStore` with no in-memory
 /// cache. Requires the `ConsentRecord.registration` entity type to be
 /// registered with the entity store (the compose path prepends it when
-/// `ServerConfig.ConsentStateStore = EntityBackedConsentStateStore`).
+/// `ServerConfig.Stores.ConsentStateStore = EntityBackedConsentStateStore`).
 /// Phase 1026 — the consent audit rows are started through
 /// `Background.startAudit`: a failing `IAuditLog` loses that one row and
 /// logs a Warning naming it, never failing the write or the host. The

@@ -1,8 +1,9 @@
-module ToolUp.Platform.AutoBootstrapDevAdminModeValidator
+module ToolUp.Platform.Jobs.AutoBootstrapDevAdminModeValidator
 
 open System
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Config
 
 // ─── AutoBootstrapDevAdmin in authenticated modes ───────────────────
 //

@@ -12,6 +12,8 @@ open Giraffe.ViewEngine
 open ToolUp.Platform
 open ToolUp.Platform.Narrative
 open ToolUp.PublicRendering
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
 
 // ─── Phase 212 — SEO / structured-data conformance lint ──────────────
 //
@@ -1016,7 +1018,7 @@ let private sitemapPages = [
     mkPage "draft" "Draft" "" (Markdown "x") [] |> withStatus Draft
     mkPage "archived" "Archived" "" (Markdown "x") [] |> withStatus Archived
     mkPage "later" "Later" "" (Markdown "x") []
-    |> withStatus (Scheduled(DateTimeOffset(2099, 1, 1, 0, 0, 0, TimeSpan.Zero)))
+    |> withStatus (PublishStatus.Scheduled(DateTimeOffset(2099, 1, 1, 0, 0, 0, TimeSpan.Zero)))
     mkPage "members" "Members" "" (Markdown "x") []
     |> withAudience PageAudience.Authenticated
     mkPage "clients" "Clients" "" (Markdown "x") []

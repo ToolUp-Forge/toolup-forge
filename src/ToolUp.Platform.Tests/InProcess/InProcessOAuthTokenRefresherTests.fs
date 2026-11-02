@@ -12,8 +12,12 @@ open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Metrics
 open ToolUp.Platform.Secrets
-open ToolUp.Platform.Tracing
+open ToolUp.Platform.Infra.Tracing
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
 
 // ─── InProcessOAuthTokenRefresher — IOAuthTokenRefresher contract + HTTP-path tests ──
 //
@@ -117,7 +121,17 @@ let private mkSubstrate () =
     let config = ServerConfig.defaults
 
     let scheduler =
-        JobScheduler.create jobStore eventStore silentChannel config silentLogger (NoOpActivitySink() :> IActivitySink)
+        JobScheduler.create
+            ({
+                Store = jobStore
+                EventStore = eventStore
+                NotificationChannel = silentChannel
+                Config = config
+                Logger = silentLogger
+                ActivitySink = (NoOpActivitySink() :> IActivitySink)
+            }
+            : JobScheduler.SchedulerDeps)
+            JobScheduler.SchedulerOptions.defaults
         :> IJobScheduler
 
     // Pre-register the refresh job handler name so RegisterDescriptor's

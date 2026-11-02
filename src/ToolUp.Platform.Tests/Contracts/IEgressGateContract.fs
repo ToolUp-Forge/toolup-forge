@@ -3,6 +3,7 @@ module ToolUp.Platform.Tests.Contracts.IEgressGateContract
 open System.Collections.Generic
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Audit
 
 // Phase 188 — contract for the field-classification egress / DLP gate.
 // Proves the three load-bearing properties from the phase acceptance:

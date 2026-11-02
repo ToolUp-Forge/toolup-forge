@@ -6,8 +6,11 @@ open System.Threading
 open System.Threading.Tasks
 open Expecto
 open ToolUp.Platform
-open ToolUp.Platform.Tracing
+open ToolUp.Platform.Infra.Tracing
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Test doubles ────────────────────────────────────────────────
 //

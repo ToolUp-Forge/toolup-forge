@@ -4,6 +4,8 @@ open System
 open System.Text
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
 
 /// Contract test list for any `IResultStore` implementation. The
 /// factory takes nothing and returns a fresh `(store, scopeA, scopeB)`

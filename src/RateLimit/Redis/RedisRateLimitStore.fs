@@ -7,6 +7,7 @@ open System
 open System.Collections.Concurrent
 open StackExchange.Redis
 open ToolUp.Platform
+open ToolUp.Platform.Infra
 
 // ─── ToolUp.RateLimit.Redis — Phase 56 reference impl ────────────────
 //

@@ -36,7 +36,7 @@ let heroCard (title: string) (lede: string) =
 open ToolUp.PublicRendering
 
 /// `PublicPage -> ReactElement` — registered via
-/// `PublicRenderingServerApp.withFelizLayout`. The page body (markdown
+/// `PublicRenderingOptions.withFelizLayout`. The page body (markdown
 /// / HTML / Narrative) is rendered by the SDK's Giraffe-side body
 /// renderer and embedded as raw HTML, showing the two DSLs composing.
 let render (page: PublicPage) : ReactElement =

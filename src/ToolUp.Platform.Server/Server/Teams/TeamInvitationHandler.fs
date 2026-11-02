@@ -1,14 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.Teams.TeamInvitationHandler
+module ToolUp.Platform.Scope.Teams.TeamInvitationHandler
 
 open System
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
 open ToolUp.Platform.Auth
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Config.TeamManagement
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
 
 // ─── Phase 3d — team-invitation handler ──────────────────────────────
 //
@@ -719,7 +722,7 @@ let teamInvitationApi
                                         directoryAbsentWarned.Value <- true
 
                                         logger.Warn
-                                            "[invite] team invite-by-email surface invoked but no IUserDirectory companion is registered — the pending invite was recorded (the invitee auto-joins on next sign-in) but NO invitation email was sent. Wire an IUserDirectory (e.g. EntraDirectory) or set ServerConfig.AcceptInviteByEmailWithoutDirectory / TOOLUP_ACCEPT_INVITE_BY_EMAIL_WITHOUT_DIRECTORY=1 to acknowledge the out-of-band-notification posture. (Logged once per process.)"
+                                            "[invite] team invite-by-email surface invoked but no IUserDirectory companion is registered — the pending invite was recorded (the invitee auto-joins on next sign-in) but NO invitation email was sent. Wire an IUserDirectory (e.g. EntraDirectory) or set ServerConfig.RiskAcknowledgements.AcceptInviteByEmailWithoutDirectory / TOOLUP_ACCEPT_INVITE_BY_EMAIL_WITHOUT_DIRECTORY=1 to acknowledge the out-of-band-notification posture. (Logged once per process.)"
                                     else
                                         logger.Info "[invite] IUserDirectory: not registered (already warned)"
                             with ex ->

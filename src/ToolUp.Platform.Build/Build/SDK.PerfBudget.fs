@@ -129,6 +129,13 @@ type PerfMetric =
     /// stops using shows here as a multiple of the population whatever the
     /// clock says. Rows. (Last, so no earlier case's tag moves.)
     | FactPopulationRowsPerRead
+    /// Phase 1168 — the JavaScript a first load of the SDK shell fetches:
+    /// the entry chunk and its static imports, read from the production
+    /// build's manifest, minified and uncompressed. `ClientShellBundleKiB`
+    /// sums every file and cannot see a split; this is what a user pays
+    /// before anything runs. Kibibytes. (Last, so no earlier case's tag
+    /// moves.)
+    | ClientShellFirstLoadKiB
 
 module PerfMetric =
 
@@ -145,6 +152,7 @@ module PerfMetric =
         | ClientViewPerDispatchUs -> "viewPerDispatchUs"
         | ClientMinimalBundleKiB -> "minimalBundleKiB"
         | ClientShellBundleKiB -> "shellBundleKiB"
+        | ClientShellFirstLoadKiB -> "shellFirstLoadKiB"
         | RetrievalP95Ms -> "retrievalP95Ms"
         | RetrievalBlobReadsPerQuery -> "retrievalBlobReadsPerQuery"
         | FactPointReadMs -> "factPointReadMs"
@@ -166,6 +174,7 @@ module PerfMetric =
         ClientViewPerDispatchUs
         ClientMinimalBundleKiB
         ClientShellBundleKiB
+        ClientShellFirstLoadKiB
     ]
 
     /// Phase 886 — the metrics the budget file's `load` block budgets (the
@@ -214,7 +223,8 @@ module PerfMetric =
         | RetrievalBlobReadsPerQuery
         | FactBlobReadsPerPointRead -> "reads"
         | ClientMinimalBundleKiB
-        | ClientShellBundleKiB -> "KiB"
+        | ClientShellBundleKiB
+        | ClientShellFirstLoadKiB -> "KiB"
         | FactPopulationRowsPerRead -> "rows"
 
     /// What a regression in this metric would mean, rendered into the
@@ -228,6 +238,7 @@ module PerfMetric =
         | ClientViewPerDispatchUs -> "the view the render hook builds for one dispatched message"
         | ClientMinimalBundleKiB -> "the JavaScript a production build of the minimal client sample ships"
         | ClientShellBundleKiB -> "the JavaScript a production build of the SDK shell's module graph ships"
+        | ClientShellFirstLoadKiB -> "the JavaScript a first load of the SDK shell fetches before anything runs"
         | RetrievalP95Ms -> "the p95 total latency of one retrieval under concurrent load"
         | RetrievalBlobReadsPerQuery -> "the blob reads one retrieval costs under concurrent load"
         | FactPointReadMs -> "the p95 latency of one subject-and-metric fact read under concurrent load"

@@ -18,9 +18,12 @@ open System
 open System.Collections.Concurrent
 open Expecto
 open ToolUp.Platform
-open ToolUp.Platform.PermissionStore
-open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Scope.PermissionStore
+open ToolUp.Platform.Config.TeamManagement
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Scope.Teams
+open ToolUp.Platform.Audit
 
 let private teamId = "acme"
 
@@ -75,7 +78,7 @@ let private expiryHookKey () = async {
     let audit = RecordingAuditLog()
 
     let hook =
-        ToolUp.Platform.Teams.PendingInviteExpiryHook.build silentLogger (Some(audit :> IAuditLog)) None
+        ToolUp.Platform.Scope.Teams.PendingInviteExpiryHook.build silentLogger (Some(audit :> IAuditLog)) None
 
     do!
         hook [

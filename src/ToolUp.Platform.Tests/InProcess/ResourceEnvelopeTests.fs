@@ -4,6 +4,9 @@ open System.Threading
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Metrics
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 437 — per-component resource envelopes ─────────────────────
 //

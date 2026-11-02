@@ -1,0 +1,50 @@
+module MyApp.Server.Config
+
+open System
+open ToolUp.Platform
+
+/// The deployment's configuration, written against the flat record.
+let config = {
+    ServerConfig.defaults with
+        Port = 5000
+        Surfaces = Surfaces.team
+        // the entity store backs the catalog
+        EntityStore = EnabledEntityStore
+        AuditLog = EnabledAuditLog
+        RequireHttps = true
+        SlowRequestThresholdOverrides =
+            Map.ofList [
+                "/api/slow", TimeSpan.FromSeconds 5.0
+            ]
+        ReplicaCount = 3
+        AcceptEphemeralRagIndex = true
+}
+
+/// A one-line update, and the qualified spelling of a case.
+let trial = { ServerConfig.defaults with Port = 1; ShareTokenStore = ShareTokenStoreMode.EnabledShareTokenStore; Webhooks = NoWebhooks }
+
+/// A base that is a plain path, with the opener on its own line.
+let hardened (app: ServerApp) =
+    {
+        app.Config with
+            SecurityHardening = StrictSecurityHardening
+            FactStore = EnabledFactStore
+    }
+
+/// A base the codemod cannot re-read as `base.Concern`.
+let fromEnvironment logger overrides =
+    { (ServerConfig.fromEnv logger overrides) with LogLevel = LogLevel.Debug }
+
+/// A deps record of the app's own with a shared label: untouched, reported.
+let deps = { JobDeps.empty with EventStore = store }
+
+/// A type annotation on a retired mode.
+let describe (mode: AuditLogMode) =
+    match mode with
+    | NoAuditLog -> "off"
+    | EnabledAuditLog -> "on"
+
+/// Reads: named as the config, a unique moved field on any receiver, and a
+/// shared label on a receiver of the app's own.
+let summary (config: ServerConfig) (deps: JobDeps) (cfg: ServerConfig) =
+    config.ReplicaCount, cfg.EventStore, deps.EventStore, config.AcceptEphemeralRagIndex, config.Port

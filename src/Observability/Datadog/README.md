@@ -47,7 +47,13 @@ services.AddSingleton<IDatadogReadbackApi>(client) |> ignore
 and turn the endpoints on:
 
 ```fsharp
-{ ServerConfig.defaults with DatadogReadback = EnabledDatadogReadback settings }
+{
+    ServerConfig.defaults with
+        Observability = {
+            ServerConfig.defaults.Observability with
+                DatadogReadback = EnabledDatadogReadback settings
+        }
+}
 ```
 
 The same `settings` value goes to both, so the region and the default tag

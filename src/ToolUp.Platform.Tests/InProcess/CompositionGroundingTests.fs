@@ -4,6 +4,9 @@ open System
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Grounding
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 526 — composition introspection covers grounding ──────────
 //
@@ -50,7 +53,10 @@ let tests =
                     ServerApp.empty with
                         Config = {
                             ServerConfig.defaults with
-                                FactStore = EnabledFactStore
+                                Stores = {
+                                    ServerConfig.defaults.Stores with
+                                        FactStore = FeatureMode.Enabled
+                                }
                         }
                 }
                 |> ServerApp.addModules [ sales ]
@@ -68,17 +74,22 @@ let tests =
                 "metric entries keyed by ComponentId.forMetric"
 
             let factKnob = m.ConfigKnobs |> List.tryFind (fun k -> k.Name = "FactStore")
+
             Expect.equal (factKnob |> Option.map _.Value) (Some "EnabledFactStore") "resolved fact-store kind reported"
         }
 
-        test "a grounding-free composition reports metrics/subjects absent + NoFactStore" {
+        test "a grounding-free composition reports metrics/subjects absent + FeatureMode.Disabled" {
             let m = ServerApp.compositionManifest ServerApp.empty
 
             Expect.isEmpty m.Metrics "no metrics composed"
             Expect.isEmpty m.Subjects "no subjects composed"
 
             let factKnob = m.ConfigKnobs |> List.tryFind (fun k -> k.Name = "FactStore")
-            Expect.equal (factKnob |> Option.map _.Value) (Some "NoFactStore") "default fact-store kind is NoFactStore"
+
+            Expect.equal
+                (factKnob |> Option.map _.Value)
+                (Some "NoFactStore")
+                "default fact-store kind is FeatureMode.Disabled"
         }
 
         test "the composable-surface descriptor enumerates the grounding surface (available-uncomposed)" {

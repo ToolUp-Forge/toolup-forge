@@ -17,6 +17,13 @@ import base from "./vite.config.mts";
 //
 // dev-scripts/perf-budget-gate.ps1 runs both, and ClientBench measures the
 // directory.
+//
+// Phase 1168 — the build writes more than one file: AG Grid and AG Charts sit
+// behind dynamic imports, so a first load fetches the entry and its static
+// imports only. `shellBundleKiB` still sums every file; `shellFirstLoadKiB`
+// sums the entry's static closure, read from the manifest this build writes
+// to `.vite/manifest.json`. The gate script refuses a build in which those
+// two chunks stopped being on demand.
 export default defineConfig((env) =>
     mergeConfig(typeof base === "function" ? base(env) : base, {
         // The SDK's `./icons/*.svg?react` imports resolve to files under the
@@ -25,6 +32,7 @@ export default defineConfig((env) =>
         // there. Resolve it (and its DOM twin) from this sample's install.
         resolve: { dedupe: ["react", "react-dom"] },
         build: {
+            manifest: true,
             rolldownOptions: {
                 input: "output/src/ToolUp.Platform.Client/Client/SDK.Client.js",
                 preserveEntrySignatures: "strict",

@@ -7,6 +7,7 @@ open System.Threading.Tasks
 open Microsoft.AspNetCore.Http
 open Google.Cloud.Functions.Framework
 open ToolUp.Platform
+open ToolUp.Platform.Compose
 
 // ─── ToolUp.Hosts.GoogleCloudFunctions — GCF adapter ─────────────────
 //
@@ -50,10 +51,10 @@ open ToolUp.Platform
 //                 Mode = Anonymous
 //                 ServerlessHost = ServerlessHost
 //                 JobScheduler = NoJobScheduler
-//                 Webhooks = NoWebhooks
+//                 Webhooks = FeatureMode.Disabled
 //                 Notifications = NoNotificationsExplicit
-//                 AuditLog = NoAuditLog
-//                 UsageMetering = NoUsageMetering
+//                 AuditLog = FeatureMode.Disabled
+//                 UsageMetering = FeatureMode.Disabled
 //                 HealthStateTracking = false
 //         }
 //         |> ServerApp.addModule (myModule.register ())

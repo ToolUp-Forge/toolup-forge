@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.HealthCheckDefaults
+module ToolUp.Platform.Compose.HealthCheckDefaults
+
+open ToolUp.Platform
 
 open ToolUp.Platform.HealthChecks
 open ToolUp.Platform.Secrets

@@ -4,6 +4,7 @@ open System
 open System.Text.Json
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Infra
 
 // ─── JsonConsoleLogger + LoggerScope — Phase 9e.1 ───────────────────
 //

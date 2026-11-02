@@ -5,12 +5,12 @@ open System.IO
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Secrets
-open ToolUp.Platform.IEmbeddingProvider
-open ToolUp.Platform.IEmbeddingCache
-open ToolUp.Platform.IVectorStore
-open ToolUp.Platform.ISparseIndex
-open ToolUp.Platform.IRetrievalPipeline
-open ToolUp.Platform.IRetrievalTracer
+open ToolUp.Platform.Infra.IEmbeddingProvider
+open ToolUp.Platform.Infra.IEmbeddingCache
+open ToolUp.Platform.Infra.IVectorStore
+open ToolUp.Platform.Infra.ISparseIndex
+open ToolUp.Platform.Infra.IRetrievalPipeline
+open ToolUp.Platform.Infra.IRetrievalTracer
 open ToolUp.RAG.InMemoryVectorStore
 open ToolUp.RAG.InMemoryBM25Index
 open ToolUp.RAG.InMemoryEmbeddingCache
@@ -18,6 +18,8 @@ open ToolUp.RAG.CachingEmbeddingProvider
 open ToolUp.RAG.RetrievalPipeline
 open ToolUp.RAG.RetrievalTracers
 open ToolUp.RAG.VectorStores.Hnsw
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
 
 // ─── CLI choice DUs ──────────────────────────────────────────────
 

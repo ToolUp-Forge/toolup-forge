@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.PresenceApiHandler
+module ToolUp.Platform.Jobs.PresenceApiHandler
 
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
@@ -103,7 +103,7 @@ let forScope
 /// the caller's scope / principal from DI + `HttpContext` per request.
 ///
 /// The route is mounted only under `ServerConfig.Presence =
-/// EnabledPresence` (`BuildRouteHandlers`), which is the same flag that
+/// FeatureMode.Enabled` (`BuildRouteHandlers`), which is the same flag that
 /// registers the substrate — so the two resolves below cannot observe a
 /// null in a composed application.
 let presenceApi (ctx: HttpContext) : IPresenceApi =

@@ -3,6 +3,8 @@ module ToolUp.Platform.Tests.Contracts.IEventStoreDecoratorContract
 open System
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── IEventStoreDecorator contract pack — Phase 9u ───────────────────
 //

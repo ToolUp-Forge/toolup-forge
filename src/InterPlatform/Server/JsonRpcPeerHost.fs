@@ -12,6 +12,9 @@ open Microsoft.FSharp.Reflection
 open Giraffe
 open ToolUp.Platform
 open PeerReflection
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Layer 4 — typed receiver host ───────────────────────────────────
 //
@@ -93,7 +96,7 @@ module PeerWireLimits =
     /// *who* can push a large body at the receiver, not *how large*.
     ///
     /// A deployment that genuinely exchanges larger payloads raises it
-    /// with `PeerServerApp.withWireLimits`; one that wants a tighter
+    /// with `PeerOptions.withWireLimits`; one that wants a tighter
     /// federation boundary lowers it. Both are one line, and neither is
     /// a wire-format change — the ceiling is per-receiver policy.
     let defaultMaxRequestBytes = 8L * 1024L * 1024L

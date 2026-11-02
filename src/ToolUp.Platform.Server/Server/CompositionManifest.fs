@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-namespace ToolUp.Platform
+namespace ToolUp.Platform.Compose
+
+open ToolUp.Platform
+open ToolUp.Platform.Jobs
 
 // ─── Introspectable composition manifest (CompositionManifest) ───────
 //
@@ -112,6 +115,23 @@ type RegisteredPurpose = {
     AllowedSurfaces: string list
 }
 
+/// One contribution in the deployment's ordered plan, as data: who
+/// contributed it, what kind of contribution it is, and the seams it
+/// requires and provides. A projection of a `Contribution` that carries no
+/// closure, so it is deterministic, comparable and serialisable.
+///
+/// `Kind` is a stable label: `service`, `staged`, `routes`,
+/// `validator:<name>`, `middleware:pre` / `middleware:post`, or
+/// `hosted:<unit id>:<placement>` (with `:outbound` appended for an
+/// outbound unit). `Requires` / `Provides` are the seam ids, sorted and
+/// distinct.
+type PlanEntry = {
+    Owner: ComponentId
+    Kind: string
+    Requires: string list
+    Provides: string list
+}
+
 /// A read-only, machine-readable description of what an application
 /// composed: every module, companion slot, datatype, and tool by stable
 /// `ComponentId`, plus the config knobs that shaped composition. Produced
@@ -173,6 +193,33 @@ type CompositionManifest = {
     /// name, so sealing it would move every existing seal's bytes for no
     /// new evidence.
     LiveInterfaceTools: string list
+    /// The deployment's contribution plan, one entry per contribution in
+    /// the order `run` applies them (after companions are resolved).
+    ///
+    /// Read it through `CompositionManifest.plan`, and only when
+    /// `recordsPlan` holds: empty at `PlanSchemaVersion`+ means *the
+    /// deployment contributes nothing*; below it, the manifest never
+    /// carried the field.
+    ///
+    /// **Sealed.** `BootVerificationPreflight.compositionCanonicalForm`
+    /// frames it, in plan order, for a manifest that records it, and
+    /// `compare` reports an entry added, removed, changed or moved when both
+    /// manifests record it.
+    Plan: PlanEntry list
+    /// The configuration the deployment states: one entry per config key the
+    /// registry marks seal-relevant, named by the key and rendered by
+    /// `ConfigKeySeal.render` from its resolved value (a secret as `set` /
+    /// `unset` only).
+    ///
+    /// Read it through `CompositionManifest.sealedConfigKeys`, and only when
+    /// `recordsConfigKeys` holds: below `ConfigKeySchemaVersion` the manifest
+    /// never carried the field.
+    ///
+    /// **Sealed.** `BootVerificationPreflight.compositionCanonicalForm`
+    /// frames it, in key order, for a manifest that records it, and
+    /// `compare` reports a key whose sealed rendering moved when both
+    /// manifests record it.
+    SealedConfigKeys: ConfigKnob list
 }
 
 /// Element constructors + assembly for `CompositionManifest`. Each
@@ -186,7 +233,7 @@ module CompositionManifest =
 
     /// The schema every manifest this binary projects is stamped with.
     [<Literal>]
-    let SchemaVersion = 3
+    let SchemaVersion = 5
 
     /// The schema of every manifest projected before Phase 694 — the
     /// shape that carried no version field at all, and therefore
@@ -207,6 +254,16 @@ module CompositionManifest =
     /// step must not move it.
     [<Literal>]
     let LiveInterfaceSchemaVersion = 3
+
+    /// The schema at which the contribution plan began to be recorded.
+    /// Like the two above, a later schema step must not move it.
+    [<Literal>]
+    let PlanSchemaVersion = 4
+
+    /// The schema at which the seal-relevant config keys began to be
+    /// recorded. Like the three above, a later schema step must not move it.
+    [<Literal>]
+    let ConfigKeySchemaVersion = 5
 
     /// The schema a manifest was projected under, reading an absent or
     /// non-positive field as the pre-694 shape.
@@ -295,6 +352,84 @@ module CompositionManifest =
         |> List.map _.Name
         |> List.distinct
         |> List.sort
+
+    // ─── Contribution plan ───────────────────────────────────────────
+
+    /// Whether this manifest is new enough for its `Plan` to be evidence.
+    /// `false` means the manifest is SILENT on the plan, which a comparison
+    /// must report as unrecorded rather than resolve as unchanged.
+    let recordsPlan (manifest: CompositionManifest) : bool =
+        effectiveSchemaVersion manifest >= PlanSchemaVersion
+
+    let private coerceStrings (xs: string list) : string list = if isNull (box xs) then [] else xs
+
+    /// The recorded plan, in plan order, with the null-list coercion a
+    /// manifest deserialised from a document predating the field needs
+    /// (on the plan and on each entry's seam lists).
+    let plan (manifest: CompositionManifest) : PlanEntry list =
+        (if isNull (box manifest.Plan) then [] else manifest.Plan)
+        |> List.map (fun entry -> {
+            entry with
+                Requires = coerceStrings entry.Requires
+                Provides = coerceStrings entry.Provides
+        })
+
+    // ─── Seal-relevant config keys ───────────────────────────────────
+
+    /// Whether this manifest is new enough for its `SealedConfigKeys` to be
+    /// evidence. `false` means the manifest is SILENT on the configuration,
+    /// which a comparison must report as unrecorded rather than resolve as
+    /// unchanged.
+    let recordsConfigKeys (manifest: CompositionManifest) : bool =
+        effectiveSchemaVersion manifest >= ConfigKeySchemaVersion
+
+    /// The recorded config keys, sorted and distinct by key, with the
+    /// null-list coercion a manifest deserialised from a document predating
+    /// the field needs.
+    let sealedConfigKeys (manifest: CompositionManifest) : ConfigKnob list =
+        (if isNull (box manifest.SealedConfigKeys) then
+             []
+         else
+             manifest.SealedConfigKeys)
+        |> List.distinctBy _.Name
+        |> List.sortBy _.Name
+
+    let private placementLabel =
+        function
+        | SharedWork -> "shared-work"
+        | ProcessLocal -> "process-local"
+        | OnceAtStart -> "once-at-start"
+
+    /// The stable label of a contribution's kind (see `PlanEntry.Kind`).
+    let contributionKindLabel (kind: ContributionKind) : string =
+        match kind with
+        | Service _ -> "service"
+        | Staged _ -> "staged"
+        | Routes _ -> "routes"
+        | Validator check -> "validator:" + check.Name
+        | Middleware(MiddlewarePosition.Pre, _) -> "middleware:pre"
+        | Middleware(MiddlewarePosition.Post, _) -> "middleware:post"
+        | Hosted unit ->
+            let label = $"hosted:{unit.Id.Value}:{placementLabel unit.Placement}"
+            if unit.Outbound then label + ":outbound" else label
+
+    /// The plan entry a contribution projects to.
+    let planEntryOf (contribution: Contribution) : PlanEntry =
+        let seams (ids: SeamId list) =
+            (if isNull (box ids) then [] else ids)
+            |> List.map _.Value
+            |> List.distinct
+            |> List.sort
+
+        {
+            Owner = contribution.Owner
+            Kind = contributionKindLabel contribution.Kind
+            Requires = seams contribution.Requires
+            Provides = seams contribution.Provides
+        }
+
+    /// The plan entries of an ordered contribution plan, in the same order.
+    let planOf (contributions: Contribution list) : PlanEntry list = contributions |> List.map planEntryOf
 
     /// A registered module, identified by the resolved id `addModule`
     /// accumulated onto `ServerApp.ModuleComponentIds` (explicit when
@@ -385,6 +520,13 @@ module CompositionManifest =
     /// by `caseName`.
     let caseKnob (name: string) (value: 'T) : ConfigKnob = knob name (caseName value)
 
+    /// Phase 877 — a knob over a `FeatureMode` field, rendered as the token
+    /// the field spelled before the modes were one type
+    /// (`FeatureModeKnob.render`), so a binding sealed before 877 still
+    /// re-canonicalises to its own bytes.
+    let featureKnob (name: string) (value: FeatureMode) : ConfigKnob =
+        knob name (FeatureModeKnob.render name value)
+
     /// Phase 1051 — the knobs `caseKnob` renders. A binding sealed before
     /// 1051 holds the `%A` rendering for a payload case of one of these,
     /// and `BootVerificationPreflight.compare` reads that legacy value as
@@ -431,6 +573,8 @@ module CompositionManifest =
             ConfigKnobs = configKnobs
             CanonicalMethods = []
             LiveInterfaceTools = []
+            Plan = []
+            SealedConfigKeys = []
         }
 
     /// Phase 526 — attach registered grounding metric / subject entries to
@@ -480,6 +624,25 @@ module CompositionManifest =
         m with
             SchemaVersion = SchemaVersion
             LiveInterfaceTools = (if isNull (box toolNames) then [] else toolNames) |> List.distinct |> List.sort
+    }
+
+    /// Record the contribution plan, the same way `withCanonicalMethods`
+    /// records selectors: it stamps `SchemaVersion` as well as the list, so
+    /// a manifest that went through it with an empty list claims "the
+    /// deployment contributes nothing".
+    let withPlan (entries: PlanEntry list) (m: CompositionManifest) : CompositionManifest = {
+        m with
+            SchemaVersion = SchemaVersion
+            Plan = (if isNull (box entries) then [] else entries)
+    }
+
+    /// Record the seal-relevant config keys, the same way `withPlan` records
+    /// the plan: it stamps `SchemaVersion` as well as the list, so a manifest
+    /// that went through it claims to speak about the configuration.
+    let withConfigKeys (entries: ConfigKnob list) (m: CompositionManifest) : CompositionManifest = {
+        m with
+            SchemaVersion = SchemaVersion
+            SealedConfigKeys = (if isNull (box entries) then [] else entries)
     }
 
     /// The empty manifest — what a pipeline that composed nothing (or was

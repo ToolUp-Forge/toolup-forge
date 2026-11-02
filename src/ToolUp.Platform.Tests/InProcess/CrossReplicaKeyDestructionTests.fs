@@ -12,11 +12,14 @@ open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.EncryptionTypes
-open ToolUp.Platform.BlobEncryption
-open ToolUp.Platform.EncryptedBlobStorage
+open ToolUp.Platform.Infra.BlobEncryption
+open ToolUp.Platform.Infra.EncryptedBlobStorage
 open ToolUp.Platform.ConfigValidation
-open ToolUp.Platform.NotificationChannel
+open ToolUp.Platform.Config.NotificationChannel
 open ToolUp.Platform.Secrets
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 22b — cross-replica encryption-key destruction ────────────
 //

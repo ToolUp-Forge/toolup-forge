@@ -13,7 +13,7 @@ open Giraffe.ViewEngine
 // `<!DOCTYPE html>` — and the Phase 111 head-metadata injection both
 // work unchanged on the result. Giraffe.ViewEngine stays the
 // zero-extra-dependency default (GP 2); Feliz layouts are opt-in via
-// `PublicRenderingServerApp.withFelizLayout`.
+// `PublicRenderingOptions.withFelizLayout`.
 //
 // Why Feliz.ViewEngine: a deployment with a Fable SPA can author
 // presentational components once against the Feliz DSL and compile

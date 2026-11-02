@@ -49,8 +49,9 @@ open ToolUp.PublicRendering
 
 ServerApp.empty
 |> ServerApp.withConfig config            // auth + scope resolver already configured
-|> PublicRenderingCompose.withPublicRendering (fun pr ->
-    pr |> PublicRenderingServerApp.withLayout (LayoutName "page") pageLayout)
+|> PublicRenderingCompose.withPublicRendering (
+    PublicRenderingOptions.create () |> PublicRenderingOptions.withLayout (LayoutName "page") pageLayout
+)
 |> ServerApp.run
 ```
 
@@ -121,7 +122,7 @@ let signIn =
 ServerApp.empty
 |> ServerApp.withAuth (OidcAuthProvider.fromConfig None authConfig)
 |> OidcSsrSignIn.withInteractiveSignIn (new System.Net.Http.HttpClient()) signIn // before the page catch-all
-|> PublicRenderingCompose.withPublicRendering (fun pr -> pr |> PublicRenderingServerApp.withLayout (LayoutName "page") pageLayout)
+|> PublicRenderingCompose.withPublicRendering (PublicRenderingOptions.create () |> PublicRenderingOptions.withLayout (LayoutName "page") pageLayout)
 |> ServerApp.run
 
 // pages/q3-results.md  →  ---\naudience: scope:finance-reader\n---
@@ -169,19 +170,20 @@ open ToolUp.RAG.RAGCompose
 ServerApp.empty
 |> ServerApp.withConfig config            // team surface, PublicPath = the client bundle, PublicRendering enabled
 |> ServerApp.withAuth authProvider        // one identity provider for the app and the pages
-|> RAGCompose.withRAG factory providerProfile embedder (fun rag -> rag |> RAGServerApp.withTopK 8)
+|> RAGCompose.withRAG (RagOptions.create factory providerProfile embedder |> RagOptions.withTopK 8)
 |> ToolUp.AuthProviders.OidcSsrSignIn.withInteractiveSignIn (new System.Net.Http.HttpClient()) signIn
-|> PublicRenderingCompose.withPublicRendering (fun pr -> pr |> PublicRenderingServerApp.withLayout (LayoutName "page") pageLayout)
+|> PublicRenderingCompose.withPublicRendering (PublicRenderingOptions.create () |> PublicRenderingOptions.withLayout (LayoutName "page") pageLayout)
 |> ServerApp.run                          // the combined pipeline ends here
 
 // pages/q3-results.md  →  ---\naudience: scope:finance-reader\n---
 ```
 
-**End the pipeline in `ServerApp.run`, never `RAGServerApp.run`.** `RAGServerApp.run` (like
-`PublicRenderingServerApp.run`) is a terminal: it composes RAG and starts the host, so nothing can be stacked
-after it. Use the `with*` composers for every companion and call `ServerApp.run` once, last. Set base
-configuration (`withConfig`, `withAuth`, `withStorage`) on the outer pipeline before the first composer; the
-delegating helpers on `RAGServerApp` / `PublicRenderingServerApp` overwrite it if called inside a configurator.
+**End the pipeline in `ServerApp.run`.** Use the `with*` composers for every companion and call
+`ServerApp.run` once, last. RAG's settings live on the `RagOptions` record `withRAG` takes and public
+rendering's on the `PublicRenderingOptions` record `withPublicRendering` takes; the deployment's base
+configuration (`withConfig`, `withAuth`, `withStorage`) stays on the `ServerApp` pipeline, and because each
+companion is composed when the deployment resolves, those builders reach it whichever side of `withRAG` or
+`withPublicRendering` they sit.
 
 How the routes divide on that pipeline:
 

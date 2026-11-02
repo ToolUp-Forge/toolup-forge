@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-namespace ToolUp.Platform
+namespace ToolUp.Platform.Scope
 
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
@@ -22,7 +22,7 @@ open ToolUp.Platform
 // **Per-route override.** Like `SecurityHeadersMiddleware`, a handler
 // that already wrote a `Content-Security-Policy` header before
 // `OnStarting` runs wins — the middleware only sets it when absent.
-// This is also what lets the static `ServerConfig.SecurityHeaders`
+// This is also what lets the static `ServerConfig.SecurityPosture.SecurityHeaders`
 // map's CSP (stamped by `SecurityHeadersMiddleware`, registered
 // earlier in the pipeline) take precedence when a deployment uses
 // both mechanisms.

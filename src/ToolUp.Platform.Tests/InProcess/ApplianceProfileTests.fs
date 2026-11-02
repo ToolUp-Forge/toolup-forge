@@ -8,6 +8,8 @@ open FSharp.Reflection
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Phase 488 — the appliance deployment profile ─────────────────────
 //

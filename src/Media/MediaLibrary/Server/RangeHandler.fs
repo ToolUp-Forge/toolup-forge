@@ -11,11 +11,13 @@ open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.Primitives
 open Giraffe
 open ToolUp.Platform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
 
 // ─── Phase 88 — HTTP range-serving endpoints ──────────────────────────
 //
 // Three routes the SDK mounts when `ServerConfig.MediaLibrary =
-// EnabledMediaLibrary`:
+// FeatureMode.Enabled`:
 //
 //   GET /api/media/stream/{mediaId}        scoped (authenticated) stream
 //   GET /media/signed/{mediaId}?token=...  scope-signed public stream

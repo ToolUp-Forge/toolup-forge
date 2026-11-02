@@ -1,7 +1,8 @@
 module ToolUp.RAG.NoOpDocUnderstanding
 
-open ToolUp.Platform.IOcrProvider
-open ToolUp.Platform.ITableExtractor
+open ToolUp.Platform.Infra.IOcrProvider
+open ToolUp.Platform.Infra.ITableExtractor
+open ToolUp.Platform.Infra
 
 /// Default `IOcrProvider`. `IsScanned` returns `false` for every input, so
 /// extractors that consult it stay on their normal text-extraction path —

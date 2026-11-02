@@ -8,11 +8,13 @@ open Microsoft.Extensions.Hosting
 open ToolUp.Platform
 open ToolUp.Platform.Providers
 open ToolUp.Platform.VectorKnowledgeTypes
-open ToolUp.Platform.IEmbeddingProvider
-open ToolUp.Platform.IRetrievalPipeline
+open ToolUp.Platform.Infra.IEmbeddingProvider
+open ToolUp.Platform.Infra.IRetrievalPipeline
 open ToolUp.AI
 open ToolUp.RAG.RAGCompose
 open ToolUp.RAG.StaticCorpus
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Phase 63 — StaticCorpus contract + determinism ──────────────────
 //
@@ -601,14 +603,11 @@ let tests =
 
             /// Compose the app, apply the RAG service-config to a fresh
             /// container, and list the resolved hosted-service type names.
-            let hostedServiceNames (app: RAGServerApp) : string list =
-                let composed = composeRAG app
+            let hostedServiceNames (app: RagOptions) : string list =
+                let composed = ServerApp.empty |> withRAG app
                 let sc = ServiceCollection() :> IServiceCollection
 
-                let sc =
-                    match ServerApp.serviceConfig composed with
-                    | Some f -> f sc
-                    | None -> sc
+                let sc = ToolUp.Platform.Tests.Support.TestSubstrate.applyServiceConfig composed sc
 
                 let sp = sc.BuildServiceProvider()
 
@@ -618,8 +617,8 @@ let tests =
 
             test "withRetrievalPipeline + no VectorisationHandler suppresses the ingestion services (63.A)" {
                 let app =
-                    RAGServerApp.create stubFactory stubProfile embedder
-                    |> RAGServerApp.withRetrievalPipeline emptyStaticPipeline
+                    RagOptions.create stubFactory stubProfile embedder
+                    |> RagOptions.withRetrievalPipeline emptyStaticPipeline
 
                 let names = hostedServiceNames app
 
@@ -633,7 +632,7 @@ let tests =
             }
 
             test "the default pipeline (no override) registers the ingestion service" {
-                let app = RAGServerApp.create stubFactory stubProfile embedder
+                let app = RagOptions.create stubFactory stubProfile embedder
                 let names = hostedServiceNames app
 
                 Expect.isTrue

@@ -7,10 +7,13 @@ open System
 open System.Collections.Concurrent
 open Expecto
 open ToolUp.Platform
-open ToolUp.Platform.IDataExporter
+open ToolUp.Platform.Audit.IDataExporter
 open ToolUp.Platform.DataSubjectRequestApi
-open ToolUp.Platform.DataSubjectRequestApiHandler
+open ToolUp.Platform.Audit.DataSubjectRequestApiHandler
 open ToolUp.Platform.DataSubject.Tests.Support.Doubles
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 9h.A — async RequestExportAsync end-to-end ───────────────────
 //

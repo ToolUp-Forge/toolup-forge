@@ -36,7 +36,8 @@ module DeploymentConfig =
     /// boolean that could silently drift apart — cf. the deliberately
     /// stricter `isHttpsTerminatedHere`.
     let isInternetFacing (config: ServerConfig) : bool =
-        config.RequireHttps || config.TrustForwardedHeaders
+        config.SecurityPosture.RequireHttps
+        || config.SecurityPosture.TrustForwardedHeaders
 
     /// The stricter "HTTPS is explicitly enforced at this layer"
     /// (`RequireHttps`) signal — deliberately NOT `isInternetFacing`. The
@@ -46,7 +47,7 @@ module DeploymentConfig =
     /// internet-facing. Centralised so the intended divergence from
     /// `isInternetFacing` is explicit, not buried in per-validator
     /// comments.
-    let isHttpsTerminatedHere (config: ServerConfig) : bool = config.RequireHttps
+    let isHttpsTerminatedHere (config: ServerConfig) : bool = config.SecurityPosture.RequireHttps
 
     /// True iff the deployment supports the `Team` subject shape
     /// (single-team or multi-team UX). Used by team-store wiring +

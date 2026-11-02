@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-namespace ToolUp.Platform
+namespace ToolUp.Platform.Audit
+
+open ToolUp.Platform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
 
 open System.Text.Json
 open System.Security.Cryptography
@@ -9,7 +13,7 @@ open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
 open Giraffe
 open ToolUp.Remoting.Json.SystemTextJson
-open ToolUp.Platform.IDataExporter
+open ToolUp.Platform.Audit.IDataExporter
 
 // ─── Phase 187 — compliance evidence-pack generator (server) ────────────
 //

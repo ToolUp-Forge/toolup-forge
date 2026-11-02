@@ -16,6 +16,10 @@ open ToolUp.AI
 open ToolUp.AI.AnswerVerifier
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Tests.InProcess.BuildTranscriptTests
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 680 — the grounded-answer chain join ──────────────────────
 //
@@ -85,9 +89,12 @@ let private factTier () =
         BlobFactStore.create (InMemoryBlobStorage()) (InMemoryEventStore.InMemoryEventStore() :> IEventStore)
 
     let assertFact sku value hash =
-        match store.Assert(scopeId, draft sku value hash) |> Async.RunSynchronously with
+        match
+            store.Assert(TestScope.resolved scopeId, draft sku value hash)
+            |> Async.RunSynchronously
+        with
         | Ok fact -> fact
-        | Error e -> failtestf "fixture could not assert a fact: %s" e
+        | Error e -> failtestf "fixture could not assert a fact: %s" (FactStoreError.describe e)
 
     let widgets = assertFact "widgets" 21800m "h-widgets"
     let gadgets = assertFact "gadgets" 14250m "h-gadgets"
@@ -321,7 +328,11 @@ let tests =
                 "the row names exactly the facts the figures matched"
 
             for factId in payload.CitedFactIds do
-                match store.Get(scopeId, factId) |> Async.RunSynchronously with
+                match
+                    store.Get(TestScope.resolved scopeId, factId)
+                    |> TestScope.ok
+                    |> Async.RunSynchronously
+                with
                 | Some fact -> Expect.equal fact.FactId factId "the cited id resolves to its own fact"
                 | None -> failtestf "cited fact id %s does not resolve in the fact store" factId
 

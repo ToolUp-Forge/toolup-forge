@@ -6,13 +6,15 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.EntityTypes
 open ToolUp.Platform.EntityQueryTypes
-open ToolUp.Platform.IEntityStore
+open ToolUp.Platform.Infra.IEntityStore
 open ToolUp.Platform.Metrics
 open ToolUp.Forms.FormSchema
 open ToolUp.Forms.IFormStore
 open ToolUp.Forms.FormStore
 open ToolUp.Forms.FormsCompose
 open ToolUp.Forms.Tests.InProcess.InMemoryEntityStore
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
 
 // ─── Forms server-side defensive hygiene tidy-up ────────────────────
 //
@@ -212,7 +214,7 @@ let private withFormSchemaUniquenessTests =
 
             let captured =
                 try
-                    FormsServerApp.create () |> FormsServerApp.withFormSchema duplicate |> ignore
+                    FormsOptions.create () |> FormsOptions.withFormSchema duplicate |> ignore
 
                     None
                 with ex ->
@@ -248,8 +250,7 @@ let private withFormSchemaUniquenessTests =
                     }
                 ]
 
-            let registered =
-                FormsServerApp.create () |> FormsServerApp.withFormSchema cleanSchema
+            let registered = FormsOptions.create () |> FormsOptions.withFormSchema cleanSchema
 
             Expect.isTrue
                 (Map.containsKey "survey-ok" registered.Schemas)

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.ServiceAccountTokenHandler
+module ToolUp.Platform.Scope.ServiceAccountTokenHandler
 
 open System
 open System.Text
@@ -9,6 +9,9 @@ open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.Primitives
 open ToolUp.Platform
 open ToolUp.Platform.Usage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Usage
+open ToolUp.Platform.Config
 
 // ─── ServiceAccountTokenMiddleware (Phase 527) ───────────────────────
 //
@@ -61,7 +64,7 @@ open ToolUp.Platform.Usage
 // prefix is what makes coexistence with OIDC / JWT bearer auth on the
 // same header possible without either scheme having to know about the
 // other. The middleware itself is registered only when
-// `ServerConfig.ServiceAccounts = EnabledServiceAccounts`, so a
+// `ServerConfig.Stores.ServiceAccounts = EnabledServiceAccounts`, so a
 // deployment that has not opted in has no middleware at all (GP 13).
 //
 // **The SCIM seam (Phase 530).** `src/AuthProviders/Scim/README.md`

@@ -10,6 +10,8 @@ open ToolUp.Platform
 // `NetworkError` case has the same name and would otherwise win.
 open ToolUp.AuthProviders.Oidc.OidcTypes
 open ToolUp.AuthProviders.Oidc.OidcClient
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
 
 // ─── Phase 755 — the OIDC pre-expiry refresh POLICY ──────────────────
 //
@@ -324,7 +326,7 @@ let tests: Test =
                 let policy = defaultPolicy ()
 
                 Expect.equal
-                    (RefreshPlan.outcomeOf policy (Error(NetworkError "Failed to fetch")))
+                    (RefreshPlan.outcomeOf policy (Error(AuthError.NetworkError "Failed to fetch")))
                     (RetryLater policy.RetrySeconds)
                     ""
 

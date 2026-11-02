@@ -5,6 +5,7 @@ open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.RAG.Evaluation.EvalTypes
+open ToolUp.Platform.Compose
 
 // JSON-on-disk shape. The FableConverters STJ converter set handles
 // CLIMutable records natively; the `VectorScope` DU is stored as a flat

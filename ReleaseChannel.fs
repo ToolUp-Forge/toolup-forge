@@ -42,6 +42,7 @@ open System.Globalization
 open System.Text.Json
 open System.Text.RegularExpressions
 open ToolUp.Forge.SemVerBump
+open ToolUp.Platform.Build
 
 // ─── Versions on the channel ─────────────────────────────────────────
 
@@ -516,6 +517,15 @@ type PromotionEvidence = {
     Now: DateTimeOffset
 }
 
+/// The surface the soak judges: the core line's. A candidate is the core's
+/// (operator ruling, docs/platform/release-process.md), and a companion line
+/// rides the core's release act without a soak of its own, so a companion's
+/// break does not re-roll the core's candidate. Only the packages KNOWN to be
+/// on a companion line are dropped: a package nothing places (one withdrawn
+/// since the candidate) still counts, because a withdrawal is a break.
+let coreSurfaceOnly (companionAssemblies: Set<string>) (changes: PackageChange list) =
+    changes |> List.filter (fun c -> not (companionAssemblies.Contains c.Package))
+
 let private days (t: TimeSpan) =
     t.TotalDays.ToString("0.#", CultureInfo.InvariantCulture)
 
@@ -622,30 +632,15 @@ module Tags =
     /// in git's order. Raises when git cannot list them: a reader that saw no
     /// tags would answer every release question as if nothing were released.
     let released (root: string) : string list =
-        let psi =
-            Diagnostics.ProcessStartInfo("git", RedirectStandardOutput = true, RedirectStandardError = true)
+        let r = Git.run root [ "tag"; "--list"; "v*"; "--merged"; "HEAD" ]
 
-        psi.WorkingDirectory <- root
-
-        for a in [ "tag"; "--list"; "v*"; "--merged"; "HEAD" ] do
-            psi.ArgumentList.Add a
-
-        use p = Diagnostics.Process.Start psi
-        let output = p.StandardOutput.ReadToEnd()
-        let err = p.StandardError.ReadToEnd()
-        p.WaitForExit()
-
-        if p.ExitCode <> 0 then
+        if r.ExitCode <> 0 then
             failwithf
                 "the release tags could not be listed (`git tag --list v* --merged HEAD` exited %d): %s"
-                p.ExitCode
-                (err.Trim())
+                r.ExitCode
+                (r.StdErr.Trim())
 
-        output.Replace("\r\n", "\n").Split('\n')
-        |> Array.map _.Trim()
-        |> Array.filter (String.IsNullOrWhiteSpace >> not)
-        |> releaseTags
-        |> List.map fst
+        Lines.ofOutput r.StdOut |> releaseTags |> List.map fst
 
 // ─── The workflow, linted ────────────────────────────────────────────
 

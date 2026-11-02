@@ -1,0 +1,1 @@
+{"kind":"appRoot","base":"publicRenderingServerApp","layers":[],"shortName":"ClientShellUnsupportedBase","id":"reject-client-shell-unsupported-base","children":[{"kind":"clientShell","id":"clientShell","children":[]}]}

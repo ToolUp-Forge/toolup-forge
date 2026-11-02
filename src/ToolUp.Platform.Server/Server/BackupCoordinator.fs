@@ -17,17 +17,20 @@
 ///
 /// `_restore/` is scratch: the snapshot walk skips it, `Promote` swaps it
 /// into place, `DiscardStaged` erases it.
-module ToolUp.Platform.BackupCoordinator
+module ToolUp.Platform.Compose.BackupCoordinator
 
 open System
 open System.Text
 open System.Text.Json
 open ToolUp.Platform
-open ToolUp.Platform.Backup
+open ToolUp.Platform.Compose.Backup
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.BlobEncryption
+open ToolUp.Platform.Infra.BlobEncryption
 open ToolUp.Platform.EncryptionTypes
 open ToolUp.Remoting.Json.SystemTextJson
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
 
 /// The backup-target container every snapshot lives in.
 [<Literal>]

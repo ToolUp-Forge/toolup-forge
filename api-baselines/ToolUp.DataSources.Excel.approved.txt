@@ -7,7 +7,7 @@ ToolUp.DataSources.Excel.ExcelDataSource (class)
 ToolUp.DataSources.Excel.ExcelDataSource.Kind : System.String (literal)
 ToolUp.DataSources.Excel.ExcelDataSource.SelectorSeparator : System.Char (literal)
 ToolUp.DataSources.Excel.ExcelDataSource.composeTableName(System.String, System.String) : System.String
-ToolUp.DataSources.Excel.ExcelDataSource.create(ToolUp.Platform.BlobStorage+IBlobStorage) : ToolUp.Platform.IDataSource
+ToolUp.DataSources.Excel.ExcelDataSource.create(ToolUp.Platform.BlobStorage+IBlobStorage) : ToolUp.Platform.Infra.IDataSource
 ToolUp.DataSources.Excel.ExcelDataSource.parseRange(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.DataSources.Excel.ExcelDataSource+CellRange, System.String]
 ToolUp.DataSources.Excel.ExcelDataSource.readSettings(Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.DataSources.Excel.ExcelDataSource+ExcelSourceSettings, ToolUp.Platform.IngestionError]
 ToolUp.DataSources.Excel.ExcelDataSource.renderCell(ToolUp.Tabular.Xlsx+XlsxCell) : System.String

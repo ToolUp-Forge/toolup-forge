@@ -4,7 +4,7 @@ open System.Net.Http
 open ToolUp.Platform
 open ToolUp.Platform.Auth
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.IEmbeddingProvider
+open ToolUp.Platform.Infra.IEmbeddingProvider
 open ToolUp.Platform.Providers
 open ToolUp.Platform.Secrets
 open ToolUp.AI
@@ -12,6 +12,10 @@ open ToolUp.Facts
 open ToolUp.RAG.RAGCompose
 open ToolUp.PublicRendering
 open ToolUp.AuthProviders
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 /// Everything the composition is handed rather than choosing itself, so the
 /// end-to-end test composes exactly the same application around a scripted
@@ -36,11 +40,14 @@ type Dependencies = {
 let configure (config: ServerConfig) (contentRoot: string) : ServerConfig = {
     config with
         Surfaces = Surfaces.team
-        FactStore = EnabledFactStore
+        Stores = {
+            config.Stores with
+                FactStore = FeatureMode.Enabled
+                EntityStore = FeatureMode.Enabled
+        }
         PublicRendering = EnabledPublicRendering(ContentRoot contentRoot)
-        DataIngestion = EnabledDataIngestion
+        DataIngestion = FeatureMode.Enabled
         JobScheduler = InProcessJobScheduler
-        EntityStore = EnabledEntityStore
 }
 
 /// The application: a RAG app (AI + retrieval + the knowledge base) with the
@@ -49,24 +56,23 @@ let configure (config: ServerConfig) (contentRoot: string) : ServerConfig = {
 /// `ServerApp`; the caller runs it.
 let build (deps: Dependencies) : ServerApp =
     let app =
-        RAGServerApp.create deps.AIProviderFactory deps.ProviderProfile deps.Embedder
-        |> RAGServerApp.withConfig deps.Config
-        |> RAGServerApp.withStorage deps.Storage
-        |> RAGServerApp.mapAI (fun ai -> {
-            ai with
-                Base = ServerApp.withSecretStore deps.Secrets ai.Base
-        })
-        |> RAGServerApp.withVectorStore (ToolUp.RAG.VectorStores.Hnsw.HnswVectorStore.create deps.Storage None)
-        |> RAGServerApp.withAuth deps.Auth
-        |> RAGServerApp.withFacts FactsCompose.withFactTier
-        |> RAGServerApp.mapAI ToolUp.KnowledgeBase.Server.AICompose.register
-        |> RAGServerApp.addModules [
+        ServerApp.empty
+        |> ServerApp.withConfig deps.Config
+        |> ServerApp.withStorage deps.Storage
+        |> ServerApp.withSecretStore deps.Secrets
+        |> ServerApp.withAuth deps.Auth
+        |> ToolUp.KnowledgeBase.Server.AICompose.register
+        |> ServerApp.addModules [
             DailyTrade.Server.serverModule ReferenceData.fiscalWeek [ Narratives.DailyReport ]
             // The knowledge base's AI tools name this module id as their source.
             ServerModule.create "ToolUp.KnowledgeBase"
             |> ServerModule.withGuardedApi KnowledgeBase.Server.knowledgeApi
         ]
-        |> composeRAG
+        |> withRAG (
+            RagOptions.create deps.AIProviderFactory deps.ProviderProfile deps.Embedder
+            |> RagOptions.withVectorStore (ToolUp.RAG.VectorStores.Hnsw.HnswVectorStore.create deps.Storage None)
+            |> RagOptions.withFacts FactsCompose.withFactTier
+        )
         |> Narratives.compose
         |> PublishedPages.captureServices
 
@@ -75,4 +81,7 @@ let build (deps: Dependencies) : ServerApp =
         | Some signIn -> app |> OidcSsrSignIn.withInteractiveSignIn (new HttpClient()) signIn
         | None -> app
 
-    app |> PublicRenderingCompose.withPublicRendering PublishedPages.install
+    app
+    |> PublicRenderingCompose.withPublicRendering (
+        PublicRenderingOptions.create () |> PublishedPages.install deps.Config
+    )

@@ -8,8 +8,10 @@
 // closing block reads are declared here; a block that declares its own
 // `answers` / `faq` shadows this one, which is why they sit in an
 // auto-opened module.
-open ToolUp.Platform.IRetrievalPipeline
+open ToolUp.Platform.Infra.IRetrievalPipeline
 open ToolUp.PublicRendering
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
 
 [<AutoOpen>]
 module PageAmbient =

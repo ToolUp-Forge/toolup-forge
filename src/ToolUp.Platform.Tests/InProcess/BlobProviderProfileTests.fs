@@ -5,6 +5,7 @@ open System.IO
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra
 
 // Binds the IProviderProfile contract pack (Phase 42.B) to the
 // default blob-backed impl over LocalFileStorage rooted in a fresh

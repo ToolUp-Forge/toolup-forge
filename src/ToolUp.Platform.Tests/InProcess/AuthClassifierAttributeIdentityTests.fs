@@ -1,6 +1,8 @@
 namespace Contoso.Consumer.Auth
 
 open System
+open ToolUp.Platform.Config
+open ToolUp.Platform.Audit
 
 // ─── Phase 335 fixtures — a THIRD-PARTY attribute family ─────────────
 //
@@ -237,7 +239,7 @@ module AuthClassifierAttributeIdentityTests =
                 }
 
                 let ex =
-                    refusalOf (fun () -> ToolUp.Platform.Api.make builder |> ignore) "foreign open marker"
+                    refusalOf (fun () -> ToolUp.Platform.Config.Api.make builder |> ignore) "foreign open marker"
 
                 Expect.stringContains ex.Message "ForeignPublicApi" "the diagnostic names the record"
                 Expect.stringContains ex.Message "LooksOpen" "the diagnostic names the field"
@@ -259,7 +261,7 @@ module AuthClassifierAttributeIdentityTests =
 
                 let ex =
                     refusalOf
-                        (fun () -> ToolUp.Platform.Api.make builder |> ignore)
+                        (fun () -> ToolUp.Platform.Config.Api.make builder |> ignore)
                         "foreign marker beside a genuine one"
 
                 Expect.stringContains ex.Message "MixedMarkers" "the diagnostic names the field"
@@ -310,15 +312,15 @@ module AuthClassifierAttributeIdentityTests =
                     PublicSurface = fun () -> async { return 5 }
                 }
 
-                ToolUp.Platform.Api.make serverBuilder |> ignore
-                ToolUp.Platform.Api.make mirrorBuilder |> ignore
+                ToolUp.Platform.Config.Api.make serverBuilder |> ignore
+                ToolUp.Platform.Config.Api.make mirrorBuilder |> ignore
             }
 
             test "an unannotated method still refuses startup (69d preserved)" {
                 let builder (_: HttpContext) : UnannotatedApi = { Naked = fun () -> async { return 1 } }
 
                 let ex =
-                    refusalOf (fun () -> ToolUp.Platform.Api.make builder |> ignore) "unannotated record"
+                    refusalOf (fun () -> ToolUp.Platform.Config.Api.make builder |> ignore) "unannotated record"
 
                 Expect.stringContains
                     ex.Message

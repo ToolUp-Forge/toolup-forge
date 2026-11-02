@@ -42,14 +42,12 @@ let scimConfig =
 
 ServerApp.empty
 |> ServerApp.withConfig myConfig
-|> ScimServerApp.ofServerApp
-|> ScimServerApp.withScim scimConfig
-|> ScimServerApp.run
+|> ScimRoutes.withScim scimConfig
+|> ServerApp.run
 ```
 
 A deployment that never calls `withScim` mounts no routes, registers no services,
 and is byte-for-byte the deployment it was before this package existed (GP 13).
-`ScimServerApp.run` on a `NoScim` app is literally `ServerApp.run app.Base`.
 
 ### The bearer token
 

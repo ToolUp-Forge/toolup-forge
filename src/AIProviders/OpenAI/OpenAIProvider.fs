@@ -5,6 +5,7 @@ open System
 open System.IO
 open System.Net.Http
 open System.Threading
+open ToolUp.Platform.Infra.Transport
 open ToolUp.AI.Wire // JsonHost (portable schema parse)
 open ToolUp.Platform // RetryPolicy (Phase 11.C.5 Tier 3 — unified)
 open ToolUp.Platform.AI
@@ -51,7 +52,7 @@ let ProviderId = "openai-gpt"
 let private sharedClient =
     lazy
         (let c =
-            ToolUp.Platform.PlatformHttpClient.create ToolUp.Platform.EgressSurface.AIProvider
+            ToolUp.Platform.Compose.PlatformHttpClient.create ToolUp.Platform.EgressSurface.AIProvider
 
          c.BaseAddress <- Uri("https://api.openai.com")
          c.Timeout <- TimeSpan.FromMinutes(5.0)

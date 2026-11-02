@@ -7,6 +7,9 @@ open System
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Grounding
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Compose
 
 // ─── Delegated fact store (Phase 889) ────────────────────────────────
 //
@@ -40,8 +43,18 @@ open ToolUp.Platform.Grounding
 // **Declared methods (Phase 1040).** A run may declare the method that
 // produced it (`FactTableRunOptions.Method`); the delegate keeps it beside the
 // run, as it keeps an imported provenance, and every row minted under the run
-// names it in its evidence — exactly the token the default writer stamps. The
-// delegate takes no other run option (inputs, a slice): see `OpenRun`.
+// names it in its evidence — exactly the token the default writer stamps.
+//
+// **Attributed rows and period slices.** Every row of a stored image names
+// the run that wrote it (`DelegateStoredRow.WrittenBy`). A run opened with a
+// period slice replaces exactly the committed rows inside its slice and
+// carries every other row forward still naming its own run, so a carried row
+// is minted under that run's watermark, inputs, method and provenance, never
+// the carrying run's. An image stored before rows were attributed holds rows
+// with no writer; such an image was always written whole by its own run, so
+// its rows are read under that run, and a slice over it is refused by name
+// until the `facts-attribute-delegate-rows` operator task records the
+// attribution.
 //
 // **What the fact tier holds** is the delegate records and exactly what was
 // quoted. A subject nobody asked about has no fact.
@@ -77,12 +90,43 @@ type DelegateTableHead = {
     Commits: DelegateTableCommit list
 }
 
-/// An answer to a `DelegateTableRead`.
+/// One row of a delegated table's stored image, with the run that wrote it.
+/// The stored form of the image: a row stored before rows were attributed
+/// reads with `WrittenBy = None` (the member is absent).
+type internal DelegateStoredRow = {
+    /// Member ids from the hierarchy root down to the table's level.
+    Subject: string list
+    /// The row's period.
+    Period: TemporalExtent
+    /// One value per declared column, keyed by metric id.
+    Values: Map<string, FactValue>
+    /// The run that wrote the row; `None` for a row stored before rows were
+    /// attributed, which the image's own run wrote.
+    WrittenBy: string option
+}
+
+/// Construction and reading of stored rows.
 [<RequireQualifiedAccess>]
-type internal DelegateTableAnswer =
-    | Rows of DelegateTableRow list
-    | Ranked of ranked: DelegateTableRow list * stats: PopulationStats * truncated: bool
-    | Totals of DelegateChildTotal list
+module internal DelegateStoredRow =
+
+    /// A row written by `runId`.
+    let written (runId: string) (row: FactTableRow) : DelegateStoredRow = {
+        Subject = row.Subject
+        Period = row.Period
+        Values = row.Values
+        WrittenBy = Some runId
+    }
+
+    /// The table row a stored row holds.
+    let row (stored: DelegateStoredRow) : FactTableRow = {
+        Subject = stored.Subject
+        Period = stored.Period
+        Values = stored.Values
+    }
+
+    /// Whether the row names the run that wrote it. Read through
+    /// `Option.isSome`: an absent member deserialises as null, which is `None`.
+    let isAttributed (stored: DelegateStoredRow) : bool = Option.isSome stored.WrittenBy
 
 /// What a committed run mints its rows with: the provenance it was opened
 /// with, and the inputs and method it
@@ -92,6 +136,25 @@ type internal DelegateRunMinting = {
     Inputs: string list
     Method: DeclaredMethod option
 }
+
+/// A row a table read returns, with the run that wrote it and what that run
+/// mints its rows with — so a row carried forward by a later run is minted
+/// under its own run.
+type internal DelegateMintedRow = {
+    /// The row, as the read asked for it.
+    Row: DelegateTableRow
+    /// The run that wrote the row.
+    Run: DelegateRun
+    /// What that run mints its rows with.
+    Minting: DelegateRunMinting
+}
+
+/// An answer to a `DelegateTableRead`.
+[<RequireQualifiedAccess>]
+type internal DelegateTableAnswer =
+    | Rows of DelegateMintedRow list
+    | Ranked of ranked: DelegateMintedRow list * stats: PopulationStats * truncated: bool
+    | Totals of DelegateChildTotal list
 
 /// What a delegate mints a draft for.
 type internal DelegateMintSource =
@@ -266,7 +329,7 @@ type internal DelegateTableStore(storage: IBlobStorage) =
     let CacheCap = 8
 
     let cache =
-        BoundedMemoIndex<string * string * int64 * string, FactTableRow array>(CacheCap, ignore)
+        BoundedMemoIndex<string * string * int64 * string, DelegateStoredRow array>(CacheCap, ignore)
 
     // A committed run's provenance, and the imported lineages as of a
     // committed run — keyed as the rows are, and immutable under that key
@@ -355,19 +418,23 @@ type internal DelegateTableStore(storage: IBlobStorage) =
                     )
         }
 
-    /// A committed run's rows.
-    member this.Rows(scopeId: string, run: DelegateRun) : Async<Result<FactTableRow array, string>> = async {
+    /// The stored image at `sequence`, read from storage rather than the
+    /// cache: what a commit carries forward and what the attribution task
+    /// rewrites, so neither ever acts on an image read before an attribution
+    /// was recorded. `None` when no image is stored there.
+    member this.StoredImage
+        (scopeId: string, tableId: string, sequence: int64)
+        : Async<Result<DelegateStoredRow list option, FactTableWriteError>> =
+        FactTableBlobIo.tryGet<DelegateStoredRow list> storage scopeId (this.RowsName tableId sequence)
+
+    /// A committed run's stored rows.
+    member this.Rows(scopeId: string, run: DelegateRun) : Async<Result<DelegateStoredRow array, string>> = async {
         let key = scopeId, run.TableId, run.Watermark.Sequence, run.Watermark.ContentDigest
 
         match cache.TryGet key with
         | Some rows -> return Ok rows
         | None ->
-            match!
-                FactTableBlobIo.tryGet<FactTableRow list>
-                    storage
-                    scopeId
-                    (this.RowsName run.TableId run.Watermark.Sequence)
-            with
+            match! this.StoredImage(scopeId, run.TableId, run.Watermark.Sequence) with
             | Error e -> return Error(FactTableWriteError.describe e)
             | Ok None -> return Error(sprintf "the rows of run %s are missing" (DelegateFact.token run.Watermark))
             | Ok(Some rows) ->
@@ -375,6 +442,79 @@ type internal DelegateTableStore(storage: IBlobStorage) =
                 cache.Set(key, image)
                 return Ok image
     }
+
+    /// A committed run's rows, each with the run that wrote it and what that
+    /// run mints with. A row with no writer was written by `image`'s own run;
+    /// a row naming a run the table's head does not record is a fault.
+    member this.Attributed
+        (scopeId: string, image: DelegateRun)
+        : Async<Result<(DelegateStoredRow * DelegateRun * DelegateRunMinting) array, string>> =
+        async {
+            match! this.Rows(scopeId, image) with
+            | Error e -> return Error e
+            | Ok rows ->
+                let others =
+                    rows
+                    |> Array.choose _.WrittenBy
+                    |> Array.distinct
+                    |> Array.filter (fun runId -> runId <> image.RunId)
+
+                let! known = async {
+                    if Array.isEmpty others then
+                        return Ok Map.empty
+                    else
+                        match! this.Head(scopeId, image.TableId) with
+                        | Error e -> return Error e
+                        | Ok head ->
+                            let runs =
+                                head
+                                |> Option.map (fun h ->
+                                    h.Commits |> List.map (fun c -> c.Run.RunId, c.Run) |> Map.ofList)
+                                |> Option.defaultValue Map.empty
+
+                            match others |> Array.tryFind (runs.ContainsKey >> not) with
+                            | Some missing ->
+                                return
+                                    Error(
+                                        sprintf
+                                            "the rows of run %s name run %s as their writer, which table '%s' has no commit of"
+                                            (DelegateFact.token image.Watermark)
+                                            missing
+                                            image.TableId
+                                    )
+                            | None -> return Ok runs
+                }
+
+                match known with
+                | Error e -> return Error e
+                | Ok known ->
+                    let writerOf (row: DelegateStoredRow) =
+                        match row.WrittenBy with
+                        | Some runId when runId <> image.RunId -> known[runId]
+                        | _ -> image
+
+                    let writers = rows |> Array.map writerOf |> Array.distinctBy _.RunId |> List.ofArray
+
+                    let rec mintings (remaining: DelegateRun list) (acc: Map<string, DelegateRunMinting>) = async {
+                        match remaining with
+                        | [] -> return Ok acc
+                        | run :: rest ->
+                            match! this.Minting(scopeId, run) with
+                            | Error e -> return Error e
+                            | Ok minting -> return! mintings rest (Map.add run.RunId minting acc)
+                    }
+
+                    match! mintings writers Map.empty with
+                    | Error e -> return Error e
+                    | Ok byRun ->
+                        return
+                            Ok(
+                                rows
+                                |> Array.map (fun row ->
+                                    let run = writerOf row
+                                    row, run, byRun[run.RunId])
+                            )
+        }
 
     /// The provenance a committed run was opened with: `ComputedRun` when it
     /// kept none.
@@ -496,38 +636,34 @@ type internal DelegateTableStore(storage: IBlobStorage) =
             freshnessOf: PopulationMember -> FactFreshness
         ) : Async<Result<DelegateTableAnswer, string>> =
         async {
-            let! loaded = async {
-                match! this.Rows(scopeId, run) with
-                | Error e -> return Error e
-                | Ok rows ->
-                    match! this.Minting(scopeId, run) with
-                    | Error e -> return Error e
-                    | Ok minting -> return Ok(rows, minting)
-            }
-
-            match loaded with
+            match! this.Attributed(scopeId, run) with
             | Error e -> return Error e
-            | Ok(rows, minting) ->
+            | Ok attributed ->
                 let column = delegateFact.Query.ValueColumn
 
-                let cell (row: FactTableRow) : DelegateTableRow option =
+                let cell (row: DelegateStoredRow, writer: DelegateRun, minting: DelegateRunMinting) =
                     row.Values
                     |> Map.tryFind column
                     |> Option.map (fun value -> {
-                        Subject = row.Subject
-                        Period = row.Period
-                        Value = value
+                        Row = {
+                            Subject = row.Subject
+                            Period = row.Period
+                            Value = value
+                        }
+                        Run = writer
+                        Minting = minting
                     })
 
                 let overlaps (filter: TemporalExtent option) (period: TemporalExtent) =
                     filter |> Option.forall (fun p -> p.From < period.To && period.From < p.To)
 
+                let where (keep: DelegateStoredRow -> bool) =
+                    attributed |> Array.filter (fun (row, _, _) -> keep row) |> Array.choose cell
+
                 match read with
                 | DelegateTableRead.Point(subject, periodOverlaps) ->
                     return
-                        rows
-                        |> Array.filter (fun r -> r.Subject = subject && overlaps periodOverlaps r.Period)
-                        |> Array.choose cell
+                        where (fun r -> r.Subject = subject && overlaps periodOverlaps r.Period)
                         |> Array.toList
                         |> DelegateTableAnswer.Rows
                         |> Ok
@@ -539,16 +675,17 @@ type internal DelegateTableStore(storage: IBlobStorage) =
                             List.length path >= List.length p && List.truncate (List.length p) path = p)
 
                     let matched =
-                        rows
-                        |> Array.filter (fun r -> prefixMatches r.Subject && overlaps periodOverlaps r.Period)
-                        |> Array.choose cell
-                        |> Array.filter (fun r ->
-                            threshold |> Option.forall (fun t -> ValueThreshold.satisfies t r.Value))
+                        where (fun r -> prefixMatches r.Subject && overlaps periodOverlaps r.Period)
+                        |> Array.filter (fun m ->
+                            threshold |> Option.forall (fun t -> ValueThreshold.satisfies t m.Row.Value))
                         |> Array.toList
 
-                    let memberOf (row: DelegateTableRow) : PopulationMember * DelegateTableRow =
-                        // The id and lineage the row is minted under.
-                        let draft = DelegateMint.draft minting delegateFact run (MintedRow row)
+                    let memberOf (minted: DelegateMintedRow) : PopulationMember * DelegateMintedRow =
+                        // The id and lineage the row is minted under: its own run's.
+                        let row = minted.Row
+
+                        let draft =
+                            DelegateMint.draft minted.Minting delegateFact minted.Run (MintedRow row)
 
                         {
                             FactId =
@@ -565,10 +702,10 @@ type internal DelegateTableStore(storage: IBlobStorage) =
                             Magnitude = PopulationValue.comparable row.Value
                             PeriodFrom = row.Period.From
                             PeriodTo = row.Period.To
-                            AsOf = run.Watermark.CommittedAt
+                            AsOf = minted.Run.Watermark.CommittedAt
                             MethodIdentity = Fact.methodIdentity draft.Method
                         },
-                        row
+                        minted
 
                     let members = matched |> List.map memberOf
                     let stats = PopulationStats.ofMembers freshnessOf (members |> List.map fst)
@@ -591,9 +728,8 @@ type internal DelegateTableStore(storage: IBlobStorage) =
                     let depth = delegateFact.Query.Level - 1
 
                     return
-                        rows
-                        |> Array.filter (fun r -> overlaps periodOverlaps r.Period)
-                        |> Array.choose cell
+                        where (fun r -> overlaps periodOverlaps r.Period)
+                        |> Array.map _.Row
                         |> Array.groupBy (fun r -> List.truncate depth r.Subject, r.Period.From, r.Period.To)
                         |> Array.map (fun ((parent, _, _), children) ->
                             let first = children[0]
@@ -621,11 +757,12 @@ type internal DelegateTableStore(storage: IBlobStorage) =
                         |> Ok
         }
 
-    /// A reconstruction recorded beside the log, by id.
-    member this.Quote(scopeId: string, factId: string) : Async<Fact option> = async {
+    /// A reconstruction recorded beside the log, by id. A quote that cannot
+    /// be read is an `Error`, never an absent quote.
+    member this.Quote(scopeId: string, factId: string) : Async<Result<Fact option, string>> = async {
         match! FactTableBlobIo.tryGet<Fact> storage scopeId (this.QuoteName factId) with
-        | Ok found -> return found
-        | Error _ -> return None
+        | Ok found -> return Ok found
+        | Error e -> return Error(FactTableWriteError.describe e)
     }
 
     /// Record a reconstruction beside the log (idempotent by id).
@@ -707,22 +844,29 @@ module internal DelegateLineages =
             return found |> List.concat
         }
 
-// The accessor pair a delegated read runs over — the inner store bound to
-// the scope form the caller holds, so the typed (`ResolvedScope`) door
-// reaches the inner store through ITS typed overloads, never through a
-// string it re-derived.
-type private InnerScope = {
-    ScopeId: string
-    Assert: FactDraft -> Async<Result<Fact, string>>
-    Get: string -> Async<Fact option>
-    Query: FactQuery -> Async<Fact list>
-    QueryWithCompetition: FactQuery -> Async<FactWithCompetition list>
-    Chain: string -> Async<Fact list>
-    Population: PopulationQuery -> Async<Result<PopulationResult, string>>
-}
+/// Where one read of the delegated store is answered — decided once per call,
+/// before anything is read: the inner store untouched, or the delegate's
+/// table.
+[<RequireQualifiedAccess>]
+type internal ReadFrom =
+    /// The inner store answers, untouched.
+    | Inner
+    /// The delegate's table answers; `importedCertificate` is the certificate
+    /// the read was selected through when it named an imported lineage.
+    | DelegateTable of delegateFact: DelegateFact * importedCertificate: string option
 
-/// The `IFactStore` decorator a delegated metric is read through (Phase
-/// 889). A delegated metric's point and population reads are pushed down to
+/// What a point read of a delegated table leaves the decorator to answer.
+[<RequireQualifiedAccess>]
+type internal DelegatedPoint =
+    /// The current rows are ordinary heads in the inner store now (or the
+    /// table never committed): the inner store answers, with its own
+    /// selection, history and competition rules.
+    | InnerAnswers
+    /// The table answered: an `AsOf` read, or its refusal.
+    | Answered of Fact list
+
+/// The `IFactStore` decorator a delegated metric is read through. A
+/// delegated metric's point and population reads are pushed down to
 /// its table and the rows returned are minted as ordinary facts; every
 /// other read, and every write, reaches the inner store untouched.
 ///
@@ -748,24 +892,32 @@ type DelegatedFactStore
 
     let now () = clock().ToUniversalTime()
 
-    let ofString (scopeId: string) : InnerScope = {
-        ScopeId = scopeId
-        Assert = fun d -> inner.Assert(scopeId, d)
-        Get = fun id -> inner.Get(scopeId, id)
-        Query = fun q -> inner.Query(scopeId, q)
-        QueryWithCompetition = fun q -> inner.QueryWithCompetition(scopeId, q)
-        Chain = fun id -> inner.QuerySupersessionChain(scopeId, id)
-        Population = fun q -> inner.QueryPopulation(scopeId, q)
+    // The inner store under the read's one scope. A fault the inner store
+    // reports is raised here and answered as `StorageFault` at the
+    // interface (`FactStoreResult.ofRead`), so a delegated read never turns a fault
+    // into a shorter answer.
+    let innerAssert (scope: ResolvedScope) (draft: FactDraft) : Async<Result<Fact, string>> = async {
+        let! asserted = inner.Assert(scope, draft)
+        return asserted |> Result.mapError FactStoreError.describe
     }
 
-    let ofResolved (scope: ResolvedScope) : InnerScope = {
-        ScopeId = scope.ScopeId
-        Assert = fun d -> inner.Assert(scope, d)
-        Get = fun id -> inner.Get(scope, id)
-        Query = fun q -> inner.Query(scope, q)
-        QueryWithCompetition = fun q -> inner.QueryWithCompetition(scope, q)
-        Chain = fun id -> inner.QuerySupersessionChain(scope, id)
-        Population = fun q -> inner.QueryPopulation(scope, q)
+    let innerGet (scope: ResolvedScope) (factId: string) =
+        inner.Get(scope, factId) |> FactStoreResult.orRaiseAsync
+
+    let innerQuery (scope: ResolvedScope) (q: FactQuery) =
+        inner.Query(scope, q) |> FactStoreResult.orRaiseAsync
+
+    let innerQueryWithCompetition (scope: ResolvedScope) (q: FactQuery) =
+        inner.QueryWithCompetition(scope, q) |> FactStoreResult.orRaiseAsync
+
+    let innerChain (scope: ResolvedScope) (factId: string) =
+        inner.QuerySupersessionChain(scope, factId) |> FactStoreResult.orRaiseAsync
+
+    let innerPopulation (scope: ResolvedScope) (q: PopulationQuery) : Async<Result<PopulationResult, string>> = async {
+        match! inner.QueryPopulation(scope, q) with
+        | Ok result -> return Ok result
+        | Error(FactStoreError.Refused reason) -> return Error reason
+        | Error fault -> return raise (FactStoreFault fault)
     }
 
     let methodMatches (delegateFact: DelegateFact) (m: MethodRef option) =
@@ -775,43 +927,58 @@ type DelegatedFactStore
     let delegateOf (metric: MetricRef) =
         delegates |> List.tryFind (fun d -> d.Metric = metric)
 
-    // Phase 964 — a read naming `Imported c` is delegated when `c` is one of
-    // the certificates the table's runs recorded importing under
-    // (`DelegateTableStore.ImportedLineages`): the table holds that lineage's
-    // rows, so asking only the inner store answered only what was already
-    // quoted. `Some c` is the certificate a selection was made through.
-    let recordsImport (ops: InnerScope) (d: DelegateFact) (certificateRef: string) : Async<bool> = async {
-        match! tables.Current(ops.ScopeId, d.TableId) with
-        | Ok(Some commit) ->
-            match! tables.ImportedLineages(ops.ScopeId, commit.Run) with
-            | Ok lineages -> return List.contains certificateRef lineages
-            | Error _ -> return false
-        | _ -> return false
+    // A delegated table that cannot be read is a fault: raised here and
+    // answered as `StorageFault` at the interface, never as a shorter answer.
+    let orFault (d: DelegateFact) (read: Async<Result<'T, string>>) : Async<'T> = async {
+        match! read with
+        | Ok value -> return value
+        | Error detail ->
+            return raise (FactStoreFault(FactStoreError.StorageFault(sprintf "delegated table '%s'" d.TableId, detail)))
     }
 
-    let selectByMethod (ops: InnerScope) (d: DelegateFact) (m: MethodRef option) = async {
+    // A read naming `Imported c` is delegated when `c` is one of the
+    // certificates the table's runs recorded importing under
+    // (`DelegateTableStore.ImportedLineages`): the table holds that lineage's
+    // rows, so asking only the inner store answered only what was already
+    // quoted.
+    let recordsImport (scope: ResolvedScope) (d: DelegateFact) (certificateRef: string) : Async<bool> = async {
+        match! tables.Current(scope.ScopeId, d.TableId) |> orFault d with
+        | None -> return false
+        | Some commit ->
+            let! lineages = tables.ImportedLineages(scope.ScopeId, commit.Run) |> orFault d
+            return List.contains certificateRef lineages
+    }
+
+    let selectByMethod (scope: ResolvedScope) (d: DelegateFact) (m: MethodRef option) : Async<ReadFrom> = async {
         if methodMatches d m then
-            return Some(d, None)
+            return ReadFrom.DelegateTable(d, None)
         else
             match m with
             | Some(Imported certificateRef) ->
-                let! recorded = recordsImport ops d certificateRef
-                return if recorded then Some(d, Some certificateRef) else None
-            | _ -> return None
+                let! recorded = recordsImport scope d certificateRef
+
+                return
+                    if recorded then
+                        ReadFrom.DelegateTable(d, Some certificateRef)
+                    else
+                        ReadFrom.Inner
+            | _ -> return ReadFrom.Inner
     }
 
-    let pointDelegate (ops: InnerScope) (query: FactQuery) : Async<(DelegateFact * string option) option> = async {
+    // Where a point read is answered, decided once for the call.
+    let pointReadFrom (scope: ResolvedScope) (query: FactQuery) : Async<ReadFrom> = async {
         match query.Subject, query.Metric with
-        // A subject outside the query's branch (Phase 1123) is no point
-        // read: the inner store, which honours the branch, answers nothing.
+        // A subject outside the query's branch is no point read: the inner
+        // store, which honours the branch, answers nothing.
         | Some subject, Some metric when FactQuery.admitsSubject query subject ->
             match delegateOf metric |> Option.filter (fun d -> DelegateFact.covers d subject) with
-            | Some d -> return! selectByMethod ops d query.Method
-            | None -> return None
-        | _ -> return None
+            | Some d -> return! selectByMethod scope d query.Method
+            | None -> return ReadFrom.Inner
+        | _ -> return ReadFrom.Inner
     }
 
-    let populationDelegate (ops: InnerScope) (query: PopulationQuery) : Async<(DelegateFact * string option) option> = async {
+    // Where a population read is answered, decided once for the call.
+    let populationReadFrom (scope: ResolvedScope) (query: PopulationQuery) : Async<ReadFrom> = async {
         let shaped =
             delegateOf query.Metric
             |> Option.filter (fun d ->
@@ -819,10 +986,10 @@ type DelegatedFactStore
                 && (query.Level |> Option.forall (fun level -> level = d.Query.Level)))
 
         match shaped, query.Methods with
-        | None, _ -> return None
+        | None, _ -> return ReadFrom.Inner
         | Some d, CanonicalMethodOnly
-        | Some d, AllCompetingMethods -> return Some(d, None)
-        | Some d, OneMethod m -> return! selectByMethod ops d (Some m)
+        | Some d, AllCompetingMethods -> return ReadFrom.DelegateTable(d, None)
+        | Some d, OneMethod m -> return! selectByMethod scope d (Some m)
     }
 
     /// Only the facts in the lineage a read named, when it was selected
@@ -843,87 +1010,87 @@ type DelegatedFactStore
     let refusal (delegateFact: DelegateFact) (detail: string) =
         DelegateRefusal.SourceUnavailable(delegateFact.TableId, detail)
 
-    let read (ops: InnerScope) (d: DelegateFact) (run: DelegateRun) (r: DelegateTableRead) (at: DateTime) =
+    let read (scope: ResolvedScope) (d: DelegateFact) (run: DelegateRun) (r: DelegateTableRead) (at: DateTime) =
         let policy = policyOf d.Metric
-        tables.Read(ops.ScopeId, d, run, r, (fun m -> Freshness.deriveAt policy m.AsOf true at))
+        tables.Read(scope.ScopeId, d, run, r, (fun m -> Freshness.deriveAt policy m.AsOf true at))
 
-    // Mint rows of the CURRENT run as ordinary facts, in order. A repeated
-    // read of an unchanged table re-asserts identical tuples, which the
-    // store answers idempotently by content address.
-    let mint (ops: InnerScope) (d: DelegateFact) (run: DelegateRun) (rows: DelegateTableRow list) = async {
-        match! tables.Minting(ops.ScopeId, run) with
-        | Error e -> return Error e
-        | Ok minting ->
-            let rec go (remaining: DelegateTableRow list) (acc: Fact list) = async {
-                match remaining with
-                | [] -> return Ok(List.rev acc)
-                | row :: rest ->
-                    match! ops.Assert(DelegateMint.draft minting d run (MintedRow row)) with
-                    | Ok fact -> return! go rest (fact :: acc)
-                    | Error e -> return Error e
-            }
+    // Mint rows of the CURRENT image as ordinary facts, in order, each under
+    // the run that wrote it. A repeated read of an unchanged table re-asserts
+    // identical tuples, which the store answers idempotently by content
+    // address; a row a slice carried forward re-asserts the fact its own run
+    // minted.
+    let mint (scope: ResolvedScope) (d: DelegateFact) (rows: DelegateMintedRow list) = async {
+        let rec go (remaining: DelegateMintedRow list) (acc: Fact list) = async {
+            match remaining with
+            | [] -> return Ok(List.rev acc)
+            | minted :: rest ->
+                match! innerAssert scope (DelegateMint.draft minted.Minting d minted.Run (MintedRow minted.Row)) with
+                | Ok fact -> return! go rest (fact :: acc)
+                | Error e -> return Error e
+        }
 
-            return! go rows []
+        return! go rows []
     }
 
-    // Quote rows of a run that is NO LONGER current: the fact minted while
+    // Quote rows of an image that is NO LONGER current: the fact minted while
     // it was current if there is one, else a reconstruction recorded beside
     // the log. Never an ordinary assertion — that would make a past value
     // the current head of its lineage.
-    let quoteHistorical (ops: InnerScope) (d: DelegateFact) (run: DelegateRun) (rows: DelegateTableRow list) = async {
-        match! tables.Minting(ops.ScopeId, run) with
-        | Error e -> return Error e
-        | Ok minting ->
-            let rec go (remaining: DelegateTableRow list) (acc: Fact list) = async {
-                match remaining with
-                | [] -> return Ok(List.rev acc)
-                | row :: rest ->
-                    let draft = DelegateMint.draft minting d run (MintedRow row)
-                    let rebuilt = DelegateMint.reconstruct draft run.Watermark.CommittedAt
+    let quoteHistorical (scope: ResolvedScope) (d: DelegateFact) (rows: DelegateMintedRow list) = async {
+        let rec go (remaining: DelegateMintedRow list) (acc: Fact list) = async {
+            match remaining with
+            | [] -> return Ok(List.rev acc)
+            | minted :: rest ->
+                let draft = DelegateMint.draft minted.Minting d minted.Run (MintedRow minted.Row)
+                let rebuilt = DelegateMint.reconstruct draft minted.Run.Watermark.CommittedAt
 
-                    match! ops.Get rebuilt.FactId with
-                    | Some stored -> return! go rest (stored :: acc)
-                    | None ->
-                        match! tables.RecordQuote(ops.ScopeId, rebuilt) with
-                        | Ok() -> return! go rest (rebuilt :: acc)
-                        | Error e -> return Error e
-            }
+                match! innerGet scope rebuilt.FactId with
+                | Some stored -> return! go rest (stored :: acc)
+                | None ->
+                    match! tables.RecordQuote(scope.ScopeId, rebuilt) with
+                    | Ok() -> return! go rest (rebuilt :: acc)
+                    | Error e -> return Error e
+        }
 
-            return! go rows []
+        return! go rows []
     }
 
     // The quoted heads of one subject minted from a run that is no longer
-    // current and whose row the current run no longer carries: superseded
-    // by an `Absent` so a stale value is never served as a current head.
+    // current and whose row the current image no longer carries: superseded
+    // by an `Absent` under the current run, so a stale value is never served
+    // as a current head. A row the image carries is live whichever run wrote
+    // it. A table read that fails fails the read: the stale head it was to
+    // retire would otherwise be served as current.
     let retireRemoved
-        (ops: InnerScope)
+        (scope: ResolvedScope)
         (d: DelegateFact)
         (run: DelegateRun)
         (subject: SubjectRef)
-        (live: DelegateTableRow list)
+        (live: DelegateMintedRow list)
         =
         async {
             let token = DelegateFact.token run.Watermark
 
             let! heads =
-                ops.Query {
+                innerQuery scope {
                     FactQuery.all with
                         Subject = Some subject
                         Metric = Some d.Metric
                         Method = Some d.Method
                 }
 
-            // The imported lineages too (Phase 938). A table that never
-            // imported records none, and asks nothing more.
-            let! lineages = tables.ImportedLineages(ops.ScopeId, run)
+            // The imported lineages too. A table that never imported records
+            // none, and asks nothing more.
+            let! lineages = tables.ImportedLineages(scope.ScopeId, run) |> orFault d
 
             let! imported =
                 match lineages with
-                | Ok(_ :: _ as certificates) ->
-                    DelegateLineages.importedHeads ops.Query d certificates (fun q -> { q with Subject = Some subject })
-                | _ -> async.Return []
-
-            let! minting = tables.Minting(ops.ScopeId, run)
+                | [] -> async.Return []
+                | certificates ->
+                    DelegateLineages.importedHeads (innerQuery scope) d certificates (fun q -> {
+                        q with
+                            Subject = Some subject
+                    })
 
             let removed =
                 (heads |> List.map (fun f -> d.Method, f)) @ imported
@@ -931,22 +1098,19 @@ type DelegatedFactStore
                     DelegateLineages.isStale d token method f
                     && not (
                         live
-                        |> List.exists (fun r -> r.Period.From = f.Period.From && r.Period.To = f.Period.To)
+                        |> List.exists (fun m -> m.Row.Period.From = f.Period.From && m.Row.Period.To = f.Period.To)
                     ))
 
-            // A run whose provenance cannot be read retires nothing now
-            // rather than minting an absence that names the wrong origin;
-            // the next read retries. An absence that fails to assert fails
-            // the read: the stale head it was to retire would
-            // otherwise be served as current.
-            match minting with
-            | Error _ -> return Ok()
-            | Ok minting ->
+            match removed with
+            | [] -> return Ok()
+            | _ ->
+                let! minting = tables.Minting(scope.ScopeId, run) |> orFault d
+
                 let rec retire (remaining: (MethodRef * Fact) list) = async {
                     match remaining with
                     | [] -> return Ok()
                     | (_, fact) :: rest ->
-                        match! ops.Assert(DelegateMint.draft minting d run (RemovedQuote fact)) with
+                        match! innerAssert scope (DelegateMint.draft minting d run (RemovedQuote fact)) with
                         | Ok _ -> return! retire rest
                         | Error e -> return Error e
                 }
@@ -954,134 +1118,130 @@ type DelegatedFactStore
                 return! retire removed
         }
 
-    // The point door's refusal: a typed `Absent` fact whose reason is the
-    // refusal, recorded beside the log so the gate resolves it. Its id is
-    // content-addressed over the question, so asking twice is one record.
-    let refusedPoint (ops: InnerScope) (d: DelegateFact) (query: FactQuery) (reason: DelegateRefusal) (asOf: DateTime) = async {
-        let subject =
-            query.Subject
-            |> Option.defaultValue {
-                Hierarchy = d.Query.Hierarchy
-                Path = []
+    // The point door's refusal of an `AsOf` read the table cannot answer: a
+    // typed `Absent` fact whose reason is the refusal, recorded beside the
+    // log so the gate resolves it. Its id is content-addressed over the
+    // question, so asking twice is one record.
+    let refusedPoint
+        (scope: ResolvedScope)
+        (d: DelegateFact)
+        (query: FactQuery)
+        (reason: DelegateRefusal)
+        (asOf: DateTime)
+        =
+        async {
+            let subject =
+                query.Subject
+                |> Option.defaultValue {
+                    Hierarchy = d.Query.Hierarchy
+                    Path = []
+                }
+
+            let period = query.PeriodOverlaps |> Option.defaultValue DelegateMint.RecordPeriod
+
+            let draft: FactDraft = {
+                Subject = subject
+                Metric = d.Metric
+                Value = Absent(DelegateRefusal.describe reason)
+                Period = period
+                Method = d.Method
+                Evidence = {
+                    ResultRef = None
+                    InputHashes = [ sprintf "refused:%s" (asOf.ToUniversalTime().ToString "o") ]
+                    TriggerRef = None
+                }
+                Confidence = None
+                Disclosure = d.Disclosure
             }
 
-        let period = query.PeriodOverlaps |> Option.defaultValue DelegateMint.RecordPeriod
-
-        let draft: FactDraft = {
-            Subject = subject
-            Metric = d.Metric
-            Value = Absent(DelegateRefusal.describe reason)
-            Period = period
-            Method = d.Method
-            Evidence = {
-                ResultRef = None
-                InputHashes = [ sprintf "refused:%s" (asOf.ToUniversalTime().ToString "o") ]
-                TriggerRef = None
-            }
-            Confidence = None
-            Disclosure = d.Disclosure
+            let fact = DelegateMint.reconstruct draft asOf
+            do! tables.RecordQuote(scope.ScopeId, fact) |> orFault d
+            return [ fact ]
         }
 
-        let fact = DelegateMint.reconstruct draft asOf
-        let! _ = tables.RecordQuote(ops.ScopeId, fact)
-        return [ fact ]
-    }
-
-    /// The point read, delegated. `Ok None` means "not delegated — ask the
-    /// inner store"; `Ok (Some facts)` is the answer.
-    let pointRead (ops: InnerScope) (query: FactQuery) : Async<Result<Fact list option, DelegateRefusal>> = async {
-        match! pointDelegate ops query with
-        | None -> return Ok None
-        | Some(d, imported) ->
+    /// A point read the delegate's table answers.
+    let pointFromTable
+        (scope: ResolvedScope)
+        (d: DelegateFact)
+        (imported: string option)
+        (query: FactQuery)
+        : Async<DelegatedPoint> =
+        async {
             let subject = query.Subject.Value
 
             let rowsOf (commit: DelegateTableCommit) at = async {
-                match! read ops d commit.Run (DelegateTableRead.Point(subject.Path, query.PeriodOverlaps)) at with
-                | Ok(DelegateTableAnswer.Rows rows) -> return Ok rows
-                | Ok _ -> return Ok []
-                | Error e -> return Error(refusal d e)
+                match!
+                    read scope d commit.Run (DelegateTableRead.Point(subject.Path, query.PeriodOverlaps)) at
+                    |> orFault d
+                with
+                | DelegateTableAnswer.Rows rows -> return rows
+                | _ -> return []
             }
 
-            match! tables.Current(ops.ScopeId, d.TableId) with
-            | Error e -> return Error(refusal d e)
-            | Ok current ->
-                match query.AsOf, current with
-                // Never committed: the table holds nothing, and neither does
-                // the fact tier for it — the inner store answers (empty).
-                | None, None -> return Ok None
-                | None, Some commit ->
-                    match! rowsOf commit (now ()) with
-                    | Error e -> return Error e
-                    | Ok rows ->
-                        match! mint ops d commit.Run rows with
-                        | Error e -> return Error(refusal d e)
-                        | Ok _ ->
-                            match! retireRemoved ops d commit.Run subject rows with
-                            | Error e -> return Error(refusal d e)
-                            | Ok() ->
-                                // The minted facts are ordinary heads now, so
-                                // the inner store answers with its own
-                                // selection, history and competition rules
-                                // intact.
-                                return Ok None
-                | Some t, _ ->
-                    match d.History with
-                    | SnapshotFidelity.Approximate ->
-                        let! refused =
-                            refusedPoint
-                                ops
-                                d
-                                query
-                                (DelegateRefusal.ApproximateHistory(d.Metric.Value, d.TableId, t))
-                                t
+            let! current = tables.Current(scope.ScopeId, d.TableId) |> orFault d
 
-                        return Ok(Some refused)
-                    | SnapshotFidelity.Exact ->
-                        match! tables.At(ops.ScopeId, d.TableId, t) with
-                        | Error e -> return Error(refusal d e)
-                        | Ok None -> return Ok(Some [])
-                        | Ok(Some commit) ->
-                            let isCurrent = current |> Option.exists (fun c -> c.Run.RunId = commit.Run.RunId)
+            match query.AsOf, current with
+            // Never committed: the table holds nothing, and neither does the
+            // fact tier for it — the inner store answers (empty).
+            | None, None -> return DelegatedPoint.InnerAnswers
+            | None, Some commit ->
+                let! rows = rowsOf commit (now ())
+                let! _ = mint scope d rows |> orFault d
+                do! retireRemoved scope d commit.Run subject rows |> orFault d
+                // The minted facts are ordinary heads now, so the inner
+                // store answers with its own selection, history and
+                // competition rules intact.
+                return DelegatedPoint.InnerAnswers
+            | Some t, _ ->
+                match d.History with
+                | SnapshotFidelity.Approximate ->
+                    let! refused =
+                        refusedPoint scope d query (DelegateRefusal.ApproximateHistory(d.Metric.Value, d.TableId, t)) t
 
-                            match! rowsOf commit t with
-                            | Error e -> return Error e
-                            | Ok rows ->
-                                if isCurrent then
-                                    match! mint ops d commit.Run rows with
-                                    | Error e -> return Error(refusal d e)
-                                    | Ok facts -> return Ok(Some(inLineage imported facts))
-                                else
-                                    match! quoteHistorical ops d commit.Run rows with
-                                    | Error e -> return Error(refusal d e)
-                                    | Ok facts -> return Ok(Some(inLineage imported facts))
+                    return DelegatedPoint.Answered refused
+                | SnapshotFidelity.Exact ->
+                    match! tables.At(scope.ScopeId, d.TableId, t) |> orFault d with
+                    | None -> return DelegatedPoint.Answered []
+                    | Some commit ->
+                        let isCurrent = current |> Option.exists (fun c -> c.Run.RunId = commit.Run.RunId)
+                        let! rows = rowsOf commit t
+
+                        let! facts =
+                            (if isCurrent then
+                                 mint scope d rows
+                             else
+                                 quoteHistorical scope d rows)
+                            |> orFault d
+
+                        return DelegatedPoint.Answered(inLineage imported facts)
+        }
+
+    let query (scope: ResolvedScope) (q: FactQuery) : Async<Fact list> = async {
+        match! pointReadFrom scope q with
+        | ReadFrom.Inner -> return! innerQuery scope q
+        | ReadFrom.DelegateTable(d, imported) ->
+            match! pointFromTable scope d imported q with
+            | DelegatedPoint.InnerAnswers -> return! innerQuery scope q
+            | DelegatedPoint.Answered facts -> return facts
     }
 
-    let query (ops: InnerScope) (q: FactQuery) : Async<Fact list> = async {
-        match! pointRead ops q with
-        | Ok None -> return! ops.Query q
-        | Ok(Some facts) -> return facts
-        // A table that cannot be read is a fault, not an answer: the point
-        // door has no error channel, so the refusal travels as the typed
-        // `Absent` the fact model reserves for "no value, and here is why".
-        | Error refused ->
-            match! pointDelegate ops q with
-            | Some(d, _) -> return! refusedPoint ops d q refused (q.AsOf |> Option.defaultValue (now ()))
-            | None -> return []
+    let queryWithCompetition (scope: ResolvedScope) (q: FactQuery) : Async<FactWithCompetition list> = async {
+        match! pointReadFrom scope q with
+        | ReadFrom.Inner -> return! innerQueryWithCompetition scope q
+        | ReadFrom.DelegateTable(d, imported) ->
+            match! pointFromTable scope d imported q with
+            | DelegatedPoint.InnerAnswers -> return! innerQueryWithCompetition scope q
+            | DelegatedPoint.Answered facts -> return facts |> List.map (fun f -> { Fact = f; CompetingMethods = [] })
     }
 
-    let queryWithCompetition (ops: InnerScope) (q: FactQuery) : Async<FactWithCompetition list> = async {
-        match! pointRead ops q with
-        | Ok None -> return! ops.QueryWithCompetition q
-        | Ok(Some facts) -> return facts |> List.map (fun f -> { Fact = f; CompetingMethods = [] })
-        | Error _ ->
-            let! facts = query ops q
-            return facts |> List.map (fun f -> { Fact = f; CompetingMethods = [] })
-    }
-
-    let population (ops: InnerScope) (q: PopulationQuery) : Async<Result<PopulationResult, string>> = async {
-        match! populationDelegate ops q with
-        | None -> return! ops.Population q
-        | Some(d, imported) ->
+    /// A population read the delegate's table answers.
+    let populationFromTable
+        (scope: ResolvedScope)
+        (d: DelegateFact)
+        (imported: string option)
+        (q: PopulationQuery)
+        : Async<Result<PopulationResult, string>> =
+        async {
             let declared =
                 registry
                 |> Option.bind (fun r -> r.TryGetMetric q.Metric.Value)
@@ -1127,59 +1287,56 @@ type DelegatedFactStore
                 | Error refused -> return Error refused
                 | Ok None -> return Ok empty
                 | Ok(Some pathPrefix) ->
-                    let! current = tables.Current(ops.ScopeId, d.TableId)
+                    let! current = tables.Current(scope.ScopeId, d.TableId) |> orFault d
 
-                    let! target =
+                    let! target = async {
                         match q.AsOf, d.History with
-                        | None, _ -> async.Return(current |> Result.map (fun c -> c, true))
+                        | None, _ -> return Ok(current, true)
                         | Some t, SnapshotFidelity.Approximate ->
-                            async.Return(
+                            return
                                 Error(
                                     DelegateRefusal.describe (
                                         DelegateRefusal.ApproximateHistory(d.Metric.Value, d.TableId, t)
                                     )
                                 )
-                            )
-                        | Some t, SnapshotFidelity.Exact -> async {
-                            match! tables.At(ops.ScopeId, d.TableId, t) with
-                            | Error e -> return Error e
-                            | Ok found ->
-                                let isCurrent =
-                                    match current, found with
-                                    | Ok(Some c), Some f -> c.Run.RunId = f.Run.RunId
-                                    | _ -> false
+                        | Some t, SnapshotFidelity.Exact ->
+                            let! found = tables.At(scope.ScopeId, d.TableId, t) |> orFault d
 
-                                return Ok(found, isCurrent)
-                          }
+                            let isCurrent =
+                                match current, found with
+                                | Some c, Some f -> c.Run.RunId = f.Run.RunId
+                                | _ -> false
+
+                            return Ok(found, isCurrent)
+                    }
 
                     match target with
-                    | Error e -> return Error e
+                    | Error refused -> return Error refused
                     | Ok(None, _) -> return Ok empty
                     | Ok(Some commit, isCurrent) ->
                         let at = q.AsOf |> Option.defaultValue (now ())
 
-                        // Phase 964 — a read for one imported lineage ranks the
-                        // rows that lineage holds: those under the root member of
-                        // the run's origin for that certificate, so the prefix is
-                        // narrowed to it. A run with no origin for it holds no row
-                        // in that lineage.
-                        let! prefix =
+                        // A read for one imported lineage ranks the rows that
+                        // lineage holds: those under the root member of the
+                        // run's origin for that certificate, so the prefix is
+                        // narrowed to it. A run with no origin for it holds no
+                        // row in that lineage.
+                        let! prefix = async {
                             match imported with
-                            | None -> async.Return(Ok(Some pathPrefix))
-                            | Some certificateRef -> async {
-                                match! tables.Provenance(ops.ScopeId, commit.Run) with
-                                | Error e -> return Error e
-                                | Ok provenance ->
-                                    return
-                                        DelegateLineages.importedPrefix provenance certificateRef pathPrefix
-                                        |> Result.mapError (fun roots ->
-                                            sprintf
-                                                "the population read for Imported %s on delegated table '%s' is refused: its run imports that certificate under %d root members (%s), and a ranked read over one imported lineage is answered from one root"
-                                                certificateRef
-                                                d.TableId
-                                                (List.length roots)
-                                                (String.concat ", " roots))
-                              }
+                            | None -> return Ok(Some pathPrefix)
+                            | Some certificateRef ->
+                                let! provenance = tables.Provenance(scope.ScopeId, commit.Run) |> orFault d
+
+                                return
+                                    DelegateLineages.importedPrefix provenance certificateRef pathPrefix
+                                    |> Result.mapError (fun roots ->
+                                        sprintf
+                                            "the population read for Imported %s on delegated table '%s' is refused: its run imports that certificate under %d root members (%s), and a ranked read over one imported lineage is answered from one root"
+                                            certificateRef
+                                            d.TableId
+                                            (List.length roots)
+                                            (String.concat ", " roots))
+                        }
 
                         match prefix with
                         | Error refused -> return Error refused
@@ -1188,43 +1345,48 @@ type DelegatedFactStore
                             let pushed =
                                 DelegateTableRead.Ranked(pathPrefix, q.PeriodOverlaps, q.Threshold, direction, k)
 
-                            match! read ops d commit.Run pushed at with
-                            | Error e -> return Error(DelegateRefusal.describe (refusal d e))
-                            | Ok(DelegateTableAnswer.Ranked(rows, stats, truncated)) ->
-                                let! quoted =
-                                    if isCurrent then
-                                        mint ops d commit.Run rows
-                                    else
-                                        quoteHistorical ops d commit.Run rows
+                            match! read scope d commit.Run pushed at |> orFault d with
+                            | DelegateTableAnswer.Ranked(rows, stats, truncated) ->
+                                let! facts =
+                                    (if isCurrent then
+                                         mint scope d rows
+                                     else
+                                         quoteHistorical scope d rows)
+                                    |> orFault d
 
-                                match quoted with
-                                | Error e -> return Error e
-                                | Ok facts ->
-                                    return
-                                        Ok {
-                                            Ranked = facts
-                                            Direction = direction
-                                            EffectiveTopK = k
-                                            Truncated = truncated
-                                            Stats = stats
-                                        }
-                            | Ok _ -> return Ok empty
+                                return
+                                    Ok {
+                                        Ranked = facts
+                                        Direction = direction
+                                        EffectiveTopK = k
+                                        Truncated = truncated
+                                        Stats = stats
+                                    }
+                            | _ -> return Ok empty
+        }
+
+    let population (scope: ResolvedScope) (q: PopulationQuery) : Async<Result<PopulationResult, string>> = async {
+        match! populationReadFrom scope q with
+        | ReadFrom.Inner -> return! innerPopulation scope q
+        | ReadFrom.DelegateTable(d, imported) -> return! populationFromTable scope d imported q
     }
 
-    let get (ops: InnerScope) (factId: string) : Async<Fact option> = async {
-        match! ops.Get factId with
+    let get (scope: ResolvedScope) (factId: string) : Async<Fact option> = async {
+        match! innerGet scope factId with
         | Some fact -> return Some fact
         | None ->
             if List.isEmpty delegates then
                 return None
             else
-                return! tables.Quote(ops.ScopeId, factId)
+                match! tables.Quote(scope.ScopeId, factId) with
+                | Ok quote -> return quote
+                | Error detail -> return raise (FactStoreFault(FactStoreError.StorageFault("delegated quote", detail)))
     }
 
-    let chain (ops: InnerScope) (factId: string) : Async<Fact list> = async {
-        match! ops.Chain factId with
+    let chain (scope: ResolvedScope) (factId: string) : Async<Fact list> = async {
+        match! innerChain scope factId with
         | [] ->
-            match! get ops factId with
+            match! get scope factId with
             | Some quote -> return [ quote ]
             | None -> return []
         | found -> return found
@@ -1270,9 +1432,11 @@ type DelegatedFactStore
     interface IDelegatedFactWalks with
         member _.Delegates = delegates
 
-        member _.CurrentRun(scopeId, metric) = runOf scopeId metric
+        member _.CurrentRun(scope, metric) = runOf scope.ScopeId metric
 
-        member _.CurrentRows(scopeId, metric, subjects) = async {
+        member _.CurrentRows(scope, metric, subjects) = async {
+            let scopeId = scope.ScopeId
+
             match delegateOf metric with
             | None -> return Ok []
             | Some d ->
@@ -1280,12 +1444,11 @@ type DelegatedFactStore
                 | Error e -> return Error(refusal d e)
                 | Ok None -> return Ok []
                 | Ok(Some commit) ->
-                    let ops = ofString scopeId
 
                     let! answers =
                         subjects
                         |> List.distinct
-                        |> List.map (fun path -> read ops d commit.Run (DelegateTableRead.Point(path, None)) (now ()))
+                        |> List.map (fun path -> read scope d commit.Run (DelegateTableRead.Point(path, None)) (now ()))
                         |> Async.Sequential
 
                     return
@@ -1295,12 +1458,14 @@ type DelegatedFactStore
                                 match acc, answer with
                                 | Error e, _ -> Error e
                                 | _, Error e -> Error(refusal d e)
-                                | Ok xs, Ok(DelegateTableAnswer.Rows rows) -> Ok(xs @ rows)
+                                | Ok xs, Ok(DelegateTableAnswer.Rows rows) -> Ok(xs @ (rows |> List.map _.Row))
                                 | Ok xs, Ok _ -> Ok xs)
                             (Ok [])
         }
 
-        member _.ChildTotals(scopeId, metric, periodOverlaps) = async {
+        member _.ChildTotals(scope, metric, periodOverlaps) = async {
+            let scopeId = scope.ScopeId
+
             match delegateOf metric with
             | None -> return Ok []
             | Some d ->
@@ -1308,9 +1473,7 @@ type DelegatedFactStore
                 | Error e -> return Error(refusal d e)
                 | Ok None -> return Ok []
                 | Ok(Some commit) ->
-                    match!
-                        read (ofString scopeId) d commit.Run (DelegateTableRead.ChildTotals periodOverlaps) (now ())
-                    with
+                    match! read scope d commit.Run (DelegateTableRead.ChildTotals periodOverlaps) (now ()) with
                     | Ok(DelegateTableAnswer.Totals totals) -> return Ok totals
                     | Ok _ -> return Ok []
                     | Error e -> return Error(refusal d e)
@@ -1323,34 +1486,15 @@ type DelegatedFactStore
     // inner store that keeps no index is listed, as the gate would list this
     // one.
     interface IDisclosureTaintIndexSource with
-        member _.ReadTaintIndex(scopeId: string) =
-            match inner with
-            | :? IDisclosureTaintIndexSource as source -> source.ReadTaintIndex scopeId
-            | _ -> async {
-                let! all =
-                    inner.Query(
-                        scopeId,
-                        {
-                            FactQuery.all with
-                                IncludeSuperseded = true
-                        }
-                    )
-
-                return DisclosureTaintIndex.ofFacts all
-              }
-
         member _.ReadTaintIndex(scope: ResolvedScope) =
             match inner with
             | :? IDisclosureTaintIndexSource as source -> source.ReadTaintIndex scope
             | _ -> async {
                 let! all =
-                    inner.Query(
-                        scope,
-                        {
-                            FactQuery.all with
-                                IncludeSuperseded = true
-                        }
-                    )
+                    innerQuery scope {
+                        FactQuery.all with
+                            IncludeSuperseded = true
+                    }
 
                 return DisclosureTaintIndex.ofFacts all
               }
@@ -1360,25 +1504,27 @@ type DelegatedFactStore
         // assertion (a hand assertion of a delegated metric is the "two
         // homes" the fact-table preflight warns about, not something this
         // layer re-routes).
-        member _.Assert(scopeId: string, draft: FactDraft) = inner.Assert(scopeId, draft)
         member _.Assert(scope: ResolvedScope, draft: FactDraft) = inner.Assert(scope, draft)
-        member _.AssertBatch(scopeId: string, drafts: FactDraft list) = inner.AssertBatch(scopeId, drafts)
         member _.AssertBatch(scope: ResolvedScope, drafts: FactDraft list) = inner.AssertBatch(scope, drafts)
-        member _.Get(scopeId: string, factId: string) = get (ofString scopeId) factId
-        member _.Get(scope: ResolvedScope, factId: string) = get (ofResolved scope) factId
-        member _.Query(scopeId: string, q: FactQuery) = query (ofString scopeId) q
-        member _.Query(scope: ResolvedScope, q: FactQuery) = query (ofResolved scope) q
 
-        member _.QueryWithCompetition(scopeId: string, q: FactQuery) =
-            queryWithCompetition (ofString scopeId) q
+        member _.Get(scope: ResolvedScope, factId: string) =
+            FactStoreResult.ofRead "get" (get scope factId)
+
+        member _.Query(scope: ResolvedScope, q: FactQuery) =
+            FactStoreResult.ofRead "query" (query scope q)
 
         member _.QueryWithCompetition(scope: ResolvedScope, q: FactQuery) =
-            queryWithCompetition (ofResolved scope) q
+            FactStoreResult.ofRead "query" (queryWithCompetition scope q)
 
-        member _.QuerySupersessionChain(scopeId: string, factId: string) = chain (ofString scopeId) factId
-        member _.QuerySupersessionChain(scope: ResolvedScope, factId: string) = chain (ofResolved scope) factId
-        member _.QueryPopulation(scopeId: string, q: PopulationQuery) = population (ofString scopeId) q
-        member _.QueryPopulation(scope: ResolvedScope, q: PopulationQuery) = population (ofResolved scope) q
+        member _.QuerySupersessionChain(scope: ResolvedScope, factId: string) =
+            FactStoreResult.ofRead "supersession chain" (chain scope factId)
+
+        member _.QueryPopulation(scope: ResolvedScope, q: PopulationQuery) = async {
+            match! FactStoreResult.ofRead "population query" (population scope q) with
+            | Ok(Ok result) -> return Ok result
+            | Ok(Error refusal) -> return Error(FactStoreError.Refused refusal)
+            | Error fault -> return Error fault
+        }
 
 /// What a commit does to the fact tier: advance each delegate's record, and
 /// walk the facts quoted from earlier runs through the Phase 561
@@ -1417,9 +1563,13 @@ module internal DelegateRefresh =
                 | Ok(DelegateTableAnswer.Rows rows) ->
                     match
                         rows
-                        |> List.tryFind (fun r -> r.Period.From = fact.Period.From && r.Period.To = fact.Period.To)
+                        |> List.tryFind (fun m ->
+                            m.Row.Period.From = fact.Period.From && m.Row.Period.To = fact.Period.To)
                     with
-                    | Some row -> return Ok(DelegateMint.draft minting delegateFact commit.Run (MintedRow row))
+                    // A row the image carries is minted under the run that
+                    // wrote it — for a row a slice carried forward, the fact
+                    // that run minted.
+                    | Some m -> return Ok(DelegateMint.draft m.Minting delegateFact m.Run (MintedRow m.Row))
                     | None -> return Ok(DelegateMint.draft minting delegateFact commit.Run (RemovedQuote fact))
                 | Ok _ -> return Ok(DelegateMint.draft minting delegateFact commit.Run (RemovedQuote fact))
         }
@@ -1436,11 +1586,12 @@ module internal DelegateRefresh =
         (store: IFactStore)
         (tables: DelegateTableStore)
         (delegates: DelegateFact list)
-        (scopeId: string)
+        (scope: ResolvedScope)
         (tableId: string)
         (run: DelegateRun)
         : Async<Result<Fact list, string>> =
         async {
+            let scopeId = scope.ScopeId
             let token = DelegateFact.token run.Watermark
 
             match! tables.Current(scopeId, tableId) with
@@ -1451,10 +1602,12 @@ module internal DelegateRefresh =
                     match remaining with
                     | [] -> return Ok acc
                     | d :: rest ->
-                        match! store.Assert(scopeId, DelegateMint.recordDraft d run) with
-                        | Error e -> return Error e
+                        match! store.Assert(scope, DelegateMint.recordDraft d run) with
+                        | Error e -> return Error(FactStoreError.describe e)
                         | Ok _ ->
-                            let! own = FactInvalidation.staleDelegatedHeads store scopeId d token
+                            let! own =
+                                FactInvalidation.staleDelegatedHeads store scope d token
+                                |> FactStoreResult.orRaiseAsync
 
                             // The imported lineages too (Phase 938).
                             let! imported = async {
@@ -1462,7 +1615,7 @@ module internal DelegateRefresh =
                                 | Ok(_ :: _ as certificates) ->
                                     let! heads =
                                         DelegateLineages.importedHeads
-                                            (fun q -> store.Query(scopeId, q))
+                                            (fun q -> store.Query(scope, q) |> FactStoreResult.orRaiseAsync)
                                             d
                                             certificates
                                             id
@@ -1483,8 +1636,8 @@ module internal DelegateRefresh =
                                     match! recomputed tables d scopeId commit fact with
                                     | Error e -> return Error e
                                     | Ok draft ->
-                                        match! store.Assert(scopeId, draft) with
-                                        | Error e -> return Error e
+                                        match! store.Assert(scope, draft) with
+                                        | Error e -> return Error(FactStoreError.describe e)
                                         | Ok _ -> return! supersede more (fact :: done')
                             }
 
@@ -1694,8 +1847,45 @@ type DelegateTableWriter
                     Some(rows |> List.map _.Period.To |> List.max)
         }
 
-    let commit (scopeId: string) (opened: OpenFactTableRun) (table: FactTableDefinition) = async {
+    let periodText (period: TemporalExtent) =
+        sprintf "%s..%s" (period.From.ToString "o") (period.To.ToString "o")
+
+    // Why a period slice cannot be taken over an image holding rows stored
+    // before rows were attributed: the slice would carry them forward, and a
+    // carried row must name the run that wrote it.
+    let unattributedRefusal (unattributed: DelegateStoredRow list) =
+        let first = List.head unattributed
+
+        sprintf
+            "a period slice would carry forward %d row(s) stored before rows were attributed, the first [%s] at %s; record their attribution with the facts-attribute-delegate-rows operator task (toolup facts migrate --attribute-delegate-rows), or commit a whole-table run"
+            unattributed.Length
+            (String.concat "/" first.Subject)
+            (periodText first.Period)
+
+    // The rows a run opened with `slice` would carry forward from the image
+    // at `sequence` that name no writer — read from storage, never the cache,
+    // so an attribution recorded since the image was cached is seen.
+    let unattributedCarried (scopeId: string) (tableId: string) (sequence: int64) (slice: TemporalExtent) = async {
+        if sequence = 0L then
+            return Ok []
+        else
+            match! tables.StoredImage(scopeId, tableId, sequence) with
+            | Error e -> return Error e
+            | Ok None -> return Ok []
+            | Ok(Some image) ->
+                return
+                    Ok(
+                        image
+                        |> List.filter (fun r ->
+                            not (FactTableRunOptions.contains slice r.Period.From r.Period.To)
+                            && not (DelegateStoredRow.isAttributed r))
+                    )
+    }
+
+    let commit (scope: ResolvedScope) (opened: OpenFactTableRun) (table: FactTableDefinition) = async {
+        let scopeId = scope.ScopeId
         let run = opened.Record
+        let options = FactTableRunOptions.ofRun run.Options
 
         match! loadHead scopeId table.Id with
         | Error e -> return Error e
@@ -1711,123 +1901,194 @@ type DelegateTableWriter
                 match! stagedRows scopeId run.RunId with
                 | Error e -> return Error e
                 | Ok rows ->
-                    match FactTableValidation.defects table (hierarchyOf table) (List.indexed rows) with
+                    let defects =
+                        FactTableValidation.defects table (hierarchyOf table) (List.indexed rows)
+                        @ FactTableValidation.outsideSlice table options.Slice (List.indexed rows)
+                        |> List.sortBy _.Position
+
+                    match defects with
                     | _ :: _ as defects ->
                         return! reject scopeId table opened (FactTableRowsRejected(run.RunId, defects))
                     | [] ->
+                        // The image the run replaces, read from storage rather
+                        // than the cache: every row it carries forward keeps
+                        // the attribution recorded for it.
                         let! previous = async {
                             match current with
-                            | None -> return Ok None
+                            | None -> return Ok []
                             | Some c ->
-                                match! tables.Rows(scopeId, c.Run) with
-                                | Ok prior ->
+                                match! tables.StoredImage(scopeId, table.Id, c.Run.Watermark.Sequence) with
+                                | Ok(Some image) -> return Ok image
+                                // A head names its image: a missing one is never
+                                // read as an empty table, which would carry
+                                // nothing and withdraw nothing.
+                                | Ok None ->
                                     return
-                                        Ok(
-                                            Some(
-                                                FactTableSnapshot.ofRows
-                                                    table
-                                                    c.Run.Watermark.Sequence
-                                                    (List.ofArray prior)
+                                        Error(
+                                            FactTableStorageFailure(
+                                                sprintf
+                                                    "the rows of run %s are missing"
+                                                    (DelegateFact.token c.Run.Watermark)
                                             )
                                         )
-                                | Error e -> return Error(FactTableStorageFailure e)
+                                | Error e -> return Error e
                         }
 
                         match previous with
                         | Error e -> return Error e
                         | Ok previous ->
-                            let next = sequence + 1L
-                            let snapshot = FactTableSnapshot.ofRows table next rows
+                            // The rows the run replaces: the whole image, or the
+                            // committed rows inside its slice. Every other row
+                            // is carried forward under the run that wrote it.
+                            let inSlice (row: DelegateStoredRow) =
+                                options.Slice
+                                |> Option.forall (fun slice ->
+                                    FactTableRunOptions.contains slice row.Period.From row.Period.To)
 
-                            let watermark: FactTableWatermark = {
-                                TableId = table.Id
-                                Sequence = next
-                                CommittedAt = now ()
-                                ContentDigest = FactTableSnapshot.digest snapshot
-                            }
+                            let split =
+                                match options.Slice with
+                                | Some slice ->
+                                    previous
+                                    |> List.filter (fun r -> FactTableRunOptions.splits slice r.Period.From r.Period.To)
+                                | None -> []
 
-                            // Canonical order, as the snapshot orders them.
-                            let image = rows |> List.sortBy (fun r -> r.Subject, r.Period.From, r.Period.To)
+                            let carried = previous |> List.filter (inSlice >> not)
 
-                            let result: FactTableCommit = {
-                                Watermark = watermark
-                                RowCount = rows.Length
-                                // The delegate writes no fact: the table IS the
-                                // population, and only a quote mints one.
-                                FactsWritten = 0
-                                Change = FactTableSnapshot.changes table.Hierarchy previous snapshot
-                                BatchDigest = BatchAssertReceipt.empty.Digest
-                            }
+                            let unattributed = carried |> List.filter (DelegateStoredRow.isAttributed >> not)
 
-                            let reach = reachOf table run.RunId watermark rows
+                            match split, unattributed with
+                            | first :: _, _ ->
+                                let reason =
+                                    sprintf
+                                        "the slice splits %d committed row(s), the first [%s] at %s; a slice must contain each committed row it overlaps"
+                                        split.Length
+                                        (String.concat "/" first.Subject)
+                                        (periodText first.Period)
 
-                            let committed = FactTableRun.commit result opened
+                                return! reject scopeId table opened (FactTableRunOptionsRefused(table.Id, reason))
+                            | [], _ :: _ ->
+                                return!
+                                    reject
+                                        scopeId
+                                        table
+                                        opened
+                                        (FactTableRunOptionsRefused(table.Id, unattributedRefusal unattributed))
+                            | [], [] ->
+                                let next = sequence + 1L
+                                let written = FactTableSnapshot.ofRows table next rows
 
-                            // The run's imported lineages are recorded before
-                            // it becomes current, so every walk that reads
-                            // the current run finds them.
-                            let! recorded = async {
-                                match!
-                                    FactTableRunProvenance.read storage scopeId (tables.ProvenanceName run.RunId)
-                                with
-                                | Error e -> return Error e
-                                | Ok provenance -> return! tables.RecordLineages(scopeId, table.Id, provenance)
-                            }
+                                // Canonical order, as the snapshot orders them.
+                                let image =
+                                    carried @ (rows |> List.map (DelegateStoredRow.written run.RunId))
+                                    |> List.sortBy (fun r -> r.Subject, r.Period.From, r.Period.To)
 
-                            match recorded with
-                            | Error e -> return Error e
-                            | Ok() ->
-                                match! FactTableBlobIo.put storage scopeId (tables.RowsName table.Id next) image with
+                                let tableRows = image |> List.map DelegateStoredRow.row
+
+                                let replaced =
+                                    current
+                                    |> Option.map (fun c ->
+                                        FactTableSnapshot.ofRows
+                                            table
+                                            c.Run.Watermark.Sequence
+                                            (previous |> List.filter inSlice |> List.map DelegateStoredRow.row))
+
+                                let watermark: FactTableWatermark = {
+                                    TableId = table.Id
+                                    Sequence = next
+                                    CommittedAt = now ()
+                                    ContentDigest =
+                                        FactTableSnapshot.digest (FactTableSnapshot.ofRows table next tableRows)
+                                }
+
+                                let result: FactTableCommit = {
+                                    Watermark = watermark
+                                    RowCount = rows.Length
+                                    // The delegate writes no fact: the table IS the
+                                    // population, and only a quote mints one.
+                                    FactsWritten = 0
+                                    Change = FactTableSnapshot.changes table.Hierarchy replaced written
+                                    BatchDigest = BatchAssertReceipt.empty.Digest
+                                }
+
+                                // The reach of the table after the commit: the
+                                // carried rows and the run's.
+                                let reach = reachOf table run.RunId watermark tableRows
+
+                                let committed = FactTableRun.commit result opened
+
+                                // The run's imported lineages are recorded before
+                                // it becomes current, so every walk that reads
+                                // the current run finds them.
+                                let! recorded = async {
+                                    match!
+                                        FactTableRunProvenance.read storage scopeId (tables.ProvenanceName run.RunId)
+                                    with
+                                    | Error e -> return Error e
+                                    | Ok provenance -> return! tables.RecordLineages(scopeId, table.Id, provenance)
+                                }
+
+                                match recorded with
                                 | Error e -> return Error e
                                 | Ok() ->
-                                    // The swap: the table's current run moves here.
-                                    let head' = {
-                                        Commits = head.Commits @ [ { Run = reach; Commit = result } ]
-                                    }
-
-                                    match! FactTableBlobIo.put storage scopeId (tables.HeadName table.Id) head' with
+                                    match!
+                                        FactTableBlobIo.put storage scopeId (tables.RowsName table.Id next) image
+                                    with
                                     | Error e -> return Error e
                                     | Ok() ->
-                                        match!
-                                            FactTableBlobIo.put storage scopeId (tables.RecordName run.RunId) committed
-                                        with
+                                        // The swap: the table's current run moves here.
+                                        let head' = {
+                                            Commits = head.Commits @ [ { Run = reach; Commit = result } ]
+                                        }
+
+                                        match! FactTableBlobIo.put storage scopeId (tables.HeadName table.Id) head' with
                                         | Error e -> return Error e
                                         | Ok() ->
-                                            do! endRun scopeId
-
-                                            do!
-                                                audit
+                                            match!
+                                                FactTableBlobIo.put
+                                                    storage
                                                     scopeId
-                                                    table
+                                                    (tables.RecordName run.RunId)
                                                     committed
-                                                    FactTableEvents.RunCommittedType
-                                                    "Committed"
-                                                    (Some result)
-                                                    None
+                                            with
+                                            | Error e -> return Error e
+                                            | Ok() ->
+                                                do! endRun scopeId
 
-                                            match store () with
-                                            | Some composed ->
-                                                let! _ =
-                                                    DelegateRefresh.afterCommit
-                                                        composed
-                                                        tables
-                                                        delegates
+                                                do!
+                                                    audit
                                                         scopeId
-                                                        table.Id
-                                                        reach
+                                                        table
+                                                        committed
+                                                        FactTableEvents.RunCommittedType
+                                                        "Committed"
+                                                        (Some result)
+                                                        None
 
-                                                ()
-                                            | None -> ()
+                                                match store () with
+                                                | Some composed ->
+                                                    let! _ =
+                                                        DelegateRefresh.afterCommit
+                                                            composed
+                                                            tables
+                                                            delegates
+                                                            scope
+                                                            table.Id
+                                                            reach
 
-                                            return Ok result
+                                                    ()
+                                                | None -> ()
+
+                                                return Ok result
     }
 
     interface IFactTableWriter with
 
-        member _.OpenRun(scopeId, tableId, ?provenance, ?options) = async {
+        member _.OpenRun(scope: ResolvedScope, tableId, ?provenance, ?options) = async {
+            let scopeId = scope.ScopeId
+
             if not (isDelegated tableId) then
                 match inner with
-                | Some w -> return! w.OpenRun(scopeId, tableId, ?provenance = provenance, ?options = options)
+                | Some w -> return! w.OpenRun(scope, tableId, ?provenance = provenance, ?options = options)
                 | None ->
                     match registrations.TryGetTable tableId with
                     | None -> return Error(FactTableUndeclared tableId)
@@ -1836,26 +2097,36 @@ type DelegateTableWriter
                 match registrations.TryGetTable tableId with
                 | None -> return Error(FactTableUndeclared tableId)
                 | Some table ->
-                    // A delegated table holds ONE row image per committed run
-                    // and mints every row under the run that image belongs
-                    // to. A run without a slice writes the whole image, so
-                    // every row it carries is its own: its declared inputs
-                    // and method ride its record
-                    // and every row is minted under them. A period slice
-                    // would carry an earlier run's rows into the image, and
-                    // those would be minted under this run's watermark and
-                    // inputs: refused rather than mint evidence that would be
-                    // wrong.
-                    match FactTableRunOptions.normalise (defaultArg options FactTableRunOptions.none) with
-                    | Error reason -> return Error(FactTableRunOptionsRefused(table.Id, reason))
-                    | Ok o when o.Slice.IsSome ->
-                        return
-                            Error(
-                                FactTableRunOptionsRefused(
-                                    table.Id,
-                                    "a delegated table does not take a period slice; bind the table to the default writer to use one"
-                                )
-                            )
+                    // A delegated table holds ONE row image per committed run,
+                    // and every row of it names the run that wrote it. A run
+                    // with a period slice carries every row outside its slice
+                    // forward under that row's own run, so a slice over an
+                    // image whose rows predate attribution is refused here,
+                    // before the table is held: carried, those rows could
+                    // name no writer.
+                    let! normalised = async {
+                        match FactTableRunOptions.normalise (defaultArg options FactTableRunOptions.none) with
+                        | Error reason -> return Error(FactTableRunOptionsRefused(table.Id, reason))
+                        | Ok({ Slice = Some slice } as o) ->
+                            match! loadHead scopeId tableId with
+                            | Error e -> return Error e
+                            | Ok head ->
+                                let sequence =
+                                    head.Commits
+                                    |> List.tryLast
+                                    |> Option.map _.Run.Watermark.Sequence
+                                    |> Option.defaultValue 0L
+
+                                match! unattributedCarried scopeId tableId sequence slice with
+                                | Error e -> return Error e
+                                | Ok [] -> return Ok o
+                                | Ok unattributed ->
+                                    return Error(FactTableRunOptionsRefused(table.Id, unattributedRefusal unattributed))
+                        | Ok o -> return Ok o
+                    }
+
+                    match normalised with
+                    | Error e -> return Error e
                     | Ok declared ->
                         let runId = Guid.NewGuid().ToString("N")
                         let openedAt = now ()
@@ -1929,12 +2200,14 @@ type DelegateTableWriter
                                 return Error e
         }
 
-        member _.WriteRows(scopeId, runId, rows) = async {
+        member _.WriteRows(scope: ResolvedScope, runId, rows) = async {
+            let scopeId = scope.ScopeId
+
             match! loadRun scopeId runId with
             | Error e -> return Error e
             | Ok None ->
                 match inner with
-                | Some w -> return! w.WriteRows(scopeId, runId, rows)
+                | Some w -> return! w.WriteRows(scope, runId, rows)
                 | None -> return Error(FactTableRunUnknown runId)
             | Ok(Some run) ->
                 match FactTableRun.tryOpen run with
@@ -1953,12 +2226,14 @@ type DelegateTableWriter
                             | Ok() -> return Ok staged
         }
 
-        member _.Commit(scopeId, runId) = async {
+        member _.Commit(scope: ResolvedScope, runId) = async {
+            let scopeId = scope.ScopeId
+
             match! loadRun scopeId runId with
             | Error e -> return Error e
             | Ok None ->
                 match inner with
-                | Some w -> return! w.Commit(scopeId, runId)
+                | Some w -> return! w.Commit(scope, runId)
                 | None -> return Error(FactTableRunUnknown runId)
             | Ok(Some run) ->
                 match FactTableRun.tryOpen run with
@@ -1970,15 +2245,17 @@ type DelegateTableWriter
                         if not (isDelegated table.Id) then
                             return passOn table.Id
                         else
-                            return! commit scopeId opened table
+                            return! commit scope opened table
         }
 
-        member _.Abandon(scopeId, runId, reason) = async {
+        member _.Abandon(scope: ResolvedScope, runId, reason) = async {
+            let scopeId = scope.ScopeId
+
             match! loadRun scopeId runId with
             | Error e -> return Error e
             | Ok None ->
                 match inner with
-                | Some w -> return! w.Abandon(scopeId, runId, reason)
+                | Some w -> return! w.Abandon(scope, runId, reason)
                 | None -> return Error(FactTableRunUnknown runId)
             | Ok(Some run) ->
                 match FactTableRun.tryOpen run with
@@ -2007,10 +2284,12 @@ type DelegateTableWriter
                         return Ok closed
         }
 
-        member _.Runs(scopeId, tableId) = async {
+        member _.Runs(scope: ResolvedScope, tableId) = async {
+            let scopeId = scope.ScopeId
+
             if not (isDelegated tableId) then
                 match inner with
-                | Some w -> return! w.Runs(scopeId, tableId)
+                | Some w -> return! w.Runs(scope, tableId)
                 | None ->
                     match registrations.TryGetTable tableId with
                     | None -> return Error(FactTableUndeclared tableId)
@@ -2033,10 +2312,12 @@ type DelegateTableWriter
                 | Ok runs -> return Ok(runs |> List.sortByDescending (fun r -> r.OpenedAt, r.BaseSequence, r.RunId))
         }
 
-        member this.Status(scopeId, tableId) = async {
+        member this.Status(scope: ResolvedScope, tableId) = async {
+            let scopeId = scope.ScopeId
+
             if not (isDelegated tableId) then
                 match inner with
-                | Some w -> return! w.Status(scopeId, tableId)
+                | Some w -> return! w.Status(scope, tableId)
                 | None ->
                     match registrations.TryGetTable tableId with
                     | None -> return Error(FactTableUndeclared tableId)
@@ -2048,7 +2329,7 @@ type DelegateTableWriter
                     match! loadHead scopeId tableId with
                     | Error e -> return Error e
                     | Ok head ->
-                        match! (this :> IFactTableWriter).Runs(scopeId, tableId) with
+                        match! (this :> IFactTableWriter).Runs(scope, tableId) with
                         | Error e -> return Error e
                         | Ok runs ->
                             let at = now ()
@@ -2072,13 +2353,14 @@ type DelegateTableWriter
     interface IFactTableOrphanSweep with
 
         // The delegate layout, then the writer it hands every other table to.
-        member _.SweepOrphans(scopeId) = async {
+        member _.SweepOrphans(scope: ResolvedScope) = async {
+            let scopeId = scope.ScopeId
             let! own = sweepOrphans scopeId
 
             match inner with
             | None -> return Ok own
             | Some w ->
-                match! FactTableOrphanSweep.sweep w scopeId with
+                match! FactTableOrphanSweep.sweep w scope with
                 | Error e -> return Error e
                 | Ok passed -> return Ok(FactTableOrphanSweepReport.combine own passed)
         }

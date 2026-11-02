@@ -31,7 +31,13 @@ This companion does NOT take a NuGet dependency on the OpenTelemetry SDK. The in
        OtelMetricsSink.create StandardMetrics.registrations resolvedLogger
 
    ServerApp.empty
-   |> ServerApp.withConfig { config with MetricsEndpoint = EnabledMetricsEndpoint }
+   |> ServerApp.withConfig {
+       config with
+           Observability = {
+               config.Observability with
+                   MetricsEndpoint = FeatureMode.Enabled
+           }
+   }
    |> ServerApp.withMetricsSink otelSink
    |> ServerApp.run
    ```
@@ -62,7 +68,7 @@ This companion does NOT take a NuGet dependency on the OpenTelemetry SDK. The in
 
 ## How it composes
 
-When `ServerApp.withMetricsSink otelSink` is wired in alongside `MetricsEndpoint = EnabledMetricsEndpoint`, `compose` folds the in-process `PrometheusMetricsSink` and every registered companion sink into a `FanOutMetricsSink`. A single `Increment` call dispatches to all sinks. The Prometheus sink is always at the head of the list so `/metrics` keeps returning current values even if the OTel exporter is down.
+When `ServerApp.withMetricsSink otelSink` is wired in alongside `MetricsEndpoint = FeatureMode.Enabled`, `compose` folds the in-process `PrometheusMetricsSink` and every registered companion sink into a `FanOutMetricsSink`. A single `Increment` call dispatches to all sinks. The Prometheus sink is always at the head of the list so `/metrics` keeps returning current values even if the OTel exporter is down.
 
 ## Cardinality
 

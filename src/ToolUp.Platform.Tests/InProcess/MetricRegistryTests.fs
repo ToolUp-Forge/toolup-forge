@@ -4,6 +4,8 @@ open System
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Grounding
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Phase 519 — metric & subject registry ───────────────────────────
 //

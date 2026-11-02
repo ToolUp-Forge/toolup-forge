@@ -3,6 +3,7 @@ module ToolUp.Platform.Tests.Contracts.IRateLimiterContract
 open System
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Compose
 
 // ─── IRateLimiter contract pack ──────────────────────────────────────
 //

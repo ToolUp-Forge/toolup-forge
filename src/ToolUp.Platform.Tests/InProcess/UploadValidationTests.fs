@@ -12,6 +12,8 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.AssetStore
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Phase 186 — upload-validation seam ──────────────────────────
 //

@@ -15,6 +15,7 @@ open Expecto
 open DocumentFormat.OpenXml.Packaging
 open DocumentFormat.OpenXml.Wordprocessing
 open ToolUp.OpenXml
+open ToolUp.Platform.Audit
 
 // ─── Payload fixtures ────────────────────────────────────────────
 //

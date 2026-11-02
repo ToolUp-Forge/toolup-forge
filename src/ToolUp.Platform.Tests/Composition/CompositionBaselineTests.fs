@@ -9,6 +9,10 @@ open Microsoft.AspNetCore.Http
 open ToolUp.Platform
 open ToolUp.Platform.FileProcessor
 open ToolUp.Remoting.Json.SystemTextJson
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 287 — composition golden-file CI gate ──────────────────────
 //
@@ -546,7 +550,10 @@ let private defaultDeploymentDescriptors () : string list =
             ServerConfig.defaults with
                 Port = port
                 PublicPath = publicDir
-                TrustForwardedHeaders = false
+                SecurityPosture = {
+                    ServerConfig.defaults.SecurityPosture with
+                        TrustForwardedHeaders = false
+                }
         }
         |> ServerApp.withExtensions {
             ComposeExtensions.empty with

@@ -272,21 +272,27 @@ module BookingConflictDetector =
 
 Pure function — the resource, its existing bookings and its availability exceptions go in as `DetectorInputs`, the conflicts come out. Used internally by `Book` and `Reschedule`; exposed so a client can preview the same verdict before submitting.
 
-### `SchedulingServerApp`
+### `SchedulingOptions` + `withScheduling`
 
 ```fsharp skip=signature
-type SchedulingServerApp = {
-    Base: ServerApp
+type SchedulingOptions = {
     /// Reminder fusion is opt-in and currently a no-op placeholder.
     RemindersEnabled: bool
+    CalendarBridges: ICalendarBridge list
+    CalendarPollTrigger: Trigger option
 }
 
-module SchedulingServerApp =
-    val create: unit -> SchedulingServerApp
-    val run: SchedulingServerApp -> int
+module SchedulingOptions =
+    val create: unit -> SchedulingOptions
+    val withReminders: SchedulingOptions -> SchedulingOptions
+    val withCalendarBridge: ICalendarBridge -> SchedulingOptions -> SchedulingOptions
+    val withCalendarPollTrigger: Trigger -> SchedulingOptions -> SchedulingOptions
+
+val withScheduling: SchedulingOptions -> ServerApp -> ServerApp
 ```
 
-Every `ServerApp.with*` is mirrored as a delegating helper on `SchedulingServerApp`. Resources are not declared at compose time — register them at runtime through `ISchedulingApi.RegisterResource` / `IBookingScheduler.RegisterResource`, which persists into the caller's scope.
+`withScheduling` sets the scheduling companion, composed once when the deployment resolves, so every `ServerApp.with*` builder works on either side of it. Resources are not declared at compose time — register them at runtime through `ISchedulingApi.RegisterResource` / `IBookingScheduler.RegisterResource`, which persists into the caller's scope.
+
 
 ## Client tier
 
@@ -326,7 +332,7 @@ Auto-injected by the scheduling compose step:
 
 ## Configuration knobs
 
-- `ServerConfig.EntityStore = EnabledEntityStore` — required; `BookableResource`, `Booking` and `AvailabilityException` are entity-store records (hence the `Type` / `Version` fields).
+- `ServerConfig.Stores.EntityStore = FeatureMode.Enabled` — required; `BookableResource`, `Booking` and `AvailabilityException` are entity-store records (hence the `Type` / `Version` fields).
 
 ## Conformance test pack
 

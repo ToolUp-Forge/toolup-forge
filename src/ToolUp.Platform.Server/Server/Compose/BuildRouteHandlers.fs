@@ -1,20 +1,26 @@
-module ToolUp.Platform.BuildRouteHandlers
+module ToolUp.Platform.Compose.BuildRouteHandlers
 
 open Giraffe
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
-open ToolUp.Platform.BlobEncryption
+open ToolUp.Platform.Infra.BlobEncryption
 open ToolUp.Platform.DataSubjectRequestApi
-open ToolUp.Platform.DataSubjectRequestApiHandler
-open ToolUp.Platform.FileManagement
+open ToolUp.Platform.Audit.DataSubjectRequestApiHandler
+open ToolUp.Platform.Files.FileManagement
 open ToolUp.Platform.FileProcessor
-open ToolUp.Platform.IDataExporter
-open ToolUp.Platform.PlatformApiHandler
-open ToolUp.Platform.PlatformSchema
-open ToolUp.Platform.RemotingHelpers
-open ToolUp.Platform.TeamManagement
-open ToolUp.Platform.Teams
+open ToolUp.Platform.Audit.IDataExporter
+open ToolUp.Platform.Compose.PlatformApiHandler
+open ToolUp.Platform.Compose.PlatformSchema
+open ToolUp.Platform.Compose.RemotingHelpers
+open ToolUp.Platform.Config.TeamManagement
+open ToolUp.Platform.Scope.Teams
 open ToolUp.Platform.Usage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Files
 
 // ─── compose phase: route handlers ───────────────────────────────────
 //
@@ -60,8 +66,8 @@ let buildRouteHandlers
     (transactionalSinks: INotificationSink list)
     (encryptionKeyResolver: IBlobEncryptionKeyResolver option)
     (effectiveNotifications: NotificationMode)
-    (persistentEventStoreInstance: PersistentEventStore.PersistentEventStore option ref)
-    (blobJobStoreInstance: JobStore.BlobJobStore option ref)
+    (persistentEventStore: PersistentEventStore.PersistentEventStore option)
+    (blobJobStore: JobStore.BlobJobStore option)
     : RouteHandlers =
 
     let fileApiMounted = fileManagementMounted dataTypes
@@ -73,13 +79,13 @@ let buildRouteHandlers
             []
 
     // Column-mapping API — mounted only when the mapping-aware Data
-    // Manager substrate is enabled (`ColumnMapping = EnabledColumnMapping`).
+    // Manager substrate is enabled (`ColumnMapping = FeatureMode.Enabled`).
     // The store it resolves is registered by
     // `ComposeStores.registerColumnMappingStore` under the same flag.
     let columnMappingHandler =
         match config.ColumnMapping with
-        | EnabledColumnMapping -> [ makeApi ColumnMappingApiHandler.columnMappingApi ]
-        | NoColumnMapping -> []
+        | FeatureMode.Enabled -> [ makeApi ColumnMappingApiHandler.columnMappingApi ]
+        | FeatureMode.Disabled -> []
 
     // Configuration API is always auto-injected; the handler itself
     // short-circuits on empty `ModuleConfigs` (ListModules returns
@@ -125,11 +131,11 @@ let buildRouteHandlers
 
         // When usage metering is enabled, the admin UI surfaces the
         // per-team quota tab without requiring every app to re-declare
-        // the schema. NoUsageMetering deployments skip the merge so the
+        // the schema. FeatureMode.Disabled deployments skip the merge so the
         // tab does not appear at all.
         match config.UsageMetering with
-        | NoUsageMetering -> withPrefs
-        | EnabledUsageMetering -> mergeUsageSchema withPrefs
+        | FeatureMode.Disabled -> withPrefs
+        | FeatureMode.Enabled -> mergeUsageSchema withPrefs
 
     let configHandler = [ makeApi (ConfigHandler.configApi mergedModuleConfigs) ]
 
@@ -154,46 +160,46 @@ let buildRouteHandlers
 
     // Phase 528 — session-security API (active sessions, revoke one,
     // sign-out-everywhere, team-admin force-revoke). Mounted only when
-    // `ServerConfig.SessionRegistry` selects a backend — which is the SAME
+    // `ServerConfig.Stores.SessionRegistry` selects a backend — which is the SAME
     // flag that registers `ISessionRegistry` into DI, so the route can
     // never resolve a null store, and the default `NoSessionRegistry`
     // mounts nothing at all (the surface 404s; GP 13).
     let sessionHandler: HttpHandler list =
-        match config.SessionRegistry with
+        match config.Stores.SessionRegistry with
         | NoSessionRegistry -> []
         | BlobSessionRegistry _
         | CustomSessionRegistry _ -> [ makeApi SessionApiHandler.sessionApi ]
 
     // Webhook admin API. Mounted only when the deployment opted in via
-    // `ServerConfig.Webhooks = EnabledWebhooks`; the lightweight
-    // `NoWebhooks` default skips the route entirely so the proxy
+    // `ServerConfig.Webhooks = FeatureMode.Enabled`; the lightweight
+    // `FeatureMode.Disabled` default skips the route entirely so the proxy
     // surface returns 404 and no `IWebhookRegistry` is resolved.
     let webhookHandler: HttpHandler list =
         match config.Webhooks with
-        | NoWebhooks -> []
-        | EnabledWebhooks -> [ makeApi WebhookApiHandler.webhookApi ]
+        | FeatureMode.Disabled -> []
+        | FeatureMode.Enabled -> [ makeApi WebhookApiHandler.webhookApi ]
 
     // Phase 7b — user-authored schema authoring API. Mounted only when
-    // `ServerConfig.UserSchemaAuthoring = EnabledUserSchemaAuthoring`; the
-    // default `NoUserSchemaAuthoring` skips the route entirely so no
+    // `ServerConfig.UserSchemaAuthoring = FeatureMode.Enabled`; the
+    // default `FeatureMode.Disabled` skips the route entirely so no
     // `IUserSchemaStore` is resolved and the surface returns 404 (GP 13).
     let userSchemaHandler: HttpHandler list =
         match config.UserSchemaAuthoring with
-        | NoUserSchemaAuthoring -> []
-        | EnabledUserSchemaAuthoring -> [ makeApi UserSchemaApiHandler.userSchemaApi ]
+        | FeatureMode.Disabled -> []
+        | FeatureMode.Enabled -> [ makeApi UserSchemaApiHandler.userSchemaApi ]
 
     // Phase 622 — presence + soft-lock API over the Phase 442 substrate.
-    // Mounted only when `ServerConfig.Presence = EnabledPresence`, which
+    // Mounted only when `ServerConfig.Presence = FeatureMode.Enabled`, which
     // is the SAME flag that registers `IPresenceTracker` /
     // `IEntityLockStore` into DI — so the route can never resolve a null
-    // substrate, and the default `NoPresence` mounts nothing at all (the
+    // substrate, and the default `FeatureMode.Disabled` mounts nothing at all (the
     // surface 404s; GP 13). Purely additive: a deployment that already
     // hand-mounts its own module-owned presence API over the resolved
     // services keeps working and simply never calls this one.
     let presenceHandler: HttpHandler list =
         match config.Presence with
-        | NoPresence -> []
-        | EnabledPresence -> [ makeApi PresenceApiHandler.presenceApi ]
+        | FeatureMode.Disabled -> []
+        | FeatureMode.Enabled -> [ makeApi PresenceApiHandler.presenceApi ]
 
     // Cross-module query bus API. Auto-injected so client-side modules
     // can reach the bus without extra wiring. The server resolves
@@ -246,7 +252,7 @@ let buildRouteHandlers
                 // shared scope resolution can refuse unauthenticated
                 // connects under CookieRequired instead of trusting a
                 // client-supplied ?userId=.
-                NotificationHandler.notificationHandler channel manager config.SseAuthMode next ctx
+                NotificationHandler.notificationHandler channel manager config.SecurityPosture.SseAuthMode next ctx
           ]
 
     // Dev diagnostics endpoint (`/dev/inspect`). Runtime-gated via
@@ -287,7 +293,7 @@ let buildRouteHandlers
     // Phase 320 — external-compute completion-callback ingress (POST
     // /_platform/external-compute/callback). Mounted only when the
     // deployment composed an external-compute backend; a deployment on
-    // the `NoExternalCompute` default has no such path at all and the
+    // the `FeatureMode.Disabled` default has no such path at all and the
     // Giraffe terminal middleware answers a clean 404 (GP 13).
     //
     // Gated on the config rather than on the presence of an
@@ -298,8 +304,8 @@ let buildRouteHandlers
     // remedy named instead.
     let externalComputeCallbackHandler =
         match config.ExternalCompute with
-        | NoExternalCompute -> []
-        | CustomExternalCompute -> ExternalComputeCallback.routes
+        | FeatureMode.Disabled -> []
+        | FeatureMode.Enabled -> ExternalComputeCallback.routes
 
     // Job API auto-injected when the scheduler is enabled.
     // `NoJobScheduler` deployments skip the route entirely; clients
@@ -316,14 +322,13 @@ let buildRouteHandlers
         | QuartzJobScheduler _ -> [ makeApi JobApiHandler.jobApi ]
 
     // MaintenanceApi always registered. Each method reads the
-    // typed-store cells at request time via the thunk arguments and
+    // typed stores compose built via the thunk arguments and
     // returns a clear error when the corresponding store mode is
     // disabled. Owner/Admin gated server-side.
     let maintenanceApiHandler: HttpHandler list = [
         makeApi (
-            MaintenanceApiHandler.maintenanceApi
-                (fun () -> persistentEventStoreInstance.Value |> Option.map _.Rebuild)
-                (fun () -> blobJobStoreInstance.Value |> Option.map _.Rebuild)
+            MaintenanceApiHandler.maintenanceApi (fun () -> persistentEventStore |> Option.map _.Rebuild) (fun () ->
+                blobJobStore |> Option.map _.Rebuild)
         )
     ]
 
@@ -333,16 +338,16 @@ let buildRouteHandlers
     // per-substrate absence is a typed refusal inside the handler.
     let modelExecutionApiHandler: HttpHandler list =
         match config.ModelExecution with
-        | NoModelExecutionApi -> []
-        | EnabledModelExecutionApi -> [ makeApi ModelExecutionApiHandler.modelExecutionApi ]
+        | FeatureMode.Disabled -> []
+        | FeatureMode.Enabled -> [ makeApi ModelExecutionApiHandler.modelExecutionApi ]
 
     // Data ingestion API auto-injected when the substrate is enabled.
     // Mirrors the JobApi route's opt-in shape — disabled deployments
     // return 404 to the proxy surface.
     let dataIngestionApiHandler: HttpHandler list =
         match config.DataIngestion with
-        | NoDataIngestion -> []
-        | EnabledDataIngestion -> [ makeApi DataIngestionApiHandler.dataIngestionApi ]
+        | FeatureMode.Disabled -> []
+        | FeatureMode.Enabled -> [ makeApi DataIngestionApiHandler.dataIngestionApi ]
 
     // Phase 10a — module data-migration admin API. Same opt-in shape:
     // a deployment on `NoDataMigrations` mounts nothing and the paths
@@ -364,15 +369,15 @@ let buildRouteHandlers
     // registration order.
     let oauthFlowRoutes: HttpHandler list =
         match config.DataIngestion with
-        | NoDataIngestion -> []
-        | EnabledDataIngestion -> OAuthFlowHandler.routes
+        | FeatureMode.Disabled -> []
+        | FeatureMode.Enabled -> OAuthFlowHandler.routes
 
     // Phase 10g — OAuth 1.0a three-legged flow routes, gated on its own
     // opt-in mode (independent of the OAuth 2.0 / DataIngestion substrate).
     let oauth1aFlowRoutes: HttpHandler list =
         match config.OAuth1a with
-        | NoOAuth1a -> []
-        | EnabledOAuth1a -> OAuth1aFlowHandler.routes
+        | FeatureMode.Disabled -> []
+        | FeatureMode.Enabled -> OAuth1aFlowHandler.routes
 
     // HealthMonitor admin API. Always auto-injected; request-scoped
     // Owner/Admin gate inside the handler short-circuits Anonymous and
@@ -397,7 +402,7 @@ let buildRouteHandlers
     ]
 
     // Phase 177 — deployment-readiness scorecard. Opt-in: mounted only
-    // when `ServerConfig.DeploymentReadiness = EnabledReadinessReport`,
+    // when `ServerConfig.DeploymentReadiness = FeatureMode.Enabled`,
     // so an unopted deployment 404s the route and is byte-for-byte
     // unchanged (GP 13). The request-scoped Platform-Admin gate inside
     // the handler short-circuits Anonymous / non-admin callers. The whole
@@ -406,8 +411,8 @@ let buildRouteHandlers
     // request.
     let deploymentReadinessApiHandler: HttpHandler list =
         match config.DeploymentReadiness with
-        | NoReadinessReport -> []
-        | EnabledReadinessReport -> [ makeApi (DeploymentReadinessReport.deploymentReadinessApi config) ]
+        | FeatureMode.Disabled -> []
+        | FeatureMode.Enabled -> [ makeApi (DeploymentReadinessReport.deploymentReadinessApi config) ]
 
     // Phase 686 — deployment verification report. Same opt-in shape as
     // the readiness scorecard above, and mounted independently of it:
@@ -419,18 +424,18 @@ let buildRouteHandlers
     // honestly `NotComposed` section rather than an error.
     let deploymentVerificationApiHandler: HttpHandler list =
         match config.DeploymentVerification with
-        | NoDeploymentVerification -> []
-        | EnabledDeploymentVerification -> [ makeApi DeploymentVerificationReport.deploymentVerificationApi ]
+        | FeatureMode.Disabled -> []
+        | FeatureMode.Enabled -> [ makeApi DeploymentVerificationReport.deploymentVerificationApi ]
 
     // Usage admin route. Auto-injected unconditionally so the client
     // dashboard's `IUsageQueryApi` proxy never 404s in mode-mismatched
     // deployments. The default `ClientConfig.UsageDashboard =
     // SlotFill.Default` renders the sidebar entry in any
     // non-Anonymous mode; the default `ServerConfig.UsageMetering =
-    // NoUsageMetering` resolves `IUsageLog` to `NoOpUsageLog` so the
+    // FeatureMode.Disabled` resolves `IUsageLog` to `NoOpUsageLog` so the
     // handler returns empty results — admin UI shows the "no usage
     // records" state until a deployment opts in to
-    // `EnabledUsageMetering`. Owner / Admin gating is enforced inside
+    // `FeatureMode.Enabled`. Owner / Admin gating is enforced inside
     // the handler (`ensureReadAllowed`). Route shape:
     // `/api/_platform/usage/*` via the shared `UsageQueryApi.routeBuilder`
     // so admin clients can discover the endpoint by path alone.
@@ -443,12 +448,12 @@ let buildRouteHandlers
     // module's default is ON, and a proxy that 404s cannot tell the
     // operator "this deployment keeps no audit trail" from "this
     // deployment is broken". The pairing is with `ServerConfig.AuditLog`
-    // — whose default `NoAuditLog` resolves `IAuditLog` to
+    // — whose default `FeatureMode.Disabled` resolves `IAuditLog` to
     // `NoOpAuditLog`, so nothing is recorded — and the mode is handed to
     // the handler rather than read off DI because the handler reads the
     // event store directly (it needs the persisted envelope's `Id` and
     // `OccurredAt`, which `IAuditLog.GetAuditTrail` drops). Under
-    // `NoAuditLog` it therefore short-circuits to an empty result rather
+    // `FeatureMode.Disabled` it therefore short-circuits to an empty result rather
     // than surfacing residue a deployment has since switched off.
     // Owner/Admin gating and caller-scope isolation are enforced inside
     // the handler. Route shape: `/api/_platform/audit/*`.
@@ -468,8 +473,8 @@ let buildRouteHandlers
         Api.make (HomeOverviewApiHandler.homeOverviewApi, routeBuilder = HomeOverviewApi.routeBuilder)
     ]
 
-    // /metrics route. Mounted only when EnabledMetricsEndpoint.
-    // NoMetricsEndpoint produces an empty list so the route does not
+    // /metrics route. Mounted only when FeatureMode.Enabled.
+    // FeatureMode.Disabled produces an empty list so the route does not
     // exist on the routing table; deployments without metrics enabled
     // get a clean 404 from the Giraffe terminal middleware, not an
     // empty 200 response. The handler itself resolves
@@ -477,9 +482,9 @@ let buildRouteHandlers
     // here doesn't depend on the sink-registration block which lives
     // later in compose.
     let metricsRoutes: HttpHandler list =
-        match config.MetricsEndpoint with
-        | EnabledMetricsEndpoint -> MetricsEndpoint.routes
-        | NoMetricsEndpoint -> []
+        match config.Observability.MetricsEndpoint with
+        | FeatureMode.Enabled -> MetricsEndpoint.routes
+        | FeatureMode.Disabled -> []
 
     let platformAdminApiHandler: HttpHandler list = [ makeApi PlatformAdminApiHandler.platformAdminApi ]
 
@@ -526,14 +531,14 @@ let buildRouteHandlers
     // pre-fetch tolerates the absence — its cache stays empty and no
     // header is attached, preserving today's behaviour).
     let csrfTokenRoutes: HttpHandler list =
-        match config.SecurityHardening with
+        match config.SecurityPosture.SecurityHardening with
         | NoSecurityHardening -> []
         | _ -> [ Csrf.tokenRoute ]
 
     // Phase 133 — BFF-style server-set auth-cookie reflection endpoint
     // (`POST` / `DELETE /api/auth/session`). Mounted only when
-    // `ServerConfig.AuthCookieIssuance = EnabledAuthCookieIssuance`; the
-    // default `NoAuthCookieIssuance` produces an empty list so the path
+    // `ServerConfig.SecurityPosture.AuthCookieIssuance = FeatureMode.Enabled`; the
+    // default `FeatureMode.Disabled` produces an empty list so the path
     // 404s from the Giraffe terminal middleware and an existing
     // deployment is byte-for-byte unchanged (GP 11). When enabled, a
     // client on `ClientConfig.AuthTokenStorage = ServerSetHttpOnlyCookie`
@@ -542,14 +547,14 @@ let buildRouteHandlers
     // `HttpOnly; Secure; SameSite=Strict` cookie so the bearer never
     // lives in JS-readable storage.
     let authSessionRoutes: HttpHandler list =
-        match config.AuthCookieIssuance with
-        | NoAuthCookieIssuance -> []
-        | EnabledAuthCookieIssuance -> AuthSession.routes
+        match config.SecurityPosture.AuthCookieIssuance with
+        | FeatureMode.Disabled -> []
+        | FeatureMode.Enabled -> AuthSession.routes
 
     // Phase 9o — post-deploy smoke-test endpoint
     // (`GET /api/_internal/smoke`). Mounted only when
-    // `ServerConfig.SmokeTest = EnabledSmokeTest`; the default
-    // `NoSmokeTest` produces an empty list so the route does not
+    // `ServerConfig.SmokeTest = FeatureMode.Enabled`; the default
+    // `FeatureMode.Disabled` produces an empty list so the route does not
     // exist on the routing table and deployments without smoke
     // enabled get a clean 404 from the Giraffe terminal middleware.
     // The handler itself gates on `TOOLUP_SMOKE_TOKEN` so even an
@@ -557,38 +562,38 @@ let buildRouteHandlers
     // deploy script's shared secret.
     let smokeTestRoutes: HttpHandler list =
         match config.SmokeTest with
-        | NoSmokeTest -> []
-        | EnabledSmokeTest -> SmokeTestHandler.routes
+        | FeatureMode.Disabled -> []
+        | FeatureMode.Enabled -> SmokeTestHandler.routes
 
     // Phase 59 — consent-audit endpoint. Mounted only when
-    // `ServerConfig.ConsentAudit = EnabledConsentAudit`; default
-    // `NoConsentAudit` produces an empty list so the path 404s and
+    // `ServerConfig.ConsentAudit = FeatureMode.Enabled`; default
+    // `FeatureMode.Disabled` produces an empty list so the path 404s and
     // client-side consent capture stays purely browser-local
     // (localStorage / CMP-host state).
     let consentAuditRoutes: HttpHandler list =
         match config.ConsentAudit with
-        | NoConsentAudit -> []
-        | EnabledConsentAudit -> ConsentApiHandler.routes
+        | FeatureMode.Disabled -> []
+        | FeatureMode.Enabled -> ConsentApiHandler.routes
 
     // Phase 60 — ad analytics endpoints (impression + click). Mounted
-    // only when `ServerConfig.AdAnalytics = EnabledAdAnalytics`; the
-    // default `NoAdAnalytics` produces an empty list so client-side
+    // only when `ServerConfig.AdAnalytics = FeatureMode.Enabled`; the
+    // default `FeatureMode.Disabled` produces an empty list so client-side
     // `ServerSinkAdAnalytics` posts 404 (the sink swallows the error,
     // matching its best-effort contract).
     let adAnalyticsRoutes: HttpHandler list =
         match config.AdAnalytics with
-        | NoAdAnalytics -> []
-        | EnabledAdAnalytics -> AdAnalyticsApiHandler.routes
+        | FeatureMode.Disabled -> []
+        | FeatureMode.Enabled -> AdAnalyticsApiHandler.routes
 
     // Phase 163 — end-user product-telemetry fan-out endpoint. Mounted
-    // only when `ServerConfig.TelemetrySink = CustomTelemetrySink`; the
-    // default `NoTelemetrySink` yields an empty list, so the route does
+    // only when `ServerConfig.Observability.TelemetrySink = FeatureMode.Enabled`; the
+    // default `FeatureMode.Disabled` yields an empty list, so the route does
     // not exist on the routing table and a deployment that composes no
     // analytics is byte-for-byte unchanged (GP 13). The client-side
     // `Telemetry.track` helper swallows the resulting 404, matching its
     // best-effort contract.
     let telemetryRoutes: HttpHandler list =
-        TelemetryApiHandler.routesFor config.TelemetrySink
+        TelemetryApiHandler.routesFor config.Observability.TelemetrySink
 
     // Phase 62 — premium claim endpoints (read + grant + revoke).
     // Always mounted — the read endpoint short-circuits to NotPremium
@@ -610,21 +615,21 @@ let buildRouteHandlers
     // on Platform-Admin role and degrade to empty / configurable
     // results when the deployment hasn't wired a concrete impl.
     let adUnitConfigRoutes: HttpHandler list =
-        match config.EntityStore with
-        | NoEntityStore -> []
-        | EnabledEntityStore -> AdUnitConfigApi.routes
+        match config.Stores.EntityStore with
+        | FeatureMode.Disabled -> []
+        | FeatureMode.Enabled -> AdUnitConfigApi.routes
 
     let rateLimitEventApiRoutes: HttpHandler list = RateLimitEventApi.routes
 
     let premiumUserApiRoutes: HttpHandler list = PremiumUserApi.routes
 
     // Phase 9w — Datadog readback endpoints (monitors / logs / metric).
-    // Mounted only when `ServerConfig.DatadogReadback =
+    // Mounted only when `ServerConfig.Observability.DatadogReadback =
     // EnabledDatadogReadback`; the default `NoDatadogReadback` produces
     // an empty list, so a deployment that does not read from Datadog
     // carries no route at all (GP 13).
     let datadogReadbackRoutes: HttpHandler list =
-        match config.DatadogReadback with
+        match config.Observability.DatadogReadback with
         | NoDatadogReadback -> []
         | EnabledDatadogReadback readbackConfig -> DatadogReadbackHandlers.routes readbackConfig
 
@@ -757,8 +762,8 @@ let buildRouteHandlers
           ]
 
     // Phase 54 — IPlatformTenantApi mount. Gated on
-    // `ServerConfig.TenantLifecycle = EnabledTenantLifecycle`; the
-    // default `NoTenantLifecycle` skips the route entirely so the proxy
+    // `ServerConfig.TenantLifecycle = FeatureMode.Enabled`; the
+    // default `FeatureMode.Disabled` skips the route entirely so the proxy
     // surface 404s and no `ITenantLifecycle` hooks are resolved (they're
     // also absent from DI — `ComposeTenantLifecycle` gates on the same
     // field). Owner / Platform-Admin gating is enforced inside the
@@ -766,8 +771,8 @@ let buildRouteHandlers
     // `/api/_platform/tenants/*` via `PlatformTenantApi.routeBuilder`.
     let platformTenantApiHandler: HttpHandler list =
         match config.TenantLifecycle with
-        | NoTenantLifecycle -> []
-        | EnabledTenantLifecycle -> [
+        | FeatureMode.Disabled -> []
+        | FeatureMode.Enabled -> [
             Api.make (PlatformTenantApiHandler.platformTenantApi, routeBuilder = PlatformTenantApi.routeBuilder)
           ]
 
@@ -778,7 +783,7 @@ let buildRouteHandlers
     // handler. Route shape: `/api/IServiceAccountApi/*` via
     // `ServiceAccountApi.routeBuilder`.
     let serviceAccountApiHandler: HttpHandler list =
-        match config.ServiceAccounts with
+        match config.Stores.ServiceAccounts with
         | NoServiceAccounts -> []
         | EnabledServiceAccounts
         | CustomServiceAccountStore -> [
@@ -825,9 +830,9 @@ let buildRouteHandlers
     // gates are enforced inside the handler. Route shape:
     // `/api/IExternalContactApi/*` via `ExternalContactApi.routeBuilder`.
     let externalContactApiHandler: HttpHandler list =
-        match config.ExternalContactStore with
-        | NoExternalContactStore -> []
-        | EnabledExternalContactStore -> [
+        match config.Stores.ExternalContactStore with
+        | FeatureMode.Disabled -> []
+        | FeatureMode.Enabled -> [
             Api.make (ExternalContactApiHandler.externalContactApi, routeBuilder = ExternalContactApi.routeBuilder)
           ]
 

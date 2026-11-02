@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.ReflectionTools
+module ToolUp.Platform.Compose.ReflectionTools
 
 open System
 open System.Text
 open System.Text.Json
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs.SmokeTests
 
 // ─── Phase 782 — the reflection door ─────────────────────────────────
 //
@@ -52,9 +54,9 @@ open ToolUp.Platform
 //
 // **Registration is the platform's own AI-tool path, and opt-in.**
 // `tools` is an ordinary `(AIToolDefinition * executor)` list;
-// `AIServerApp.withReflectionTools` appends it to the composition's tool
+// `AIOptions.withReflectionTools` appends it to the composition's tool
 // accumulator, which `composeAI` registers. A composition that composes no
-// AI provider has no `AIServerApp` to call it on, and so registers nothing
+// AI provider has no `AIOptions` to call it on, and so registers nothing
 // (GP 11 / GP 13); an AI composition that does not opt in offers the model
 // exactly the tools it offered before.
 
@@ -403,7 +405,7 @@ let executeModuleReach (ctx: HttpContext) (_argsJson: string) : Async<string> =
 
 /// The three reflection tools, in the platform's `(definition, executor)`
 /// registration shape. Appended to a composition by
-/// `AIServerApp.withReflectionTools`; registered by `composeAI`.
+/// `AIOptions.withReflectionTools`; registered by `composeAI`.
 let tools: (AIToolDefinition * (HttpContext -> string -> Async<string>)) list = [
     describeCompositionDefinition, executeDescribeComposition
     verificationReportDefinition, executeVerificationReport

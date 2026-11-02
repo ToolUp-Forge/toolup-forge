@@ -9,6 +9,7 @@ open ToolUp.Platform.AI
 open ToolUp.Platform.Providers
 open ToolUp.Platform.Secrets
 open ToolUp.AI
+open ToolUp.Platform.Compose
 
 // ─── Phase 498 — provider fallback / failover routing ────────────
 //

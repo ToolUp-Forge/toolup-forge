@@ -7,6 +7,7 @@ open System
 open System.Text
 open System.Security.Cryptography
 open ToolUp.Platform
+open ToolUp.Platform.Infra
 
 // ─── Phase 454 — reference IModelScoreProvider ──────────────────────────
 //

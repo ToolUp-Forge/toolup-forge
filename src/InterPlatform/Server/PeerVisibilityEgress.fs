@@ -4,6 +4,7 @@
 namespace ToolUp.InterPlatform
 
 open ToolUp.Platform.VectorKnowledgeTypes
+open ToolUp.Platform.Infra
 
 // ─── Phase 642 — level-gated egress rides the disclosure plane ───────
 //
@@ -77,6 +78,13 @@ type PeerEgressRoute = {
     /// The shipped Phase 525 gate. The route never re-implements the
     /// predicate — the whole point of the seam is that there is one.
     Gate: IFactDisclosureGate
+    /// The scope the gate judges this route's references in: the resolved
+    /// scope the binding's declared principal resolves to, resolved at
+    /// composition through the platform's `DeclaredPrincipalResolver`. A
+    /// route whose scope is not the binding's shard judges nothing there —
+    /// every reference is withheld (fail-closed), never checked in a shard
+    /// nobody resolved.
+    Scope: ToolUp.Platform.ResolvedScope
     Purpose: PeerEgressPurpose
     /// The fact references an answer to `operation` carries, in this
     /// binding's scope.
@@ -180,7 +188,11 @@ module PeerVisibilityEgress =
             | references ->
                 r.Purpose.Claim r.Purpose.PurposeId
 
-                let! verdicts = r.Gate.Check(scopeId, principal, FactPeerEgress, references)
+                let! verdicts =
+                    if r.Scope.ScopeId = scopeId then
+                        r.Gate.Check(r.Scope, principal, FactPeerEgress, references)
+                    else
+                        async.Return Map.empty
 
                 let permitted =
                     references

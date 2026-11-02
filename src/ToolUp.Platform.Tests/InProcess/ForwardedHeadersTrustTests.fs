@@ -12,13 +12,22 @@ open System.Net
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
 let private cfg (surfaces: SurfaceProfile list) (cidrs: string list) (escapeHatch: bool) : ServerConfig = {
     ServerConfig.defaults with
         Surfaces = surfaces
-        TrustForwardedHeaders = true
-        TrustedProxyCidrs = cidrs
-        AcceptForwardedHeadersFromAnyProxy = escapeHatch
+        SecurityPosture = {
+            ServerConfig.defaults.SecurityPosture with
+                TrustForwardedHeaders = true
+                TrustedProxyCidrs = cidrs
+        }
+        RiskAcknowledgements = {
+            ServerConfig.defaults.RiskAcknowledgements with
+                AcceptForwardedHeadersFromAnyProxy = escapeHatch
+        }
 }
 
 let private validate (config: ServerConfig) : ValidationResult =
@@ -36,9 +45,11 @@ let tests =
     testList "Phase 325 — forwarded-headers CIDR trust allowlist" [
 
         test "GP 11 — defaults preserve the pre-325 shape (empty allowlist, escape hatch off)" {
-            Expect.equal ServerConfig.defaults.TrustedProxyCidrs [] "allowlist defaults empty"
+            Expect.equal ServerConfig.defaults.SecurityPosture.TrustedProxyCidrs [] "allowlist defaults empty"
 
-            Expect.isFalse ServerConfig.defaults.AcceptForwardedHeadersFromAnyProxy "escape hatch defaults off"
+            Expect.isFalse
+                ServerConfig.defaults.RiskAcknowledgements.AcceptForwardedHeadersFromAnyProxy
+                "escape hatch defaults off"
         }
 
         test "Auth mode + empty allowlist → preflight Error naming both remedies" {

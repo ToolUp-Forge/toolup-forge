@@ -10,6 +10,8 @@ open KnowledgeBase.ServerIndexStorage
 open KnowledgeBase.ServerIngestionObserver
 open KnowledgeBase.ServerApiDeps
 open KnowledgeBase.ServerApiDocuments
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 4b — Platform KB write surface ─────────────────────────────
 //
@@ -95,7 +97,7 @@ let private platformDeps (baseDeps: KnowledgeApiDeps) : KnowledgeApiDeps =
 
 /// Resolve `IAuditLog` from DI for audit emission on Platform KB
 /// mutations. Returns `None` when the audit-log substrate isn't
-/// registered (test bypass, `NoAuditLog` deployment) — emission is
+/// registered (test bypass, `FeatureMode.Disabled` deployment) — emission is
 /// fire-and-forget and silent when the substrate is absent.
 let private resolveAuditLog (ctx: HttpContext) : IAuditLog option =
     match ctx.RequestServices.GetService(typeof<IAuditLog>) with

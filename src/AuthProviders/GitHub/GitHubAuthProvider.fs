@@ -14,6 +14,10 @@ open ToolUp.Platform.Auth
 open ToolUp.Platform.Metrics
 open ToolUp.AuthProviders.GitHubApi
 open ToolUp.AuthProviders.GitHubAuthConfig
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Config.Auth
+open ToolUp.Platform.Compose
 
 // ─── GitHub auth-provider companion ──────────────────────────────────
 //
@@ -203,13 +207,13 @@ let private validate
                 return Ok user
             | None ->
                 match! getUser httpClient config.UserAgent config.ApiBaseUrl token with
-                | Error Unauthorized ->
+                | Error GitHubApiError.Unauthorized ->
                     incr ValidateInvalidToken
                     return Error "GitHub rejected the access token"
-                | Error(Forbidden msg) ->
+                | Error(GitHubApiError.Forbidden msg) ->
                     incr ValidateForbidden
                     return Error(sprintf "GitHub API forbade the request: %s" msg)
-                | Error(NetworkError msg) ->
+                | Error(GitHubApiError.NetworkError msg) ->
                     incr ValidateUpstreamError
                     return Error(sprintf "could not reach the GitHub API: %s" msg)
                 | Error(MalformedResponse msg) ->
@@ -225,13 +229,13 @@ let private validate
                             anyActiveOrg token config.AllowedOrgs
 
                     match orgResult with
-                    | Error Unauthorized ->
+                    | Error GitHubApiError.Unauthorized ->
                         incr ValidateInvalidToken
                         return Error "GitHub rejected the access token"
-                    | Error(Forbidden msg) ->
+                    | Error(GitHubApiError.Forbidden msg) ->
                         incr ValidateForbidden
                         return Error(sprintf "GitHub API forbade the org-membership check: %s" msg)
-                    | Error(NetworkError msg) ->
+                    | Error(GitHubApiError.NetworkError msg) ->
                         incr ValidateUpstreamError
                         return Error(sprintf "could not verify GitHub org membership: %s" msg)
                     | Error(MalformedResponse msg) ->

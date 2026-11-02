@@ -13,17 +13,16 @@
 #
 # ─── Trigger ─────────────────────────────────────────────────────────
 #
-# - `v*.*.*` tag push — coordinated SDK-wide release. Every IsPackable
-#   fsproj packs at its current <Version> — the centralised <Version> in
-#   Directory.Build.props, unless a per-fsproj <Version> override applies.
-#   NOTE: <Version> (what packs + publishes here) is a SEPARATE knob from
-#   the meta-manifest's <ToolUpSdkVersion> in Directory.Packages.props
-#   (the version at which a *consumer* pins every ToolUp.* package via the
-#   ToolUp.Sdk meta-manifest). The two are maintained independently and
-#   are NOT auto-derived from each other — keep them in sync at release
-#   time. Per-package independent bumps remain possible via a per-fsproj
-#   <Version> override; the tag scheme `v{Package}/{Version}` is reserved
-#   for that future shape but not yet wired here.
+# - `v*.*.*` tag push — coordinated SDK-wide release, ONE tag named by the
+#   core version (docs/platform/release-process.md, ruling 2: there are no
+#   group tags). Every IsPackable fsproj packs at its VERSION GROUP's
+#   version (version-groups.json): the core group at the <Version> in
+#   Directory.Build.props, each companion family at its own line, through
+#   the region of Directory.Build.props generated from that file. Nothing
+#   here reads a version: the Publish target packs what MSBuild evaluates.
+#   A companion line that did not move re-packs at the version it already
+#   published, and `--skip-duplicate` leaves the published package alone.
+#   The tag and VerifyReleaseChannel read the core's version only.
 # - `vX.0.0-rc.N` tag push (X >= 1) — a RELEASE CANDIDATE of a major (Phase 263;
 #   candidates exist only for majors from 1.0 on). The same `v*.*.*` filter
 #   matches it (a filter `*` spans `-rc.N`), so no second
@@ -153,8 +152,8 @@ jobs:
       # credential ever being minted. For a candidate it appends
       # TOOLUP_RELEASE_CORE / TOOLUP_RELEASE_PRERELEASE to $GITHUB_ENV, so
       # every later step in THIS job sees them and the Publish pack stamps
-      # `-rc.N` onto the lockstep packages (Directory.Build.targets) and
-      # skips the independently versioned ones. A stable run exports
+      # `-rc.N` onto the core packages (Directory.Build.targets) and skips
+      # every companion version group (Directory.Build.props). A stable run exports
       # nothing and packs exactly as before.
       #
       # The Phase 257 scorecard half of the soak gate is NOT here: its
@@ -169,7 +168,9 @@ jobs:
       # import.
       #
       # `ToolUp.Sdk.props` is what a consumer imports to resolve every
-      # ToolUp.* package from one <ToolUpSdkVersion>. It was hand-listed
+      # ToolUp.* package from one <ToolUpSdkVersion> (each companion family
+      # through its own defaulted property). The same check refuses a tree
+      # whose version groups do not place every packable project once. It was hand-listed
       # and had drifted to 57 of 166 published ids (the rest were NU1008
       # for any consumer), and its header comment nested a second XML
       # comment, which made the whole import MSB4024 — the manifest
@@ -191,9 +192,10 @@ jobs:
       # release tag are diffed against this tree with the same comparer
       # the public-API approval gate runs (Phase 175/618), each package
       # classified unchanged / additive / breaking, and the highest class
-      # rolled up to the one lockstep <Version>. A declared version at or
-      # above what that demands passes; below it fails. It never edits
-      # the version — the proposal is advice, the check is a floor.
+      # rolled up PER VERSION GROUP (version-groups.json). A group whose
+      # declared version is at or above what its own packages demand
+      # passes; below it fails. It never edits a version — the proposal is
+      # advice, the check is a floor.
       #
       # It needs the tag history, which is why the checkout above sets
       # `fetch-depth: 0`.

@@ -4,12 +4,13 @@ open System
 open System.Diagnostics
 open System.IO
 open ToolUp.Platform.VectorKnowledgeTypes
-open ToolUp.Platform.IRetrievalPipeline
+open ToolUp.Platform.Infra.IRetrievalPipeline
 open ToolUp.RAG.Benchmarks.EvalCore
 open ToolUp.RAG.Benchmarks.BeirTypes
 open ToolUp.RAG.Benchmarks.BeirLoader
 open ToolUp.RAG.Benchmarks.LatencyMetrics
 open ToolUp.RAG.Benchmarks.PipelineFactory
+open ToolUp.Platform.Infra
 
 // ─── Run config + output row ─────────────────────────────────────
 

@@ -40,8 +40,12 @@ open System.IO
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.PermissionStore
-open ToolUp.Platform.AdminMutationApproval
+open ToolUp.Platform.Scope.PermissionStore
+open ToolUp.Platform.Scope.AdminMutationApproval
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Jobs.SmokeTests
 
 // ─── Fixtures ────────────────────────────────────────────────────────
 
@@ -868,6 +872,7 @@ let tests =
                                     }
                                 ]
                             ]
+                        Pages = Map.ofList [ "bob", [ PageGrant.SaveTeam ] ]
                     }
                 ]
 

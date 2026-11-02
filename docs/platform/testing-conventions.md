@@ -4,10 +4,9 @@ Conventions for keeping the SDK's Expecto test suite reliable under default para
 
 ## The "module-level mutable cache" pattern
 
-A handful of SDK substrate files carry a `let mutable private <name>` (or `let mutable internal <name>`) at module scope — a process-local cache or registration list populated lazily on first use and read on every call. Two examples:
+A handful of SDK substrate files carry a `let mutable private <name>` (or `let mutable internal <name>`) at module scope — a process-local cache or registration list populated lazily on first use and read on every call. For example:
 
 - [`PendingInviteStore.cache`](../../src/ToolUp.Platform.Server/Server/Teams/PendingInviteStore.fs) — 30-second TTL cache of the pending-invite blob, populated on first read and invalidated on every write.
-- [`FileManagement.pendingPostSaveHooks`](../../src/ToolUp.Platform.Server/Server/Files/FileManagement.fs) — companion-registered list of post-save hooks; populated before `compose`, drained when `compose` runs.
 
 In production this is the right shape: process-lifetime singletons at hot paths, no DI overhead per call. In tests the same shape is a flake source — sibling tests in the same `testList` mutate the shared cache concurrently and observe each other's writes.
 
@@ -20,7 +19,7 @@ In production this is the right shape: process-lifetime singletons at hot paths,
 **When it's not OK.**
 
 - Anywhere DI resolution per call is cheap enough that the cache buys nothing.
-- New code on the SDK boundary. Prefer a record-shaped runtime threaded through `compose` (see how `FileManagementRuntime` retired three of `FileManagement.fs`'s prior module mutables — only `pendingPostSaveHooks` survives, and that survives precisely because it's populated by callers BEFORE `compose` runs).
+- New code on the SDK boundary. Prefer a record-shaped runtime threaded through `compose` (see how `FileManagementRuntime` retired `FileManagement.fs`'s registration mutables — the last, the post-save hook list, went when hooks became DI registrations the runtime folds in).
 
 **Client-tier consolidation rule (Phase 496).** A client-tier concern (`ToolUp.Platform.Client/`, `ToolUp.AI.Client/`) with **more than one** ambient module-level mutable consolidates them into a **single mutable state record** — one `type private <Concern>State = { … }` carrying the per-field justification as doc comments, plus one `let mutable private state = { … }` binding updated via copy-and-update (`state <- { state with … }`). One documented exception per concern instead of N, and the related fields cannot be updated inconsistently. Reference shapes: `NotificationClient.NotificationClientState`, `UserSession.SubjectAndBridgeState` / `TokenStorageState` (split by lifetime), `CsrfClient.CsrfClientState`. New **lone** flags (one-shot init guards, warn-once latches, single pluggable-reporter slots) stay as plain `let mutable private` bindings and keep the one-line justification comment — a record wrapper adds nothing to a lone boolean.
 
@@ -94,7 +93,6 @@ Each (a) site MUST carry a comment naming its classification: `// (a) — proces
 
 **Class (b) — exposes `__internal_resetForTests`.** Required when the mutable is:
 - A read-on-every-call cache populated lazily (`PendingInviteStore.cache`).
-- A compose-time registration list drained by `compose` (`FileManagement.pendingPostSaveHooks`) — even though the drain pattern resets it, tests that bypass `compose` need an explicit reset to start clean.
 
 Each (b) site MUST be registered in `CacheReset.invalidateAll`.
 
@@ -148,9 +146,25 @@ Two things that look like fixes and are not: **no CLI flag helps** — `--no-spi
 
 **It builds once, then invokes each pack's built test dll directly (`dotnet <dll>`), rather than shelling `dotnet run --project <pack>` per pack.** The reason is a hang, not a speed-up: the `dotnet run` launch path intermittently wedges *before the suite starts* — ~0% CPU, no output, indistinguishable from a slow pack until someone gives up waiting on it. That failure mode is worse than an ordinary red, because nothing about it says which it is. Invoking the built dll has no such step. Each pack's assembly is asked of MSBuild (`-getProperty:TargetPath`) rather than assembled from a `bin/<config>/<tfm>/<name>.dll` convention, so a project that sets `AssemblyName` or a custom output path stays correct instead of failing in a way that looks like a missing pack. The child's working directory is the caller's — measured, not assumed; `dotnet run` does *not* move the child into the project directory — so a pack resolving a relative path sees exactly what it saw before. **If you add a harness that shells a test pack, invoke the dll, not `dotnet run`.**
 
-The per-pack `PASS` / `FAIL` summary block is unchanged, and deliberately so: CI parses it and fails the job unless at least `EXPECTED_PACKS` lines report `PASS` (a floor, so adding a pack needs no workflow edit). The up-front build sits **outside** that aggregate — a build failure means no pack can run, so it fails the target directly rather than producing a summary about a tree that does not compile.
+The per-pack `PASS` / `FAIL` summary block is unchanged, and deliberately so: CI parses it and fails the job unless at least `EXPECTED_PACKS` lines report `PASS` — a floor rendered from the gate manifest (below), so adding a row moves it through `Gate --render`, never by hand. A `PENDING` line (an arm whose named input is absent) is counted in neither. The up-front build sits **outside** that aggregate — a build failure means no pack can run, so it fails the target directly rather than producing a summary about a tree that does not compile.
 
 **The Public-API approval gate's build precondition is now enforced, and it fails once.** `Phase 175 — Public-API approval baseline` renders each packable assembly's surface from its built DLL, so a pack run against a tree whose companion `bin/` directories are empty has nothing to compare. It used to answer that with one assertion failure per unbuilt assembly — 52 of them — which reads like a catastrophic surface break and has cost at least one session a wrong diagnosis. It now resolves each DLL **when the case runs** rather than snapshotting the answer at process start, and reports a missing build as a single `the solution is built` failure naming the count, a bounded sample, and the remedy; the per-assembly cases defer to it. The pack is still red — a precondition that let the run report green would be the vacuous shape the section below exists to end. **So: `dotnet build ToolUp.Forge.sln` before running the Platform pack on its own.** Running it through `VerifyAll` needs no such care, because the target now does that build itself.
+
+## The gate manifest: a new gate is a row
+
+`GateManifest.rows` (repo root, `GateManifest.fs`, source-linked into the Build test pack) is the one statement of what the forge gate runs. A row is a `GateLeg`: its `Name` (the token in the `VerifyAll summary:` block), its `Kind` (an `ExpectoPack` project, a `Body` returning a `Verdict`, or a `Script` path), its `Lanes` (`TestLane.Lane` — a pack whose own test sources read nothing is in `pure`; every pack is in the other three), its `Where` (`Local` under `VerifyAll`, `Ci <job>` for a `checks.yml` / `proofs.yml` job, `Release` for `publish-nuget.yml`), its `Reads` (`Tree`, `Git`, `Node`, `Browser`, `Docker`, `Network`, `Env <name>`), its measured `Budget` and its `Floor`.
+
+Everything that used to restate the list is a render of the rows, and each render is held by a test or a `--check`:
+
+- `BuildConfig.TestPacks` is `Gate.packs` over the `Local` pack rows; `GateReconcile` holds every `*.Tests.fsproj` to a pack row or a named exclusion (`GateReconcileTests`).
+- The `pure` lane is the pack rows with `Reads = []`; `PureLaneTests` re-runs the recorded grep over each such row's sources and is red when one reads the tree.
+- CI's `EXPECTED_PACKS` is `Gate.ciFloor`, the count of rows whose `Where` carries `Ci "verify-all"`; `dotnet run --project Build.fsproj -- Gate --check` refuses a drift and `Gate --render` writes it. The CI table in `CLAUDE.md` is rendered from `Where` the same way, and `GateManifestTests` holds every `checks.yml` job to a row or a named CI-only reason, and every row's job to a step that runs it.
+- Each pack is launched under a scrubbed environment: every `Env` variable some other row declares and this row does not is cleared, so a pack cannot read a credential it did not name (`Gate.scrubbedFor`).
+- `VerifyGate` serialises `VerifyAll` and every `Body` row that reads the tree for over a minute; its stale-holder bound is twice the full lane's summed `Budget`, never a literal.
+- `VerifyAll` prints the lane's measured duration once at the end of a run and a trailer naming the rows it did not run (`Where` without `Local`) with their reads; `VerifyGate` appends one admission record per run to `.git/fuaran-gate/verify-runs.jsonl`, and `dotnet run --project Build.fsproj -- GateTimings [--since <days>]` folds them into per-lane and per-row medians, which is where a row's `Budget` is re-derived from.
+- A `Floor` is applied by the fold, not the body: `AtLeast n` / `Exactly n` against the `Pass` count, `HighWater <file>` against the committed mark, `FromRegistry proofs.json` by `proofs/check.ps1`, which reads each differential host's case names from the claims registry and fails by name on a case that stops running.
+
+`dotnet run --project Build.fsproj -- Gate --run <row>` runs one row on its own (building what it names), which is how the CI-only jobs invoke theirs. A consumer's `Build.fs` that sets `TestPacks` and calls `VerifyLeg.register` is unchanged: both are derived views onto `Gate.register`.
 
 ## `[<Tests>]` alone does not run a test list — register it (Phase 722)
 
@@ -171,6 +185,134 @@ The guard adds three cases: the **subset check** (every `[<Tests>]`-attributed b
 A binding that genuinely must not run in the .NET pack — the standing case is a client-tier list whose module body touches Fable `importDefault` dummy code — is declared as a `TestRegistrationGuard.Exemption` with its reason and passed to `withGuardExempting`. The declaration is data the guard reads, not prose beside the list: an exemption naming a binding the assembly no longer carries, or one the pack has since registered, **fails the guard** rather than quietly excusing something.
 
 Three packs (`ToolUp.Stripe.Tests`, `ToolUp.Voice.Tests`, `ToolUp.Cloud.Parity.Tests`) call `runTestsInAssemblyWithCLIArgs` instead — real auto-discovery, where `[<Tests>]` **is** sufficient and this whole class cannot arise. They carry no guard, deliberately. The client-tier Fable harness is a different runner again; its floor lives in `VerifyFable`.
+
+## The `affected` lane: run the lists a change can reach
+
+`TOOLUP_TEST_LANE=affected` with `TOOLUP_TEST_LISTS=<file>` runs the Platform pack's lists named in the file and
+every other pack whole. The file is written by `Select`. The measurement the lane was cut from is in
+[`docs/migrations/1121-affected-lane-v0.md`](../migrations/1121-affected-lane-v0.md).
+
+```powershell
+dotnet run --project Build.fsproj -- Select --base origin/main --head HEAD --declared tests.txt --out .affected/selection.json
+$env:TOOLUP_TEST_LANE = 'affected'; $env:TOOLUP_TEST_LISTS = "$PWD/.affected/selection.lists"; pwsh ./verify.ps1
+```
+
+**When it may be used.** It is a worker's fail-fast lane: run it on your own change, before the merge, to learn in
+minutes whether the lists that change reaches are green. It is **not citable**. A ship cites the full lane, run on the
+folded tree. A selected run becomes citable only once the gate runner accepts a selected record under a declared
+selection policy for this repository, and until then nothing reads its manifest but a person. **A release always runs
+`full`**, whatever any policy says.
+
+**What `Select` selects.** It unions three sources and records which source admitted each unit:
+
+- **declared** — the lists the change is known to reach, from `--declared` (one per line: `<pack>/<list>`, or a bare
+  Platform list by its label or by the binding `Program.fs` registers). A list in another pack runs anyway, because
+  that pack runs whole.
+- **diffed** — every Platform list whose defining test file is in the diff, read off `Program.fs`'s registration and
+  the module the file defines. A new test file's lists are in by construction. An edited test file re-runs whole.
+- **always** — the registration guard, `Phase 175 — Public-API approval baseline`, every other pack (the `pure` packs
+  among them) and the Analyzers leg.
+
+There is no coverage map yet, so there is no derived source, and every manifest says `map: none`.
+
+**Forcing paths run the full lane, and the manifest names the rule that fired:**
+
+| Rule | Paths |
+|---|---|
+| `msbuild-import` | any `*.props` or `*.targets` |
+| `solution` | `*.sln`, `*.slnx` |
+| `build-script` | `Build.fs`, `Build.fsproj`, the repo-root sources the build script compiles, `verify.ps1` |
+| `toolchain` | `global.json`, `nuget.config` |
+| `composition-root` | `ToolUp.Platform.Server`'s `Compose/`, `ServerApp.fs`, `SDK.Server.fs` |
+| `server-client-config` | `ServerConfig` (`SDK.Shared.fs`, `Shared/Config/`) and `ClientConfig` (`SDK.ClientTypes.fs`) |
+| `module-registry` | a module's `*Compose.fs`, the client's `RegisteredModules.fs` |
+| `test-support` | the Platform pack's `Support/`, `ToolUp.Platform.Testing`, a non-source file in the Platform pack |
+| `test-project` | a `*.Tests.fsproj` |
+| `unpinned-test-source` | a Platform test file whose lists cannot be named. Either it is registered only through an applied, argument-taking entry (a contract pack), or it defines no registered list at all (a helper other lists share). |
+
+Under a forcing rule the lists file holds `*`, so the Platform pack keeps every list and every leg runs. Each rule is
+pinned in both directions in `ToolUp.Platform.Build.Tests/AffectedLaneTests.fs`. A rule added without a pinned row
+fails that pack.
+
+**The Platform pack's `Program.fs` is deliberately NOT a forcing path.** Every change that adds a list touches it,
+and the registration guard runs in every lane. The cost: a registration added without its test file changing is not
+diffed. Declare it.
+
+**The legs follow the diff.** The Fable leg runs only when client-tier code moved. Samples builds every sample in every
+lane, and transpiles the Fable ones only when client-tier code moved. Analyzers always runs. "Client-tier" is decided
+conservatively: anything under `samples/`, and any `src/` project not named as server-only, build-only or
+.NET-test-only. A guess can only add minutes, never skip a leg that mattered. A lists file written by hand, with no
+manifest beside it, runs every leg.
+
+**What the run says about itself.** `Select` writes the manifest (`--out`) and the lists file beside it (`.lists`),
+which points back at the manifest. Under `affected`, `VerifyAll` prints the manifest summary before anything runs:
+units by source, every skipped list, the forcing rules checked and any that fired, the legs, `map: none`. The Platform
+pack then prints each list it kept (with the line that kept it) and each it skipped, with case counts. A log cannot be
+mistaken for a full run.
+
+**The keep is the one name-keyed selection, and it fails closed.** Every other lane selects by physical identity.
+`affected` reads names from a file, so it resolves each line to the registered lists it names: by label, or by
+binding through reflection. A line that names no registered list makes the pack exit non-zero before running
+anything, and so does a missing or empty lists file. This is the `--filter` lesson: a mistyped name must never become
+a green run of nothing. The manifest's skipped list is exact when every declared Platform name is a binding. A declared
+label is resolved only by the pack, so the manifest marks its skipped list `skippedExact: false` and the pack's own
+print is the exact account.
+
+**What it does not protect against.** A selected run is unsound by construction. A regression in a list nobody
+declared, no diff touched and no forcing rule covers will pass it. Two things keep that cost bounded. The full lane is
+still the gate, and the lane says what it skipped.
+
+### The build floor under a selected run
+
+A selected lane still builds the solution first. What that build costs depends on what the change touched, because
+reference assemblies are on (`ProduceReferenceAssembly`, declared in `Directory.Build.props` and held by
+`CompilerLeversTests.fs` in the Build pack):
+
+- **Internal edit to an implementation.** The edited project recompiles. Its dependants do not, because they compile
+  against its reference assembly and that did not change. On a warm worktree an internal Server edit took about 1.5
+  minutes (2 projects) and an internal Core edit under a minute.
+- **Public change.** Every dependant recompiles: 129 projects for Server and 193 for Core, close to a clean build.
+- **A changed or added `[<Literal>]`.** The reference assembly does not move, so dependants are not recompiled and an
+  incremental build keeps the old value. Build them clean (`--no-incremental`) before you trust a green over a literal
+  change.
+
+The gate itself is unaffected. The Public-API approval list renders the implementation DLLs in `bin/`, never a `ref/`
+copy, so an internal edit leaves every baseline unchanged and a public addition still fails it by name. A clean solution
+build, the floor for a fresh checkout, is still the 4m18s quiet-machine figure. The measurements are in
+[`docs/migrations/1195-compiler-levers.md`](../migrations/1195-compiler-levers.md).
+
+## The build census: what each project costs to build
+
+[`build-census.json`](../../build-census.json) at the repository root records, for every project in
+`ToolUp.Forge.sln`, its build seconds, its evaluation seconds, the lines in its `Compile` items, its fan-in (solution
+projects that reference it) and its fan-out (solution projects it references). It also records the tree SHA, the
+machine, the UTC time of the measurement, the wall clock of the build and the command that produced it. Rows are
+sorted by build seconds, most expensive first. Read it before you plan a project split or size a gate's build budget,
+so the plan follows measured cost rather than folder size.
+
+**The figures are one machine's, and they are dated.** They come from a single clean graph build on the machine the
+file names, at the time it names, and that machine may have been busy. Compare projects against each other within
+one file, and prefer their ranking to an exact ratio. Contention moves the totals most, but a busy run also stretches
+the projects that build in the wide middle of the graph more than the ones that build early. Do not compare a total
+from one census with a total from another machine. A per-project figure is that project's own build time under
+`-graph`, so it never includes time spent waiting for a reference. Because projects build in parallel, the per-project
+seconds add up to several times the wall clock.
+
+**Regenerate it** whenever the project set changes, and whenever you need current figures:
+
+```powershell
+dotnet run --project Build.fsproj -- Census
+```
+
+That target rebuilds the whole solution once from scratch (`dotnet build ToolUp.Forge.sln -graph --no-incremental`).
+It takes as long as a clean build and leaves every project rebuilt. Commit the regenerated file.
+
+**The file cannot go silently stale.** `dotnet run --project Build.fsproj -- Census --check` builds nothing. It is red
+when the file's project set differs from the solution's, and it names each project added or removed. The Build pack
+runs the same check over the committed file (`BuildCensusTests.fs`), so adding a project to the solution without
+regenerating the census reddens `VerifyAll`. Timings are never compared, because they differ from machine to machine.
+Why the census reads a graph build's performance summary, not a binary log or a plain solution build, is in
+[`docs/migrations/1199-build-census.md`](../migrations/1199-build-census.md).
 
 ## Testing client-tier MVU update functions
 
@@ -326,7 +468,7 @@ Full convention, the baseline's ratchet, and how context is supplied:
 
 ## Generated documentation pages, and the one command that moves them (Phases 214 / 697 / 765)
 
-Three committed artefacts are **projections of the config-key registry** (`ConfigKeys.all` in
+Four committed artefacts are **projections of the config-key registry** (`ConfigKeys.keys` in
 `src/ToolUp.Platform.Core/Shared/Types/ConfigKeyDescriptor.fs`), not hand-maintained documents:
 
 | Artefact | What is generated | Projected by |
@@ -334,17 +476,20 @@ Three committed artefacts are **projections of the config-key registry** (`Confi
 | `docs/reference/config-reference.md` | the whole file | `ReferenceDoc.render` |
 | `docs/reference/toolup.config.schema.json` | the whole file | `ConfigSchema.render` |
 | `docs/operations/env-vars.md` | the **`Description` column** of every table headed `Variable` | `OperationsDoc.render` |
+| `DEPLOYMENT.md` | the region between the `BEGIN GENERATED` / `END GENERATED` markers: each key's direction, and the boot seal's coverage | `DeploymentDoc.render` |
 
-One command refreshes all three:
+One command refreshes all four:
 
 ```
-pwsh dev-scripts/generate-config-reference.ps1
+dotnet run --project Build.fsproj -- GenerateConfigReference
 ```
 
-It runs the `ConfigReference` test list with `TOOLUP_REGEN_CONFIG_REFERENCE=1`, which flips those
-three arms from *comparing* to *writing*. Without the variable they compare, and `VerifyAll` is red
-whenever a committed artefact disagrees with the registry — so **a descriptor edit and its three
-regenerated artefacts land in the same commit**, or the gate says so.
+(`pwsh dev-scripts/generate-config-reference.ps1` is the same target under a shorter name.) It
+builds the Platform pack and runs its `ConfigReference` test list with
+`TOOLUP_REGEN_CONFIG_REFERENCE=1`, which flips those four arms from *comparing* to *writing*. Without
+the variable they compare, and `VerifyAll` is red whenever a committed artefact disagrees with the
+registry — so **a registry edit and its regenerated artefacts land in the same commit**, or the gate
+says so.
 
 **The operations page is the interesting one, because only a column of it is generated.** Whole-file
 generation was rejected for it: it covers a curated subset of the registry and each row carries two

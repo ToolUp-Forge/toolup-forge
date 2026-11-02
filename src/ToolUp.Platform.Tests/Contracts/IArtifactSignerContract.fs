@@ -3,6 +3,7 @@ module ToolUp.Platform.Tests.Contracts.IArtifactSignerContract
 open System
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Audit
 
 /// Phase 30a — contract assertions every `IArtifactSigner` implementation
 /// must satisfy. Binders supply a factory that returns a fresh signer

@@ -1,4 +1,4 @@
-module ToolUp.Platform.ResultStore
+module ToolUp.Platform.Config.ResultStore
 
 open System
 open System.Collections.Concurrent
@@ -8,6 +8,7 @@ open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Transport
+open ToolUp.Platform.Infra
 
 // ─── ResultStore implementations ────────────────────────────────
 //
@@ -375,7 +376,7 @@ let private causeOf (ex: exn) = (ProviderExceptions.unwrap ex).Message
 
 /// The durable lineage outbox (Phase 1027; see the section header). Built
 /// and registered by compose when `ServerConfig.LineageDurability =
-/// EnabledDurableLineage`; resolve it from DI for its read surface.
+/// FeatureMode.Enabled`; resolve it from DI for its read surface.
 type LineageOutbox
     (
         blobStorage: IBlobStorage,

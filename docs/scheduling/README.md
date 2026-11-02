@@ -70,11 +70,12 @@ let salonChair: BookableResource = {
 Wire the server composition root. There is no compose-time resource list — register resources at runtime, into the caller's scope:
 
 ```fsharp skip=fragment
-SchedulingServerApp.create ()
-|> SchedulingServerApp.withConfig serverConfig
-|> SchedulingServerApp.withAuth authProvider
-|> SchedulingServerApp.addModules modules
-|> SchedulingServerApp.run
+ServerApp.empty
+|> ServerApp.withConfig serverConfig
+|> ServerApp.withAuth authProvider
+|> ServerApp.addModules modules
+|> SchedulingCompose.withScheduling (SchedulingOptions.create ())
+|> ServerApp.run
 ```
 
 Wire the client (no built-in calendar UI — the SDK ships the data primitives; the calendar grid is your module's UI).

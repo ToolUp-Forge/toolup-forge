@@ -19,7 +19,7 @@ module ToolUp.Platform.Tests.InProcess.FactRenderToolTests
 //      wrote and the provenance of the read; the request decodes back and the
 //      node rebuilds from it (what the conversation panel does).
 //   4. **The door.** The gate is asked at `FactToolResult`, never `FactBrowse`.
-//   5. **The composition.** Opt-in, idempotent, nothing under `NoFactStore`,
+//   5. **The composition.** Opt-in, idempotent, nothing under `FeatureMode.Disabled`,
 //      registered by `composeAI` through the record-form funnel; the fact
 //      tier itself stays free of the Fuaran-UI dependency.
 //   6. **End to end.** A scripted turn calls `render_chart` through the
@@ -43,13 +43,17 @@ open ToolUp.Platform.AI
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Providers
 open ToolUp.Platform.Grounding
-open ToolUp.Platform.StorageScopeResolver
+open ToolUp.Platform.Scope.StorageScopeResolver
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.AI
 open ToolUp.AI.AICompose
 open ToolUp.Facts
 open ToolUp.Facts.Presentation
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Fixtures (shared with the disclosure egress pack) ──────────────
 
@@ -230,9 +234,9 @@ module RenderFixtures =
                     }
         ]
 
-        let opened = ok "open" (writer.OpenRun(scope.ScopeId, table.Id))
-        ok "write" (writer.WriteRows(scope.ScopeId, opened.RunId, rows)) |> ignore
-        ok "commit" (writer.Commit(scope.ScopeId, opened.RunId)) |> ignore
+        let opened = ok "open" (writer.OpenRun(scope, table.Id))
+        ok "write" (writer.WriteRows(scope, opened.RunId, rows)) |> ignore
+        ok "commit" (writer.Commit(scope, opened.RunId)) |> ignore
 
     /// A fresh world with both tables written.
     let world () : World =
@@ -515,22 +519,32 @@ let private profile =
         member _.SetEntryHealth(_, _, _) = async { return Ok() }
     }
 
-let private aiApp (factStore: FactStoreMode) : AIServerApp =
-    AIServerApp.createFrom factory profile {
+/// A deployment under `factStore` and the options of the AI tier the tools
+/// join, as the presentation builders take them.
+let private aiApp (factStore: FeatureMode) : ServerApp * AIOptions =
+    {
         ServerApp.empty with
             Config = {
                 ServerConfig.defaults with
-                    FactStore = factStore
+                    Stores = {
+                        ServerConfig.defaults.Stores with
+                            FactStore = factStore
+                    }
             }
-    }
+    },
+    AIOptions.create factory profile
 
-let private answeringNames (app: AIServerApp) =
-    app.AIAnsweringTools |> List.map (fun (d, _) -> d.Name)
+let private answeringNames ((_, ai): ServerApp * AIOptions) =
+    ai.AIAnsweringTools |> List.map (fun (d, _) -> d.Name)
+
+/// Both halves are the very values passed in: nothing was rebuilt.
+let private unchanged ((app, ai): ServerApp * AIOptions) ((app', ai'): ServerApp * AIOptions) =
+    obj.ReferenceEquals(app, app') && obj.ReferenceEquals(ai, ai')
 
 /// The registry `composeAI` registers, read back out of the composition's
 /// own service registrations.
-let private composedRegistry (app: AIServerApp) : AIToolRegistry.AIToolRegistry =
-    let composed = composeAI app
+let private composedRegistry ((app, ai): ServerApp * AIOptions) : AIToolRegistry.AIToolRegistry =
+    let composed = app |> withAI ai
     let services = ServiceCollection() :> IServiceCollection
 
     match ServerApp.serviceConfig composed with
@@ -549,7 +563,7 @@ let private composedRegistry (app: AIServerApp) : AIToolRegistry.AIToolRegistry 
 let private compositionTests =
     testList "the composition" [
         test "withRenderTools composes both tools under the fact store, once however often it is called" {
-            let once = aiApp EnabledFactStore |> PresentationCompose.withRenderTools
+            let once = aiApp FeatureMode.Enabled |> PresentationCompose.withRenderTools
             Expect.equal (answeringNames once) [ "render_chart"; "render_table" ] "both tools"
 
             let twice = once |> PresentationCompose.withRenderTools
@@ -557,15 +571,15 @@ let private compositionTests =
         }
 
         test "without the fact store withRenderTools changes nothing" {
-            let before = aiApp NoFactStore
+            let before = aiApp FeatureMode.Disabled
             let after = before |> PresentationCompose.withRenderTools
-            Expect.isTrue (obj.ReferenceEquals(before, after)) "the app itself, unchanged"
+            Expect.isTrue (unchanged before after) "the app itself, unchanged"
         }
 
         test
             "composeAI registers the composed tools through the record-form funnel, and a deployment that does not compose them has neither" {
             let registry =
-                composedRegistry (aiApp EnabledFactStore |> PresentationCompose.withRenderTools)
+                composedRegistry (aiApp FeatureMode.Enabled |> PresentationCompose.withRenderTools)
 
             for toolName in [ RenderTools.ChartToolName; RenderTools.TableToolName ] do
                 match registry.FindByName toolName with
@@ -575,16 +589,18 @@ let private compositionTests =
                     Expect.equal tool.Definition.Effects ToolEffectDeclaration.readFacts "declares ReadFacts only"
                 | None -> failtestf "%s did not reach the AI tool registry" toolName
 
-            let plain = composedRegistry (aiApp EnabledFactStore)
+            let plain = composedRegistry (aiApp FeatureMode.Enabled)
 
             for toolName in [ RenderTools.ChartToolName; RenderTools.TableToolName ] do
                 Expect.isNone (plain.FindByName toolName) (sprintf "%s is absent unless composed" toolName)
         }
 
         test "composeAI refuses an answering tool whose name collides with a string tool" {
+            let app, ai = aiApp FeatureMode.Enabled
+
             let colliding =
-                aiApp EnabledFactStore
-                |> AIServerApp.withAIAnsweringTools [
+                ai
+                |> AIOptions.withAIAnsweringTools [
                     {
                         RenderTools.definition RenderTool.Chart with
                             Name = "query_facts"
@@ -593,29 +609,26 @@ let private compositionTests =
                 ]
 
             let withStringTool = {
-                colliding with
-                    Base = {
-                        colliding.Base with
-                            AITools = colliding.Base.AITools @ [ FactQueryTool.definition, FactQueryTool.execute ]
-                    }
+                app with
+                    AITools = app.AITools @ [ FactQueryTool.definition, FactQueryTool.execute ]
             }
 
-            Expect.throwsC (fun () -> composeAI withStringTool |> ignore) (fun ex ->
+            Expect.throwsC (fun () -> withStringTool |> withAI colliding |> ServerApp.resolve |> ignore) (fun ex ->
                 Expect.stringContains ex.Message "query_facts" "the collision names the tool")
         }
 
         test "withPipelineTool composes evaluate_pipeline and mounts its re-run once, however often it is called" {
-            let before = aiApp EnabledFactStore
+            let before = aiApp FeatureMode.Enabled
             let once = before |> PresentationCompose.withPipelineTool
             Expect.equal (answeringNames once) [ PipelineTool.Name ] "the tool"
 
             Expect.equal
-                (List.length once.Base.Extensions.Handlers)
-                (List.length before.Base.Extensions.Handlers + 1)
+                (List.length (fst once).Extensions.Handlers)
+                (List.length (fst before).Extensions.Handlers + 1)
                 "one handler: the re-run a reader's panel draws the block from"
 
             let twice = once |> PresentationCompose.withPipelineTool
-            Expect.isTrue (obj.ReferenceEquals(once, twice)) "idempotent: the app itself, unchanged"
+            Expect.isTrue (unchanged once twice) "idempotent: the app itself, unchanged"
 
             let beside =
                 before
@@ -629,14 +642,14 @@ let private compositionTests =
         }
 
         test "without the fact store withPipelineTool changes nothing" {
-            let before = aiApp NoFactStore
+            let before = aiApp FeatureMode.Disabled
             let after = before |> PresentationCompose.withPipelineTool
-            Expect.isTrue (obj.ReferenceEquals(before, after)) "the app itself, unchanged"
+            Expect.isTrue (unchanged before after) "the app itself, unchanged"
         }
 
         test "composeAI registers evaluate_pipeline in the record form only when it is composed" {
             let registry =
-                composedRegistry (aiApp EnabledFactStore |> PresentationCompose.withPipelineTool)
+                composedRegistry (aiApp FeatureMode.Enabled |> PresentationCompose.withPipelineTool)
 
             match registry.FindByName PipelineTool.Name with
             | Some tool ->
@@ -645,7 +658,7 @@ let private compositionTests =
             | None -> failtest "evaluate_pipeline did not reach the AI tool registry"
 
             Expect.isNone
-                ((composedRegistry (aiApp EnabledFactStore)).FindByName PipelineTool.Name)
+                ((composedRegistry (aiApp FeatureMode.Enabled)).FindByName PipelineTool.Name)
                 "absent unless composed"
         }
 
@@ -701,7 +714,10 @@ let private composedContext () : HttpContext =
             ServerApp.empty with
                 Config = {
                     ServerConfig.defaults with
-                        FactStore = EnabledFactStore
+                        Stores = {
+                            ServerConfig.defaults.Stores with
+                                FactStore = FeatureMode.Enabled
+                        }
                 }
         }
         |> FactsCompose.withFactStore
@@ -743,7 +759,7 @@ let private composedContext () : HttpContext =
 /// results the model read, and the loop state.
 let private scriptedTurn
     (ctx: HttpContext)
-    (app: AIServerApp)
+    ((_, ai): ServerApp * AIOptions)
     (question: string)
     (toolName: string)
     (args: string)
@@ -776,7 +792,7 @@ let private scriptedTurn
         let registry = AIToolRegistry.AIToolRegistry()
 
         registry.RegisterAll(
-            app.AIAnsweringTools
+            ai.AIAnsweringTools
             |> List.map (fun (definition, answer) -> AIToolRegistry.createAnsweringTool definition answer)
         )
 
@@ -858,7 +874,7 @@ let private endToEndTests =
             let! modelRead, state =
                 scriptedTurn
                     ctx
-                    (aiApp EnabledFactStore |> PresentationCompose.withRenderTools)
+                    (aiApp FeatureMode.Enabled |> PresentationCompose.withRenderTools)
                     "Show me daily revenue by site."
                     RenderTools.ChartToolName
                     args
@@ -896,7 +912,7 @@ let private endToEndTests =
             let! modelRead, state =
                 scriptedTurn
                     ctx
-                    (aiApp EnabledFactStore |> PresentationCompose.withPipelineTool)
+                    (aiApp FeatureMode.Enabled |> PresentationCompose.withPipelineTool)
                     "Which site took the most revenue on days above 1000?"
                     PipelineTool.Name
                     args

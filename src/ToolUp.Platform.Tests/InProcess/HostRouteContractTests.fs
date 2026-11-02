@@ -6,6 +6,7 @@ open ToolUp.Platform
 open ToolUp.PublicRendering
 open ToolUp.PublicRendering.PublicRenderingCompose
 open Toolup.Samples.ToyTreeBinding.ToyNode
+open ToolUp.Platform.Compose
 
 // ─── Phase 276 — hosted-tree navigation/route contract ─────────────────
 //
@@ -29,7 +30,7 @@ open Toolup.Samples.ToyTreeBinding.ToyNode
 //      (a stranger tree language) resolves a `Bind` against the restored
 //      namespace.
 //   5. `HostRouteRegistration.register` appends the source to a
-//      `PublicRenderingServerApp` (append-only, GP 11).
+//      `PublicRenderingOptions` (append-only, GP 11).
 //   6. The seam sources carry no banned OSS vocabulary (GP 1 grep-guard).
 
 let private run a = a |> Async.RunSynchronously
@@ -221,14 +222,14 @@ let private toyRoundTripTests =
                 dispose ()
     ]
 
-// ─── 5. Append-only registration into PublicRenderingServerApp ────────
+// ─── 5. Append-only registration into PublicRenderingOptions ────────
 
 let private composeTests =
     testList "Phase 276 — append-only registration (GP 11)" [
         testCase "register appends one content source per route"
         <| fun _ ->
-            let app0 = PublicRenderingServerApp.create ()
-            Expect.isEmpty app0.ContentSources "a fresh PublicRenderingServerApp registers no content sources"
+            let app0 = PublicRenderingOptions.create ()
+            Expect.isEmpty app0.ContentSources "fresh PublicRenderingOptions register no content sources"
 
             let app1 = HostRouteRegistration.register [ ssrRegistration ] app0
             Expect.hasLength app1.ContentSources 1 "registering one hosted route appends exactly one content source"

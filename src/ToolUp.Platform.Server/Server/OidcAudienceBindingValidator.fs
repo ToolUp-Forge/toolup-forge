@@ -1,8 +1,9 @@
-module ToolUp.Platform.OidcAudienceBindingValidator
+module ToolUp.Platform.Scope.OidcAudienceBindingValidator
 
 open System
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Config
 
 // ─── OIDC audience binding in authenticated modes ───────────────────
 //
@@ -24,7 +25,7 @@ open ToolUp.Platform.ConfigValidation
 //
 // Anonymous / non-auth modes are exempt (`requiresAuth = false`) — with
 // no real identity there is nothing to confuse. Escape hatch:
-// `ServerConfig.AcceptUnboundAudienceWhenAuthRequired = true`
+// `ServerConfig.RiskAcknowledgements.AcceptUnboundAudienceWhenAuthRequired = true`
 // (`TOOLUP_ACCEPT_UNBOUND_AUDIENCE_IN_AUTH_MODE=1`) for a single-app
 // issuer where no other relying party shares it, or where the IdP does
 // not yet provision an audience claim.
@@ -48,7 +49,7 @@ let private OidcAudienceEnvVar = ConfigKeys.Names.oidcAudience
 /// Config validator that refuses an authenticated `Mode` running OIDC
 /// (`TOOLUP_AUTH_MODE=oidc`) without `TOOLUP_OIDC_AUDIENCE`, unless the
 /// operator has explicitly opted in via
-/// `ServerConfig.AcceptUnboundAudienceWhenAuthRequired`.
+/// `ServerConfig.RiskAcknowledgements.AcceptUnboundAudienceWhenAuthRequired`.
 type OidcAudienceBindingValidator(config: ServerConfig, ?timeout: TimeSpan) =
     let timeout = defaultArg timeout IConfigValidator.defaultTimeout
 
@@ -70,13 +71,13 @@ type OidcAudienceBindingValidator(config: ServerConfig, ?timeout: TimeSpan) =
             let oidcAudience =
                 ConfigResolution.tryValue OidcAudienceEnvVar |> Option.map _.Trim()
 
-            let escapeHatch = config.AcceptUnboundAudienceWhenAuthRequired
+            let escapeHatch = config.RiskAcknowledgements.AcceptUnboundAudienceWhenAuthRequired
 
             if requiresAuth && authMode = Some "oidc" && oidcAudience.IsNone && not escapeHatch then
                 return
                     Error(
                         sprintf
-                            "ServerConfig.Surfaces = %s with TOOLUP_AUTH_MODE=oidc but TOOLUP_OIDC_AUDIENCE unset. The OIDC provider's audience check is skipped when no audience is configured, so any token the issuer minted is accepted — including a token issued for a different application that shares the same IdP (same Auth0 tenant / Azure AD directory / Keycloak realm). The signature and issuer are valid; the token was simply never intended for this app, and it authenticates as its subject anyway (confused-deputy / token reuse). Set TOOLUP_OIDC_AUDIENCE to this application's audience / client id, or set ServerConfig.AcceptUnboundAudienceWhenAuthRequired = true (TOOLUP_ACCEPT_UNBOUND_AUDIENCE_IN_AUTH_MODE=1) for a single-app issuer no other relying party shares. After fixing, verify in the HealthMonitorUI admin tab (production-safe) or /dev/inspect Validators panel (debug builds only)."
+                            "ServerConfig.Surfaces = %s with TOOLUP_AUTH_MODE=oidc but TOOLUP_OIDC_AUDIENCE unset. The OIDC provider's audience check is skipped when no audience is configured, so any token the issuer minted is accepted — including a token issued for a different application that shares the same IdP (same Auth0 tenant / Azure AD directory / Keycloak realm). The signature and issuer are valid; the token was simply never intended for this app, and it authenticates as its subject anyway (confused-deputy / token reuse). Set TOOLUP_OIDC_AUDIENCE to this application's audience / client id, or set ServerConfig.RiskAcknowledgements.AcceptUnboundAudienceWhenAuthRequired = true (TOOLUP_ACCEPT_UNBOUND_AUDIENCE_IN_AUTH_MODE=1) for a single-app issuer no other relying party shares. After fixing, verify in the HealthMonitorUI admin tab (production-safe) or /dev/inspect Validators panel (debug builds only)."
                             (DeploymentConfig.surfacesLabel config)
                     )
             else

@@ -137,7 +137,7 @@ clock comparisons. The SDK's own verifier does all five:
 
 ```fsharp
 open ToolUp.Platform
-open ToolUp.Platform.AccessAttestation
+open ToolUp.Platform.Compose.AccessAttestation
 open ToolUp.ArtefactSigning
 
 /// A counterparty checks a certificate they were handed, for module
@@ -173,10 +173,10 @@ already composes and receives an envelope:
 ```fsharp
 open ToolUp.Platform
 open ToolUp.Platform.Secrets
-open ToolUp.Platform.PermissionStore
-open ToolUp.Platform.GrantPolicyGuard
-open ToolUp.Platform.GrantConsentStore
-open ToolUp.Platform.AccessAttestation
+open ToolUp.Platform.Scope.PermissionStore
+open ToolUp.Platform.Scope.GrantPolicyGuard
+open ToolUp.Platform.Scope.GrantConsentStore
+open ToolUp.Platform.Compose.AccessAttestation
 open ToolUp.ArtefactSigning
 
 /// Emit a certificate for `moduleName` over the named teams. The signer

@@ -5,6 +5,7 @@ module ToolUp.Platform.Tests.Contracts.IEgressPolicyContract
 
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Audit
 
 // Phase 772 — contract for the server-side egress policy seam. Any
 // `IEgressPolicy` — the shipped permit-all default, the declared-

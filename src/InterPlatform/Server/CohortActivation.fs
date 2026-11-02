@@ -7,6 +7,9 @@ open System
 open System.Text
 open ToolUp.Platform
 open ToolUp.Platform.Secrets
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Compose
 
 // ─── Phase 490 — the enforced activation pipeline ─────────────────────
 //
@@ -80,7 +83,7 @@ open ToolUp.Platform.Secrets
 //
 // ── Cost when unused (GP 13) ──
 //
-// Nothing here is composed by `PeerServerApp.run`. A deployment that
+// Nothing here is composed by `PeerCompose.withPeer`. A deployment that
 // never calls `activate` constructs none of these types and pays
 // nothing; its peer substrate is byte-for-byte what it was before this
 // phase (GP 11).

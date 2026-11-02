@@ -4,7 +4,9 @@ open System
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.VectorKnowledgeTypes
-open ToolUp.Platform.ISparseIndex
+open ToolUp.Platform.Infra.ISparseIndex
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Phase 893 — ISparseIndex contract pack ──────────────────────────
 //

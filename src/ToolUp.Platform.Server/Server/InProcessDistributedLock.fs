@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-namespace ToolUp.Platform
+namespace ToolUp.Platform.Jobs
+
+open ToolUp.Platform
+open ToolUp.Platform.Config
 
 open System
 open System.Collections.Concurrent
@@ -19,7 +22,7 @@ open System.Threading
 //
 // **It is NOT a distributed lock and never pretends to be.** Two replicas
 // each hold their own table and so exclude nothing from each other; that
-// is the whole reason `ServerConfig.ReplicaCount > 1` is refused at
+// is the whole reason `ServerConfig.MultiInstance.ReplicaCount > 1` is refused at
 // preflight for the in-process single-writer subsystems
 // (`MultiInstanceAdminCoherenceValidator`). Composing a store-backed
 // companion is what makes exclusion cross a process boundary.

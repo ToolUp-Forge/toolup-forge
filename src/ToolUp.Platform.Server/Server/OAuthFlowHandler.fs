@@ -1,4 +1,4 @@
-module ToolUp.Platform.OAuthFlowHandler
+module ToolUp.Platform.Jobs.OAuthFlowHandler
 
 open System
 open System.Text
@@ -11,7 +11,9 @@ open Giraffe
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Secrets
-open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Config.TeamManagement
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
 
 // ─── Phase 10b — OAuth Authorization Code endpoints ─────────────────
 //
@@ -887,7 +889,7 @@ let private callback (flowName: string) : HttpHandler =
 // ─── Routes table ───────────────────────────────────────────────────
 
 /// Routes mounted by `SDK.Server.compose` only when
-/// `ServerConfig.DataIngestion = EnabledDataIngestion` AND at least
+/// `ServerConfig.DataIngestion = FeatureMode.Enabled` AND at least
 /// one `IOAuthCredentialFlow` is registered (gating lives in A.8 —
 /// this list is the unconditional shape).
 let routes: HttpHandler list = [

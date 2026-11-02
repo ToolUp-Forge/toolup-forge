@@ -4,6 +4,7 @@ open Feliz
 open ToolUp.Platform
 open DailyTrade.SharedTypes
 open DailyTrade.ClientModel
+open ToolUp.Platform.Infra
 
 let private resultView (result: UploadResult) =
     Html.div [

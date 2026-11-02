@@ -5,6 +5,7 @@ namespace ToolUp.PublicRendering
 
 open ToolUp.Platform
 open ToolUp.Platform.Narrative
+open ToolUp.Platform.Infra
 
 // ─── Phase 91 — KB-as-docs SSR surface ───────────────────────────────
 //
@@ -208,7 +209,7 @@ module KnowledgeDocsSource =
         withSections |> Narrative.withProvenance "knowledge-docs" None "kb-doc" []
 
     /// Construct a KB-as-docs content source over a read-port. Register it
-    /// with `PublicRenderingServerApp.withContentSource`. The produced
+    /// with `PublicRenderingOptions.withContentSource`. The produced
     /// pages are `Narrative`-bodied and cache through the Phase 84 render
     /// cache like any other content-source page; the source also
     /// enumerates its routes (Phase 95) for sitemap + static export.

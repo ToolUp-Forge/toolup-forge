@@ -15,9 +15,10 @@
 // where the drift was: the AWS block opened `ToolUp.Storage.AwsS3`,
 // which does not exist.
 open Microsoft.Extensions.Caching.Memory
-open ToolUp.Platform.BlobEncryption
+open ToolUp.Platform.Infra.BlobEncryption
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Secrets
+open ToolUp.Platform.Config
 
 [<AutoOpen>]
 module PageAmbient =

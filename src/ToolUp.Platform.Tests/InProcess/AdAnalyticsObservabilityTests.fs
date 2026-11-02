@@ -16,6 +16,10 @@ open Giraffe
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.Metrics
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Audit.Metrics
 
 // ─── Phase 466 — ad-analytics silent-degradation observability ───────
 //

@@ -1,4 +1,4 @@
-module ToolUp.Platform.OAuthSecretEncryptionModeValidator
+module ToolUp.Platform.Config.OAuthSecretEncryptionModeValidator
 
 open System
 open ToolUp.Platform
@@ -33,7 +33,7 @@ open ToolUp.Platform.ConfigValidation
 // enabled), so the refusal is scoped to deployments that actually
 // persist OAuth credentials.
 //
-// Escape hatch: `ServerConfig.AcceptPlaintextSecretsWhenAuthRequired`
+// Escape hatch: `ServerConfig.RiskAcknowledgements.AcceptPlaintextSecretsWhenAuthRequired`
 // (default `false`) — the same informed-opt-out the secrets-at-rest
 // validator honours (disk FDE / a backend with its own encryption).
 //
@@ -103,7 +103,7 @@ let secretStoreProvidesEncryptionAtRest (store: Secrets.ISecretStore) =
 /// refusal prints, so severity changes what happens at startup and never
 /// what the operator is told to do about it.
 let private resolutions =
-    "Resolutions: (1) compose the EncryptedSecretStore decorator with TOOLUP_SECRETS_MASTER_KEY set to a base64-encoded 32-byte key (EncryptedSecretStore.generateMasterKey () once during setup); (2) switch to a cloud-KMS-backed store via TOOLUP_SECRET_STORE=azure-key-vault (or aws-secrets-manager / vault / gcp-secret-manager); (3) set ServerConfig.AcceptPlaintextSecretsWhenAuthRequired = true if your storage backend provides at-rest encryption (disk FDE) and you've made an informed decision to rely on that. Note: the default SDK secret store is a raw FileSecretStore with no encryption — a master key env var alone does not encrypt it. After fixing, verify in the HealthMonitorUI admin tab (production-safe) or /dev/inspect Validators panel (debug builds only)."
+    "Resolutions: (1) compose the EncryptedSecretStore decorator with TOOLUP_SECRETS_MASTER_KEY set to a base64-encoded 32-byte key (EncryptedSecretStore.generateMasterKey () once during setup); (2) switch to a cloud-KMS-backed store via TOOLUP_SECRET_STORE=azure-key-vault (or aws-secrets-manager / vault / gcp-secret-manager); (3) set ServerConfig.RiskAcknowledgements.AcceptPlaintextSecretsWhenAuthRequired = true if your storage backend provides at-rest encryption (disk FDE) and you've made an informed decision to rely on that. Note: the default SDK secret store is a raw FileSecretStore with no encryption — a master key env var alone does not encrypt it. After fixing, verify in the HealthMonitorUI admin tab (production-safe) or /dev/inspect Validators panel (debug builds only)."
 
 /// Phase 138 / Phase 340 — surface an OAuth-connector deployment whose
 /// secret store does not encrypt at rest. Store-type-aware (inspects the
@@ -136,11 +136,11 @@ type OAuthSecretEncryptionModeValidator(config: ServerConfig, secretStore: Secre
                 let label = DeploymentConfig.surfacesLabel config
                 let requiresAuth = DeploymentConfig.requiresAnyAuth config
 
-                if config.AcceptPlaintextSecretsWhenAuthRequired then
+                if config.RiskAcknowledgements.AcceptPlaintextSecretsWhenAuthRequired then
                     return
                         Warning(
                             sprintf
-                                "ServerConfig.Surfaces = %s and connector OAuth flows are active: the registered ISecretStore does not encrypt at rest, so connector refresh tokens (and cached access tokens) sit in plaintext blob storage. This is NOT being refused only because ServerConfig.AcceptPlaintextSecretsWhenAuthRequired = true — that informed opt-out is suppressing %s. Confirm the storage backend really does provide at-rest encryption (disk FDE / an encrypting volume); if it does not, clear the flag. %s"
+                                "ServerConfig.Surfaces = %s and connector OAuth flows are active: the registered ISecretStore does not encrypt at rest, so connector refresh tokens (and cached access tokens) sit in plaintext blob storage. This is NOT being refused only because ServerConfig.RiskAcknowledgements.AcceptPlaintextSecretsWhenAuthRequired = true — that informed opt-out is suppressing %s. Confirm the storage backend really does provide at-rest encryption (disk FDE / an encrypting volume); if it does not, clear the flag. %s"
                                 label
                                 (if requiresAuth then
                                      "a startup refusal"

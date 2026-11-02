@@ -481,10 +481,68 @@ let private sidebarBoundaryTests =
             Expect.isFalse (same (cyclic ()) (cyclic ())) "past the depth cap the answer is 'changed', never a hang")
     ]
 
+let private renderToString: ReactElement -> string =
+    import "renderToString" "react-dom/server"
+
+/// AG Grid reads both at mount, and `installDom`'s globals are what the
+/// shell's own views need. jsdom has no ResizeObserver.
+[<Emit("globalThis.MutationObserver = $0.MutationObserver; globalThis.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} }")>]
+let private installGridGlobals (window: obj) : unit = jsNative
+
+/// Phase 1168 — a grid is a dynamic import now, so the first render of one has
+/// nothing to show yet. The prerender pass must emit the placeholder rather
+/// than throw, and hydration must adopt what it emitted. The real chunk then
+/// loads under jsdom, which is how a mounted grid proves the import resolves.
+let private gridChunkTests =
+    let grid () =
+        Feliz.AgGrid.MemoizedGrid(createObj [ "rowData" ==> [||]; "columnDefs" ==> [||] ])
+
+    testList "1168 - the grid chunk" [
+
+        testCase "the prerender pass emits the loading state and no grid" (fun () ->
+            let html = renderToString (Html.div [ prop.id "ssr"; prop.children [ grid () ] ])
+            Expect.isTrue (html.Contains "aria-busy=\"true\"") $"the placeholder is in the markup: {html}"
+            Expect.isFalse (html.Contains "ag-root") "no grid can render before its chunk has loaded")
+
+        testCaseDeferred "hydration adopts the prerendered page, and the grid replaces the placeholder" 15000
+        <| fun () ->
+            let document = installDom "grid-h"
+            installGridGlobals document?defaultView
+
+            let view () =
+                Html.div [ prop.id "grid-h-out"; prop.children [ grid () ] ]
+
+            let host = document?getElementById "grid-h"
+            host?innerHTML <- renderToString (view ())
+            let serverNode = document?getElementById "grid-h-out"
+            let mutable adopted = false
+            let mutable placeholders = -1
+            let mutable grids = 0
+            let store = ModelStore.create<int, CounterMsg> ()
+
+            Program.mkProgram (fun () -> 0, Cmd.none) (fun Bump model -> model + 1, Cmd.none) (fun _ _ -> view ())
+            |> Program.withReactStoreHydrate store "grid-h"
+            |> Program.run
+
+            JS.setTimeout
+                (fun () ->
+                    adopted <- obj.ReferenceEquals(document?getElementById "grid-h-out", serverNode)
+                    placeholders <- unbox<int> (document?querySelectorAll "[aria-busy=true]")?length
+                    grids <- unbox<int> (document?querySelectorAll ".ag-root-wrapper")?length)
+                12000
+            |> ignore
+
+            fun () ->
+                Expect.isTrue adopted "hydration kept the server's node"
+                Expect.equal placeholders 0 "the loading state is gone"
+                Expect.equal grids 1 "and the grid from the chunk is mounted"
+    ]
+
 let tests =
     testList "Phase 852 - the sliced model store" [
         storeBindingTests
         shellScopeTests
         gridCompareTests
         sidebarBoundaryTests
+        gridChunkTests
     ]

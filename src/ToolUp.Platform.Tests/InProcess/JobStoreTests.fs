@@ -6,6 +6,9 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── BlobJobStore — IJobStore contract binding ───────────────────
 //
@@ -45,6 +48,7 @@ let private mkDefinition (scopeId: string) (handler: string) (nextRunAt: DateTim
     LastRunError = None
     ConsecutiveFailures = 0
     Tags = Map.empty
+    LastRunWarning = None
 }
 
 let contractTests =

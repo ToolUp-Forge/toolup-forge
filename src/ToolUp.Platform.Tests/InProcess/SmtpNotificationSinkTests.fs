@@ -3,6 +3,7 @@ module ToolUp.Platform.Tests.InProcess.SmtpNotificationSinkTests
 open ToolUp.Platform
 open ToolUp.Platform.NotificationChannels.Email.Smtp
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Jobs
 
 /// Bind `INotificationSinkContract` to the SDK SMTP sink. The factory
 /// returns a sink configured against a deliberately-unreachable host:

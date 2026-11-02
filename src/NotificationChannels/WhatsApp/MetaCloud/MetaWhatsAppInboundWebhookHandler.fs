@@ -17,6 +17,8 @@ open ToolUp.Platform.NotificationChannels.WhatsApp.MetaCloud
 open ToolUp.Platform.Secrets
 open ToolUp.Webhooks
 open ToolUp.Webhooks.Server
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 6f.C — Meta WhatsApp inbound, on the Phase 238 substrate ──
 //

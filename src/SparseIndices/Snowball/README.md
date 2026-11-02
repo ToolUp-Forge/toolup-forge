@@ -28,8 +28,11 @@ This companion makes the lexical leg agree with the language.
 open ToolUp.SparseIndices.Snowball
 
 let app =
-    RAGServerApp.create factory profile embedder
-    |> RAGServerApp.withSparseAnalyzer (SnowballAnalyzer.english ())
+    ServerApp.empty
+    |> RAGCompose.withRAG (
+        RagOptions.create factory profile embedder
+        |> RagOptions.withSparseAnalyzer (SnowballAnalyzer.english ())
+    )
 ```
 
 Constructing the index directly (tests, evaluation harnesses, a bespoke

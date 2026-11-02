@@ -4,6 +4,7 @@ open System
 open System.Text
 open Expecto
 open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.Infra
 
 /// Contract test list for any `IBlobStorage` implementation. Callers
 /// pass a display name (shown as the test-list title) and a factory

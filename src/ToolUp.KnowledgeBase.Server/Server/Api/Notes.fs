@@ -4,13 +4,14 @@ open System
 open System.Text
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.IVectorStore
+open ToolUp.Platform.Infra.IVectorStore
 open ToolUp.RAG.IngestionTypes
 open SharedTypes
 open KnowledgeBase.ServerIndexStorage
 open KnowledgeBase.ServerIngestionObserver
 open KnowledgeBase.ServerNotes
 open KnowledgeBase.ServerApiDeps
+open ToolUp.Platform.Compose
 
 let addNote (deps: KnowledgeApiDeps) (req: AddNoteRequest) : Async<Result<KnowledgeDocument, string>> = async {
     let title = req.Title.Trim()

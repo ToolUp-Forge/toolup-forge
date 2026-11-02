@@ -1,4 +1,4 @@
-module ToolUp.Platform.ShareTokenStore
+module ToolUp.Platform.Scope.ShareTokenStore
 
 open System
 open System.Security.Cryptography
@@ -9,6 +9,8 @@ open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Secrets
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
 
 // ─── Storage layout ──────────────────────────────────────────────────
 //
@@ -304,7 +306,7 @@ let private resolveSigningKey (secretStore: ISecretStore) (logger: ILogger) : As
 /// `_platform/share-tokens/{scopeId}/...` and HMAC-signs token strings
 /// against a key resolved from `ISecretStore`. Audit emission is
 /// optional — pass `None` for the `audit` constructor parameter when
-/// the deployment runs `AuditLog = NoAuditLog`.
+/// the deployment runs `AuditLog = FeatureMode.Disabled`.
 type BlobShareTokenStore(storage: IBlobStorage, secretStore: ISecretStore, audit: IAuditLog option, logger: ILogger) =
 
     let lockObj = obj ()

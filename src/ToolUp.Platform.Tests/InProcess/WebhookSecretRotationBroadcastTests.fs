@@ -9,10 +9,13 @@ open Expecto
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.NotificationChannel
+open ToolUp.Platform.Config.NotificationChannel
 open ToolUp.Platform.Secrets
-open ToolUp.Platform.WebhookDispatcher
+open ToolUp.Platform.Jobs.WebhookDispatcher
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 464 — cross-instance signing-secret rotation fanout ───────
 //
@@ -597,7 +600,10 @@ let private preflightGateTests =
 
     let multiReplica = {
         ServerConfig.defaults with
-            ReplicaCount = 3
+            MultiInstance = {
+                ServerConfig.defaults.MultiInstance with
+                    ReplicaCount = 3
+            }
     }
 
     let wiredRegistry (channel: INotificationChannel) = async {

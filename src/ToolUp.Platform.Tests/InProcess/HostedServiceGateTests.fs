@@ -1,31 +1,30 @@
 module ToolUp.Platform.Tests.InProcess.HostedServiceGateTests
 
-// ─── Phase 1051 — every hosted service meets the gate or states its reason ──
+// ─── every hosted service goes through the one placement gate ────────
 //
-// A hosted-service registration is in one of two states: the
-// `ProcessProfileGate` matrix admits it for the profile, or it is exempt and
-// says why (`HostedServiceExemption`, registered beside it by
-// `ProcessProfileGate.addExempt`). There is no third state. The guard
-// composes the RAG companion (which composes the AI one over the base
-// `ServerApp`) together with the platform's own compose-time sites, under
-// every `ProcessProfile × ServerlessHost` cell the matrix admits nothing in
-// — `WebOnly`, `DispatcherOnly` (none of these registrations is one of its
-// two dispatchers) and `ServerlessHost` — and reads the descriptors off the
-// service collection: each `IHostedService` there must have an exemption.
-// Under `AllInOne` the matrix admits everything, and the same registrations
-// must still carry the same exemptions.
-//
-// Before this phase the RAG ingestion and re-embedding services (and every
-// other site below) registered on every profile with no exemption, so each
-// cell here was red.
+// `Hosting.register` records every unit of background work it is handed
+// (`BackgroundUnitRecord`) and registers the unit's hosted service only when
+// the deployment's shape admits the unit's `Placement`. So a composition's
+// hosted services and its ADMITTED records are the same set — there is no
+// way to register one without the other. The guard composes the RAG
+// companion (which composes the AI one over the base `ServerApp`) together
+// with the platform's own compose-time sites, under every
+// `ProcessProfile × ServerlessHost` cell, and reads the descriptors off the
+// service collection: the hosted-service count must equal the admitted-unit
+// count, and a serverless host must start only `OnceAtStart` units.
 
 open System
 open Expecto
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.IEmbeddingProvider
+open ToolUp.Platform.Infra.IEmbeddingProvider
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 let private stubAiFactory =
     { new ToolUp.AI.IAIProviderFactory with
@@ -58,6 +57,19 @@ let private embedder =
         member _.ModelId = "gate-v1"
     }
 
+/// A stand-in for a shared ingestion queue store (the Redis companion's
+/// shape); nothing here drains it.
+let private sharedQueue =
+    { new ToolUp.RAG.IngestionTypes.IIngestionQueueStore with
+        member _.Name = "shared-test-queue"
+        member _.Enqueue(_, _) = async { return true }
+        member _.Claim _ = async { return None }
+        member _.Complete _ = async { return () }
+        member _.Release _ = async { return () }
+        member _.ReclaimExpired() = async { return 0 }
+        member _.Depth() = async { return 0 }
+    }
+
 let private silentLogger =
     { new ILogger with
         member _.Debug _ = ()
@@ -68,13 +80,16 @@ let private silentLogger =
 
 /// The configuration a cell composes under: every subsystem whose
 /// hosted-service site this guard reaches switched on.
-let private configFor (profile: ProcessProfile) (host: ServerlessHostMode) : ServerConfig = {
+let configFor (profile: ProcessProfile) (host: ServerlessHostMode) : ServerConfig = {
     ServerConfig.defaults with
-        ProcessProfile = profile
+        MultiInstance = {
+            ServerConfig.defaults.MultiInstance with
+                ProcessProfile = profile
+        }
         ServerlessHost = host
         JobScheduler = InProcessJobScheduler
-        TenantLifecycle = EnabledTenantLifecycle
-        ModelFitting = EnabledModelFitting
+        TenantLifecycle = FeatureMode.Enabled
+        ModelFitting = FeatureMode.Enabled
         DataSubjectRequests =
             DataSubjectRequestMode.Enabled {
                 DataSubjectRequestConfig.sync ErasurePolicy.Tombstone with
@@ -83,31 +98,35 @@ let private configFor (profile: ProcessProfile) (host: ServerlessHostMode) : Ser
 }
 
 /// Compose the RAG companion and the platform sites under `config`, and
-/// return the service collection they registered into.
-let private composed (config: ServerConfig) : IServiceCollection =
+/// return the service collection they registered into. `durableQueue`
+/// composes a shared ingestion queue store, which is what makes RAG
+/// ingestion shared work.
+let composedWith (durableQueue: bool) (config: ServerConfig) : IServiceCollection =
     let storage = InMemoryBlobStorage() :> IBlobStorage
     let services = ServiceCollection() :> IServiceCollection
 
+    let rag =
+        ToolUp.RAG.RAGCompose.RagOptions.create stubAiFactory stubProviderProfile embedder
+        |> ToolUp.RAG.RAGCompose.RagOptions.withIngestionRecoverySweep [ "_platform" ]
+        |> ToolUp.RAG.RAGCompose.RagOptions.withVacuumSchedule
+
+    let rag =
+        if durableQueue then
+            ToolUp.RAG.RAGCompose.RagOptions.withDurableIngestionQueue sharedQueue rag
+        else
+            rag
+
     let app =
-        ToolUp.RAG.RAGCompose.RAGServerApp.create stubAiFactory stubProviderProfile embedder
-        |> ToolUp.RAG.RAGCompose.RAGServerApp.withConfig config
-        |> ToolUp.RAG.RAGCompose.RAGServerApp.withStorage storage
-        |> ToolUp.RAG.RAGCompose.RAGServerApp.withIngestionRecoverySweep [ "_platform" ]
-        |> ToolUp.RAG.RAGCompose.RAGServerApp.withVacuumSchedule
-        |> ToolUp.RAG.RAGCompose.RAGServerApp.mapAI (fun ai -> {
-            ai with
-                Base =
-                    ai.Base
-                    |> ServerApp.withDataObjectOrphanSweep (
-                        DataObjectOrphanSweep.DataObjectOrphanSweepPolicy.forScopes [ "_platform" ]
-                    )
-        })
-        |> ToolUp.RAG.RAGCompose.composeRAG
+        ServerApp.empty
+        |> ServerApp.withConfig config
+        |> ServerApp.withStorage storage
+        |> ToolUp.RAG.RAGCompose.withRAG rag
+        |> ServerApp.withDataObjectOrphanSweep (
+            DataObjectOrphanSweep.DataObjectOrphanSweepPolicy.forScopes [ "_platform" ]
+        )
 
     let services =
-        match ServerApp.serviceConfig app with
-        | Some configure -> configure services
-        | None -> services
+        ToolUp.Platform.Tests.Support.TestSubstrate.applyServiceConfig app services
 
     // The platform's own compose-time sites. The scheduler instance is
     // captured by the start hooks and never invoked: nothing here starts.
@@ -131,76 +150,85 @@ let private composed (config: ServerConfig) : IServiceCollection =
         storage
         None
 
-    services
+    // Admission is decided once, against the final configuration — the
+    // step `compose` runs after every registration.
+    Hosting.admit services config
+
+/// The composition over the historical in-process ingestion queue.
+let composed (config: ServerConfig) : IServiceCollection = composedWith false config
+
+/// Every `ProcessProfile × ServerlessHost` cell.
+let cells: (ProcessProfile * ServerlessHostMode) list = [
+    for host in [ KestrelHost; ServerlessHost ] do
+        for profile in [ AllInOne; WebOnly; WorkerOnly; DispatcherOnly ] do
+            profile, host
+]
 
 let private hostedCount (services: IServiceCollection) =
     services
     |> Seq.filter (fun d -> d.ServiceType = typeof<Microsoft.Extensions.Hosting.IHostedService>)
     |> Seq.length
 
-let private exemptions (services: IServiceCollection) : HostedServiceExemption list =
-    services
-    |> Seq.filter (fun d -> d.ServiceType = typeof<HostedServiceExemption>)
-    |> Seq.map (fun d -> d.ImplementationInstance :?> HostedServiceExemption)
-    |> List.ofSeq
-
+let private admittedIds (config: ServerConfig) (services: IServiceCollection) : string list =
+    Hosting.describe config (Hosting.records services)
+    |> List.filter _.Admitted
+    |> List.map (fun row -> ComponentId.value row.Unit.Id)
 
 let tests =
-    testList "Phase 1051 — hosted services meet the gate or state their reason" [
-        for profile, host in
-            [
-                WebOnly, KestrelHost
-                DispatcherOnly, KestrelHost
-                AllInOne, ServerlessHost
-                WorkerOnly, ServerlessHost
-            ] do
-            test (
-                sprintf
-                    "%A x %A: the matrix admits nothing, so every hosted service is exempt with a reason"
-                    profile
-                    host
-            ) {
+    testList "Hosting — every hosted service goes through the one placement gate" [
+        for profile, host in cells do
+            test (sprintf "%A x %A: the hosted services are exactly the admitted units" profile host) {
                 let config = configFor profile host
-
-                for subsystem in
-                    [
-                        JobSchedulerSubsystem
-                        AuditReplicatorSubsystem
-                        DataMigrationSweepSubsystem
-                        HealthStateTrackerSubsystem
-                    ] do
-                    Expect.isFalse
-                        (ProcessProfileGate.shouldRegisterBackgroundService config subsystem)
-                        (sprintf "the cell admits no %A (premise)" subsystem)
-
                 let services = composed config
-                let exempt = exemptions services
+                let admitted = admittedIds config services
 
-                Expect.isGreaterThan (hostedCount services) 8 "the guard reaches the sites it claims to (probe)"
+                Expect.isGreaterThan
+                    (Hosting.records services).Length
+                    8
+                    "the guard reaches the sites it claims to (probe)"
 
                 Expect.equal
                     (hostedCount services)
-                    exempt.Length
-                    (sprintf
-                        "every IHostedService has an exemption; the exemptions present: %s"
-                        (exempt |> List.map _.Service |> String.concat "; "))
-
-                for e in exempt do
-                    Expect.isFalse (String.IsNullOrWhiteSpace e.Reason) (sprintf "%s states a reason" e.Service)
-
-                for named in [ "RAG ingestion"; "RAG re-embedding" ] do
-                    Expect.exists exempt (fun e -> e.Service = named) (sprintf "%s is named with its reason" named)
+                    admitted.Length
+                    (sprintf "one hosted service per admitted unit; admitted: %s" (String.concat "; " admitted))
             }
 
-        test "AllInOne x KestrelHost registers the same hosted services, with the same exemptions (GP 11)" {
-            let everywhere = composed (configFor AllInOne KestrelHost)
-            let web = composed (configFor WebOnly KestrelHost)
+        test "a serverless host starts only OnceAtStart units" {
+            for profile in [ AllInOne; WebOnly; WorkerOnly; DispatcherOnly ] do
+                let config = configFor profile ServerlessHost
 
-            Expect.equal (hostedCount everywhere) (hostedCount web) "an exempt service registers on every profile"
+                let admitted =
+                    Hosting.describe config (Hosting.records (composed config))
+                    |> List.filter _.Admitted
 
-            Expect.equal
-                (exemptions everywhere |> List.map _.Service)
-                (exemptions web |> List.map _.Service)
-                "and says why on every profile"
+                Expect.isNonEmpty admitted "the one-shot units still register (probe)"
+
+                for row in admitted do
+                    Expect.equal
+                        row.Unit.Placement
+                        OnceAtStart
+                        (sprintf "%s is admitted on a serverless host" (ComponentId.value row.Unit.Id))
+        }
+
+        test "a WebOnly composition over a shared ingestion queue registers no RAG ingestion or re-embedding" {
+            let web = configFor WebOnly KestrelHost
+            let services = composedWith true web
+            let onWeb = admittedIds web services
+            let onWorker = admittedIds (configFor WorkerOnly KestrelHost) services
+
+            for unit in [ "hosted:rag-ingestion"; "hosted:rag-reembedding" ] do
+                Expect.isFalse (List.contains unit onWeb) (sprintf "%s is not admitted on WebOnly" unit)
+                Expect.isTrue (List.contains unit onWorker) (sprintf "%s runs on the worker silo" unit)
+        }
+
+        test "over the in-process ingestion queue, ingestion stays with the process that accepted the upload" {
+            let config = configFor WebOnly KestrelHost
+
+            let ingestion =
+                Hosting.describe config (Hosting.records (composed config))
+                |> List.find (fun row -> ComponentId.value row.Unit.Id = "hosted:rag-ingestion")
+
+            Expect.equal ingestion.Unit.Placement ProcessLocal "process-local over the in-process channel"
+            Expect.isTrue ingestion.Admitted "a WebOnly silo drains what its own HTTP tier enqueued"
         }
     ]

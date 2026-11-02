@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.DatadogReadbackHandlers
+module ToolUp.Platform.Infra.DatadogReadbackHandlers
 
 open System
 open System.Text.Json
@@ -10,6 +10,7 @@ open Microsoft.AspNetCore.Http
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.Metrics
+open ToolUp.Platform.Infra.Metrics
 
 // ─── Phase 9w — Datadog readback endpoints ────────────────────────────
 //
@@ -20,7 +21,7 @@ open ToolUp.Platform.Metrics
 // Read-only surface over a DI-registered `IDatadogReadbackApi` — the
 // `ToolUp.Observability.Datadog` companion is the shipped
 // implementation. Mounted only when
-// `ServerConfig.DatadogReadback = EnabledDatadogReadback`, so a
+// `ServerConfig.Observability.DatadogReadback = EnabledDatadogReadback`, so a
 // deployment that does not read from Datadog carries no route and pays
 // nothing (GP 13).
 //

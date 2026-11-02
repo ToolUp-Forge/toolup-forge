@@ -2,6 +2,7 @@ module ToolUp.Forms.Tests.Contracts.IActionLedgerContract
 
 open Expecto
 open ToolUp.Forms.IActionLedger
+open ToolUp.Platform.Jobs
 
 // ─── IActionLedger contract pack ─────────────────────────────────────
 //

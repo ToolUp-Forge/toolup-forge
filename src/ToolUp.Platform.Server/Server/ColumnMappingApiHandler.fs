@@ -6,13 +6,15 @@
 /// every method through to the store keyed by the scope's container —
 /// the same scope-isolation posture as `FileManagement.fileManagementApi`.
 /// Mounted by `BuildRouteHandlers` only when `ColumnMapping =
-/// EnabledColumnMapping`.
-module ToolUp.Platform.ColumnMappingApiHandler
+/// FeatureMode.Enabled`.
+module ToolUp.Platform.Files.ColumnMappingApiHandler
 
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
 open ColumnMappingApi
 open ColumnMappingTypes
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
 
 /// The storage container for this request. Prefers the scope resolved by
 /// `ScopeResolutionMiddleware` (cached in `HttpContext.Items`); falls
@@ -32,7 +34,7 @@ let columnMappingApi (ctx: HttpContext) : IConversionApi =
     // Phase 218 — dry-run validation dependencies. The catalog resolves
     // the target type's schema authoritatively server-side; the validator
     // (default `MappingDryRunValidator`, registered under the same
-    // `EnabledColumnMapping` flag) inspects the mapped shape; the policy
+    // `FeatureMode.Enabled` flag) inspects the mapped shape; the policy
     // (`ServerConfig.MappingDryRun`) decides whether failures block commit.
     let catalog = ctx.RequestServices.GetService(typeof<IDataCatalog>) :?> IDataCatalog
 

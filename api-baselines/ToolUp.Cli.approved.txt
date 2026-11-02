@@ -123,6 +123,8 @@ ToolUp.Cli.DockerEmitCommand+Options.OutputDir : System.String { get }
 ToolUp.Cli.DockerEmitCommand+Options.ServerDll : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Cli.DockerEmitCommand+Options.ServerProject : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Cli.FactsMigrateCommand (class)
+ToolUp.Cli.FactsMigrateCommand.AttributeDelegateRowsTask : System.String (literal)
+ToolUp.Cli.FactsMigrateCommand.ReissueJobsTask : System.String (literal)
 ToolUp.Cli.FactsMigrateCommand.TaskName : System.String (literal)
 ToolUp.Cli.FactsMigrateCommand.command : ToolUp.Cli.Dispatch+Command { get }
 ToolUp.Cli.FactsMigrateCommand.defaultOptions : ToolUp.Cli.FactsMigrateCommand+Options { get }
@@ -131,8 +133,9 @@ ToolUp.Cli.FactsMigrateCommand.invocation(ToolUp.Cli.FactsMigrateCommand+Options
 ToolUp.Cli.FactsMigrateCommand.parse(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Cli.FactsMigrateCommand+Options, System.String]
 ToolUp.Cli.FactsMigrateCommand.run(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.Int32]]]], System.IO.TextWriter, ToolUp.Cli.FactsMigrateCommand+Options) : System.Int32
 ToolUp.Cli.FactsMigrateCommand+Options (class)
-ToolUp.Cli.FactsMigrateCommand+Options..ctor(Microsoft.FSharp.Core.FSharpChoice`2[System.String, System.String], System.Int32, Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Cli.FactsMigrateCommand+Options..ctor(Microsoft.FSharp.Core.FSharpChoice`2[System.String, System.String], System.Int32, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String])
 ToolUp.Cli.FactsMigrateCommand+Options.Root : Microsoft.FSharp.Core.FSharpChoice`2[System.String, System.String] { get }
+ToolUp.Cli.FactsMigrateCommand+Options.Task : System.String { get }
 ToolUp.Cli.FactsMigrateCommand+Options.TaskArgs : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Cli.FactsMigrateCommand+Options.TimeoutSeconds : System.Int32 { get }
 ToolUp.Cli.K8sEmitCommand (class)

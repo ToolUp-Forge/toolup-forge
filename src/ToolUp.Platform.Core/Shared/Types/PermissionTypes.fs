@@ -32,7 +32,7 @@ type ModulePermission =
     /// module defaults, manage per-module resources). Does not imply
     /// team-scope admin — that's `TeamRole.Admin`.
     | Admin
-    /// Phase 30d — partner-sandbox grant. The holder can call
+    /// Partner-sandbox grant. The holder can call
     /// `IDataCatalog.GetSchema` + `GetSyntheticSample` to discover data
     /// shapes and iterate against deterministically-generated synthetic
     /// rows, but every path that would return a real-row blob is
@@ -44,7 +44,7 @@ type ModulePermission =
     | SchemaOnly
 
 module ModulePermission =
-    /// Phase 730 — stable wire token for audit rows and operator queries.
+    /// Stable wire token for audit rows and operator queries.
     /// The rendering several call sites had spelled privately; hoisted so
     /// a grant row and a tool-registry diagnostic name a permission the
     /// same way.
@@ -74,7 +74,7 @@ module ModulePermission =
         | ModulePermission.SchemaOnly, ModulePermission.SchemaOnly -> true
         | _ -> false
 
-/// Phase 551 — an opaque reference to a party whose approval a module's
+/// An opaque reference to a party whose approval a module's
 /// declared `GrantPolicy` requires. A stable string the deployment
 /// resolves (a tenant id, a DPO mailbox, a regulator handle); the SDK
 /// never interprets it, mirroring the `PolicyRef` shape. GP 9 — the SDK
@@ -98,7 +98,7 @@ module PartyRef =
     /// fail-closed state, never a fall-through to admin discretion.
     let isEmpty (p: PartyRef) = value p = ""
 
-/// Phase 551 — a module's **declared** precondition on being granted to
+/// A module's **declared** precondition on being granted to
 /// anyone. The admin-authored `ModulePermissions` map remains the
 /// authority on *who* is granted; this is the module's own voice on
 /// *what must be true first*, enforced fail-closed at dispatch as well
@@ -139,7 +139,7 @@ type GrantPolicy =
     /// than optimistically permissive.
     | RequiresCounterpartyApproval of PartyRef
 
-/// Phase 551 — the lifecycle state of a recorded grant. A grant under
+/// The lifecycle state of a recorded grant. A grant under
 /// `AdminDiscretion` needs no record at all; the states below exist for
 /// grants written under a stricter declared policy.
 [<RequireQualifiedAccess>]
@@ -172,7 +172,7 @@ module GrantState =
         | "active" -> GrantState.Active
         | _ -> GrantState.PendingConsent
 
-/// Phase 551 — the evidence that a module's declared `GrantPolicy` was
+/// The evidence that a module's declared `GrantPolicy` was
 /// satisfied for one (subject, module) grant. Persisted alongside the
 /// permission entry it qualifies, and re-read at dispatch: a permission
 /// entry without an adequate record is inert.
@@ -194,7 +194,7 @@ type ModuleGrantRecord = {
     ConsentedBy: string option
 }
 
-/// Phase 551 — a typed refusal from the grant-policy guard. Every arm
+/// A typed refusal from the grant-policy guard. Every arm
 /// names the module and the policy that refused, so a caller can render
 /// an actionable message without parsing prose, and an audit row carries
 /// the same discriminator an operator dashboards on.
@@ -219,7 +219,7 @@ type GrantRefusal =
     /// parties. Incomparable — neither narrows the other, so the estate
     /// refuses rather than silently picking one.
     | ConflictingCounterparty of moduleName: string * declared: PartyRef * attempted: PartyRef
-    /// Phase 730 — the underlying store refused or failed, carrying its own
+    /// The underlying store refused or failed, carrying its own
     /// message verbatim. NOT a policy refusal: the policy was satisfied and
     /// the write was still not persisted.
     ///
@@ -235,7 +235,7 @@ type GrantRefusal =
     /// applied to the path that had it wrong.
     | StoreUnavailable of moduleName: string * message: string
 
-/// Phase 551 — what a policy-satisfying grant write actually did.
+/// What a policy-satisfying grant write actually did.
 [<RequireQualifiedAccess>]
 type GrantWriteOutcome =
     /// The grant is live.
@@ -243,7 +243,7 @@ type GrantWriteOutcome =
     /// Recorded and awaiting the named subject's acceptance. The
     /// permission entry exists but confers nothing until then.
     | RecordedPendingConsent of subjectId: string
-    /// Phase 730 — the write satisfied the module's grant policy and was
+    /// The write satisfied the module's grant policy and was
     /// then PARKED by the Phase 555 dual-control gate: nothing was
     /// persisted, and a second distinct administrator must approve request
     /// `requestId` before it applies.
@@ -488,6 +488,44 @@ module ModuleExposure =
         | ModuleExposure.Hidden -> true
         | ModuleExposure.Unavailable -> false
 
+/// One authority over a module page's stored layers: who may SAVE to which
+/// layer of the page store. Distinct from `ModulePermission`, which governs
+/// a module's data routes; a page grant governs only the page document's
+/// layers and never widens a module permission.
+///
+/// - `SavePlatform` — save to the platform layer (the default every team
+///   folds over), re-seed it, detach it. `PlatformRole.PlatformAdmin`
+///   satisfies it whatever any team document says. An explicit entry is
+///   honoured only from the one team a deployment names to hold it, never
+///   from an arbitrary team's own document: a team's owners cannot grant
+///   themselves the deployment's default.
+/// - `SaveTeam` — save to the team layer of the team the document belongs
+///   to. `TeamRole.Owner` and `Admin` satisfy it for their own team.
+/// - `SaveOwn` — save to the viewer's own individual layer, where the
+///   deployment enables that layer for granted members only.
+[<RequireQualifiedAccess>]
+type PageGrant =
+    | SavePlatform
+    | SaveTeam
+    | SaveOwn
+
+module PageGrant =
+    /// Stable wire token for persistence and audit.
+    let toToken =
+        function
+        | PageGrant.SavePlatform -> "save-platform"
+        | PageGrant.SaveTeam -> "save-team"
+        | PageGrant.SaveOwn -> "save-own"
+
+    /// Parse a persisted token. An unknown token is `None`: dropped, never
+    /// read as a grant, because a malformed entry must not authorise a save.
+    let ofToken (token: string) : PageGrant option =
+        match token with
+        | "save-platform" -> Some PageGrant.SavePlatform
+        | "save-team" -> Some PageGrant.SaveTeam
+        | "save-own" -> Some PageGrant.SaveOwn
+        | _ -> None
+
 /// Persisted per-team permission document. One per team, stored under
 /// `_platform/permissions/{teamId}.json` by the blob-backed
 /// `PermissionStore`.
@@ -518,7 +556,7 @@ type TeamPermissions = {
     /// `Unavailable` states. See the `ModuleExposure` doc for the
     /// exposure-vs-permission distinction.
     Exposure: Map<string, ModuleExposure>
-    /// Phase 551 — grant-policy evidence, keyed `userId → moduleName →
+    /// Grant-policy evidence, keyed `userId → moduleName →
     /// record`, mirroring `Members`. Populated ONLY for grants written
     /// against a module whose declared `GrantPolicy` is stricter than
     /// `AdminDiscretion`; an empty map is the whole of every pre-551
@@ -530,6 +568,14 @@ type TeamPermissions = {
     /// `Members` alone (Phase 311 lesson — write-path-only enforcement is
     /// insufficient).
     Grants: Map<string, Map<string, ModuleGrantRecord>>
+    /// Explicit page-save grants, keyed `userId → grants`: the authority
+    /// over the page store's layers, beside the module grants above. Empty
+    /// on every document that predates it, and then omitted on write, so
+    /// such a document reads and writes back byte-identically (GP 11). An
+    /// empty map grants nothing: role-implied authority (`PlatformAdmin`,
+    /// a team `Owner` / `Admin`) is resolved by the page store, and
+    /// everything else is denied.
+    Pages: Map<string, PageGrant list>
 }
 
 module TeamPermissions =
@@ -538,14 +584,23 @@ module TeamPermissions =
         Members = Map.empty
         Exposure = Map.empty
         Grants = Map.empty
+        Pages = Map.empty
     }
+
+    /// The explicit page-save grants recorded for one member. Empty when
+    /// the member has none.
+    let pageGrantsFor (userId: string) (perms: TeamPermissions) : PageGrant list =
+        if isNull (box perms.Pages) then
+            []
+        else
+            perms.Pages |> Map.tryFind userId |> Option.defaultValue []
 
     /// The grant records recorded for one subject, module-keyed. Empty
     /// when the subject has none — the pre-551 shape.
     let grantsFor (userId: string) (perms: TeamPermissions) : Map<string, ModuleGrantRecord> =
         perms.Grants |> Map.tryFind userId |> Option.defaultValue Map.empty
 
-/// Phase 36.C — whether a module's data is reachable from the
+/// Whether a module's data is reachable from the
 /// cross-module AI surface (`_platform.ai.*`, Phase 36.B).
 ///
 /// **Default `NotQueryable`, and that is the whole point.** A user
@@ -622,7 +677,7 @@ module ModuleAIExposure =
                 $"Module '{moduleName}' already declares AI exposure '{toToken ModuleAIExposure.NotQueryable}'; composition may narrow a module's AI-queryability, never widen it. Remove the earlier withAIExposure call rather than overriding it here."
         | Some _, d -> Ok d
 
-/// Phase 36.C — the compose-time projection of every module's declared
+/// The compose-time projection of every module's declared
 /// `ModuleAIExposure`, read by the `_platform.ai.*` gate.
 ///
 /// Absence is the default, exactly as `ModuleGrantPolicyRegistry` treats

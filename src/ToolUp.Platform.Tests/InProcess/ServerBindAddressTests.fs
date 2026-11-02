@@ -29,8 +29,11 @@ open Microsoft.AspNetCore.Hosting.Server.Features
 open Microsoft.Extensions.Configuration
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
-open ToolUp.Platform.ServerBinding
-open ToolUp.Platform.TransientFault
+open ToolUp.Platform.Config.ServerBinding
+open ToolUp.Platform.Infra.TransientFault
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
@@ -125,44 +128,15 @@ let private composedVerdict (config: ServerConfig) : string * string list =
         Directory.SetCurrentDirectory dir
 
         try
-            ToolUp.Platform.Server.compose
-                []
-                []
-                config
-                None
-                ComposeExtensions.empty
-                (Some(logger :> ILogger))
-                (Some(
-                    ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage.InMemoryBlobStorage()
-                    :> BlobStorage.IBlobStorage
-                ))
-                None
-                []
-                []
-                []
-                []
-                []
-                None
-                []
-                None
-                []
-                []
-                None
-                []
-                None
-                []
-                []
-                None
-                None
-                []
-                []
-                []
-                []
-                []
-                NoResilience
-                NoResilience
-                None
-                None
+            ToolUp.Platform.Compose.Server.compose {
+                ToolUp.Platform.Compose.Server.CompositionPlan.ofConfig config with
+                    Logger = Some(logger :> ILogger)
+                    BlobStorage =
+                        Some(
+                            ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage.InMemoryBlobStorage()
+                            :> BlobStorage.IBlobStorage
+                        )
+            }
             |> ignore<IServerHost> // typed: a compose arity change must not compile into a silently-ignored partial application
         with :? ConfigValidatorAggregator.ConfigPreflightFailedException ->
             ()
@@ -344,7 +318,10 @@ let tests =
                 deployedSignals
                     {
                         ServerConfig.defaults with
-                            ReplicaCount = 3
+                            MultiInstance = {
+                                ServerConfig.defaults.MultiInstance with
+                                    ReplicaCount = 3
+                            }
                     }
                     noEnv
 

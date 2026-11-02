@@ -22,8 +22,8 @@ ToolUp.AlgorithmProviders.MathNetAlgorithmSupport.unsupported`1(System.String, S
 ToolUp.AlgorithmProviders.MathNetAlgorithms (class)
 ToolUp.AlgorithmProviders.MathNetAlgorithms.declarations : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Algorithms.AlgorithmTypes+AlgorithmInfo] { get }
 ToolUp.AlgorithmProviders.MathNetAlgorithms.provider : ToolUp.Algorithms.IAlgorithmProvider { get }
-ToolUp.AlgorithmProviders.MathNetAlgorithms.withMathNetAlgorithmProvider(ToolUp.Algorithms.AlgorithmsCompose+AlgorithmsServerApp) : ToolUp.Algorithms.AlgorithmsCompose+AlgorithmsServerApp
-ToolUp.AlgorithmProviders.MathNetAlgorithms.withMathNetAlgorithms(ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+ToolUp.AlgorithmProviders.MathNetAlgorithms.withMathNetAlgorithmProvider(ToolUp.Algorithms.AlgorithmsCompose+AlgorithmsOptions) : ToolUp.Algorithms.AlgorithmsCompose+AlgorithmsOptions
+ToolUp.AlgorithmProviders.MathNetAlgorithms.withMathNetAlgorithms(ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.AlgorithmProviders.MathNetDescriptiveStats (class)
 ToolUp.AlgorithmProviders.MathNetDescriptiveStats..ctor()
 ToolUp.AlgorithmProviders.MathNetDistributionFitter (class)

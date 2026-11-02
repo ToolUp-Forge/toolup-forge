@@ -21,8 +21,13 @@ open Feliz
 // Variant A (classic): Call ModuleRegistry.registerModules globally before rendering.
 //   Still fully supported as a fallback.
 
-let private allCommunityModule: obj =
-    import "AllCommunityModule" "ag-grid-community"
+// Phase 1168 — `[<Import>]` rather than a value bound to `import`: Fable then
+// emits the import where a binding is USED, not at the top of this file.
+// `ag-grid-react` declares no `sideEffects`, so one unused import of it here
+// would keep all of AG Grid in the first load of every program that opens this
+// module. Not private, because `provider` is inline.
+[<Import("AllCommunityModule", "ag-grid-community")>]
+let allCommunityModule: obj = jsNative
 
 /// Configuration for which AG Grid modules to load and optional license key.
 /// Used by the AgGridProvider (Variant B) to supply modules via React Context.
@@ -35,22 +40,27 @@ type AgGridModuleConfig = {
 
 module AgGridModuleConfig =
     /// Community-only configuration — zero-config default. No license key required.
-    let community: AgGridModuleConfig = {
-        Modules = [| allCommunityModule |]
-        LicenseKey = None
-    }
+    /// `Modules` is empty because an empty array MEANS Community: the module
+    /// object is resolved where it is used, so holding this value does not
+    /// pull AG Grid into a first load (Phase 1168).
+    let community: AgGridModuleConfig = { Modules = [||]; LicenseKey = None }
 
 // ─── AgGridProvider (Variant B — recommended) ────────────────────
 
-let private agGridProvider: obj = import "AgGridProvider" "ag-grid-react"
+[<Import("AgGridProvider", "ag-grid-react")>]
+let agGridProvider: obj = jsNative
 
 /// Wrap a React subtree in AgGridProvider, supplying AG Grid modules and
 /// optional license key to all <AgGridReact> instances within the subtree.
 /// This is the recommended approach for AG Grid v35+.
-let provider (config: AgGridModuleConfig) (children: ReactElement list) : ReactElement =
+let inline provider (config: AgGridModuleConfig) (children: ReactElement list) : ReactElement =
     let props =
         createObj [
-            "modules" ==> config.Modules
+            "modules"
+            ==> (if Array.isEmpty config.Modules then
+                     [| allCommunityModule |]
+                 else
+                     config.Modules)
             match config.LicenseKey with
             | Some key -> "licenseKey" ==> key
             | None -> ()
@@ -78,7 +88,54 @@ let ensureGridModulesRegistered () =
         gridModuleRegistry?registerModules ([| allCommunityModule |])
         gridModulesRegistered <- true
 
-let agGrid: obj = import "AgGridReact" "ag-grid-react"
+[<Import("AgGridReact", "ag-grid-react")>]
+let agGrid: obj = jsNative
+
+// ─── Phase 1168 — the grid loads on demand ─────────────────────────────
+//
+// AG Grid is most of a shell's JavaScript, and a first screen rarely shows a
+// grid. So `MemoizedGrid` renders the grid out of `AgGridRuntime`, a separate
+// file reached only by dynamic import: a production build puts it, and AG Grid
+// with it, in a chunk fetched when the first grid mounts. The values above
+// (`agGrid`, `provider`, `ensureGridModulesRegistered`, the `Theme` module)
+// stay as they were, and a build that uses one of them keeps AG Grid in the
+// importing chunk. That is a choice the consumer can see, in `shellFirstLoadKiB`.
+//
+// While the chunk loads, the grid's own `Suspense` shows a placeholder. A
+// chunk that fails rejects into the nearest error boundary, which in the SDK
+// shell is `ModuleBoundary` and its "Reload module" button. `React.lazy` keeps
+// a rejection for good, so the rejected lazy is dropped here: the remount the
+// button causes builds a new one and the browser fetches the chunk again.
+
+/// Set once by the SDK shell at boot, before any grid renders. `None` is a
+/// program that never configured modules: the grid registers Community
+/// globally, as `AgGrid.grid` always has.
+// Sanctioned module-level mutable: boot-time configuration, one writer.
+let mutable private configuredModules: AgGridModuleConfig option = None
+
+/// What the SDK shell does with `ClientConfig.GridModules`: every grid in the
+/// program takes its modules and licence key from this configuration, through
+/// `AgGridProvider`, when the grid chunk loads.
+let configure (config: AgGridModuleConfig) = configuredModules <- Some config
+
+let private reactLazy: (unit -> JS.Promise<obj>) -> obj = import "lazy" "react"
+
+[<Emit("$0.then(c => ({ default: c }), e => { $1(); throw e; })")>]
+let private asLazyModule (load: JS.Promise<'c>) (onFailed: unit -> unit) : JS.Promise<obj> = jsNative
+
+// Sanctioned module-level mutable: the one lazy component, replaced on failure.
+let mutable private loadedGrid: obj option = None
+
+let private lazyGrid () : obj =
+    match loadedGrid with
+    | Some grid -> grid
+    | None ->
+        let grid =
+            reactLazy (fun () ->
+                asLazyModule (importValueDynamic Feliz.AgGridRuntime.Grid) (fun () -> loadedGrid <- None))
+
+        loadedGrid <- Some grid
+        grid
 
 // ─── Phase 852 — the grid's props compare, without serialising ─────────
 //
@@ -239,7 +296,23 @@ let MemoizedGrid (reactProps: obj) =
     if not (sameGridProps stableRef.current reactProps) then
         stableRef.current <- reactProps
 
-    ReactLegacy.createElement (unbox<ReactElement> agGrid, stableRef.current)
+    let host =
+        createObj [
+            "modules" ==> (configuredModules |> Option.map _.Modules)
+            "licenseKey" ==> (configuredModules |> Option.bind _.LicenseKey)
+            "externallyRegistered" ==> gridModulesRegistered
+            "gridProps" ==> stableRef.current
+        ]
+
+    React.Suspense(
+        [ ReactLegacy.createElement (unbox<ReactElement> (lazyGrid ()), host) ],
+        Html.div [
+            prop.role "status"
+            prop.ariaBusy true
+            prop.className "animate-pulse rounded bg-gray-100"
+            prop.style [ style.minHeight 160 ]
+        ]
+    )
 
 /// See https://www.ag-grid.com/react-data-grid/row-object/.
 [<Erase>]
@@ -670,6 +743,15 @@ type DOMLayout =
 //
 // See node_modules/ag-grid-community/dist/types/src/agStack/theming/theme.d.ts.
 
+/// The base themes by name, for `AgGrid.baseTheme` (Phase 1168). Each name is
+/// a theme every build of the grid chunk carries, so the list stays at the
+/// default and the one the SDK's own views use; `Theme.themeMaterial` and
+/// `Theme.themeAlpine` cost their weight only in a build that names them.
+[<RequireQualifiedAccess; StringEnum(CaseRules.None)>]
+type BaseTheme =
+    | themeQuartz
+    | themeBalham
+
 /// Typed core theme parameters (the documented common set). Long-tail CSS
 /// variables stay reachable via `Theme.withCustomCss`. All fields optional —
 /// None values Fable-erase to `undefined` and AG Grid ignores them, so build
@@ -714,6 +796,10 @@ module ThemeParams =
 ///   Theme.themeQuartz
 ///   |> Theme.withParams { ThemeParams.empty with accentColor = Some "#59229D" }
 ///   |> Theme.withPart Theme.colorSchemeDark
+///
+/// A `Theme` value is AG Grid's own object, so using one keeps AG Grid in the
+/// importing chunk. A view that takes a base theme as it stands should name it
+/// with `AgGrid.baseTheme` instead, which resolves inside the grid's chunk.
 module Theme =
     let themeQuartz: obj = import "themeQuartz" "ag-grid-community"
     let themeBalham: obj = import "themeBalham" "ag-grid-community"
@@ -1637,6 +1723,10 @@ type AgGrid<'row> =
     /// CSS-class strings.
     static member inline theme(t: obj) = agGridProp<'row> ("theme" ==> t)
 
+    /// A base theme by name, resolved inside the grid's chunk (Phase 1168).
+    /// The form to use where a `Theme` value would keep AG Grid in the first load.
+    static member inline baseTheme(t: BaseTheme) = agGridProp<'row> ("theme" ==> t)
+
     // ─── localeText (Phase 12e) ─────────────────────────────────
     static member inline localeText(v: LocaleText) = agGridProp<'row> ("localeText" ==> v)
 
@@ -1711,6 +1801,4 @@ type AgGrid<'row> =
     static member inline pinnedTopRowData(data: 'row array) =
         agGridProp<'row> ("pinnedTopRowData", data)
 
-    static member inline grid(props: IAgGridProp<'row> seq) =
-        ensureGridModulesRegistered ()
-        MemoizedGrid(createObj !!props)
+    static member inline grid(props: IAgGridProp<'row> seq) = MemoizedGrid(createObj !!props)

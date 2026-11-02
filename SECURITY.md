@@ -189,7 +189,7 @@ Monitor admin card (available in production without the dev flag) both render a
 rolling 60-minute denial rollup for the caller's scope — by tool, by module, with
 the top denied `(tool, module)` pairs and the most recent sanitised reasons. A
 deployment can additionally opt into a sustained-rate alert
-(`AIServerApp.withDenialRateAlert`), which publishes one `SystemMessage` per
+(`AIOptions.withDenialRateAlert`), which publishes one `SystemMessage` per
 campaign: a burst of refused actions is a security incident, and treating it as
 one is the point of writing the audit in the first place. Refusal reasons are
 control-stripped and truncated on the way out, and raw model arguments never

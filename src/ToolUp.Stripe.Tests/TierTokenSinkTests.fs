@@ -21,6 +21,7 @@ open Giraffe
 open ToolUp.Stripe.Webhook
 open ToolUp.Stripe.Server
 open ToolUp.Stripe.TierToken
+open ToolUp.Platform.Compose
 
 let private secret = "whsec_test_32_byte_minimum_padding"
 

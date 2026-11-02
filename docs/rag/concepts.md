@@ -177,7 +177,7 @@ results depending on which replica served the turn.
 | Ingestion queue | process-local channel | yes | `ToolUp.IngestionQueues.Redis` (`withDurableIngestionQueue`) |
 | Embedding cache | `InMemoryEmbeddingCache` | yes (correct, but per replica) | `ToolUp.EmbeddingCaches.Redis` (`withEmbeddingCache`) |
 
-Startup validators hold this table against `ServerConfig.ReplicaCount`. At a replica count above one:
+Startup validators hold this table against `ServerConfig.MultiInstance.ReplicaCount`. At a replica count above one:
 
 - `rag-in-process-index-replicas` **warns** when the vector store or the keyword index is in-process, naming
   the store and the companion that replaces it.
@@ -333,20 +333,23 @@ Trigger on operator action (model swap, scope reset, periodic refresh). The defa
 
 `IVectorStore.DeleteChunk` is a **soft-delete**: it stamps `_deletedAt` and keeps the entry so `RestoreChunk` can un-delete within the retention window. `Vacuum(scope, olderThan)` hard-removes tombstones past that window. Left un-driven, tombstones accumulate for the whole process lifetime and a long-running replica's memory grows without bound — soft-delete on its own does **not** bound memory.
 
-`RAGServerApp.withVacuumSchedule` closes that gap. It registers a `RAGVacuumJobHandler` on the `IJobScheduler` under `_platform.rag.tombstone-vacuum`, triggered by a cron (default **daily 03:00 UTC**; override with `withVacuumScheduleCron "<5-field cron>"`). On each tick the handler enumerates `IVectorStore.ListScopes()` and calls `Vacuum(scope, now - retention)` per scope. Retention defaults to **7 days** (`withTombstoneRetention`, floored at one minute). Every scope that purges anything emits a `KnowledgeVacuumCompleted` audit event with `(ScopeKey, ChunksRemoved, BytesReclaimed, DurationMs)`.
+`RagOptions.withVacuumSchedule` closes that gap. It registers a `RAGVacuumJobHandler` on the `IJobScheduler` under `_platform.rag.tombstone-vacuum`, triggered by a cron (default **daily 03:00 UTC**; override with `withVacuumScheduleCron "<5-field cron>"`). On each tick the handler enumerates `IVectorStore.ListScopes()` and calls `Vacuum(scope, now - retention)` per scope. Retention defaults to **7 days** (`withTombstoneRetention`, floored at one minute). Every scope that purges anything emits a `KnowledgeVacuumCompleted` audit event with `(ScopeKey, ChunksRemoved, BytesReclaimed, DurationMs)`.
 
 **Deployment contract — required for production:**
 
-- Set `ServerConfig.JobScheduler = InProcessJobScheduler` (or a distributed scheduler companion) **and** call `RAGServerApp.withVacuumSchedule`. Without both, memory does not stabilise: with the schedule but no scheduler the sweep never fires; with neither, tombstones are reclaimed only by a manual `IVectorStore.Vacuum` call from your own admin path.
+- Set `ServerConfig.JobScheduler = InProcessJobScheduler` (or a distributed scheduler companion) **and** call `RagOptions.withVacuumSchedule`. Without both, memory does not stabilise: with the schedule but no scheduler the sweep never fires; with neither, tombstones are reclaimed only by a manual `IVectorStore.Vacuum` call from your own admin path.
 - The `VacuumScheduleValidator` warns at startup in both misconfigured cases (visible in the HealthMonitorUI admin tab / `/dev/inspect` Validators panel), so the gap is loud rather than silent.
 - `ListScopes()` on the in-memory default returns only scopes loaded so far this process lifetime — a cold scope is vacuumed on the first tick after it loads, not before. This is a latency, not a correctness, caveat: nothing is ever purged before its retention window elapses.
 
 ```fsharp skip=fragment
-RAGServerApp.create factory providerProfile embedder
-|> RAGServerApp.withConfig { config with JobScheduler = InProcessJobScheduler }
-|> RAGServerApp.withTombstoneRetention (TimeSpan.FromDays 14.0)   // optional — default 7 days
-|> RAGServerApp.withVacuumSchedule                                // daily 03:00 UTC
-|> RAGServerApp.run
+ServerApp.empty
+|> ServerApp.withConfig { config with JobScheduler = InProcessJobScheduler }
+|> RAGCompose.withRAG (
+    RagOptions.create factory providerProfile embedder
+    |> RagOptions.withTombstoneRetention (TimeSpan.FromDays 14.0)   // optional — default 7 days
+    |> RagOptions.withVacuumSchedule                                // daily 03:00 UTC
+)
+|> ServerApp.run
 ```
 
 ## RAG prompt builder
@@ -361,15 +364,18 @@ let ragBuilder = RAGPromptBuilder.withRetrieval pipeline {
     ScopeStrategy = ActiveTeamPlusPlatform
 }
 
-AIServerApp.create aiProviderFactory providerProfile
+ServerApp.empty
 |> ...
-|> AIServerApp.withAIConfig {
-    Branding = branding
-    SystemPrompt = Some ragBuilder
-    Limits = AgentLoopLimits.defaults
-    AISurfaceDerivation = TrustClient
-}
-|> AIServerApp.run
+|> AICompose.withAI (
+    AIOptions.create aiProviderFactory providerProfile
+    |> AIOptions.withAIConfig {
+        Branding = branding
+        SystemPrompt = Some ragBuilder
+        Limits = AgentLoopLimits.defaults
+        AISurfaceDerivation = TrustClient
+    }
+)
+|> ServerApp.run
 ```
 
 The builder runs per chat request. It:
@@ -380,7 +386,7 @@ The builder runs per chat request. It:
 5. Cites each chunk with a short identifier (`[Doc abc, Chunk 1 of 5]`).
 6. Returns the formatted string.
 
-When `RAGCompose.composeWithRAG` is in the pipeline, this builder is automatically composed with the default system-prompt builders (platform + active module). Apps that want full control over composition can wire it via `withAIConfig` manually.
+When the deployment composes `RAGCompose.withRAG`, this builder is automatically composed with the default system-prompt builders (platform + active module). Apps that want full control over composition can wire it via `withAIConfig` manually.
 
 ### Grounding modes
 
@@ -458,7 +464,7 @@ When `IAIProvider.AIProviderMessage.Content` is widened to support multimodal co
 
 ## Latency budgets and ingestion capacity (Phase 894)
 
-A slow embedding provider, a slow fact store or a slow audit write degrades a chat turn's retrieval; it never stalls the turn. Each bound below is a `RAGServerApp` builder with a default. A composition that sets none of them gets the defaults, and a healthy provider's results are unchanged.
+A slow embedding provider, a slow fact store or a slow audit write degrades a chat turn's retrieval; it never stalls the turn. Each bound below is a `RagOptions` setter with a default. A composition that sets none of them gets the defaults, and a healthy provider's results are unchanged.
 
 | Bound | Builder | Default | On overrun or fault |
 |---|---|---|---|

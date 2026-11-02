@@ -16,6 +16,10 @@ open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 let private silentLogger =
     { new ILogger with
@@ -103,6 +107,7 @@ let tests =
                         (throwingReads ())
                         (AuditLog.NoOpAuditLog() :> IAuditLog)
                         silentLogger
+                        InProcessDistributedLock.shared
                     |> ignore
 
                     match faultRows services with
@@ -128,6 +133,7 @@ let tests =
                     storage
                     (AuditLog.NoOpAuditLog() :> IAuditLog)
                     silentLogger
+                    InProcessDistributedLock.shared
                 |> ignore
 
                 Expect.isEmpty (faultRows services) "nothing to refuse"

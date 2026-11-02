@@ -7,8 +7,12 @@ open Microsoft.Extensions.DependencyInjection
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.Tracing
+open ToolUp.Platform.Infra.Tracing
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── InProcessJobScheduler — IJobScheduler contract binding ──────
 //
@@ -56,7 +60,17 @@ let private buildScheduler () =
     let jobStore = JobStore.create storage eventStore
     let config = ServerConfig.defaults
 
-    JobScheduler.create jobStore eventStore silentChannel config silentLogger (NoOpActivitySink() :> IActivitySink)
+    JobScheduler.create
+        ({
+            Store = jobStore
+            EventStore = eventStore
+            NotificationChannel = silentChannel
+            Config = config
+            Logger = silentLogger
+            ActivitySink = (NoOpActivitySink() :> IActivitySink)
+        }
+        : JobScheduler.SchedulerDeps)
+        JobScheduler.SchedulerOptions.defaults
 
 // Phase 9b.A — telemetry interface tests. Drift detection itself lives
 // in the BackgroundService loop and uses `DateTime.UtcNow` directly,
@@ -162,14 +176,20 @@ let private buildCatchUpFixture () =
     let watermark = JobTriggerWatermark.JobTriggerWatermark(storage, silentLogger)
 
     let scheduler =
-        JobScheduler.createWithCatchUp
-            jobStore
-            eventStore
-            silentChannel
-            config
-            silentLogger
-            (NoOpActivitySink() :> IActivitySink)
-            watermark
+        JobScheduler.create
+            ({
+                Store = jobStore
+                EventStore = eventStore
+                NotificationChannel = silentChannel
+                Config = config
+                Logger = silentLogger
+                ActivitySink = (NoOpActivitySink() :> IActivitySink)
+            }
+            : JobScheduler.SchedulerDeps)
+            {
+                JobScheduler.SchedulerOptions.defaults with
+                    TriggerWatermark = Some watermark
+            }
 
     storage, eventStore, scheduler, watermark
 
@@ -530,16 +550,21 @@ let private buildHandoffAt (root: string) (dispatcher: IExternalComputeDispatche
     let lck = InProcessDistributedLock.create ()
 
     let scheduler =
-        new JobScheduler.InProcessJobScheduler(
-            jobStore,
-            eventStore,
-            channel,
-            ServerConfig.defaults,
-            silentLogger,
-            NoOpActivitySink() :> IActivitySink,
-            distributedLock = lck,
-            externalDispatcher = dispatcher
-        )
+        JobScheduler.create
+            ({
+                Store = jobStore
+                EventStore = eventStore
+                NotificationChannel = channel
+                Config = ServerConfig.defaults
+                Logger = silentLogger
+                ActivitySink = NoOpActivitySink() :> IActivitySink
+            }
+            : JobScheduler.SchedulerDeps)
+            {
+                JobScheduler.SchedulerOptions.defaults with
+                    DistributedLock = Some lck
+                    ExternalDispatcher = Some dispatcher
+            }
 
     {
         Root = root
@@ -1149,12 +1174,16 @@ let private handoffTests =
             // No `externalDispatcher` argument at all — the pre-319 shape.
             let scheduler =
                 JobScheduler.create
-                    jobStore
-                    eventStore
-                    silentChannel
-                    ServerConfig.defaults
-                    silentLogger
-                    (NoOpActivitySink() :> IActivitySink)
+                    ({
+                        Store = jobStore
+                        EventStore = eventStore
+                        NotificationChannel = silentChannel
+                        Config = ServerConfig.defaults
+                        Logger = silentLogger
+                        ActivitySink = (NoOpActivitySink() :> IActivitySink)
+                    }
+                    : JobScheduler.SchedulerDeps)
+                    JobScheduler.SchedulerOptions.defaults
 
             let handler = RecordingHandler()
             let iface = scheduler :> IJobScheduler
@@ -1231,6 +1260,7 @@ let private handoffTests =
                 Error = Some "upstream timeout"
                 DurationMs = Some 300_000L
                 ExternalHandle = None
+                Warning = None
             }
 
             // Build a genuine pre-319 blob by serialising and stripping
@@ -1351,17 +1381,22 @@ let private defect1064Tests =
             let handleStore = InMemoryExternalHandleStore() :> IExternalHandleStore
 
             let scheduler =
-                new JobScheduler.InProcessJobScheduler(
-                    store,
-                    eventStore,
-                    channel,
-                    ServerConfig.defaults,
-                    silentLogger,
-                    NoOpActivitySink() :> IActivitySink,
-                    distributedLock = lck,
-                    externalDispatcher = dispatcher,
-                    externalHandleStore = handleStore
-                )
+                JobScheduler.create
+                    ({
+                        Store = store
+                        EventStore = eventStore
+                        NotificationChannel = channel
+                        Config = ServerConfig.defaults
+                        Logger = silentLogger
+                        ActivitySink = NoOpActivitySink() :> IActivitySink
+                    }
+                    : JobScheduler.SchedulerDeps)
+                    {
+                        JobScheduler.SchedulerOptions.defaults with
+                            DistributedLock = Some lck
+                            ExternalDispatcher = Some dispatcher
+                            ExternalHandleStore = Some handleStore
+                    }
 
             let fixture = {
                 Root = root
@@ -1518,12 +1553,16 @@ let private restartBindingWith (bindRing: bool) =
 
                     let scheduler =
                         JobScheduler.create
-                            jobStore
-                            eventStore
-                            silentChannel
-                            ServerConfig.defaults
-                            silentLogger
-                            (NoOpActivitySink() :> IActivitySink)
+                            ({
+                                Store = jobStore
+                                EventStore = eventStore
+                                NotificationChannel = silentChannel
+                                Config = ServerConfig.defaults
+                                Logger = silentLogger
+                                ActivitySink = (NoOpActivitySink() :> IActivitySink)
+                            }
+                            : JobScheduler.SchedulerDeps)
+                            JobScheduler.SchedulerOptions.defaults
 
                     // Phase 935 — what compose does: bind a carrier over the
                     // key ring the root's storage persists, so a restart
@@ -1754,16 +1793,21 @@ let private buildPin () : PinFixture =
     let dispatcher = FakeExternalDispatcher("gpu-pool")
 
     let scheduler =
-        new JobScheduler.InProcessJobScheduler(
-            store,
-            eventStore,
-            channel,
-            ServerConfig.defaults,
-            silentLogger,
-            NoOpActivitySink() :> IActivitySink,
-            distributedLock = InProcessDistributedLock.create (),
-            externalDispatcher = dispatcher
-        )
+        JobScheduler.create
+            ({
+                Store = store
+                EventStore = eventStore
+                NotificationChannel = channel
+                Config = ServerConfig.defaults
+                Logger = silentLogger
+                ActivitySink = NoOpActivitySink() :> IActivitySink
+            }
+            : JobScheduler.SchedulerDeps)
+            {
+                JobScheduler.SchedulerOptions.defaults with
+                    DistributedLock = Some(InProcessDistributedLock.create ())
+                    ExternalDispatcher = Some dispatcher
+            }
 
     {
         Store = store
@@ -1991,6 +2035,7 @@ let private pinCapture () : string =
                 Error = None
                 DurationMs = None
                 ExternalHandle = None
+                Warning = None
             }
             |> Async.RunSynchronously
 
@@ -2044,6 +2089,7 @@ let private lifecycleJob: JobDefinition = {
     LastRunError = None
     ConsecutiveFailures = 2
     Tags = Map.empty
+    LastRunWarning = None
 }
 
 let private lifecycleHandle: ExternalHandle = {
@@ -2065,6 +2111,7 @@ let private lifecycleRun (attempt: int) : JobRun = {
     Error = None
     DurationMs = None
     ExternalHandle = None
+    Warning = None
 }
 
 let private ended (origin: JobLifecycle.TransitionOrigin) (attempt: int) (outcome: JobLifecycle.RunOutcome) =
@@ -2222,6 +2269,94 @@ let private lifecycleTests =
         }
     ]
 
+// ─── the composed lock and the replica pin ───────────────────────────
+//
+// `compose` resolves the deployment's lock before it builds the scheduler
+// (`ServerApp.withDistributedLock`), so a shared lock reaches the cron-tick
+// election, and the in-process scheduler's ReplicaCount pin lifts for it.
+
+let private replicaConfig: ServerConfig = {
+    ServerConfig.defaults with
+        JobScheduler = InProcessJobScheduler
+        MultiInstance = {
+            ServerConfig.defaults.MultiInstance with
+                ReplicaCount = 3
+        }
+}
+
+let private validate (services: IServiceCollection option) =
+    let validator =
+        match services with
+        | Some services ->
+            JobSchedulerInstanceValidator.JobSchedulerInstanceValidator(replicaConfig, services = services)
+        | None -> JobSchedulerInstanceValidator.JobSchedulerInstanceValidator(replicaConfig)
+
+    (validator :> ConfigValidation.IConfigValidator).Validate()
+    |> Async.RunSynchronously
+
+let sharedLockTests =
+    testList "the composed lock" [
+        test "the in-process lock keeps the replica pin" {
+            let services = ServiceCollection() :> IServiceCollection
+
+            services.AddSingleton<IDistributedLock>(InProcessDistributedLock.shared)
+            |> ignore
+
+            match validate (Some services) with
+            | ConfigValidation.Error _ -> ()
+            | _ -> failtest "three replicas over the in-process lock each run every due job"
+        }
+
+        test "a shared lock lifts the replica pin for the scheduler" {
+            let services = ServiceCollection() :> IServiceCollection
+
+            services.AddSingleton<IDistributedLock>(InProcessDistributedLock.shared)
+            |> ignore
+
+            services.AddSingleton<IDistributedLock>(InProcessDistributedLock.create ())
+            |> ignore
+
+            match validate (Some services) with
+            | ConfigValidation.Error e ->
+                failtestf "a shared lock makes the cron tick an election, so the pin lifts: %s" e
+            | _ -> ()
+        }
+
+        test "with no composition to read, the pin stands" {
+            match validate None with
+            | ConfigValidation.Error _ -> ()
+            | _ -> failtest "a validator with no composition cannot see a shared lock"
+        }
+
+        test "SchedulerOptions.defaults is the single-instance scheduler" {
+            let o = JobScheduler.SchedulerOptions.defaults
+            Expect.isNone o.DistributedLock "no lock: the in-process default"
+            Expect.isNone o.ExternalDispatcher "no backend: the reconciliation pass is off"
+            Expect.isNone o.ProgressSink "no progress sink unless asked"
+            Expect.isNone o.ScopeCarrier "the scheduler's own carrier"
+        }
+
+        test "progressSinkFor builds a sink only under FeatureMode.Enabled" {
+            let deps (progress: FeatureMode) : JobScheduler.SchedulerDeps = {
+                Store = Unchecked.defaultof<IJobStore>
+                EventStore = InMemoryEventStore.InMemoryEventStore() :> IEventStore
+                NotificationChannel = silentChannel
+                Config = {
+                    ServerConfig.defaults with
+                        JobProgress = progress
+                }
+                Logger = silentLogger
+                ActivitySink = NoOpActivitySink() :> IActivitySink
+            }
+
+            Expect.isNone
+                (JobScheduler.progressSinkFor (deps FeatureMode.Disabled))
+                "nothing under FeatureMode.Disabled (GP 13)"
+
+            Expect.isSome (JobScheduler.progressSinkFor (deps FeatureMode.Enabled)) "the fan-out sink when asked"
+        }
+    ]
+
 let tests =
     let factory () =
         let scheduler = buildScheduler () :> IJobScheduler
@@ -2240,4 +2375,5 @@ let tests =
         defect1064Tests
         pinTests
         lifecycleTests
+        sharedLockTests
     ]

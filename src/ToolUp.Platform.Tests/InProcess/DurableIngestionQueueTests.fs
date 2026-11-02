@@ -38,6 +38,8 @@ open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.RAG.IngestionTypes
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 let private run = Async.RunSynchronously
 
@@ -351,8 +353,14 @@ let private storeContract
 
 let private cfg (replicaCount: int) (escapeHatch: bool) : ServerConfig = {
     ServerConfig.defaults with
-        ReplicaCount = replicaCount
-        AcceptInProcessIngestionInMultiInstance = escapeHatch
+        MultiInstance = {
+            ServerConfig.defaults.MultiInstance with
+                ReplicaCount = replicaCount
+        }
+        RiskAcknowledgements = {
+            ServerConfig.defaults.RiskAcknowledgements with
+                AcceptInProcessIngestionInMultiInstance = escapeHatch
+        }
 }
 
 let private validate (config: ServerConfig) (durableQueue: bool) : ValidationResult =

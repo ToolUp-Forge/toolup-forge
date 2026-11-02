@@ -1,4 +1,6 @@
-module ToolUp.Platform.ISparseIndex
+module ToolUp.Platform.Infra.ISparseIndex
+
+open ToolUp.Platform
 
 open ToolUp.Platform.VectorKnowledgeTypes
 
@@ -7,7 +9,7 @@ open ToolUp.Platform.VectorKnowledgeTypes
 /// `src/SparseIndices/` (e.g. `ToolUp.SparseIndices.Postgres`, which holds
 /// the index in the database so it is the same on every replica); the
 /// in-process default is `ToolUp.RAG.InMemoryBM25Index`. A composition picks
-/// one with `RAGServerApp.withSparseIndex` / `withAnalyzedSparseIndex`, or
+/// one with `RagOptions.withSparseIndex` / `withAnalyzedSparseIndex`, or
 /// none with `withoutSparseIndex` (Phase 893).
 ///
 /// `VectorMatch.Score` is on the implementation's own scale — BM25 for the
@@ -81,14 +83,14 @@ type ISparseIndex =
 type ISparseIndexLocality =
     /// Where this index's postings live: `Some` for an index that knows,
     /// `None` for a decorator over an index that declares nothing.
-    abstract IndexLocality: ToolUp.Platform.IVectorStore.VectorIndexLocality option
+    abstract IndexLocality: ToolUp.Platform.Infra.IVectorStore.VectorIndexLocality option
 
 /// The probe for the Phase 964 keyword-index locality declaration.
 [<RequireQualifiedAccess>]
 module SparseIndexLocality =
     /// The locality `index` declares, or `None` when it implements no
     /// `ISparseIndexLocality`.
-    let declared (index: ISparseIndex) : ToolUp.Platform.IVectorStore.VectorIndexLocality option =
+    let declared (index: ISparseIndex) : ToolUp.Platform.Infra.IVectorStore.VectorIndexLocality option =
         match box index with
         | :? ISparseIndexLocality as declaring -> declaring.IndexLocality
         | _ -> None
@@ -96,4 +98,4 @@ module SparseIndexLocality =
     /// `true` only when `index` declares its postings `InProcess`. An
     /// undeclared index is `false` (see `ISparseIndexLocality`).
     let isInProcess (index: ISparseIndex) : bool =
-        declared index = Some ToolUp.Platform.IVectorStore.VectorIndexLocality.InProcess
+        declared index = Some ToolUp.Platform.Infra.IVectorStore.VectorIndexLocality.InProcess

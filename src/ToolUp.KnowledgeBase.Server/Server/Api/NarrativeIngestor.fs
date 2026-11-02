@@ -9,6 +9,7 @@ open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Narrative
 open SharedTypes
 open KnowledgeBase.ServerApiDeps
+open ToolUp.Platform.Infra
 
 // ─── The programmatic narrative-commit door (Phase 707) ──────────────
 //
@@ -43,7 +44,7 @@ type KnowledgeNarrativeIngestor(services: IServiceProvider) =
     interface INarrativeIngestor with
 
         member _.Ingest
-            (scope: StorageScope, principal: string, document: NarrativeDocument)
+            (scope: ResolvedScope, principal: string, document: NarrativeDocument)
             : Async<NarrativeIngestOutcome> =
             async {
                 // Probed rather than assumed: on a deployment composing the
@@ -62,9 +63,13 @@ type KnowledgeNarrativeIngestor(services: IServiceProvider) =
                         return
                             NarrativeIngestRefused
                                 "The document carries no NarrativeProvenance. A programmatic commit must stamp one: its ModuleId + SettingsKey are the dedup key that makes the commit a replacement rather than an accumulation."
+                    | Some _ when scope.Storage.IsNone ->
+                        return
+                            NarrativeIngestRefused
+                                "The anonymous scope has no knowledge base: a programmatic commit names the resolved scope it commits under."
                     | Some _ ->
                         try
-                            let deps = KnowledgeApiDeps.resolveFrom services (Some scope) principal
+                            let deps = KnowledgeApiDeps.resolveFrom services scope scope.Storage principal
 
                             let! outcome =
                                 KnowledgeBase.ServerApiNarrative.ingestNarrative deps {

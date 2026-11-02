@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-namespace ToolUp.Platform
+namespace ToolUp.Platform.Compose
+
+open ToolUp.Platform
 
 open System
 open System.Diagnostics
@@ -459,7 +461,7 @@ module CompositionDryRun =
     /// reports every unresolved selection rather than the first.
     let private buildFindings (error: VersionedBuildError) : CompositionDryRunFinding list =
         match error with
-        | MigrationFailed migration -> [
+        | VersionedBuildError.MigrationFailed migration -> [
             {
                 FindingKind = SchemaMigrationRejected
                 FindingCode = SchemaMigrationCode
@@ -468,7 +470,7 @@ module CompositionDryRun =
                 FindingDetail = CompositionDescriptorVersion.renderMigrationError migration
             }
           ]
-        | BuildFailed(UnknownComponents ids) ->
+        | VersionedBuildError.BuildFailed(UnknownComponents ids) ->
             ids
             |> List.map (fun id -> {
                 FindingKind = UnresolvedComponent
@@ -480,7 +482,7 @@ module CompositionDryRun =
                         "Component '%s' resolves to no entry in the registration catalogue. A dry run supplies null bindings for every companion slot, so an unresolved id is a module (or other non-slot) selection the catalogue does not register — register it via RegistrationCatalogue.addModule / add, or correct the id."
                         (ComponentId.value id)
             })
-        | BuildFailed(UnfilledHoles names) ->
+        | VersionedBuildError.BuildFailed(UnfilledHoles names) ->
             names
             |> List.map (fun name -> {
                 FindingKind = UnfilledDescriptorHole

@@ -10,12 +10,17 @@ open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.DataObjectStore
-open ToolUp.Platform.Tracing
+open ToolUp.Platform.Infra.DataObjectStore
+open ToolUp.Platform.Infra.Tracing
 open ToolUp.Platform.Usage
 open ToolUp.InterPlatform
 open ToolUp.ModelProviders.Reference
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 451 — compute-budget governance ───────────────────────────────
 //
@@ -1117,7 +1122,17 @@ let private newFitFixture (budget: ComputeBudget) (clock: TestClock) =
     let jobStore = JobStore.create schedStorage eventStore
 
     let scheduler =
-        JobScheduler.create jobStore eventStore silentChannel ServerConfig.defaults silentLogger (NoOpActivitySink())
+        JobScheduler.create
+            ({
+                Store = jobStore
+                EventStore = eventStore
+                NotificationChannel = silentChannel
+                Config = ServerConfig.defaults
+                Logger = silentLogger
+                ActivitySink = (NoOpActivitySink())
+            }
+            : JobScheduler.SchedulerDeps)
+            JobScheduler.SchedulerOptions.defaults
         :> IJobScheduler
 
     let providers = ModelFitProviderRegistry [ ReferenceModelFitProvider.create () ]

@@ -10,7 +10,9 @@ open System.Runtime.ExceptionServices
 open StackExchange.Redis
 open ToolUp.Platform
 open ToolUp.Platform.Metrics
-open ToolUp.Platform.IEmbeddingCache
+open ToolUp.Platform.Infra.IEmbeddingCache
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
 
 // ─── Phase 513 — Redis distributed embedding-cache companion ─────────
 //

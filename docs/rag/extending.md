@@ -14,7 +14,7 @@ ToolUp.Platform` alone does **not** bring either type into scope — the
 shipped providers open both explicitly.
 
 ```fsharp
-open ToolUp.Platform.IEmbeddingProvider
+open ToolUp.Platform.Infra.IEmbeddingProvider
 open ToolUp.Platform.Secrets
 
 type MyVendorEmbeddingProvider(secretStore: ISecretStore, model: string) =
@@ -55,15 +55,16 @@ module MyVendorEmbeddingProvider =
 
 ### Wire into a consumer
 
-`RAGServerApp.create` is curried, and its second argument is the
+`RagOptions.create` is curried, and its second argument is the
 `IProviderProfile` that resolves which model a scope gets — not a config
 store:
 
 ```fsharp
 let embedder = MyVendorEmbeddingProvider.create secretStore "myvendor-large"
 
-RAGServerApp.create aiProviderFactory providerProfile embedder
-|> RAGServerApp.run
+ServerApp.empty
+|> RAGCompose.withRAG (RagOptions.create aiProviderFactory providerProfile embedder)
+|> ServerApp.run
 ```
 
 Author `IHealthCheck` and `IConfigValidator` probes too — both self-register via DI; the validator emits `Warning` / `Error` at startup if misconfigured.
@@ -121,7 +122,7 @@ an admin UI can surface "queries that fall through" without scanning every
 trace.
 
 ```fsharp
-open ToolUp.Platform.IRetrievalTracer
+open ToolUp.Platform.Infra.IRetrievalTracer
 
 type DatadogRetrievalTracer(httpClient: HttpClient, apiKey: string) =
     interface IRetrievalTracer with
@@ -148,10 +149,10 @@ type DatadogRetrievalTracer(httpClient: HttpClient, apiKey: string) =
         }
 ```
 
-Register it in DI **before** the RAG composition runs. `composeRAG` probes
-for an already-registered `IRetrievalTracer` and falls back to the default
-only when it finds none, so registration is the whole of the wiring — there
-is no `RAGServerApp` pipeline step for it:
+Register it in DI **before** the RAG composition runs. The RAG composition
+probes for an already-registered `IRetrievalTracer` and falls back to the
+default only when it finds none, so registration is the whole of the wiring —
+there is no `RagOptions` setter for it:
 
 ```fsharp
 services.AddSingleton<IRetrievalTracer>(DatadogRetrievalTracer(httpClient, apiKey))
@@ -197,7 +198,7 @@ type alongside the bytes, and the extractor declares a `Name` for
 diagnostics.
 
 ```fsharp
-open ToolUp.Platform.ITableExtractor
+open ToolUp.Platform.Infra.ITableExtractor
 
 type CamelotTableExtractor() =
     interface ITableExtractor with
@@ -217,7 +218,7 @@ Output shape (`ExtractedTable`) is deliberately compatible with `Chunking.SheetD
 `EmbedImage` is curried and takes the image's MIME type; both methods return `float[]`, not `float32[]`.
 
 ```fsharp
-open ToolUp.Platform.IImageEmbedder
+open ToolUp.Platform.Infra.IImageEmbedder
 
 type ClipImageEmbedder(httpClient: HttpClient, apiKey: string) =
     let dimensions = 512
@@ -251,7 +252,7 @@ Cross-encoder rerankers (BGE Reranker, Cohere Rerank, Mixedbread Reranker):
 `Rerank` is curried over query and candidates and takes no `topK` — it reorders the pool it is given, and the caller truncates. The batch ceiling is declared as `MaxBatchSize` so the pipeline can chunk the pool for you:
 
 ```fsharp
-open ToolUp.Platform.IReranker
+open ToolUp.Platform.Infra.IReranker
 
 type CohereReranker(httpClient: HttpClient, apiKey: string) =
     interface IReranker with
@@ -291,7 +292,7 @@ call: model parameters belong to the provider's own configuration.
 
 ```fsharp
 open ToolUp.Platform.AI
-open ToolUp.Platform.ITextSummariser
+open ToolUp.Platform.Infra.ITextSummariser
 
 type ClaudeTextSummariser(aiProvider: IAIProvider) =
     interface ITextSummariser with

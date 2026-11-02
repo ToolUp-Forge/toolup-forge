@@ -8,6 +8,10 @@ open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Facts
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Grounding-plane wiring follow-ups ───────────────────────────────
 //
@@ -64,13 +68,16 @@ let tests =
 
         // ─── FactsCompose.withFactStore (item 1) ──────────────────────
 
-        test "withFactStore registers IFactStore + IFactEvidenceSource when EnabledFactStore" {
+        test "withFactStore registers IFactStore + IFactEvidenceSource when FeatureMode.Enabled" {
             let app =
                 {
                     ServerApp.empty with
                         Config = {
                             ServerConfig.defaults with
-                                FactStore = EnabledFactStore
+                                Stores = {
+                                    ServerConfig.defaults.Stores with
+                                        FactStore = FeatureMode.Enabled
+                                }
                         }
                 }
                 |> FactsCompose.withFactStore
@@ -85,17 +92,17 @@ let tests =
 
             match ServerApp.serviceConfig app with
             | Some cfg -> cfg services |> ignore
-            | None -> failtest "EnabledFactStore should append a service registration"
+            | None -> failtest "FeatureMode.Enabled should append a service registration"
 
             let sp = services.BuildServiceProvider()
             Expect.isFalse (isNull (box (sp.GetService<IFactStore>()))) "IFactStore resolves from DI"
             Expect.isFalse (isNull (box (sp.GetService<IFactEvidenceSource>()))) "IFactEvidenceSource resolves from DI"
         }
 
-        test "withFactStore is a no-op under NoFactStore (byte-identical)" {
+        test "withFactStore is a no-op under FeatureMode.Disabled (byte-identical)" {
             let before = ServerApp.empty
             let after = before |> FactsCompose.withFactStore
-            Expect.isTrue (ServerApp.serviceConfig after).IsNone "no service registration under NoFactStore"
+            Expect.isTrue (ServerApp.serviceConfig after).IsNone "no service registration under FeatureMode.Disabled"
             Expect.isTrue (Object.ReferenceEquals(after, before)) "the app is returned unchanged"
         }
 
@@ -109,16 +116,16 @@ let tests =
                     (InMemoryEventStore.InMemoryEventStore())
 
             let scope = newScope ()
-            let! asserted = store.Assert(scope, draftWith (Some "res-1") [ "obj-1" ] 100m)
+            let! asserted = store.Assert(TestScope.resolved scope, draftWith (Some "res-1") [ "obj-1" ] 100m)
 
             let fact =
                 match asserted with
                 | Ok f -> f
-                | Error e -> failtestf "assert: %s" e
+                | Error e -> failtestf "assert: %s" (FactStoreError.describe e)
 
             let src = FactStoreEvidenceSource.create store
 
-            let! ev = src.GetFact(scope, fact.FactId)
+            let! ev = src.GetFact(TestScope.resolved scope, fact.FactId)
 
             match ev with
             | Some e ->
@@ -129,10 +136,10 @@ let tests =
                 Expect.equal e.Subject "geography/uk" "subject rendered"
             | None -> failtest "expected evidence for the stored fact"
 
-            let! forResult = src.FactsForResult(scope, "res-1")
+            let! forResult = src.FactsForResult(TestScope.resolved scope, "res-1")
             Expect.equal (forResult |> List.map _.FactId) [ fact.FactId ] "fact found by its result ref"
 
-            let! none = src.FactsForResult(scope, "res-other")
+            let! none = src.FactsForResult(TestScope.resolved scope, "res-other")
             Expect.isEmpty none "no facts for an unrelated result"
         }
 

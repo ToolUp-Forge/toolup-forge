@@ -9,6 +9,8 @@ open ToolUp.Platform
 open ToolUp.Platform.Narrative
 open ToolUp.PublicRendering
 open ToolUp.PublicRendering.PublicRenderingCompose
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── The published report pages ───────────────────────────────────
 //
@@ -178,19 +180,17 @@ let layout (page: PublicPage) : XmlNode =
         body [] [ main [] [ NarrativeLayout.renderBody page ] ]
     ]
 
-/// Install the pages on the rendering app: the layout, and forge's default
-/// content API (the markdown loader over the content root) behind them.
-let install (app: PublicRenderingServerApp) : PublicRenderingServerApp =
-    match app.Base.Config.PublicRendering with
+/// Install the pages on the rendering options: the layout, and forge's default
+/// content API (the markdown loader over `config`'s content root) behind them.
+let install (config: ServerConfig) (options: PublicRenderingOptions) : PublicRenderingOptions =
+    match config.PublicRendering with
     | EnabledPublicRendering root ->
-        let logger =
-            app.Base.Logger
-            |> Option.defaultWith (fun () -> ConsoleLogger.ConsoleLogger() :> ILogger)
+        let logger = ConsoleLogger.ConsoleLogger() :> ILogger
 
         let inner =
-            PublicContentApiImpl.create (new MarkdownContentLoader(root, logger, app.HotReload)) None []
+            PublicContentApiImpl.create (new MarkdownContentLoader(root, logger, options.HotReload)) None []
 
-        app
-        |> PublicRenderingServerApp.withLayout (LayoutName Layout) layout
-        |> PublicRenderingServerApp.withContentApi (over app.Base.Config inner)
-    | NoPublicRendering -> app
+        options
+        |> PublicRenderingOptions.withLayout (LayoutName Layout) layout
+        |> PublicRenderingOptions.withContentApi (over config inner)
+    | NoPublicRendering -> options

@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.LifecycleJobHandler
+module ToolUp.Platform.Compose.LifecycleJobHandler
 
 open System
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.PlatformTenantApiHandler
+open ToolUp.Platform.Compose.PlatformTenantApiHandler
+open ToolUp.Platform.Jobs
 
 // ─── Phase 54a/54b — background offboard job handler ─────────────────
 //

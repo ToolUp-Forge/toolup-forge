@@ -1,8 +1,8 @@
-module ToolUp.Platform.MaintenanceApiHandler
+module ToolUp.Platform.Config.MaintenanceApiHandler
 
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
-open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Config.TeamManagement
 
 // ─── MaintenanceApi handler factory (Phase 9f) ───────────────────
 //

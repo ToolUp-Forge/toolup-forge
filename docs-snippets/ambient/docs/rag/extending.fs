@@ -21,9 +21,10 @@ open Microsoft.Extensions.DependencyInjection
 open ToolUp.AI
 open ToolUp.Platform.Providers
 open ToolUp.Platform.Secrets
-open ToolUp.Platform.IEmbeddingProvider
-open ToolUp.Platform.IRetrievalTracer
-open ToolUp.Platform.ITableExtractor
+open ToolUp.Platform.Infra.IEmbeddingProvider
+open ToolUp.Platform.Infra.IRetrievalTracer
+open ToolUp.Platform.Infra.ITableExtractor
+open ToolUp.Platform.Infra
 
 [<AutoOpen>]
 module PageAmbient =

@@ -26,7 +26,7 @@ ToolUp.Platform.ExternalCompute.Http.HttpComputeCancel..ctor(System.String, Syst
 ToolUp.Platform.ExternalCompute.Http.HttpComputeCancel.Method : System.String { get }
 ToolUp.Platform.ExternalCompute.Http.HttpComputeCancel.UrlTemplate : System.String { get }
 ToolUp.Platform.ExternalCompute.Http.HttpComputeCompose (class)
-ToolUp.Platform.ExternalCompute.Http.HttpComputeCompose.withHttpCompute(ToolUp.Platform.ExternalCompute.Http.HttpComputeConfig, ToolUp.Platform.Secrets+ISecretStore, System.Net.Http.HttpClient, ToolUp.Platform.ILogger, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+ToolUp.Platform.ExternalCompute.Http.HttpComputeCompose.withHttpCompute(ToolUp.Platform.ExternalCompute.Http.HttpComputeConfig, ToolUp.Platform.Secrets+ISecretStore, System.Net.Http.HttpClient, ToolUp.Platform.ILogger, ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.Platform.ExternalCompute.Http.HttpComputeConfig (class)
 ToolUp.Platform.ExternalCompute.Http.HttpComputeConfig..ctor(System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ExternalCompute.Http.HttpComputeCancel], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ExternalCompute.Http.HttpComputeAuth], ToolUp.Platform.ExternalCompute.Http.HttpComputeSubmitFields, ToolUp.Platform.ExternalCompute.Http.HttpComputeSelectors, ToolUp.Platform.ExternalCompute.Http.HttpComputeStatusMap, System.Double, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ExternalCompute.Http.HttpComputeCallback], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.TimeSpan)
 ToolUp.Platform.ExternalCompute.Http.HttpComputeConfig.Auth : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ExternalCompute.Http.HttpComputeAuth] { get }
@@ -68,7 +68,7 @@ ToolUp.Platform.ExternalCompute.Http.HttpComputeDispatcher.PollHandle(ToolUp.Pla
 ToolUp.Platform.ExternalCompute.Http.HttpComputeDispatcher.ProbeHealth() : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]]
 ToolUp.Platform.ExternalCompute.Http.HttpComputeDispatcher.SubmitWork(System.String, ToolUp.Platform.ExternalWorkSpec) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ExternalHandle, ToolUp.Platform.ExternalComputeError]]
 ToolUp.Platform.ExternalCompute.Http.HttpComputeDispatcherModule (class)
-ToolUp.Platform.ExternalCompute.Http.HttpComputeDispatcherModule.create(ToolUp.Platform.ExternalCompute.Http.HttpComputeConfig, ToolUp.Platform.Secrets+ISecretStore, System.Net.Http.HttpClient, ToolUp.Platform.ILogger) : ToolUp.Platform.IExternalComputeDispatcher
+ToolUp.Platform.ExternalCompute.Http.HttpComputeDispatcherModule.create(ToolUp.Platform.ExternalCompute.Http.HttpComputeConfig, ToolUp.Platform.Secrets+ISecretStore, System.Net.Http.HttpClient, ToolUp.Platform.ILogger) : ToolUp.Platform.Infra.IExternalComputeDispatcher
 ToolUp.Platform.ExternalCompute.Http.HttpComputeDispatcherModule.createTyped(ToolUp.Platform.ExternalCompute.Http.HttpComputeConfig, ToolUp.Platform.Secrets+ISecretStore, System.Net.Http.HttpClient, ToolUp.Platform.ILogger) : ToolUp.Platform.ExternalCompute.Http.HttpComputeDispatcher
 ToolUp.Platform.ExternalCompute.Http.HttpComputeHealth (class)
 ToolUp.Platform.ExternalCompute.Http.HttpComputeHealth.configValidator(ToolUp.Platform.ExternalCompute.Http.HttpComputeDispatcher, ToolUp.Platform.Secrets+ISecretStore) : ToolUp.Platform.ConfigValidation+IConfigValidator

@@ -1,4 +1,7 @@
-module ToolUp.Platform.MetricsEndpoint
+module ToolUp.Platform.Infra.MetricsEndpoint
+
+open ToolUp.Platform
+open ToolUp.Platform.Infra.Metrics
 
 open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
@@ -9,7 +12,7 @@ open ToolUp.Platform.Metrics
 //
 // Renders the in-process `PrometheusMetricsSink` registry as
 // OpenMetrics text. Mounted by `compose` only when
-// `ServerConfig.MetricsEndpoint = EnabledMetricsEndpoint` — the route
+// `ServerConfig.Observability.MetricsEndpoint = FeatureMode.Enabled` — the route
 // is conditionally added to the Giraffe `choose` list so deployments
 // without metrics enabled get a clean 404 rather than an empty 200.
 //
@@ -29,7 +32,7 @@ open ToolUp.Platform.Metrics
 // network layer (LB allowlist, monitoring-network CIDR). The
 // information disclosed is intentional — route templates, tag values,
 // traffic patterns. For deployments that don't want that surface
-// open, `MetricsEndpoint = NoMetricsEndpoint` is the right answer.
+// open, `MetricsEndpoint = FeatureMode.Disabled` is the right answer.
 //
 // **Content type.** `application/openmetrics-text; version=1.0.0;
 // charset=utf-8` is the OpenMetrics 1.0 mandate. Prometheus accepts

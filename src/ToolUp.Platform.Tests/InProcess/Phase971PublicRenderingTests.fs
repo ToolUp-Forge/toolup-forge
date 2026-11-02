@@ -6,6 +6,7 @@ open ToolUp.Platform.BlobStorage
 open ToolUp.PublicRendering
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Tests.InProcess.DataObjectStoreTests
+open ToolUp.Platform.Compose
 
 // ─── Phase 971 — PublicRendering: a refused invalidation is reported ──
 //

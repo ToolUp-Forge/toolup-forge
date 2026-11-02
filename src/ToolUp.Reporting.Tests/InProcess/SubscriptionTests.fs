@@ -9,6 +9,10 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Reporting
 open ToolUp.Reporting.Tests.Fakes
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 534 — scheduled report subscriptions ──────────────────────
 //
@@ -126,7 +130,7 @@ type private World(?sink: RecordingSink, ?addresses: (string * string) list, ?re
     let subscriptions = ReportSubscriptionStore.create blobs
 
     let artefacts =
-        ToolUp.Platform.DataObjectStore.DataObjectStore(blobs) :> IDataObjectStore
+        ToolUp.Platform.Infra.DataObjectStore.DataObjectStore(blobs) :> IDataObjectStore
 
     let producers = ReportProducerRegistry()
     let templates = InMemoryTemplateStore()

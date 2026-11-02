@@ -16,6 +16,8 @@ open Expecto
 open ToolUp.Platform.AI
 open ToolUp.AI
 open ToolUp.AI.AIAgentEngine
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 let private conversationId = Guid.Parse "6f0f7c1e-2b9d-4a51-8c3e-0d4b2a9e7f10"
 

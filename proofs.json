@@ -1865,7 +1865,7 @@
           "the extracted model agrees with production over every Phase 800 refusal shape",
           "the widened reference vocabulary round-trips through the extracted encoder and decoder"
         ],
-        "runner": "proofs/check.ps1 step 7, whose HostMinCases for RemotingDecode rose from 7 to 9 with these"
+        "runner": "proofs/check.ps1 step 7, which reads this family's case names from this registry and fails by name on one that stops running"
       }
     },
     {

@@ -10,6 +10,8 @@ open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.ArtefactSigning
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Grounding certificates (Phase 565) ──────────────────────────────
 //
@@ -41,6 +43,137 @@ open ToolUp.ArtefactSigning
 // — validates it with the public key alone. The anchor needs no forge
 // closure: the format is open and the anchor is a key registry.
 
+/// One named detail of a certificate admission that only its
+/// kind carries: an instruction echo's `wordingVersion` and `section`, and
+/// whatever a later kind needs. `Values` keep their order (an input list is
+/// ordered); attributes are ordered by `Name` in the signed body.
+type CertificateAdmissionAttribute = { Name: string; Values: string list }
+
+/// A number a grounded narrative states WITHOUT a Fact, and why
+/// the grounding gate admitted it, as sealed into a `grounding-certificate/v2`
+/// body.
+///
+/// The shape is the same for every kind, so a new kind of admission is a new
+/// `Kind` value with its own attributes — an additive entry — and never a new
+/// field: a field added here would change the signed bytes of every
+/// certificate already issued.
+type CertificateAdmission = {
+    /// `instruction` (the wording in force asked for the number) or
+    /// `structural-count` (it counts what the document itself lists).
+    Kind: string
+    /// The reference exactly as the gate cited it
+    /// (`instruction:<wording version>#<section id>`,
+    /// `structural-count:<location>`).
+    Reference: string
+    /// Where the admitted number sits in the document
+    /// (`section 'summary' › element 2 › span 1`).
+    Location: string
+    /// The kind's own details, ordered by name; empty when it has none.
+    Attributes: CertificateAdmissionAttribute list
+}
+
+module CertificateAdmission =
+    /// The attribute naming an instruction echo's wording version.
+    [<Literal>]
+    let WordingVersionAttribute = "wordingVersion"
+
+    /// The attribute naming the section whose wording an instruction echo
+    /// answers.
+    [<Literal>]
+    let SectionAttribute = "section"
+
+    /// The admission the gate recorded as `citation` for the number at
+    /// `location`. An instruction echo (`instruction:<version>#<section>`)
+    /// carries its wording version and section as attributes; any other kind
+    /// carries none.
+    let ofCitation (location: string) (citation: ToolUp.Platform.Narrative.NarrativeCitation) : CertificateAdmission =
+        let attributes =
+            if
+                citation.ReferenceKind
+                <> ToolUp.Platform.Narrative.NarrativeCitation.InstructionKind
+            then
+                []
+            else
+                let body =
+                    citation.Reference.Substring(min citation.Reference.Length (citation.ReferenceKind.Length + 1))
+
+                match body.IndexOf '#' with
+                | i when i > 0 -> [
+                    {
+                        Name = SectionAttribute
+                        Values = [ body.Substring(i + 1) ]
+                    }
+                    {
+                        Name = WordingVersionAttribute
+                        Values = [ body.Substring(0, i) ]
+                    }
+                  ]
+                | _ -> []
+
+        {
+            Kind = citation.ReferenceKind
+            Reference = citation.Reference
+            Location = location
+            Attributes = attributes
+        }
+
+    /// The attribute naming an authorised calculation's declaration.
+    [<Literal>]
+    let DeclarationAttribute = "declaration"
+
+    /// The declaration version a calculation was computed under.
+    [<Literal>]
+    let DeclarationVersionAttribute = "declarationVersion"
+
+    /// A calculation's operator (`percentChange`, `share`, …).
+    [<Literal>]
+    let OperationAttribute = "operation"
+
+    /// A calculation's input Fact ids, in the operator's order.
+    [<Literal>]
+    let InputsAttribute = "inputs"
+
+    /// A calculation's rounding: its places, then its mode.
+    [<Literal>]
+    let RoundingAttribute = "rounding"
+
+    /// A calculation's display format (`percent`; `currency`, code; …).
+    [<Literal>]
+    let FormatAttribute = "format"
+
+    /// A calculation's result, in display units at its declared places.
+    [<Literal>]
+    let ResultAttribute = "result"
+
+    /// A calculation's content address.
+    [<Literal>]
+    let AddressAttribute = "address"
+
+    /// The admission of an authorised calculation (kind
+    /// `AuthorisedCalculation.ReferenceKind`) cited as `reference` at
+    /// `location`, with its details as attributes, ordered by name as the
+    /// signed body orders them.
+    let ofCalculation
+        (location: string)
+        (reference: string)
+        (attributes: (string * string list) list)
+        : CertificateAdmission =
+        {
+            Kind = AuthorisedCalculation.ReferenceKind
+            Reference = reference
+            Location = location
+            Attributes =
+                attributes
+                |> List.sortBy fst
+                |> List.map (fun (name, values) -> { Name = name; Values = values })
+        }
+
+    /// The values of the attribute `name`, when the admission carries it.
+    let attribute (name: string) (admission: CertificateAdmission) : string list option =
+        admission.Attributes
+        |> List.tryFind (fun a -> a.Name = name)
+        |> Option.map _.Values
+
 /// What a certificate is issued over. Identity by value (GP 12):
 ///  - `AnswerCertificate` — a grounded conversation message plus the fact
 ///    ids the answer cited; the chain is the answer's upstream (message →
@@ -55,6 +188,15 @@ type CertificateSubject =
     /// node) with a `CitesFact` edge to each cited Fact, whose upstream is
     /// then walked exactly as an answer's is.
     | NarrativeCertificate of narrativeId: string * citedFactIds: string list
+    /// A published grounded narrative, the Fact ids it cites,
+    /// and the numbers it states WITHOUT a Fact, each with the reason the
+    /// grounding gate admitted it. The chain is `NarrativeCertificate`'s;
+    /// the admissions are sealed into the body beside it, in document order,
+    /// so the signature covers them exactly as it covers the chain.
+    | AdmittedNarrativeCertificate of
+        narrativeId: string *
+        citedFactIds: string list *
+        admissions: CertificateAdmission list
 
 /// One node in a sealed grounding certificate — a provenance-chain node,
 /// projected to structure only. For a **disclosable** fact node `Method`
@@ -124,6 +266,12 @@ type GroundingCertificateBody = {
     /// — one per withheld node's policy, sorted. Empty when nothing was
     /// withheld.
     PolicyRefs: string list
+    /// `grounding-certificate/v2` — the numbers the narrative
+    /// states without a Fact, in document order. `None` (or an empty list)
+    /// is OMITTED from the signed bytes, so a body that admitted nothing
+    /// signs exactly the bytes a v1 body of the same content signs, apart
+    /// from the format string. Always `None` on a v1 certificate.
+    Admissions: CertificateAdmission list option
 }
 
 /// A sealed grounding certificate — the canonical body plus the detached
@@ -160,7 +308,7 @@ module CertificateError =
 /// composed.
 type IGroundingCertificateIssuer =
     abstract Issue:
-        scopeId: string * principal: string * subject: CertificateSubject * depth: int ->
+        scope: ResolvedScope * principal: string * subject: CertificateSubject * depth: int ->
             Async<Result<GroundingCertificate, CertificateError>>
 
 // ─── Certificates on the application signing seam ────────────────────────
@@ -233,7 +381,7 @@ module AttestedCertificateVerdict =
 /// `IArtefactSigner` (GP 13).
 type IAttestedGroundingCertificateIssuer =
     abstract Issue:
-        scopeId: string * principal: string * subject: CertificateSubject * depth: int ->
+        scope: ResolvedScope * principal: string * subject: CertificateSubject * depth: int ->
             Async<Result<AttestedGroundingCertificate, CertificateError>>
 
 // ─── Issuance transparency (Phase 685) ───────────────────────────────────
@@ -330,10 +478,37 @@ type ICertificateIssuanceLog =
 
 module GroundingCertificate =
 
-    /// The open interchange format version. Do not change without a
-    /// compatibility note — a verifier keys on it.
+    /// The first interchange format: the chain, signed. A v1 body carries no
+    /// admissions. Certificates issued under it keep verifying under it, and
+    /// are never re-issued or re-signed.
     [<Literal>]
-    let Format = "grounding-certificate/v1"
+    let FormatV1 = "grounding-certificate/v1"
+
+    /// The second interchange format: v1's body plus the `Admissions` array,
+    /// inside the signed bytes. Its canonical JSON follows v1's rules; an
+    /// empty array is omitted, so a v2 body that admitted nothing signs v1's
+    /// bytes apart from the format string.
+    [<Literal>]
+    let FormatV2 = "grounding-certificate/v2"
+
+    /// The format this issuer stamps on every certificate it issues. Do not
+    /// change without a compatibility note — a verifier keys on it.
+    [<Literal>]
+    let Format = FormatV2
+
+    /// Every format a verifier here reads, oldest first.
+    let Formats: string list = [ FormatV1; FormatV2 ]
+
+    /// `true` when `format` is one a verifier here reads.
+    let isKnownFormat (format: string) : bool = List.contains format Formats
+
+    /// The purpose an attested certificate is signed as: the name of this
+    /// kind of payload, so a signature minted for one kind cannot be
+    /// replayed as another. It is the FIRST format string and stays so when
+    /// the format moves on: the version is inside the signed body, and a
+    /// purpose that moved with it would refuse every certificate already
+    /// sealed under the old one.
+    let AttestationPurpose = FormatV1
 
     let private jsonOptions = FableConverters.create ()
 
@@ -383,23 +558,120 @@ module GroundingCertificate =
             (if withheld then "withheld" else "disclosed")
         ]
 
+    // The signed shapes, field for field. The record converter writes every
+    // field, so an absent `Admissions` cannot be left out of the public body's
+    // JSON; these fix exactly what each shape signs instead. `SignedV1` is
+    // v1's body as it has always been serialised, and must never change:
+    // every v1 certificate already issued verifies against it.
+    type private SignedV1 = {
+        Format: string
+        Root: string
+        IssuedAt: DateTimeOffset
+        DeploymentKeyId: string
+        Nodes: CertificateNode list
+        Edges: CertificateEdge list
+        PolicyRefs: string list
+    }
+
+    type private SignedWithAdmissions = {
+        Format: string
+        Root: string
+        IssuedAt: DateTimeOffset
+        DeploymentKeyId: string
+        Nodes: CertificateNode list
+        Edges: CertificateEdge list
+        PolicyRefs: string list
+        Admissions: CertificateAdmission list
+    }
+
+    let private canonicalAdmission (admission: CertificateAdmission) : CertificateAdmission = {
+        admission with
+            Attributes = admission.Attributes |> List.sortBy _.Name
+    }
+
     /// Deterministically order a body's lists so the signed bytes are
     /// reproducible (nodes by kind+id, edges by kind+from+to, policy refs
-    /// distinct+sorted). Idempotent — verification re-canonicalises before
-    /// re-serialising, so a body signed here canonicalises to itself.
+    /// distinct+sorted; admissions keep their document order, distinct, each
+    /// one's attributes by name, and an empty list becomes `None`).
+    /// Idempotent — verification re-canonicalises before re-serialising, so a
+    /// body signed here canonicalises to itself. A body read from JSON that
+    /// predates `Admissions` (a v1 document) reads it as `None`.
     let canonicalise (body: GroundingCertificateBody) : GroundingCertificateBody = {
         body with
             Nodes = body.Nodes |> List.sortBy (fun n -> n.Kind, n.Id)
             Edges = body.Edges |> List.sortBy (fun e -> e.Kind, e.From, e.To)
             PolicyRefs = body.PolicyRefs |> List.distinct |> List.sort
+            Admissions =
+                match body.Admissions with
+                | Some admissions when not (isNull (box admissions) || List.isEmpty admissions) ->
+                    Some(admissions |> List.distinct |> List.map canonicalAdmission)
+                | _ -> None
     }
 
-    /// The exact bytes the detached JWS is computed over — canonical JSON of
-    /// the (canonicalised) body. Both issue and verify go through this, so
-    /// the byte stream matches on both sides.
+    /// A body's JSON in the shape it is signed in, as the body stands (no
+    /// reordering — `canonicalBytes` canonicalises first).
+    ///
+    /// A body with no admissions takes v1's shape, whatever its format
+    /// string, so a v1 certificate verifies under v1's rules exactly as it
+    /// always has, and its interchange JSON is unchanged. A body WITH
+    /// admissions carries them after the policy refs — so admissions added
+    /// to a v1 certificate, or edited on a v2 one, change the bytes and fail
+    /// verification. The format string is itself inside the bytes, so
+    /// relabelling a certificate's version fails too.
+    let bodyJson (body: GroundingCertificateBody) : string =
+        match body.Admissions with
+        | Some admissions when not (isNull (box admissions) || List.isEmpty admissions) ->
+            JsonSerializer.Serialize(
+                {
+                    SignedWithAdmissions.Format = body.Format
+                    Root = body.Root
+                    IssuedAt = body.IssuedAt
+                    DeploymentKeyId = body.DeploymentKeyId
+                    Nodes = body.Nodes
+                    Edges = body.Edges
+                    PolicyRefs = body.PolicyRefs
+                    Admissions = admissions
+                },
+                jsonOptions
+            )
+        | _ ->
+            JsonSerializer.Serialize(
+                {
+                    SignedV1.Format = body.Format
+                    Root = body.Root
+                    IssuedAt = body.IssuedAt
+                    DeploymentKeyId = body.DeploymentKeyId
+                    Nodes = body.Nodes
+                    Edges = body.Edges
+                    PolicyRefs = body.PolicyRefs
+                },
+                jsonOptions
+            )
+
+    /// The exact bytes the detached JWS is computed over — the signed-shape
+    /// JSON (`bodyJson`) of the canonicalised body. Both issue and verify go
+    /// through this, so the byte stream matches on both sides.
     let canonicalBytes (body: GroundingCertificateBody) : byte[] =
-        JsonSerializer.Serialize(canonicalise body, jsonOptions)
-        |> Encoding.UTF8.GetBytes
+        canonicalise body |> bodyJson |> Encoding.UTF8.GetBytes
+
+    /// A sealed certificate's open interchange JSON — `{"Body":…,"Signature":…}`
+    /// with the body in its signed shape, so a certificate with no admissions
+    /// reads exactly as a v1 document always has.
+    let certificateJson (certificate: GroundingCertificate) : string =
+        "{\"Body\":"
+        + bodyJson certificate.Body
+        + ",\"Signature\":"
+        + JsonSerializer.Serialize(certificate.Signature, jsonOptions)
+        + "}"
+
+    /// An attested certificate's interchange JSON — `{"Body":…,"Envelope":…}`,
+    /// the body in its signed shape, as `certificateJson`.
+    let attestedCertificateJson (certificate: AttestedGroundingCertificate) : string =
+        "{\"Body\":"
+        + bodyJson certificate.Body
+        + ",\"Envelope\":"
+        + JsonSerializer.Serialize(certificate.Envelope, jsonOptions)
+        + "}"
 
     // ── issuance transparency (Phase 685) ───────────────────────────────
 
@@ -492,45 +764,53 @@ module GroundingCertificate =
         // answer plan(s) (Phase 560) are stitched in as `AnswerPlanNode`s
         // with `PlannedBy` / `CitesFact` edges, and both the answer's own
         // citations and the plans' cited facts are walked upstream.
-        let materialise (scopeId: string) (subject: CertificateSubject) (depth: int) : Async<string * ProvenanceChain> = async {
-            match subject with
-            | FactCertificate factId ->
-                let! chain = graph.GetChain(scopeId, FactRef factId, Upstream, depth)
-                return factId, chain
-            | AnswerCertificate(messageId, citedFactIds) ->
-                let! plans = AnswerPlanProvenance.recordedFor events scopeId messageId
-                let planCited = plans |> List.collect AnswerPlan.citedFactIds
-                let allCited = (citedFactIds @ planCited) |> List.distinct
-                let! baseChain = graph.GetChainForMessage(scopeId, messageId, allCited, depth)
-                return messageId, AnswerPlanProvenance.withPlans messageId plans baseChain
-            | NarrativeCertificate(narrativeId, citedFactIds) ->
-                // The answer-side walk, re-rooted: the provenance graph roots
-                // `GetChainForMessage` at a message node, and the narrative is
-                // the same shape of root (something that cites facts) under
-                // its own kind.
-                let! baseChain = graph.GetChainForMessage(scopeId, narrativeId, List.distinct citedFactIds, depth)
+        let materialise
+            (scope: ResolvedScope)
+            (subject: CertificateSubject)
+            (depth: int)
+            : Async<string * ProvenanceChain> =
+            async {
+                let scopeId = scope.ScopeId
 
-                let nodes =
-                    baseChain.Nodes
-                    |> List.map (fun node ->
-                        if node.Id = narrativeId && node.Kind = ConversationMessage then
-                            {
-                                node with
-                                    Kind = NarrativeDocument
-                                    Label = sprintf "narrative: %s" narrativeId
-                            }
-                        else
-                            node)
+                match subject with
+                | FactCertificate factId ->
+                    let! chain = graph.GetChain(scope, FactRef factId, Upstream, depth)
+                    return factId, chain
+                | AnswerCertificate(messageId, citedFactIds) ->
+                    let! plans = AnswerPlanProvenance.recordedFor events scopeId messageId
+                    let planCited = plans |> List.collect AnswerPlan.citedFactIds
+                    let allCited = (citedFactIds @ planCited) |> List.distinct
+                    let! baseChain = graph.GetChainForMessage(scope, messageId, allCited, depth)
+                    return messageId, AnswerPlanProvenance.withPlans messageId plans baseChain
+                | NarrativeCertificate(narrativeId, citedFactIds)
+                | AdmittedNarrativeCertificate(narrativeId, citedFactIds, _) ->
+                    // The answer-side walk, re-rooted: the provenance graph roots
+                    // `GetChainForMessage` at a message node, and the narrative is
+                    // the same shape of root (something that cites facts) under
+                    // its own kind.
+                    let! baseChain = graph.GetChainForMessage(scope, narrativeId, List.distinct citedFactIds, depth)
 
-                return narrativeId, { baseChain with Nodes = nodes }
-        }
+                    let nodes =
+                        baseChain.Nodes
+                        |> List.map (fun node ->
+                            if node.Id = narrativeId && node.Kind = ConversationMessage then
+                                {
+                                    node with
+                                        Kind = NarrativeDocument
+                                        Label = sprintf "narrative: %s" narrativeId
+                                }
+                            else
+                                node)
+
+                    return narrativeId, { baseChain with Nodes = nodes }
+            }
 
         // Project one provenance node to a certificate node, consulting the
         // disclosure verdicts for fact nodes. Returns the node + the policy
         // ref it was withheld under (when any), so the caller can collect
         // the sealed-under policy set.
         let projectNode
-            (scopeId: string)
+            (scope: ResolvedScope)
             (verdicts: Map<string, FactDisclosureVerdict>)
             (node: ProvenanceNode)
             : Async<CertificateNode * string option> =
@@ -541,7 +821,7 @@ module GroundingCertificate =
                 | FactNode ->
                     match verdicts.TryFind node.Id with
                     | Some FactDisclosable ->
-                        let! fact = store.Get(scopeId, node.Id)
+                        let! fact = store.Get(scope, node.Id) |> FactStoreResult.orRaiseAsync
 
                         let method, certRef, stance =
                             match fact with
@@ -606,10 +886,10 @@ module GroundingCertificate =
         /// id the sealing key will sign under, bound into the body so it is
         /// covered by whichever signature follows.
         member _.BuildBody
-            (scopeId: string, principal: string, subject: CertificateSubject, depth: int, keyId: string)
+            (scope: ResolvedScope, principal: string, subject: CertificateSubject, depth: int, keyId: string)
             : Async<Result<GroundingCertificateBody, CertificateError>> =
             async {
-                let! root, chain = materialise scopeId subject depth
+                let! root, chain = materialise scope subject depth
 
                 if List.isEmpty chain.Nodes then
                     return Error EmptyChain
@@ -628,9 +908,9 @@ module GroundingCertificate =
                         if List.isEmpty factIds then
                             async { return Map.empty }
                         else
-                            gate.Check(scopeId, principal, FactExport, factIds)
+                            gate.Check(scope, principal, FactExport, factIds)
 
-                    let! projected = chain.Nodes |> List.map (projectNode scopeId verdicts) |> Async.Parallel
+                    let! projected = chain.Nodes |> List.map (projectNode scope verdicts) |> Async.Parallel
 
                     let nodes = projected |> Array.map fst |> Array.toList
 
@@ -655,6 +935,10 @@ module GroundingCertificate =
                                 Nodes = nodes
                                 Edges = edges
                                 PolicyRefs = policyRefs
+                                Admissions =
+                                    match subject with
+                                    | AdmittedNarrativeCertificate(_, _, admissions) -> Some admissions
+                                    | _ -> None
                             }
                         )
             }
@@ -671,17 +955,17 @@ module GroundingCertificate =
     type private DefaultIssuer(builder: CertificateBuilder, signer: IArtefactSigner option, audit: IAuditLog option) =
 
         interface IGroundingCertificateIssuer with
-            member _.Issue(scopeId, principal, subject, depth) = async {
+            member _.Issue(scope, principal, subject, depth) = async {
                 match signer with
                 | None -> return Error SigningUnavailable
                 | Some signer ->
-                    match! builder.BuildBody(scopeId, principal, subject, depth, signer.KeyId()) with
+                    match! builder.BuildBody(scope, principal, subject, depth, signer.KeyId()) with
                     | Error e -> return Error e
                     | Ok body ->
                         match! signer.Sign(canonicalBytes body) with
                         | Error e -> return Error(SigningFailed(SigningError.describe e))
                         | Ok signature ->
-                            do! recordIssuance audit scopeId DetachedJwsSeal body
+                            do! recordIssuance audit scope.ScopeId DetachedJwsSeal body
                             return Ok { Body = body; Signature = signature }
             }
 
@@ -692,17 +976,17 @@ module GroundingCertificate =
         =
 
         interface IAttestedGroundingCertificateIssuer with
-            member _.Issue(scopeId, principal, subject, depth) = async {
+            member _.Issue(scope, principal, subject, depth) = async {
                 match signer with
                 | None -> return Error SigningUnavailable
                 | Some signer ->
-                    match! builder.BuildBody(scopeId, principal, subject, depth, signer.ActiveKeyId()) with
+                    match! builder.BuildBody(scope, principal, subject, depth, signer.ActiveKeyId()) with
                     | Error e -> return Error e
                     | Ok body ->
-                        match! signer.SignPayload(Format, canonicalBytes body) with
+                        match! signer.SignPayload(AttestationPurpose, canonicalBytes body) with
                         | Error e -> return Error(SigningFailed(SigningError.describe e))
                         | Ok envelope ->
-                            do! recordIssuance audit scopeId ApplicationSeal body
+                            do! recordIssuance audit scope.ScopeId ApplicationSeal body
                             return Ok { Body = body; Envelope = envelope }
             }
 
@@ -765,14 +1049,6 @@ module GroundingCertificate =
         createIssuerWithClockAudited graph store gate events signer audit (fun () -> DateTime.UtcNow)
 
     // ── the attested path ───────────────────────────────────────────────
-
-    /// The purpose an attested certificate is signed as. Deliberately the
-    /// format discriminator itself: the purpose exists to stop a signature
-    /// minted for one kind of payload being replayed as another, and the
-    /// format string is precisely the name of this kind of payload.
-    /// Inventing a second string would be one more thing that could drift
-    /// out of step with the first.
-    let AttestationPurpose = Format
 
     /// Construct the attested issuer. `signer` is `None` when no
     /// `IApplicationSigner` is composed — issuance then refuses with

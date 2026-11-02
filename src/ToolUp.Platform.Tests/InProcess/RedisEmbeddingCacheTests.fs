@@ -3,9 +3,11 @@ module ToolUp.Platform.Tests.InProcess.RedisEmbeddingCacheTests
 open System
 open Expecto
 open StackExchange.Redis
-open ToolUp.Platform.IEmbeddingProvider
-open ToolUp.Platform.IEmbeddingCache
+open ToolUp.Platform.Infra.IEmbeddingProvider
+open ToolUp.Platform.Infra.IEmbeddingCache
 open ToolUp.RAG.EmbeddingCaches.Redis.RedisEmbeddingCache
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Phase 513 — Redis IEmbeddingCache test pack ─────────────────────
 //
@@ -597,7 +599,7 @@ let private liveTests (connectionString: string) =
         }
     ]
 
-// ─── Phase 633 — the compose seam (`RAGServerApp.withEmbeddingCache`) ──
+// ─── Phase 633 — the compose seam (`RagOptions.withEmbeddingCache`) ──
 //
 // Phase 513 shipped this companion, but `composeWithRAG` hard-constructed
 // `InMemoryEmbeddingCache` at the compose site — so the companion was
@@ -668,22 +670,21 @@ let private crossReplicaStub () =
     }
 
 let private newApp () =
-    ToolUp.RAG.RAGCompose.RAGServerApp.create stubFactory stubProfile stubEmbedder
+    ToolUp.RAG.RAGCompose.RagOptions.create stubFactory stubProfile stubEmbedder
 
 /// Resolve the `IEmbeddingCache` the composition actually registered —
 /// the only evidence that the hook reaches `composeWithRAG` rather than
 /// merely landing in the record.
-let private composedCache (app: ToolUp.RAG.RAGCompose.RAGServerApp) : IEmbeddingCache =
-    let composed = ToolUp.RAG.RAGCompose.composeRAG app
+let private composedCache (app: ToolUp.RAG.RAGCompose.RagOptions) : IEmbeddingCache =
+    let composed =
+        ToolUp.Platform.Compose.ServerApp.empty |> ToolUp.RAG.RAGCompose.withRAG app
 
     let services =
         Microsoft.Extensions.DependencyInjection.ServiceCollection()
         :> Microsoft.Extensions.DependencyInjection.IServiceCollection
 
     let services =
-        match ToolUp.Platform.ServerApp.serviceConfig composed with
-        | Some f -> f services
-        | None -> services
+        ToolUp.Platform.Tests.Support.TestSubstrate.applyServiceConfig composed services
 
     let provider =
         Microsoft.Extensions.DependencyInjection.ServiceCollectionContainerBuilderExtensions.BuildServiceProvider
@@ -694,8 +695,14 @@ let private composedCache (app: ToolUp.RAG.RAGCompose.RAGServerApp) : IEmbedding
 let private teamCfg (replicaCount: int) (accepted: bool) : ToolUp.Platform.ServerConfig = {
     ToolUp.Platform.ServerConfig.defaults with
         Surfaces = [ ToolUp.Platform.SurfaceProfile.team ]
-        ReplicaCount = replicaCount
-        AcceptSharedEmbeddingCacheInTeamMode = accepted
+        MultiInstance = {
+            ToolUp.Platform.ServerConfig.defaults.MultiInstance with
+                ReplicaCount = replicaCount
+        }
+        RiskAcknowledgements = {
+            ToolUp.Platform.ServerConfig.defaults.RiskAcknowledgements with
+                AcceptSharedEmbeddingCacheInTeamMode = accepted
+        }
 }
 
 let private validate
@@ -709,7 +716,7 @@ let private validate
     v.Validate() |> Async.RunSynchronously
 
 let private composeSeamTests =
-    testList "Phase 633 — RAGServerApp.withEmbeddingCache" [
+    testList "Phase 633 — RagOptions.withEmbeddingCache" [
         testList "the hook" [
             test "unset ⇒ the composition still builds InMemoryEmbeddingCache (GP 11)" {
                 let app = newApp ()
@@ -722,7 +729,7 @@ let private composeSeamTests =
 
             test "composed ⇒ the composition resolves THAT instance, not a fresh default" {
                 let cache = crossReplicaStub ()
-                let app = newApp () |> ToolUp.RAG.RAGCompose.RAGServerApp.withEmbeddingCache cache
+                let app = newApp () |> ToolUp.RAG.RAGCompose.RagOptions.withEmbeddingCache cache
 
                 Expect.isTrue
                     (Object.ReferenceEquals(composedCache app, cache))
@@ -740,7 +747,7 @@ let private composeSeamTests =
             test "a cross-replica companion ⇒ true" {
                 let app =
                     newApp ()
-                    |> ToolUp.RAG.RAGCompose.RAGServerApp.withEmbeddingCache (crossReplicaStub ())
+                    |> ToolUp.RAG.RAGCompose.RagOptions.withEmbeddingCache (crossReplicaStub ())
 
                 Expect.isTrue
                     (ToolUp.RAG.RAGCompose.hasCrossReplicaEmbeddingCache app)
@@ -750,7 +757,7 @@ let private composeSeamTests =
             test "InMemoryEmbeddingCache composed BY HAND ⇒ still false" {
                 let app =
                     newApp ()
-                    |> ToolUp.RAG.RAGCompose.RAGServerApp.withEmbeddingCache (
+                    |> ToolUp.RAG.RAGCompose.RagOptions.withEmbeddingCache (
                         ToolUp.RAG.InMemoryEmbeddingCache.InMemoryEmbeddingCache() :> IEmbeddingCache
                     )
 
@@ -799,7 +806,7 @@ let private composeSeamTests =
             test "end to end: compose a cross-replica cache ⇒ Team-mode preflight is silent" {
                 let app =
                     newApp ()
-                    |> ToolUp.RAG.RAGCompose.RAGServerApp.withEmbeddingCache (crossReplicaStub ())
+                    |> ToolUp.RAG.RAGCompose.RagOptions.withEmbeddingCache (crossReplicaStub ())
 
                 Expect.equal
                     (validate (teamCfg 2 false) (ToolUp.RAG.RAGCompose.hasCrossReplicaEmbeddingCache app))
@@ -831,7 +838,7 @@ let private liveComposeSeamTests (connectionString: string) =
             let cache, dispose = makeCacheWith connectionString options
 
             try
-                let app = newApp () |> ToolUp.RAG.RAGCompose.RAGServerApp.withEmbeddingCache cache
+                let app = newApp () |> ToolUp.RAG.RAGCompose.RagOptions.withEmbeddingCache cache
 
                 Expect.isTrue
                     (ToolUp.RAG.RAGCompose.hasCrossReplicaEmbeddingCache app)

@@ -1036,8 +1036,5 @@ module DisclosureTaintIndex =
 /// listing, writes it and logs the rebuild; nodes of addresses the store no
 /// longer holds are dropped.
 type IDisclosureTaintIndexSource =
-    /// The disclosure-taint index of the scope named by `scopeId`.
-    abstract ReadTaintIndex: scopeId: string -> Async<DisclosureTaintIndex>
-
     /// The disclosure-taint index of `scope`.
     abstract ReadTaintIndex: scope: ToolUp.Platform.ResolvedScope -> Async<DisclosureTaintIndex>

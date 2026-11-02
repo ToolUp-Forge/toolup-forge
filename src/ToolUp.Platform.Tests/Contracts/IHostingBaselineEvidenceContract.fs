@@ -5,6 +5,7 @@ module ToolUp.Platform.Tests.Contracts.IHostingBaselineEvidenceContract
 
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Compose
 
 // ─── IHostingBaselineEvidence contract pack (Phase 771) ──────────────
 //

@@ -9,6 +9,7 @@ open ToolUp.DataSources.Synapse
 open ToolUp.DataSources.Tests.Support
 open ToolUp.DataSources.Tests.Support.TestFakes
 open DataManagementTypes
+open ToolUp.Platform.Infra
 
 // ─── ToolUp.DataSources.Synapse ───────────────────────────────────
 

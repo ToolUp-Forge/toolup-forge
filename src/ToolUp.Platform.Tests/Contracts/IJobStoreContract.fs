@@ -10,6 +10,9 @@ open Expecto
 open ToolUp.Remoting
 open ToolUp.Remoting.MsgPack
 open ToolUp.Platform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── IJobStore contract pack ─────────────────────────────────────
 //
@@ -71,6 +74,7 @@ let tests (name: string) (factory: unit -> IJobStore * string * string) =
         LastRunError = None
         ConsecutiveFailures = 0
         Tags = Map.empty
+        LastRunWarning = None
     }
 
     let mkRun (job: JobDefinition) attempt status : JobRun = {
@@ -84,6 +88,7 @@ let tests (name: string) (factory: unit -> IJobStore * string * string) =
         Error = None
         DurationMs = Some 100L
         ExternalHandle = None
+        Warning = None
     }
 
     /// Phase 319 — an `ExternalHandle` with every field distinct, so a
@@ -762,6 +767,7 @@ let restartTests (name: string) (factory: unit -> ReopenableStore) =
         LastRunError = None
         ConsecutiveFailures = 0
         Tags = Map.empty
+        LastRunWarning = None
     }
 
     testList $"{name} — IJobStore restart survival (Phase 9c.F)" [
@@ -815,6 +821,7 @@ let restartTests (name: string) (factory: unit -> ReopenableStore) =
                     Error = None
                     DurationMs = Some 5000L
                     ExternalHandle = None
+                    Warning = None
                 }
 
             let second = binding.Open()

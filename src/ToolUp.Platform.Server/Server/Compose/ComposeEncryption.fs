@@ -1,11 +1,13 @@
-module ToolUp.Platform.ComposeEncryption
+module ToolUp.Platform.Compose.ComposeEncryption
 
 open System
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.BlobEncryption
-open ToolUp.Platform.DegradedCapabilities
+open ToolUp.Platform.Infra.BlobEncryption
+open ToolUp.Platform.Infra.DegradedCapabilities
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
 
 // ─── compose phase: encryption decorator + DI ────────────────────────
 //

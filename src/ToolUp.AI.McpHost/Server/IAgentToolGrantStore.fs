@@ -4,6 +4,7 @@
 namespace ToolUp.AI.McpHost
 
 open System
+open ToolUp.Platform.Infra
 
 // ─── Phase 489 — the agent tool-grant seam ───────────────────────────
 //

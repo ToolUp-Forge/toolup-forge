@@ -12,10 +12,10 @@ open System.Threading.Tasks
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.VectorKnowledgeTypes
-open ToolUp.Platform.IEmbeddingProvider
-open ToolUp.Platform.IVectorStore
-open ToolUp.Platform.ISparseIndex
-open ToolUp.Platform.IRetrievalPipeline
+open ToolUp.Platform.Infra.IEmbeddingProvider
+open ToolUp.Platform.Infra.IVectorStore
+open ToolUp.Platform.Infra.ISparseIndex
+open ToolUp.Platform.Infra.IRetrievalPipeline
 open ToolUp.RAG
 open ToolUp.RAG.InMemoryVectorStore
 open ToolUp.RAG.InMemoryBM25Index
@@ -24,6 +24,9 @@ open ToolUp.RAG.CachingEmbeddingProvider
 open ToolUp.RAG.RetrievalPipeline
 open ToolUp.RAG.VectorStores.Hnsw
 open ToolUp.RAG.VectorStores.Pgvector
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 886 — the concurrent load harness (retrieval half) ─────────
 //
@@ -572,7 +575,7 @@ let runRetrievalCell (cell: RetrievalCell) : Async<Result<RetrievalResult, strin
                 let telemetry = RagTelemetry.createRolling 3600
 
                 let cache =
-                    new InMemoryEmbeddingCache() :> ToolUp.Platform.IEmbeddingCache.IEmbeddingCache
+                    new InMemoryEmbeddingCache() :> ToolUp.Platform.Infra.IEmbeddingCache.IEmbeddingCache
 
                 let pipeline =
                     RetrievalPipeline(

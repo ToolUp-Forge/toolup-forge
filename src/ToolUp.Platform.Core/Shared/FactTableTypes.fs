@@ -566,7 +566,9 @@ type FactTableRunStatus =
     /// Ended without a commit by the producer.
     | Abandoned of reason: string
 
-/// The record of one run of one table.
+/// The record of one run of one table: what a writer keeps and the wire
+/// carries. The plane reads it as its one run envelope through
+/// `FactTableRun.toRunRecord`.
 type FactTableRunRecord = {
     /// The table the run refreshes.
     TableId: string
@@ -727,6 +729,29 @@ module FactTableRun =
         run.Record with
             Status = FactTableRunStatus.Abandoned reason
     }
+
+#if !FABLE_COMPILER
+    /// The run as the plane's one run envelope, in `scope` — the scope the
+    /// reader resolved, in whose shard the record is kept — with the
+    /// provenance the run was opened with. Its id is
+    /// `RunRecord.id FactTableRun [tableId; runId]`; a committed run's result
+    /// is its watermark's content digest.
+    let toRunRecord (scope: ResolvedScope) (provenance: RunProvenance) (run: FactTableRunRecord) : RunRecord = {
+        Id = RunRecord.id RunKind.FactTableRun [ run.TableId; run.RunId ]
+        Kind = RunKind.FactTableRun
+        Scope = scope
+        Subject = run.TableId
+        StartedAt = run.OpenedAt
+        Options = RunOptions.ofStored run.Options
+        Provenance = provenance
+        Outcome =
+            match run.Status with
+            | FactTableRunStatus.Open -> RunOutcome.Open
+            | FactTableRunStatus.Committed commit -> RunOutcome.Succeeded commit.Watermark.ContentDigest
+            | FactTableRunStatus.Rejected reason -> RunOutcome.Failed reason
+            | FactTableRunStatus.Abandoned reason -> RunOutcome.Abandoned reason
+    }
+#endif
 
     /// The outcome of a run under its table's declaration at instant `now`.
     /// Derived, never stored: an open run becomes overdue by the clock, not

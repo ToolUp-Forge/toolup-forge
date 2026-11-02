@@ -1,8 +1,8 @@
-module ToolUp.Platform.BlobStorageErasureHandler
+module ToolUp.Platform.Audit.BlobStorageErasureHandler
 
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.IDataExporter
+open ToolUp.Platform.Audit.IDataExporter
 
 // ─── Phase 9h — blob-storage DSR adapter ─────────────────────────────
 //

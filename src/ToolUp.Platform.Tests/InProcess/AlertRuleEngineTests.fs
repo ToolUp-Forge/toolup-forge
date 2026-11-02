@@ -8,7 +8,10 @@ open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Hosting
 open ToolUp.Platform
 open ToolUp.Platform.HealthChecks
-open ToolUp.Platform.AlertRuleEngine
+open ToolUp.Platform.Infra.AlertRuleEngine
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 178 — AlertRuleEngine tests ───────────────────────────────
 //
@@ -316,7 +319,10 @@ let tests =
                     services
                     {
                         ServerConfig.defaults with
-                            AlertRules = rules
+                            Observability = {
+                                ServerConfig.defaults.Observability with
+                                    AlertRules = rules
+                            }
                     }
                     stubChannel
                     stubLogger

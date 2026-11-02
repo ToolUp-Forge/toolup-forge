@@ -3,6 +3,9 @@ module ToolUp.Platform.Tests.InProcess.MultiInstanceAdminCoherenceValidatorTests
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
 // ─── Phase 236 — multi-instance admin-store coherence validator ─────
 
@@ -18,7 +21,10 @@ let tests =
             let cfg = {
                 ServerConfig.defaults with
                     Surfaces = Surfaces.team
-                    ReplicaCount = 1
+                    MultiInstance = {
+                        ServerConfig.defaults.MultiInstance with
+                            ReplicaCount = 1
+                    }
             }
 
             Expect.equal (run cfg) Ok "no warning on a single instance"
@@ -28,7 +34,10 @@ let tests =
             let cfg = {
                 ServerConfig.defaults with
                     Surfaces = Surfaces.team
-                    ReplicaCount = 2
+                    MultiInstance = {
+                        ServerConfig.defaults.MultiInstance with
+                            ReplicaCount = 2
+                    }
             }
 
             match run cfg with
@@ -42,7 +51,10 @@ let tests =
             let cfg = {
                 ServerConfig.defaults with
                     Surfaces = Surfaces.anonymous
-                    ReplicaCount = 2
+                    MultiInstance = {
+                        ServerConfig.defaults.MultiInstance with
+                            ReplicaCount = 2
+                    }
             }
 
             Expect.equal (run cfg) Ok "no in-process admin subsystems composed"
@@ -52,8 +64,11 @@ let tests =
             let cfg = {
                 ServerConfig.defaults with
                     Surfaces = Surfaces.anonymous
-                    ReplicaCount = 2
-                    Webhooks = EnabledWebhooks
+                    MultiInstance = {
+                        ServerConfig.defaults.MultiInstance with
+                            ReplicaCount = 2
+                    }
+                    Webhooks = FeatureMode.Enabled
             }
 
             match run cfg with

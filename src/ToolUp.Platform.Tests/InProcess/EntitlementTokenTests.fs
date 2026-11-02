@@ -8,6 +8,8 @@ open FSharp.Reflection
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 492 — offline entitlement verification ─────────────────────
 //

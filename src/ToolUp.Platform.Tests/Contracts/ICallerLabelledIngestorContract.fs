@@ -7,6 +7,7 @@ open System
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Tests.Contracts.IDataIngestorContract
+open ToolUp.Platform.Infra
 
 // ─── ICallerLabelledIngestor contract pack — Phase 1042 ───────────
 //

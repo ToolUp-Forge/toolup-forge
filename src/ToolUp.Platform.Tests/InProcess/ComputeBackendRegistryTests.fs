@@ -6,6 +6,11 @@ open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.HealthChecks
 open ToolUp.Platform.Metrics
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 484 — compute-backend registry + routing ──────────────────
 //
@@ -315,7 +320,7 @@ let registryTests =
 
             Expect.stringContains
                 message
-                "NoExternalCompute"
+                "FeatureMode.Disabled"
                 "the diagnostic points at the honest alternative rather than just complaining"
         }
 
@@ -1095,12 +1100,13 @@ let observabilityTests =
 let gp13Tests =
     testList "Phase 484.D — GP 13: the registry adds nothing to a single-dispatcher deployment" [
 
-        test "NoExternalCompute composes exactly what it did before 484 — no registry, no telemetry, no probe, no panel" {
+        test
+            "FeatureMode.Disabled composes exactly what it did before 484 — no registry, no telemetry, no probe, no panel" {
             let services = ServiceCollection()
 
             ComposeStores.registerExternalCompute services {
                 ServerConfig.defaults with
-                    ExternalCompute = NoExternalCompute
+                    ExternalCompute = FeatureMode.Disabled
             }
 
             use provider = services.BuildServiceProvider()
@@ -1137,7 +1143,7 @@ let gp13Tests =
             Expect.equal
                 (submit dispatcher standardSpec)
                 (Error ExternalComputeError.notConfigured)
-                "this phase adds no behaviour to NoExternalCompute — same error value, not merely the same shape"
+                "this phase adds no behaviour to FeatureMode.Disabled — same error value, not merely the same shape"
 
             Expect.equal
                 (ExecutionProfileGate.postureOf dispatcher)

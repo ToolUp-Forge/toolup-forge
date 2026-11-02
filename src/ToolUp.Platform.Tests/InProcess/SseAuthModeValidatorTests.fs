@@ -3,12 +3,21 @@ module ToolUp.Platform.Tests.InProcess.SseAuthModeValidatorTests
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 let private cfg (surfaces: SurfaceProfile list) (sseAuth: SseAuthMode) (escapeHatch: bool) : ServerConfig = {
     ServerConfig.defaults with
         Surfaces = surfaces
-        SseAuthMode = sseAuth
-        AcceptQueryParamSseAuthWhenAuthRequired = escapeHatch
+        SecurityPosture = {
+            ServerConfig.defaults.SecurityPosture with
+                SseAuthMode = sseAuth
+        }
+        RiskAcknowledgements = {
+            ServerConfig.defaults.RiskAcknowledgements with
+                AcceptQueryParamSseAuthWhenAuthRequired = escapeHatch
+        }
 }
 
 let private validate (config: ServerConfig) : ValidationResult =

@@ -10,7 +10,9 @@ open System.Text.RegularExpressions
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Graph
 open ToolUp.Platform
-open ToolUp.Platform.IEntityStore
+open ToolUp.Platform.Infra.IEntityStore
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
 
 // ─── EntityGraphProjector — sync + rebuild (68d.B / 68d.C) ──────────
 //
@@ -312,7 +314,7 @@ module EntityGraphProjectionCompose =
         | None -> ProjectingAuditLog(inner, projector) :> IAuditLog
 
     /// The composition seam (68d.D). When the deployment opted in
-    /// (`config.EntityGraphProjection = EnabledEntityGraphProjection`),
+    /// (`config.EntityGraphProjection = FeatureMode.Enabled`),
     /// registers `IEntityGraphProjection` over the resolved `IEntityStore` +
     /// `IGraphStore` and decorates the registered `IAuditLog` so entity
     /// mutations propagate to the graph automatically. When opted out (the
@@ -324,8 +326,8 @@ module EntityGraphProjectionCompose =
     /// the store registrations.
     let wire (services: IServiceCollection) (config: ServerConfig) (enrollments: ProjectedEntityType list) : unit =
         match config.EntityGraphProjection with
-        | NoEntityGraphProjection -> ()
-        | EnabledEntityGraphProjection ->
+        | FeatureMode.Disabled -> ()
+        | FeatureMode.Enabled ->
             services.AddSingleton<IEntityGraphProjection>(fun (sp: IServiceProvider) ->
                 let es = sp.GetRequiredService<IEntityStore>()
                 let gs = sp.GetRequiredService<IGraphStore>()

@@ -12,8 +12,8 @@ open ToolUp.Platform.Consent
 // The browser end of the `ITelemetrySink` seam. `Telemetry.track` POSTs a
 // `TelemetryEvent` to `/api/_platform/telemetry`, where the server fans it
 // out to the composed sink (`TelemetryApiHandler`). The endpoint is mounted
-// only when `ServerConfig.TelemetrySink = CustomTelemetrySink`; on the
-// `NoTelemetrySink` default the post 404s and is swallowed here, so a
+// only when `ServerConfig.Observability.TelemetrySink = FeatureMode.Enabled`; on the
+// `FeatureMode.Disabled` default the post 404s and is swallowed here, so a
 // deployment that composes no analytics pays nothing at either end (GP 13).
 //
 // **The consent gate is CLIENT-SIDE, and that is the design, not a
@@ -39,7 +39,7 @@ open ToolUp.Platform.Consent
 
 module Telemetry =
 
-    /// Server fan-out endpoint. Mounted only under `CustomTelemetrySink`.
+    /// Server fan-out endpoint. Mounted only under `FeatureMode.Enabled`.
     [<Literal>]
     let EndpointPath = "/api/_platform/telemetry"
 
@@ -58,7 +58,7 @@ module Telemetry =
         Components.ConsentGatedScript.ConsentGated.isPermitted decision
 
     /// Ship the event to the server fan-out endpoint. Swallows every
-    /// transport failure — an unmounted endpoint (the `NoTelemetrySink`
+    /// transport failure — an unmounted endpoint (the `FeatureMode.Disabled`
     /// default) 404s, which is a legitimate steady state, not an error.
     let private postToServer (event: TelemetryEvent) : Async<unit> = async {
         try

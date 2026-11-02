@@ -7,9 +7,13 @@ open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Primitives
 open ToolUp.Platform
-open ToolUp.Platform.PeerBearerAuthMiddleware
+open ToolUp.Platform.Scope.PeerBearerAuthMiddleware
 open ToolUp.Platform.Secrets
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
 // ─── PeerBearerAuthMiddleware contract binding ───────────────────────
 //
@@ -110,7 +114,10 @@ let private hardeningTests =
 
             let config = {
                 ServerConfig.defaults with
-                    PeerRoutePrefixes = [ "/peer/" ]
+                    MultiInstance = {
+                        ServerConfig.defaults.MultiInstance with
+                            PeerRoutePrefixes = [ "/peer/" ]
+                    }
             }
 
             let mw = PeerBearerAuthMiddleware(next, config)

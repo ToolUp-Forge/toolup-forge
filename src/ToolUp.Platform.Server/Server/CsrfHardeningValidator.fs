@@ -1,8 +1,9 @@
-module ToolUp.Platform.CsrfHardeningValidator
+module ToolUp.Platform.Scope.CsrfHardeningValidator
 
 open System
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Config
 
 // ─── Phase 9j — hardening + split-origin preflight ───────────────────
 //
@@ -44,7 +45,7 @@ type CsrfHardeningValidator(config: ServerConfig, ?timeout: TimeSpan) =
         member _.Timeout = timeout
 
         member _.Validate() = async {
-            let hardened = config.SecurityHardening <> NoSecurityHardening
+            let hardened = config.SecurityPosture.SecurityHardening <> NoSecurityHardening
 
             match hardened, config.PublicBaseUrl with
             | true, Some baseUrl ->

@@ -8,9 +8,12 @@ Feliz.AgGrid.CellRendererComponent`2(Microsoft.FSharp.Core.FSharpFunc`2[Feliz.Ag
 Feliz.AgGrid.MemoizedGrid(System.Object) : Fable.React.ReactElement
 Feliz.AgGrid.agGrid : System.Object { get }
 Feliz.AgGrid.agGridProp`1(System.Object) : Feliz.AgGrid+IAgGridProp`1[row]
+Feliz.AgGrid.agGridProvider : System.Object { get }
+Feliz.AgGrid.allCommunityModule : System.Object { get }
 Feliz.AgGrid.columnDefProp`2() : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.Object], Feliz.AgGrid+IColumnDefProp`2[row, value]]
 Feliz.AgGrid.columnDef`1() : Microsoft.FSharp.Core.FSharpFunc`2[System.Object, Feliz.AgGrid+IColumnDef`1[row]]
 Feliz.AgGrid.columnGroupDefProp`1() : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.Object], Feliz.AgGrid+IColumnGroupDefProp`1[row]]
+Feliz.AgGrid.configure(Feliz.AgGrid+AgGridModuleConfig) : System.Void
 Feliz.AgGrid.ensureGridModulesRegistered() : System.Void
 Feliz.AgGrid.openClosed(System.Boolean) : System.String
 Feliz.AgGrid.provider(Feliz.AgGrid+AgGridModuleConfig, Microsoft.FSharp.Collections.FSharpList`1[Fable.React.ReactElement]) : Fable.React.ReactElement
@@ -49,6 +52,7 @@ Feliz.AgGrid+AgGridModuleConfigModule.community : Feliz.AgGrid+AgGridModuleConfi
 Feliz.AgGrid+AgGrid`1 (class)
 Feliz.AgGrid+AgGrid`1.alwaysShowVerticalScroll(System.Boolean) : Feliz.AgGrid+IAgGridProp`1[row]
 Feliz.AgGrid+AgGrid`1.animateRows(System.Boolean) : Feliz.AgGrid+IAgGridProp`1[row]
+Feliz.AgGrid+AgGrid`1.baseTheme(Feliz.AgGrid+BaseTheme) : Feliz.AgGrid+IAgGridProp`1[row]
 Feliz.AgGrid+AgGrid`1.cacheQuickFilter(System.Boolean) : Feliz.AgGrid+IAgGridProp`1[row]
 Feliz.AgGrid+AgGrid`1.columnDefs(System.Collections.Generic.IEnumerable`1[Feliz.AgGrid+IColumnDef`1[row]]) : Feliz.AgGrid+IAgGridProp`1[row]
 Feliz.AgGrid+AgGrid`1.dataTypeDefinitions(System.Object) : Feliz.AgGrid+IAgGridProp`1[row]
@@ -156,6 +160,15 @@ Feliz.AgGrid+AgGrid`1.tooltipHideDelay(System.Int32) : Feliz.AgGrid+IAgGridProp`
 Feliz.AgGrid+AgGrid`1.tooltipInteraction(System.Boolean) : Feliz.AgGrid+IAgGridProp`1[row]
 Feliz.AgGrid+AgGrid`1.tooltipMouseTrack(System.Boolean) : Feliz.AgGrid+IAgGridProp`1[row]
 Feliz.AgGrid+AgGrid`1.tooltipShowDelay(System.Int32) : Feliz.AgGrid+IAgGridProp`1[row]
+Feliz.AgGrid+BaseTheme (class)
+Feliz.AgGrid+BaseTheme.IsthemeBalham : System.Boolean { get }
+Feliz.AgGrid+BaseTheme.IsthemeQuartz : System.Boolean { get }
+Feliz.AgGrid+BaseTheme.Tag : System.Int32 { get }
+Feliz.AgGrid+BaseTheme.themeBalham : Feliz.AgGrid+BaseTheme { get }
+Feliz.AgGrid+BaseTheme.themeQuartz : Feliz.AgGrid+BaseTheme { get }
+Feliz.AgGrid+BaseTheme+Tags (class)
+Feliz.AgGrid+BaseTheme+Tags.themeBalham : System.Int32 (literal)
+Feliz.AgGrid+BaseTheme+Tags.themeQuartz : System.Int32 (literal)
 Feliz.AgGrid+CallbackParams (class)
 Feliz.AgGrid+CallbackParams+ICellFocusedEvent`1 (class)
 Feliz.AgGrid+CallbackParams+ICellFocusedEvent`1..ctor(Feliz.AgGrid+IGridApi`1[row], System.Int32, Feliz.AgGrid+IColumn, System.Boolean)
@@ -683,3 +696,5 @@ Feliz.AgGrid+ThemeParams.spacing : Microsoft.FSharp.Core.FSharpOption`1[System.I
 Feliz.AgGrid+ThemeParams.wrapperBorderRadius : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
 Feliz.AgGrid+ThemeParamsModule (class)
 Feliz.AgGrid+ThemeParamsModule.empty : Feliz.AgGrid+ThemeParams { get }
+Feliz.AgGridRuntime (class)
+Feliz.AgGridRuntime.Grid(<>f__AnonymousType2924788175`4[System.Boolean, System.Object, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Object[]]]) : Fable.React.ReactElement

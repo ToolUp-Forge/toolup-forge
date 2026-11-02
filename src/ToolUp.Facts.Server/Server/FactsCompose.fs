@@ -9,17 +9,22 @@ open Microsoft.Extensions.DependencyInjection.Extensions
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.VectorKnowledgeTypes
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── FactsCompose (Phase 520 wiring) ─────────────────────────────────
 //
-// Turns the introspectable `ServerConfig.FactStore` knob into real
-// composition: when `EnabledFactStore`, folds an `IFactStore`
+// Turns the introspectable `ServerConfig.Stores.FactStore` knob into real
+// composition: when `FeatureMode.Enabled`, folds an `IFactStore`
 // (BlobFactStore over the composed `IBlobStorage` + `IEventStore`), its
 // `IFactEvidenceSource` adapter, the `IFactDisclosureGate` egress gate,
 // and the `IFactResolver` retrieval adapter into DI, so the fact tier is
 // available to request handlers, the provenance graph, and fact-first
 // retrieval (Phase 558 — `RAGCompose` picks the resolver + gate up into
-// the `RetrievalPipeline` with zero extra config). `NoFactStore` (the
+// the `RetrievalPipeline` with zero extra config). `FeatureMode.Disabled` (the
 // default) folds nothing — the composition is byte-for-byte unchanged
 // (GP 11 + GP 13).
 //
@@ -37,7 +42,7 @@ open ToolUp.Platform.VectorKnowledgeTypes
 // rather than leaving an operator to find out from latency.
 //
 // It speaks only when BOTH hold: more than one replica is configured
-// (`ServerConfig.ReplicaCount > 1`), and the composed store is the blob
+// (`ServerConfig.MultiInstance.ReplicaCount > 1`), and the composed store is the blob
 // default. A single-replica deployment does not register it at all, so its
 // composition is byte-for-byte unchanged (GP 11). It warns above
 // `BlobFactStoreScale.WarnAboveFacts` facts in any one scope, and warns
@@ -128,7 +133,7 @@ type internal FactStoreBackend = { Backend: string }
 /// well, in stronger terms past the upper threshold, naming
 /// `ToolUp.FactStores.Postgres` as the remedy. Warn-only in this release
 /// (operator decision, 2026-09-29) — it never refuses startup. Registered
-/// by `FactsCompose.withFactStore` only when `ServerConfig.ReplicaCount > 1`.
+/// by `FactsCompose.withFactStore` only when `ServerConfig.MultiInstance.ReplicaCount > 1`.
 type BlobFactStoreScaleValidator
     /// The guard over `storage`'s census of the scopes `scopes` enumerates,
     /// at explicit thresholds. `isBlobStore` is whether the composed store
@@ -186,11 +191,6 @@ type BlobFactStoreScaleValidator
                         )
         }
 
-
-/// Phase 946 — the blob fact store a composition built, once its
-/// `IFactStore` has been resolved, for the `/dev/inspect` index inspector.
-type internal ComposedBlobFactStore() =
-    member val Instance: BlobFactStore option = None with get, set
 
 /// Phase 946 — the registered form of `BlobFactStoreScaleValidator`: an
 /// instance (the compose-time preflight refuses a factory registration)
@@ -306,8 +306,6 @@ module FactsCompose =
     // Register the fact-store DI singletons (lazy factories over the
     // composed substrate).
     let private registerFactStore (services: IServiceCollection) : IServiceCollection =
-        let composedBlob = ComposedBlobFactStore()
-
         services
             // Phase 703 — the store is composed WITH the metric registry.
             // It was registry-less until now, and that was a wiring gap
@@ -323,44 +321,38 @@ module FactsCompose =
             // exactly as before, and a metric with no `CanonicalMethod`
             // declaration keeps the pre-566 selection byte-for-byte
             // (GP 11).
-            .AddSingleton<IFactStore>(
-                Func<IServiceProvider, IFactStore>(fun sp ->
+            //
+            // The blob store this composition builds is its own singleton, so
+            // the index inspector below can tell it from a replacement.
+            .AddSingleton<BlobFactStore>(
+                Func<IServiceProvider, BlobFactStore>(fun sp ->
                     // A fact read that faults is logged through the composed
                     // logger as well as failing the read.
-                    let store =
-                        BlobFactStore(
-                            sp.GetRequiredService<IBlobStorage>(),
-                            sp.GetRequiredService<IEventStore>(),
-                            tryService<Grounding.IMetricRegistry> sp,
-                            (fun () -> DateTime.UtcNow),
-                            FactSurfaceOptions.defaults,
-                            FactIndexOptions.defaults,
-                            tryService<ILogger> sp
-                        )
-                        :> IFactStore
-
-                    // Phase 946 — remember the blob store this composition
-                    // built, for the /dev/inspect index inspector below.
-                    match store with
-                    | :? BlobFactStore as blob -> composedBlob.Instance <- Some blob
-                    | _ -> ()
-
-                    store)
+                    BlobFactStore(
+                        sp.GetRequiredService<IBlobStorage>(),
+                        sp.GetRequiredService<IEventStore>(),
+                        tryService<Grounding.IMetricRegistry> sp,
+                        (fun () -> DateTime.UtcNow),
+                        FactSurfaceOptions.defaults,
+                        FactIndexOptions.defaults,
+                        tryService<ILogger> sp
+                    ))
             )
-            // Phase 946 — the fact store's index check (Phase 890) on
-            // /dev/inspect. Resolving the composed IFactStore first builds
-            // it, so the inspector samples the blob store this composition
-            // built; a replacement (`withFactStoreImplementation`) never
-            // builds one, and the inspector samples nothing.
+            .AddSingleton<IFactStore>(
+                Func<IServiceProvider, IFactStore>(fun sp -> sp.GetRequiredService<BlobFactStore>() :> IFactStore)
+            )
+            // The fact store's index check on /dev/inspect. It samples the
+            // blob store this composition built when that is the composed
+            // `IFactStore`; a replacement (`withFactStoreImplementation`)
+            // is not this inspector's, and it samples nothing.
             .AddSingleton<DevDiagnosticsHandler.IIndexConsistencyInspector>(
                 Func<IServiceProvider, DevDiagnosticsHandler.IIndexConsistencyInspector>(fun sp ->
                     { new DevDiagnosticsHandler.IIndexConsistencyInspector with
                         member _.Inspect(scopeId) = async {
-                            sp.GetService<IFactStore>() |> ignore
-
-                            match composedBlob.Instance with
-                            | Some blob -> return! blob.IndexConsistencyCheck(scopeId, 20)
-                            | None -> return []
+                            match sp.GetService<IFactStore>() with
+                            | :? BlobFactStore as blob when obj.ReferenceEquals(blob, sp.GetService<BlobFactStore>()) ->
+                                return! blob.IndexConsistencyCheck(scopeId, 20)
+                            | _ -> return []
                         }
                     })
             )
@@ -601,10 +593,14 @@ module FactsCompose =
             // too: a grounded narrative run composed anywhere finds a gate
             // whenever the fact tier is, and finds none (and refuses every
             // narrative) when it is not. Declared reference kinds are every
-            // `ICitableReferenceKind` the deployment registered.
+            // `ICitableReferenceKind` the deployment registered, and a
+            // `calc:` reference is derived again against the calculations
+            // `withNarrativeCalculations` registered (none, no kind).
             .AddSingleton<INarrativeGroundingGate>(
                 Func<IServiceProvider, INarrativeGroundingGate>(fun sp ->
-                    FactNarrativeGroundingGate.create
+                    FactNarrativeGroundingGate.createWithCalculations
+                        (tryService<NarrativeCalculations> sp
+                         |> Option.defaultValue NarrativeCalculations.empty)
                         (sp.GetRequiredService<IFactStore>())
                         (sp.GetRequiredService<IFactDisclosureGate>())
                         (tryService<Grounding.IMetricRegistry> sp)
@@ -618,7 +614,7 @@ module FactsCompose =
     // handler was never registered with a scheduler, so a job it enqueued
     // had no handler to dispatch to, and nothing ever told the fact tier a
     // data-object version had landed. The three registrations below are
-    // what take it live, and they ride the SAME `EnabledFactStore` knob as
+    // what take it live, and they ride the SAME `FeatureMode.Enabled` knob as
     // the store itself — one compose knob, never four.
     //
     //   1. `IFactRecomputer` — the deployment seam that actually
@@ -634,7 +630,7 @@ module FactsCompose =
     //      `RecomputePolicy`, so a fact deployment that declares none pays
     //      one boolean test per save.
     //
-    // A `NoFactStore` deployment reaches none of this — `withFactStore`
+    // A `FeatureMode.Disabled` deployment reaches none of this — `withFactStore`
     // returns before `registerFactStore` is ever composed into
     // `ServiceConfig` (GP 13).
 
@@ -674,7 +670,22 @@ module FactsCompose =
                 FactQuestionCompilerGuard(services) :> ConfigValidation.IConfigValidator
             )
 
-    let private registerReactiveRecomputation (services: IServiceCollection) : IServiceCollection =
+    /// The fact-table change signal, dormant until a reader registers its
+    /// demand (`FactTableChangeSignal.demand`); it raises across processes
+    /// through the composed notification channel.
+    let private registerTableChangeSignal (services: IServiceCollection) : IServiceCollection =
+        services.TryAddSingleton<IFactTableChangeSignal>(
+            Func<IServiceProvider, IFactTableChangeSignal>(fun sp ->
+                let demanded = lazy (FactTableChangeSignal.demanded sp)
+                FactTableChangeSignal.create (tryService<INotificationChannel> sp) (fun () -> demanded.Value))
+        )
+
+        services
+
+    let private registerReactiveRecomputation
+        (serverConfig: ServerConfig)
+        (services: IServiceCollection)
+        : IServiceCollection =
         // (1) The default recompute engine — TryAdd so a deployment-
         //     supplied `IFactRecomputer` registered anywhere in the
         //     compose chain takes precedence.
@@ -703,24 +714,33 @@ module FactsCompose =
                     let narratives () =
                         tryService<GroundedNarrativeRegistry> sp
 
+                    // A reader of the fact-table change signal hears a
+                    // landed data object as a change of any table of its
+                    // scope, after the recompute and narrative reactions.
+                    let tableChangeDemanded = lazy (FactTableChangeSignal.demanded sp)
+
                     let react =
                         ReactiveDataChangeComposition.combine
-                            (ReactiveDataChange.reaction
-                                (fun () -> sp.GetRequiredService<IFactStore>())
-                                (fun () -> resolveLineage sp)
-                                scheduler
-                                registry)
-                            (GroundedNarrativeTrigger.reaction
-                                (fun () -> sp.GetRequiredService<IFactStore>())
-                                (fun () -> resolveLineage sp)
-                                scheduler
-                                narratives)
+                            (ReactiveDataChangeComposition.combine
+                                (ReactiveDataChange.reaction
+                                    (fun () -> sp.GetRequiredService<IFactStore>())
+                                    (fun () -> resolveLineage sp)
+                                    scheduler
+                                    registry)
+                                (GroundedNarrativeTrigger.reaction
+                                    (fun () -> sp.GetRequiredService<IFactStore>())
+                                    (fun () -> resolveLineage sp)
+                                    scheduler
+                                    narratives))
+                            (FactTableChangeSignal.reaction (fun () -> sp.GetRequiredService<IFactTableChangeSignal>()))
 
                     ReactiveDataChange.decorate
                         (captured.Resolve sp)
                         (ReactiveDataChangeComposition.either
-                            (ReactiveDataChange.gate registry scheduler)
-                            (GroundedNarrativeTrigger.armed scheduler narratives))
+                            (ReactiveDataChangeComposition.either
+                                (ReactiveDataChange.gate registry scheduler)
+                                (GroundedNarrativeTrigger.armed scheduler narratives))
+                            (fun () -> tableChangeDemanded.Value))
                         (ReactiveDataChange.requestScope (fun () ->
                             tryService<Microsoft.AspNetCore.Http.IHttpContextAccessor> sp))
                         react
@@ -732,45 +752,40 @@ module FactsCompose =
         // (2) Register + schedule the recompute handler at startup, once
         //     the container that owns `IFactStore` / `IFactRecomputer`
         //     exists. `Trigger.Manual`: recompute jobs are fired on demand
-        //     by `reactToDataChange`, never on a cadence.
-        //     Exempt from the profile matrix (Phase 1051), like (3) below: a
-        //     scheduler registration, placed by the scheduler's own gate.
-        (services
-         |> ProcessProfileGate.exempt "Reactive fact recomputation" ProcessProfileGate.SchedulerRegistrationReason)
-            .AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(
-                Func<IServiceProvider, Microsoft.Extensions.Hosting.IHostedService>(fun sp ->
-                    DeferredScheduledJobDeclaration.hostedService
-                        "Reactive fact recomputation"
-                        [
-                            DeferredScheduledJobDeclaration.create (fun provider ->
-                                RecomputeJobHandler.declaration
-                                    (provider.GetRequiredService<IFactStore>())
-                                    (provider.GetRequiredService<IFactRecomputer>())
-                                    (provider.GetRequiredService<ILogger>()))
-                        ]
-                        sp)
-            )
+        //     by `reactToDataChange`, never on a cadence. Once at start,
+        //     like (3) below: a scheduler registration, placed by the
+        //     scheduler's own unit.
+        Hosting.register
+            services
+            (Hosting.deferredJobs "reactive-fact-recomputation" [
+                DeferredScheduledJobDeclaration.create (fun provider ->
+                    RecomputeJobHandler.declaration
+                        (provider.GetRequiredService<IFactStore>())
+                        (provider.GetRequiredService<IFactRecomputer>())
+                        (provider.GetRequiredService<ILogger>()))
+            ])
         |> ignore
 
-        // Phase 985 — the grounded-narrative job handler, registered with
-        // the scheduler at startup only when a run registry and a run are
-        // composed; otherwise the start is a DI lookup and nothing else.
-        services
-        |> ProcessProfileGate.addExempt
-            "Grounded-narrative handler registration"
-            ProcessProfileGate.SchedulerRegistrationReason
-            GroundedNarrativeTrigger.hostedService
+        // The grounded-narrative job handler, registered with the scheduler
+        // at startup only when a run registry and a run are composed;
+        // otherwise the start is a DI lookup and nothing else.
+        Hosting.register
+            services
+            (BackgroundUnit.create
+                "grounded-narrative-handler-registration"
+                OnceAtStart
+                GroundedNarrativeTrigger.hostedService)
         |> ignore
 
         services
 
-    /// Compose the grounding fact store per `ServerConfig.FactStore`.
-    /// `EnabledFactStore` registers `IFactStore` (`BlobFactStore`) +
+    /// Compose the grounding fact store per `ServerConfig.Stores.FactStore`.
+    /// `FeatureMode.Enabled` registers `IFactStore` (`BlobFactStore`) +
     /// `IFactEvidenceSource` + `IFactDisclosureGate` + `IFactResolver`
     /// into DI, and (Phase 623) activates reactive recomputation over it:
     /// the default `IFactRecomputer`, the recompute job handler on the
     /// composed scheduler, and the data-arrival hook that drives fact
-    /// invalidation when a data-object version lands. `NoFactStore`
+    /// invalidation when a data-object version lands. `FeatureMode.Disabled`
     /// returns the app unchanged — no registration, no hosted service, no
     /// decorator, no allocation (GP 13). Insert once in the compose
     /// pipeline before `ServerApp.run` (and before a RAG compose, so the
@@ -791,17 +806,17 @@ module FactsCompose =
     /// `IFactRecomputer` into DI to give any of them a value to compute.
     /// **Adds** its registrations as a contribution under the Facts companion's id; a later `withExtensions` keeps them.
     let withFactStore (app: ServerApp) : ServerApp =
-        match app.Config.FactStore with
-        | NoFactStore -> app
-        | EnabledFactStore ->
+        match app.Config.Stores.FactStore with
+        | FeatureMode.Disabled -> app
+        | FeatureMode.Enabled ->
             // Phase 623 — the fact tier and its reactive activation are
             // one registration pass: the store first, then the recompute
             // engine + handler + data-arrival hook over it.
             let register (s: IServiceCollection) =
-                registerReactiveRecomputation (registerFactStore s)
+                registerReactiveRecomputation app.Config (registerTableChangeSignal (registerFactStore s))
                 // Phase 888 — the backend marker and, for a multi-replica
                 // deployment only, the blob store's scale guard.
-                |> registerBlobScaleGuard app.Config.ReplicaCount
+                |> registerBlobScaleGuard app.Config.MultiInstance.ReplicaCount
                 // Phase 986 — the dormant-push-door warning.
                 |> registerQuestionCompilerGuard
                 // The undescribed-declarations report (information only).
@@ -840,6 +855,30 @@ module FactsCompose =
             }
             |> contribute register
 
+    /// **Adds** the deployment's authorised narrative calculations: the
+    /// grounding gate then derives every `calc:` reference a narrative cites
+    /// again against them, and admits it only when it holds. Give a grounded
+    /// run the `calculate` tool from the same value
+    /// (`NarrativeCalculations.tools`). Empty calculations change nothing, as
+    /// does a deployment with no fact store; registering calculations twice
+    /// is refused.
+    let withNarrativeCalculations (calculations: NarrativeCalculations) (app: ServerApp) : ServerApp =
+        match app.Config.Stores.FactStore with
+        | FeatureMode.Disabled -> app
+        | FeatureMode.Enabled when NarrativeCalculations.isEmpty calculations -> app
+        | FeatureMode.Enabled ->
+            app
+            |> contribute (fun s ->
+                if s |> Seq.exists (fun d -> d.ServiceType = typeof<NarrativeCalculations>) then
+                    ServiceComposition.refuse (
+                        CompositionRefusal.InvalidDeclaration(
+                            "FactsCompose.withNarrativeCalculations",
+                            "narrative calculations are already registered; declare them all in one NarrativeCalculations value"
+                        )
+                    )
+                else
+                    s.AddSingleton<NarrativeCalculations>(calculations))
+
     /// Declare what `list_fact_tables` lists: the cap on the distinct members
     /// a level may hold and still be named (`FactTablesOptions.MemberCap`, `0`
     /// turns member listing off). Call it after `withFactStore`, which declares
@@ -847,9 +886,9 @@ module FactsCompose =
     /// reads the container for nothing. With no fact store composed it changes
     /// nothing, and calling it before `withFactStore` is refused.
     let withFactTablesOptions (options: FactTablesOptions) (app: ServerApp) : ServerApp =
-        match app.Config.FactStore with
-        | NoFactStore -> app
-        | EnabledFactStore ->
+        match app.Config.Stores.FactStore with
+        | FeatureMode.Disabled -> app
+        | FeatureMode.Enabled ->
             let declared (definition: AIToolDefinition, _) = definition.Name = FactTablesTool.Name
 
             if not (List.exists declared app.AITools) then
@@ -905,7 +944,7 @@ module FactsCompose =
     /// the purpose facet, and project the taxonomy + per-surface allowed
     /// sets into the composition manifest beside the Phase 526 grounding
     /// declarations — the whole purpose regime is readable before any
-    /// data flows. A `NoFactStore` deployment (or one that never calls
+    /// data flows. A `FeatureMode.Disabled` deployment (or one that never calls
     /// this) is byte-for-byte unchanged (GP 11 / GP 13). Insert after
     /// `withFactStore`:
     ///
@@ -921,9 +960,9 @@ module FactsCompose =
     /// with a declared taxonomy an unclaimed check refuses at every
     /// purpose-bound surface (default-deny-by-shape).
     let withDisclosurePurposes (config: DisclosurePurposeConfig) (app: ServerApp) : ServerApp =
-        match app.Config.FactStore with
-        | NoFactStore -> app
-        | EnabledFactStore ->
+        match app.Config.Stores.FactStore with
+        | FeatureMode.Disabled -> app
+        | FeatureMode.Enabled ->
             let register (s: IServiceCollection) =
                 s.AddSingleton<DisclosurePurposeConfig>(config)
 
@@ -983,13 +1022,13 @@ module FactsCompose =
     /// budgets. The two share one body, so there is no second
     /// registration path to drift.
     ///
-    /// A `NoFactStore` deployment is byte-for-byte unchanged (GP 11 /
+    /// A `FeatureMode.Disabled` deployment is byte-for-byte unchanged (GP 11 /
     /// GP 13).
     /// **Adds** its registrations as a contribution under the Facts companion's id; a later `withExtensions` keeps them.
     let withDeclassificationBudgetConfig (config: DeclassificationBudgetConfig) (app: ServerApp) : ServerApp =
-        match app.Config.FactStore with
-        | NoFactStore -> app
-        | EnabledFactStore ->
+        match app.Config.Stores.FactStore with
+        | FeatureMode.Disabled -> app
+        | FeatureMode.Enabled ->
             let register (s: IServiceCollection) =
                 s.AddSingleton<DeclassificationBudgetConfig>(config)
 
@@ -1004,7 +1043,7 @@ module FactsCompose =
     /// exhausted ceiling denies with the same typed, audited refusal
     /// shape a policy denial takes (GP 6) — never a silent allow.
     ///
-    /// A `NoFactStore` deployment (or one that never calls this) is
+    /// A `FeatureMode.Disabled` deployment (or one that never calls this) is
     /// byte-for-byte unchanged (GP 11 / GP 13). Insert after
     /// `withFactStore`:
     ///
@@ -1049,7 +1088,7 @@ module FactsCompose =
     /// Bound how many fact reads one disclosure check holds in flight. A
     /// deployment that does not compose this runs the gate at
     /// `DisclosureFanOut.DefaultMaxConcurrentReads`; a bound below 1 is
-    /// raised to 1. A `NoFactStore` deployment is unchanged.
+    /// raised to 1. A `FeatureMode.Disabled` deployment is unchanged.
     ///
     /// ```fsharp skip=fragment
     /// ServerApp.create config
@@ -1058,9 +1097,9 @@ module FactsCompose =
     /// ```
     /// **Adds** its registrations as a contribution under the Facts companion's id; a later `withExtensions` keeps them.
     let withDisclosureFanOut (maxConcurrentReads: int) (app: ServerApp) : ServerApp =
-        match app.Config.FactStore with
-        | NoFactStore -> app
-        | EnabledFactStore ->
+        match app.Config.Stores.FactStore with
+        | FeatureMode.Disabled -> app
+        | FeatureMode.Enabled ->
             let bound: DisclosureFanOut = {
                 MaxConcurrentReads = max 1 maxConcurrentReads
             }
@@ -1088,7 +1127,7 @@ module FactsCompose =
     /// Compose the certificate-verified fact import door with the peer
     /// anchors this deployment accepts facts from. Registers
     /// `IFactImportDoor` over the composed `IFactStore` + `IAuditLog`; a
-    /// `NoFactStore` deployment (or one that never calls this) is
+    /// `FeatureMode.Disabled` deployment (or one that never calls this) is
     /// byte-for-byte unchanged (GP 11 / GP 13). Insert after
     /// `withFactStore`:
     ///
@@ -1108,9 +1147,9 @@ module FactsCompose =
     /// discovered, so no key is implicitly trusted.
     /// **Adds** its registrations as a contribution under the Facts companion's id; a later `withExtensions` keeps them.
     let withFactImport (anchors: PeerTrustAnchor list) (app: ServerApp) : ServerApp =
-        match app.Config.FactStore with
-        | NoFactStore -> app
-        | EnabledFactStore ->
+        match app.Config.Stores.FactStore with
+        | FeatureMode.Disabled -> app
+        | FeatureMode.Enabled ->
             let register (s: IServiceCollection) =
                 s.AddSingleton<IFactImportDoor>(
                     Func<IServiceProvider, IFactImportDoor>(fun sp ->
@@ -1148,7 +1187,7 @@ module FactsCompose =
     /// Compose the audited grounding-envelope mutation door and its
     /// continuity proof (Phase 684). Registers `IGroundingEnvelopeMutator`
     /// over the composed `IAuditLog`, sealed to the grounding envelope
-    /// this app declares. A `NoFactStore` deployment (or one that never
+    /// this app declares. A `FeatureMode.Disabled` deployment (or one that never
     /// calls this) is byte-for-byte unchanged (GP 11 / GP 13).
     ///
     /// **Insert LAST among the grounding compose steps.** The envelope is
@@ -1181,9 +1220,9 @@ module FactsCompose =
         (observe: (unit -> GroundingEnvelope) option)
         (app: ServerApp)
         : ServerApp =
-        match app.Config.FactStore with
-        | NoFactStore -> app
-        | EnabledFactStore ->
+        match app.Config.Stores.FactStore with
+        | FeatureMode.Disabled -> app
+        | FeatureMode.Enabled ->
             let sealedEnvelope =
                 GroundingEnvelope.ofComposition (ServerApp.compositionManifest app) app.RegisteredMetrics
 
@@ -1261,7 +1300,7 @@ module FactsCompose =
     /// commits one narrative per populated metric into the deployment's
     /// knowledge base through the ordinary ingestion path.
     ///
-    /// A `NoFactStore` deployment (or one that never calls this) is
+    /// A `FeatureMode.Disabled` deployment (or one that never calls this) is
     /// byte-for-byte unchanged (GP 11 / GP 13), and a deployment that
     /// calls it without composing a knowledge base is inert: the trigger
     /// probes for `INarrativeIngestor` before it reads anything, so
@@ -1273,7 +1312,7 @@ module FactsCompose =
     /// |> ServerApp.withStorage blob
     /// |> FactsCompose.withFactStore
     /// |> FactsCompose.withCoverageNarratives
-    ///        (CoverageNarrative.CoverageNarrativeOptions.forScopes "coverage-reader" [ tenantScope ])
+    ///        (CoverageNarrative.CoverageNarrativeOptions.forScopes "coverage-reader" [ tenantScopeId ])
     /// |> ServerApp.run
     /// ```
     ///
@@ -1281,9 +1320,9 @@ module FactsCompose =
     /// and finds nothing to decorate if it runs first.
     /// **Adds** its registrations as a contribution under the Facts companion's id; a later `withExtensions` keeps them.
     let withCoverageNarratives (options: CoverageNarrative.CoverageNarrativeOptions) (app: ServerApp) : ServerApp =
-        match app.Config.FactStore with
-        | NoFactStore -> app
-        | EnabledFactStore ->
+        match app.Config.Stores.FactStore with
+        | FeatureMode.Disabled -> app
+        | FeatureMode.Enabled ->
             let register = registerCoverageNarratives options
 
             app |> contribute register
@@ -1313,62 +1352,91 @@ module FactsCompose =
         | Some walks -> walks :> IFactStore
         | None -> sp.GetRequiredService<IFactStore>()
 
+    /// A declared principal's scope, resolved through the platform's
+    /// `DeclaredPrincipalResolver` — the resolver seam declared work takes, so
+    /// a sweep never reads a shard nobody resolved.
+    let private resolveDeclared
+        (sp: IServiceProvider)
+        (principal: DeclaredPrincipal)
+        : Async<Result<ResolvedScope, string>> =
+        async {
+            match tryService<DeclaredPrincipalResolver> sp with
+            | None ->
+                return
+                    Error
+                        "this deployment composes no DeclaredPrincipalResolver — compose the server through the platform, whose scope-resolution registration provides it"
+            | Some resolver ->
+                let! resolved = resolver.Resolve(DeclaredPrincipal.user principal)
+
+                return
+                    resolved
+                    |> Result.mapError (fun e ->
+                        sprintf
+                            "the declared principal '%s' lacks %s"
+                            principal.UserId
+                            (DeclaredPrincipal.missingGrant e))
+        }
+
     let private registerCoherenceChecks
+        (serverConfig: ServerConfig)
         (config: CoherenceConfig)
         (cadence: Trigger)
-        (scopes: string list)
+        (principals: DeclaredPrincipal list)
         (services: IServiceCollection)
         : IServiceCollection =
-        services
-            // The health probe surfaces current findings for
-            // `config.HealthScope` — a fresh re-scan per call (GP 12 rule 4).
-            .AddSingleton<HealthChecks.IHealthCheck>(
+        // The health probe surfaces current findings for the scope the
+        // declared health principal resolves to — resolved and re-scanned per
+        // call (GP 12 rule 4). No principal, no probe.
+        match config.HealthPrincipal with
+        | Some principal ->
+            services.AddSingleton<HealthChecks.IHealthCheck>(
                 Func<IServiceProvider, HealthChecks.IHealthCheck>(fun sp ->
-                    CoherenceHealthCheck.create (coherenceStore sp) (tryService<Grounding.IMetricRegistry> sp) config)
+                    CoherenceHealthCheck.create
+                        (coherenceStore sp)
+                        (tryService<Grounding.IMetricRegistry> sp)
+                        config
+                        (fun () -> resolveDeclared sp principal))
             )
-            // Schedule the standing check on the opt-in cadence. The
-            // scheduler + metric registry are only resolvable from the built
-            // container, so registration happens in a startup hosted service
-            // — exempt from the profile matrix (Phase 1051): a scheduler
-            // registration, placed by the scheduler's own gate.
-            .AddSingleton<HostedServiceExemption>(
-                {
-                    Service = "Fact coherence check scheduling"
-                    Reason = ProcessProfileGate.SchedulerRegistrationReason
-                }
-            )
-            .AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(
-                Func<IServiceProvider, Microsoft.Extensions.Hosting.IHostedService>(fun sp ->
-                    { new Microsoft.Extensions.Hosting.IHostedService with
-                        // The schedule calls are awaited here, in the hosted
-                        // start, never run synchronously: a slow scheduler
-                        // delays this start step, not the thread that is
-                        // composing the container.
-                        member _.StartAsync(ct) =
-                            let logger = sp.GetRequiredService<ILogger>()
+            |> ignore
+        | None -> ()
 
-                            match tryService<IJobScheduler> sp with
-                            | Some scheduler ->
-                                let handler =
-                                    CoherenceJobHandler.create
-                                        (coherenceStore sp)
-                                        (tryService<Grounding.IMetricRegistry> sp)
-                                        (sp.GetRequiredService<INotificationChannel>())
-                                        (sp.GetRequiredService<IEventStore>())
-                                        config
-                                        (fun () -> DateTime.UtcNow)
-                                        logger
+        // Schedule the standing check on the opt-in cadence. The scheduler +
+        // metric registry are only resolvable from the built container, so
+        // registration happens in a startup hosted service — once at start:
+        // a scheduler registration, placed by the scheduler's own unit.
+        Hosting.register
+            services
+            (BackgroundUnit.create "fact-coherence-check-scheduling" OnceAtStart (fun sp ->
+                { new Microsoft.Extensions.Hosting.IHostedService with
+                    // The schedule calls are awaited here, in the hosted
+                    // start, never run synchronously: a slow scheduler
+                    // delays this start step, not the thread that is
+                    // composing the container.
+                    member _.StartAsync(ct) =
+                        let logger = sp.GetRequiredService<ILogger>()
 
-                                scheduler.RegisterHandler(CoherenceJobHandler.HandlerName, handler)
+                        match tryService<IJobScheduler> sp with
+                        | Some scheduler ->
+                            let handler =
+                                CoherenceJobHandler.create
+                                    (coherenceStore sp)
+                                    (tryService<Grounding.IMetricRegistry> sp)
+                                    (sp.GetRequiredService<INotificationChannel>())
+                                    (sp.GetRequiredService<IEventStore>())
+                                    config
+                                    (fun () -> DateTime.UtcNow)
+                                    logger
 
-                                let effectiveScopes =
-                                    if List.isEmpty scopes then
-                                        [ ScopeKey.PlatformContainer ]
-                                    else
-                                        scopes
+                            scheduler.RegisterHandler(CoherenceJobHandler.HandlerName, handler)
 
-                                let scheduleAll = async {
-                                    for scopeId in effectiveScopes do
+                            let scheduleAll = async {
+                                for principal in principals do
+                                    match! resolveDeclared sp principal with
+                                    | Error reason ->
+                                        logger.Warn(sprintf "The coherence check was not scheduled: %s" reason)
+                                    | Ok scope ->
+                                        let scopeId = scope.ScopeId
+
                                         let registration: JobRegistration = {
                                             ScopeId = scopeId
                                             Handler = CoherenceJobHandler.HandlerName
@@ -1386,7 +1454,7 @@ module FactsCompose =
                                             Tags = Map.ofList [ "origin", "fact-coherence" ]
                                         }
 
-                                        match! scheduler.Schedule registration with
+                                        match! scheduler.Schedule(scope, registration) with
                                         | Ok _ -> ()
                                         | Error err ->
                                             logger.Warn(
@@ -1395,29 +1463,32 @@ module FactsCompose =
                                                     scopeId
                                                     err
                                             )
-                                }
+                            }
 
-                                Async.StartAsTask(scheduleAll, cancellationToken = ct) :> System.Threading.Tasks.Task
-                            | None ->
-                                logger.Warn(
-                                    "Coherence checking enabled but JobScheduler = NoJobScheduler — the standing check is not scheduled (the on-demand path and the /ready health probe still work). Pair with JobScheduler = InProcessJobScheduler."
-                                )
+                            Async.StartAsTask(scheduleAll, cancellationToken = ct) :> System.Threading.Tasks.Task
+                        | None ->
+                            logger.Warn(
+                                "Coherence checking enabled but JobScheduler = NoJobScheduler — the standing check is not scheduled (the on-demand path and the /ready health probe still work). Pair with JobScheduler = InProcessJobScheduler."
+                            )
 
-                                System.Threading.Tasks.Task.CompletedTask
-
-                        member _.StopAsync(_ct) =
                             System.Threading.Tasks.Task.CompletedTask
-                    })
-            )
+
+                    member _.StopAsync(_ct) =
+                        System.Threading.Tasks.Task.CompletedTask
+                }))
         |> ignore
 
         services
 
     /// Compose the standing fact-base coherence check with an explicit
-    /// `config` + `cadence` (a cron `Trigger`) + the `scopes` to sweep
-    /// (empty ⇒ `["_platform"]`). Registers the coherence `IHealthCheck` +
-    /// the scheduled sweep on top of an already-enabled fact store. A
-    /// `NoFactStore` deployment (or one that never calls this) is
+    /// `config` + `cadence` (a cron `Trigger`) + the declared `principals`
+    /// whose scopes to sweep — each resolved through the platform's
+    /// `DeclaredPrincipalResolver` when the sweep is scheduled, and the job
+    /// runs under the scope it resolved to (empty ⇒ no sweep is scheduled: a
+    /// sweep never reads a shard nobody resolved). Registers the coherence
+    /// `IHealthCheck` when `config.HealthPrincipal` names one, and the
+    /// scheduled sweep, on top of an already-enabled fact store. A
+    /// `FeatureMode.Disabled` deployment (or one that never calls this) is
     /// byte-for-byte unchanged (GP 11 / GP 13). Insert after
     /// `withFactStore`:
     ///
@@ -1425,31 +1496,38 @@ module FactsCompose =
     /// ServerApp.empty
     /// |> ServerApp.withStorage blob
     /// |> FactsCompose.withFactStore
-    /// |> FactsCompose.withCoherenceChecksConfig cfg cadence [ "_platform" ]
+    /// |> FactsCompose.withCoherenceChecksConfig cfg cadence [ sweepPrincipal ]
     /// |> ServerApp.run
     /// ```
     /// **Adds** its registrations as a contribution under the Facts companion's id; a later `withExtensions` keeps them.
     let withCoherenceChecksConfig
         (config: CoherenceConfig)
         (cadence: Trigger)
-        (scopes: string list)
+        (principals: DeclaredPrincipal list)
         (app: ServerApp)
         : ServerApp =
-        match app.Config.FactStore with
-        | NoFactStore -> app
-        | EnabledFactStore ->
-            let register = registerCoherenceChecks config cadence scopes
+        match app.Config.Stores.FactStore with
+        | FeatureMode.Disabled -> app
+        | FeatureMode.Enabled ->
+            let register = registerCoherenceChecks app.Config config cadence principals
 
             app |> contribute register
 
-    /// `withCoherenceChecksConfig` with `CoherenceConfig.defaults` and the
-    /// default `_platform` sweep scope — the one-liner opt-in. `cadence` is
-    /// the recurring `Trigger` the standing check runs on (e.g. a daily
-    /// `CronTrigger`); the check is also fireable on demand and re-scanned
-    /// by the `/ready` health probe.
+    /// `withCoherenceChecksConfig` with `CoherenceConfig.defaults`, sweeping
+    /// and health-probing the scope `principal` resolves to — the one-liner
+    /// opt-in. `cadence` is the recurring `Trigger` the standing check runs on
+    /// (e.g. a daily `CronTrigger`); the check is also fireable on demand and
+    /// re-scanned by the `/ready` health probe.
     /// **Adds** its registrations as a contribution under the Facts companion's id; a later `withExtensions` keeps them.
-    let withCoherenceChecks (cadence: Trigger) (app: ServerApp) : ServerApp =
-        withCoherenceChecksConfig CoherenceConfig.defaults cadence [] app
+    let withCoherenceChecks (cadence: Trigger) (principal: DeclaredPrincipal) (app: ServerApp) : ServerApp =
+        withCoherenceChecksConfig
+            {
+                CoherenceConfig.defaults with
+                    HealthPrincipal = Some principal
+            }
+            cadence
+            [ principal ]
+            app
 
     // ─── Phase 887 — the default fact-table writer (opt-in) ───────────
     //
@@ -1463,8 +1541,8 @@ module FactsCompose =
     /// Compose the default `IFactTableWriter` and bind every declared fact
     /// table to it (`BindAllFactTables DefaultFactTableWriter.Destination`).
     ///
-    /// Requires the fact store (`ServerConfig.FactStore = EnabledFactStore`,
-    /// composed with `withFactStore`). Under `NoFactStore` this returns the
+    /// Requires the fact store (`ServerConfig.Stores.FactStore = FeatureMode.Enabled`,
+    /// composed with `withFactStore`). Under `FeatureMode.Disabled` this returns the
     /// app unchanged and binds nothing, exactly as `withFactStore` does — so
     /// a composition declaring a `Required` table then refuses to start at
     /// the fact-table preflight, naming the table, rather than failing here.
@@ -1473,19 +1551,26 @@ module FactsCompose =
     /// DI when first used, so modules may be added before or after this call.
     /// **Adds** its registrations as a contribution under the Facts companion's id; a later `withExtensions` keeps them.
     let withFactTableWriter (app: ServerApp) : ServerApp =
-        match app.Config.FactStore with
-        | NoFactStore -> app
-        | EnabledFactStore ->
+        match app.Config.Stores.FactStore with
+        | FeatureMode.Disabled -> app
+        | FeatureMode.Enabled ->
             let register (s: IServiceCollection) =
                 s.AddSingleton<IFactTableWriter>(
                     Func<IServiceProvider, IFactTableWriter>(fun sp ->
-                        DefaultFactTableWriter.create
-                            (sp.GetRequiredService<IFactStore>())
-                            (sp.GetRequiredService<IBlobStorage>())
-                            (sp.GetRequiredService<IEventStore>())
-                            (tryService<Grounding.IFactTableRegistry> sp
-                             |> Option.defaultValue Grounding.FactTableRegistry.empty)
-                            (tryService<Grounding.IMetricRegistry> sp))
+                        let writer =
+                            DefaultFactTableWriter.create
+                                (sp.GetRequiredService<IFactStore>())
+                                (sp.GetRequiredService<IBlobStorage>())
+                                (sp.GetRequiredService<IEventStore>())
+                                (tryService<Grounding.IFactTableRegistry> sp
+                                 |> Option.defaultValue Grounding.FactTableRegistry.empty)
+                                (tryService<Grounding.IMetricRegistry> sp)
+
+                        // A committed run raises its table's change, for a
+                        // reader that keeps what it read.
+                        match tryService<IFactTableChangeSignal> sp with
+                        | Some signal -> FactTableChangeSignal.raisingWriter signal writer
+                        | None -> writer)
                 )
 
             app
@@ -1495,18 +1580,18 @@ module FactsCompose =
     // ─── Phase 986 — the fact tier as one composition, and its compiler ─
 
     /// The whole fact tier in one call: turn the fact store on
-    /// (`ServerConfig.FactStore = EnabledFactStore`), then `withFactStore`
+    /// (`ServerConfig.Stores.FactStore = FeatureMode.Enabled`), then `withFactStore`
     /// and `withFactTableWriter` over it. Because it sets the knob itself,
     /// it does not depend on a `withConfig` having run first.
     ///
-    /// For a RAG app, hand it to `RAGServerApp.withFacts`, which applies it
+    /// For a RAG app, hand it to `RagOptions.withFacts`, which applies it
     /// when the app is composed — after every `withConfig`, wherever the
     /// call sits in the pipeline:
     ///
     /// ```fsharp
-    /// RAGServerApp.create factory providerProfile embedder
-    /// |> RAGServerApp.withFacts FactsCompose.withFactTier
-    /// |> RAGServerApp.withConfig config
+    /// RagOptions.create factory providerProfile embedder
+    /// |> RagOptions.withFacts FactsCompose.withFactTier
+    /// |> ServerApp.withConfig config
     /// ```
     ///
     /// What it arms: the fact tools (`query_facts` and its siblings, once
@@ -1519,7 +1604,10 @@ module FactsCompose =
             app with
                 Config = {
                     app.Config with
-                        FactStore = EnabledFactStore
+                        Stores = {
+                            app.Config.Stores with
+                                FactStore = FeatureMode.Enabled
+                        }
                 }
         }
         |> withFactStore
@@ -1558,8 +1646,8 @@ module FactsCompose =
     /// multi-replica scale guard, which stands down once the blob store is
     /// no longer the one composed.
     ///
-    /// Requires the fact store (`ServerConfig.FactStore = EnabledFactStore`);
-    /// under `NoFactStore` this returns the app unchanged, exactly as
+    /// Requires the fact store (`ServerConfig.Stores.FactStore = FeatureMode.Enabled`);
+    /// under `FeatureMode.Disabled` this returns the app unchanged, exactly as
     /// `withFactStore` does. Insert straight AFTER `withFactStore` and
     /// before any knob that decorates the store (`withCoverageNarratives`):
     /// the replacement removes every `IFactStore` registration made before
@@ -1582,9 +1670,9 @@ module FactsCompose =
         (factory: IServiceProvider -> IFactStore)
         (app: ServerApp)
         : ServerApp =
-        match app.Config.FactStore with
-        | NoFactStore -> app
-        | EnabledFactStore ->
+        match app.Config.Stores.FactStore with
+        | FeatureMode.Disabled -> app
+        | FeatureMode.Enabled ->
             let register (s: IServiceCollection) =
                 s.RemoveAll<IFactStore>() |> ignore
 
@@ -1683,8 +1771,8 @@ module FactsCompose =
     /// a point or population read of a delegated metric is answered from the
     /// table, minting as ordinary facts only the rows it returns.
     ///
-    /// Requires the fact store (`ServerConfig.FactStore = EnabledFactStore`);
-    /// under `NoFactStore` this returns the app unchanged. Insert AFTER
+    /// Requires the fact store (`ServerConfig.Stores.FactStore = FeatureMode.Enabled`);
+    /// under `FeatureMode.Disabled` this returns the app unchanged. Insert AFTER
     /// `withFactStore` (and after `withFactStoreImplementation`, which drops
     /// every registration made before it) — it decorates what they
     /// registered. `withFactTableWriter` may come before or after: tables
@@ -1693,7 +1781,7 @@ module FactsCompose =
     ///
     /// ```fsharp
     /// ServerApp.empty
-    /// |> ServerApp.withConfig { ServerConfig.defaults with FactStore = EnabledFactStore }
+    /// |> ServerApp.withConfig { ServerConfig.defaults with Stores = { ServerConfig.defaults.Stores with FactStore = FeatureMode.Enabled } }
     /// |> ServerApp.addModules [ salesModule ]
     /// |> FactsCompose.withFactStore
     /// |> FactsCompose.withFactTableWriter
@@ -1701,10 +1789,10 @@ module FactsCompose =
     /// ```
     /// **Adds** its registrations as a contribution under the Facts companion's id; a later `withExtensions` keeps them.
     let withDelegateFacts (tableIds: string list) (app: ServerApp) : ServerApp =
-        match app.Config.FactStore, tableIds with
-        | NoFactStore, _
+        match app.Config.Stores.FactStore, tableIds with
+        | FeatureMode.Disabled, _
         | _, [] -> app
-        | EnabledFactStore, _ ->
+        | FeatureMode.Enabled, _ ->
             let register = registerDelegateFacts tableIds
 
             let bound =
@@ -1743,7 +1831,7 @@ module FactsCompose =
         (sp: IServiceProvider)
         : ViewerAwareDisclosure =
         let source = tryService<ITeamOutputVisibilitySource> sp
-        let teams = tryService<ToolUp.Platform.TeamManagement.ITeamStore> sp
+        let teams = tryService<ToolUp.Platform.Config.TeamManagement.ITeamStore> sp
 
         {
             Resolver = None
@@ -1789,7 +1877,7 @@ module FactsCompose =
     ///
     /// **Not composing this is the default**, and so is composing it with
     /// `TeamVisible` as the default and no team choosing otherwise: every
-    /// check is then decided exactly as before (GP 11). A `NoFactStore`
+    /// check is then decided exactly as before (GP 11). A `FeatureMode.Disabled`
     /// deployment is unchanged. Insert after `withFactStore`:
     ///
     /// ```fsharp
@@ -1805,9 +1893,9 @@ module FactsCompose =
         (allowed: TeamVisibilityLevel list)
         (app: ServerApp)
         : ServerApp =
-        match app.Config.FactStore with
-        | NoFactStore -> app
-        | EnabledFactStore ->
+        match app.Config.Stores.FactStore with
+        | FeatureMode.Disabled -> app
+        | FeatureMode.Enabled ->
             let settings =
                 match TeamOutputVisibilitySettings.create defaultLevel allowed with
                 | Ok settings -> settings
@@ -1905,7 +1993,7 @@ module FactsCompose =
     ///
     /// Requires the fact store, and the table writer for the tables it
     /// names; owner acts read the team's roles from the composed team store.
-    /// A `NoFactStore` deployment is unchanged. Insert after
+    /// A `FeatureMode.Disabled` deployment is unchanged. Insert after
     /// `withFactTableWriter`:
     ///
     /// ```fsharp
@@ -1918,13 +2006,13 @@ module FactsCompose =
     /// ```
     /// **Adds** its registrations as a contribution under the Facts companion's id; a later `withExtensions` keeps them.
     let withFactPublication (config: FactPublicationConfig) (app: ServerApp) : ServerApp =
-        match app.Config.FactStore with
-        | NoFactStore -> app
-        | EnabledFactStore ->
+        match app.Config.Stores.FactStore with
+        | FeatureMode.Disabled -> app
+        | FeatureMode.Enabled ->
             let register (s: IServiceCollection) =
                 s.AddSingleton<IFactPublication>(
                     Func<IServiceProvider, IFactPublication>(fun sp ->
-                        let teams = tryService<ToolUp.Platform.TeamManagement.ITeamStore> sp
+                        let teams = tryService<ToolUp.Platform.Config.TeamManagement.ITeamStore> sp
 
                         // Phase 935 — grants persist when the platform's
                         // scope carrier is composed (it is, beside the
@@ -1958,33 +2046,29 @@ module FactsCompose =
                 // is scheduled by the source team's owner under the source's
                 // minted scope, and a refresh by the target's under its own
                 // (`FactPublicationJobs.schedulePublication` / `scheduleRefresh`).
-                // Exempt from the profile matrix (Phase 1051): a handler
-                // registration, placed by the scheduler's own gate.
-                (s
-                 |> ProcessProfileGate.exempt
-                     "Fact publication handler registration"
-                     ProcessProfileGate.SchedulerRegistrationReason)
-                    .AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(
-                        Func<IServiceProvider, Microsoft.Extensions.Hosting.IHostedService>(fun sp ->
-                            ProcessProfileGate.atStart (fun () ->
-                                // Resolving the service here surfaces a
-                                // declaration defect at startup, not at the
-                                // first publication.
-                                let publication = sp.GetRequiredService<IFactPublication>()
+                // Once at start: a handler registration, placed by the
+                // scheduler's own unit.
+                Hosting.register
+                    s
+                    (BackgroundUnit.create "fact-publication-handler-registration" OnceAtStart (fun sp ->
+                        Hosting.atStart (fun () ->
+                            // Resolving the service here surfaces a
+                            // declaration defect at startup, not at the
+                            // first publication.
+                            let publication = sp.GetRequiredService<IFactPublication>()
 
-                                match tryService<IJobScheduler> sp with
-                                | Some scheduler ->
-                                    scheduler.RegisterHandler(
-                                        FactPublicationJobs.PublishHandler,
-                                        FactPublicationJobs.publishHandler publication
-                                    )
+                            match tryService<IJobScheduler> sp with
+                            | Some scheduler ->
+                                scheduler.RegisterHandler(
+                                    FactPublicationJobs.PublishHandler,
+                                    FactPublicationJobs.publishHandler publication
+                                )
 
-                                    scheduler.RegisterHandler(
-                                        FactPublicationJobs.RefreshHandler,
-                                        FactPublicationJobs.refreshHandler publication
-                                    )
-                                | None -> ()))
-                    )
+                                scheduler.RegisterHandler(
+                                    FactPublicationJobs.RefreshHandler,
+                                    FactPublicationJobs.refreshHandler publication
+                                )
+                            | None -> ())))
                 |> ignore
 
                 s

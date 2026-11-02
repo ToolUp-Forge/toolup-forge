@@ -10,6 +10,9 @@ open KnowledgeBase.ServerIndexStorage
 open KnowledgeBase.ServerApiDeps
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Tests.InProcess.DataObjectStoreTests
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 971 — a refused KB delete that is the operation says so ────
 //

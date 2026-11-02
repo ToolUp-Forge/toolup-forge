@@ -5,7 +5,7 @@ End-to-end walkthrough: define a bookable resource, book a slot, render a calend
 ## Prerequisites
 
 - A working ToolUp Platform app.
-- `IEntityStore` enabled — `ServerConfig.EntityStore = EnabledEntityStore`. Resources and bookings persist as entities.
+- `IEntityStore` enabled — `ServerConfig.Stores.EntityStore = FeatureMode.Enabled`. Resources and bookings persist as entities.
 
 ## 1. Add the packages
 
@@ -53,17 +53,21 @@ let stylistOne: BookableResource = {
 
 `AvailabilityWindow`s repeat weekly (`DayOfWeek = None` means every day). One-off blackouts and one-off extra hours are separate `AvailabilityException` records against a specific date, not a list on the resource. Slot length is chosen per query rather than baked into the resource.
 
-## 3. Wire `SchedulingServerApp`
+## 3. Wire the scheduling companion
 
 ```fsharp
-SchedulingServerApp.create ()
-|> SchedulingServerApp.withConfig {
+ServerApp.empty
+|> ServerApp.withConfig {
     ServerConfig.defaults with
-        EntityStore = EnabledEntityStore
+        Stores = {
+            ServerConfig.defaults.Stores with
+                EntityStore = FeatureMode.Enabled
+        }
 }
-|> SchedulingServerApp.withAuth authProvider
-|> SchedulingServerApp.addModules modules
-|> SchedulingServerApp.run
+|> ServerApp.withAuth authProvider
+|> ServerApp.addModules modules
+|> withScheduling (SchedulingOptions.create ())
+|> ServerApp.run
 ```
 
 That's it. The scheduling API + persistence is now in place. Register `stylistOne` at runtime with `ISchedulingApi.RegisterResource` — resources are per-scope data, not compose-time configuration.

@@ -98,9 +98,9 @@ Three companion types live in the same file:
 | `RateLimit: RateLimitConfig option` | 1392 | Per-team / per-user / per-IP partition depending on Mode. Default `None`. |
 | `SseAuthMode: SseAuthMode` | 1681 | `QueryParamFallback` (default) or `CookieRequired`. The former allows the SSE carve-out in `AuthEnforcementMiddleware`; the latter routes SSE through normal auth. |
 | `MaxSseConnectionsPerScope: int option` | 1706 | Concurrent SSE cap per scope id. Default `Some 10`. |
-| `ShareTokenStore: ShareTokenStoreMode` | 1424 | `NoShareTokenStore` (default) or `EnabledShareTokenStore`. Powers anonymous-gated persistent writes via `BlobShareTokenStore`. |
+| `ShareTokenStore: FeatureMode` | 1424 | `FeatureMode.Disabled` (default) or `FeatureMode.Enabled`. Powers anonymous-gated persistent writes via `BlobShareTokenStore`. |
 | `PublicBaseUrl: string option` | 1493 | Base URL for share-link composition. Default `None`. |
-| `AuditLog: AuditLogMode` | 1562 | `NoAuditLog` default; validator warns when paired with authenticated Mode. |
+| `AuditLog: FeatureMode` | 1562 | `FeatureMode.Disabled` default; validator warns when paired with authenticated Mode. |
 | `EventStore: EventStoreMode` | 1289 | `InMemoryOnly` default; opt-in to `PersistentBlobBacked`. |
 | `Notifications: NotificationMode` | 1569 | `NotificationsAuto` default — infers in-memory vs no-op from feature presence. |
 | `ReplicaCount: int` | 1762 | Operator-declared replica count. `JobSchedulerInstanceValidator` refuses startup when `> 1` and scheduler is in-process (unless `AcceptInProcessSchedulerInMultiInstance = true`). |
@@ -157,7 +157,7 @@ Three middlewares in [`Middleware.fs`](../../src/ToolUp.Platform.Server/Server/M
 - **SSE carve-out** (line 267-270, 296) — `/api/ai/events` and `/api/notifications` are exempt iff `SseAuthMode = QueryParamFallback`. Production deployments running `CookieRequired` route SSE through normal auth (an `IAuthBridge` writes the JWT to `document.cookie` so `EventSource` carries it).
 - **CSRF token endpoint** (line 307) — `path = Csrf.TokenPath` is exempt, because the token must be reachable before any credentials exist.
 - **Anonymous-route prefixes** (line 277-281) — case-insensitive `StartsWith` against `config.AnonymousRoutePrefixes`.
-- **Peer-bearer routes** (line 288-289) — `PeerRouteRegistry.isPeerRoute config.PeerRoutePrefixes path`. `PeerBearerAuthMiddleware` runs ahead of this middleware and either rejects the request or stamps `HttpContext.Items["PeerName"]`.
+- **Peer-bearer routes** (line 288-289) — `PeerRouteRegistry.isPeerRoute config.MultiInstance.PeerRoutePrefixes path`. `PeerBearerAuthMiddleware` runs ahead of this middleware and either rejects the request or stamps `HttpContext.Items["PeerName"]`.
 
 On all exemptions failing AND `requiresAuth && not authenticated` → 401 JSON (line 314-325).
 
@@ -221,7 +221,7 @@ Forge's `IConfigValidator` substrate runs preflight checks at startup. The Mode-
 | `AnonymousRoutePrefixValidator` | Error | Prefix < 3 segments or < 12 chars after `/api/` | `AcceptShallowAnonymousRoutePrefix = true` |
 | `HeaderAuthProviderModeValidator` | Error | `HeaderAuthProvider` + auth-requiring Mode | `AcceptHeaderAuthInAuthenticatedMode = true` |
 | `RateLimitModeValidator` | Warning | Auth-requiring + HTTPS, no `RateLimit` | `AcceptNoRateLimitInAuthenticatedMode = true` |
-| `AuditLogModeValidator` | Warning | Auth-requiring + `NoAuditLog` | (none — dev/demo legitimate) |
+| `AuditLogModeValidator` | Warning | Auth-requiring + `FeatureMode.Disabled` | (none — dev/demo legitimate) |
 | `SseAuthModeValidator` | Warning | Auth-requiring + `QueryParamFallback` | (production: switch to `CookieRequired`) |
 | `EncryptedSecretStoreModeValidator` | Error | Plaintext-secrets wrapper + auth-requiring Mode without master key | `AcceptPlaintextSecretsInAuthenticatedMode = true` |
 | `OidcAudienceBindingValidator` | Error | OIDC + auth-requiring Mode without `TOOLUP_OIDC_AUDIENCE` | (none — must set audience) |
@@ -678,7 +678,7 @@ Most existing handler code that branches on `ctx.Mode` mechanically rewrites to 
 | `AnonymousRoutePrefixes` (+ validator + escape hatch) | **Subsumed.** | Routes declare `SurfaceRequirement` instead of opting into a string-prefix-match exemption. Prefix list, validator, and `AcceptShallowAnonymousRoutePrefix` flag all retire. |
 | `PeerBearerAuthPrefixes` / `PeerRouteRegistry` / `PeerBearerAuthMiddleware` | **Stays separate.** | Peer-bearer auth is machine-to-machine federation, a different auth scheme. Modelling it as a fifth subject kind (`PeerKind`) was considered and rejected — peer requests are not "a subject acting on its own behalf", they're another deployment delegating. The cost of unifying outweighs the small symmetry gain. Federation deployments continue to use the existing peer route + bearer infrastructure unchanged. |
 | `IPublicFormApi` (the contract) | **Stays.** | The Forms public-form API itself is a Forms concern. Its position as "an exception to the auth pipeline" goes away — the API's routes simply declare `SurfaceRequirement.claimBearerOnly`. |
-| `IShareTokenStore` (the substrate) | **Stays — promoted.** | Today: optional opt-in via `ShareTokenStore = EnabledShareTokenStore`. New model: presence of `ClaimBearer _` in `Surfaces` wires the substrate. The interface, blob layout, HMAC scheme — all unchanged. |
+| `IShareTokenStore` (the substrate) | **Stays — promoted.** | Today: optional opt-in via `ShareTokenStore = FeatureMode.Enabled`. New model: presence of `ClaimBearer _` in `Surfaces` wires the substrate. The interface, blob layout, HMAC scheme — all unchanged. |
 | `PublicEmbed` (the Fable component) | **Stays unchanged.** | Mounts at `/r/{token}`, boots without an authenticated user, hits routes that declare `SurfaceRequirement.claimBearerOnly`. The component code doesn't change. |
 | `SseAuthMode` (`QueryParamFallback` / `CookieRequired`) | **Stays.** | Orthogonal to surface profile — describes how SSE handshakes prove identity. Validator stays; the "warn in authenticated Mode" wording becomes "warn when any non-Anonymous surface is supported". |
 | Per-mode validators (12 in Phase 1 §1.8) | **Rewritten mechanically.** | Each validator's `PlatformMode.requiresAuth` / `isTeamScoped` predicate becomes a check on `Surfaces`. Severity + escape hatch flags stay. See Phase 3 § "Validators". |
@@ -712,7 +712,7 @@ These are decisions I'm deliberately surfacing rather than picking:
    Subsumption argument: it would unify all auth schemes under one type and let federation routes declare `SurfaceRequirement` symmetrically. Counter-argument: peer requests are *delegated* (one deployment acting on behalf of another), not "a subject acting on its own behalf"; conflating them obscures rather than clarifies. I've kept peer-auth as a separate concern. Flagging in case the operator wants the symmetry.
 
 4. **Should `SurfaceProfile.ClaimBearer` carry the share-token-store backend choice?**
-   Today `ShareTokenStore: ShareTokenStoreMode` is a separate `ServerConfig` field that names the backend (default `BlobShareTokenStore`). I've kept it separate (mechanical migration). Alternative: roll it into `ClaimBearerConfig` so all share-token knobs sit together. Cleaner-looking but means an existing distinct concern is now expressed in two places (the substrate field + the surface presence). I lean keep-separate.
+   Today `ShareTokenStore: FeatureMode` is a separate `ServerConfig` field that names the backend (default `BlobShareTokenStore`). I've kept it separate (mechanical migration). Alternative: roll it into `ClaimBearerConfig` so all share-token knobs sit together. Cleaner-looking but means an existing distinct concern is now expressed in two places (the substrate field + the surface presence). I lean keep-separate.
 
 5. **Auto-promotion from `AnonymousSession` to `AuthenticatedUser` mid-session.**
    Today: anonymous users use `sessionStorage`; signing in switches to `localStorage` and the SDK starts attaching `Authorization: Bearer`. The data in sessionStorage is naturally discarded. Question: should the new model offer a *hook* for deployments that want to migrate anonymous-session data (e.g. a guest-built form draft) into the user's account on sign-in? Today this is hand-rolled per app. I haven't designed it into Phase 2; flagging as a possible Phase 3 subsystem addition (the design extends cleanly — `IAnonymousSessionMigrator` interface invoked by middleware on first authenticated request following an anonymous session).
@@ -736,7 +736,7 @@ Phase 2 surfaced seven open questions. Resolutions, picking for platform flexibi
 
 3. **Peer-bearer as a fifth subject kind** — No. Keeping peer-bearer separate. Federation is delegated authority (deployment B → deployment A), not a subject acting on its own behalf; conflating obscures rather than clarifies. The peer pipeline stays as it is today (federation deployments' needs unchanged).
 
-4. **`ClaimBearerConfig` carrying the share-token-store backend** — Split. `ClaimBearerConfig` carries the policy fields (default lifetime, default use limit). The backend choice stays in a separate `ServerConfig.ShareTokenStore` field so a deployment can switch from `BlobShareTokenStore` to a future `RedisShareTokenStore` without restructuring its `Surfaces` list. **Robustness lever**: when `ClaimBearer _` is present in `Surfaces` and `ShareTokenStore` is unset, the SDK auto-promotes to `BlobShareTokenStore` (one-line authoring still works); the new `SurfaceCoherenceValidator` refuses startup if a `ClaimBearer` surface exists with `NoShareTokenStore` explicitly set.
+4. **`ClaimBearerConfig` carrying the share-token-store backend** — Split. `ClaimBearerConfig` carries the policy fields (default lifetime, default use limit). The backend choice stays in a separate `ServerConfig.Stores.ShareTokenStore` field so a deployment can switch from `BlobShareTokenStore` to a future `RedisShareTokenStore` without restructuring its `Surfaces` list. **Robustness lever**: when `ClaimBearer _` is present in `Surfaces` and `ShareTokenStore` is unset, the SDK auto-promotes to `BlobShareTokenStore` (one-line authoring still works); the new `SurfaceCoherenceValidator` refuses startup if a `ClaimBearer` surface exists with `FeatureMode.Disabled` explicitly set.
 
 5. **Anonymous → user migration hook** — Yes, design it in. New optional `IAnonymousSessionMigrator` interface invoked by the middleware on first authenticated request following an anonymous session in the same browser. Default impl: no-op. Deployments that want guest-data migration implement and wire via `ServerApp.withSubjectMigrator`. Details in §3.7.
 
@@ -1094,7 +1094,7 @@ JSON shape: `Subject` serialises as a tagged object (`{"kind":"team","userId":".
 
 `X-Request-Id` middleware (today's `RequestIdMiddleware`) is unchanged. Per-request correlation stays the same.
 
-**Audit-event volume implications.** A mixed-mode deployment with high anonymous traffic produces a higher rate of `AnonymousAudit` events. Today's `AuditLogModeValidator` warns when authenticated mode + `NoAuditLog`; the new wording is "warn when any non-`Anonymous` surface is in `Surfaces` + `NoAuditLog`". Pure-anonymous deployments can sensibly skip audit; mixed deployments cannot.
+**Audit-event volume implications.** A mixed-mode deployment with high anonymous traffic produces a higher rate of `AnonymousAudit` events. Today's `AuditLogModeValidator` warns when authenticated mode + `FeatureMode.Disabled`; the new wording is "warn when any non-`Anonymous` surface is in `Surfaces` + `FeatureMode.Disabled`". Pure-anonymous deployments can sensibly skip audit; mixed deployments cannot.
 
 ### 3.7 Anonymous → user session migration hook
 
@@ -1181,14 +1181,14 @@ Semantics: "when auth is required" now means "when `Surfaces` contains any non-`
    - Example: module declares `teamScoped` requirement; deployment has `Surfaces = [SurfaceProfile.individual]`. The module is unreachable.
    - Error message: `"Module 'Forms' requires team scope but deployment Surfaces declares no Team profile. Add SurfaceProfile.team to Surfaces or change the module's DefaultSurfaceRequirement."`
 4. Any route's per-endpoint `SurfaceRequirement` is similarly inconsistent.
-5. `config.Surfaces` contains `ClaimBearer _` but `config.ShareTokenStore = NoShareTokenStore` was explicitly set.
-6. `config.ShareTokenStore ≠ NoShareTokenStore` but `config.Surfaces` contains no `ClaimBearer _` (warning, not error — substrate is wired but no surface accepts claim-bearers; legitimate during a feature roll-back).
+5. `config.Surfaces` contains `ClaimBearer _` but `config.Stores.ShareTokenStore = FeatureMode.Disabled` was explicitly set.
+6. `config.Stores.ShareTokenStore ≠ FeatureMode.Disabled` but `config.Surfaces` contains no `ClaimBearer _` (warning, not error — substrate is wired but no surface accepts claim-bearers; legitimate during a feature roll-back).
 7. `config.Surfaces` contains only `Anonymous _` but `ServerApp.withAuth` was called with a non-`HeaderAuthProvider` auth provider (warning — auth provider is unreachable; legitimate during development).
 8. `config.Surfaces` contains any non-`Anonymous _` but no auth provider was registered (error).
 
 The validator is the central "did the operator declare a coherent deployment?" gate. Failures are operator-actionable with a remediation suggestion baked into the error message.
 
-**Auto-promotion of `ShareTokenStore` default.** Not a validator behaviour per se, but a composition-time fix-up: when `Surfaces` contains `ClaimBearer _` and `ShareTokenStore` is unset (defaults to `NoShareTokenStore`), the composition root auto-promotes it to `EnabledShareTokenStore BlobShareTokenStore.create`. Logged at info level so operators can see the auto-promotion in startup output. The override is set-explicit to disable: `ShareTokenStore = NoShareTokenStore` (validator then refuses — see rule 5 above).
+**Auto-promotion of `ShareTokenStore` default.** Not a validator behaviour per se, but a composition-time fix-up: when `Surfaces` contains `ClaimBearer _` and `ShareTokenStore` is unset (defaults to `FeatureMode.Disabled`), the composition root auto-promotes it to `FeatureMode.Enabled BlobShareTokenStore.create`. Logged at info level so operators can see the auto-promotion in startup output. The override is set-explicit to disable: `ShareTokenStore = FeatureMode.Disabled` (validator then refuses — see rule 5 above).
 
 ### 3.9 Subsystem-change summary (cross-cut)
 
@@ -1435,7 +1435,7 @@ What can go wrong:
 - *Claim used in parallel.* `MarkUsed` is atomic (per the interface contract); `UseLimitExceeded` is raised the moment the counter would exceed. Parallel requests are serialised by the underlying store's `MarkUsed` semantics.
 - *Claim wire-format collision with anonymous session id.* Both are passed in URL/header. Distinct mechanisms: anonymous session uses `X-User-Id` (or sessionStorage cookie); share token uses `?token=` query OR `X-Share-Token` header. No collision.
 - *Claim survives a token-id collision.* Wire format includes `tokenId.base64(payload).base64(hmac)`; the HMAC binds the payload (which includes the token id). A collision (two tokens with the same id but different payloads) is statistically impossible (GUID generation) but if forged, the HMAC fails — only one of the two could be the legitimate one.
-- *Claim against a now-disabled `ClaimBearer` surface.* Operator removes `ClaimBearer _` from `Surfaces` in a deploy. Old claims continue to validate at the substrate level, but the `SurfaceEnforcementMiddleware` 403s every claim-bearer subject (no surface admits `ClaimBearerKind`). Result: existing tokens stop working without explicit revocation. Mitigation: the validator (Phase 3 §3.8 rule 6) warns at startup when `ShareTokenStore ≠ NoShareTokenStore` AND `ClaimBearer _` is not in `Surfaces` — operators see the warning and can decide whether to drain claims or restore the surface.
+- *Claim against a now-disabled `ClaimBearer` surface.* Operator removes `ClaimBearer _` from `Surfaces` in a deploy. Old claims continue to validate at the substrate level, but the `SurfaceEnforcementMiddleware` 403s every claim-bearer subject (no surface admits `ClaimBearerKind`). Result: existing tokens stop working without explicit revocation. Mitigation: the validator (Phase 3 §3.8 rule 6) warns at startup when `ShareTokenStore ≠ FeatureMode.Disabled` AND `ClaimBearer _` is not in `Surfaces` — operators see the warning and can decide whether to drain claims or restore the surface.
 
 **E6 — Capabilities ↔ Surface requirements consistency.**
 
@@ -1452,7 +1452,7 @@ The Q1 resolution permits `AnonymousConfig.Persistence = Persistent`. Edge cases
 
 - *Eviction in persistent-anonymous mode.* `SessionEvictionMinutes` still applies; the eviction timer deletes from both the in-memory map AND the persistent backing. A timer iteration with a stalled backend (e.g. S3 slow) backs up; the design accepts the eviction lag (eventual consistency for cleanup).
 - *Session id reuse across sessions.* A user's `X-User-Id` may be cleared (browser cookie wiped) and re-issued with the same GUID (collision is statistically impossible but theoretically possible). The persistent backing would be visible to whoever reissued. Mitigation: the session id is GUID-strength; collisions are not a defended-against concern.
-- *Audit volume.* Persistent anonymous data implies more audit events with `AuditSubject.AnonymousAudit sid`. The `AuditLogModeValidator` warning still applies (non-Anonymous-only deployment + NoAuditLog).
+- *Audit volume.* Persistent anonymous data implies more audit events with `AuditSubject.AnonymousAudit sid`. The `AuditLogModeValidator` warning still applies (non-Anonymous-only deployment + FeatureMode.Disabled).
 
 **E8 — Composition order: substrate auto-wiring.**
 
@@ -1802,10 +1802,16 @@ ServerApp.empty
 let config = {
     ServerConfig.defaults with
         Surfaces = Surfaces.individual
-        AcceptHeaderAuthWhenAuthRequired = true       // renamed flag
-        AcceptPlaintextSecretsWhenAuthRequired = true // renamed flag
-        AcceptQueryParamSseAuthWhenAuthRequired = true // renamed flag
-        PeerRoutePrefixes = [...]   // unchanged — peer-bearer is orthogonal
+        RiskAcknowledgements = {
+            ServerConfig.defaults.RiskAcknowledgements with
+                AcceptHeaderAuthWhenAuthRequired = true       // renamed flag
+                AcceptPlaintextSecretsWhenAuthRequired = true // renamed flag
+                AcceptQueryParamSseAuthWhenAuthRequired = true // renamed flag
+        }
+        MultiInstance = {
+            ServerConfig.defaults.MultiInstance with
+                PeerRoutePrefixes = [...]   // unchanged — peer-bearer is orthogonal
+        }
 }
 
 ServerApp.empty

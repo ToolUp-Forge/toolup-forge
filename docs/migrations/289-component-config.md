@@ -23,7 +23,7 @@ pure over an injected view of the environment (deterministic, testable, no globa
 ## Adopting the binding
 
 ```fsharp
-open ToolUp.Platform.ComponentConfigResolver
+open ToolUp.Platform.Compose.ComponentConfigResolver
 
 // 1. Declare a component's config section, keyed by its Phase 279 id.
 let ordersCfg =

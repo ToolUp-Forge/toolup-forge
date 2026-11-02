@@ -13,6 +13,7 @@ open ToolUp.Platform
 open ToolUp.DataSources.Excel
 open ToolUp.DataSources.Tests.Support
 open ToolUp.DataSources.Tests.Contracts
+open ToolUp.Platform.Infra
 
 // ─── ToolUp.DataSources.Excel ─────────────────────────────────────
 //

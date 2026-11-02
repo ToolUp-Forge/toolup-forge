@@ -9,6 +9,8 @@ open ToolUp.DataSources.BigQuery
 open ToolUp.DataSources.Tests.Support
 open ToolUp.DataSources.Tests.Support.TestFakes
 open DataManagementTypes
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── ToolUp.DataSources.BigQuery ──────────────────────────────────
 

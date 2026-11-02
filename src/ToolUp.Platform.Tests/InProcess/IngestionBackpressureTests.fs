@@ -21,14 +21,18 @@ open ToolUp.RAG.IngestionTypes
 open System
 open System.Threading
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.IVectorStore
-open ToolUp.Platform.ISparseIndex
-open ToolUp.Platform.IEmbeddingProvider
-open ToolUp.Platform.IRetrievalPipeline
-open ToolUp.Platform.IRetrievalTracer
+open ToolUp.Platform.Infra.IVectorStore
+open ToolUp.Platform.Infra.ISparseIndex
+open ToolUp.Platform.Infra.IEmbeddingProvider
+open ToolUp.Platform.Infra.IRetrievalPipeline
+open ToolUp.Platform.Infra.IRetrievalTracer
 open ToolUp.RAG.RetrievalPipeline
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 let private run = Async.RunSynchronously
 
@@ -246,7 +250,6 @@ type private SlowGate(delay: TimeSpan) =
     }
 
     interface IFactDisclosureGate with
-        member _.Check(_: string, _: string, _: FactEgressSurface, ids: string list) = check ids
         member _.Check(_: ResolvedScope, _: string, _: FactEgressSurface, ids: string list) = check ids
 
 let private resolvedFact (id: string) : ResolvedFact = {
@@ -349,9 +352,9 @@ let private queryPath =
             Expect.isNonEmpty after "and there is something to compare"
         }
 
-        test "RAGServerApp composes the default budgets and an off-path trace queue" {
+        test "RagOptions composes the default budgets and an off-path trace queue" {
             let app =
-                ToolUp.RAG.RAGCompose.RAGServerApp.create
+                ToolUp.RAG.RAGCompose.RagOptions.create
                     Unchecked.defaultof<_>
                     Unchecked.defaultof<_>
                     (DelayedEmbedder TimeSpan.Zero)
@@ -361,11 +364,11 @@ let private queryPath =
 
             let tuned =
                 app
-                |> ToolUp.RAG.RAGCompose.RAGServerApp.withQueryEmbedTimeout (TimeSpan.FromSeconds 1.0)
-                |> ToolUp.RAG.RAGCompose.RAGServerApp.withQueryEmbedAttempts 2
-                |> ToolUp.RAG.RAGCompose.RAGServerApp.withQueryEmbedConcurrency 16
-                |> ToolUp.RAG.RAGCompose.RAGServerApp.withFactStageTimeout (TimeSpan.FromMilliseconds 750.0)
-                |> ToolUp.RAG.RAGCompose.RAGServerApp.withRetrievalTraceQueueCapacity 0
+                |> ToolUp.RAG.RAGCompose.RagOptions.withQueryEmbedTimeout (TimeSpan.FromSeconds 1.0)
+                |> ToolUp.RAG.RAGCompose.RagOptions.withQueryEmbedAttempts 2
+                |> ToolUp.RAG.RAGCompose.RagOptions.withQueryEmbedConcurrency 16
+                |> ToolUp.RAG.RAGCompose.RagOptions.withFactStageTimeout (TimeSpan.FromMilliseconds 750.0)
+                |> ToolUp.RAG.RAGCompose.RagOptions.withRetrievalTraceQueueCapacity 0
 
             Expect.equal
                 tuned.RetrievalBudgets
@@ -592,7 +595,7 @@ type private BatchingVectorStore(blob: IBlobStorage) =
         }
 
 let private noopEventStore () =
-    ToolUp.Platform.InMemoryEventStore.InMemoryEventStore() :> IEventStore
+    ToolUp.Platform.Infra.InMemoryEventStore.InMemoryEventStore() :> IEventStore
 
 let private startService
     (q: IngestionQueue)
@@ -609,8 +612,8 @@ let private startService
         1
         noopLogger
         (ToolUp.RAG.RagTelemetry.createNoOp ())
-        (ToolUp.Platform.Usage.NoOpUsageLog())
-        (ToolUp.Platform.Usage.NoOpTeamQuotaPolicy())
+        (ToolUp.Platform.Infra.Usage.NoOpUsageLog())
+        (ToolUp.Platform.Infra.Usage.NoOpTeamQuotaPolicy())
         retry
         None
         (ToolUp.RAG.IngestionService.IngestionAlertState())
@@ -1011,14 +1014,17 @@ let private lostTraces =
                 }
 
             let app =
-                ToolUp.RAG.RAGCompose.RAGServerApp.create
+                ToolUp.RAG.RAGCompose.RagOptions.create
                     stubAiFactory
                     stubProviderProfile
                     (DelayedEmbedder TimeSpan.Zero)
-                |> ToolUp.RAG.RAGCompose.RAGServerApp.withStorage (InMemoryBlobStorage() :> IBlobStorage)
-                |> ToolUp.RAG.RAGCompose.RAGServerApp.withRetrievalTraceQueueCapacity 1
+                |> ToolUp.RAG.RAGCompose.RagOptions.withRetrievalTraceQueueCapacity 1
 
-            let composed = ToolUp.RAG.RAGCompose.composeRAG app
+            let composed =
+                ServerApp.empty
+                |> ServerApp.withStorage (InMemoryBlobStorage() :> IBlobStorage)
+                |> ToolUp.RAG.RAGCompose.withRAG app
+                |> ServerApp.resolve
 
             let services =
                 Microsoft.Extensions.DependencyInjection.ServiceCollection()
@@ -1031,9 +1037,7 @@ let private lostTraces =
             |> ignore
 
             let services =
-                match ServerApp.serviceConfig composed with
-                | Some configure -> configure services
-                | None -> services
+                ToolUp.Platform.Tests.Support.TestSubstrate.applyServiceConfig composed services
 
             use sp =
                 Microsoft.Extensions.DependencyInjection.ServiceCollectionContainerBuilderExtensions.BuildServiceProvider
@@ -1187,8 +1191,8 @@ let private startOnQueue (q: IIngestionQueue) (logger: ILogger) =
         1
         logger
         (ToolUp.RAG.RagTelemetry.createNoOp ())
-        (ToolUp.Platform.Usage.NoOpUsageLog())
-        (ToolUp.Platform.Usage.NoOpTeamQuotaPolicy())
+        (ToolUp.Platform.Infra.Usage.NoOpUsageLog())
+        (ToolUp.Platform.Infra.Usage.NoOpTeamQuotaPolicy())
         IngestionRetryPolicy.defaults
         None
         (ToolUp.RAG.IngestionService.IngestionAlertState())

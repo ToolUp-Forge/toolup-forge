@@ -26,6 +26,8 @@ open System.IO
 open System.Text.Json
 open ToolUp.Cli.Dispatch
 open ToolUp.Cli.Commands
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ── Recording mock transport ────────────────────────────────────────
 

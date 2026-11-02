@@ -1,10 +1,11 @@
-module ToolUp.Platform.DataObjectStoreErasureHandler
+module ToolUp.Platform.Audit.DataObjectStoreErasureHandler
 
 open System.Text
 open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
-open ToolUp.Platform.IDataExporter
+open ToolUp.Platform.Audit.IDataExporter
+open ToolUp.Platform.Infra
 
 // ─── Phase 9h — data-object-store DSR adapter ────────────────────────
 //

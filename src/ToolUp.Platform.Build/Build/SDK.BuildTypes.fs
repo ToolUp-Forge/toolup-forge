@@ -29,6 +29,81 @@ type TestPack = {
 module TestPack =
     let create name project = { Name = name; Project = project }
 
+/// Where a gate leg runs.
+[<RequireQualifiedAccess>]
+type Site =
+    /// `VerifyAll` runs it, on a developer's machine or wherever `verify.ps1` does.
+    | Local
+    /// The named workflow job runs it.
+    | Ci of job: string
+    /// The release workflow runs it, at a tag.
+    | Release
+
+/// An input a gate leg's verdict depends on. `Env` names a variable that
+/// gates an arm or a regeneration — never ambient toolchain state such as
+/// `PATH`. A leg with no inputs is the `pure` lane's.
+[<RequireQualifiedAccess>]
+type Input =
+    | Tree
+    | Git
+    | Node
+    | Browser
+    | Docker
+    | Network
+    | Env of name: string
+
+/// The floor a leg's `Pass` count is held to, applied by the fold.
+[<RequireQualifiedAccess>]
+type Floor =
+    /// At least this many cases: a lower bound that fires only when the
+    /// harness has collapsed rather than shrunk.
+    | AtLeast of cases: int
+    /// Exactly this many: each case is expensive and losing one silently
+    /// is what the floor must catch.
+    | Exactly of cases: int
+    /// At least the mark in this repo-relative file, which may only rise.
+    | HighWater of file: string
+    /// The case floors are read from this registry by the leg's own
+    /// script, which fails by name on a case that stops running.
+    | FromRegistry of file: string
+
+/// What one leg concluded. `Pending` is how an arm says its named input
+/// was absent; it is counted in neither `PASS` nor `FAIL`, never as a pass.
+[<RequireQualifiedAccess>]
+type Verdict =
+    /// Passed; the case count when the runner reported one.
+    | Pass of cases: int option
+    | Fail of reason: string
+    | Pending of reason: string
+
+/// How a leg runs.
+[<RequireQualifiedAccess>]
+type LegKind =
+    /// An Expecto runner project, built once with the solution and launched
+    /// as its dll.
+    | ExpectoPack of project: string
+    /// A body of the driver's own, returning its verdict.
+    | Body of run: (unit -> Verdict)
+    /// A script at this repo-relative path, run by `pwsh -NoProfile -File`.
+    | Script of path: string
+
+/// One row of a gate manifest: what runs, in which lanes, where, reading
+/// what, within what budget and above what floor. `'Lane` is the
+/// repository's own lane vocabulary (forge: `TestLane.Lane`); the SDK
+/// does not define lanes.
+type GateLeg<'Lane when 'Lane: comparison> = {
+    /// The token in the `<label> summary:` block.
+    Name: string
+    Kind: LegKind
+    Lanes: Set<'Lane>
+    Where: Set<Site>
+    Reads: Input list
+    /// The measured wall clock, seeded from `ProcResult.Elapsed` and
+    /// re-derived from recorded runs; `None` until measured.
+    Budget: System.TimeSpan option
+    Floor: Floor option
+}
+
 /// Phase 1096 — the directories under `src/` that the `Pack` and `Publish`
 /// targets never pack, declared once. They were spelled three times (the
 /// two globs and the SDK manifest reconciler), and a copy that drifts packs
@@ -62,3 +137,103 @@ module PackScope =
         let normalised = projectPath.Replace('\\', '/')
 
         excludedDirs |> List.exists (fun seg -> normalised.Contains(sprintf "/%s/" seg))
+
+/// What one child process did: the command line as run, its
+/// exit code, what it printed (empty unless the run was redirected) and how
+/// long it took. Every runner in a build driver returns this one record, so a
+/// gate leg's verdict, output and budget are read off it rather than scraped.
+type ProcResult = {
+    /// The command line as the process was started, for reports.
+    Command: string
+    ExitCode: int
+    /// Captured standard output; empty when the run inherited the console.
+    StdOut: string
+    /// Captured standard error; empty when the run inherited the console.
+    StdErr: string
+    Elapsed: System.TimeSpan
+}
+
+/// How a child process is run. `Proc.options` is the default:
+/// inherit the console, echo the command line, no extra environment.
+type ProcOptions = {
+    /// Variables set on the child's environment, in order.
+    Environment: (string * string) list
+    /// Capture standard output and error into the result instead of
+    /// inheriting the console.
+    Redirect: bool
+    /// Echo the command line before it runs. Off for high-volume readers
+    /// (one `git show` per baseline), whose echo would bury the report.
+    TraceCommand: bool
+    /// Kill the child and raise when it outlives this.
+    Timeout: System.TimeSpan option
+}
+
+/// The options a driver accepts. A switch takes no value; a
+/// valued option takes the next argument. Anything else spelled `--name` is
+/// refused by name, so a mistyped flag cannot be silently ignored.
+type FlagSpec = {
+    Switches: string list
+    Valued: string list
+}
+
+/// A driver's command line, parsed once.
+type Flags = {
+    /// The first argument when it is not an option, else `Run` — the rule
+    /// `execute` has always applied.
+    Target: string
+    /// The non-option arguments after the target, in order.
+    Positionals: string list
+    /// The switches given.
+    Switches: Set<string>
+    /// The valued options given; the last occurrence wins.
+    Values: Map<string, string>
+}
+
+/// One project's cost in a solution build, read off MSBuild's
+/// `-clp:PerformanceSummary` text. The census build runs with `-graph`, so a
+/// project starts only after every project it references has finished: its
+/// time is its own work (dominated by `Fsc`), never time spent blocked on a
+/// reference. See `docs/migrations/1199-build-census.md`.
+type ProjectCost = {
+    /// The project file as MSBuild printed it (a full path).
+    Project: string
+    /// The project's own build time, in seconds, summed over its calls.
+    CompileSeconds: float
+    /// Seconds MSBuild spent evaluating the project file, summed over its
+    /// evaluations; 0 when the summary has no evaluation row for it.
+    EvaluationSeconds: float
+}
+
+/// One row of `build-census.json`: a solution project's measured cost,
+/// its size and its place in the reference graph.
+type CensusEntry = {
+    /// Repo-relative path of the `.fsproj`, forward-slashed.
+    Project: string
+    /// The project's own build seconds, as in `ProjectCost`.
+    CompileSeconds: float
+    /// The project file's evaluation seconds, as in `ProjectCost`.
+    EvaluationSeconds: float
+    /// Lines in the project's `Compile` items.
+    Lines: int
+    /// Solution projects that reference this one.
+    FanIn: int
+    /// Solution projects this one references.
+    FanOut: int
+}
+
+/// The whole census: one machine's measurement of one tree, dated.
+type BuildCensus = {
+    /// `git rev-parse HEAD` when the census was measured.
+    TreeSha: string
+    /// The machine that measured it, as its OS, architecture and processor
+    /// count — never its host name, which names a private machine.
+    Machine: string
+    /// When it was measured, UTC, ISO 8601.
+    MeasuredAt: string
+    /// Wall-clock seconds of the census build.
+    WallSeconds: float
+    /// The build command, as run.
+    Command: string
+    /// Every solution project, most expensive first.
+    Projects: CensusEntry list
+}

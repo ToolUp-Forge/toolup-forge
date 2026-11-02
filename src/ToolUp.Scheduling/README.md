@@ -19,7 +19,7 @@ Shipped surface (commit-stable across Phase 20):
 | Pure conflict detection | [`Server/BookingConflictDetector.fs`](Server/BookingConflictDetector.fs) | `detect`, `DetectorInputs` |
 | Default impl | [`Server/BookingScheduler.fs`](Server/BookingScheduler.fs) | `BookingScheduler` over `IEntityStore` + `IEventStore` |
 | API handler | [`Server/SchedulingApiHandler.fs`](Server/SchedulingApiHandler.fs) | `schedulingApi` ToolUp.Remoting handler |
-| Compose pipeline | [`Server/SchedulingCompose.fs`](Server/SchedulingCompose.fs) | `SchedulingServerApp` record + `run` |
+| Compose pipeline | [`Server/SchedulingCompose.fs`](Server/SchedulingCompose.fs) | `SchedulingOptions` + `withScheduling` |
 
 ## Why a companion, not core SDK
 
@@ -50,20 +50,24 @@ let config = {
     ServerConfig.defaults with
         Port = 5000
         Surfaces = Surfaces.team
-        EntityStore = EnabledEntityStore   // REQUIRED — scheduling rides on Phase 19
+        Stores = {
+            ServerConfig.defaults.Stores with
+                EntityStore = FeatureMode.Enabled   // REQUIRED — scheduling rides on Phase 19
+        }
 }
 
 [<EntryPoint>]
 let main _ =
-    SchedulingServerApp.create ()
-    |> SchedulingServerApp.withConfig config
-    |> SchedulingServerApp.withAuth (StaticJwtAuthProvider(...))
-    |> SchedulingServerApp.withStorage (LocalFileStorage("data"))
-    |> SchedulingServerApp.addModules myModules
-    |> SchedulingServerApp.run
+    ServerApp.empty
+    |> ServerApp.withConfig config
+    |> ServerApp.withAuth (StaticJwtAuthProvider(...))
+    |> ServerApp.withStorage (LocalFileStorage("data"))
+    |> ServerApp.addModules myModules
+    |> SchedulingCompose.withScheduling (SchedulingOptions.create ())
+    |> ServerApp.run
 ```
 
-`SchedulingServerApp.run`:
+`SchedulingCompose.withScheduling`, when the deployment resolves:
 1. Registers three entity types with `IEntityStore` via `ServerApp.withEntity`:
    - `BookableResource` (index on `ResourceType`)
    - `Booking` (indexes on `ResourceId`, `Status`, compound `(ResourceId, StartUtc)`)
@@ -72,7 +76,7 @@ let main _ =
 3. Mounts the `ISchedulingApi` ToolUp.Remoting handler.
 4. Delegates the rest to `ServerApp.run`.
 
-Apps without `ServerConfig.EntityStore = EnabledEntityStore` get a runtime null reference at first dispatch — explicit enforcement is a follow-up.
+Apps without `ServerConfig.Stores.EntityStore = FeatureMode.Enabled` get a runtime null reference at first dispatch — explicit enforcement is a follow-up.
 
 ## How to register a resource type
 
@@ -103,12 +107,15 @@ scheduler.RegisterResource("team-acme", alice)
 
 ## How to configure reminders
 
-Reminder fusion is **opt-in** and currently a no-op flag (`SchedulingServerApp.withReminders`). When the feature lands, the consumer enables it via:
+Reminder fusion is **opt-in** and currently a no-op flag (`SchedulingOptions.withReminders`). When the feature lands, the consumer enables it via:
 
 ```fsharp
-SchedulingServerApp.create ()
-|> SchedulingServerApp.withReminders        // future: lead-time + transport config
-|> SchedulingServerApp.run
+ServerApp.empty
+|> SchedulingCompose.withScheduling (
+    SchedulingOptions.create ()
+    |> SchedulingOptions.withReminders        // future: lead-time + transport config
+)
+|> ServerApp.run
 ```
 
 Until then, deployments that want booking reminders dispatch them themselves via `IJobScheduler` against `_scheduling` events — same plumbing the future fusion will use.

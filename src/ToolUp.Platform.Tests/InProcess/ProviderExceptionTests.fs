@@ -15,7 +15,8 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.ProviderExceptions
 open ToolUp.Platform.Secrets
-open ToolUp.Platform.IEmbeddingProvider
+open ToolUp.Platform.Infra.IEmbeddingProvider
+open ToolUp.Platform.Infra
 
 // ─── Phase 972 — provider exception matches see through Async.AwaitTask ───
 //

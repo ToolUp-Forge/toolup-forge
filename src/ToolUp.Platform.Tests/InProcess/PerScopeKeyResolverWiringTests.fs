@@ -7,10 +7,13 @@ open Expecto
 open Microsoft.Extensions.Caching.Memory
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
-open ToolUp.Platform.BlobEncryption
+open ToolUp.Platform.Infra.BlobEncryption
 open ToolUp.Platform.ConfigValidation
-open ToolUp.Platform.NotificationChannel
+open ToolUp.Platform.Config.NotificationChannel
 open ToolUp.Platform.Secrets
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 458 — crypto-shred fanout wiring: optional on one replica, ──
 //     required on more, and enforced rather than assumed
@@ -21,8 +24,8 @@ open ToolUp.Platform.Secrets
 // nothing and said nothing, and the one hard-Error guard over the
 // crypto-shred contract read the replica count from
 // `TOOLUP_REPLICA_COUNT` — the environment — while its six sibling
-// topology validators read `config.ReplicaCount`. A deployment that
-// declared `{ config with ReplicaCount = 3 }` in code therefore tripped
+// topology validators read `config.MultiInstance.ReplicaCount`. A deployment that
+// declared ` { config with MultiInstance = { config.MultiInstance with ReplicaCount = 3 } }` in code therefore tripped
 // every other topology validator and silently skipped the security one.
 //
 // Three properties are pinned here, and each has a control case beside it
@@ -83,7 +86,10 @@ type private FakeDistributedChannel() =
 /// A `ServerConfig` declaring `n` replicas and nothing else unusual.
 let private configWithReplicas (n: int) = {
     ServerConfig.defaults with
-        ReplicaCount = n
+        MultiInstance = {
+            ServerConfig.defaults.MultiInstance with
+                ReplicaCount = n
+        }
 }
 
 /// `IServiceCollection` carrying the composed channel instance, in the
@@ -255,7 +261,7 @@ let wiringValidatorTests =
                     "names what is missing, not just that something is"
 
                 Expect.stringContains msg "3" "quotes the declared replica count back"
-                Expect.stringContains msg "ServerConfig.ReplicaCount" "names the field that declared it"
+                Expect.stringContains msg "ServerConfig.MultiInstance.ReplicaCount" "names the field that declared it"
                 Expect.stringContains msg "withEncryptedBlobStorage" "names the compose path that wires it for you"
             | other ->
                 failtestf "expected a hard Error for declared multi-instance with an unwired resolver, got %A" other

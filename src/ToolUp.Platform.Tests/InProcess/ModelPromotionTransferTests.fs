@@ -9,7 +9,10 @@ open System.Text
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.DataObjectStore
+open ToolUp.Platform.Infra.DataObjectStore
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 646 — promotion-time provenance transfer ─────────────────────
 //
@@ -607,7 +610,7 @@ let tests =
             let graph =
                 ProvenanceGraph.createWithArtifacts stack.Lineage (ModelArtifactProvenance.source stack.Registry)
 
-            let! chain = graph.GetChain(scope, ModelArtifactRef promotedKey.Hash, Upstream, 4)
+            let! chain = graph.GetChain(TestScope.resolved scope, ModelArtifactRef promotedKey.Hash, Upstream, 4)
 
             Expect.equal chain.Root promotedKey.Hash "the chain is rooted at the promoted artifact"
 

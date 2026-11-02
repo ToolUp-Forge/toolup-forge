@@ -6,7 +6,8 @@ namespace ToolUp.PublicRendering
 open ToolUp.Platform
 open ToolUp.Platform.Narrative
 open ToolUp.Platform.VectorKnowledgeTypes
-open ToolUp.Platform.IRetrievalPipeline
+open ToolUp.Platform.Infra.IRetrievalPipeline
+open ToolUp.Platform.Infra
 
 // ─── Phase 91 — RAG-backed answer pages ──────────────────────────────
 //
@@ -170,7 +171,7 @@ module RagAnswerSource =
         |> Narrative.withProvenance "rag" None "rag-answer" []
 
     /// Construct a RAG answer-page content source over a retrieval pipeline.
-    /// Register it with `PublicRenderingServerApp.withContentSource`. The
+    /// Register it with `PublicRenderingOptions.withContentSource`. The
     /// produced pages are `Narrative`-bodied and cache through the Phase 84
     /// render cache like any other content-source page.
     let create (pipeline: IRetrievalPipeline) (config: RagAnswerConfig) : IContentSource =
@@ -306,7 +307,7 @@ module SuggestedQuestionsSource =
             |> Narrative.withProvenance "rag" None "faq" []
 
     /// Construct a suggested-questions FAQ content source over a provider.
-    /// Register it with `PublicRenderingServerApp.withContentSource`
+    /// Register it with `PublicRenderingOptions.withContentSource`
     /// alongside the `RagAnswerSource` whose `answersPrefix` it links into.
     let create (provider: SuggestedQuestionsProvider) (config: SuggestedQuestionsConfig) : IContentSource =
         ContentSource.create (fun (Slug s) ctx -> async {

@@ -4,7 +4,7 @@
 # removal is breaking and must be reviewed; an addition is non-breaking but must
 # still be folded into this file in the same PR.
 ToolUp.DataSources.GoogleAnalyticsDataSource (class)
-ToolUp.DataSources.GoogleAnalyticsDataSource.create(ToolUp.Platform.Secrets+ISecretStore, ToolUp.DataSources.GoogleAnalyticsDataSource+GoogleAnalyticsTransport, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IOAuthTokenRefresher], ToolUp.DataSources.GoogleAnalyticsDataSource+GoogleAnalyticsSourceConfig) : ToolUp.Platform.IDataSource
+ToolUp.DataSources.GoogleAnalyticsDataSource.create(ToolUp.Platform.Secrets+ISecretStore, ToolUp.DataSources.GoogleAnalyticsDataSource+GoogleAnalyticsTransport, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.IOAuthTokenRefresher], ToolUp.DataSources.GoogleAnalyticsDataSource+GoogleAnalyticsSourceConfig) : ToolUp.Platform.Infra.IDataSource
 ToolUp.DataSources.GoogleAnalyticsDataSource+GoogleAnalyticsProperty (class)
 ToolUp.DataSources.GoogleAnalyticsDataSource+GoogleAnalyticsProperty..ctor(System.String, System.String, System.String)
 ToolUp.DataSources.GoogleAnalyticsDataSource+GoogleAnalyticsProperty.AccountDisplayName : System.String { get }
@@ -82,7 +82,7 @@ ToolUp.DataSources.GoogleAnalyticsSchema+Ga4SentinelMeaning+Tags.Classification 
 ToolUp.DataSources.GoogleOAuthFlow (class)
 ToolUp.DataSources.GoogleOAuthFlow.clientIdKey(System.String, System.String) : System.String
 ToolUp.DataSources.GoogleOAuthFlow.clientSecretKey(System.String, System.String) : System.String
-ToolUp.DataSources.GoogleOAuthFlow.create(System.Net.Http.HttpClient, ToolUp.Platform.Secrets+ISecretStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IOAuthTokenRefresher], ToolUp.DataSources.GoogleOAuthFlow+GoogleOAuthFlowConfig) : ToolUp.Platform.IOAuthCredentialFlow
+ToolUp.DataSources.GoogleOAuthFlow.create(System.Net.Http.HttpClient, ToolUp.Platform.Secrets+ISecretStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.IOAuthTokenRefresher], ToolUp.DataSources.GoogleOAuthFlow+GoogleOAuthFlowConfig) : ToolUp.Platform.Infra.IOAuthCredentialFlow
 ToolUp.DataSources.GoogleOAuthFlow.refreshTokenKey(System.String, System.String) : System.String
 ToolUp.DataSources.GoogleOAuthFlow+GoogleOAuthFlowConfig (class)
 ToolUp.DataSources.GoogleOAuthFlow+GoogleOAuthFlowConfig..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, System.String, System.String)

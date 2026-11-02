@@ -16,7 +16,7 @@ open Expecto
 open SkiaSharp
 open ToolUp.AssetStore
 open ToolUp.Companions.Isolation
-open ToolUp.Platform.IOcrProvider
+open ToolUp.Platform.Infra.IOcrProvider
 open ToolUp.RAG.OcrProviders.Tesseract
 open ToolUp.RAG.OcrProviders.Tesseract.TesseractOcrIsolation
 

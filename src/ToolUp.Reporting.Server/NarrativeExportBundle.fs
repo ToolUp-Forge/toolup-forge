@@ -34,6 +34,7 @@ module ToolUp.Reporting.NarrativeExportBundle
 open ToolUp.Platform.Narrative
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Reporting
+open ToolUp.Platform.Infra
 
 /// Pair a document with its rendered chart artifacts, with no disclosure
 /// gate — for a deployment that composes no fact tier. Byte-for-byte
@@ -59,10 +60,10 @@ let createWithDisclosureGate
     (gate: IFactDisclosureGate)
     (principal: string)
     (renderer: ChartArtifactRenderer)
-    (scopeId: string)
+    (scope: ToolUp.Platform.ResolvedScope)
     (document: NarrativeDocument)
     : Async<ChartExportBundle> =
     async {
-        let! disclosed = ReportApiHandler.applyExportDisclosure gate principal scopeId document
+        let! disclosed = ReportApiHandler.applyExportDisclosure gate principal scope document
         return ChartExportBundle.ofDocument renderer disclosed
     }

@@ -1,9 +1,10 @@
-module ToolUp.Platform.AuditLog
+module ToolUp.Platform.Audit.AuditLog
 
 open System
 open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
+open ToolUp.Platform.Infra
 
 // ─── Audit log default implementation ────────────────────────────
 //
@@ -2021,6 +2022,39 @@ let internal auditEventCodecs: AuditEventCodec list = [
             | _ -> None)
         Decode = fun j -> PublicationReaderRevoked(fromAuditJson<PublicationReaderGrantChangedPayload> j)
     }
+    // The page store's writes and refusals (append-only registration).
+    {
+        EventType = "PageSaved"
+        TryEncode =
+            (function
+            | PageSaved p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> PageSaved(fromAuditJson<PageSavedPayload> j)
+    }
+    {
+        EventType = "PageReseeded"
+        TryEncode =
+            (function
+            | PageReseeded p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> PageReseeded(fromAuditJson<PageReseededPayload> j)
+    }
+    {
+        EventType = "PageDetached"
+        TryEncode =
+            (function
+            | PageDetached p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> PageDetached(fromAuditJson<PageDetachedPayload> j)
+    }
+    {
+        EventType = "PageWriteRefused"
+        TryEncode =
+            (function
+            | PageWriteRefused p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> PageWriteRefused(fromAuditJson<PageWriteRefusedPayload> j)
+    }
 ]
 
 /// Decode lookup keyed by wire `EventType`. Built once at module init.
@@ -2284,7 +2318,7 @@ type EventStoreAuditLog
         }
 
 /// `NoOp` `IAuditLog`. Registered by `compose` when
-/// `ServerConfig.AuditLog = NoAuditLog` (Phase 1g lightweight default).
+/// `ServerConfig.AuditLog = FeatureMode.Disabled` (Phase 1g lightweight default).
 /// `Record` returns immediately without serialising or touching the
 /// event store; `GetAuditTrail` returns an empty list. Emission sites
 /// (`ScopeResolutionMiddleware`, `PlatformApi` handlers,

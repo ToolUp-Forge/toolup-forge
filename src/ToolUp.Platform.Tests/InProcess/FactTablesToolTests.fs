@@ -32,13 +32,17 @@ open ToolUp.Platform
 open ToolUp.Platform.AI
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Grounding
-open ToolUp.Platform.StorageScopeResolver
+open ToolUp.Platform.Scope.StorageScopeResolver
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.AI
 open ToolUp.AI.AIToolRegistry
 open ToolUp.Facts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Tests.InProcess.FactRenderToolTests.RenderFixtures
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 /// The render tools' fixture with its tables, metrics and hierarchy
 /// described.
@@ -626,13 +630,16 @@ let private memberTests =
 
 // ─── 4. Composition ──────────────────────────────────────────────────
 
-let private composedUnder (knob: FactStoreMode) : ServerApp * ServiceProvider * IBlobStorage =
+let private composedUnder (knob: FeatureMode) : ServerApp * ServiceProvider * IBlobStorage =
     let app =
         {
             ServerApp.empty with
                 Config = {
                     ServerConfig.defaults with
-                        FactStore = knob
+                        Stores = {
+                            ServerConfig.defaults.Stores with
+                                FactStore = knob
+                        }
                 }
         }
         |> FactsCompose.withFactStore
@@ -690,7 +697,7 @@ let private compositionTests =
         }
 
         test "the fact store's knob declares the table listing with the other fact tools" {
-            let app, _, _ = composedUnder EnabledFactStore
+            let app, _, _ = composedUnder FeatureMode.Enabled
 
             Expect.equal
                 (app.AITools |> List.map (fun (d, _) -> d.Name))
@@ -705,7 +712,7 @@ let private compositionTests =
         }
 
         test "the grounded narrative's tool set is the same list" {
-            let app, _, _ = composedUnder EnabledFactStore
+            let app, _, _ = composedUnder FeatureMode.Enabled
 
             Expect.equal
                 (NarrativeGrounding.factTools |> List.map (fun (d, _) -> d.Name))
@@ -714,7 +721,7 @@ let private compositionTests =
         }
 
         test "no fact store declares no table listing" {
-            let app, _, _ = composedUnder NoFactStore
+            let app, _, _ = composedUnder FeatureMode.Disabled
             Expect.isEmpty app.AITools "nothing declared"
         }
 
@@ -729,7 +736,7 @@ let private compositionTests =
         }
 
         test "composed, the executor lists the tables the request's scope holds" {
-            let _, sp, _ = composedUnder EnabledFactStore
+            let _, sp, _ = composedUnder FeatureMode.Enabled
             let scope = newScope ()
             seed (sp.GetRequiredService<IFactTableWriter>()) scope trade "revenue"
 
@@ -743,7 +750,7 @@ let private compositionTests =
         }
 
         test "withFactTablesOptions hands the cap to the executor as a value" {
-            let app, sp, _ = composedUnder EnabledFactStore
+            let app, sp, _ = composedUnder FeatureMode.Enabled
             let scope = newScope ()
             seed (sp.GetRequiredService<IFactTableWriter>()) scope trade "revenue"
 
@@ -775,7 +782,10 @@ let private compositionTests =
                 ServerApp.empty with
                     Config = {
                         ServerConfig.defaults with
-                            FactStore = EnabledFactStore
+                            Stores = {
+                                ServerConfig.defaults.Stores with
+                                    FactStore = FeatureMode.Enabled
+                            }
                     }
             }
 
@@ -880,7 +890,7 @@ let private turnTests =
     testList "a scripted turn" [
         testCaseAsync "asked for a metric at a level no table holds, the turn says so without a query call"
         <| async {
-            let app, sp, _ = composedUnder EnabledFactStore
+            let app, sp, _ = composedUnder FeatureMode.Enabled
             let scope = newScope ()
             seed (sp.GetRequiredService<IFactTableWriter>()) scope trade "revenue"
 

@@ -8,6 +8,8 @@ open ToolUp.Algorithms
 open ToolUp.Algorithms.AlgorithmTypes
 open ToolUp.Algorithms.AlgorithmOperations
 open ToolUp.Algorithms.Tests.InProcess.ReferenceProvider
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
 
 // ─── Phase 11.E.2 — registry, catalog and dispatcher paths ──────────
 

@@ -5,6 +5,8 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
 open ToolUp.AI
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 6n — AI cancel / client-tool-dispatch multi-instance ──────
 //
@@ -20,7 +22,7 @@ open ToolUp.AI
 //
 //   * the un-attested multi-replica case is `Error` (a refusal), not
 //     `Warning`. The shard says "Warning (not Error)"; the shipped
-//     validator, `ServerConfig.AcceptStickyRoutedAiInMultiInstance`'s
+//     validator, `ServerConfig.RiskAcknowledgements.AcceptStickyRoutedAiInMultiInstance`'s
 //     own doc comment ("`AICancellationDispatchInstanceValidator`
 //     refuses startup") and `docs/operations/env-vars.md` ("Lowers a
 //     startup preflight refusal to a warning") all agree on `Error`.
@@ -35,8 +37,14 @@ open ToolUp.AI
 
 let private cfg (replicaCount: int) (escapeHatch: bool) : ServerConfig = {
     ServerConfig.defaults with
-        ReplicaCount = replicaCount
-        AcceptStickyRoutedAiInMultiInstance = escapeHatch
+        MultiInstance = {
+            ServerConfig.defaults.MultiInstance with
+                ReplicaCount = replicaCount
+        }
+        RiskAcknowledgements = {
+            ServerConfig.defaults.RiskAcknowledgements with
+                AcceptStickyRoutedAiInMultiInstance = escapeHatch
+        }
 }
 
 let private validator (config: ServerConfig) : IConfigValidator =

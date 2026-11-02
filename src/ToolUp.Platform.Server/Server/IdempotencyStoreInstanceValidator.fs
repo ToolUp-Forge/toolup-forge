@@ -1,4 +1,4 @@
-module ToolUp.Platform.IdempotencyStoreInstanceValidator
+module ToolUp.Platform.Config.IdempotencyStoreInstanceValidator
 
 open System
 open Microsoft.Extensions.DependencyInjection
@@ -80,14 +80,14 @@ type IdempotencyStoreInstanceValidator(config: ServerConfig, services: IServiceC
         member _.Timeout = timeout
 
         member _.Validate() = async {
-            let multiInstance = config.ReplicaCount > 1
+            let multiInstance = config.MultiInstance.ReplicaCount > 1
 
             if multiInstance && inMemoryStoreRegistered () then
                 return
                     Warning(
                         sprintf
                             "A DI-registered IIdempotencyStore is the in-memory default (InMemoryIdempotencyStore) with ReplicaCount = %d. The idempotency cache is a process-local dictionary, per-instance and lost on restart — so a retry of an [<Idempotent>] method that lands on a different replica (or after a restart) than the first call misses the memo and re-executes the handler, dropping the cross-instance idempotency guarantee (double-charge / duplicate side effect) silently. Wire the distributed BlobIdempotencyStore over IBlobStorage (the Phase 69f.C reference), or a compare-and-set backend (Redis SETNX / DynamoDB conditional put) against the same IIdempotencyStore contract, or run a single instance / pin idempotent traffic to one replica. After fixing, verify in the HealthMonitorUI admin tab (production-safe) or /dev/inspect Validators panel (debug builds only)."
-                            config.ReplicaCount
+                            config.MultiInstance.ReplicaCount
                     )
             else
                 return Ok

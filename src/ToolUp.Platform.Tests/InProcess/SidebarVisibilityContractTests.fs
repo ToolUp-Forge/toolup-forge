@@ -27,6 +27,7 @@ module ToolUp.Platform.Tests.InProcess.SidebarVisibilityContractTests
 
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Compose
 
 // ─── Phase 570 — sidebar visibility matrix contract pack ─────────────
 //

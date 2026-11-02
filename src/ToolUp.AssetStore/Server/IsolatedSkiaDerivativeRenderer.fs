@@ -23,7 +23,7 @@ open ToolUp.Companions.Isolation
 // going away.
 //
 // Composed through the seam the store already has —
-// `AssetCompose.withRenderer (IsolatedSkiaDerivativeRenderer.create
+// `AssetStoreCompanionOptions.withRenderer (IsolatedSkiaDerivativeRenderer.create
 // isolation)` — so a deployment that composes nothing keeps the
 // in-process renderer byte-for-byte (GP 11 / GP 13).
 

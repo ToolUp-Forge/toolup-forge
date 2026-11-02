@@ -2,7 +2,11 @@ module ToolUp.Platform.Tests.InProcess.BuiltInModuleSurfaceTests
 
 open Expecto
 open ToolUp.Platform
-open ToolUp.Platform.SurfaceEnforcement
+open ToolUp.Platform.Scope.SurfaceEnforcement
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 66 Stream B.4 — SDK built-in surface-requirement tests ────
 //

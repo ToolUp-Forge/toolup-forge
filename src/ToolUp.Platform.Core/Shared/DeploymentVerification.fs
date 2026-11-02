@@ -504,7 +504,7 @@ module DeploymentVerification =
 /// Deployment-wide, never per-tenant (GP 4).
 ///
 /// Mounted only when `ServerConfig.DeploymentVerification =
-/// EnabledDeploymentVerification` (default `NoDeploymentVerification`,
+/// FeatureMode.Enabled` (default `FeatureMode.Disabled`,
 /// GP 11/13) — an unopted deployment 404s the route and pays nothing.
 type IDeploymentVerificationApi = {
     [<RequiresRole "PlatformAdmin">]

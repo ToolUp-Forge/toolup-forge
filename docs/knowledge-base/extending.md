@@ -8,7 +8,7 @@ How to replace the built-in KB module with a custom one, add new extractors, cus
 
 The minimum contract for a KB replacement:
 1. Implements a ToolUp.Remoting API for document upload + list.
-2. Wires an `IIngestionStatusObserver` into `composeWithRAG`.
+2. Wires an `IIngestionStatusObserver` onto the RAG options (`RagOptions.withIngestionObserver`).
 3. Either matches the `"KnowledgeBase.IngestionStatus"` notification key (so the AI side panel surfaces ingestion progress) or accepts the AI panel won't show progress for its uploads.
 4. Optionally supplies a `ClientConfig.Handlers.NarrativeCommitHandler`, which the shell installs into the `Toolup.NarrativeCommit` broker at boot (so other modules' "Save to Knowledge Base" buttons resolve).
 
@@ -58,11 +58,14 @@ In the composition root:
 ```fsharp
 // Vectorisation handlers ride on the module that owns the data type —
 // `ServerModule.withVectorisation [ myVectorisationHandler ]` — not on
-// the RAG app.
-RAGServerApp.create aiProviderFactory providerProfile embedder
-|> RAGServerApp.addModules [ myKnowledgeBaseModule ]    // your module
-|> RAGServerApp.withIngestionObserver myIngestionStatusObserver
-|> RAGServerApp.run
+// the RAG options.
+ServerApp.empty
+|> ServerApp.addModules [ myKnowledgeBaseModule ]    // your module
+|> RAGCompose.withRAG (
+    RagOptions.create aiProviderFactory providerProfile embedder
+    |> RagOptions.withIngestionObserver myIngestionStatusObserver
+)
+|> ServerApp.run
 ```
 
 Drop the `ToolUp.KnowledgeBase` `<PackageReference>` entries from the consuming project's `.fsproj`. The built-in KB module disappears; your replacement provides equivalent (or different) functionality.
@@ -95,7 +98,7 @@ Client.run clientConfig modules      // or: AIClientConfig.run aiMode clientConf
 Two properties worth stating explicitly:
 
 - **The DU lives in the companion, not in `ClientConfig`.** `ToolUp.Platform.Client` cannot reference `ToolUp.KnowledgeBase.Client` (the shell takes no companion dependency), and `DefaultKnowledgeBase` has to construct the companion's own module. So the transform is a companion-owned `ClientConfig * ErasedModule list` function, exactly as `AIClientConfig.appendAssistantModule` is for `AIAssistantMode`. It composes under either entry point.
-- **The mode governs the client only.** Server-side wiring — the `KnowledgeApi` registration, `makeIngestionStatusObserver` into `composeWithRAG`, the opt-in `standingContextBuilder` — stays a composition-root concern, mirroring how `DataManagerMode` governs the sidebar module while `fileManagementApi` is wired by hand.
+- **The mode governs the client only.** Server-side wiring — the `KnowledgeApi` registration, `makeIngestionStatusObserver` onto the RAG options, the opt-in `standingContextBuilder` — stays a composition-root concern, mirroring how `DataManagerMode` governs the sidebar module while `fileManagementApi` is wired by hand.
 
 A deployment that never calls `withKnowledgeBase` is unchanged: there is no SDK-side default mode, and the direct `KnowledgeBaseView.register ()` registration keeps working.
 
@@ -104,7 +107,7 @@ A deployment that never calls `withKnowledgeBase` is unchanged: there is no SDK-
 An `ExternalKnowledgeBase` is reached by the rest of the SDK through exactly three seams. Skip one and you degrade a surface you don't own; the build stays green either way, so they are listed here rather than enforced.
 
 1. **NarrativeCommit handler.** Other modules offer "Save to Knowledge Base" by rendering `NarrativeRenderer` and letting it dispatch through the global `Toolup.NarrativeCommit` broker — no module imports KB types directly. An external KB sets its own `ClientConfig.Handlers.NarrativeCommitHandler` (a record whose `Submit` takes the `NarrativeDocument` plus an overwrite flag and returns a `NarrativeCommitResult`). Left `None`, the button hides itself.
-2. **`IIngestionStatusObserver` registration.** The composition root passes an observer (from `ToolUp.RAG.IngestionTypes`) into `composeWithRAG`; `OnChunkIndexed` / `OnChunkFailed` drive the per-document status index and publish the status notifications. Identity is by-value (`IngestionJob.DocumentId : string`) and both members are `Async<unit>`, per the six portability rules (GP 12).
+2. **`IIngestionStatusObserver` registration.** The composition root passes an observer (from `ToolUp.RAG.IngestionTypes`) onto the RAG options with `RagOptions.withIngestionObserver`; `OnChunkIndexed` / `OnChunkFailed` drive the per-document status index and publish the status notifications. Identity is by-value (`IngestionJob.DocumentId : string`) and both members are `Async<unit>`, per the six portability rules (GP 12).
 3. **Notification-key contract.** `"KnowledgeBase.IngestionStatus"` — exposed as `[<Literal>] SharedTypes.IngestionStatusNotificationKey` — is a *published* key, not an imported one: the AI side panel subscribes to the literal directly so AI (the more foundational companion) never depends on KB. An external KB either publishes under the same key and inherits the stock AI side-panel surface, or defines its own and accepts that the stock surface won't subscribe.
 
 ## Adding a new format extractor
@@ -182,9 +185,10 @@ Wire alongside KB:
 ```fsharp
 // Each module declares its own handler with
 // `ServerModule.withVectorisation`, so wiring the module wires the handler.
-RAGServerApp.create aiProviderFactory providerProfile embedder
-|> RAGServerApp.addModules [ kbModule; epubModule ]
-|> RAGServerApp.run
+ServerApp.empty
+|> ServerApp.addModules [ kbModule; epubModule ]
+|> RAGCompose.withRAG (RagOptions.create aiProviderFactory providerProfile embedder)
+|> ServerApp.run
 ```
 
 The file manager UI accepts EPUBs; the post-save hook routes by `DataTypeId` to the right handler.
@@ -224,14 +228,14 @@ The KB extractor for PDFs uses `UglyToad.PdfPig` for native text extraction. Sca
 
 **Without an OCR companion, such an upload is stored and reports `IngestionStatus.OcrUnavailable`** rather than the misleading `Complete 0` it used to report. That status is the signal that this section is the remedy; it is not an error, and the original stays downloadable.
 
-The shipped companion is `ToolUp.OcrProviders.Tesseract` (in-process, no per-page cost, operator-supplied language data). Register any `IOcrProvider` in DI **before** `composeWithRAG` runs — the RAG composition probes for one and only falls back to the no-op when it finds none:
+The shipped companion is `ToolUp.OcrProviders.Tesseract` (in-process, no per-page cost, operator-supplied language data). Register any `IOcrProvider` in DI **before** the RAG composition runs — the RAG composition probes for one and only falls back to the no-op when it finds none:
 
 ```fsharp
 open ToolUp.RAG.OcrProviders.Tesseract
 
 let ocr = TesseractOcrProvider.createForTessData "/var/lib/tessdata"
 
-services.AddSingleton<ToolUp.Platform.IOcrProvider.IOcrProvider>(ocr)
+services.AddSingleton<ToolUp.Platform.Infra.IOcrProvider.IOcrProvider>(ocr)
 ```
 
 The extractor then routes through it on two paths:
@@ -252,7 +256,7 @@ let tableExtractor = CamelotTableExtractor.create pythonSidecar :> ITableExtract
 
 // Registered in DI BEFORE the RAG composition runs — `composeRAG` probes
 // for an already-registered `ITableExtractor` and falls back to the no-op
-// only when it finds none. There is no `RAGServerApp` pipeline step.
+// only when it finds none. There is no `RagOptions` setter.
 services.AddSingleton<ITableExtractor>(tableExtractor)
 ```
 
@@ -274,7 +278,7 @@ type SlackOnFailureObserver(slackWebhookUrl: string) =
         }
 ```
 
-Register several with `RAGServerApp.withIngestionObservers` — the built-in KB observer and your own coexist rather than replacing each other.
+Register several with `RagOptions.withIngestionObservers` — the built-in KB observer and your own coexist rather than replacing each other.
 
 Wire alongside (or replace) the built-in observer:
 
@@ -290,9 +294,12 @@ let composedObserver: IIngestionStatusObserver =
         ]
     )
 
-RAGServerApp.create aiProviderFactory providerProfile embedder
-|> RAGServerApp.withIngestionObserver composedObserver
-|> RAGServerApp.run
+ServerApp.empty
+|> RAGCompose.withRAG (
+    RagOptions.create aiProviderFactory providerProfile embedder
+    |> RagOptions.withIngestionObserver composedObserver
+)
+|> ServerApp.run
 ```
 
 (`ChainedObserver` isn't shipped — it's a 5-line composition you write yourself.)

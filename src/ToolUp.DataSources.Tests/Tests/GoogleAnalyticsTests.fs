@@ -9,6 +9,7 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.DataSources
 open ToolUp.DataSources.Common
+open ToolUp.Platform.Infra
 
 // ─── Phase 838 — provider sentinels are declared at the connector ───
 //

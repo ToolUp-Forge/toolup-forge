@@ -6,9 +6,12 @@ open System.Net.Http
 open System.Text
 open System.Text.Json
 open System.Threading
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Config
 open ToolUp.Platform // IEventStore, Events, ModuleEvent (SDK.Shared)
 open ToolUp.Platform.Metrics // IMetricsSink (Phase 9e)
-open ToolUp.Platform.IEmbeddingProvider
+open ToolUp.Platform.Infra.IEmbeddingProvider
 open ToolUp.Platform.Secrets
 open ToolUp.Platform.ProviderExceptions
 
@@ -101,7 +104,7 @@ type private EmbedAttempt =
 let private sharedClient =
     lazy
         (let c =
-            ToolUp.Platform.PlatformHttpClient.create ToolUp.Platform.EgressSurface.AIProvider
+            ToolUp.Platform.Compose.PlatformHttpClient.create ToolUp.Platform.EgressSurface.AIProvider
 
          c.BaseAddress <- Uri("https://api.openai.com")
          c.Timeout <- Timeout.InfiniteTimeSpan
@@ -795,7 +798,7 @@ type EmbeddingProbeResult =
 let private probeClient =
     lazy
         (let c =
-            ToolUp.Platform.PlatformHttpClient.create ToolUp.Platform.EgressSurface.AIProvider
+            ToolUp.Platform.Compose.PlatformHttpClient.create ToolUp.Platform.EgressSurface.AIProvider
 
          c.BaseAddress <- Uri("https://api.openai.com")
          c.Timeout <- TimeSpan.FromSeconds 10.0

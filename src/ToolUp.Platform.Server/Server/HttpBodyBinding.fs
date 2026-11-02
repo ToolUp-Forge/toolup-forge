@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.HttpBodyBinding
+module ToolUp.Remoting.Server.Http.HttpBodyBinding
 
 open System
 open System.IO

@@ -14,6 +14,9 @@ open Giraffe
 open ToolUp.Platform
 open ToolUp.Platform.Metrics
 open ToolUp.Platform.Usage
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Infra.Usage
+open ToolUp.Platform.Compose
 
 // ─── Phase 473 — playback + delivery telemetry ────────────────────────
 //
@@ -82,8 +85,8 @@ open ToolUp.Platform.Usage
 // **Off means off (GP 13).** `accountFor` returns `EgressUnmetered` — a
 // nullary union case, which F# caches as a singleton — when neither
 // sink is live, and `count` / `flush` on that value allocate nothing at
-// all. A deployment with `MetricsEndpoint = NoMetricsEndpoint` and
-// `UsageMetering = NoUsageMetering` pays two DI lookups per served
+// all. A deployment with `MetricsEndpoint = FeatureMode.Disabled` and
+// `UsageMetering = FeatureMode.Disabled` pays two DI lookups per served
 // response and not one byte of allocation. The gate is resolved
 // per-response rather than cached in a process-wide `mutable` (the
 // Phase 69l shape) because this seam is per-RESPONSE rather than
@@ -255,7 +258,7 @@ let SemanticsUnknown = "unknown"
 let byteSemanticsTokens: string list = [ SemanticsBodyOnly; SemanticsIncludesHeaders; SemanticsUnknown ]
 
 /// Metric declarations, wired into `ServerApp.MetricRegistrations` by
-/// `MediaCompose.run` so a media-composing deployment has both series
+/// `MediaCompose.withMediaLibrary` so a media-composing deployment has both series
 /// declared the moment it composes — the `AILatencyMetrics` /
 /// `ActionLedgerMetrics` pattern. An unregistered series is dropped by
 /// the sink, so declaring them at compose time is what makes the

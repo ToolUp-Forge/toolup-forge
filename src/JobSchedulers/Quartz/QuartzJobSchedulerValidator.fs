@@ -8,6 +8,7 @@ open Quartz
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
 open ToolUp.Platform.JobSchedulers.QuartzStore
+open ToolUp.Platform.Config
 
 // ─── Phase 9c.E Quartz config preflight ──────────────────────────────
 //
@@ -33,7 +34,7 @@ open ToolUp.Platform.JobSchedulers.QuartzStore
 //      in-memory store, which is NOT clustered: N replicas of that
 //      configuration each fire every cron job independently. A
 //      deployment that means it sets
-//      `ServerConfig.AcceptInProcessSchedulerInMultiInstance`, exactly
+//      `ServerConfig.RiskAcknowledgements.AcceptInProcessSchedulerInMultiInstance`, exactly
 //      as it would for the in-process default.
 
 type private Impl(scheduler: IScheduler, quartzConfig: QuartzConfig, config: ServerConfig) =
@@ -60,8 +61,8 @@ type private Impl(scheduler: IScheduler, quartzConfig: QuartzConfig, config: Ser
                 try
                     let! metadata = await (scheduler.GetMetadata())
 
-                    let multiInstance = config.ReplicaCount > 1
-                    let accepted = config.AcceptInProcessSchedulerInMultiInstance
+                    let multiInstance = config.MultiInstance.ReplicaCount > 1
+                    let accepted = config.RiskAcknowledgements.AcceptInProcessSchedulerInMultiInstance
 
                     if multiInstance && not metadata.JobStorePersistent then
                         if accepted then
@@ -69,15 +70,15 @@ type private Impl(scheduler: IScheduler, quartzConfig: QuartzConfig, config: Ser
                                 Warning(
                                     sprintf
                                         "ServerConfig.JobScheduler = QuartzJobScheduler with ReplicaCount = %d over a non-persistent Quartz job store (%s). Every replica fires every cron job independently; AcceptInProcessSchedulerInMultiInstance is set, so this is accepted as deliberate."
-                                        config.ReplicaCount
+                                        config.MultiInstance.ReplicaCount
                                         metadata.JobStoreTypeName
                                 )
                         else
                             return
                                 Error(
                                     sprintf
-                                        "ServerConfig.JobScheduler = QuartzJobScheduler with ReplicaCount = %d, but the composed Quartz job store (%s) is not persistent and therefore not clustered — each replica holds its own copy of every trigger and fires it, so N replicas means N times every job. Compose the companion with QuartzJobScheduler.createWith and a persistent, clustered store (Quartz's UsePersistentStore), or set ServerConfig.AcceptInProcessSchedulerInMultiInstance = true if your jobs are idempotent and you accept the duplicate execution. After fixing, verify in the HealthMonitorUI admin tab (production-safe) or /dev/inspect Validators panel (debug builds only)."
-                                        config.ReplicaCount
+                                        "ServerConfig.JobScheduler = QuartzJobScheduler with ReplicaCount = %d, but the composed Quartz job store (%s) is not persistent and therefore not clustered — each replica holds its own copy of every trigger and fires it, so N replicas means N times every job. Compose the companion with QuartzJobScheduler.createWith and a persistent, clustered store (Quartz's UsePersistentStore), or set ServerConfig.RiskAcknowledgements.AcceptInProcessSchedulerInMultiInstance = true if your jobs are idempotent and you accept the duplicate execution. After fixing, verify in the HealthMonitorUI admin tab (production-safe) or /dev/inspect Validators panel (debug builds only)."
+                                        config.MultiInstance.ReplicaCount
                                         metadata.JobStoreTypeName
                                 )
                     elif multiInstance && not metadata.JobStoreClustered then
@@ -85,7 +86,7 @@ type private Impl(scheduler: IScheduler, quartzConfig: QuartzConfig, config: Ser
                             Warning(
                                 sprintf
                                     "ServerConfig.JobScheduler = QuartzJobScheduler with ReplicaCount = %d over a persistent but NON-CLUSTERED Quartz job store (%s). Persistence alone does not elect one firing node; enable Quartz clustering so exactly one replica acquires each trigger."
-                                    config.ReplicaCount
+                                    config.MultiInstance.ReplicaCount
                                     metadata.JobStoreTypeName
                             )
                     elif metadata.Status = SchedulerStatus.Shutdown then

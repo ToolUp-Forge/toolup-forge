@@ -16,18 +16,23 @@ open System.Text
 open Expecto
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
-open ToolUp.Platform.Backup
-open ToolUp.Platform.BackupCoordinator
-open ToolUp.Platform.BlobEncryption
+open ToolUp.Platform.Compose.Backup
+open ToolUp.Platform.Compose.BackupCoordinator
+open ToolUp.Platform.Infra.BlobEncryption
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.DataObjectStore
+open ToolUp.Platform.Infra.DataObjectStore
 open ToolUp.Platform.EncryptionTypes
-open ToolUp.Platform.EntityStore
+open ToolUp.Platform.Infra.EntityStore
 open ToolUp.Platform.HealthChecks
-open ToolUp.Platform.IEntityStore
-open ToolUp.Platform.RestoreDrill
+open ToolUp.Platform.Infra.IEntityStore
+open ToolUp.Platform.Compose.RestoreDrill
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 let private run (work: Async<'T>) = Async.RunSynchronously work
 
@@ -951,7 +956,10 @@ let private tests_boot =
             let config = {
                 ServerConfig.defaults with
                     Port = port
-                    TrustForwardedHeaders = false
+                    SecurityPosture = {
+                        ServerConfig.defaults.SecurityPosture with
+                            TrustForwardedHeaders = false
+                    }
                     Backup = BackupEnabled BackupSettings.defaults
             }
 

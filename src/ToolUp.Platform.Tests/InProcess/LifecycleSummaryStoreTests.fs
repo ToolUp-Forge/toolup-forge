@@ -3,6 +3,8 @@ module ToolUp.Platform.Tests.InProcess.LifecycleSummaryStoreTests
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Phase 54e — BlobBackedLifecycleSummaryStore tests ───────────────
 //

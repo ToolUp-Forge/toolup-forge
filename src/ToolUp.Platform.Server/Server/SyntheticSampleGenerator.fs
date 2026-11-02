@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.SyntheticSampleGenerator
+module ToolUp.Platform.Infra.SyntheticSampleGenerator
 
 open System
 open System.Text

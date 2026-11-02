@@ -1,0 +1,1 @@
+{"kind":"appRoot","base":"serverApp","layers":[],"shortName":"DeclaredProjects","projects":["src/Modules/DailySales/DailySales.fsproj"],"id":"profile-declared-projects","children":[{"kind":"clientShell","id":"clientShell","children":[]}]}

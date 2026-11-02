@@ -3,6 +3,7 @@ module ToolUp.Cloud.Parity.Tests.AuditSinkParityTests
 open Expecto
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Cloud.Parity.Tests.EmulatorLegs
+open ToolUp.Platform.Audit
 
 // ─── Phase 193 — IAuditSink row of the parity matrix ──────────────────
 //

@@ -20,12 +20,15 @@ open Microsoft.Extensions.DependencyInjection
 open ProcessedDataTypes
 open ToolUp.AI
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.EmbeddingProviderEnv
-open ToolUp.Platform.IEmbeddingProvider
+open ToolUp.Platform.Config.EmbeddingProviderEnv
+open ToolUp.Platform.Infra.IEmbeddingProvider
 open ToolUp.Platform.Providers
 open ToolUp.Platform.Secrets
 open ToolUp.Platform.VectorisationTypes
 open ToolUp.RAG.IngestionTypes
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 [<AutoOpen>]
 module PageAmbient =
@@ -51,7 +54,7 @@ module PageAmbient =
     let modules: ServerModule list = failwith "ambient"
 
     /// The embedding provider built in "Wire an embedding provider" and
-    /// passed to `RAGServerApp.create`; those blocks shadow this.
+    /// passed to `RagOptions.create`; those blocks shadow this.
     let embedder: IEmbeddingProvider = failwith "ambient"
 
     // ─── A running deployment ─────────────────────────────────────

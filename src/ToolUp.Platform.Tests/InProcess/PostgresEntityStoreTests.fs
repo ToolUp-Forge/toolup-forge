@@ -9,10 +9,11 @@ open Npgsql
 open ToolUp.Platform
 open ToolUp.Platform.EntityTypes
 open ToolUp.Platform.EntityQueryTypes
-open ToolUp.Platform.EntityStore
-open ToolUp.Platform.IEntityStore
+open ToolUp.Platform.Infra.EntityStore
+open ToolUp.Platform.Infra.IEntityStore
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.EntityStores.Postgres
+open ToolUp.Platform.Infra
 
 // ─── Phase 531 — PostgresEntityStore (env-gated live arm) ───────────────
 //

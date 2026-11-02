@@ -12,6 +12,10 @@ open ToolUp.Platform.Metrics
 open ToolUp.AuthProviders.OidcJwksCacheTypes
 open ToolUp.AuthProviders.OidcAuthProviderJwt
 open ToolUp.AuthProviders.OidcAuthProviderJwks
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Config.Auth
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
 // ─── Phase 341 — opt-in token-validation hardening knobs ─────────────
 //

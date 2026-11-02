@@ -2,8 +2,9 @@ module ToolUp.Platform.Tests.InProcess.HostCapabilityRegistryTests
 
 open Expecto
 open ToolUp.Platform
-open ToolUp.Platform.PermissionStore
+open ToolUp.Platform.Scope.PermissionStore
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Scope
 
 // ─── Phase 266 — host-capability registry tests ──────────────────────
 //

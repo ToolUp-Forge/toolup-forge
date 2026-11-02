@@ -6,6 +6,7 @@ module ToolUp.FeatureFlagProviders.OpenFeature.Validator
 open System
 open OpenFeature
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Config
 
 // ─── Phase 239 — OpenFeature flag-source startup preflight ───────────
 //

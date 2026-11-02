@@ -7,6 +7,7 @@ open ToolUp.RAG.Chunking
 open ToolUp.OpenXml
 open SharedTypes
 open KnowledgeBase.ServerJsonHelpers
+open ToolUp.Platform.Audit
 
 // ─── Phase 124 — opt-in structured DOCX extraction ───────────────
 //

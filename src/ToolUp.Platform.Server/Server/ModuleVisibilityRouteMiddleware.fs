@@ -1,8 +1,9 @@
-module ToolUp.Platform.ModuleVisibilityRoutes
+module ToolUp.Platform.Scope.ModuleVisibilityRoutes
 
 open System
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
+open ToolUp.Platform.Infra
 
 // ─── Phase 637 — opt-in route hardening ──────────────────────────────
 //

@@ -4,14 +4,17 @@ open System.Collections.Generic
 open System.Text.RegularExpressions
 open ToolUp.Platform
 open ToolUp.Platform.VectorKnowledgeTypes
-open ToolUp.Platform.IEmbeddingProvider
-open ToolUp.Platform.IVectorStore
-open ToolUp.Platform.ISparseIndex
-open ToolUp.Platform.IReranker
-open ToolUp.Platform.IQueryRewriter
-open ToolUp.Platform.IRetrievalPipeline
-open ToolUp.Platform.IRetrievalTracer
-open ToolUp.Platform.IRagTelemetry
+open ToolUp.Platform.Infra.IEmbeddingProvider
+open ToolUp.Platform.Infra.IVectorStore
+open ToolUp.Platform.Infra.ISparseIndex
+open ToolUp.Platform.Infra.IReranker
+open ToolUp.Platform.Infra.IQueryRewriter
+open ToolUp.Platform.Infra.IRetrievalPipeline
+open ToolUp.Platform.Infra.IRetrievalTracer
+open ToolUp.Platform.Infra.IRagTelemetry
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Query-size guard (Phase 14y) ─────────────────────────────────
 
@@ -35,7 +38,7 @@ type KnowledgeQueryTooLargeException(queryChars: int, maxQueryChars: int) =
     inherit
         exn(
             sprintf
-                "Retrieval query of %d characters exceeds the configured MaxQueryChars cap of %d. A query this long is almost always a programming bug (an entire document pasted into the query slot) — split it, or raise the cap via RAGServerApp.withMaxQueryChars."
+                "Retrieval query of %d characters exceeds the configured MaxQueryChars cap of %d. A query this long is almost always a programming bug (an entire document pasted into the query slot) — split it, or raise the cap via RagOptions.withMaxQueryChars."
                 queryChars
                 maxQueryChars
         )
@@ -72,18 +75,14 @@ let private queryRejectedJsonOptions =
 /// - Anonymous users (userId = "anonymous") may read Platform / Deployment
 ///   only; team scopes are filtered out. A session with a stable id reads
 ///   its own `User` scope (its `ctx.UserId`).
-let private authorisedScopes
-    (platformKnowledgeBase: PlatformKnowledgeBaseMode)
-    (ctx: AccessContext)
-    (scopes: VectorScope list)
-    =
+let private authorisedScopes (platformKnowledgeBase: FeatureMode) (ctx: AccessContext) (scopes: VectorScope list) =
     scopes
     |> List.filter (fun scope ->
         match scope with
         | Platform ->
             match platformKnowledgeBase with
-            | EnabledPlatformKnowledgeBase -> true
-            | NoPlatformKnowledgeBase -> false
+            | FeatureMode.Enabled -> true
+            | FeatureMode.Disabled -> false
         | Deployment -> true
         | Team teamId ->
             match ctx.TeamId with
@@ -162,7 +161,7 @@ let private fuseRRF (dense: VectorMatch list) (sparse: VectorMatch list) : Vecto
 [<RequireQualifiedAccess>]
 type RetrievalScoreSpace =
     /// Dense cosine similarity exactly as the vector store scored it — the
-    /// dense-only composition (`RAGServerApp.withoutSparseIndex`). Absolute:
+    /// dense-only composition (`RagOptions.withoutSparseIndex`). Absolute:
     /// a threshold is a similarity floor, and a pool of weak matches can
     /// fall below it entirely.
     | Cosine
@@ -173,7 +172,7 @@ type RetrievalScoreSpace =
     /// `1.0` and its weakest `0.0`, so a threshold trims the weak tail
     /// relative to the best match rather than refusing a pool outright.
     | Fused
-    /// A cross-encoder reranker's own scale (`RAGServerApp.withReranker`).
+    /// A cross-encoder reranker's own scale (`RagOptions.withReranker`).
     /// `IReranker` promises an ordering, not a calibrated scale, so the SDK
     /// cannot say what range these scores occupy. The boosts read it too
     /// (Phase 978): each nudges in units of the reranked pool's range.
@@ -226,7 +225,7 @@ module RetrievalScoreSpace =
             | None ->
                 Some(
                     sprintf
-                        "MinScore = %g is applied to the scores of a supplied IRetrievalPipeline (RAGServerApp.withRetrievalPipeline), whose score space the SDK cannot see. Confirm that pipeline's scores can exceed %g; if they cannot, the gate drops every chunk and the assistant answers with no retrieved context."
+                        "MinScore = %g is applied to the scores of a supplied IRetrievalPipeline (RagOptions.withRetrievalPipeline), whose score space the SDK cannot see. Confirm that pipeline's scores can exceed %g; if they cannot, the gate drops every chunk and the assistant answers with no retrieved context."
                         t
                         t
                 )
@@ -235,7 +234,7 @@ module RetrievalScoreSpace =
                 | None ->
                     Some(
                         sprintf
-                            "MinScore = %g is applied in the %s score space: the composed reranker's own scores (RAGServerApp.withReranker). IReranker promises an ordering, not a calibrated scale, so the SDK cannot confirm %g is reachable. Check it against that reranker's documented score range; a threshold above it drops every chunk and the assistant answers with no retrieved context."
+                            "MinScore = %g is applied in the %s score space: the composed reranker's own scores (RagOptions.withReranker). IReranker promises an ordering, not a calibrated scale, so the SDK cannot confirm %g is reachable. Check it against that reranker's documented score range; a threshold above it drops every chunk and the assistant answers with no retrieved context."
                             t
                             (label space)
                             t
@@ -243,7 +242,7 @@ module RetrievalScoreSpace =
                 | Some bound when t >= bound ->
                     Some(
                         sprintf
-                            "MinScore = %g cannot be met in the %s score space, which tops out at %g: the gate keeps only scores strictly above the threshold, so it drops every unboosted chunk and the assistant answers with no retrieved context. Lower it (RAGServerApp.withMinScore)."
+                            "MinScore = %g cannot be met in the %s score space, which tops out at %g: the gate keeps only scores strictly above the threshold, so it drops every unboosted chunk and the assistant answers with no retrieved context. Lower it (RagOptions.withMinScore)."
                             t
                             (label space)
                             bound
@@ -521,7 +520,7 @@ module RetrievalPipelineOptions =
 /// Supplied to `RetrievalPipeline` as the optional `budgets` argument.
 /// Omitting it leaves every stage unbounded — the pipeline's pre-894
 /// behaviour, byte for byte, including a provider failure raising out of
-/// `Retrieve` (GP 11). `RAGServerApp` supplies `defaults` unless a
+/// `Retrieve` (GP 11). `RagOptions` supplies `defaults` unless a
 /// deployment sets its own.
 type RetrievalBudgets = {
     /// Policy for the query embed (the dense branch). On any outcome but
@@ -702,8 +701,8 @@ type RetrievalPipeline
         ?sparseIndex: ISparseIndex,
         ?options: RetrievalPipelineOptions,
         ?tracer: IRetrievalTracer,
-        ?platformKnowledgeBase: PlatformKnowledgeBaseMode,
-        ?platformKnowledgeBaseSnapshot: unit -> PlatformKnowledgeBaseMode,
+        ?platformKnowledgeBase: FeatureMode,
+        ?platformKnowledgeBaseSnapshot: unit -> FeatureMode,
         // Phase 122 — when supplied, each `Retrieve` reports its per-stage
         // timing breakdown via `RecordRetrievalStages` so `/health/rag`
         // can expose per-stage P50/P95. `None` costs nothing (GP 13).
@@ -746,7 +745,7 @@ type RetrievalPipeline
         ?queryRewriter: IQueryRewriter,
         // Phase 894 — the per-turn budgets (query embed, fact stage). `None`
         // ⇒ every stage unbounded, the pre-894 pipeline byte for byte
-        // (GP 11); `RAGServerApp` passes `RetrievalBudgets.defaults` unless
+        // (GP 11); `RagOptions` passes `RetrievalBudgets.defaults` unless
         // configured otherwise.
         ?budgets: RetrievalBudgets
     ) =
@@ -758,9 +757,9 @@ type RetrievalPipeline
     // takes effect immediately on the next request without rebuilding
     // the pipeline. When supplied, the snapshot thunk wins; otherwise
     // fall back to the static `platformKnowledgeBase` constructor
-    // parameter (test-harness compat) or `NoPlatformKnowledgeBase`
+    // parameter (test-harness compat) or `FeatureMode.Disabled`
     // (safe default matching `ServerConfig.PlatformKnowledgeBase`).
-    let staticMode = defaultArg platformKnowledgeBase NoPlatformKnowledgeBase
+    let staticMode = defaultArg platformKnowledgeBase FeatureMode.Disabled
 
     let readPlatformKbMode () =
         match platformKnowledgeBaseSnapshot with
@@ -977,7 +976,7 @@ type RetrievalPipeline
                     // still be executing when the turn moves on, so it
                     // returns its stage marks instead of appending them.
                     let resolveAndDisclose = async {
-                        let! resolved = resolver.Resolve(factScope.ScopeId, clause)
+                        let! resolved = resolver.Resolve(factScope, clause)
 
                         // Phase 525.B — disclosure egress filter, applied to the
                         // resolved facts BEFORE merge. Default-deny at retrieval:

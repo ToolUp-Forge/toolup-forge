@@ -2,13 +2,18 @@ module ToolUp.Platform.Tests.InProcess.TelemetryZeroCostGateTests
 
 open System.IO
 open Expecto
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 69l — Telemetry seam zero-cost gate (GP 13 alignment) ──
 //
 // `Api.make`'s default-bridge composition pairs `defaultMetricsBridge`
 // with `defaultBridgeGate` so the per-request `Stopwatch` +
 // `MethodTelemetry` allocation is skipped entirely when the registered
-// `IMetricsSink` resolves to `NoOpMetricsSink` (the `NoMetricsEndpoint`
+// `IMetricsSink` resolves to `NoOpMetricsSink` (the `FeatureMode.Disabled`
 // default). Source plan: application-plans/toolup-remoting-hot-path-perf.md,
 // Finding F1. Acceptance criterion: the source-level composition is in
 // place AND the dispatcher honours the gate before allocation.
@@ -102,7 +107,7 @@ let tests =
                 contents
                 ":? NoOpMetricsSink -> false"
                 "The gate must short-circuit when the registered IMetricsSink is NoOpMetricsSink — \
-                 that's the entire mechanism by which Api.make + NoMetricsEndpoint becomes zero-cost."
+                 that's the entire mechanism by which Api.make + FeatureMode.Disabled becomes zero-cost."
         }
 
         test "Api.make composes withTelemetryGate only on the default bridge" {

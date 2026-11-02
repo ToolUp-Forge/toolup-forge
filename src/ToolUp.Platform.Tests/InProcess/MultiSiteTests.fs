@@ -12,6 +12,8 @@ open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
 open ToolUp.PublicRendering
 open ToolUp.PublicRendering.PublicRenderingCompose
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 114 — multi-host site registry ────────────────────────────
 //
@@ -411,14 +413,13 @@ let private exportTests =
                 Path.Combine(Path.GetTempPath(), "toolup-multisite-tests", "export-" + Guid.NewGuid().ToString("N"))
 
             let app =
-                PublicRenderingServerApp.create ()
-                |> PublicRenderingServerApp.withConfig config
-                |> PublicRenderingServerApp.withLayout (LayoutName "page") (fun p ->
-                    html [] [ body [] [ str p.Title ] ])
-                |> PublicRenderingServerApp.withSite (mkSite "siteb" [ "b.example" ] "https://b.example" "B Home")
+                ServerApp.empty |> ServerApp.withConfig config,
+                PublicRenderingOptions.create ()
+                |> PublicRenderingOptions.withLayout (LayoutName "page") (fun p -> html [] [ body [] [ str p.Title ] ])
+                |> PublicRenderingOptions.withSite (mkSite "siteb" [ "b.example" ] "https://b.example" "B Home")
 
             let total =
-                PublicRenderingServerApp.exportStaticAll outDir app |> Async.RunSynchronously
+                PublicRenderingExport.exportStaticAll outDir app |> Async.RunSynchronously
 
             Expect.isGreaterThanOrEqual total 2 "both trees rendered pages"
 
@@ -453,12 +454,11 @@ let private exportTests =
                 Path.Combine(Path.GetTempPath(), "toolup-multisite-tests", "export-" + Guid.NewGuid().ToString("N"))
 
             let app =
-                PublicRenderingServerApp.create ()
-                |> PublicRenderingServerApp.withConfig config
-                |> PublicRenderingServerApp.withLayout (LayoutName "page") (fun p ->
-                    html [] [ body [] [ str p.Title ] ])
+                ServerApp.empty |> ServerApp.withConfig config,
+                PublicRenderingOptions.create ()
+                |> PublicRenderingOptions.withLayout (LayoutName "page") (fun p -> html [] [ body [] [ str p.Title ] ])
 
-            PublicRenderingServerApp.exportStaticAll outDir app
+            PublicRenderingExport.exportStaticAll outDir app
             |> Async.RunSynchronously
             |> ignore
 

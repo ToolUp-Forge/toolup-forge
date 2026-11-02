@@ -29,12 +29,12 @@ declare `ReadFacts` only, and change nothing.
 
 ## Composing it
 
-Nothing is wired unless you compose it: `composeAI` never registers the tool, so a deployment that
+Nothing is wired unless you compose it: the AI tier never registers the tool by itself, so a deployment that
 does not use the companion is unchanged and pays nothing.
 
 ```fsharp skip=fragment
-// Server composition root
-aiApp |> ToolUp.AI.UiAwareness.Server.AICompose.register
+// Server composition root — on the deployment, either side of `AICompose.withAI`
+app |> ToolUp.AI.UiAwareness.Server.AICompose.register
 
 // Client boot, alongside the AI client configuration
 ToolUp.AI.UiAwareness.Client.InspectActiveModule.install ()

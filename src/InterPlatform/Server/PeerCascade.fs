@@ -3,6 +3,8 @@
 
 namespace ToolUp.InterPlatform
 
+open ToolUp.Platform.Infra
+
 // ─── Layer 5 — federation orchestration: cascade ─────────────────────
 //
 // A cascade is a multi-hop peer call: A calls B, and B — while handling

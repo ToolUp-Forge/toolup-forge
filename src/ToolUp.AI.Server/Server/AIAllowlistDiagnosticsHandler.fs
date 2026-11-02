@@ -9,6 +9,7 @@ open ToolUp.Remoting.Json.SystemTextJson
 open Giraffe
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
+open ToolUp.Platform.Compose
 
 // ─── Phase 47 — `/dev/ai-allowlist` action-denial rollup ─────────
 //
@@ -86,8 +87,8 @@ let private indentedJsonOptions =
     o.WriteIndented <- true
     o
 
-/// Mirror of the payload `AIAgentEngine.writeToolDenialAudit` serialises
-/// onto the denial event. Kept field-for-field so the deserialise path
+/// Mirror of the payload the agent loop's denial audit (`AIAgentEngine.Loop.run`)
+/// serialises onto the denial event. Kept field-for-field so the deserialise path
 /// round-trips; the rollup itself reads only the first three.
 type DenialEventPayload = {
     ToolName: string

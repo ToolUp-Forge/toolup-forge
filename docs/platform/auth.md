@@ -229,7 +229,7 @@ Server-Sent Events open a long-lived connection to `/api/notifications`. The bro
 2. **Cookie** — server sets a session cookie on sign-in; SSE reads it automatically. Risk: CSRF surface. Mitigation: `SameSite=Strict` + CSRF token on state-changing requests.
 3. **Pre-handshake** — a brief `/api/auth/sse-handshake` POST exchanges the bearer token for a short-lived SSE-scoped opaque session ID; `EventSource` connects with that. Most secure; most plumbing.
 
-`SseAuthModeValidator` (an `IConfigValidator`) emits a `Warning` when a deployment whose `Surfaces` requires authentication is configured without a documented SSE auth strategy. Deployments set `ServerConfig.SseAuthMode` explicitly to acknowledge the choice.
+`SseAuthModeValidator` (an `IConfigValidator`) emits a `Warning` when a deployment whose `Surfaces` requires authentication is configured without a documented SSE auth strategy. Deployments set `ServerConfig.SecurityPosture.SseAuthMode` explicitly to acknowledge the choice.
 
 **The SDK's choice is option 2, and the cookie has more than one writer (Phase 1047).** Under `TOOLUP_SSE_AUTH=cookie` the OIDC provider reads the bearer header first and the `toolup-auth-token` cookie second (`TokenLocation = BearerOrCookie "toolup-auth-token"`). REST calls carry the header; an `EventSource` handshake carries only the cookie. Three things write that cookie:
 
@@ -267,12 +267,12 @@ Every event carries the actor's userId, the affected userId (if different), the 
 
 ## Hardening checklist for production
 
-- `ServerConfig.RequireHttps = true` — registers `app.UseHttpsRedirection()`.
-- `ServerConfig.TrustForwardedHeaders = true` — default-on. Behind a TLS-terminating proxy this is needed so secure-cookie scoping and `Url.IsAbsoluteUri` see the originating scheme. Direct-bind dev shells with no proxy opt out with `TOOLUP_TRUST_FORWARDED_HEADERS=0`.
-- `ServerConfig.SecurityHeaders = StrictSecurityHeaders` — emits CSP, HSTS, X-Frame-Options, X-Content-Type-Options, Referrer-Policy.
+- `ServerConfig.SecurityPosture.RequireHttps = true` — registers `app.UseHttpsRedirection()`.
+- `ServerConfig.SecurityPosture.TrustForwardedHeaders = true` — default-on. Behind a TLS-terminating proxy this is needed so secure-cookie scoping and `Url.IsAbsoluteUri` see the originating scheme. Direct-bind dev shells with no proxy opt out with `TOOLUP_TRUST_FORWARDED_HEADERS=0`.
+- `ServerConfig.SecurityPosture.SecurityHeaders = StrictSecurityHeaders` — emits CSP, HSTS, X-Frame-Options, X-Content-Type-Options, Referrer-Policy.
 - `ServerConfig.RateLimit` — configure a per-team / per-user / per-IP partition with a sensible fixed-window cap. `/health`, `/ready`, and `/api/notifications` are excluded by default.
 - `ServerConfig.CorsConfig` — explicit allow-list for cross-origin browser callers; reject `*` for credentialed requests.
-- `ServerConfig.MaxRequestBodyBytes` — explicit cap. Default is generous; tighten for production.
+- `ServerConfig.SecurityPosture.MaxRequestBodyBytes` — explicit cap. Default is generous; tighten for production.
 - Real auth provider (not `HeaderAuthProvider`). Real OIDC or Clerk or in-house JWT.
 - `TOOLUP_INITIAL_PLATFORM_ADMIN` set for the bootstrap user.
 - Encryption-at-rest decorator wired with `PerScopeKeyResolver` (for crypto-shred capability).

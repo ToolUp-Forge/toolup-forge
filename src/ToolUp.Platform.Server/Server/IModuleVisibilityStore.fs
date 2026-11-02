@@ -1,4 +1,6 @@
-namespace ToolUp.Platform
+namespace ToolUp.Platform.Infra
+
+open ToolUp.Platform
 
 /// Scope-indexed persistent store for module-visibility profiles
 /// (Phase 637). One JSON document per `FlagScope`, each holding a single

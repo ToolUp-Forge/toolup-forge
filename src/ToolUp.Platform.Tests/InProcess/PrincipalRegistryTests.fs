@@ -10,6 +10,10 @@ open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Remoting.Json.SystemTextJson
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
 // ─── Phase 543 — derived principal enumeration tests ─────────────────
 //
@@ -91,7 +95,7 @@ let private handlerFor
     services.AddSingleton<ServerConfig>(
         {
             ServerConfig.defaults with
-                TenantLifecycle = EnabledTenantLifecycle
+                TenantLifecycle = FeatureMode.Enabled
         }
     )
     |> ignore

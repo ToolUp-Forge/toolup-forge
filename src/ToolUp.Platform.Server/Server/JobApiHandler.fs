@@ -1,9 +1,10 @@
-module ToolUp.Platform.JobApiHandler
+module ToolUp.Platform.Jobs.JobApiHandler
 
 open System
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
-open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Config.TeamManagement
+open ToolUp.Platform.Config
 
 // ─── JobApi handler factory ──────────────────────────────────────
 //

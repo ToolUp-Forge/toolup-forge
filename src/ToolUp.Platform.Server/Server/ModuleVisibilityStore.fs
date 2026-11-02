@@ -1,10 +1,11 @@
-module ToolUp.Platform.ModuleVisibilityStore
+module ToolUp.Platform.Scope.ModuleVisibilityStore
 
 open System.Text
 open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.Infra
 
 // ─── JSON helpers ────────────────────────────────────────────────
 

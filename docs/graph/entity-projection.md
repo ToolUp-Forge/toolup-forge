@@ -125,13 +125,16 @@ types you want mirrored:
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Graph.Projection
 
-// 1. Opt in (requires ServerConfig.EntityStore = EnabledEntityStore and an
+// 1. Opt in (requires ServerConfig.Stores.EntityStore = FeatureMode.Enabled and an
 //    IGraphStore — the in-memory default suffices for dev).
 let app =
     ServerApp.empty
     |> ServerApp.withConfig {
         ServerConfig.defaults with
-            EntityStore = EnabledEntityStore
+            Stores = {
+                ServerConfig.defaults.Stores with
+                    EntityStore = FeatureMode.Enabled
+            }
     }
     |> ServerApp.withEntity bookRegistration
     |> ServerApp.withEntity authorRegistration

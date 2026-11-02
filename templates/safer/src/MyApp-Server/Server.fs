@@ -1,7 +1,9 @@
 module MyApp.Server
 
 open ToolUp.Platform
-open ToolUp.Platform.Server
+open ToolUp.Platform.Compose.Server
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Composition root ───────────────────────────────────────────────────
 //

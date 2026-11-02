@@ -5,10 +5,13 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.VectorKnowledgeTypes
-open ToolUp.Platform.IVectorStore
+open ToolUp.Platform.Infra.IVectorStore
 open ToolUp.RAG.InMemoryVectorStore
 open ToolUp.RAG.RAGVacuumJobHandler
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 14w — tombstone auto-vacuum scheduler ─────────────────────
 //
@@ -43,7 +46,7 @@ let tests =
             let vs = vectorStore :> IVectorStore
 
             let eventStore =
-                ToolUp.Platform.InMemoryEventStore.InMemoryEventStore() :> IEventStore
+                ToolUp.Platform.Infra.InMemoryEventStore.InMemoryEventStore() :> IEventStore
 
             let scope = Team "t1"
             do! vs.Upsert scope "doc:chunk:0" [| 1.0f; 0.0f |] (chunk "alpha content")
@@ -85,7 +88,7 @@ let tests =
             let vs = vectorStore :> IVectorStore
 
             let eventStore =
-                ToolUp.Platform.InMemoryEventStore.InMemoryEventStore() :> IEventStore
+                ToolUp.Platform.Infra.InMemoryEventStore.InMemoryEventStore() :> IEventStore
 
             let scope = Team "t2"
             // A live chunk, never deleted — nothing to reclaim.

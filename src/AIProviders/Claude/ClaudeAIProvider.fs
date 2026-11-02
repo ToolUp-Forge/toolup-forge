@@ -5,6 +5,7 @@ open System
 open System.IO
 open System.Net.Http
 open System.Threading
+open ToolUp.Platform.Infra.Transport
 open ToolUp.AI.Wire // ClaudeStreaming — the pure SSE state machine
 open ToolUp.Platform // RetryPolicy
 open ToolUp.Platform.AI // IHttpTransport / HttpClientTransport / HttpRequest / ErrorClassifier
@@ -68,7 +69,7 @@ let KnownModels = [
 let private sharedClient =
     lazy
         (let c =
-            ToolUp.Platform.PlatformHttpClient.create ToolUp.Platform.EgressSurface.AIProvider
+            ToolUp.Platform.Compose.PlatformHttpClient.create ToolUp.Platform.EgressSurface.AIProvider
 
          c.BaseAddress <- Uri("https://api.anthropic.com")
          c.Timeout <- TimeSpan.FromMinutes(5.0)

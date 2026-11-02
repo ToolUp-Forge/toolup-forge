@@ -13,6 +13,8 @@ open ToolUp.DataSources.Parquet
 open ToolUp.DataSources.Tests.Support
 open ToolUp.DataSources.Tests.Contracts
 open DataManagementTypes
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── ToolUp.DataSources.Parquet (the IDataSource leg) ─────────────
 //

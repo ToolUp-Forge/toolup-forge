@@ -51,8 +51,11 @@ open System.Text
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.PermissionStore
-open ToolUp.Platform.GrantConsentStore
+open ToolUp.Platform.Scope.PermissionStore
+open ToolUp.Platform.Scope.GrantConsentStore
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
 // ─── Fixtures ────────────────────────────────────────────────────────
 

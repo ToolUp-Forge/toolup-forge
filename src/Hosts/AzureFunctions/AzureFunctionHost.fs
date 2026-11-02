@@ -13,6 +13,7 @@ open Microsoft.Azure.Functions.Worker.Http
 open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Primitives
 open ToolUp.Platform
+open ToolUp.Platform.Compose
 
 // ─── ToolUp.Hosts.AzureFunctions — Azure Functions Worker adapter ────
 //
@@ -34,10 +35,10 @@ open ToolUp.Platform
 //                    Mode = Anonymous
 //                    ServerlessHost = ServerlessHost
 //                    JobScheduler = NoJobScheduler
-//                    Webhooks = NoWebhooks
+//                    Webhooks = FeatureMode.Disabled
 //                    Notifications = NoNotificationsExplicit
-//                    AuditLog = NoAuditLog
-//                    UsageMetering = NoUsageMetering
+//                    AuditLog = FeatureMode.Disabled
+//                    UsageMetering = FeatureMode.Disabled
 //                    HealthStateTracking = false
 //            }
 //            |> ServerApp.addModule (myModule.register ())

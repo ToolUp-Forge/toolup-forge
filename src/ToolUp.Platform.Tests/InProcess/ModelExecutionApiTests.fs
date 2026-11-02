@@ -10,9 +10,13 @@ open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.DataObjectStore
-open ToolUp.Platform.Tracing
+open ToolUp.Platform.Infra.DataObjectStore
+open ToolUp.Platform.Infra.Tracing
 open ToolUp.ModelProviders.Reference
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 600 — model-execution submitter API conformance ──────────────
 //
@@ -99,7 +103,17 @@ let private freshFixtureWith (fitProviders: IModelFitProvider list) : Fixture =
     let jobStore = JobStore.create schedStorage eventStore
 
     let scheduler =
-        JobScheduler.create jobStore eventStore silentChannel ServerConfig.defaults silentLogger (NoOpActivitySink())
+        JobScheduler.create
+            ({
+                Store = jobStore
+                EventStore = eventStore
+                NotificationChannel = silentChannel
+                Config = ServerConfig.defaults
+                Logger = silentLogger
+                ActivitySink = (NoOpActivitySink())
+            }
+            : JobScheduler.SchedulerDeps)
+            JobScheduler.SchedulerOptions.defaults
         :> IJobScheduler
 
     let providers = ModelFitProviderRegistry fitProviders

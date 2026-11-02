@@ -4,6 +4,8 @@ open ToolUp.Elmish
 open ToolUp.Platform
 open ProcessedDataTypes
 open DailyTrade.SharedTypes
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
 
 type Model = {
     /// The file the user picked, read as text, waiting to be uploaded.

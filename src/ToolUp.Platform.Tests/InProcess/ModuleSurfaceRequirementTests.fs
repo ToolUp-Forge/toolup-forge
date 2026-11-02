@@ -2,7 +2,9 @@ module ToolUp.Platform.Tests.InProcess.ModuleSurfaceRequirementTests
 
 open Expecto
 open ToolUp.Platform
-open ToolUp.Platform.SurfaceEnforcement
+open ToolUp.Platform.Scope.SurfaceEnforcement
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 66 Stream B.3 — Module surface-requirement API tests ──────
 //

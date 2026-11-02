@@ -19,7 +19,7 @@ module ToolUp.Platform.Tests.InProcess.GroundedNarrativeTests
 //   B. the fact-tier gate over a real store, and the certificate it issues
 //      over a published narrative;
 //   C. the run end to end on a RAG app composed with
-//      `RAGServerApp.withFacts FactsCompose.withFactTier`: a scripted model
+//      `RagOptions.withFacts FactsCompose.withFactTier`: a scripted model
 //      that reads a fact through `query_facts` and then writes each defeat
 //      case — every one refused before publication and logged, and the
 //      grounded one published, indexed, certified, and marked stale when its
@@ -54,10 +54,10 @@ open ToolUp.Platform
 open ToolUp.Platform.AI
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Grounding
-open ToolUp.Platform.IEmbeddingProvider
+open ToolUp.Platform.Infra.IEmbeddingProvider
 open ToolUp.Platform.Narrative
 open ToolUp.Platform.Secrets
-open ToolUp.Platform.StorageScopeResolver
+open ToolUp.Platform.Scope.StorageScopeResolver
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.AI
 open ToolUp.AI.GroundedNarrativeRun
@@ -68,6 +68,12 @@ open ToolUp.RAG
 open ToolUp.RAG.RAGCompose
 open ToolUp.Reporting
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ── Document builders ─────────────────────────────────────────────
 
@@ -380,9 +386,9 @@ let private assertedDraft (metricId: string) (value: decimal) (disclosure: Discl
 }
 
 let private assertOk (store: IFactStore) (scopeId: string) (draft: FactDraft) : Fact =
-    match store.Assert(scopeId, draft) |> Async.RunSynchronously with
+    match store.Assert(TestScope.resolved scopeId, draft) |> Async.RunSynchronously with
     | Ok fact -> fact
-    | Error e -> failtestf "assert failed: %s" e
+    | Error e -> failtestf "assert failed: %s" (FactStoreError.describe e)
 
 /// A declared reference kind for dated calendar events.
 let private calendarKind =
@@ -427,8 +433,13 @@ let private gateFixture () : GateFixture =
     }
 
 let private gateCheck (fixture: GateFixture) (scopeId: string) (elements: NarrativeElement list) =
-    fixture.Gate.Check(scopeId, "reader", FactNarrativePublication, docOf elements)
+    fixture.Gate.Check(TestScope.resolved scopeId, "reader", FactNarrativePublication, docOf elements)
     |> Async.RunSynchronously
+
+/// The sealed certificate a narrative certificate carries, read back from its
+/// interchange JSON.
+let private sealedOf (certificate: NarrativeGroundingCertificate) : GroundingCertificate =
+    JsonSerializer.Deserialize<GroundingCertificate>(certificate.CertificateJson, FableConverters.create ())
 
 let factGateTests =
     testList "Phase 985 B — the fact-tier gate resolves against the store" [
@@ -496,7 +507,7 @@ let factGateTests =
             let narrativeId = Guid.NewGuid().ToString()
 
             match
-                fixture.Gate.Certify(scope, "reader", narrativeId, [ fact.FactId ])
+                fixture.Gate.Certify(TestScope.resolved scope, "reader", narrativeId, [ fact.FactId ])
                 |> Async.RunSynchronously
             with
             | Error reason -> failtestf "certificate must issue: %s" reason
@@ -795,6 +806,10 @@ let private summaryRun: GroundedNarrativeDefinition =
             }
         ]
     |> GroundedNarrativeDefinition.dependingOn [ "revenue" ]
+    // The refusal suites below pin what the gate refuses, so they run the
+    // run as it was before the repair loop: no repair, refuse on the first
+    // offence. The repair loop's own suite composes the default policy.
+    |> GroundedNarrativeDefinition.withRepairPolicy GroundedRepairPolicy.refuseOnOffence
 
 type private Deployment = {
     Services: ServiceProvider
@@ -822,10 +837,12 @@ let private deployShaped
     let model = ScriptedModel write
 
     let app =
-        RAGServerApp.create (factoryFor model) stubProfile constantEmbedder
-        |> RAGServerApp.withStorage storage
-        |> RAGServerApp.withFacts FactsCompose.withFactTier
-        |> composeRAG
+        ServerApp.empty
+        |> ServerApp.withStorage storage
+        |> withRAG (
+            RagOptions.create (factoryFor model) stubProfile constantEmbedder
+            |> RagOptions.withFacts FactsCompose.withFactTier
+        )
         |> GroundedNarratives.compose options [ definition ]
         |> NarrativePromptHandler.withPromptAdmin
 
@@ -865,9 +882,7 @@ let private deployShaped
     |> ignore
 
     let services =
-        match ServerApp.serviceConfig app with
-        | Some configure -> configure services
-        | None -> services
+        ToolUp.Platform.Tests.Support.TestSubstrate.applyServiceConfig app services
 
     let sp = services.BuildServiceProvider()
 
@@ -978,7 +993,7 @@ let runTests =
                 assertOk deployment.Store deployment.TeamId (assertedDraft "revenue" 1250m Surfaceable)
 
             match run deployment with
-            | GroundedNarrativePublished(narrativeId, document, citations, indexed, certificate) ->
+            | GroundedNarrativePublished(narrativeId, document, citations, indexed, certificate, _) ->
                 Expect.equal (citations |> List.map _.Reference) [ fact.FactId ] "cites the fact it read"
 
                 Expect.equal
@@ -1146,7 +1161,16 @@ let triggerTests =
                 GroundedNarrativeProducer.create
                     "grounded-monthly"
                     "Monthly"
-                    (stubRun (GroundedNarrativePublished(Guid.NewGuid(), doc, [], None, Error "no signer")) seen)
+                    (stubRun
+                        (GroundedNarrativePublished(
+                            Guid.NewGuid(),
+                            doc,
+                            [],
+                            None,
+                            Error "no signer",
+                            GroundedRepairSummary.complete 0
+                        ))
+                        seen)
                     "monthly-brand-summary"
                     "monthly-template"
                     "body"
@@ -1198,6 +1222,54 @@ let triggerTests =
             match producer.Resolve "team-producer" Map.empty |> Async.RunSynchronously with
             | Error reason -> Expect.stringContains reason "resolved scope" "no carried scope, no run"
             | Ok _ -> failtest "a producer with no carried scope must not run"
+        }
+
+        test "as a report producer: a narrative published with claims withheld reports the job's warning (Phase 1181)" {
+            let offence = {
+                Location = "section 'summary' › element 1 › span 1"
+                Claim = "40 units"
+                Reason = UnreferencedNumber
+            }
+
+            let resolveOver (repair: GroundedRepairSummary) =
+                let producer =
+                    GroundedNarrativeProducer.create
+                        "grounded-monthly"
+                        "Monthly"
+                        (stubRun
+                            (GroundedNarrativePublished(
+                                Guid.NewGuid(),
+                                documentFor "Monthly",
+                                [],
+                                None,
+                                Error "no signer",
+                                repair
+                            ))
+                            (ConcurrentQueue()))
+                        "monthly-brand-summary"
+                        "monthly-template"
+                        "body"
+
+                ReportProducerScope.within
+                    (ScopeResolution.ofStorageScope (storageFor "team-producer"))
+                    (ReportProducerWarning.collect (producer.Resolve "team-producer" Map.empty))
+                |> Async.RunSynchronously
+
+            let withheld = { Rounds = 2; Withheld = [ offence ] }
+
+            match resolveOver withheld with
+            | Ok _, Some warning ->
+                Expect.equal
+                    warning
+                    (GroundedRepairSummary.warning withheld)
+                    "the same warning the narrative's own job carries"
+
+                Expect.stringContains warning "40 units" "naming the claim"
+            | other -> failtestf "expected a render request with a warning, got %A" other
+
+            match resolveOver (GroundedRepairSummary.complete 1) with
+            | Ok _, None -> ()
+            | other -> failtestf "a narrative published whole reports no warning, got %A" other
         }
 
         test "on data arrival: a resolved write enqueues the runs that depend on the changed metric, end to end" {
@@ -1256,7 +1328,7 @@ let triggerTests =
             Expect.equal (published deployment).Length 1 "and the narrative was published"
         }
 
-        test "on data arrival: a carried write, or a change no run depends on, enqueues nothing" {
+        test "on data arrival: a resolved change enqueues the run; a change no run depends on enqueues nothing" {
             let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
             let store = BlobFactStore.create (InMemoryBlobStorage()) events
             let lineage = LineageStore.EventStoreLineageStore(events) :> ILineageStore
@@ -1295,20 +1367,16 @@ let triggerTests =
                 |> Async.RunSynchronously
 
             Expect.equal
-                (enqueue
-                    (registryOf summaryRun)
-                    (DataChangeScope.Resolved(ScopeResolution.ofStorageScope (storageFor teamId))))
+                (enqueue (registryOf summaryRun) (ScopeResolution.ofStorageScope (storageFor teamId)))
                 [ summaryRun.Key ]
                 "a resolved change to a depended-on metric enqueues the run"
 
-            Expect.isEmpty
-                (enqueue (registryOf summaryRun) (DataChangeScope.Carried teamId))
-                "a carried change has no resolved scope to give the run, so enqueues nothing"
+            // Phase 1157 retired the string scope form; a carried (DataChangeScope.Carried) change is gone.
 
             Expect.isEmpty
                 (enqueue
                     (registryOf (summaryRun |> GroundedNarrativeDefinition.dependingOn [ "cost" ]))
-                    (DataChangeScope.Resolved(ScopeResolution.ofStorageScope (storageFor teamId))))
+                    (ScopeResolution.ofStorageScope (storageFor teamId)))
                 "a run that does not depend on the changed metric is not enqueued"
         }
 
@@ -1349,7 +1417,16 @@ let triggerTests =
                     store,
                     Some eager,
                     registry,
-                    stubRun (GroundedNarrativePublished(Guid.NewGuid(), documentFor "x", [], None, Error "-")) seen
+                    stubRun
+                        (GroundedNarrativePublished(
+                            Guid.NewGuid(),
+                            documentFor "x",
+                            [],
+                            None,
+                            Error "-",
+                            GroundedRepairSummary.complete 0
+                        ))
+                        seen
                 )
                 :> IJobHandler
 
@@ -1963,18 +2040,24 @@ let budgetTests =
             let jobStore = JobStore.create (InMemoryBlobStorage() :> IBlobStorage) events
 
             use scheduler =
-                new JobScheduler.InProcessJobScheduler(
-                    jobStore,
-                    events,
-                    { new INotificationChannel with
-                        member _.Publish(_, _) = async { return () }
-                        member _.Subscribe(_, _) = async { return Guid.NewGuid() }
-                        member _.Unsubscribe(_) = async { return () }
-                    },
-                    ServerConfig.defaults,
-                    silentLogger,
-                    ToolUp.Platform.Tracing.NoOpActivitySink() :> ToolUp.Platform.Tracing.IActivitySink
-                )
+                JobScheduler.create
+                    ({
+                        Store = jobStore
+                        EventStore = events
+                        NotificationChannel =
+                            { new INotificationChannel with
+                                member _.Publish(_, _) = async { return () }
+                                member _.Subscribe(_, _) = async { return Guid.NewGuid() }
+                                member _.Unsubscribe(_) = async { return () }
+                            }
+                        Config = ServerConfig.defaults
+                        Logger = silentLogger
+                        ActivitySink =
+                            ToolUp.Platform.Infra.Tracing.NoOpActivitySink()
+                            :> ToolUp.Platform.Infra.Tracing.IActivitySink
+                    }
+                    : JobScheduler.SchedulerDeps)
+                    JobScheduler.SchedulerOptions.defaults
 
             let jobs = scheduler :> IJobScheduler
 
@@ -2188,7 +2271,7 @@ let wordingTests =
 
             let document =
                 match run deployment with
-                | GroundedNarrativePublished(_, document, _, _, _) -> document
+                | GroundedNarrativePublished(_, document, _, _, _, _) -> document
                 | other -> failtestf "the reworded run must publish, got %s" (GroundedNarrativeOutcome.describe other)
 
             let overridden = recording.Prompts |> List.last
@@ -2538,8 +2621,7 @@ let doubleRunTests =
             let registry = GroundedNarrativeRegistry()
             registry.Register summaryRun |> ignore
 
-            let scope =
-                DataChangeScope.Resolved(ScopeResolution.ofStorageScope (storageFor teamId))
+            let scope = ScopeResolution.ofStorageScope (storageFor teamId)
 
             for _ in 1..2 do
                 let! _ = GroundedNarrativeTrigger.enqueueFor lineage store scheduler registry scope [ "sales.rollup" ]
@@ -2596,8 +2678,7 @@ let doubleRunTests =
             let registry = GroundedNarrativeRegistry()
             registry.Register summaryRun |> ignore
 
-            let scope =
-                DataChangeScope.Resolved(ScopeResolution.ofStorageScope (storageFor teamId))
+            let scope = ScopeResolution.ofStorageScope (storageFor teamId)
 
             let! enqueued =
                 GroundedNarrativeTrigger.enqueueFor lineage store (refusing ()) registry scope [ "sales.rollup" ]
@@ -2651,18 +2732,24 @@ let doubleRunTests =
             let jobStore = JobStore.create (InMemoryBlobStorage() :> IBlobStorage) events
 
             use scheduler =
-                new JobScheduler.InProcessJobScheduler(
-                    jobStore,
-                    events,
-                    { new INotificationChannel with
-                        member _.Publish(_, _) = async { return () }
-                        member _.Subscribe(_, _) = async { return Guid.NewGuid() }
-                        member _.Unsubscribe(_) = async { return () }
-                    },
-                    ServerConfig.defaults,
-                    silentLogger,
-                    ToolUp.Platform.Tracing.NoOpActivitySink() :> ToolUp.Platform.Tracing.IActivitySink
-                )
+                JobScheduler.create
+                    ({
+                        Store = jobStore
+                        EventStore = events
+                        NotificationChannel =
+                            { new INotificationChannel with
+                                member _.Publish(_, _) = async { return () }
+                                member _.Subscribe(_, _) = async { return Guid.NewGuid() }
+                                member _.Unsubscribe(_) = async { return () }
+                            }
+                        Config = ServerConfig.defaults
+                        Logger = silentLogger
+                        ActivitySink =
+                            ToolUp.Platform.Infra.Tracing.NoOpActivitySink()
+                            :> ToolUp.Platform.Infra.Tracing.IActivitySink
+                    }
+                    : JobScheduler.SchedulerDeps)
+                    JobScheduler.SchedulerOptions.defaults
 
             let jobs = scheduler :> IJobScheduler
             let registry = deployment.Services.GetRequiredService<GroundedNarrativeRegistry>()
@@ -2678,7 +2765,7 @@ let doubleRunTests =
             )
 
             let lineage = LineageStore.EventStoreLineageStore(events) :> ILineageStore
-            let change = DataChangeScope.Resolved deployment.Scope
+            let change = deployment.Scope
 
             let enqueue changedIds =
                 GroundedNarrativeTrigger.enqueueFor lineage deployment.Store jobs registry change changedIds
@@ -2777,18 +2864,18 @@ let private withBrandSales (deployment: Deployment) : Deployment =
     }
 
     let opened =
-        match writer.OpenRun(deployment.TeamId, brandSales.Id) |> Async.RunSynchronously with
+        match writer.OpenRun(deployment.Scope, brandSales.Id) |> Async.RunSynchronously with
         | Ok r -> r
         | Error e -> failtestf "open: %s" (FactTableWriteError.describe e)
 
     match
-        writer.WriteRows(deployment.TeamId, opened.RunId, [ row "zenith" 900m 400m; row "acme" 1250m 700m ])
+        writer.WriteRows(deployment.Scope, opened.RunId, [ row "zenith" 900m 400m; row "acme" 1250m 700m ])
         |> Async.RunSynchronously
     with
     | Ok _ -> ()
     | Error e -> failtestf "write: %s" (FactTableWriteError.describe e)
 
-    match writer.Commit(deployment.TeamId, opened.RunId) |> Async.RunSynchronously with
+    match writer.Commit(deployment.Scope, opened.RunId) |> Async.RunSynchronously with
     | Ok _ -> deployment
     | Error e -> failtestf "commit: %s" (FactTableWriteError.describe e)
 
@@ -2826,7 +2913,7 @@ let private deployFor (definition: GroundedNarrativeDefinition) (write: Writer) 
 
 let private publishedDocument (outcome: GroundedNarrativeOutcome) : NarrativeDocument * NarrativeCitation list =
     match outcome with
-    | GroundedNarrativePublished(_, document, citations, _, _) -> document, citations
+    | GroundedNarrativePublished(_, document, citations, _, _, _) -> document, citations
     | other -> failtestf "expected a publication, got %s" (GroundedNarrativeOutcome.describe other)
 
 let private summaryElements (document: NarrativeDocument) : NarrativeElement list =
@@ -2858,6 +2945,7 @@ let private brandFacts (deployment: Deployment) (metric: string) : Map<string, F
                 Metric = Some(MetricRef metric)
         }
     )
+    |> TestScope.ok
     |> Async.RunSynchronously
     |> List.filter (fun f -> f.Period.From = tradingDay)
     |> List.map (fun f -> List.last f.Subject.Path, f)
@@ -3122,7 +3210,14 @@ let private expectedRetry (outcome: GroundedNarrativeOutcome) : Retry =
     | GroundedNarrativeOverBudget _ -> GivenUp
 
 let private everyOutcome: GroundedNarrativeOutcome list = [
-    GroundedNarrativePublished(Guid.NewGuid(), documentFor "x", [], None, Error "no signer")
+    GroundedNarrativePublished(
+        Guid.NewGuid(),
+        documentFor "x",
+        [],
+        None,
+        Error "no signer",
+        GroundedRepairSummary.complete 0
+    )
     GroundedNarrativeRefused []
     GroundedNarrativeFailed "provider outage"
     GroundedNarrativeUnfunded "no key"
@@ -3171,7 +3266,16 @@ let private recordedTrigger (job: Trigger) (source: TriggerSource) (attempt: int
             store,
             None,
             registry,
-            stubRun (GroundedNarrativePublished(Guid.NewGuid(), documentFor "x", [], None, Error "-")) seen
+            stubRun
+                (GroundedNarrativePublished(
+                    Guid.NewGuid(),
+                    documentFor "x",
+                    [],
+                    None,
+                    Error "-",
+                    GroundedRepairSummary.complete 0
+                ))
+                seen
         )
         :> IJobHandler
 
@@ -3247,18 +3351,24 @@ let triggerNameTests =
             let jobStore = JobStore.create (InMemoryBlobStorage() :> IBlobStorage) events
 
             use scheduler =
-                new JobScheduler.InProcessJobScheduler(
-                    jobStore,
-                    events,
-                    { new INotificationChannel with
-                        member _.Publish(_, _) = async { return () }
-                        member _.Subscribe(_, _) = async { return Guid.NewGuid() }
-                        member _.Unsubscribe(_) = async { return () }
-                    },
-                    ServerConfig.defaults,
-                    silentLogger,
-                    ToolUp.Platform.Tracing.NoOpActivitySink() :> ToolUp.Platform.Tracing.IActivitySink
-                )
+                JobScheduler.create
+                    ({
+                        Store = jobStore
+                        EventStore = events
+                        NotificationChannel =
+                            { new INotificationChannel with
+                                member _.Publish(_, _) = async { return () }
+                                member _.Subscribe(_, _) = async { return Guid.NewGuid() }
+                                member _.Unsubscribe(_) = async { return () }
+                            }
+                        Config = ServerConfig.defaults
+                        Logger = silentLogger
+                        ActivitySink =
+                            ToolUp.Platform.Infra.Tracing.NoOpActivitySink()
+                            :> ToolUp.Platform.Infra.Tracing.IActivitySink
+                    }
+                    : JobScheduler.SchedulerDeps)
+                    JobScheduler.SchedulerOptions.defaults
 
             let jobs = scheduler :> IJobScheduler
 
@@ -3268,7 +3378,16 @@ let triggerNameTests =
                     store,
                     None,
                     registry,
-                    stubRun (GroundedNarrativePublished(Guid.NewGuid(), documentFor "x", [], None, Error "-")) seen
+                    stubRun
+                        (GroundedNarrativePublished(
+                            Guid.NewGuid(),
+                            documentFor "x",
+                            [],
+                            None,
+                            Error "-",
+                            GroundedRepairSummary.complete 0
+                        ))
+                        seen
                 )
             )
 
@@ -3300,16 +3419,1082 @@ let triggerNameTests =
             let! afterCadence = runs 1
             Expect.equal afterCadence [ "cadence" ] "the cadence's run records cadence"
 
-            let! enqueued =
-                GroundedNarrativeTrigger.enqueueFor lineage store jobs registry (DataChangeScope.Resolved scope) [
-                    "sales.rollup"
-                ]
+            let! enqueued = GroundedNarrativeTrigger.enqueueFor lineage store jobs registry (scope) [ "sales.rollup" ]
 
             Expect.equal enqueued [ summaryRun.Key ] "the change enqueued the run"
             let! afterChange = runs 2
             Expect.equal afterChange [ "cadence"; "data-arrival" ] "and the data-arrival run records data-arrival"
         }
     ]
+
+// ── The repair loop ──────────────────────────────────────────────
+
+let private offence (location: string) (claim: string) : GroundingOffence = {
+    Location = location
+    Claim = claim
+    Reason = UnreferencedNumber
+}
+
+let private checkDoc (document: NarrativeDocument) =
+    NarrativeGrounding.check NarrativeGrounding.defaultPolicy resolve document
+
+/// A draft the scripted model writes, then its repairs, one answer per call:
+/// two refused claims in the draft (an unreferenced number in element 2, a
+/// figure with no reference in element 3); the first repair fixes element
+/// 3, and every later one rewrites element 2 as it was.
+let private repairingWriter () : Writer =
+    let calls = ref 0
+
+    fun id rendering ->
+        calls.Value <- calls.Value + 1
+
+        if calls.Value = 1 then
+            JsonSerializer.Serialize {|
+                sections = [
+                    {|
+                        id = "summary"
+                        paragraphs = [
+                            $"Acme revenue was [[Revenue|{rendering}|{id}]] in September."
+                            "It was the best of the three months."
+                            "Costs were [[Cost|900]]."
+                        ]
+                    |}
+                ]
+            |}
+        elif calls.Value = 2 then
+            """{"repairs":[{"section":"summary","element":3,"text":"Costs were not reported."}]}"""
+        else
+            """{"repairs":[{"section":"summary","element":2,"text":"It was the best of the three months."}]}"""
+
+let repairTests =
+    testList "Phase 1175 — a refused draft is repaired while it improves, then its grounded remainder is published" [
+
+        test "a job row and a definition written before the warning fields read the warning as None (GP 11)" {
+            let options = FableConverters.create ()
+
+            let strip (field: string) (json: string) =
+                let node = System.Text.Json.Nodes.JsonNode.Parse(json).AsObject()
+                Expect.isTrue (node.Remove field) $"the property {field} exists to be removed"
+                node.ToJsonString()
+
+            let row: JobRun = {
+                RunId = Guid.NewGuid()
+                JobId = Guid.NewGuid()
+                ScopeId = "legacy-scope"
+                Attempt = 1
+                StartedAt = DateTime(2026, 1, 2, 3, 4, 5, DateTimeKind.Utc)
+                CompletedAt = Some(DateTime(2026, 1, 2, 3, 9, 5, DateTimeKind.Utc))
+                Status = JobRunStatus.Succeeded
+                Error = None
+                DurationMs = Some 300_000L
+                ExternalHandle = None
+                Warning = Some "withheld"
+            }
+
+            let revivedRow =
+                JsonSerializer.Deserialize<JobRun>(strip "Warning" (JsonSerializer.Serialize(row, options)), options)
+
+            Expect.isNone revivedRow.Warning "an absent Warning reads as None"
+            Expect.equal revivedRow.RunId row.RunId "and the rest of the row is untouched"
+
+            let definition = {
+                SchedulerPolicy.definitionFor
+                    (Guid.NewGuid())
+                    (GroundedNarrativeTrigger.registrationFor "legacy-scope" summaryRun.Key Set.empty)
+                    DateTime.UtcNow with
+                    LastRunWarning = Some "withheld"
+            }
+
+            let revivedDefinition =
+                JsonSerializer.Deserialize<JobDefinition>(
+                    strip "LastRunWarning" (JsonSerializer.Serialize(definition, options)),
+                    options
+                )
+
+            Expect.isNone revivedDefinition.LastRunWarning "an absent LastRunWarning reads as None"
+            Expect.equal revivedDefinition.JobId definition.JobId "and the rest of the definition is untouched"
+        }
+
+        test "progress: a shrinking set continues, a swapped set is progress, the same or a larger set is not" {
+            let a = offence "section 's' › element 1 › span 1" "a"
+            let b = offence "section 's' › element 2 › span 1" "b"
+            let c = offence "section 's' › element 3 › span 1" "c"
+
+            Expect.isTrue (GroundedRepair.isProgress [ a; b ] [ b ]) "fewer refused claims is progress"
+            Expect.isTrue (GroundedRepair.isProgress [ a; b ] [ a; c ]) "as many, different members, is progress"
+            Expect.isFalse (GroundedRepair.isProgress [ a; b ] [ b; a ]) "the same set is not"
+            Expect.isFalse (GroundedRepair.isProgress [ a ] [ a; b ]) "a larger set is not"
+        }
+
+        test "stopping: the same set three times stops, the ceiling stops, the token budget stops" {
+            let policy = GroundedRepairPolicy.defaults
+            let afterProgress = GroundedRepair.start |> GroundedRepair.advance true 0L
+            Expect.isNone (GroundedRepair.shouldStop policy afterProgress) "progress continues"
+
+            let stalled =
+                [ 1..3 ]
+                |> List.fold (fun p _ -> GroundedRepair.advance false 0L p) afterProgress
+
+            Expect.equal (GroundedRepair.shouldStop policy stalled) (Some GroundedRepair.NoProgress) "three stalls stop"
+
+            let twoStalls =
+                [ 1..2 ]
+                |> List.fold (fun p _ -> GroundedRepair.advance false 0L p) afterProgress
+
+            Expect.isNone (GroundedRepair.shouldStop policy twoStalls) "two do not"
+
+            let atCeiling =
+                [ 1 .. policy.MaxRepairRounds ]
+                |> List.fold (fun p _ -> GroundedRepair.advance true 0L p) GroundedRepair.start
+
+            Expect.equal (GroundedRepair.shouldStop policy atCeiling) (Some GroundedRepair.Ceiling) "the ceiling stops"
+
+            Expect.equal
+                (GroundedRepair.shouldStop policy {
+                    afterProgress with
+                        Tokens = policy.MaxRunTokens.Value
+                })
+                (Some GroundedRepair.TokenBudget)
+                "the token budget stops"
+
+            Expect.equal
+                (GroundedRepair.shouldStop GroundedRepairPolicy.refuseOnOffence GroundedRepair.start)
+                (Some GroundedRepair.Ceiling)
+                "no rounds at all under the refuse-on-offence policy"
+        }
+
+        test "the place of every refused claim is read from the gate's own locations" {
+            let offences =
+                checkDoc (
+                    docOf [
+                        para [ text "Flat on last week." ]
+                        para [ text "Up by "; metric "Revenue" "12" None ]
+                        NarrativeElement.BulletList [ [ text "fine" ]; [ text "three stores" ] ]
+                        NarrativeElement.Table(
+                            [ "Store", Left; "Sales", Right ],
+                            [ [ [ text "North" ]; [ text "17" ] ] ]
+                        )
+                        NarrativeElement.KeyValueGrid [
+                            "Week", [ text "fourth" ]
+                            "Sales", [ metric "Sales" "9" None ]
+                        ]
+                    ]
+                )
+                |> offencesOf
+
+            Expect.equal
+                (offences |> List.map (fun o -> GroundedRepair.tryPlace o.Location))
+                [
+                    Some {
+                        Section = "summary"
+                        Element = 2
+                        Part = GroundedRepair.Span 2
+                    }
+                    Some {
+                        Section = "summary"
+                        Element = 3
+                        Part = GroundedRepair.Item 2
+                    }
+                    Some {
+                        Section = "summary"
+                        Element = 4
+                        Part = GroundedRepair.Row 1
+                    }
+                    Some {
+                        Section = "summary"
+                        Element = 5
+                        Part = GroundedRepair.Entry 2
+                    }
+                ]
+                "a span, an item, a row and an entry, each where the gate found it"
+        }
+
+        test "the splice: a repaired element replaces only itself" {
+            let draft =
+                docOf [
+                    para [ text "First." ]
+                    para [ text "Second, with three things." ]
+                    NarrativeElement.Table([ "Store", Left ], [ [ [ text "North" ] ] ])
+                ]
+
+            let repaired =
+                GroundedRepair.splice
+                    [
+                        {
+                            Section = "summary"
+                            Element = 2
+                            Text = $"Second, with [[Revenue|1,248,300|{revenueId}]]."
+                        }
+                        // Not the model's prose: a projection is never rewritten.
+                        {
+                            Section = "summary"
+                            Element = 3
+                            Text = "replaced"
+                        }
+                    ]
+                    draft
+
+            Expect.equal
+                repaired.Sections.Head.Elements
+                [
+                    para [ text "First." ]
+                    para [
+                        text "Second, with "
+                        metric "Revenue" "1,248,300" (Some revenueId)
+                        text "."
+                    ]
+                    NarrativeElement.Table([ "Store", Left ], [ [ [ text "North" ] ] ])
+                ]
+                "element two is the rewrite; elements one and three are untouched"
+
+            Expect.equal
+                (GroundedRepair.tokensOf (List.item 1 repaired.Sections.Head.Elements))
+                $"Second, with [[Revenue|1,248,300|{revenueId}]]."
+                "and an element reads back in the format the model writes"
+        }
+
+        test
+            "the prune: a pruned span leaves its paragraph standing, a pruned last item removes its list, and the result passes the gate" {
+            let draft =
+                docOf [
+                    para [
+                        text "Revenue was "
+                        metric "Revenue" "1,248,300" (Some revenueId)
+                        text ", the best of three months."
+                    ]
+                    NarrativeElement.BulletList [ [ text "seven stores opened" ] ]
+                    para [ text "Nothing else moved." ]
+                ]
+
+            let offences = checkDoc draft |> offencesOf
+            Expect.equal (List.length offences) 2 "two refused claims: the prose run, and the list item"
+
+            match GroundedRepair.prune offences draft with
+            | Error why -> failtestf "the claims are placeable: %s" why
+            | Ok pruned ->
+                Expect.equal
+                    pruned.Sections.Head.Elements
+                    [
+                        para [ text "Revenue was "; metric "Revenue" "1,248,300" (Some revenueId) ]
+                        para [ text "Nothing else moved." ]
+                    ]
+                    "the span is gone and its paragraph stands; the list lost its last item and went"
+
+                Expect.isTrue (NarrativeGroundingVerdict.isGrounded (checkDoc pruned)) "the pruned document passes"
+
+                let noted = {
+                    pruned with
+                        Sections = pruned.Sections @ [ GroundedRepair.withheldNote draft offences ]
+                }
+
+                Expect.isTrue
+                    (NarrativeGroundingVerdict.isGrounded (checkDoc noted))
+                    "and so does it with the withheld-claims note, which states no number"
+        }
+
+        test
+            "the withheld note names each claim's place and reason, never its value — even under a heading with a digit" {
+            let draft =
+                docOf [ para [ text "Revenue was "; metric "Revenue" "999" (Some revenueId) ] ]
+
+            let offences = checkDoc draft |> offencesOf
+            let note = GroundedRepair.withheldNote draft offences
+
+            let lines =
+                note.Elements
+                |> List.collect (function
+                    | NarrativeElement.BulletList items ->
+                        items |> List.map (fun item -> GroundedRepair.tokensOf (Paragraph item))
+                    | _ -> [])
+
+            Expect.equal
+                lines
+                [
+                    "part of a paragraph in a section: a figure that does not match its recorded value"
+                ]
+                "the place (a heading with a digit is named as a section) and the reason"
+
+            Expect.isFalse
+                (note.Elements
+                 |> List.exists (fun e -> GroundedRepair.tokensOf e |> Seq.exists Char.IsDigit))
+                "no digit anywhere in the note"
+
+            Expect.isTrue
+                (NarrativeGroundingVerdict.isGrounded (checkDoc { draft with Sections = [ note ] }))
+                "the note passes the gate on its own"
+        }
+
+        test
+            "end to end: the loop repairs one claim, stops on no progress, publishes the rest, and the job succeeds with a warning" {
+            let deployment =
+                deployShaped
+                    (summaryRun
+                     |> GroundedNarrativeDefinition.withRepairPolicy GroundedRepairPolicy.defaults)
+                    []
+                    (GroundedNarrativeRunOptions.create NarrativeGrounding.factTools)
+                    (fun model -> ScriptedFactory(model) :> IAIProviderFactory)
+                    (repairingWriter ())
+
+            let fact =
+                assertOk deployment.Store deployment.TeamId (assertedDraft "revenue" 1250m Surfaceable)
+
+            let result = narrativeJob deployment
+
+            let warning =
+                match result with
+                | SuccessWithWarning warning -> warning
+                | other -> failtestf "expected a success with a warning, got %A" other
+
+            Expect.stringContains warning "1 claim(s) withheld after 4 repair round(s)" "the count and the rounds"
+            Expect.stringContains warning "element 2" "and the claim, with its place"
+            Expect.stringContains warning (GroundingOffenceReason.describe UnreferencedNumber) "and its reason"
+
+            // The report was published, without the claim that never grounded.
+            let entries = published deployment
+            Expect.equal (List.length entries) 1 "the report was published"
+
+            let document =
+                match deployment.Ingestor.Ingested with
+                | [ document ] -> document
+                | other -> failtestf "expected one indexed narrative, got %d" (List.length other)
+
+            let summary = document.Sections |> List.find (fun s -> s.Id = "summary")
+
+            match summary.Elements |> List.map GroundedRepair.tokensOf with
+            | [ first; second ] ->
+                Expect.stringStarts first "Acme revenue was [[Revenue|" "the grounded prose stands"
+                Expect.stringContains first fact.FactId "citing its fact"
+                Expect.equal second "Costs were not reported." "the repaired element replaced the refused one"
+            | other -> failtestf "expected the grounded and the repaired element, got %A" other
+
+            let note =
+                document.Sections
+                |> List.find (fun s -> s.Id = GroundedRepair.WithheldSectionId)
+
+            Expect.contains
+                (note.Elements
+                 |> List.collect (function
+                     | NarrativeElement.BulletList items ->
+                         items |> List.map (fun item -> GroundedRepair.tokensOf (Paragraph item))
+                     | _ -> []))
+                "part of a paragraph in the section \"Summary\": a number that is not a recorded fact"
+                "the note names it"
+
+            // The job: its run row reads Succeeded, with the warning.
+            let job =
+                SchedulerPolicy.definitionFor
+                    (Guid.NewGuid())
+                    (GroundedNarrativeTrigger.registrationFor deployment.TeamId summaryRun.Key Set.empty)
+                    DateTime.UtcNow
+
+            let running: JobRun = {
+                RunId = Guid.NewGuid()
+                JobId = job.JobId
+                ScopeId = job.ScopeId
+                Attempt = 1
+                StartedAt = DateTime.UtcNow
+                CompletedAt = None
+                Status = JobRunStatus.Running
+                Error = None
+                DurationMs = None
+                ExternalHandle = None
+                Warning = None
+            }
+
+            let ended =
+                JobLifecycle.transition
+                    (JobLifecycle.Loop(10L, None))
+                    (Some job)
+                    running
+                    DateTime.UtcNow
+                    (JobLifecycle.RunOutcome.ofJobResult result)
+
+            Expect.equal (ended.Row |> Option.map _.Status) (Some JobRunStatus.Succeeded) "the run row is Succeeded"
+            Expect.equal (ended.Row |> Option.bind _.Warning) (Some warning) "with the warning"
+            Expect.equal (ended.Definition |> Option.bind _.LastRunWarning) (Some warning) "on the definition too"
+            Expect.equal (ended.Definition |> Option.map _.ConsecutiveFailures) (Some 0) "a success, not a failure"
+            Expect.isNone ended.Notify "and no dead-letter notification"
+
+            // The audit trail: every round, then the publication.
+            // The trail reads newest first.
+            let rows = narrativeRows deployment |> List.rev
+
+            Expect.equal
+                (rows |> List.map _.EventType)
+                [
+                    yield! List.replicate 4 GroundedNarrativeEvents.RepairRoundType
+                    GroundedNarrativeEvents.PublishedType
+                ]
+                "four rounds, then one publication row"
+
+            let progressOf (row: ModuleEvent) =
+                (JsonDocument.Parse row.Payload).RootElement.GetProperty("Progress").GetBoolean()
+
+            Expect.equal
+                (rows |> List.take 4 |> List.map progressOf)
+                [ true; false; false; false ]
+                "the first round progressed; three did not, and the loop stopped"
+
+            Expect.stringContains (List.last rows).Payload "published-with-withheld" "the outcome says so"
+        }
+    ]
+
+// ── Admissions: the number the instruction asked for, and the count ──
+
+let private wording (version: int) (prompt: string) : GroundingInstruction = {
+    Version = version
+    Prompt = prompt
+    Guidance = Map.empty
+}
+
+let private firstDraft (instruction: GroundingInstruction option) : GroundingCheckOptions = {
+    Instruction = instruction
+    LateStage = false
+}
+
+let private lateStage (instruction: GroundingInstruction option) : GroundingCheckOptions = {
+    Instruction = instruction
+    LateStage = true
+}
+
+let private subjectFacts: Map<string, string> =
+    Map.ofList [
+        String('1', 64), "brand/acme"
+        String('2', 64), "brand/globex"
+        String('3', 64), "brand/initech"
+        String('4', 64), "brand/acme"
+    ]
+
+let private admitResolve (reference: string) =
+    if subjectFacts.ContainsKey reference then
+        GroundingCurrent([ "100" ], Some 100m, false)
+    else
+        resolve reference
+
+let private checkUnder (options: GroundingCheckOptions) (elements: NarrativeElement list) =
+    NarrativeGrounding.checkWith
+        NarrativeGrounding.defaultPolicy
+        admitResolve
+        subjectFacts.TryFind
+        options
+        (docOf elements)
+
+/// A paragraph stating `prose`, then one metric span per fact id.
+let private citingSpans (prose: string) (factIds: string list) =
+    para [
+        text prose
+        yield! factIds |> List.map (fun id -> metric "Revenue" "100" (Some id))
+    ]
+
+let private listOf (n: int) =
+    NarrativeElement.BulletList [ for k in 1..n -> [ text (sprintf "Brand %c" (char (int 'A' + k - 1))) ] ]
+
+let private top3 = wording 2 "Report on the top three categories by revenue."
+
+let admissionTests =
+    testList
+        "Phase 1176 — the gate admits a number the instruction asked for, and, late, a count of what the document lists"
+        [
+
+            test "the matcher reads digits and words, singular and plural, with adjectives between" {
+                let read text =
+                    NarrativeGrounding.mentions NarrativeGrounding.defaultPolicy text
+                    |> List.map (fun m -> m.Whole, m.Following)
+
+                let table = [
+                    "the top three categories", [ Some 3, [ "category" ] ]
+                    "the top 3 categories", [ Some 3, [ "category" ] ]
+                    "three category", [ Some 3, [ "category" ] ]
+                    "the three largest categories all fell", [ Some 3, [ "largest"; "category" ] ]
+                    "twenty-one markets", [ Some 21, [ "market" ] ]
+                    "three of them", [ Some 3, [] ]
+                    "three pounds", [ None, [ "pound" ] ]
+                ]
+
+                for (text, expected) in table do
+                    Expect.equal (read text) expected (sprintf "'%s'" text)
+
+                // A figure is never a whole number, however its digits split.
+                for figure in
+                    [
+                        "3%"
+                        "£3"
+                        "GBP 3"
+                        "-3"
+                        "3.5 stores"
+                        "1,200 stores"
+                        "1/3 of stores"
+                        "½ of stores"
+                        "the 3rd store"
+                        "3m"
+                    ] do
+                    let wholes = read figure |> List.map fst
+                    Expect.isNonEmpty wholes (sprintf "'%s' states a number" figure)
+                    Expect.allEqual wholes None (sprintf "'%s' is no whole number" figure)
+
+                // "three percent": the number word "percent" is a mention too,
+                // and neither is a whole number.
+                Expect.equal
+                    (read "three percent" |> List.map fst)
+                    [ None; None ]
+                    "a percentage written in words is not a whole number"
+
+                let asked = NarrativeGrounding.mentions NarrativeGrounding.defaultPolicy top3.Prompt
+
+                let echoes text =
+                    NarrativeGrounding.mentions NarrativeGrounding.defaultPolicy text
+                    |> List.forall (NarrativeGrounding.echoes asked)
+
+                Expect.isTrue (echoes "the top three categories") "the echo"
+                Expect.isTrue (echoes "the three largest categories all made less") "adjectives between"
+                Expect.isTrue (echoes "3 categories") "digits for the word"
+                Expect.isTrue (echoes "three category") "the singular"
+                Expect.isFalse (echoes "three markets") "a different noun"
+                Expect.isFalse (echoes "four categories") "a different number"
+                Expect.isFalse (echoes "three largest markets") "an adjective in common is not the noun"
+            }
+
+            test "the echo passes on a FIRST draft, cited by its wording version and section" {
+                let elements = [
+                    citingSpans "The top three categories all grew; the largest, " [ String('1', 64) ]
+                ]
+
+                Expect.isFalse
+                    (NarrativeGroundingVerdict.isGrounded (checkUnder (firstDraft None) elements))
+                    "with no instruction the number is refused as before"
+
+                match checkUnder (firstDraft (Some top3)) elements with
+                | Grounded citations ->
+                    Expect.contains citations (NarrativeCitation.instruction 2 "summary") "cited as the instruction"
+
+                    Expect.equal
+                        (List.last citations).Reference
+                        "instruction:2#summary"
+                        "written <kind>:<version>#<section>"
+
+                    Expect.equal
+                        (NarrativeCitation.admissions citations)
+                        [ NarrativeCitation.instruction 2 "summary" ]
+                        "the admissions are the non-Fact citations"
+
+                    Expect.equal (NarrativeCitation.factIds citations) [ String('1', 64) ] "beside the Fact it cites"
+                | Ungrounded offences ->
+                    failtestf
+                        "the echo was refused: %s"
+                        (offences |> List.map GroundingOffence.describe |> String.concat "; ")
+            }
+
+            test "a section's guidance is wording in force for that section only" {
+                let guided = {
+                    wording 1 "Summarise the month." with
+                        Guidance = Map.ofList [ "summary", "Name the five weakest stores." ]
+                }
+
+                Expect.isTrue
+                    (NarrativeGroundingVerdict.isGrounded (
+                        checkUnder (firstDraft (Some guided)) [ para [ text "The five weakest stores all shrank." ] ]
+                    ))
+                    "the section's guidance admits its own number"
+
+                let elsewhere = {
+                    guided with
+                        Guidance = Map.ofList [ "outlook", "Name the five weakest stores." ]
+                }
+
+                Expect.isFalse
+                    (NarrativeGroundingVerdict.isGrounded (
+                        checkUnder (firstDraft (Some elsewhere)) [ para [ text "The five weakest stores all shrank." ] ]
+                    ))
+                    "another section's guidance does not"
+            }
+
+            test "a near-miss echo is refused: the wrong noun, or the wrong number" {
+                for prose in [ "The top three markets all grew."; "The top four categories all grew." ] do
+                    Expect.equal
+                        (reasonsOf (checkUnder (lateStage (Some top3)) [ para [ text prose ] ]))
+                        [ UnreferencedNumber ]
+                        prose
+            }
+
+            test "after the instruction is reworded, the old number is refused" {
+                let elements = [ para [ text "The top three categories all grew." ] ]
+                let reworded = wording 3 "Report on the top five categories by revenue."
+
+                Expect.isTrue
+                    (NarrativeGroundingVerdict.isGrounded (checkUnder (firstDraft (Some top3)) elements))
+                    "under version 2 it passes"
+
+                Expect.equal
+                    (reasonsOf (checkUnder (firstDraft (Some reworded)) elements))
+                    [ UnreferencedNumber ]
+                    "under version 3 it is refused"
+            }
+
+            test "a count of the cited subjects is refused on a first draft and passes at the late stage" {
+                let elements = [
+                    citingSpans "Three brands carried the month: " [ String('1', 64); String('2', 64); String('3', 64) ]
+                ]
+
+                Expect.equal
+                    (reasonsOf (checkUnder (firstDraft (Some top3)) elements))
+                    [ UnreferencedNumber ]
+                    "a first draft is asked to cite or rephrase first"
+
+                match checkUnder (lateStage (Some top3)) elements with
+                | Grounded citations ->
+                    Expect.equal
+                        (NarrativeCitation.admissions citations |> List.map _.Reference)
+                        [ "structural-count:section 'summary' › element 1 › span 1" ]
+                        "cited as a structural count at its location"
+                | Ungrounded offences ->
+                    failtestf
+                        "the count was refused: %s"
+                        (offences |> List.map GroundingOffence.describe |> String.concat "; ")
+            }
+
+            test "subjects are counted DISTINCT, and a count that does not match is refused" {
+                // Two of the three spans cite facts about the same brand.
+                let twoBrands =
+                    citingSpans "Two brands carried the month: " [ String('1', 64); String('2', 64); String('4', 64) ]
+
+                Expect.isTrue
+                    (NarrativeGroundingVerdict.isGrounded (checkUnder (lateStage None) [ twoBrands ]))
+                    "two distinct subjects behind three spans"
+
+                let four =
+                    citingSpans "Four brands carried the month: " [ String('1', 64); String('2', 64); String('3', 64) ]
+
+                Expect.equal
+                    (reasonsOf (checkUnder (lateStage None) [ four ]))
+                    [ UnreferencedNumber ]
+                    "'four' with three cited subjects is refused"
+            }
+
+            test "a count of the list or table that immediately follows passes only at the late stage" {
+                let withList = [ para [ text "Three brands led:" ]; listOf 3 ]
+
+                Expect.isFalse
+                    (NarrativeGroundingVerdict.isGrounded (checkUnder (firstDraft None) withList))
+                    "refused on a first draft"
+
+                Expect.isTrue
+                    (NarrativeGroundingVerdict.isGrounded (checkUnder (lateStage None) withList))
+                    "the list's item count passes late"
+
+                let table =
+                    NarrativeElement.Table(
+                        [ "Brand", TableAlignment.Left ],
+                        [ [ [ text "Acme" ] ]; [ [ text "Globex" ] ]; [ [ text "Initech" ] ] ]
+                    )
+
+                Expect.isTrue
+                    (NarrativeGroundingVerdict.isGrounded (
+                        checkUnder (lateStage None) [ para [ text "Three brands led:" ]; table ]
+                    ))
+                    "a table's row count passes late"
+
+                Expect.isFalse
+                    (NarrativeGroundingVerdict.isGrounded (
+                        checkUnder (lateStage None) [
+                            para [ text "Three brands led:" ]
+                            NarrativeElement.Divider
+                            listOf 3
+                        ]
+                    ))
+                    "a list that does not IMMEDIATELY follow is not counted"
+
+                Expect.isFalse
+                    (NarrativeGroundingVerdict.isGrounded (
+                        checkUnder (lateStage None) [ para [ text "Four brands led:" ]; listOf 3 ]
+                    ))
+                    "a count that does not match is refused"
+            }
+
+            test "a percentage, a currency amount and a fraction stay refused in every stage" {
+                // Every stage, with an instruction naming the same figure, and
+                // three cited subjects and a three-item list to count against.
+                let asks =
+                    wording 1 "Report the top 3% of categories, the £3 lines and the 1/3 share."
+
+                let three = [ String('1', 64); String('2', 64); String('3', 64) ]
+
+                for options in [ firstDraft (Some asks); lateStage (Some asks) ] do
+                    for prose in
+                        [
+                            "The top 3% of categories: "
+                            "The £3 lines: "
+                            "The 1/3 share: "
+                            "Three percent of categories: "
+                        ] do
+                        Expect.contains
+                            (reasonsOf (checkUnder options [ citingSpans prose three; listOf 3 ]))
+                            UnreferencedNumber
+                            (sprintf "'%s' (late stage: %b)" prose options.LateStage)
+            }
+
+            test "every number in a run must be admitted: one admitted number does not carry another" {
+                Expect.equal
+                    (reasonsOf (
+                        checkUnder (lateStage (Some top3)) [
+                            para [ text "The top three categories made 40% of sales." ]
+                        ]
+                    ))
+                    [ UnreferencedNumber ]
+                    "the percentage beside the echo still refuses the run"
+            }
+
+            test "the existing check is the check with no instruction, at no late stage" {
+                let elements = [
+                    citingSpans "Three brands: " [ String('1', 64); String('2', 64); String('3', 64) ]
+                    listOf 3
+                ]
+
+                Expect.equal
+                    (NarrativeGrounding.check NarrativeGrounding.defaultPolicy admitResolve (docOf elements))
+                    (checkUnder GroundingCheckOptions.none elements)
+                    "check = checkWith none"
+
+                Expect.isFalse
+                    (NarrativeGroundingVerdict.isGrounded (checkUnder GroundingCheckOptions.none elements))
+                    "and refuses"
+            }
+
+            test "the fact gate resolves each current Fact's subject for the late-stage count" {
+                let fixture = gateFixture ()
+                let scopeId = "team-" + Guid.NewGuid().ToString "N"
+
+                let factFor (brand: string) =
+                    assertOk fixture.Store scopeId {
+                        assertedDraft "revenue" 1250m Surfaceable with
+                            Subject = {
+                                Hierarchy = "brand"
+                                Path = [ brand ]
+                            }
+                    }
+
+                let ids = [ "acme"; "globex"; "initech" ] |> List.map (fun b -> (factFor b).FactId)
+
+                let gate =
+                    match fixture.Gate with
+                    | :? IInstructedNarrativeGroundingGate as instructed -> instructed
+                    | _ -> failtest "the fact gate offers the instructed check"
+
+                let checkAt options prose =
+                    gate.CheckWith(
+                        TestScope.resolved scopeId,
+                        "reader",
+                        FactNarrativePublication,
+                        docOf [
+                            para [
+                                text prose
+                                yield! ids |> List.map (fun id -> metric "Revenue" "1250" (Some id))
+                            ]
+                        ],
+                        options
+                    )
+                    |> Async.RunSynchronously
+
+                Expect.isTrue
+                    (NarrativeGroundingVerdict.isGrounded (checkAt (lateStage None) "Three brands: "))
+                    "three subjects"
+
+                Expect.isFalse
+                    (NarrativeGroundingVerdict.isGrounded (checkAt (lateStage None) "Four brands: "))
+                    "not four"
+
+                Expect.isFalse
+                    (NarrativeGroundingVerdict.isGrounded (checkAt (firstDraft None) "Three brands: "))
+                    "and not first"
+
+                Expect.equal
+                    (fixture.Gate.Check(
+                        TestScope.resolved scopeId,
+                        "reader",
+                        FactNarrativePublication,
+                        docOf [ para [ text "Three brands: " ] ]
+                     )
+                     |> Async.RunSynchronously
+                     |> reasonsOf)
+                    [ UnreferencedNumber ]
+                    "the plain Check admits neither"
+            }
+
+            test "the gate seals each admission into a v2 certificate that verifies, and an edited admission does not" {
+                let fixture = gateFixture ()
+                let scopeId = "team-" + Guid.NewGuid().ToString "N"
+
+                let fact =
+                    assertOk fixture.Store scopeId (assertedDraft "revenue" 1250m Surfaceable)
+
+                let options =
+                    firstDraft (Some(wording 2 "Report on the top three brands by revenue."))
+
+                let document =
+                    docOf [
+                        para [
+                            text "Of the top three brands, Acme made "
+                            metric "Revenue" "1250" (Some fact.FactId)
+                        ]
+                    ]
+
+                let gate =
+                    match fixture.Gate with
+                    | :? IInstructedNarrativeGroundingGate as instructed -> instructed
+                    | _ -> failtest "the fact gate offers the instructed check"
+
+                let scope = TestScope.resolved scopeId
+
+                let citations =
+                    match
+                        gate.CheckWith(scope, "reader", FactNarrativePublication, document, options)
+                        |> Async.RunSynchronously
+                    with
+                    | Grounded citations -> citations
+                    | Ungrounded offences -> failtestf "the document must pass: %A" offences
+
+                let certify citations =
+                    GroundingCertification.run
+                        fixture.Gate
+                        scope
+                        "reader"
+                        FactNarrativePublication
+                        options
+                        "narrative-1"
+                        document
+                        citations
+                    |> Async.RunSynchronously
+
+                match certify citations with
+                | Error reason -> failtestf "a certificate must issue: %s" reason
+                | Ok certificate ->
+                    let sealedCert = sealedOf certificate
+                    Expect.equal sealedCert.Body.Format GroundingCertificate.FormatV2 "issued as v2"
+                    Expect.equal certificate.CitedFactIds [ fact.FactId ] "the chain is the Fact's"
+
+                    let admission =
+                        match sealedCert.Body.Admissions with
+                        | Some [ admission ] -> admission
+                        | other -> failtestf "expected one sealed admission, got %A" other
+
+                    Expect.equal admission.Kind NarrativeCitation.InstructionKind "an instruction echo"
+                    Expect.equal admission.Reference "instruction:2#summary" "cited as the gate cited it"
+                    Expect.equal admission.Location "section 'summary' › element 1 › span 1" "at its location"
+
+                    Expect.equal
+                        (CertificateAdmission.attribute CertificateAdmission.WordingVersionAttribute admission)
+                        (Some [ "2" ])
+                        "with its wording version"
+
+                    Expect.equal
+                        (CertificateAdmission.attribute CertificateAdmission.SectionAttribute admission)
+                        (Some [ "summary" ])
+                        "and its section"
+
+                    let verifier = DefaultArtefactVerifier.create fixture.Secrets
+
+                    let verify (c: GroundingCertificate) =
+                        GroundingCertificate.verify verifier c |> Async.RunSynchronously
+
+                    Expect.equal (verify sealedCert) (Ok()) "the sealed certificate verifies offline"
+
+                    let edited (field: string) (change: CertificateAdmission -> CertificateAdmission) =
+                        field,
+                        {
+                            sealedCert with
+                                Body = {
+                                    sealedCert.Body with
+                                        Admissions = Some [ change admission ]
+                                }
+                        }
+
+                    for field, tampered in
+                        [
+                            edited "Kind" (fun a -> {
+                                a with
+                                    Kind = NarrativeCitation.StructuralCountKind
+                            })
+                            edited "Reference" (fun a -> {
+                                a with
+                                    Reference = "instruction:3#summary"
+                            })
+                            edited "Location" (fun a -> {
+                                a with
+                                    Location = "section 'summary' › element 2 › span 1"
+                            })
+                            edited "Attributes" (fun a -> { a with Attributes = [] })
+                        ] do
+                        Expect.equal
+                            (verify tampered)
+                            (Error Tampered)
+                            (sprintf "an admission whose %s was edited fails verification" field)
+
+                    let dropped = {
+                        sealedCert with
+                            Body = {
+                                sealedCert.Body with
+                                    Admissions = None
+                            }
+                    }
+
+                    Expect.equal
+                        (verify dropped)
+                        (Error Tampered)
+                        "and so does a certificate whose admission was removed"
+
+                let factOnly =
+                    citations |> List.filter (fun c -> c.ReferenceKind = NarrativeCitation.FactKind)
+
+                match certify factOnly with
+                | Error reason ->
+                    Expect.stringContains reason "not the ones the verdict records" "a disagreement is refused"
+                | Ok _ -> failtest "the gate must not seal admissions the verdict does not record"
+            }
+
+            test "end to end: the number the prompt asked for publishes on the first draft, listed on the certificate" {
+                let definition = {
+                    summaryRun with
+                        Prompt = "Report on the top three brands by revenue."
+                }
+
+                let deployment =
+                    deployShaped
+                        definition
+                        []
+                        (GroundedNarrativeRunOptions.create NarrativeGrounding.factTools)
+                        (fun model -> ScriptedFactory(model) :> IAIProviderFactory)
+                        (fun id rendering -> answer $"Of the top three brands, Acme made [[Revenue|{rendering}|{id}]].")
+
+                let fact =
+                    assertOk deployment.Store deployment.TeamId (assertedDraft "revenue" 1250m Surfaceable)
+
+                match run deployment with
+                | GroundedNarrativePublished(_, _, citations, _, certificate, repair) ->
+                    Expect.equal repair.Rounds 0 "no repair round was needed"
+
+                    Expect.equal
+                        (citations |> List.map _.Reference)
+                        [ fact.FactId; "instruction:0#summary" ]
+                        "the Fact, and the instruction (the declaration is version 0)"
+
+                    match certificate with
+                    | Ok c ->
+                        Expect.equal c.CitedFactIds [ fact.FactId ] "the signed chain is the Fact's"
+
+                        let sealedBody = (sealedOf c).Body
+
+                        Expect.equal sealedBody.Format GroundingCertificate.FormatV2 "a v2 certificate"
+
+                        Expect.equal
+                            (sealedBody.Admissions
+                             |> Option.defaultValue []
+                             |> List.map (fun a -> a.Kind, a.Reference, a.Location))
+                            [
+                                NarrativeCitation.InstructionKind,
+                                "instruction:0#summary",
+                                "section 'summary' › element 1 › span 1"
+                            ]
+                            "the admission is inside the signed body, at its location"
+                    | Error reason -> failtestf "a certificate must issue: %s" reason
+                | other -> failtestf "expected publication, got %s" (GroundedNarrativeOutcome.describe other)
+            }
+
+            test "end to end: a count of the table below is refused at first, and published once the repair loop stops" {
+                let table =
+                    NarrativeElement.Table(
+                        [ "Brand", TableAlignment.Left ],
+                        [ [ [ text "Acme" ] ]; [ [ text "Globex" ] ]; [ [ text "Initech" ] ] ]
+                    )
+
+                let calls = ref 0
+
+                let writer: Writer =
+                    fun id rendering ->
+                        calls.Value <- calls.Value + 1
+
+                        if calls.Value = 1 then
+                            JsonSerializer.Serialize {|
+                                sections = [
+                                    {|
+                                        id = "summary"
+                                        paragraphs = [
+                                            $"Acme revenue was [[Revenue|{rendering}|{id}]] in September."
+                                            "The three brands are listed below."
+                                        ]
+                                    |}
+                                ]
+                            |}
+                        else
+                            """{"repairs":[{"section":"summary","element":2,"text":"The three brands are listed below."}]}"""
+
+                let shaped policy =
+                    summaryRun
+                    |> GroundedNarrativeDefinition.withRepairPolicy policy
+                    |> GroundedNarrativeDefinition.withProjection (fun _ -> async {
+                        return Ok [ "summary", [ table ] ]
+                    })
+
+                // With no repair round there is no late stage: refused.
+                let unrepaired =
+                    deployShaped
+                        (shaped GroundedRepairPolicy.refuseOnOffence)
+                        []
+                        (GroundedNarrativeRunOptions.create NarrativeGrounding.factTools)
+                        (fun model -> ScriptedFactory(model) :> IAIProviderFactory)
+                        writer
+
+                assertOk unrepaired.Store unrepaired.TeamId (assertedDraft "revenue" 1250m Surfaceable)
+                |> ignore
+
+                match run unrepaired with
+                | GroundedNarrativeRefused offences ->
+                    Expect.equal
+                        (offences |> List.map _.Reason)
+                        [ UnreferencedNumber ]
+                        "the count, refused on the first draft"
+                | other -> failtestf "expected a refusal, got %s" (GroundedNarrativeOutcome.describe other)
+
+                calls.Value <- 0
+
+                let repaired =
+                    deployShaped
+                        (shaped GroundedRepairPolicy.defaults)
+                        []
+                        (GroundedNarrativeRunOptions.create NarrativeGrounding.factTools)
+                        (fun model -> ScriptedFactory(model) :> IAIProviderFactory)
+                        writer
+
+                assertOk repaired.Store repaired.TeamId (assertedDraft "revenue" 1250m Surfaceable)
+                |> ignore
+
+                match run repaired with
+                | GroundedNarrativePublished(_, document, citations, _, certificate, repair) ->
+                    Expect.isTrue (GroundedRepairSummary.isComplete repair) "published whole, nothing withheld"
+                    Expect.isTrue (repair.Rounds > 0) "after the repair loop stopped"
+
+                    Expect.isFalse
+                        (document.Sections
+                         |> List.exists (fun s -> s.Id = GroundedRepair.WithheldSectionId))
+                        "with no withheld-claims note"
+
+                    Expect.contains
+                        (citations |> List.map _.Reference)
+                        "structural-count:section 'summary' › element 2 › span 1"
+                        "the count is cited at its location"
+
+                    match certificate with
+                    | Ok c ->
+                        Expect.equal
+                            ((sealedOf c).Body.Admissions
+                             |> Option.defaultValue []
+                             |> List.map (fun a -> a.Kind, a.Location))
+                            [
+                                NarrativeCitation.StructuralCountKind, "section 'summary' › element 2 › span 1"
+                            ]
+                            "and sealed into the certificate"
+                    | Error reason -> failtestf "a certificate must issue: %s" reason
+                | other -> failtestf "expected publication, got %s" (GroundedNarrativeOutcome.describe other)
+            }
+        ]
 
 let tests =
     testList "Phase 985 — grounded narrative generation" [
@@ -3324,4 +4509,6 @@ let tests =
         projectionTests
         jobResultTests
         triggerNameTests
+        repairTests
+        admissionTests
     ]

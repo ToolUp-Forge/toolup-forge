@@ -14,10 +14,10 @@ Substrate dependencies arrive through composition, never read directly (companio
 
 ## How a consumer composes it
 
-Wrap a base `ServerApp` with `PasskeyServerApp` (the `PasskeyCompose` companion root, mirroring `PeerServerApp`) and run it. At `run`, the companion folds itself into the base app in one pass: it sets the app `IAuthProvider`, registers the preflight validator, mounts the ceremony routes, and registers the `PasskeyRuntime` DI singleton (the Fido2 verifier plus the credential / challenge stores) over the resolved `IBlobStorage`.
+Compose the passkey companion onto your `ServerApp` with `PasskeyCompose.withPasskey config`. It is applied once, when the deployment resolves, so every `ServerApp` builder works on either side of it: it sets the app `IAuthProvider`, registers the preflight validator, mounts the ceremony routes, and registers the `PasskeyRuntime` DI singleton (the Fido2 verifier plus the credential / challenge stores) over the resolved `IBlobStorage`.
 
 ```fsharp skip=fragment
-open ToolUp.Platform.Server
+open ToolUp.Platform.Compose.Server
 open ToolUp.AuthProviders.Passkey.PasskeyTypes
 open ToolUp.AuthProviders.Passkey.PasskeyCompose
 
@@ -31,13 +31,13 @@ let main _ =
     ServerApp.empty
     |> ServerApp.withConfig { ServerConfig.defaults with Port = 5000 }
     |> ServerApp.withStorage (LocalFileStorage "data")   // any IBlobStorage
-    |> PasskeyCompose.create config
-    |> PasskeyCompose.run
+    |> PasskeyCompose.withPasskey config
+    |> ServerApp.run
 ```
 
 The relying-party id (`RelyingPartyId`) is the WebAuthn scope of the credential — a **registrable domain suffix** of every browser origin the app is served from, with no scheme or port (`example.com`, not `https://example.com:5000`). It covers subdomains: RP id `example.com` scopes credentials for both `https://example.com` and `https://app.example.com`. `Origins` is the exact allow-list the verifier checks the browser's `clientDataJSON.origin` against.
 
-Core takes no `Fido2` dependency and a deployment that never composes `PasskeyServerApp` pays nothing (GP 13).
+Core takes no `Fido2` dependency and a deployment that never composes the passkey companion pays nothing (GP 13).
 
 ## Configuration contract
 
@@ -76,7 +76,7 @@ Assertion enforces a monotonic per-credential signature counter — a non-increa
 
 ## See also
 
-- [`../../InterPlatform/README.md`](../../InterPlatform/README.md) — the opt-in companion-composition shape (`PeerServerApp`) this mirrors.
+- [`../../InterPlatform/README.md`](../../InterPlatform/README.md) — the opt-in companion-composition shape (`PeerOptions` + `PeerCompose.withPeer`) this mirrors.
 
 Licensed under Apache-2.0.
 

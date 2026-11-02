@@ -20,13 +20,15 @@ open Giraffe
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.NotificationChannel
-open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Config.NotificationChannel
+open ToolUp.Platform.Config.TeamManagement
 open ToolUp.Platform.Secrets
 open ToolUp.AuthProviders.ScimTypes
 open ToolUp.AuthProviders.ScimHandler
 open ToolUp.AuthProviders.ScimRoutes
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── SCIM 2.0 provisioning conformance pack ──────────────────────────
 //
@@ -1005,19 +1007,47 @@ let tests =
 
         test "a deployment that does not compose SCIM contributes no handler" {
             let baseApp = ServerApp.empty
-            let wrapped = ScimServerApp.ofServerApp baseApp
-
-            Expect.equal wrapped.Mode NoScim "the default is NoScim"
 
             Expect.equal
-                (List.length wrapped.Base.Extensions.Handlers)
-                (List.length baseApp.Extensions.Handlers)
-                "and the base app's handler list is untouched"
+                (ServerApp.composedExtensions baseApp).Handlers.Length
+                baseApp.Extensions.Handlers.Length
+                "no SCIM route without withScim"
 
-            let mounted = wrapped |> ScimServerApp.withScim (ScimConfig.create teamId)
+            let mounted = baseApp |> withScim (ScimConfig.create teamId)
 
-            match mounted.Mode with
-            | EnabledScim c -> Expect.equal c.TeamId teamId "withScim records the bound team"
-            | NoScim -> failtest "withScim should have enabled the mode"
+            Expect.equal
+                (ServerApp.composedExtensions mounted).Handlers.Length
+                (baseApp.Extensions.Handlers.Length + 1)
+                "withScim contributes the endpoint"
+        }
+
+        test "builders applied after withScim reach the resolved app" {
+            let logger = ConsoleLogger.ConsoleLogger() :> ILogger
+
+            let app =
+                ServerApp.empty
+                |> withScim (ScimConfig.create teamId)
+                |> ServerApp.withConfig {
+                    ServerConfig.defaults with
+                        MultiInstance = {
+                            ServerConfig.defaults.MultiInstance with
+                                ReplicaCount = 2
+                        }
+                }
+                |> ServerApp.withLogger logger
+
+            let resolved = ServerApp.resolve app
+
+            Expect.equal
+                (ServerApp.effectiveConfig app).MultiInstance.ReplicaCount
+                2
+                "the later withConfig reaches the app"
+
+            Expect.isTrue (obj.ReferenceEquals(resolved.Logger.Value, logger)) "and the later withLogger"
+
+            Expect.equal
+                (ServerApp.composedExtensions app).Handlers.Length
+                (ServerApp.empty.Extensions.Handlers.Length + 1)
+                "and the SCIM endpoint is still contributed"
         }
     ]

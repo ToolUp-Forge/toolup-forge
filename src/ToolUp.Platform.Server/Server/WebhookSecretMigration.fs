@@ -1,4 +1,4 @@
-module ToolUp.Platform.WebhookSecretMigration
+module ToolUp.Platform.Jobs.WebhookSecretMigration
 
 open System
 open ToolUp.Platform

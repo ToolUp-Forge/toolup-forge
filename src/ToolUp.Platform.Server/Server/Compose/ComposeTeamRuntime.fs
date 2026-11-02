@@ -1,11 +1,16 @@
-module ToolUp.Platform.ComposeTeamRuntime
+module ToolUp.Platform.Compose.ComposeTeamRuntime
 
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.Auth
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.PermissionStore
-open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Scope.PermissionStore
+open ToolUp.Platform.Config.TeamManagement
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Scope.Teams
+open ToolUp.Platform.Jobs
 
 // ─── compose phase: team / invite / permission stores + validators ───
 //
@@ -132,8 +137,8 @@ let registerTeamPermissionStores
         pendingInviteStoreOverride
         |> Option.defaultWith (fun () ->
             let blobDefault =
-                if config.ReplicaCount > 1 then
-                    ToolUp.Platform.Teams.BlobPendingInviteStore.TryCreate(
+                if config.MultiInstance.ReplicaCount > 1 then
+                    ToolUp.Platform.Scope.Teams.BlobPendingInviteStore.TryCreate(
                         resolvedBlobStorage,
                         resolvedLogger,
                         Some auditLog,
@@ -146,13 +151,13 @@ let registerTeamPermissionStores
             | Some store ->
                 resolvedLogger.Info(
                     sprintf
-                        "[ComposeTeamRuntime] event=pending_invite_store_selected store=BlobPendingInviteStore ServerConfig.ReplicaCount = %d and the composed IBlobStorage implements IConditionalBlobStorage — pending-by-email invitations use ETag-guarded writes across replicas."
-                        config.ReplicaCount
+                        "[ComposeTeamRuntime] event=pending_invite_store_selected store=BlobPendingInviteStore ServerConfig.MultiInstance.ReplicaCount = %d and the composed IBlobStorage implements IConditionalBlobStorage — pending-by-email invitations use ETag-guarded writes across replicas."
+                        config.MultiInstance.ReplicaCount
                 )
 
                 store
             | None ->
-                ToolUp.Platform.Teams.InMemoryPendingInviteStore(
+                ToolUp.Platform.Scope.Teams.InMemoryPendingInviteStore(
                     resolvedBlobStorage,
                     resolvedLogger,
                     Some auditLog,
@@ -175,7 +180,7 @@ let registerTeamPermissionStores
     // of registration site, and it requires an INSTANCE, which is why the
     // validator cannot be registered before the store is in hand.
     services.AddSingleton<ConfigValidation.IConfigValidator>(
-        ToolUp.Platform.Teams.PendingInviteStoreInstanceValidator.PendingInviteStoreInstanceValidator(
+        ToolUp.Platform.Scope.Teams.PendingInviteStoreInstanceValidator.PendingInviteStoreInstanceValidator(
             config,
             Some resolvedPendingInviteStore
         )

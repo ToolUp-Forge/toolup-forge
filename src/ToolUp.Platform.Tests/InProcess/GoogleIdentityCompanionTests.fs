@@ -13,6 +13,8 @@ open ToolUp.Platform.ConfigValidation
 open ToolUp.AuthProviders.Oidc.OidcTypes
 open ToolUp.AuthProviders.GoogleIdentity.GoogleIdentityConfig
 open ToolUp.AuthProviders.GoogleIdentity.GoogleIdentityClient
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
 
 // ─── Google Identity Services companion ──────────────────────────────
 //
@@ -371,7 +373,10 @@ let private cspContributorTests =
 let private cspValidatorTests =
     let serverConfig hardening = {
         ServerConfig.defaults with
-            SecurityHardening = hardening
+            SecurityPosture = {
+                ServerConfig.defaults.SecurityPosture with
+                    SecurityHardening = hardening
+            }
     }
 
     let validate (config: ServerConfig) (services: IServiceCollection) =

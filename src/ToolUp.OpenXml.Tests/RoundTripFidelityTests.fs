@@ -36,6 +36,7 @@ open DocumentFormat.OpenXml.Packaging
 open ToolUp.OpenXml
 open ToolUp.OpenXml.Tests
 open ToolUp.OpenXml.Tests.Corpus
+open ToolUp.Platform.Audit
 
 /// One fixture, carried through the whole round trip once so every
 /// case in its list asserts against the same values.

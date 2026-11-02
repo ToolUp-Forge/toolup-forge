@@ -21,6 +21,8 @@ open ToolUp.Platform.Secrets
 open ToolUp.DataSources
 open ToolUp.DataSources.GoogleAnalyticsDataSource
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Google Analytics 4 connector tests ──────────────────────────────
 //

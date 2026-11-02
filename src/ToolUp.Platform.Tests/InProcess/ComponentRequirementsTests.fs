@@ -5,7 +5,9 @@ open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
 open ToolUp.Platform.Secrets
-open ToolUp.Platform.ComponentRequirementsPreflight
+open ToolUp.Platform.Compose.ComponentRequirementsPreflight
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 432 — component secret & config requirements manifest ──────
 //

@@ -10,6 +10,7 @@ open ToolUp.Stripe.Server
 // into `WebhookTestHarness` so the fixture-replay pack can reuse them rather
 // than keep a second copy of the signing helper.
 open ToolUp.Stripe.Server.Tests.WebhookTestHarness
+open ToolUp.Platform.Compose
 
 let private okHandler
     (calls: int ref)

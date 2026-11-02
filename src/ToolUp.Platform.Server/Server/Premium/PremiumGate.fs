@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.Premium.PremiumGate
+module ToolUp.Platform.Scope.Premium.PremiumGate
 
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
+open ToolUp.Platform.Config
 
 // ─── Phase 62 — server-side premium gating helpers ────────────────
 //

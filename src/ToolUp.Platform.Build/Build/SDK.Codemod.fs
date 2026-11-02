@@ -38,6 +38,27 @@ type CodemodMigration =
     /// (`Scheduled` / `Coalesced`) and `TriggerOnce` refuses with a typed
     /// `TriggerError`.
     | JobOutcomes
+    /// `IFactStore` and the fact-tier seams take a `ResolvedScope` only, and
+    /// every fact-store member answers `Result<_, FactStoreError>`.
+    | OneScopeForm
+    /// Every hosted service declares a `Placement` through
+    /// `Hosting.register`, and the in-process scheduler and the webhook
+    /// dispatcher are each built by one factory over an options record.
+    | BackgroundPlacement
+    /// A companion root is an options record composed onto a `ServerApp`
+    /// with one `withX options` entry point, not a record wrapping it.
+    | CompanionOptions
+    /// `ServerConfig` is nested by concern (`SecurityPosture`,
+    /// `RiskAcknowledgements`, `MultiInstance`, `Observability`, `Stores`)
+    /// and every payload-free two-case `*Mode` is the one `FeatureMode`.
+    | NestedConfig
+    /// The server tier's namespaces name the part a file is compiled
+    /// into (`ToolUp.Platform.Infra` / `.Config` / `.Scope` / `.Jobs` /
+    /// `.Audit`, the umbrella's `.Compose` and `.Files`), and a consumer's
+    /// opens are derived from the names it uses. Table-driven, so it runs
+    /// only when named (`--phase 1198`), never under the default
+    /// every-migration pass.
+    | SubsystemNamespaces
 
 /// Helpers over `CodemodMigration`.
 module CodemodMigration =
@@ -56,6 +77,12 @@ module CodemodMigration =
             "docs/migrations/1066-redesign-d-schedulerpolicy-coalesced-and-joblifecycle-transition.md"
         | CodemodMigration.ModelCapabilities ->
             "docs/migrations/1094-redesign-h-factscompose-options-modelling-dedup-and-fact-tools.md"
+        | CodemodMigration.OneScopeForm -> "docs/migrations/1157-one-scope-form.md"
+        | CodemodMigration.BackgroundPlacement ->
+            "docs/migrations/1067-redesign-d-hosting-register-placement-and-options-records.md"
+        | CodemodMigration.CompanionOptions -> "docs/migrations/876-composition-contributions.md"
+        | CodemodMigration.NestedConfig -> "docs/migrations/877-nested-server-config.md"
+        | CodemodMigration.SubsystemNamespaces -> "docs/migrations/1198-subsystem-namespaces.md"
 
     /// The phase label the renderings print.
     let label migration =
@@ -70,6 +97,11 @@ module CodemodMigration =
         | CodemodMigration.JobOutcomes -> "Phase 1066"
         | CodemodMigration.ModelCapabilities -> "Phase 1094"
         | CodemodMigration.RemotingLeftovers -> "Phase 1053"
+        | CodemodMigration.OneScopeForm -> "Phase 1157"
+        | CodemodMigration.BackgroundPlacement -> "Phase 1067"
+        | CodemodMigration.CompanionOptions -> "Phase 876"
+        | CodemodMigration.NestedConfig -> "Phase 877"
+        | CodemodMigration.SubsystemNamespaces -> "Phase 1198"
 
 /// Which files a rule applies to. The Phase 11.C.5 Tier 2 renames are
 /// PACKAGE ids — they live in `.fsproj` / `Directory.Packages.props` —
@@ -288,6 +320,169 @@ module Codemod =
     /// one per labelled slot, plus the platform-users module's.
     let private labelRecords =
         "HomeModule|TeamManager|TeamConfig|WebhookAdmin|ServiceAccountAdmin|ExternalContactManager|NotificationPreferences|ModuleVisibilityAdmin|SessionSecurity|PermissionsAdmin|UsageDashboard|AuditViewer|DataIngestionAdmin|PlatformAdmin|HealthMonitor|ServiceStatusBoard|DataSubjectRequestAdmin|MigrationAdmin|CompositionInspector|PlatformUsers"
+
+    // ── The Phase 877 tables ──────────────────────────────────────────
+
+    /// The thirty-seven payload-free two-case `*Mode` unions that became
+    /// `FeatureMode`, as (type, off case, on case). The table is the
+    /// migration doc's mode map; a type that kept its own shape (a
+    /// payload, a third case, a choice between substrates) is not here.
+    let featureModes: (string * string * string) list = [
+        "PlatformKnowledgeBaseMode", "NoPlatformKnowledgeBase", "EnabledPlatformKnowledgeBase"
+        "LineageStoreMode", "NoLineageStore", "EnabledLineageStore"
+        "LineageDurabilityMode", "NoDurableLineage", "EnabledDurableLineage"
+        "JobProgressMode", "NoJobProgress", "EnabledJobProgress"
+        "ShareTokenStoreMode", "NoShareTokenStore", "EnabledShareTokenStore"
+        "DataIngestionMode", "NoDataIngestion", "EnabledDataIngestion"
+        "ColumnMappingMode", "NoColumnMapping", "EnabledColumnMapping"
+        "OAuthRefresherMode", "NoOAuthRefresher", "EnabledOAuthRefresher"
+        "OAuth1aMode", "NoOAuth1a", "EnabledOAuth1a"
+        "EntityStoreMode", "NoEntityStore", "EnabledEntityStore"
+        "EntityOutboxMode", "NoEntityOutbox", "EnabledEntityOutbox"
+        "EntityGraphProjectionMode", "NoEntityGraphProjection", "EnabledEntityGraphProjection"
+        "ModelFittingMode", "NoModelFitting", "EnabledModelFitting"
+        "ModelExecutionApiMode", "NoModelExecutionApi", "EnabledModelExecutionApi"
+        "ExternalComputeMode", "NoExternalCompute", "CustomExternalCompute"
+        "ComputeBudgetMode", "NoComputeBudget", "EnabledComputeBudget"
+        "TelemetrySinkMode", "NoTelemetrySink", "CustomTelemetrySink"
+        "UsageMeteringMode", "NoUsageMetering", "EnabledUsageMetering"
+        "MetricsEndpointMode", "NoMetricsEndpoint", "EnabledMetricsEndpoint"
+        "WebhookMode", "NoWebhooks", "EnabledWebhooks"
+        "AuditLogMode", "NoAuditLog", "EnabledAuditLog"
+        "AuthCookieIssuanceMode", "NoAuthCookieIssuance", "EnabledAuthCookieIssuance"
+        "ConfigDriftDetectionMode", "NoConfigDriftDetection", "EnabledConfigDriftDetection"
+        "RateLimiterMode", "NoRateLimiter", "EnabledRateLimiter"
+        "SmokeTestMode", "NoSmokeTest", "EnabledSmokeTest"
+        "AssetStoreMode", "NoAssetStore", "EnabledAssetStore"
+        "MediaLibraryMode", "NoMediaLibrary", "EnabledMediaLibrary"
+        "DeploymentReadinessMode", "NoReadinessReport", "EnabledReadinessReport"
+        "DeploymentVerificationMode", "NoDeploymentVerification", "EnabledDeploymentVerification"
+        "ConsentAuditMode", "NoConsentAudit", "EnabledConsentAudit"
+        "AdAnalyticsMode", "NoAdAnalytics", "EnabledAdAnalytics"
+        "PeerSubstrateMode", "NoPeerSubstrate", "EnabledPeerSubstrate"
+        "FactStoreMode", "NoFactStore", "EnabledFactStore"
+        "TenantLifecycleMode", "NoTenantLifecycle", "EnabledTenantLifecycle"
+        "UserSchemaAuthoringMode", "NoUserSchemaAuthoring", "EnabledUserSchemaAuthoring"
+        "ExternalContactStoreMode", "NoExternalContactStore", "EnabledExternalContactStore"
+        "PresenceMode", "NoPresence", "EnabledPresence"
+    ]
+
+    /// The `ServerConfig` fields that moved into a concern record, as
+    /// (concern, fields). The table is the migration doc's field map.
+    let concernFields: (string * string list) list = [
+        "SecurityPosture",
+        [
+            "RequireHttps"
+            "TrustForwardedHeaders"
+            "TrustedProxyCidrs"
+            "SecurityHeaders"
+            "SecurityHardening"
+            "Cors"
+            "SseAuthMode"
+            "AuthCookieIssuance"
+            "MaxRequestBodyBytes"
+            "WebhookUrlAllowedHosts"
+        ]
+        "RiskAcknowledgements",
+        [
+            "AcceptForwardedHeadersFromAnyProxy"
+            "AcceptHeaderAuthWhenAuthRequired"
+            "AcceptPlaintextSecretsWhenAuthRequired"
+            "AcceptInProcessSchedulerInMultiInstance"
+            "AcceptInProcessIngestionInMultiInstance"
+            "AcceptSharedEmbeddingCacheInTeamMode"
+            "AcceptEphemeralRagIndex"
+            "AcceptLocalEmbedderAtScale"
+            "AcceptStickyRoutedAiInMultiInstance"
+            "AcceptNoRateLimitWhenAuthRequired"
+            "AcceptUnsignedPublishable"
+            "AcceptQueryParamSseAuthWhenAuthRequired"
+            "AcceptSameSiteOnlyCsrfWhenAuthRequired"
+            "AcceptUnboundAudienceWhenAuthRequired"
+            "AcceptInMemoryOAuthStateInMultiInstance"
+            "AcceptInMemoryShareTokenRateLimiterInMultiInstance"
+            "AcceptPendingInviteStoreInMultiInstance"
+            "AcceptInviteByEmailWithoutDirectory"
+            "AcceptEphemeralShareTokenKey"
+            "AcceptAnonymousModeWithAI"
+        ]
+        "MultiInstance", [ "ReplicaCount"; "ProcessProfile"; "PeerRoutePrefixes"; "PeerSubstrate" ]
+        "Observability",
+        [
+            "LogLevel"
+            "TraceCategories"
+            "HealthStateTracking"
+            "MetricsEndpoint"
+            "MetricsSink"
+            "MetricsHistory"
+            "TelemetrySink"
+            "SlowRequestThreshold"
+            "SlowRequestThresholdOverrides"
+            "AlertRules"
+            "LogStore"
+            "DatadogReadback"
+        ]
+        "Stores",
+        [
+            "EventStore"
+            "ResultStore"
+            "ShareTokenStore"
+            "ServiceAccounts"
+            "EntityStore"
+            "EntityOutbox"
+            "GraphStore"
+            "TimeSeriesStore"
+            "Datasets"
+            "SessionRegistry"
+            "ConversationStore"
+            "AssetStore"
+            "RateLimitStore"
+            "ConsentStateStore"
+            "ExternalContactStore"
+            "FactStore"
+        ]
+    ]
+
+    /// Field → concern, over `concernFields`.
+    let private concernOf: Map<string, string> =
+        concernFields
+        |> List.collect (fun (concern, fields) -> fields |> List.map (fun f -> f, concern))
+        |> Map.ofList
+
+    let private concernNames = concernFields |> List.map fst
+
+    /// The moved fields whose NAME is also a label on other records a
+    /// consumer is likely to hold (a deps record's `EventStore`, an
+    /// overrides record's `SecurityHardening`): a `.Field` read on an
+    /// arbitrary receiver cannot be proved to be a `ServerConfig` read,
+    /// so it is rewritten only behind a receiver that names the config
+    /// and reported otherwise. `DatadogReadback` is also a `ClientConfig`
+    /// field, and a client shell reads it as `ctx.Config.DatadogReadback`,
+    /// so it is never rewritten, only reported.
+    let private sharedLabels =
+        set [
+            "EventStore"
+            "EntityStore"
+            "ResultStore"
+            "Datasets"
+            "MetricsSink"
+            "SlowRequestThresholdOverrides"
+            "DatadogReadback"
+            "SecurityHardening"
+            "ProcessProfile"
+            "ShareTokenStore"
+            "RateLimitStore"
+            "LogLevel"
+            "Cors"
+        ]
+
+    let private movedFields = concernOf |> Map.keys |> List.ofSeq
+    let private alternation (names: string seq) = String.Join("|", names)
+
+    /// A receiver that is a `ServerConfig` by name: the conventional
+    /// bindings, `app.Config`, and the defaults value itself.
+    let private configReceiver =
+        @"(?:\b(?:config|cfg|serverConfig|conf|effective|effectiveConfig|finalConfig|baseConfig|merged|defaults)|\.Config|\.defaults)"
 
     // ── The deterministic rewrites ────────────────────────────────────
 
@@ -609,6 +804,106 @@ module Codemod =
             @"\bError\s*\(?\s*""Cannot trigger a disabled job; enable it first""\s*\)?"
             "Error TriggerError.JobDisabled"
             "`Error \"Cannot trigger a disabled job; enable it first\"` → `Error TriggerError.JobDisabled`"
+        // A fact-store call handed `scope.ScopeId` already holds the resolved
+        // scope: pass the scope itself. Only the members no other store
+        // spells, so a string-keyed store's `Get(x.ScopeId, …)` is untouched.
+        rewrite
+            "1157-resolved-scope-id"
+            CodemodMigration.OneScopeForm
+            CodemodFileClass.Source
+            @"\.(AssertBatch|QueryWithCompetition|QuerySupersessionChain|QueryPopulation)\(\s*([A-Za-z_][\w.]*)\.ScopeId\s*,"
+            ".$1($2,"
+            "`store.AssertBatch(scope.ScopeId, …)` (and `QueryWithCompetition` / `QuerySupersessionChain` / `QueryPopulation`) → `store.AssertBatch(scope, …)`: the caller already holds the resolved scope"
+        rewrite
+            "1157-render-offenders"
+            CodemodMigration.OneScopeForm
+            CodemodFileClass.Source
+            @"\bFactWrite\.renderOffenders\s+(?:\([^()]*\)|[\w.]+)\s+"
+            "FactStoreError.describe "
+            "`FactWrite.renderOffenders total offenders` → `FactStoreError.describe refused` (`prepare` answers one `MalformedDrafts`)"
+        rewrite
+            "1157-same-container"
+            CodemodMigration.OneScopeForm
+            CodemodFileClass.Source
+            @"\bCoverageNarrativeOptions\.sameContainer\b"
+            "CoverageNarrativeOptions.everyScope"
+            "`CoverageNarrativeOptions.sameContainer` → `CoverageNarrativeOptions.everyScope` (the narrative commits under the resolved scope's own container)"
+        // The startup-registration shape moved with the placement rule.
+        rewrite
+            "1067-at-start"
+            CodemodMigration.BackgroundPlacement
+            CodemodFileClass.Source
+            @"\bProcessProfileGate\.atStart\b"
+            "Hosting.atStart"
+            "`ProcessProfileGate.atStart` → `Hosting.atStart`"
+        // Phase 877 — the thirty-seven two-case modes are one. The
+        // qualified spelling (`AuditLogMode.NoAuditLog`) is consumed with
+        // its case, so the type rule below never sees it.
+        rewrite
+            "877-feature-mode-off"
+            CodemodMigration.NestedConfig
+            CodemodFileClass.Source
+            (sprintf
+                @"\b(?:(?:%s)\.)?(?:%s)\b"
+                (alternation (featureModes |> List.map (fun (t, _, _) -> t)))
+                (alternation (featureModes |> List.map (fun (_, off, _) -> off))))
+            "FeatureMode.Disabled"
+            "`NoAuditLog` / `NoEntityStore` / … (the off case of every payload-free two-case mode) → `FeatureMode.Disabled`"
+        rewrite
+            "877-feature-mode-on"
+            CodemodMigration.NestedConfig
+            CodemodFileClass.Source
+            (sprintf
+                @"\b(?:(?:%s)\.)?(?:%s)\b"
+                (alternation (featureModes |> List.map (fun (t, _, _) -> t)))
+                (alternation (featureModes |> List.map (fun (_, _, on) -> on))))
+            "FeatureMode.Enabled"
+            "`EnabledAuditLog` / `EnabledEntityStore` / `CustomTelemetrySink` / … (the on case) → `FeatureMode.Enabled`"
+        rewrite
+            "877-feature-mode-type"
+            CodemodMigration.NestedConfig
+            CodemodFileClass.Source
+            (sprintf @"\b(?:%s)\b" (alternation (featureModes |> List.map (fun (t, _, _) -> t))))
+            "FeatureMode"
+            "`FeatureMode` / `FeatureMode` / … (a type annotation on a retired mode) → `FeatureMode`"
+        // A moved field read off a receiver that names the config.
+        {
+            rewrite
+                "877-config-member"
+                CodemodMigration.NestedConfig
+                CodemodFileClass.Source
+                (sprintf
+                    @"(%s)\.(%s)\b"
+                    configReceiver
+                    (alternation (Set.toList (sharedLabels.Remove "DatadogReadback"))))
+                ""
+                "`config.EventStore` / `app.Config.LogLevel` / … (a moved field read off a receiver named as the config) → `config.<Concern>.<Field>`" with
+                Rewrite =
+                    fun m ->
+                        let field = m.Groups[2].Value
+                        sprintf "%s.%s.%s" m.Groups[1].Value concernOf[field] field
+        }
+        // A moved field whose name no other record a consumer holds is
+        // likely to carry: the read is a `ServerConfig` read on any VALUE
+        // receiver (a lowercase-initial binding, or `.Config`). A
+        // capitalised segment is a module or namespace path — `ToolUp.AssetStore`,
+        // `Consent.ConsentStateStore`, `module X.EntityOutbox` — and is
+        // never a field read, whatever its last segment is called.
+        {
+            rewrite
+                "877-moved-member"
+                CodemodMigration.NestedConfig
+                CodemodFileClass.Source
+                (sprintf
+                    @"(?<=\b[a-z_][\w']*|\.Config)\.(%s)\b"
+                    (alternation (movedFields |> List.filter (fun f -> not (sharedLabels.Contains f)))))
+                ""
+                "`.ReplicaCount` / `.RequireHttps` / `.AcceptEphemeralRagIndex` / … (a moved field only `ServerConfig` carries) → `.<Concern>.<Field>`" with
+                Rewrite =
+                    fun m ->
+                        let field = m.Groups[1].Value
+                        sprintf ".%s.%s" concernOf[field] field
+        }
     ]
 
     // ── The review rules ──────────────────────────────────────────────
@@ -821,6 +1116,26 @@ module Codemod =
             CodemodFileClass.Source
             @"\bmember\s+\w+\.(?:Schedule|TriggerOnce)\b"
             "an `IJobScheduler` implementer: `Schedule` returns `ScheduleOutcome` and `TriggerOnce` returns `TriggerError`; a decorator forwards both unchanged, and a scheduler builds on `SchedulerPolicy` (`scheduleValidated`, `triggerable`, `setStatus`, `eventTriggered`) instead of re-typing the policy"
+        // A fact-store call handed a string scope: no mechanical target
+        // exists, because nothing turns a string into a resolved scope.
+        review
+            "1157-string-scope-call"
+            CodemodMigration.OneScopeForm
+            CodemodFileClass.Source
+            @"\.(?:Assert|AssertBatch|Get|Query|QueryWithCompetition|QuerySupersessionChain|QueryPopulation)\(\s*(?:""[^""]*""|\w*[sS]copeId\b)\s*,"
+            "an `IFactStore` member takes a `ResolvedScope`, never a string: on a request `ScopeResolution.forRequest ctx`, in a job `JobContext.Scope`, for declared standing work a principal resolved through `DeclaredPrincipalResolver`. Every member answers `Result<_, FactStoreError>`: match it, or `FactStoreResult.orRaise` where the caller has no failure channel (a string-keyed store's own member is not affected)"
+        review
+            "1157-fact-store-implementer"
+            CodemodMigration.OneScopeForm
+            CodemodFileClass.Source
+            @"\binterface\s+(?:[\w.]+\.)?(?:IFactStore|IFactDisclosureGate|IDisclosureTaintIndexSource|IFactTableWriter)\s+with\b"
+            "an implementer of a fact-tier seam: delete the `string` scope members and keep the `ResolvedScope` ones; an `IFactStore` answers `Result<_, FactStoreError>` from every member, and wraps a read in `FactStoreResult.ofRead` so a fault is `StorageFault`, never absence"
+        review
+            "1157-coherence-scopes"
+            CodemodMigration.OneScopeForm
+            CodemodFileClass.Source
+            @"\b(?:withCoherenceChecks|withCoherenceChecksConfig)\b|\bHealthScope\b"
+            "coherence sweeps and their health probe name DECLARED PRINCIPALS now (`withCoherenceChecks cadence principal`, `withCoherenceChecksConfig config cadence principals`, `CoherenceConfig.HealthPrincipal`), each resolved through the platform's `DeclaredPrincipalResolver`; the `_platform` default sweep is gone"
         review
             "1053-thread-safe-cell"
             CodemodMigration.RemotingLeftovers
@@ -863,6 +1178,130 @@ module Codemod =
             CodemodFileClass.Source
             @"\bWrite\.Fable\b"
             "`Write.Fable` no longer ships: no browser path writes MessagePack. Copy `src/ToolUp.AI.Client.Tests/Remoting/MsgPackWrite.fs` if you need the writer"
+        // A gated hosted service: the matrix is gone, and the unit's author
+        // declares where it runs.
+        review
+            "1067-should-register-background-service"
+            CodemodMigration.BackgroundPlacement
+            CodemodFileClass.Source
+            @"\bProcessProfileGate\.shouldRegisterBackgroundService\b|\b\w+Subsystem\b(?=.*\bProcessProfileGate\b)|\bBackgroundSubsystem\b"
+            "the profile matrix is removed: register the hosted service with `Hosting.register services (BackgroundUnit.create \"<name>\" <placement> factory)` (or `BackgroundUnit.ofInstance` for an instance) and drop the `if`. Every subsystem the matrix named is `SharedWork`; the webhook and transactional dispatchers add `|> BackgroundUnit.outbound`"
+        // A hosted service exempt from the matrix stated its placement in
+        // prose; it states it as a value now.
+        review
+            "1067-exempt-hosted-service"
+            CodemodMigration.BackgroundPlacement
+            CodemodFileClass.Source
+            @"\bProcessProfileGate\.(?:addExempt|exempt|addDeferredJobs|SchedulerRegistrationReason)\b|\bHostedServiceExemption\b"
+            "exemptions are removed: register the service with `Hosting.register services unit` and choose its `Placement` — `OnceAtStart` for a one-shot or a scheduler registration (`addDeferredJobs label decls` is `Hosting.deferredJobs label decls`), `ProcessLocal` for a loop over this process's own state, `SharedWork` for a loop draining shared state. A companion holding a `ServerApp` can contribute it as a value: `ServerApp.addContribution (Contribution.hosted owner unit)`"
+        // An ungated hosted service now goes through the one gate.
+        review
+            "1067-ungated-hosted-service"
+            CodemodMigration.BackgroundPlacement
+            CodemodFileClass.Source
+            @"\bAdd(?:Singleton|HostedService)\s*<\s*(?:[\w.]+\.)?IHostedService\s*>|\bAddHostedService\s*<"
+            "every hosted service is registered through `Hosting.register services unit` with a declared `Placement`: `OnceAtStart` for a one-shot, `SharedWork` for a store-draining loop, `ProcessLocal` for a loop bound to this process; a profile that does not admit the placement registers nothing"
+        // The four in-process scheduler factories are one.
+        review
+            "1067-scheduler-factory"
+            CodemodMigration.BackgroundPlacement
+            CodemodFileClass.Source
+            @"\bJobScheduler\.(?:create|createWithCatchUp|createWithExternalCompute|createWithExternalCallback)\b|\bnew\s+(?:[\w.]+\.)?InProcessJobScheduler\s*\("
+            "`InProcessJobScheduler` has one factory: `JobScheduler.create { Store = …; EventStore = …; NotificationChannel = …; Config = …; Logger = …; ActivitySink = … } { SchedulerOptions.defaults with TriggerWatermark = Some w; ExternalDispatcher = Some d; ExternalHandleStore = Some h; DistributedLock = Some l; ProgressSink = JobScheduler.progressSinkFor deps; ScopeCarrier = Some c }` — set only the fields the old factory took (`createWithCatchUp` set the watermark, `createWithExternalCompute` the dispatcher, `createWithExternalCallback` the dispatcher and handle store). A progress sink is no longer derived from `JobProgress` inside the constructor: pass `JobScheduler.progressSinkFor deps`"
+        // The three webhook construction paths are one.
+        review
+            "1067-webhook-factory"
+            CodemodMigration.BackgroundPlacement
+            CodemodFileClass.Source
+            @"\bWebhookDispatcher\.(?:create|createWithLock)\b|\bnew\s+(?:[\w.]+\.)?WebhookDispatcherService\s*\("
+            "`WebhookDispatcherService` has one factory: `WebhookDispatcher.create { Registry = …; DeliveryLog = …; EventStore = …; HttpClient = …; RetryPolicy = …; Logger = …; ActivitySink = …; SecretStore = …; GetRateLimiter = …; UrlPolicy = … } WebhookOptions.defaults`, with `{ WebhookOptions.defaults with DistributedLock = Some lock }` where `createWithLock` passed a lock"
+        // The declared-data-sources startup service goes through the gate.
+        review
+            "1067-declared-data-sources"
+            CodemodMigration.BackgroundPlacement
+            CodemodFileClass.Source
+            @"\bwithDeclaredDataSources\s+(?!config\b)"
+            "`DeclaredDelivery.withDeclaredDataSources` takes the deployment's `ServerConfig` first (it registers through `Hosting.register`): `withDeclaredDataSources config declared watchPoll services`"
+        // The AI companion root no longer wraps the deployment.
+        review
+            "876-ai-options"
+            CodemodMigration.CompanionOptions
+            CodemodFileClass.Source
+            @"\bAIServerApp\b|\bwithAI\s+[A-Za-z_][\w.]*\s+[A-Za-z_][\w.]*\s+[A-Za-z_(]"
+            "`AIServerApp` is gone: the AI tier is a companion composed onto the `ServerApp`. Build its options with `AIOptions.create factory providerProfile` and the AI-only setters (`AIOptions.withAIConfig`, `withModuleAIContexts`, `withToolEffects`, `withReflectionTools`, `withAIAnsweringTools`, `withPlatformProvider`, …), and compose it with `app |> AICompose.withAI options |> ServerApp.run`. An `AIServerApp.withX` delegator is the `ServerApp.withX` builder applied to the deployment, on either side of `withAI`; `withAnswerVerifier`, `withNumericFidelityGate`, `withAnswerProvenanceAnchors` and `withFastPathTriage` are `AICompose.withX` over the `ServerApp`; `AIServerApp.run` is `ServerApp.run`; `createFrom` and the old `withAI factory providerProfile configure` are `withAI (AIOptions.create factory providerProfile |> …)`; a `.Base` read is the `ServerApp` itself"
+        // The RAG companion root no longer wraps the AI root.
+        review
+            "876-rag-options"
+            CodemodMigration.CompanionOptions
+            CodemodFileClass.Source
+            @"\bRAGServerApp\b|\bwithRAG\s+[A-Za-z_][\w.]*\s+[A-Za-z_][\w.]*\s+[A-Za-z_][\w.]*\s+[A-Za-z_(]"
+            "`RAGServerApp` is gone: RAG is a companion composed onto the `ServerApp`. Build its options with `RagOptions.create factory providerProfile embedder` and the RAG setters (`RagOptions.withTopK`, `withVectorStore`, `withFacts`, …; the AI tier's options through `RagOptions.withAIOptions`, `withAIConfig`, `withModuleAIContexts`), and compose it with `app |> RAGCompose.withRAG options |> ServerApp.run`, which composes the AI tier too — do not also call `AICompose.withAI`. A `RAGServerApp.withX` delegator is the `ServerApp.withX` builder applied to the deployment, on either side of `withRAG`; `mapAI f` that edited the AI layer's `Base` is a `ServerApp` builder (a companion's `register` now takes the `ServerApp`), and one that edited AI settings is `RagOptions.withAIOptions`; `RAGServerApp.run` is `ServerApp.run`; `createFrom` and the old `withRAG factory providerProfile embedder configure` are `withRAG (RagOptions.create factory providerProfile embedder |> …)`"
+        // The remaining companion roots no longer wrap the deployment either.
+        review
+            "876-forms-options"
+            CodemodMigration.CompanionOptions
+            CodemodFileClass.Source
+            @"\bFormsServerApp\b|\bwithForms\s+\(fun\b"
+            "`FormsServerApp` is gone: Forms is a companion composed onto the `ServerApp`. Build its options with `FormsOptions.create ()` and the Forms setters (`FormsOptions.withFormSchema`, `withWorkflow`, `withGuard`, `withAction`, `withActionPolicy`, `withActionLedger`, …), and compose it with `app |> FormsCompose.withForms options |> ServerApp.run`. A `FormsServerApp.withX` delegator (`withConfig`, `withAuth`, `addModules`, …) is the `ServerApp.withX` builder applied to the deployment, on either side of `withForms`; `FormsServerApp.run` is `ServerApp.run`; `createFrom` and the old `withForms (fun f -> …)` configurator are `withForms (FormsOptions.create () |> …)`. A second `withForms` replaces the first"
+        review
+            "876-scheduling-options"
+            CodemodMigration.CompanionOptions
+            CodemodFileClass.Source
+            @"\bSchedulingServerApp\b"
+            "`SchedulingServerApp` is gone: scheduling is a companion composed onto the `ServerApp`. Build its options with `SchedulingOptions.create ()` and `SchedulingOptions.withCalendarBridge` / `withCalendarPollTrigger` / `withReminders`, and compose it with `app |> SchedulingCompose.withScheduling options |> ServerApp.run`. A `SchedulingServerApp.withX` delegator is the `ServerApp.withX` builder applied to the deployment; `SchedulingServerApp.run` is `ServerApp.run`. The calendar renewal helpers (`withChannelRenewal`, `withSubscriptionRenewal`) take the `ServerApp`; `MicrosoftGraphSubscriptions.compose` takes and returns `ServerApp * SchedulingOptions`"
+        review
+            "876-peer-options"
+            CodemodMigration.CompanionOptions
+            CodemodFileClass.Source
+            @"\bPeerServerApp\b"
+            "`PeerServerApp` is gone: the peer substrate is a companion composed onto the `ServerApp`. Build its options with `PeerOptions.create ()` and the peer setters (`PeerOptions.withLocalPeer`, `withContract`, `withCleanRoomTemplate`, …), and compose it with `app |> PeerCompose.withPeer options |> ServerApp.run`. A `PeerServerApp.withX` delegator is the `ServerApp.withX` builder applied to the deployment; `PeerServerApp.run` is `ServerApp.run`; `withCommutativeCipher` is `PeerCompose.withCommutativeCipher` over the `ServerApp`. The audits (`PeerCompose.auditAudienceBinding`, `enforce*`, …), `PeerSurface.describe` and `PeerGateway.surface` take the `(app, options)` pair; `PeerGateway.withAggregate` takes and returns it; the option-only helpers (`cleanRoomTemplateMap`, `jobResultStore`, `peerAuthProvider`, `federationPreflightInput`, …) take `PeerOptions`"
+        review
+            "876-public-rendering-options"
+            CodemodMigration.CompanionOptions
+            CodemodFileClass.Source
+            @"\bPublicRenderingServerApp\b|\bwithPublicRendering\s+\(fun\b"
+            "`PublicRenderingServerApp` is gone: public rendering is a companion composed onto the `ServerApp`. Build its options with `PublicRenderingOptions.create ()` and the setters (`PublicRenderingOptions.withLayout`, `withSite`, `withFeed`, `withRenderCache`, …), and compose it with `app |> withPublicRendering options |> ServerApp.run`. A `PublicRenderingServerApp.withX` delegator is the `ServerApp.withX` builder applied to the deployment; `PublicRenderingServerApp.run` is `ServerApp.run`; `createFrom` and the old `withPublicRendering (fun pr -> …)` configurator are `withPublicRendering (PublicRenderingOptions.create () |> …)`; `exportStatic*` is `PublicRenderingExport.exportStatic*` over the `(app, options)` pair. A second `withPublicRendering` replaces the first"
+        review
+            "876-asset-store-options"
+            CodemodMigration.CompanionOptions
+            CodemodFileClass.Source
+            @"\bAssetStoreServerApp(Module)?\b"
+            "`AssetStoreServerApp` is gone: the asset store is a companion composed onto the `ServerApp`. Build its options with `AssetStoreCompanionOptions.create ()` and its setters (`withOptions`, `withRenderer`, `withDerivativeProfile`, `withAssetStore`, `withAsyncDerivation`, `withDerivativeDlq`, …), and compose it with `app |> AssetCompose.withAssetStore options |> ServerApp.run`. A delegator is the `ServerApp.withX` builder applied to the deployment; `AssetStoreServerApp.run` is `ServerApp.run`"
+        review
+            "876-media-library-options"
+            CodemodMigration.CompanionOptions
+            CodemodFileClass.Source
+            @"\bMediaLibraryServerApp\b"
+            "`MediaLibraryServerApp` is gone: the media library is a companion composed onto the `ServerApp`. Build its options with `MediaLibraryCompanionOptions.create ()` and its setters (`withOptions`, `withDerivation`, `withTranscoder`, `withMediaLibrary`, `withEdgeCache`, `withDelegatedUrlSigner`), and compose it with `app |> MediaCompose.withMediaLibrary options |> ServerApp.run`. A delegator is the `ServerApp.withX` builder applied to the deployment; `MediaLibraryServerApp.run` is `ServerApp.run`"
+        review
+            "876-algorithms-options"
+            CodemodMigration.CompanionOptions
+            CodemodFileClass.Source
+            @"\bAlgorithmsServerApp\b|\bwithAlgorithms\s+\(fun\b"
+            "`AlgorithmsServerApp` is gone: the algorithms catalog is a companion composed onto the `ServerApp`. Build its options with `AlgorithmsOptions.create ()` and `AlgorithmsOptions.withProvider` / `withProviders` / `withoutAITools` / `withoutCatalogApi`, and compose it with `app |> AlgorithmsCompose.withAlgorithms options`. The old `withAlgorithms (fun a -> …)` configurator is `withAlgorithms (AlgorithmsOptions.create () |> …)`; `AlgorithmsServerApp.run` is `ServerApp.run`. A second `withAlgorithms` replaces the first"
+        review
+            "876-passkey-options"
+            CodemodMigration.CompanionOptions
+            CodemodFileClass.Source
+            @"\bPasskeyServerApp\b|\bPasskeyCompose\.(create|run|withBase|withConfig)\b"
+            "the passkey wrapper is gone: the passkey ceremonies are a companion composed onto the `ServerApp`. `PasskeyCompose.create config |> PasskeyCompose.run` is `app |> PasskeyCompose.withPasskey config |> ServerApp.run`; `withBase` is the `ServerApp` itself and `withConfig` is a new `PasskeyConfig` passed to `withPasskey`"
+        review
+            "876-scim-options"
+            CodemodMigration.CompanionOptions
+            CodemodFileClass.Source
+            @"\bScimServerApp\b|\bScimMode\b|\bEnabledScim\b|\bNoScim\b"
+            "`ScimServerApp` and `ScimMode` are gone: the SCIM endpoint is a companion composed onto the `ServerApp`. `ScimServerApp.ofServerApp app |> ScimServerApp.withScim config |> ScimServerApp.run` is `app |> ScimRoutes.withScim config |> ServerApp.run`; a deployment that does not call `withScim` mounts nothing"
+        // Phase 877 — a moved field whose name other records carry too,
+        // read off a receiver the rewrite could not name as the config.
+        review
+            "877-shared-label-receiver"
+            CodemodMigration.NestedConfig
+            CodemodFileClass.Source
+            (sprintf
+                @"(?<!\b(?:%s|config|cfg|serverConfig|conf|effective|effectiveConfig|finalConfig|baseConfig|merged|defaults|Config))\.(?:%s)\b"
+                (alternation concernNames)
+                (alternation (Set.toList sharedLabels)))
+            "if this receiver is a `ServerConfig`, the field moved: `EventStore` / `EntityStore` / `ResultStore` / `Datasets` / `ShareTokenStore` / `RateLimitStore` read `.Stores.<Field>`, `MetricsSink` / `SlowRequestThresholdOverrides` / `DatadogReadback` / `LogLevel` read `.Observability.<Field>`, `SecurityHardening` / `Cors` read `.SecurityPosture.<Field>` and `ProcessProfile` reads `.MultiInstance.ProcessProfile`; a deps or options record of your own with the same label is unchanged"
     ]
 
 
@@ -1040,6 +1479,517 @@ module Codemod =
 
         out, List.ofSeq rewrites
 
+    // ── Phase 877 — nesting `ServerConfig` record-update expressions ──
+    //
+    // A record update that sets `Port` and `EntityStore` has to set `Port`
+    // and `Stores = { base.Stores with EntityStore = … }` instead, which no
+    // line regex can do: the labels of one expression regroup, and the inner
+    // base is the outer one. So the pass reads whole expressions. It is
+    // deterministic exactly when the base is a plain identifier path
+    // (`defaults`, `ServerConfig.defaults`, `app.Config`) and every top-level
+    // item is `Label = …`; a base that is an application or a parenthesised
+    // expression cannot be re-read as `base.Concern` without a binding, and
+    // is reported instead. A label other records carry too (`EventStore` on a
+    // deps record) proves nothing on its own: such an expression is nested
+    // only behind a base named as the config, or beside a label only
+    // `ServerConfig` has, and is reported otherwise.
+
+    /// `{ base with …` on one line (`rest` is what follows `with`).
+    let private updateOpener =
+        Regex(@"\{\s*(?<base>[^{}]+?)\s+with\b(?<rest>.*)$", RegexOptions.CultureInvariant)
+
+    /// The second line of the two-line opener `{` / `base with`.
+    let private withLine =
+        Regex(@"^\s*(?<base>[^{}]+?)\s+with\s*$", RegexOptions.CultureInvariant)
+
+    let private simplePath =
+        Regex(@"^[A-Za-z_][\w']*(?:\.[A-Za-z_][\w']*)*$", RegexOptions.CultureInvariant)
+
+    let private labelLine =
+        Regex(@"^(?<label>[A-Z][\w']*)\s*=(?!=)", RegexOptions.CultureInvariant)
+
+    /// Brace depth change over `text`, skipping string literals and a
+    /// trailing `//` comment.
+    let private braceDelta (text: string) =
+        let mutable depth = 0
+        let mutable inString = false
+        let mutable i = 0
+
+        while i < text.Length do
+            let c = text[i]
+
+            if inString then
+                if c = '\\' then
+                    i <- i + 1
+                elif c = '"' then
+                    inString <- false
+            elif c = '"' then
+                inString <- true
+            elif c = '/' && i + 1 < text.Length && text[i + 1] = '/' then
+                i <- text.Length
+            elif c = '{' then
+                depth <- depth + 1
+            elif c = '}' then
+                depth <- depth - 1
+
+            i <- i + 1
+
+        depth
+
+    /// The index of the `}` that closes the `{` opened before `text`
+    /// (depth starts at 1), or -1 when it is not on this line.
+    let private closingBrace (text: string) =
+        let mutable depth = 1
+        let mutable inString = false
+        let mutable i = 0
+        let mutable found = -1
+
+        while found < 0 && i < text.Length do
+            let c = text[i]
+
+            if inString then
+                if c = '\\' then
+                    i <- i + 1
+                elif c = '"' then
+                    inString <- false
+            elif c = '"' then
+                inString <- true
+            elif c = '/' && i + 1 < text.Length && text[i + 1] = '/' then
+                i <- text.Length
+            elif c = '{' || c = '[' || c = '(' then
+                depth <- depth + 1
+            elif c = '}' || c = ']' || c = ')' then
+                depth <- depth - 1
+
+                if depth = 0 then
+                    found <- i
+
+            i <- i + 1
+
+        found
+
+    /// Splits single-line items on `;` at depth 0.
+    let private splitItems (text: string) =
+        let items = ResizeArray<string>()
+        let sb = StringBuilder()
+        let mutable depth = 0
+        let mutable inString = false
+        let mutable i = 0
+
+        while i < text.Length do
+            let c = text[i]
+
+            if inString then
+                if c = '\\' && i + 1 < text.Length then
+                    sb.Append(c).Append(text[i + 1]) |> ignore
+                    i <- i + 1
+                else
+                    if c = '"' then
+                        inString <- false
+
+                    sb.Append c |> ignore
+            elif c = '"' then
+                inString <- true
+                sb.Append c |> ignore
+            elif c = '{' || c = '[' || c = '(' then
+                depth <- depth + 1
+                sb.Append c |> ignore
+            elif c = '}' || c = ']' || c = ')' then
+                depth <- depth - 1
+                sb.Append c |> ignore
+            elif c = ';' && depth = 0 then
+                items.Add(sb.ToString())
+                sb.Clear() |> ignore
+            else
+                sb.Append c |> ignore
+
+            i <- i + 1
+
+        items.Add(sb.ToString())
+        items |> Seq.map _.Trim() |> Seq.filter (fun s -> s <> "") |> List.ofSeq
+
+    /// One top-level item of a record-update expression: the comment
+    /// lines above it, its label, and its lines (the first holds the
+    /// label; continuations keep their own indentation).
+    type private UpdateItem = {
+        Comments: string list
+        Label: string
+        Lines: string list
+    }
+
+    /// One record-update expression the pass read: where it sits, its
+    /// base, its items, and the text after its closing brace.
+    type private UpdateBlock = {
+        First: int
+        Last: int
+        OpenerPrefix: string
+        Base: string
+        Items: UpdateItem list
+        Suffix: string
+    }
+
+    let private indentOf' (line: string) = line.Length - line.TrimStart().Length
+
+    /// Reads the record-update expression opening at `at`, or `None` when
+    /// the line opens none. `Error` names why an expression that holds a
+    /// moved label cannot be nested mechanically.
+    let private readUpdate (lines: string[]) (at: int) : Result<UpdateBlock, string> option =
+        let line = lines[at]
+        // A record update quoted in a comment is prose, not code.
+        let isComment = line.TrimStart().StartsWith "//"
+        let oneLine = if isComment then Match.Empty else updateOpener.Match line
+
+        let twoLine =
+            if
+                not isComment
+                && not oneLine.Success
+                && line.TrimEnd().EndsWith "{"
+                && at + 1 < lines.Length
+            then
+                let m = withLine.Match lines[at + 1]
+                if m.Success then Some m else None
+            else
+                None
+
+        match oneLine.Success, twoLine with
+        | false, None -> None
+        | _ ->
+            let baseText, rest, itemsFrom, openerPrefix =
+                if oneLine.Success then
+                    let restText = oneLine.Groups["rest"].Value
+                    let prefix = line.Substring(0, oneLine.Index)
+                    oneLine.Groups["base"].Value.Trim(), restText, at + 1, prefix
+                else
+                    twoLine.Value.Groups["base"].Value.Trim(), "", at + 2, line.Substring(0, line.LastIndexOf '{')
+
+            let closeOnOpener = if oneLine.Success then closingBrace rest else -1
+
+            let last, suffix, inner =
+                if closeOnOpener >= 0 then
+                    at, rest.Substring(closeOnOpener + 1), Some(rest.Substring(0, closeOnOpener))
+                else
+                    let mutable depth = 1 + (if oneLine.Success then braceDelta rest else 0)
+
+                    let mutable i = itemsFrom
+                    let mutable closing = -1
+
+                    while closing < 0 && i < lines.Length do
+                        let d = braceDelta lines[i]
+
+                        if depth + d <= 0 then closing <- i else depth <- depth + d
+                        i <- i + 1
+
+                    if closing < 0 then
+                        -1, "", None
+                    else
+                        // Where on the closing line the expression ends.
+                        let text = lines[closing]
+                        let mutable depth' = depth
+                        let mutable pos = -1
+                        let mutable k = 0
+
+                        while pos < 0 && k < text.Length do
+                            if text[k] = '{' then
+                                depth' <- depth' + 1
+                            elif text[k] = '}' then
+                                depth' <- depth' - 1
+
+                                if depth' = 0 then
+                                    pos <- k
+
+                            k <- k + 1
+
+                        closing, text.Substring(pos + 1), None
+
+            if last < 0 then
+                None
+            else
+                let items: Result<UpdateItem list, string> =
+                    match inner with
+                    | Some inline' ->
+                        splitItems inline'
+                        |> List.map (fun item ->
+                            let m = labelLine.Match item
+
+                            if m.Success then
+                                Ok {
+                                    Comments = []
+                                    Label = m.Groups["label"].Value
+                                    Lines = [ item ]
+                                }
+                            else
+                                Error(sprintf "an item that is not `Label = …`: `%s`" item))
+                        |> List.fold
+                            (fun acc r ->
+                                match acc, r with
+                                | Ok xs, Ok x -> Ok(xs @ [ x ])
+                                | Error e, _
+                                | _, Error e -> Error e)
+                            (Ok [])
+                    | None ->
+                        let body = [
+                            if rest.Trim() <> "" then
+                                yield rest.Trim(), true
+                            for i in itemsFrom .. last - 1 do
+                                yield lines[i], false
+                            if last >= itemsFrom then
+                                let text = lines[last]
+                                let cut = text.Length - suffix.Length - 1
+                                let head = text.Substring(0, max 0 cut)
+
+                                if head.Trim() <> "" then
+                                    yield head, false
+                        ]
+
+                        let fieldIndent =
+                            body
+                            |> List.tryPick (fun (l, inlineFirst) ->
+                                if inlineFirst || l.Trim() = "" then
+                                    None
+                                else
+                                    Some(indentOf' l))
+                            |> Option.defaultValue 0
+
+                        let mutable comments = []
+                        let mutable current: UpdateItem option = None
+                        let items = ResizeArray<UpdateItem>()
+                        let mutable fault = None
+
+                        for text, inlineFirst in body do
+                            let trimmed = text.Trim()
+
+                            if trimmed = "" then
+                                ()
+                            elif inlineFirst || indentOf' text = fieldIndent then
+                                if trimmed.StartsWith "//" then
+                                    comments <- comments @ [ trimmed ]
+                                elif trimmed.StartsWith "}" then
+                                    match current with
+                                    | Some c -> current <- Some { c with Lines = c.Lines @ [ text ] }
+                                    | None -> fault <- Some "a `}` before any item"
+                                else
+                                    let m = labelLine.Match trimmed
+
+                                    if m.Success then
+                                        current |> Option.iter items.Add
+
+                                        current <-
+                                            Some {
+                                                Comments = comments
+                                                Label = m.Groups["label"].Value
+                                                Lines = [ text ]
+                                            }
+
+                                        comments <- []
+                                    else
+                                        fault <- Some(sprintf "an item that is not `Label = …`: `%s`" trimmed)
+                            else
+                                match current with
+                                | Some c -> current <- Some { c with Lines = c.Lines @ [ text ] }
+                                | None -> fault <- Some(sprintf "text before the first item: `%s`" trimmed)
+
+                        current |> Option.iter items.Add
+
+                        match fault with
+                        | Some f -> Error f
+                        | None -> Ok(List.ofSeq items)
+
+                let movedLabelLine =
+                    Regex(sprintf @"^\s*(?:%s)\s*=(?!=)" (alternation movedFields), RegexOptions.CultureInvariant)
+
+                // Whether a TOP-LEVEL item of this expression sets a moved
+                // field: the items of a one-line form, else the lines at
+                // the field indentation (a nested concern block's own items
+                // are deeper, and are that block's business).
+                let holdsMovedLabel =
+                    match inner with
+                    | Some text -> splitItems text |> List.exists movedLabelLine.IsMatch
+                    | None ->
+                        let candidates = [
+                            if rest.Trim() <> "" then
+                                yield! splitItems rest
+                            for i in itemsFrom..last do
+                                yield lines[i]
+                        ]
+
+                        let fieldIndent =
+                            candidates
+                            |> List.tryFind (fun l -> l.Trim() <> "" && not (l.Trim().StartsWith "//"))
+                            |> Option.map indentOf'
+                            |> Option.defaultValue 0
+
+                        candidates
+                        |> List.exists (fun l -> indentOf' l <= fieldIndent && movedLabelLine.IsMatch l)
+
+                let baseIsConfig =
+                    simplePath.IsMatch baseText
+                    && (match baseText.Split '.' |> Array.last with
+                        | "defaults"
+                        | "Config"
+                        | "config"
+                        | "cfg"
+                        | "serverConfig"
+                        | "conf"
+                        | "effective"
+                        | "effectiveConfig"
+                        | "finalConfig"
+                        | "baseConfig"
+                        | "merged" -> true
+                        | _ -> false)
+
+                match items with
+                | _ when not holdsMovedLabel || baseText.StartsWith "new " -> None
+                | Error e -> Some(Error e)
+                | Ok items when not (items |> List.exists (fun i -> concernOf.ContainsKey i.Label)) -> None
+                | Ok items when
+                    (match baseText.Split '.' |> Array.last with
+                     | seg -> List.contains seg concernNames)
+                    ->
+                    None
+                | Ok items when
+                    not baseIsConfig
+                    && items
+                       |> List.forall (fun i -> not (concernOf.ContainsKey i.Label) || sharedLabels.Contains i.Label)
+                    ->
+                    Some(
+                        Error(
+                            sprintf
+                                "`%s` is not named as the config and every moved label it sets (%s) is one other records carry too; if it is a `ServerConfig`, nest by hand, otherwise nothing changes"
+                                baseText
+                                (items
+                                 |> List.filter (fun i -> sharedLabels.Contains i.Label)
+                                 |> List.map _.Label
+                                 |> alternation)
+                        )
+                    )
+                | Ok items when not (simplePath.IsMatch baseText) ->
+                    Some(
+                        Error(
+                            sprintf
+                                "the base `%s` is not a plain path, so `%s.<Concern>` cannot be written for the nested record"
+                                baseText
+                                baseText
+                        )
+                    )
+                | Ok items ->
+                    Some(
+                        Ok {
+                            First = at
+                            Last = last
+                            OpenerPrefix = openerPrefix
+                            Base = baseText
+                            Items = items
+                            Suffix = suffix
+                        }
+                    )
+
+    /// The nested rendering of a block, as lines.
+    let private renderNested (block: UpdateBlock) : string list =
+        // A bare `{` keeps its own column; `Config = {` nests under the
+        // line that carries it.
+        let openerIndent = indentOf' (block.OpenerPrefix + "x")
+        let pad n = String(' ', n)
+        let fi = openerIndent + 8
+
+        let shifted (item: UpdateItem) (toIndent: int) =
+            let from = item.Lines |> List.head |> indentOf'
+
+            item.Lines
+            |> List.mapi (fun i l ->
+                if i = 0 then
+                    pad toIndent + l.Trim()
+                else
+                    let current = indentOf' l
+                    pad (max 0 (current - from + toIndent)) + l.Trim())
+
+        [
+            yield
+                (if block.OpenerPrefix.Trim() = "" then
+                     pad openerIndent + "{"
+                 else
+                     block.OpenerPrefix.TrimEnd() + " {")
+            yield pad (openerIndent + 4) + block.Base + " with"
+            let mutable emitted = Set.empty
+
+            for item in block.Items do
+                match concernOf.TryFind item.Label with
+                | None ->
+                    for c in item.Comments do
+                        yield pad fi + c
+
+                    yield! shifted item fi
+                | Some concern when emitted.Contains concern -> ()
+                | Some concern ->
+                    emitted <- emitted.Add concern
+                    yield pad fi + concern + " = {"
+                    yield pad (fi + 4) + block.Base + "." + concern + " with"
+
+                    for inner in block.Items |> List.filter (fun i -> concernOf.TryFind i.Label = Some concern) do
+                        for c in inner.Comments do
+                            yield pad (fi + 8) + c
+
+                        yield! shifted inner (fi + 8)
+
+                    yield pad fi + "}"
+
+            yield pad openerIndent + "}" + block.Suffix
+        ]
+
+    /// Reads every record-update expression in `lines`, nesting the
+    /// provable ones. Answers the rewritten segments, one rewrite per
+    /// nested expression and one finding per expression it could not
+    /// prove.
+    let private nestServerConfigUpdates (segments: string[]) : string[] * CodemodRewrite list * CodemodFinding list =
+        let lines = [| for i in 0..2 .. segments.Length - 1 -> segments[i] |]
+        let out = Array.copy segments
+        let rewrites = ResizeArray<CodemodRewrite>()
+        let findings = ResizeArray<CodemodFinding>()
+        let mutable at = 0
+
+        while at < lines.Length do
+            match readUpdate lines at with
+            | None -> at <- at + 1
+            | Some(Error why) ->
+                findings.Add {
+                    RuleId = "877-record-update-unprovable"
+                    Migration = CodemodMigration.NestedConfig
+                    Line = at + 1
+                    Text = lines[at].Trim()
+                    Guidance =
+                        sprintf
+                            "this record update sets a field that moved into a concern record, and the codemod could not nest it: %s. Bind the base to a name and write `<Concern> = { <base>.<Concern> with <Field> = … }` by hand"
+                            why
+                }
+
+                at <- at + 1
+            | Some(Ok block) ->
+                let terminator =
+                    if 2 * block.First + 1 < segments.Length then
+                        segments[2 * block.First + 1]
+                    else
+                        "\n"
+
+                let rendered = renderNested block
+                let after = String.Join(terminator, rendered)
+                out[2 * block.First] <- after
+
+                for i in block.First + 1 .. block.Last do
+                    out[2 * i] <- ""
+
+                    if 2 * i + 1 < out.Length then
+                        out[2 * i + 1] <- ""
+
+                rewrites.Add {
+                    RuleId = "877-record-update"
+                    Line = block.First + 1
+                    Before = lines[block.First]
+                    After = after
+                }
+
+                at <- block.Last + 1
+
+        out, List.ofSeq rewrites, List.ofSeq findings
+
     // ── Per-file decision ─────────────────────────────────────────────
 
     /// The file class a path belongs to, or `None` when the walk skips it.
@@ -1056,11 +2006,27 @@ module Codemod =
     /// terminators (`\r\n`, `\n`, `\r`) are re-emitted verbatim.
     let private lineSplitter = Regex(@"(\r\n|\n|\r)", RegexOptions.CultureInvariant)
 
-    /// Applies every rewrite rule of `cls` to `text`, line by line.
+    /// Applies every rewrite rule of `cls` to `text`, line by line, for a
+    /// file its compiling projects let `reach` (the Phase 1198 pass
+    /// derives opens within it; see `SubsystemNamespaces.ProjectScope`).
     /// Returns the rewritten text and one record per (line, rule) that
     /// changed it.
-    let rewriteText (cls: CodemodFileClass) (text: string) : string * CodemodRewrite list =
-        let rules = rewriteRules |> List.filter (fun r -> r.Applies = cls)
+    let rewriteTextIn
+        (reach: SubsystemNamespaces.FileReach)
+        (only: CodemodMigration list)
+        (cls: CodemodFileClass)
+        (text: string)
+        : string * CodemodRewrite list =
+        let selected (migration: CodemodMigration) =
+            match migration with
+            // Table-driven and derived, so never implied by "every
+            // migration": a consumer names it.
+            | CodemodMigration.SubsystemNamespaces -> List.contains migration only
+            | _ -> only.IsEmpty || List.contains migration only
+
+        let rules =
+            rewriteRules |> List.filter (fun r -> r.Applies = cls && selected r.Migration)
+
         let segments = lineSplitter.Split text
         let rewrites = ResizeArray<CodemodRewrite>()
 
@@ -1099,15 +2065,69 @@ module Codemod =
 
         match cls with
         | CodemodFileClass.Source ->
-            let withMembers, added = addCapabilitiesMembers (lineSplitter.Split rewritten)
+            let nested, nestedRewrites =
+                if selected CodemodMigration.NestedConfig then
+                    let segments, nestedRewrites, _ =
+                        nestServerConfigUpdates (lineSplitter.Split rewritten)
 
-            String.concat "" withMembers, List.ofSeq rewrites @ added |> List.sortBy _.Line
+                    segments, nestedRewrites
+                else
+                    lineSplitter.Split rewritten, []
+
+            let withMembers, added =
+                if selected CodemodMigration.ModelCapabilities then
+                    addCapabilitiesMembers nested
+                else
+                    nested, []
+
+            let withNamespaces, derived =
+                if selected CodemodMigration.SubsystemNamespaces then
+                    let segments, moves =
+                        SubsystemNamespaces.rewrite SubsystemNamespaces.embeddedIndex.Value reach withMembers
+
+                    segments,
+                    moves
+                    |> List.map (fun (rule, line, before, after) -> {
+                        RuleId = rule
+                        Line = line + 1
+                        Before = before
+                        After = after
+                    })
+                else
+                    withMembers, []
+
+            String.concat "" withNamespaces,
+            List.ofSeq rewrites @ nestedRewrites @ added @ derived |> List.sortBy _.Line
         | CodemodFileClass.Project -> rewritten, List.ofSeq rewrites
+
+    /// `rewriteTextIn` for a file whose project reaches the server tier.
+    let rewriteTextFor (only: CodemodMigration list) (cls: CodemodFileClass) (text: string) =
+        rewriteTextIn SubsystemNamespaces.consumerReach only cls text
+
+    /// Applies every rewrite rule of `cls` to `text`, line by line.
+    let rewriteText (cls: CodemodFileClass) (text: string) : string * CodemodRewrite list = rewriteTextFor [] cls text
+
+    /// The findings the nesting pass raises over `text` — the REWRITTEN
+    /// text, like every review finding, so a second run over migrated
+    /// source reports the same lines as the first.
+    let private nestFindings
+        (only: CodemodMigration list)
+        (cls: CodemodFileClass)
+        (text: string)
+        : CodemodFinding list =
+        match cls with
+        | CodemodFileClass.Source when only.IsEmpty || List.contains CodemodMigration.NestedConfig only ->
+            let _, _, findings = nestServerConfigUpdates (lineSplitter.Split text)
+            findings
+        | _ -> []
 
     /// Every review-rule match over `text` (the REWRITTEN text), in line
     /// order then rule order.
-    let reviewText (cls: CodemodFileClass) (text: string) : CodemodFinding list =
-        let rules = reviewRules |> List.filter (fun r -> r.Applies = cls)
+    let reviewTextFor (only: CodemodMigration list) (cls: CodemodFileClass) (text: string) : CodemodFinding list =
+        let rules =
+            reviewRules
+            |> List.filter (fun r -> r.Applies = cls && (only.IsEmpty || List.contains r.Migration only))
+
         let segments = lineSplitter.Split text
 
         [
@@ -1137,14 +2157,32 @@ module Codemod =
         Path.GetRelativePath(root, path).Replace('\\', '/')
 
     /// Decides one file: read, rewrite, review. Pure apart from the read.
-    let analyseFile (root: string) (cls: CodemodFileClass) (path: string) : CodemodFileResult =
+    /// `scope` says which projects under the root reach the server tier
+    /// (read once per plan); `None` decides it for this file's tree alone.
+    let analyseFileIn
+        (scope: SubsystemNamespaces.ProjectScope.Scope option)
+        (only: CodemodMigration list)
+        (root: string)
+        (cls: CodemodFileClass)
+        (path: string)
+        : CodemodFileResult =
         let bytes = File.ReadAllBytes path
         let bom = hasBom bytes
 
         let original =
             Encoding.UTF8.GetString(bytes, (if bom then 3 else 0), bytes.Length - (if bom then 3 else 0))
 
-        let rewritten, rewrites = rewriteText cls original
+        let reach =
+            if List.contains CodemodMigration.SubsystemNamespaces only then
+                let scope =
+                    scope
+                    |> Option.defaultWith (fun () -> SubsystemNamespaces.ProjectScope.ofTree root)
+
+                SubsystemNamespaces.ProjectScope.reachOf scope path
+            else
+                SubsystemNamespaces.consumerReach
+
+        let rewritten, rewrites = rewriteTextIn reach only cls original
 
         {
             Path = Path.GetFullPath path
@@ -1154,8 +2192,21 @@ module Codemod =
             Rewritten = rewritten
             HasBom = bom
             Rewrites = rewrites
-            Findings = reviewText cls rewritten
+            Findings =
+                reviewTextFor only cls rewritten @ nestFindings only cls rewritten
+                |> List.sortBy _.Line
         }
+
+    /// Decides one file, deciding its project's reach for itself.
+    let analyseFileFor (only: CodemodMigration list) (root: string) (cls: CodemodFileClass) (path: string) =
+        analyseFileIn None only root cls path
+
+    /// Every review-rule match over `text` (the REWRITTEN text).
+    let reviewText (cls: CodemodFileClass) (text: string) : CodemodFinding list = reviewTextFor [] cls text
+
+    /// Decides one file under every migration.
+    let analyseFile (root: string) (cls: CodemodFileClass) (path: string) : CodemodFileResult =
+        analyseFileFor [] root cls path
 
     // ── The walk ──────────────────────────────────────────────────────
 
@@ -1188,16 +2239,49 @@ module Codemod =
 
     /// Decides the whole tree under `root`. Pure apart from reads: no
     /// file is written until `apply`.
-    let plan (root: string) : CodemodPlan =
+    let planFor (only: CodemodMigration list) (root: string) : CodemodPlan =
         if not (Directory.Exists root) then
             failwithf "Codemod: %s is not a directory" root
 
         let full = Path.GetFullPath root
 
+        let scope =
+            if List.contains CodemodMigration.SubsystemNamespaces only then
+                Some(SubsystemNamespaces.ProjectScope.ofTree full)
+            else
+                None
+
         {
             Root = full
-            Files = walk full |> List.map (fun (cls, path) -> analyseFile full cls path)
+            Files =
+                walk full
+                |> List.map (fun (cls, path) -> analyseFileIn scope only full cls path)
         }
+
+    /// Decides the whole tree under `root` under every migration.
+    let plan (root: string) : CodemodPlan = planFor [] root
+
+    /// The migration a `--phase` argument names, by its label's number
+    /// (`877` for `Phase 877`), or `None` when no migration carries it.
+    let migrationOfPhase (phase: string) : CodemodMigration option =
+        [
+            CodemodMigration.Remoting
+            CodemodMigration.Surfaces
+            CodemodMigration.ApiStability
+            CodemodMigration.Deprecations
+            CodemodMigration.ShellSlots
+            CodemodMigration.AgentLoop
+            CodemodMigration.Capabilities
+            CodemodMigration.ModelCapabilities
+            CodemodMigration.RemotingLeftovers
+            CodemodMigration.JobOutcomes
+            CodemodMigration.OneScopeForm
+            CodemodMigration.BackgroundPlacement
+            CodemodMigration.CompanionOptions
+            CodemodMigration.NestedConfig
+            CodemodMigration.SubsystemNamespaces
+        ]
+        |> List.tryFind (fun m -> CodemodMigration.label m = "Phase " + phase.Trim())
 
     /// Writes every changed file in `plan`, preserving its BOM and line
     /// terminators, and returns the absolute paths written (in plan

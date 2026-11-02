@@ -7,6 +7,8 @@ open System
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
 open ToolUp.AI.AIToolRegistry
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
 // ─── Phase 489 — who may see what, answered ONCE ─────────────────────
 //

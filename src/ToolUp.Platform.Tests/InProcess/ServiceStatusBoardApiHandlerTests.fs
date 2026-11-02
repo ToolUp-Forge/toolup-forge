@@ -6,6 +6,9 @@ open Microsoft.Extensions.DependencyInjection
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.HealthChecks
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // Deliberately NOT opening `ToolUp.Platform.ConfigValidation` here —
 // its `ValidationResult` cases (`Ok | Warning | Error`) would shadow
@@ -56,9 +59,9 @@ let private nonAdminContext (configure: IServiceCollection -> unit) =
 let private allDisabledConfig = {
     ServerConfig.defaults with
         JobScheduler = NoJobScheduler
-        RateLimiter = NoRateLimiter
-        ConfigDriftDetection = NoConfigDriftDetection
-        SmokeTest = NoSmokeTest
+        RateLimiter = FeatureMode.Disabled
+        ConfigDriftDetection = FeatureMode.Disabled
+        SmokeTest = FeatureMode.Disabled
 }
 
 // ─── Tests ───────────────────────────────────────────────────────────
@@ -132,6 +135,7 @@ let tests =
                     LastRunError = None
                     ConsecutiveFailures = 0
                     Tags = Map.empty
+                    LastRunWarning = None
                 }
                 {
                     JobId = Guid.NewGuid()
@@ -152,6 +156,7 @@ let tests =
                     LastRunError = None
                     ConsecutiveFailures = 3
                     Tags = Map.empty
+                    LastRunWarning = None
                 }
             ]
 
@@ -196,11 +201,11 @@ let tests =
             | Error e -> failtestf "expected Ok, got Error %s" e
         }
 
-        testCaseAsync "RateLimit section reports enabled when RateLimiter = EnabledRateLimiter"
+        testCaseAsync "RateLimit section reports enabled when RateLimiter = FeatureMode.Enabled"
         <| async {
             let config = {
                 allDisabledConfig with
-                    RateLimiter = EnabledRateLimiter
+                    RateLimiter = FeatureMode.Enabled
             }
 
             let ctx = platformAdminContext ignore
@@ -238,7 +243,7 @@ let tests =
 
             let config = {
                 allDisabledConfig with
-                    SmokeTest = EnabledSmokeTest
+                    SmokeTest = FeatureMode.Enabled
             }
 
             let ctx =
@@ -250,7 +255,7 @@ let tests =
 
             match result with
             | Ok summary ->
-                Expect.isFalse summary.Disabled "Smoke not disabled when EnabledSmokeTest"
+                Expect.isFalse summary.Disabled "Smoke not disabled when FeatureMode.Enabled"
                 Expect.equal summary.Severity StatusSeverity.Ok "no-runs-yet is Ok"
                 Expect.stringContains summary.Headline "no runs" "headline mentions no runs"
             | Error e -> failtestf "expected Ok, got Error %s" e

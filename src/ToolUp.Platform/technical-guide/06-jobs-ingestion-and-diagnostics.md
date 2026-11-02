@@ -154,10 +154,9 @@ let serverModule =
 ```
 
 Composition-root-owned crons that aren't tied to a single module use the
-mirrored `ServerApp.withJobHandler` / `ServerApp.withScheduledJob` hooks
-(and the same names on every superset — `AIServerApp`,
-`FormsServerApp`, `RAGServerApp`, `SchedulingServerApp` — delegating to
-the base).
+`ServerApp.withJobHandler` / `ServerApp.withScheduledJob` hooks, on the
+`ServerApp` pipeline beside whichever companions it composes
+(`AICompose.withAI`, `FormsCompose.withForms`, …).
 
 ### Manual `RegisterHandler` + `Schedule` (advanced)
 
@@ -208,7 +207,7 @@ The threshold is exactly `60_000ms` (one full minute) — the loop's own tick in
 - **`/dev/inspect`** — `JobSchedulerDiagnosticsContributor` (registered when the scheduler is registered) emits a `"Job scheduler"` panel with the current counter, last drift, and last-miss timestamp. Debug-only — gated on `ServerConfig.EnableDevEndpoints`.
 - **`HealthMonitorApi.GetJobSchedulerTelemetry`** — production-safe Owner/Admin surface that the SDK's `HealthMonitorUI` admin module renders as an inline card on the "Live health" tab. The card is suppressed entirely when `HasScheduler = false` (no scheduler registered, or distributed companion that didn't ship a telemetry impl); when a miss has been observed the card draws with a yellow warning border so the signal is visible without reading the numbers.
 
-**Operator opt-in to back-fill.** `ServerConfig.BackfillMissedTicks` (default `false`) opts the deployment into re-firing `OnEvent`-triggered jobs once on drift recovery. The fluent helper is `ServerApp.withBackfillMissedTicks true` (mirrored on every superset: `AIServerApp`, `RAGServerApp`, `FormsServerApp`, `SchedulingServerApp`). Operators opt in when their `OnEvent` work is safely re-entrant — idempotent inserts, dedup'd upserts, advisory side effects. Non-idempotent work should stay opt-out; the missed dispatches are the trade-off for at-most-once semantics.
+**Operator opt-in to back-fill.** `ServerConfig.BackfillMissedTicks` (default `false`) opts the deployment into re-firing `OnEvent`-triggered jobs once on drift recovery. The fluent helper is `ServerApp.withBackfillMissedTicks true` (on the `ServerApp` pipeline, beside any companion). Operators opt in when their `OnEvent` work is safely re-entrant — idempotent inserts, dedup'd upserts, advisory side effects. Non-idempotent work should stay opt-out; the missed dispatches are the trade-off for at-most-once semantics.
 
 **Verifying drift detection manually.** Set a breakpoint inside the scheduler's `ExecuteAsync` loop (or hit `Ctrl+Break` to pause the whole process), wait ≥120 seconds, then resume. Within a few seconds: the `HealthMonitorUI` panel shows a non-zero `tick_missed_count`, and the `_platform.jobs`-scope operational-event log contains one `JobSchedulerTickMissed` entry whose `MissedTickCount` matches the number of minute boundaries inside the pause window. Without the pause, the counter stays at zero across an arbitrary uptime.
 
@@ -216,7 +215,7 @@ The threshold is exactly `60_000ms` (one full minute) — the loop's own tick in
 
 Drift back-fill (above) covers a scheduler that *paused*; it cannot cover a process that *died*. `OnEvent` triggering rides an in-memory hook — `JobNotifyEventStore` forwards each successful `IEventStore.Write` to `IJobScheduler.NotifyEventWritten` — so an event durably written immediately before a crash never fires its triggers: after restart the event sits in the store, the scheduler has no memory it was never dispatched, and the trigger is lost permanently. Writes that land during the compose window (before the scheduler cell is populated) are dropped the same way.
 
-**Opt-in:** `ServerConfig.EventTriggerCatchUp = true` (fluent: `ServerApp.withEventTriggerCatchUp true`, mirrored on every superset) alongside `JobScheduler = InProcessJobScheduler`. Default `false` — the notify path stays byte-for-byte at-most-once.
+**Opt-in:** `ServerConfig.EventTriggerCatchUp = true` (fluent: `ServerApp.withEventTriggerCatchUp true`) alongside `JobScheduler = InProcessJobScheduler`. Default `false` — the notify path stays byte-for-byte at-most-once.
 
 **Mechanism.** When enabled, compose creates one `JobTriggerWatermark` shared by the notify decorator and the scheduler:
 
@@ -243,7 +242,7 @@ The SDK ships the substrate for pulling data from external sources (BigQuery, Re
 
 ### Activation
 
-`ServerConfig.DataIngestion` is an opt-in DU. `NoDataIngestion` (default) skips registration entirely — no `IDataIngestor`, no `IDataSourceConfigStore`, no `_platform/data-sources/` blob layout, no `IDataIngestionApi` route. `EnabledDataIngestion` activates the substrate. Triggered refreshes through `IDataIngestionApi.TriggerRefresh` additionally require `JobScheduler = InProcessJobScheduler` (or any future distributed-scheduler companion) — without a scheduler, the ingestor still runs synchronously through `IDataIngestor.RunIngestion`, but the API path returns a clear error.
+`ServerConfig.DataIngestion` is an opt-in DU. `FeatureMode.Disabled` (default) skips registration entirely — no `IDataIngestor`, no `IDataSourceConfigStore`, no `_platform/data-sources/` blob layout, no `IDataIngestionApi` route. `FeatureMode.Enabled` activates the substrate. Triggered refreshes through `IDataIngestionApi.TriggerRefresh` additionally require `JobScheduler = InProcessJobScheduler` (or any future distributed-scheduler companion) — without a scheduler, the ingestor still runs synchronously through `IDataIngestor.RunIngestion`, but the API path returns a clear error.
 
 ### Substrate
 
@@ -339,7 +338,7 @@ OAuth Authorization Code with offline-access is the canonical credential-minting
 
 ### Activation
 
-OAuth substrate registration follows the data-ingestion gate: `ServerConfig.DataIngestion = EnabledDataIngestion` registers `IOAuthStateStore` + the cleanup `BackgroundService` and mounts `OAuthFlowHandler.routes`. Companion packages register their `IOAuthCredentialFlow` via DI (`services.AddSingleton<IOAuthCredentialFlow>(GoogleOAuthFlow.create ...)` from the composition root). Deployments without OAuth-flow companions get a working route table that returns `404 "OAuth flow 'X' is not registered"` to any /authorize attempt — the substrate stays cheap until a real flow is added.
+OAuth substrate registration follows the data-ingestion gate: `ServerConfig.DataIngestion = FeatureMode.Enabled` registers `IOAuthStateStore` + the cleanup `BackgroundService` and mounts `OAuthFlowHandler.routes`. Companion packages register their `IOAuthCredentialFlow` via DI (`services.AddSingleton<IOAuthCredentialFlow>(GoogleOAuthFlow.create ...)` from the composition root). Deployments without OAuth-flow companions get a working route table that returns `404 "OAuth flow 'X' is not registered"` to any /authorize attempt — the substrate stays cheap until a real flow is added.
 
 ### Two endpoints, one flow
 

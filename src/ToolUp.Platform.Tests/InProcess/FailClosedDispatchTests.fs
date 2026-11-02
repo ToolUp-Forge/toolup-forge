@@ -5,7 +5,9 @@ open System.Threading.Tasks
 open Expecto
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
-open ToolUp.Platform.SurfaceEnforcement
+open ToolUp.Platform.Scope.SurfaceEnforcement
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
 // ─── Phase 336 — fail-closed dispatch consistency ─────────────────────
 //

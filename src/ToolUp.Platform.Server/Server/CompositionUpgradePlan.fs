@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-namespace ToolUp.Platform
+namespace ToolUp.Platform.Compose
+
+open ToolUp.Platform
 
 open System
+open ToolUp.Platform.Config
 
 // ─── Cross-version composition upgrade planner ────────────────────────
 //
@@ -584,10 +587,12 @@ module CompositionUpgradePlan =
         let knobProjection (schemas: ConfigKnobSchema list) =
             schemas
             |> List.filter (fun schema -> composedKnobs.ContainsKey schema.Name)
-            |> List.map (fun schema -> {
-                Name = schema.Name
-                Value = schema.Values |> String.concat ","
-            })
+            |> List.map (fun schema ->
+                ({
+                    Name = schema.Name
+                    Value = schema.Values |> String.concat ","
+                }
+                : ConfigKnob))
 
         let before = {
             CompositionManifest.empty with

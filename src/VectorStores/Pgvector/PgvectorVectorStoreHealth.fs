@@ -6,8 +6,9 @@ module ToolUp.RAG.VectorStores.Pgvector.Health
 open System
 open ToolUp.Platform.HealthChecks
 open ToolUp.Platform
-open ToolUp.Platform.IVectorStore
+open ToolUp.Platform.Infra.IVectorStore
 open ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore
+open ToolUp.Platform.Infra
 
 // ─── Phase 507 — Pgvector vector-store health probe ──────────────────
 //
@@ -35,8 +36,8 @@ open ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore
 // Usage from a deployment that wires Pgvector:
 //   let vectorStore = PgvectorVectorStore.createTuned connStr options PgvectorTuning.recommended (Some logger)
 //   ...
-//   |> RAGServerApp.withHealthCheck (Health.create vectorStore)
-//   |> RAGServerApp.withConfigValidator (Health.validator vectorStore)
+//   |> ServerApp.withHealthCheck (Health.create vectorStore)
+//   |> ServerApp.withConfigValidator (Health.validator vectorStore)
 
 /// The configured approximate index, as an operator reads it.
 let private indexKind (options: PgvectorOptions) : string =

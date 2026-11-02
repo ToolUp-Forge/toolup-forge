@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.ExternalContactStore
+module ToolUp.Platform.Jobs.ExternalContactStore
 
 open System
 open ToolUp.Platform
 open ToolUp.Platform.EntityTypes
+open ToolUp.Platform.Infra
 
 // ─── SDK-default IExternalContactStore (Phase 6f.A) ──────────────────
 //
@@ -46,7 +47,7 @@ open ToolUp.Platform.EntityTypes
 /// composition root can register the entity itself with
 /// `ServerApp.withEntity` where it wants the address book's storage
 /// without the rest of the substrate; the SDK registers it for you when
-/// `ServerConfig.ExternalContactStore = EnabledExternalContactStore`.
+/// `ServerConfig.Stores.ExternalContactStore = FeatureMode.Enabled`.
 ///
 /// Three single-field indexes, each earning its place:
 ///   * `owner` serves `ListByOwner`, so a personal lookup in a scope that

@@ -5,13 +5,13 @@ namespace ToolUp.AssetStore
 
 /// Per-deployment registry mapping `DerivativeProfileId` to the
 /// list of `DerivativeSpec`s that profile generates. Built at
-/// compose time from `AssetCompose.withDerivativeProfile` calls;
+/// compose time from `AssetStoreCompanionOptions.withDerivativeProfile` calls;
 /// read per-request by `DefaultAssetStore.GetDerivative` when a
 /// cache miss resolves the spec to render.
 ///
 /// Operators register profiles declaratively at compose time;
 /// the `_platform/assets/profiles.json` file is the
-/// deployment-edit-without-recompile path — `AssetCompose.run`
+/// deployment-edit-without-recompile path — `AssetCompose.withAssetStore`
 /// merges any file-loaded profiles on top of compose-registered
 /// ones (file wins on collision so ops can override a
 /// hard-coded baseline without a redeploy).
@@ -64,7 +64,7 @@ module DerivativeProfileRegistry =
     ]
 
     /// Registry seeded with `web-default`. The default
-    /// `AssetCompose.create` uses this; `withDerivativeProfile`
+    /// `AssetStoreCompanionOptions.create` uses this; `withDerivativeProfile`
     /// appends / overrides.
     let withWebDefault: DerivativeProfileRegistry = {
         profiles =

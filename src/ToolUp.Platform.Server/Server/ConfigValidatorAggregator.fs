@@ -1,4 +1,4 @@
-module ToolUp.Platform.ConfigValidatorAggregator
+module ToolUp.Platform.Compose.ConfigValidatorAggregator
 
 open System
 open System.Text
@@ -6,6 +6,7 @@ open System.Threading
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Config
 
 // ─── Phase 9m aggregator + snapshot ──────────────────────────────────
 //

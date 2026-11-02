@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-namespace ToolUp.Platform
+namespace ToolUp.Platform.Scope
 
 open System
 open Giraffe
@@ -45,8 +45,8 @@ open ToolUp.Platform.Auth
 // cookie this fends off login-CSRF / session-fixation against the
 // reflect endpoint.
 //
-// Mounted only when `ServerConfig.AuthCookieIssuance =
-// EnabledAuthCookieIssuance`; the `NoAuthCookieIssuance` default leaves
+// Mounted only when `ServerConfig.SecurityPosture.AuthCookieIssuance =
+// FeatureMode.Enabled`; the `FeatureMode.Disabled` default leaves
 // the route unmounted and an existing deployment byte-for-byte
 // unchanged (GP 11).
 
@@ -145,5 +145,5 @@ module AuthSession =
         }
 
     /// Both routes. Mounted by `BuildRouteHandlers` only when
-    /// `ServerConfig.AuthCookieIssuance = EnabledAuthCookieIssuance`.
+    /// `ServerConfig.SecurityPosture.AuthCookieIssuance = FeatureMode.Enabled`.
     let routes: HttpHandler list = [ setRoute; clearRoute ]

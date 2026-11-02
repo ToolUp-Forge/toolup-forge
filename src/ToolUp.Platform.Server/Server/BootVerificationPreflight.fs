@@ -1,7 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-namespace ToolUp.Platform
+namespace ToolUp.Platform.Compose
+
+open ToolUp.Platform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Audit
 
 open System
 open System.Text
@@ -183,6 +188,22 @@ type CompositionDrift =
     /// declared. The twin of `CanonicalMethodDeclared`, and equally a
     /// change in what a method-less query returns.
     | CanonicalMethodWithdrawn of metricId: string * recorded: string
+    /// A contribution in the running plan that the sealed plan did not
+    /// record. `position` is its 1-based place in the running plan.
+    | ContributionAdded of position: int * owner: string * kind: string
+    /// A contribution the sealed plan recorded that the running plan does
+    /// not carry. `position` is its 1-based place in the sealed plan.
+    | ContributionRemoved of position: int * owner: string * kind: string
+    /// A contribution with the same owner and kind in both plans whose
+    /// required or provided seams moved. `position` is its 1-based place in
+    /// the running plan.
+    | ContributionChanged of position: int * owner: string * kind: string * recorded: string * observed: string
+    /// A contribution identical in both plans that runs at a different
+    /// place: the order `run` applies contributions in moved.
+    | ContributionMoved of owner: string * kind: string * recordedPosition: int * observedPosition: int
+    /// A seal-relevant config key, recorded by both compositions, whose
+    /// sealed rendering moved: the deployment states a different value.
+    | ConfigKeyChanged of key: string * recorded: string * observed: string
 
 [<RequireQualifiedAccess>]
 module CompositionDrift =
@@ -204,6 +225,15 @@ module CompositionDrift =
             $"metric '{metricId}' declares canonical method '{observed}', and the sealed composition recorded none for it"
         | CanonicalMethodWithdrawn(metricId, recorded) ->
             $"metric '{metricId}' declares no canonical method, and the sealed composition recorded '{recorded}'"
+        | ContributionAdded(position, owner, kind) ->
+            $"contribution '{kind}' by '{owner}' runs at plan position {position} and was not recorded"
+        | ContributionRemoved(position, owner, kind) ->
+            $"contribution '{kind}' by '{owner}' was recorded at plan position {position} and is not in the plan"
+        | ContributionChanged(position, owner, kind, recorded, observed) ->
+            $"contribution '{kind}' by '{owner}' at plan position {position} {observed}, recorded as {recorded}"
+        | ContributionMoved(owner, kind, recordedPosition, observedPosition) ->
+            $"contribution '{kind}' by '{owner}' runs at plan position {observedPosition}, recorded at {recordedPosition}"
+        | ConfigKeyChanged(key, recorded, observed) -> $"config key {key} is '{observed}', recorded as '{recorded}'"
 
 // ─── Phase 694 — what an older binding could not record ──────────────
 
@@ -224,6 +254,15 @@ type CompositionUnrecorded =
     /// the running composition declares — `None` when it declares none,
     /// which is equally unprovable against a silent binding.
     | CanonicalMethodUnrecorded of metricId: string * observed: string option
+    /// The sealed binding predates the manifest's contribution plan, so the
+    /// running plan could not be compared. `observed` names each running
+    /// contribution as `<kind> by <owner>`, in plan order.
+    | ContributionPlanUnrecorded of observed: string list
+    /// Seal-relevant config keys the running composition states that the
+    /// sealed binding did not record: the whole configuration when the
+    /// binding predates config-key recording, or keys the registry gained
+    /// since it was sealed. Named by key.
+    | ConfigKeysUnrecorded of keys: string list
 
 [<RequireQualifiedAccess>]
 module CompositionUnrecorded =
@@ -235,11 +274,21 @@ module CompositionUnrecorded =
             $"metric '{metricId}' resolves a method-less query by canonical method '{selector}', and the sealed binding predates canonical-method recording — so this could not be compared, and is not evidence that it did not move"
         | CanonicalMethodUnrecorded(metricId, None) ->
             $"metric '{metricId}' declares no canonical method, and the sealed binding predates canonical-method recording — so this could not be compared, and is not evidence that it did not move"
+        | ContributionPlanUnrecorded observed ->
+            let listed = String.concat "; " observed
+
+            $"the running composition applies {observed.Length} contribution(s) ({listed}), and the sealed binding predates contribution-plan recording — so the plan could not be compared, and is not evidence that it did not move"
+        | ConfigKeysUnrecorded keys ->
+            let listed = String.concat ", " keys
+
+            $"the running composition states {keys.Length} seal-relevant config key(s) the sealed binding did not record ({listed}) — so they could not be compared, and are not evidence that they did not move"
 
     /// Stable lowercase code for a payload / dashboard cut.
     let code =
         function
         | CanonicalMethodUnrecorded _ -> "canonical-method-unrecorded"
+        | ContributionPlanUnrecorded _ -> "contribution-plan-unrecorded"
+        | ConfigKeysUnrecorded _ -> "config-keys-unrecorded"
 
 // ─── Verdict ─────────────────────────────────────────────────────────
 
@@ -678,20 +727,37 @@ module BootVerificationPreflight =
     [<Literal>]
     let CanonicalMethodFramingVersion = "toolup.compositionmanifest.canonicalmethods.v1"
 
-    /// Phase 860 — the schema version the canonical-method block frames:
-    /// the newest schema whose additions the seal COVERS, never the
-    /// manifest's own `SchemaVersion`.
+    /// Framing version for the contribution-plan block. Part of the framed
+    /// bytes, like `CanonicalMethodFramingVersion`.
+    [<Literal>]
+    let PlanFramingVersion = "toolup.compositionmanifest.plan.v1"
+
+    /// Framing version for the config-key block. Part of the framed bytes,
+    /// like the two above.
+    [<Literal>]
+    let ConfigKeyFramingVersion = "toolup.compositionmanifest.configkeys.v1"
+
+    /// The schema version the canonical-method block frames: the newest
+    /// schema whose additions the seal COVERS, never the manifest's own
+    /// `SchemaVersion`.
     ///
-    /// Phase 694 framed the effective schema, which was the same number
-    /// while the canonical-method schema was the newest. Schema 3 adds a
-    /// field the seal deliberately does not cover (`LiveInterfaceTools`),
-    /// and framing `3` would have made the same composition seal to new
-    /// bytes on this binary for no new evidence. Existing seals were never
-    /// at risk (a stored binding re-canonicalises under its own recorded
-    /// version), but a re-seal of an unchanged composition was. A later
-    /// schema that adds a SEALED field raises this in its own gated block.
+    /// Schema 3 added a field the seal deliberately does not cover
+    /// (`LiveInterfaceTools`), so a schema-3 manifest frames `2`, exactly
+    /// as a schema-2 one does: framing `3` would have made the same
+    /// composition seal to new bytes for no new evidence. Schema 4 adds the
+    /// contribution plan, which IS sealed, so a manifest that records it
+    /// frames `4` — in the gated branch below, so no manifest that predates
+    /// the plan moves. A later schema that adds a sealed field raises this
+    /// in its own gated branch.
     let private sealedSchemaVersion (manifest: CompositionManifest) : int =
-        min (CompositionManifest.effectiveSchemaVersion manifest) CompositionManifest.CanonicalMethodSchemaVersion
+        let effective = CompositionManifest.effectiveSchemaVersion manifest
+
+        if CompositionManifest.recordsConfigKeys manifest then
+            min effective CompositionManifest.ConfigKeySchemaVersion
+        elif CompositionManifest.recordsPlan manifest then
+            min effective CompositionManifest.PlanSchemaVersion
+        else
+            min effective CompositionManifest.CanonicalMethodSchemaVersion
 
     /// Length-framed canonical text for a composition manifest.
     ///
@@ -711,10 +777,16 @@ module BootVerificationPreflight =
     /// means the old bytes stay reachable, not merely that the new field
     /// is optional.
     ///
-    /// **Phase 860: `LiveInterfaceTools` is not framed at all.** It is
-    /// derived from tool definitions whose names the entry block already
-    /// covers, so the same composition seals to the same bytes with or
-    /// without it, at schema 2 or 3 (see `sealedSchemaVersion`).
+    /// **`LiveInterfaceTools` is not framed at all.** It is derived from
+    /// tool definitions whose names the entry block already covers, so the
+    /// same composition seals to the same bytes with or without it, at
+    /// schema 2 or 3 (see `sealedSchemaVersion`).
+    ///
+    /// **The contribution plan is framed only for a manifest that records
+    /// it**, by the same rule as the canonical-method block: a binding
+    /// sealed at schema 3 or below re-canonicalises to the bytes it was
+    /// sealed over. Entries are framed in plan order, because the order is
+    /// what `run` applies.
     let compositionCanonicalForm (manifest: CompositionManifest) : string =
         let builder = StringBuilder()
         let frame = ProvenanceFraming.frame builder
@@ -747,6 +819,35 @@ module BootVerificationPreflight =
             for method in methods do
                 frame method.MetricId
                 frame method.Selector
+
+        if CompositionManifest.recordsPlan manifest then
+            let plan = CompositionManifest.plan manifest
+
+            frame PlanFramingVersion
+            frame (string plan.Length)
+
+            for entry in plan do
+                frame entry.Owner.Value
+                frame entry.Kind
+                frame (string entry.Requires.Length)
+
+                for seam in entry.Requires do
+                    frame seam
+
+                frame (string entry.Provides.Length)
+
+                for seam in entry.Provides do
+                    frame seam
+
+        if CompositionManifest.recordsConfigKeys manifest then
+            let configKeys = CompositionManifest.sealedConfigKeys manifest
+
+            frame ConfigKeyFramingVersion
+            frame (string configKeys.Length)
+
+            for entry in configKeys do
+                frame entry.Name
+                frame entry.Value
 
         builder.ToString()
 
@@ -810,6 +911,75 @@ module BootVerificationPreflight =
         && recorded.Length > observed.Length
         && recorded.StartsWith(observed, StringComparison.Ordinal)
         && Char.IsWhiteSpace recorded.[observed.Length]
+
+    let private renderSeams (entry: PlanEntry) : string =
+        let seams (ids: string list) = String.concat ", " ids
+        $"requires [{seams entry.Requires}] and provides [{seams entry.Provides}]"
+
+    /// How the observed plan differs from the recorded one, both read in
+    /// plan order. A longest common subsequence anchors the entries that
+    /// held; of the rest, an identical entry on both sides MOVED, an entry
+    /// with the same owner and kind CHANGED its seams, and anything else
+    /// was added or removed. Positions are 1-based.
+    let private planFindings (recorded: PlanEntry list) (observed: PlanEntry list) : CompositionDrift list =
+        let r = List.toArray recorded
+        let o = List.toArray observed
+        let lcs = Array2D.zeroCreate<int> (r.Length + 1) (o.Length + 1)
+
+        for i in r.Length - 1 .. -1 .. 0 do
+            for j in o.Length - 1 .. -1 .. 0 do
+                lcs[i, j] <-
+                    if r[i] = o[j] then
+                        lcs[i + 1, j + 1] + 1
+                    else
+                        max lcs[i + 1, j] lcs[i, j + 1]
+
+        let rec unmatched i j (removed: int list) (added: int list) =
+            if i < r.Length && j < o.Length then
+                if r[i] = o[j] then
+                    unmatched (i + 1) (j + 1) removed added
+                elif lcs[i + 1, j] >= lcs[i, j + 1] then
+                    unmatched (i + 1) j (i :: removed) added
+                else
+                    unmatched i (j + 1) removed (j :: added)
+            else
+                List.rev removed @ [ i .. r.Length - 1 ], List.rev added @ [ j .. o.Length - 1 ]
+
+        let removed, added = unmatched 0 0 [] []
+
+        // Pair each unmatched observed entry with the first unmatched
+        // recorded entry `fits` accepts; returns the pairs and what is left
+        // on both sides.
+        let pair (fits: PlanEntry -> PlanEntry -> bool) (removed: int list) (added: int list) =
+            let pairs, pending, unpaired =
+                added
+                |> List.fold
+                    (fun (pairs, pending, unpaired) a ->
+                        match pending |> List.tryFind (fun i -> fits r[i] o[a]) with
+                        | Some i -> (i, a) :: pairs, List.filter ((<>) i) pending, unpaired
+                        | None -> pairs, pending, a :: unpaired)
+                    ([], removed, [])
+
+            List.rev pairs, pending, List.rev unpaired
+
+        let moves, removed, added = pair (=) removed added
+
+        let changes, removed, added =
+            pair (fun x y -> x.Owner = y.Owner && x.Kind = y.Kind) removed added
+
+        [
+            for i, a in moves do
+                ContributionMoved(o[a].Owner.Value, o[a].Kind, i + 1, a + 1)
+
+            for i, a in changes do
+                ContributionChanged(a + 1, o[a].Owner.Value, o[a].Kind, renderSeams r[i], renderSeams o[a])
+
+            for a in added do
+                ContributionAdded(a + 1, o[a].Owner.Value, o[a].Kind)
+
+            for i in removed do
+                ContributionRemoved(i + 1, r[i].Owner.Value, r[i].Kind)
+        ]
 
     /// Every way `observed` differs from `recorded`, each naming its
     /// subject.
@@ -910,7 +1080,46 @@ module BootVerificationPreflight =
                             CanonicalMethodWithdrawn(metricId, recordedSelector)
                 ]
 
-        componentFindings @ knobFindings @ canonicalMethodFindings
+        // The contribution plan, compared only when both manifests record
+        // it, by the same rule as the selectors above.
+        let contributionFindings =
+            if
+                CompositionManifest.recordsPlan recorded
+                && CompositionManifest.recordsPlan observed
+            then
+                planFindings (CompositionManifest.plan recorded) (CompositionManifest.plan observed)
+            else
+                []
+
+        // The seal-relevant config keys, compared only when both manifests
+        // record them, and only over the keys both record: a key the registry
+        // gained since the seal is reported by `unrecorded`, and one it
+        // dropped is no longer stated by anything.
+        let configKeyFindings =
+            if
+                CompositionManifest.recordsConfigKeys recorded
+                && CompositionManifest.recordsConfigKeys observed
+            then
+                let recordedKeys =
+                    CompositionManifest.sealedConfigKeys recorded
+                    |> List.map (fun k -> k.Name, k.Value)
+                    |> Map.ofList
+
+                [
+                    for entry in CompositionManifest.sealedConfigKeys observed do
+                        match Map.tryFind entry.Name recordedKeys with
+                        | Some recordedValue when recordedValue <> entry.Value ->
+                            ConfigKeyChanged(entry.Name, recordedValue, entry.Value)
+                        | _ -> ()
+                ]
+            else
+                []
+
+        componentFindings
+        @ knobFindings
+        @ canonicalMethodFindings
+        @ contributionFindings
+        @ configKeyFindings
 
     /// Phase 694 — every declaration the running composition makes that
     /// the sealed binding is too old to have recorded.
@@ -921,24 +1130,68 @@ module BootVerificationPreflight =
     /// refuse on these. Empty whenever the binding is new enough to speak
     /// — so a deployment that re-seals once never sees this again.
     let unrecorded (recorded: CompositionManifest) (observed: CompositionManifest) : CompositionUnrecorded list =
-        if CompositionManifest.recordsCanonicalMethods recorded then
-            []
-        else
-            let metricIds (manifest: CompositionManifest) =
-                coerceEntries manifest.Metrics |> List.map _.Label |> Set.ofList
+        let canonicalMethodItems =
+            if CompositionManifest.recordsCanonicalMethods recorded then
+                []
+            else
+                let metricIds (manifest: CompositionManifest) =
+                    coerceEntries manifest.Metrics |> List.map _.Label |> Set.ofList
 
-            let observedSelectors =
-                CompositionManifest.canonicalMethods observed
-                |> List.map (fun m -> m.MetricId, m.Selector)
-                |> Map.ofList
+                let observedSelectors =
+                    CompositionManifest.canonicalMethods observed
+                    |> List.map (fun m -> m.MetricId, m.Selector)
+                    |> Map.ofList
 
-            // Only metrics BOTH sides carry. A grounding-free composition
-            // therefore reports nothing at all: with no metric recorded on
-            // either side, no selector can exist to be silent about, and
-            // that is a provable statement rather than a hedge.
-            Set.intersect (metricIds recorded) (metricIds observed)
-            |> Set.toList
-            |> List.map (fun metricId -> CanonicalMethodUnrecorded(metricId, Map.tryFind metricId observedSelectors))
+                // Only metrics BOTH sides carry. A grounding-free composition
+                // therefore reports nothing at all: with no metric recorded on
+                // either side, no selector can exist to be silent about, and
+                // that is a provable statement rather than a hedge.
+                Set.intersect (metricIds recorded) (metricIds observed)
+                |> Set.toList
+                |> List.map (fun metricId ->
+                    CanonicalMethodUnrecorded(metricId, Map.tryFind metricId observedSelectors))
+
+        // The plan, when the binding predates it and the running composition
+        // records one with at least one entry: an empty running plan has
+        // nothing to be silent about.
+        let planItems =
+            let plan = CompositionManifest.plan observed
+
+            if
+                not plan.IsEmpty
+                && not (CompositionManifest.recordsPlan recorded)
+                && CompositionManifest.recordsPlan observed
+            then
+                [
+                    ContributionPlanUnrecorded(plan |> List.map (fun entry -> $"{entry.Kind} by {entry.Owner.Value}"))
+                ]
+            else
+                []
+
+        // The config keys the running composition states and the binding did
+        // not record: all of them against a binding that predates the block,
+        // the newly registered ones against one that records it.
+        let configKeyItems =
+            if CompositionManifest.recordsConfigKeys observed then
+                let observedKeys = CompositionManifest.sealedConfigKeys observed |> List.map _.Name
+
+                let missing =
+                    if CompositionManifest.recordsConfigKeys recorded then
+                        let recordedKeys =
+                            CompositionManifest.sealedConfigKeys recorded |> List.map _.Name |> Set.ofList
+
+                        observedKeys |> List.filter (not << recordedKeys.Contains)
+                    else
+                        observedKeys
+
+                if missing.IsEmpty then
+                    []
+                else
+                    [ ConfigKeysUnrecorded missing ]
+            else
+                []
+
+        canonicalMethodItems @ planItems @ configKeyItems
 
     // ─── Verifying ───────────────────────────────────────────────────
 

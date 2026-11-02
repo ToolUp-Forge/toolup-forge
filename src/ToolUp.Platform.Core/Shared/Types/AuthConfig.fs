@@ -105,7 +105,7 @@ type TokenLocation =
     /// EventSource spec forbids custom request headers). The single-
     /// location cases above force a deployment to pick one transport
     /// or the other and silently break the unpicked path; this case
-    /// admits both. Pairs with `ServerConfig.SseAuthMode = CookieRequired`
+    /// admits both. Pairs with `ServerConfig.SecurityPosture.SseAuthMode = CookieRequired`
     /// and `UserSession.setAuthToken` on the client side, which already
     /// writes the JWT into both `localStorage` (for the Authorization
     /// header) and the matching cookie (for SSE).

@@ -3,9 +3,10 @@ module ToolUp.Forms.Tests.InProcess.InMemoryEntityStore
 open System.Collections.Concurrent
 open Microsoft.FSharp.Reflection
 open ToolUp.Platform.EntityTypes
-open ToolUp.Platform.IEntityStore
+open ToolUp.Platform.Infra.IEntityStore
 open ToolUp.Platform.EntityQueryTypes
 open ToolUp.Forms.FormSubmission
+open ToolUp.Platform.Infra
 
 // ─── Test-only in-memory IEntityStore stub ────────────────────────
 //

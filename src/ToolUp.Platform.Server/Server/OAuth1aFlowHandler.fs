@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.OAuth1aFlowHandler
+module ToolUp.Platform.Config.OAuth1aFlowHandler
 
 open System
 open System.Threading.Tasks
@@ -10,7 +10,8 @@ open Microsoft.Extensions.DependencyInjection
 open Giraffe
 open ToolUp.Platform
 open ToolUp.Platform.Secrets
-open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Config.TeamManagement
+open ToolUp.Platform.Infra
 
 // ─── Phase 10g — OAuth 1.0a three-legged flow endpoints ─────────────────
 //
@@ -35,7 +36,7 @@ open ToolUp.Platform.TeamManagement
 // via `ISecretStore` (two keys — token + token secret), emits an
 // `OAuth1aConnected` audit event, and 302-redirects back to the admin UI.
 //
-// Routes are mounted only when `ServerConfig.OAuth1a = EnabledOAuth1a`
+// Routes are mounted only when `ServerConfig.OAuth1a = FeatureMode.Enabled`
 // (see `BuildRouteHandlers`). Stateless across calls; the state store is
 // the only stateful element (single-instance default + distributed
 // companion candidate).
@@ -271,7 +272,7 @@ let private callback (flowName: string) : HttpHandler =
 // ─── Route table ────────────────────────────────────────────────────────
 
 /// The OAuth 1.0a flow routes. Mounted by `BuildRouteHandlers` only when
-/// `ServerConfig.OAuth1a = EnabledOAuth1a`.
+/// `ServerConfig.OAuth1a = FeatureMode.Enabled`.
 let routes: HttpHandler list = [
     GET >=> routef "/api/oauth1a/%s/start" start
     GET >=> routef "/api/oauth1a/%s/callback" callback

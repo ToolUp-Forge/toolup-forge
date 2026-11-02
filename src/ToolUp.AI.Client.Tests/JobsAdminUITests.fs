@@ -42,6 +42,7 @@ let private job (handler: string) (minute: int) : JobDefinition = {
     LastRunError = None
     ConsecutiveFailures = 0
     Tags = Map.empty
+    LastRunWarning = None
 }
 
 let private unfundedReason =
@@ -79,6 +80,7 @@ let private run
         Error = error
         DurationMs = completedAt |> Option.map (fun c -> int64 (c - startedAt).TotalMilliseconds)
         ExternalHandle = None
+        Warning = None
     }
 
 let private loadedWith (jobs: JobDefinition list) =
@@ -195,6 +197,43 @@ let tests =
                     "weekly-report"
                 ]
                 "failed for good, then will-retry, then the rest, each band in API order"
+
+        testCase
+            "a job that succeeded with a warning reads as succeeded, shows the warning, and sorts after the failures"
+        <| fun _ ->
+            let warning =
+                "published with 1 claim(s) withheld after 4 repair round(s): section 'summary' › element 1 › span 2: a number in prose that is not a reference — \"the three largest\""
+
+            let warned = {
+                job "daily-insights" 5 with
+                    LastRunStatus = Some JobRunStatus.Succeeded
+                    LastRunWarning = Some warning
+            }
+
+            let succeeded = {
+                job "weekly-report" 3 with
+                    LastRunStatus = Some JobRunStatus.Succeeded
+            }
+
+            Expect.equal (standingOf warned) JobStanding.Succeeded "the job did succeed"
+            Expect.equal (warningOf warned) (Some warning) "and its warning is shown, verbatim"
+            Expect.isNone (warningOf succeeded) "a plain success shows none"
+
+            // A stale warning on a later failure is not shown as a warning.
+            let failedSince = {
+                warned with
+                    LastRunStatus = Some JobRunStatus.DeadLettered
+            }
+
+            Expect.isNone (warningOf failedSince) "only a success carries its warning"
+
+            let order =
+                ordered [ scheduled; succeeded; warned; deadLettered ] |> List.map _.Handler
+
+            Expect.equal
+                order
+                [ "daily-narrative"; "daily-insights"; "nightly-rollup"; "weekly-report" ]
+                "failed first, then warned, then the rest"
 
         testCase "re-run round-trip: confirm, trigger, poll, the new attempt lands"
         <| fun _ ->

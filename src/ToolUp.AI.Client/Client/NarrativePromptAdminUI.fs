@@ -9,7 +9,7 @@ open Feliz
 open ToolUp.Platform
 open ToolUp.AI
 
-// ─── Phase 1111 — a report's wording, edited in the platform ─────────
+// ─── A report's wording, edited in the platform ─────────
 //
 // A view over `NarrativePromptApi` for an Owner or Admin of the active team:
 // the team's grounded narratives; for one, its declared wording beside the
@@ -19,6 +19,11 @@ open ToolUp.AI
 // outcome when it lands. The grounding rules the wording sits inside are
 // shown read-only — nothing here can change them, and a report that breaks
 // them is refused whatever the wording says.
+//
+// Where the server composes the learning loop, a panel lists the sentences
+// proposed for refusals that recur, with their evidence and the wording each
+// would produce, to approve or dismiss. A proposal is never in force until
+// it is approved.
 //
 // **Off by default.** The API is mounted only by the server's
 // `NarrativePromptHandler.withPromptAdmin`, so the module is not appended by
@@ -74,6 +79,51 @@ let wordingInForce (view: NarrativePromptView) : string * Map<string, string> =
         |> List.fold (fun acc g -> Map.add g.SectionId g.Guidance acc) declared
     | None -> view.DeclaredPrompt, declared
 
+/// The wording version in force; 0 when the declaration is.
+let versionInForce (view: NarrativePromptView) : int =
+    view.Current |> Option.map _.Version |> Option.defaultValue 0
+
+/// Whether a proposal can be approved: it is open, and the wording it was
+/// drafted against is still the one in force.
+let canApprove (inForce: int) (proposal: NarrativeWordingProposal) : bool =
+    proposal.State = NarrativeProposalState.Open
+    && proposal.WordingVersion = inForce
+
+/// The open proposals, in the order the server listed them.
+let openProposals (learning: NarrativeLearningView) : NarrativeProposalView list =
+    learning.Proposals
+    |> List.filter (fun p -> p.Proposal.State = NarrativeProposalState.Open)
+
+/// How a proposal stands, in words.
+let proposalStatus (inForce: int) (proposal: NarrativeWordingProposal) : string =
+    match proposal.State with
+    | NarrativeProposalState.Open when canApprove inForce proposal -> "Waiting for approval"
+    | NarrativeProposalState.Open ->
+        sprintf
+            "Drafted against version %d; the wording has changed since, so it can only be dismissed"
+            proposal.WordingVersion
+    | NarrativeProposalState.Approved version -> sprintf "Approved as version %d" version
+    | NarrativeProposalState.Dismissed -> "Dismissed"
+    | NarrativeProposalState.Lapsed -> "Lapsed: the wording changed before it was decided"
+
+/// Whether an approved sentence stopped its class recurring: `None` until
+/// the version it made has run a full window.
+let stoppedRecurring (window: int) (standing: NarrativeOffenceStanding) : bool option =
+    if standing.Recurs then Some false
+    elif standing.Runs >= window then Some true
+    else None
+
+/// The follow-through line of an approved proposal.
+let followThroughText (window: int) (standing: NarrativeOffenceStanding) : string =
+    let seen =
+        sprintf "Refused on %d of %d run(s) since" standing.RunsWithClass standing.Runs
+
+    match standing.Runs, stoppedRecurring window standing with
+    | 0, _ -> "Not run since approval"
+    | _, Some true -> seen + " — it stopped recurring"
+    | _, Some false -> seen + " — it still recurs"
+    | _, None -> seen
+
 // ─── Model ──────────────────────────────────────────────────────────
 
 type LoadState<'T> =
@@ -97,6 +147,9 @@ type Model = {
     /// The open narrative, if any.
     Open: LoadState<NarrativePromptView> option
     Versions: NarrativePromptVersion list
+    /// The open narrative's proposals; `None` until loaded, or when the
+    /// learning loop is not reachable.
+    Learning: NarrativeLearningView option
     Regenerate: RegenerateProgress option
     Busy: bool
     Banner: Result<string, string> option
@@ -119,6 +172,10 @@ type Msg =
     | Poll of runKey: string
     | Polled of Result<NarrativePromptView, string>
     | DismissBanner
+    | LearningLoaded of Result<NarrativeLearningView, string>
+    | ApproveProposal of NarrativeProposalDecision
+    | DismissProposal of NarrativeProposalDecision
+    | ProposalDismissed of Result<NarrativeLearningView, string>
 
 // Header freshness is the CsrfClient request-guard's job — see
 // UserSession.fs + SDK.Client.fs installRequestGuard.
@@ -133,6 +190,9 @@ let private loadList () =
 let private loadVersions (runKey: string) =
     Cmd.OfRemoting.call api.ListVersions runKey VersionsLoaded (failure >> VersionsLoaded)
 
+let private loadLearning (runKey: string) =
+    Cmd.OfRemoting.call api.ListProposals runKey LearningLoaded (failure >> LearningLoaded)
+
 let private pollCmd (runKey: string) : Cmd<Msg> =
     Cmd.OfAsync.perform (fun () -> Async.Sleep pollIntervalMs) () (fun _ -> Poll runKey)
 
@@ -141,6 +201,7 @@ let init () : Model * Cmd<Msg> =
         Narratives = Loading
         Open = None
         Versions = []
+        Learning = None
         Regenerate = None
         Busy = false
         Banner = None
@@ -173,12 +234,14 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
             model with
                 Open = Some Loading
                 Versions = []
+                Learning = None
                 Regenerate = None
                 Banner = None
         },
         Cmd.batch [
             Cmd.OfRemoting.call api.GetNarrative runKey NarrativeLoaded (failure >> NarrativeLoaded)
             loadVersions runKey
+            loadLearning runKey
         ]
     | NarrativeLoaded(Ok view) -> { model with Open = Some(Loaded view) }, Cmd.none
     | NarrativeLoaded(Error reason) ->
@@ -200,6 +263,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
             model with
                 Open = None
                 Versions = []
+                Learning = None
                 Regenerate = None
                 Banner = None
         },
@@ -231,7 +295,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Open = Some(Loaded view)
                 Banner = Some(Ok what)
         },
-        loadVersions view.RunKey
+        Cmd.batch [ loadVersions view.RunKey; loadLearning view.RunKey ]
     | Changed(_, Error reason) ->
         {
             model with
@@ -313,6 +377,44 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
             Cmd.none
         | _ -> model, Cmd.none
     | DismissBanner -> { model with Banner = None }, Cmd.none
+
+    | LearningLoaded(Ok learning) -> { model with Learning = Some learning }, Cmd.none
+    // The learning loop is optional: a deployment that does not compose it
+    // shows no panel rather than an error.
+    | LearningLoaded(Error _) -> { model with Learning = None }, Cmd.none
+    | ApproveProposal decision ->
+        {
+            model with
+                Busy = true
+                Banner = None
+        },
+        Cmd.OfRemoting.call
+            api.ApproveProposal
+            decision
+            (fun r -> Changed("Approved: the sentence is in the wording the next run uses.", r))
+            (fun e -> Changed("", Error e.Message))
+    | DismissProposal decision ->
+        {
+            model with
+                Busy = true
+                Banner = None
+        },
+        Cmd.OfRemoting.call api.DismissProposal decision ProposalDismissed (failure >> ProposalDismissed)
+    | ProposalDismissed(Ok learning) ->
+        {
+            model with
+                Busy = false
+                Learning = Some learning
+                Banner = Some(Ok "Dismissed. It is proposed again only if it recurs under a later wording.")
+        },
+        Cmd.none
+    | ProposalDismissed(Error reason) ->
+        {
+            model with
+                Busy = false
+                Banner = Some(Error reason)
+        },
+        Cmd.none
 
 // ─── View ───────────────────────────────────────────────────────────
 
@@ -616,6 +718,110 @@ let private versionsView (versions: NarrativePromptVersion list) =
         ]
     ]
 
+let private proposalsView
+    (model: Model)
+    (view: NarrativePromptView)
+    (learning: NarrativeLearningView)
+    (dispatch: Msg -> unit)
+    =
+    let inForce = versionInForce view
+
+    let decision (p: NarrativeWordingProposal) = {
+        RunKey = view.RunKey
+        ProposalId = p.Id
+    }
+
+    Html.div [
+        prop.className "border rounded p-4 mb-4"
+        prop.children [
+            Html.h3 [ prop.className "font-medium mb-1"; prop.text "Proposed wording" ]
+            Html.p [
+                prop.className "text-xs text-gray-500 mb-2"
+                prop.text (
+                    sprintf
+                        "When the same kind of claim is refused on %d of the last %d runs under one wording, a sentence aimed at it is proposed here. It is never used until you approve it."
+                        learning.Threshold
+                        learning.Window
+                )
+            ]
+            if learning.Proposals.IsEmpty then
+                Html.p [ prop.className "text-sm text-gray-500"; prop.text "No proposals." ]
+            else
+                Html.ul [
+                    prop.className "divide-y"
+                    prop.children [
+                        for item in learning.Proposals do
+                            let p = item.Proposal
+
+                            Html.li [
+                                prop.key p.Id
+                                prop.className "py-2 text-sm"
+                                prop.children [
+                                    Html.p [
+                                        prop.className "text-xs text-gray-500"
+                                        prop.text (
+                                            sprintf
+                                                "%s · %s · %s"
+                                                (NarrativeOffenceClass.describe p.Class)
+                                                (formatTime p.ProposedAt)
+                                                (proposalStatus inForce p)
+                                        )
+                                    ]
+                                    Html.p [ prop.className "font-medium"; prop.text p.Sentence ]
+                                    for earlier in p.Earlier do
+                                        Html.p [
+                                            prop.className "text-xs text-gray-500"
+                                            prop.text $"Tried before: {earlier}"
+                                        ]
+                                    Html.details [
+                                        prop.children [
+                                            Html.summary [
+                                                prop.className "text-xs"
+                                                prop.text "Evidence and resulting wording"
+                                            ]
+                                            Html.ul [
+                                                prop.className "list-disc ml-5 text-xs"
+                                                prop.children [ for claim in p.Evidence -> Html.li [ prop.text claim ] ]
+                                            ]
+                                            Html.pre [
+                                                prop.className "text-xs whitespace-pre-wrap mt-1"
+                                                prop.text item.ResultingPrompt
+                                            ]
+                                        ]
+                                    ]
+                                    match item.FollowThrough with
+                                    | Some standing ->
+                                        Html.p [
+                                            prop.className "text-xs"
+                                            prop.text (followThroughText learning.Window standing)
+                                        ]
+                                    | None -> Html.none
+                                    if p.State = NarrativeProposalState.Open then
+                                        Html.div [
+                                            prop.className "flex gap-2 mt-1"
+                                            prop.children [
+                                                if canApprove inForce p then
+                                                    Html.button [
+                                                        prop.className "text-sm underline"
+                                                        prop.disabled model.Busy
+                                                        prop.text "Approve"
+                                                        prop.onClick (fun _ -> dispatch (ApproveProposal(decision p)))
+                                                    ]
+                                                Html.button [
+                                                    prop.className "text-sm underline"
+                                                    prop.disabled model.Busy
+                                                    prop.text "Dismiss"
+                                                    prop.onClick (fun _ -> dispatch (DismissProposal(decision p)))
+                                                ]
+                                            ]
+                                        ]
+                                ]
+                            ]
+                    ]
+                ]
+        ]
+    ]
+
 let private detailView (model: Model) (view: NarrativePromptView) (dispatch: Msg -> unit) =
     Html.div [
         prop.children [
@@ -627,8 +833,7 @@ let private detailView (model: Model) (view: NarrativePromptView) (dispatch: Msg
             Html.h2 [ prop.className "text-lg font-semibold"; prop.text view.DisplayName ]
             Html.p [
                 prop.className "text-xs text-gray-500 mb-4"
-                prop.text
-                    $"{view.Title} · {view.RunKey} · {versionLabel (view.Current |> Option.map _.Version |> Option.defaultValue 0)} in force"
+                prop.text $"{view.Title} · {view.RunKey} · {versionLabel (versionInForce view)} in force"
             ]
             banner model dispatch
             Html.div [
@@ -647,6 +852,9 @@ let private detailView (model: Model) (view: NarrativePromptView) (dispatch: Msg
                     Html.pre [ prop.className "text-xs whitespace-pre-wrap"; prop.text view.Rules ]
                 ]
             ]
+            match model.Learning with
+            | Some learning -> proposalsView model view learning dispatch
+            | None -> Html.none
             regenerateView model view dispatch
             versionsView model.Versions
         ]

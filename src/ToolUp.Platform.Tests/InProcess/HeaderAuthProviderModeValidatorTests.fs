@@ -4,13 +4,19 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Auth
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
 // ─── Helpers ──────────────────────────────────────────────────────────
 
 let private cfg (surfaces: SurfaceProfile list) (escapeHatch: bool) = {
     ServerConfig.defaults with
         Surfaces = surfaces
-        AcceptHeaderAuthWhenAuthRequired = escapeHatch
+        RiskAcknowledgements = {
+            ServerConfig.defaults.RiskAcknowledgements with
+                AcceptHeaderAuthWhenAuthRequired = escapeHatch
+        }
 }
 
 let private headerAuthProvider () : IAuthProvider =

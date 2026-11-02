@@ -4,11 +4,11 @@ open System
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Config.TeamManagement
 open ToolUp.Platform.VectorKnowledgeTypes
-open ToolUp.Platform.IEmbeddingProvider
-open ToolUp.Platform.IVectorStore
-open ToolUp.Platform.ISparseIndex
+open ToolUp.Platform.Infra.IEmbeddingProvider
+open ToolUp.Platform.Infra.IVectorStore
+open ToolUp.Platform.Infra.ISparseIndex
 open ToolUp.RAG.IngestionTypes
 open SharedTypes
 open KnowledgeBase.ServerIndexStorage
@@ -18,6 +18,9 @@ open KnowledgeBase.ServerOriginalSourceResolver
 open ToolUp.RAG.InMemoryVectorStore
 open ToolUp.RAG.InMemoryBM25Index
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 115 — KnowledgeScopeErased audit on scope-level reset ──────
 //
@@ -82,7 +85,7 @@ let private chunk content : TextChunk = {
 let private mkDeps
     (storage: IBlobStorage)
     (auditLog: IAuditLog option)
-    (lifecycle: ToolUp.Platform.IIndexLifecycle.IIndexLifecycle option)
+    (lifecycle: ToolUp.Platform.Infra.IIndexLifecycle.IIndexLifecycle option)
     (container: string)
     : KnowledgeApiDeps =
     {
@@ -144,8 +147,8 @@ let tests =
             let sparse = bm25 :> ISparseIndex
 
             let lifecycle =
-                ToolUp.Platform.IIndexLifecycle.DefaultIndexLifecycle(vs, Some sparse, None)
-                :> ToolUp.Platform.IIndexLifecycle.IIndexLifecycle
+                ToolUp.Platform.Infra.IIndexLifecycle.DefaultIndexLifecycle(vs, Some sparse, None)
+                :> ToolUp.Platform.Infra.IIndexLifecycle.IIndexLifecycle
 
             // Two documents in the scope, each with a chunk in both retrieval legs.
             do! saveIndex storage "team-a" [ mkDoc "doc-1"; mkDoc "doc-2" ]
@@ -177,12 +180,12 @@ let tests =
             use bm25 = new InMemoryBM25Index(storage, flushIntervalMs = 60000)
 
             let lifecycle =
-                ToolUp.Platform.IIndexLifecycle.DefaultIndexLifecycle(
+                ToolUp.Platform.Infra.IIndexLifecycle.DefaultIndexLifecycle(
                     vectorStore :> IVectorStore,
                     Some(bm25 :> ISparseIndex),
                     None
                 )
-                :> ToolUp.Platform.IIndexLifecycle.IIndexLifecycle
+                :> ToolUp.Platform.Infra.IIndexLifecycle.IIndexLifecycle
 
             do! saveIndex storage "team-a" [ mkDoc "doc-1" ]
             let deps = mkDeps storage None (Some lifecycle) "team-a"

@@ -1,11 +1,13 @@
-module ToolUp.Platform.RemotingHelpers
+module ToolUp.Platform.Compose.RemotingHelpers
 
 open System
 open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
 open Giraffe
 open ToolUp.Platform
-open ToolUp.Platform.FileManagement
+open ToolUp.Platform.Files.FileManagement
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
 
 /// Shared diagnostic logging for ToolUp.Remoting error handlers. Routes
 /// through the DI-registered `ILogger`. `compose` validates the

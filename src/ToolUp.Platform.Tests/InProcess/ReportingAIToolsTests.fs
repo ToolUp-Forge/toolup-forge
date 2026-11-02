@@ -13,13 +13,17 @@ open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.Narrative
 open ToolUp.Platform.VectorKnowledgeTypes
-open ToolUp.Platform.InMemoryEventStore
+open ToolUp.Platform.Infra.InMemoryEventStore
 open ToolUp.AI
 open ToolUp.AI.AIToolRegistry
 open ToolUp.Reporting
 open ToolUp.Reporting.IReportTemplateStore
 open ToolUp.Reporting.RendererRegistry
 open ToolUp.Reporting.ReportingAITools
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 577 — the `_platform.reporting` AI tool family ────────────
 //
@@ -99,7 +103,7 @@ type private RecordingScheduler() =
 /// Preset-verdict gate: ids absent from `verdicts` deny as `unknown-fact`.
 type private PresetGate(verdicts: Map<string, FactDisclosureVerdict>) =
     interface IFactDisclosureGate with
-        member _.Check(_: string, _: string, _: FactEgressSurface, factIds: string list) = async {
+        member _.Check(_: ResolvedScope, _: string, _: FactEgressSurface, factIds: string list) = async {
             return
                 factIds
                 |> List.distinct
@@ -107,9 +111,6 @@ type private PresetGate(verdicts: Map<string, FactDisclosureVerdict>) =
                     id, (verdicts.TryFind id |> Option.defaultValue (FactNotDisclosable "unknown-fact")))
                 |> Map.ofList
         }
-
-        member this.Check(scope: ResolvedScope, principal: string, surface: FactEgressSurface, factIds: string list) =
-            (this :> IFactDisclosureGate).Check(scope.ScopeId, principal, surface, factIds)
 
 // ── Fixtures ──────────────────────────────────────────────────────
 
@@ -222,12 +223,17 @@ let private signedIn (services: Services) (activeModule: string option) : HttpCo
     ctx.RequestServices <- services.Provider
     ctx.Items["ToolUp.UserId"] <- box "user-1"
 
-    ctx.Items["ToolUp.StorageScope"] <-
-        box {
-            ScopeId = "team-a"
-            Container = "team-team-a"
-            Persist = true
-        }
+    let storage: StorageScope = {
+        ScopeId = "team-a"
+        Container = "team-team-a"
+        Persist = true
+    }
+
+    // As the scope-resolution middleware records it: the storage scope, and
+    // the resolved scope the fact and reporting doors read through
+    // `ScopeResolution.forRequest`.
+    ctx.Items["ToolUp.StorageScope"] <- box storage
+    StorageScopeResolver.ScopeResolution.remember ctx storage |> ignore
 
     ctx.Items["ToolUp.Subject"] <- box (TeamMember("user-1", "team-a"))
     ctx.Items[AIConsentDispatch.ItemsKeys.ConversationId] <- box conversationId

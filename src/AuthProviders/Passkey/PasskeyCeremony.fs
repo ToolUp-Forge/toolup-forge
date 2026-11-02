@@ -14,6 +14,9 @@ open ToolUp.Platform.Auth
 open ToolUp.AuthProviders.Passkey.PasskeyTypes
 open ToolUp.AuthProviders.Passkey.PasskeyStores
 open ToolUp.AuthProviders.Passkey.PasskeyRegistrationPolicy
+open ToolUp.Platform.Config.Auth
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── 443.A — WebAuthn ceremony orchestration over Fido2NetLib ────────
 //

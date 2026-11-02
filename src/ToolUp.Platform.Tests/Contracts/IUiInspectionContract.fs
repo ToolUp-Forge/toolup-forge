@@ -54,6 +54,9 @@ open ToolUp.Platform
 open ToolUp.Platform.AI
 open ToolUp.AI
 open ToolUp.AI.UiAwareness
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 /// Reads the latest `UiStateReport` a module published, by module id —
 /// the shape of `ModuleStateObserver.tryInspect`.
@@ -132,7 +135,7 @@ type private StateTable(seed: (string * UiStateReport) list) =
 
 type private AllowAll() =
     interface IClientToolAuthorizer with
-        member _.Authorize(_toolName, _argsJson, _activeModule, _activePage) = Allow
+        member _.Authorize(_toolName, _argsJson, _activeModule, _activePage) = ClientToolAuthDecision.Allow
 
 type private DenyAll() =
     interface IClientToolAuthorizer with

@@ -8,9 +8,13 @@ open System.IO
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.DataObjectStore
-open ToolUp.Platform.Tracing
+open ToolUp.Platform.Infra.DataObjectStore
+open ToolUp.Platform.Infra.Tracing
 open ToolUp.ModelProviders.Reference
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 599 — batch fit submission + bulk retrieval ──────────────────
 //
@@ -31,7 +35,8 @@ open ToolUp.ModelProviders.Reference
 //   * a batch-of-one item is semantically identical to the single-item
 //     envelope path (same composite key, diagnostics, verdicts).
 //
-// Item execution drives `ModelFitBatchItemJobHandler.Execute` directly
+// Item execution drives the handler `ModelFitBatchItemJobHandler.create`
+// builds through `IJobHandler.Execute` directly
 // with synthesised `JobContext`s (the IModelFitProviderContract pattern) —
 // the scheduler's dispatch loop is hosting-only and not started in tests.
 
@@ -84,7 +89,17 @@ let private buildScheduler () =
     let jobStore = JobStore.create storage eventStore
     let config = ServerConfig.defaults
 
-    JobScheduler.create jobStore eventStore silentChannel config silentLogger (NoOpActivitySink() :> IActivitySink)
+    JobScheduler.create
+        ({
+            Store = jobStore
+            EventStore = eventStore
+            NotificationChannel = silentChannel
+            Config = config
+            Logger = silentLogger
+            ActivitySink = (NoOpActivitySink() :> IActivitySink)
+        }
+        : JobScheduler.SchedulerDeps)
+        JobScheduler.SchedulerOptions.defaults
     :> IJobScheduler
 
 let private fitRequest (scope: string) (seed: int64) : FitRequest = {

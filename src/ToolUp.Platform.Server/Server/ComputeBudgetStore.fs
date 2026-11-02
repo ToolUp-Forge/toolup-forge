@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-namespace ToolUp.Platform
+namespace ToolUp.Platform.Infra
+
+open ToolUp.Platform
 
 open System
 open System.Collections.Concurrent
@@ -179,7 +181,7 @@ module ComputeBudgetJson =
         |> Option.map ComputeBudgetUsage.ofBudgetUsage
 
 /// Phase 451 — the blob-backed `IComputeBudgetStore` registered when
-/// `ServerConfig.ComputeBudget = EnabledComputeBudget`.
+/// `ServerConfig.ComputeBudget = FeatureMode.Enabled`.
 ///
 /// `blobs` is the composed `IBlobStorage`; when it also implements
 /// `IConditionalBlobStorage` the admission write becomes a cross-replica

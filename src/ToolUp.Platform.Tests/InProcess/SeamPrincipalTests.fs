@@ -35,9 +35,9 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.EntityTypes
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.IEntityStore
-open ToolUp.Platform.DataObjectStore
-open ToolUp.Platform.EntityStore
+open ToolUp.Platform.Infra.IEntityStore
+open ToolUp.Platform.Infra.DataObjectStore
+open ToolUp.Platform.Infra.EntityStore
 open ToolUp.Platform.Narrative
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Tests.Contracts.IEntityStoreContract
@@ -45,6 +45,8 @@ open ToolUp.Platform.Tests.Support.PrincipalRecordingEntityStore
 open ToolUp.PublicRendering
 open ToolUp.Reporting
 open ToolUp.Reporting.IReportTemplateStore
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ── Section A — the narrative publisher stamps the caller on the page row ──
 

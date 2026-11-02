@@ -4,6 +4,8 @@ open Microsoft.AspNetCore.Http
 open ToolUp.Platform
 open ToolUp.Platform.AI
 open ToolUp.AI
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
 /// A registered tool: metadata + executable function.
 /// The Execute function receives JSON arguments and HttpContext

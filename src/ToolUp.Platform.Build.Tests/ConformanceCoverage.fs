@@ -105,9 +105,17 @@ open System.Text.RegularExpressions
 let contractsDir (root: string) =
     Path.Combine(root, "src", "ToolUp.Platform.Tests", "Contracts")
 
-/// The repo-root FAKE script whose `BuildConfig.TestPacks` literal is the
-/// authoritative list of test projects `VerifyAll` runs.
-let buildScriptPath (root: string) = Path.Combine(root, "Build.fs")
+/// The repo-root file that lists the test projects `VerifyAll` runs: the
+/// gate manifest (`GateManifest.fs`, whose `pack` rows are the list) when
+/// the tree has one, else the FAKE script's `BuildConfig.TestPacks`
+/// literal (a consumer tree, or a fixture).
+let buildScriptPath (root: string) =
+    let manifest = Path.Combine(root, "GateManifest.fs")
+
+    if File.Exists manifest then
+        manifest
+    else
+        Path.Combine(root, "Build.fs")
 
 /// The committed ratchet baseline. It sits WITH the packs rather than
 /// with the gate: it is a statement about the contents of that
@@ -214,21 +222,23 @@ let bindingsIn (packNames: Set<string>) (sourceText: string) : string list =
     |> Seq.filter packNames.Contains
     |> List.ofSeq
 
-/// A `TestPack.create "<name>" "<path>.fsproj"` entry, tolerating the
-/// wrapped shape Fantomas gives a long entry (name and path on their own
-/// lines).
+/// A gate-manifest `pack "<name>" "<path>.fsproj"` row, or a
+/// `TestPack.create "<name>" "<path>.fsproj"` entry in a `Build.fs`,
+/// tolerating the wrapped shape Fantomas gives a long entry (name and
+/// path on their own lines).
 let private testPackEntry =
-    Regex(@"\bTestPack\.create\s+""[^""\n]*""\s+""(?<path>[^""\n]+\.fsproj)""", RegexOptions.Compiled)
+    Regex(@"\b(?:TestPack\.create|pack)\s+""[^""\n]*""\s+""(?<path>[^""\n]+\.fsproj)""", RegexOptions.Compiled)
 
-/// The project files (repo-relative, `/`-separated) of every
-/// `TestPack.create` entry in a `Build.fs` text — the set `VerifyAll`
-/// runs. `//` comments are stripped first, so a commented-out entry (a
-/// pack parked out of the gate) does not count as run.
+/// The project files (repo-relative, `/`-separated) of every pack row in
+/// a gate-manifest text, or every `TestPack.create` entry in a `Build.fs`
+/// text — the set `VerifyAll` runs. `//` comments are stripped first, so
+/// a commented-out entry (a pack parked out of the gate) does not count
+/// as run.
 ///
 /// Parsed rather than referenced: this module is source-linked into
 /// `Build.fsproj` itself, so it cannot take `Build.fs`'s `config` as a
 /// value, and the test project cannot reference the FAKE script at all.
-/// Reading the literal keeps ONE list authoritative — the one the gate
+/// Reading the one list keeps it authoritative — the one the gate
 /// executes — instead of a second hand-kept copy that drifts from it.
 let testPackProjectsIn (buildScriptText: string) : string list =
     let uncommented =
@@ -267,8 +277,8 @@ let private sourceFiles (root: string) =
 let private normalise (path: string) = path.Replace('\\', '/').TrimEnd('/')
 
 /// The directory (repo-relative, `/`-separated) of every test project
-/// `VerifyAll` runs, read from `Build.fs`. Empty when there is no
-/// `Build.fs` or it lists nothing — which the vacuity pins catch, rather
+/// `VerifyAll` runs, read from the gate manifest (or a `Build.fs`). Empty
+/// when there is neither or it lists nothing — which the vacuity pins catch, rather
 /// than a fallback that would quietly re-privilege one directory.
 let verifyAllProjectDirs (root: string) : string list =
     let path = buildScriptPath root

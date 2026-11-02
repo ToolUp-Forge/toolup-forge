@@ -10,8 +10,11 @@ open Npgsql
 open ToolUp.Platform
 open ToolUp.Platform.HealthChecks
 open ToolUp.Platform.VectorKnowledgeTypes
-open ToolUp.Platform.ISparseIndex
+open ToolUp.Platform.Infra.ISparseIndex
 open ToolUp.RAG.SparseAnalysis
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 893 — PostgreSQL full-text ISparseIndex ───────────────────
 //
@@ -366,7 +369,7 @@ LIMIT @top_k;"""
 
 /// `ISparseIndex` over a PostgreSQL table with a `tsvector` column and a
 /// GIN index. Construct through `create` / `createWithDataSource` (or
-/// `factory` for `RAGServerApp.withAnalyzedSparseIndex`), which validate the
+/// `factory` for `RagOptions.withAnalyzedSparseIndex`), which validate the
 /// options, resolve the text-search configuration and probe the database
 /// before returning.
 type PostgresFullTextIndex
@@ -465,7 +468,8 @@ type PostgresFullTextIndex
 
     /// Phase 964 — every replica searches the one table.
     interface ISparseIndexLocality with
-        member _.IndexLocality = Some ToolUp.Platform.IVectorStore.VectorIndexLocality.Shared
+        member _.IndexLocality =
+            Some ToolUp.Platform.Infra.IVectorStore.VectorIndexLocality.Shared
 
     interface ISparseIndex with
 
@@ -747,7 +751,7 @@ let create
         dataSource.Dispose()
         reraise ()
 
-/// The composition-time factory for `RAGServerApp.withAnalyzedSparseIndex`:
+/// The composition-time factory for `RagOptions.withAnalyzedSparseIndex`:
 /// the composition passes the analyzer it composed (the identity analyzer
 /// when none), and the index is built for it — or refused, naming it.
 let factory

@@ -1,4 +1,6 @@
-module ToolUp.Platform.IVectorStore
+module ToolUp.Platform.Infra.IVectorStore
+
+open ToolUp.Platform
 
 open System
 open ToolUp.Platform.VectorKnowledgeTypes

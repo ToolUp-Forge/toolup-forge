@@ -15,6 +15,8 @@ open ToolUp.Scheduling
 open ToolUp.Scheduling.SchedulingTypes
 open ToolUp.Scheduling.ICalendarBridge
 open ToolUp.Platform.ProviderExceptions
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 20a — the generic CalDAV calendar bridge ─────────────────
 //
@@ -193,7 +195,7 @@ let classifyStatus (status: HttpStatusCode) (body: string) : BridgeError =
 // ─── The bridge ─────────────────────────────────────────────────────
 
 /// Generic CalDAV `ICalendarBridge`. Construct one per deployment and
-/// compose it with `SchedulingServerApp.withCalendarBridge`.
+/// compose it with `SchedulingOptions.withCalendarBridge`.
 ///
 /// `handler` is the transport. The parameterless-transport constructor
 /// builds the platform's own egress-policy-wrapped client, which is

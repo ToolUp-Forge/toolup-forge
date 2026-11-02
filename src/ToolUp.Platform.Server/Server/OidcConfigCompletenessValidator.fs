@@ -1,8 +1,9 @@
-module ToolUp.Platform.OidcConfigCompletenessValidator
+module ToolUp.Platform.Scope.OidcConfigCompletenessValidator
 
 open System
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Config
 
 // ─── Gap #4 — OIDC config completeness (cascading-error fix) ────────
 //

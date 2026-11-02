@@ -3,7 +3,8 @@ module ToolUp.RAG.RagTelemetry
 open System
 open System.Collections.Concurrent
 open ToolUp.Platform
-open ToolUp.Platform.IRagTelemetry
+open ToolUp.Platform.Infra.IRagTelemetry
+open ToolUp.Platform.Infra
 
 // ─── No-op telemetry ──────────────────────────────────────────────
 

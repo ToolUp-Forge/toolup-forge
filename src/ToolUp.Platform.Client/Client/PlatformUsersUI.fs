@@ -40,7 +40,7 @@ open ToolUp.Platform
 //
 // **Opt-in / zero-cost (GP 11/13).** Injected only when
 // `ClientConfig.PlatformUsers = DefaultPlatformUsers`; the default
-// `NoPlatformUsers` omits it entirely. On a `NoTenantLifecycle` deployment
+// `NoPlatformUsers` omits it entirely. On a `FeatureMode.Disabled` deployment
 // the offboard endpoints 404, so the per-row actions surface an error
 // banner rather than a blank page — the list itself still renders.
 

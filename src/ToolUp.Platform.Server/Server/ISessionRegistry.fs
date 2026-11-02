@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-namespace ToolUp.Platform
+namespace ToolUp.Platform.Scope
+
+open ToolUp.Platform
 
 // ─── ISessionRegistry — Phase 528 ────────────────────────────────────
 //
@@ -76,7 +78,7 @@ namespace ToolUp.Platform
 open System
 
 /// Server-side session registry. One stateless component per
-/// deployment; composed only when `ServerConfig.SessionRegistry` selects
+/// deployment; composed only when `ServerConfig.Stores.SessionRegistry` selects
 /// a backend, so a deployment that does not opt in never resolves it and
 /// pays nothing (GP 13).
 type ISessionRegistry =

@@ -6,6 +6,7 @@ module ToolUp.AI.AIDenialRateMonitor
 open System
 open System.Collections.Concurrent
 open ToolUp.Platform
+open ToolUp.Platform.Infra
 
 // ─── Phase 47 — sustained action-denial rate alert ───────────────
 //
@@ -23,7 +24,7 @@ open ToolUp.Platform
 // hundreds, or the alert channel becomes the denial-of-service.
 //
 // **Opt-in, zero footprint when unused (GP 13).** No policy declared
-// (`AIServerApp.withDenialRateAlert` never called) → nothing is
+// (`AIOptions.withDenialRateAlert` never called) → nothing is
 // registered in DI, the agent loop's one `GetService` returns null, and
 // the deployment is byte-for-byte as it was.
 //
@@ -72,7 +73,7 @@ module AIDenialRateAlertPolicy =
     /// the denials occurred in.
     ///
     /// Not a default that applies anywhere by itself — a deployment
-    /// must call `AIServerApp.withDenialRateAlert` for any of this to
+    /// must call `AIOptions.withDenialRateAlert` for any of this to
     /// exist (GP 13). This value is the shape to start tuning from.
     let defaults = {
         Threshold = 20

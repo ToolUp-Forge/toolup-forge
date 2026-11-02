@@ -4,9 +4,10 @@
 // was already written in. Purely additive (GP 11): an explicit
 // `open ToolUp.PublicRendering.PublicRenderingCompose` still compiles, and
 // the qualified `PublicRenderingCompose.withPublicRendering …` spelling is
-// unaffected. The module's whole top-level surface is one record type, one
-// nested `PublicRenderingServerApp` module and `withPublicRendering`, so
-// nothing generically-named leaks into a consumer's scope.
+// unaffected. The module's whole top-level surface is the `PublicRenderingOptions`
+// record and module, the `PublicRenderingExport` module, the companion's id
+// and `withPublicRendering`, so nothing generically-named leaks into a
+// consumer's scope.
 [<AutoOpen>]
 module ToolUp.PublicRendering.PublicRenderingCompose
 
@@ -17,37 +18,46 @@ open Giraffe.ViewEngine
 open ToolUp.Platform
 open ToolUp.Platform.Auth
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.BlobEncryption
-open ToolUp.Platform.IEntityStore
-open ToolUp.Platform.Server
+open ToolUp.Platform.Infra.BlobEncryption
+open ToolUp.Platform.Infra.IEntityStore
+open ToolUp.Platform.Compose.Server
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
-// ─── Phase 38 — PublicRenderingServerApp composition root ───────────
+// ─── The public-rendering companion: `PublicRenderingOptions` + `withPublicRendering`
 //
-// `PublicRenderingServerApp` mirrors `FormsServerApp` / `AIServerApp`
-// shape: it wraps a base `ServerApp` and adds `with*` helpers for
+// Public rendering is a companion composed onto a `ServerApp`, not a
+// record that wraps one. `PublicRenderingOptions` holds the
 // public-rendering-specific compose-time registrations (layouts,
-// redirects, JSON-LD builders, content-api override, hot-reload toggle).
+// redirects, JSON-LD builders, content-api override, hot-reload toggle);
+// `withPublicRendering options` registers the companion with
+// `ServerApp.withCompanion`, so it is applied once, when the deployment
+// resolves, to the deployment as every builder left it.
 //
 // **Required substrate**: none, beyond what `ServerApp` itself needs.
 // The companion is self-contained — it brings its own
-// `MarkdownContentLoader` + `PublicContentApiImpl` and mounts handlers
-// onto the SDK's route chain via `ComposeExtensions.Handlers`.
+// `MarkdownContentLoader` + `PublicContentApiImpl` and contributes its
+// handlers to the SDK's route chain.
 //
-// **Strip-imports guarantee**: when
-// `ServerConfig.PublicRendering = NoPublicRendering`, `run` short-
-// circuits to `ServerApp.run app.Base` — no DI registrations, no
-// handlers, no hosted services. Byte-for-byte equivalent to a base
-// `ServerApp.run` of the same `Base`.
+// **Strip-imports guarantee**: when the resolved
+// `ServerConfig.PublicRendering = NoPublicRendering`, the companion
+// contributes nothing — no DI registrations, no handlers, no hosted
+// services.
 
-/// Record form of compose arguments. Wraps a base `ServerApp` and
-/// carries compose-time-registered maps for layouts, redirects, and
-/// JSON-LD builders. The required `ContentRoot` comes from
-/// `ServerConfig.PublicRendering` (set via `withConfig`); the
-/// architecture deliberately reads it from `ServerConfig` rather than
-/// a separate field on this record so a single `ServerConfig.defaults`
-/// override controls the strip-imports gate.
-type PublicRenderingServerApp = {
-    Base: ServerApp
+/// The public-rendering companion's identity: the slot
+/// `withPublicRendering` composes under and the owner of its contributions.
+let publicRenderingCompanion: ComponentId =
+    ComponentId.forCompanionSlot "ToolUp.PublicRendering"
+
+/// What the public-rendering companion composes: compose-time-registered
+/// maps for layouts, redirects, and JSON-LD builders. The required
+/// `ContentRoot` comes from the resolved `ServerConfig.PublicRendering`;
+/// the architecture deliberately reads it from `ServerConfig` rather than
+/// a separate field on this record so a single `ServerConfig` override
+/// controls the strip-imports gate.
+type PublicRenderingOptions = {
     /// Compose-time-registered layouts keyed by `LayoutName`. The
     /// page's `Layout` field selects one; a page naming none takes
     /// `DefaultLayout`. A name nobody registered is refused (Phase 1039,
@@ -253,18 +263,10 @@ type PublicRenderingServerApp = {
     RenderCoalescer: IRenderCoalescer option
 }
 
-module PublicRenderingServerApp =
+module PublicRenderingOptions =
 
-    /// Phase 80c composition seam — lift an existing `ServerApp` into a
-    /// `PublicRenderingServerApp` so the additive
-    /// `PublicRenderingCompose.withPublicRendering` extension can stack
-    /// public-rendering contributions onto whatever the input
-    /// `ServerApp` already carries. The input `ServerApp` becomes the
-    /// `Base` field; all public-rendering-specific fields initialise
-    /// empty (the configurator passed to `withPublicRendering`
-    /// populates them via `withLayout` / `withRedirects` / etc.).
-    let createFrom (baseApp: ServerApp) : PublicRenderingServerApp = {
-        Base = baseApp
+    /// No layouts, redirects, builders or feeds; every knob at its default.
+    let create () : PublicRenderingOptions = {
         Layouts = Map.empty
         DefaultLayout = None
         Redirects = []
@@ -297,103 +299,6 @@ module PublicRenderingServerApp =
         RenderCoalescer = None
     }
 
-    /// A `PublicRenderingServerApp` over an empty base `ServerApp`.
-    let create () : PublicRenderingServerApp = createFrom ServerApp.empty
-
-    // ─── Delegating helpers (mirror every `ServerApp.with*`) ─────
-
-    let withConfig (c: ServerConfig) (app: PublicRenderingServerApp) : PublicRenderingServerApp = {
-        app with
-            Base = ServerApp.withConfig c app.Base
-    }
-
-    let withAuth (a: IAuthProvider) (app: PublicRenderingServerApp) : PublicRenderingServerApp = {
-        app with
-            Base = ServerApp.withAuth a app.Base
-    }
-
-    let withLogger (l: ILogger) (app: PublicRenderingServerApp) : PublicRenderingServerApp = {
-        app with
-            Base = ServerApp.withLogger l app.Base
-    }
-
-    let withStorage (s: IBlobStorage) (app: PublicRenderingServerApp) : PublicRenderingServerApp = {
-        app with
-            Base = ServerApp.withStorage s app.Base
-    }
-
-    let withNotifications (n: INotificationChannel) (app: PublicRenderingServerApp) : PublicRenderingServerApp = {
-        app with
-            Base = ServerApp.withNotifications n app.Base
-    }
-
-    let withTransactionalSink (sink: INotificationSink) (app: PublicRenderingServerApp) : PublicRenderingServerApp = {
-        app with
-            Base = ServerApp.withTransactionalSink sink app.Base
-    }
-
-    let withHealthCheck (check: HealthChecks.IHealthCheck) (app: PublicRenderingServerApp) : PublicRenderingServerApp = {
-        app with
-            Base = ServerApp.withHealthCheck check app.Base
-    }
-
-    let withConfigValidator
-        (validator: ConfigValidation.IConfigValidator)
-        (app: PublicRenderingServerApp)
-        : PublicRenderingServerApp =
-        {
-            app with
-                Base = ServerApp.withConfigValidator validator app.Base
-        }
-
-    let withEncryptedBlobStorage
-        (resolver: IBlobEncryptionKeyResolver)
-        (app: PublicRenderingServerApp)
-        : PublicRenderingServerApp =
-        {
-            app with
-                Base = ServerApp.withEncryptedBlobStorage resolver app.Base
-        }
-
-    let withEntity<'T>
-        (registration: EntityTypes.EntityRegistration<'T>)
-        (app: PublicRenderingServerApp)
-        : PublicRenderingServerApp =
-        {
-            app with
-                Base = ServerApp.withEntity registration app.Base
-        }
-
-    let withPreMiddleware
-        (f: IApplicationBuilder -> IApplicationBuilder)
-        (app: PublicRenderingServerApp)
-        : PublicRenderingServerApp =
-        {
-            app with
-                Base = ServerApp.withPreMiddleware f app.Base
-        }
-
-    let withPostMiddleware
-        (f: IApplicationBuilder -> IApplicationBuilder)
-        (app: PublicRenderingServerApp)
-        : PublicRenderingServerApp =
-        {
-            app with
-                Base = ServerApp.withPostMiddleware f app.Base
-        }
-
-    let addModule (m: ServerModule) (app: PublicRenderingServerApp) : PublicRenderingServerApp = {
-        app with
-            Base = ServerApp.addModule m app.Base
-    }
-
-    let addModules (modules: ServerModule list) (app: PublicRenderingServerApp) : PublicRenderingServerApp = {
-        app with
-            Base = ServerApp.addModules modules app.Base
-    }
-
-    // ─── Public-rendering-specific helpers ───────────────────────
-
     /// Register a layout function. At least one layout must be
     /// registered when `PublicRendering = EnabledPublicRendering`. A page
     /// naming a layout nobody registered is refused, never framed by
@@ -402,19 +307,19 @@ module PublicRenderingServerApp =
     let withLayout
         (name: LayoutName)
         (layout: PublicPage -> XmlNode)
-        (app: PublicRenderingServerApp)
-        : PublicRenderingServerApp =
+        (options: PublicRenderingOptions)
+        : PublicRenderingOptions =
         {
-            app with
-                Layouts = Map.add name layout app.Layouts
+            options with
+                Layouts = Map.add name layout options.Layouts
         }
 
     /// Phase 1039 — declare the layout a page naming none is framed in.
     /// Required once two or more layouts are registered; the name must be
     /// registered (by `withLayout` / `withFelizLayout`, in any order) or
     /// compose raises `LayoutRefusedException`.
-    let withDefaultLayout (name: LayoutName) (app: PublicRenderingServerApp) : PublicRenderingServerApp = {
-        app with
+    let withDefaultLayout (name: LayoutName) (options: PublicRenderingOptions) : PublicRenderingOptions = {
+        options with
             DefaultLayout = Some name
     }
 
@@ -429,16 +334,16 @@ module PublicRenderingServerApp =
     let withFelizLayout
         (name: LayoutName)
         (layout: PublicPage -> Feliz.ViewEngine.ReactElement)
-        (app: PublicRenderingServerApp)
-        : PublicRenderingServerApp =
-        withLayout name (FelizLayout.toGiraffe layout) app
+        (options: PublicRenderingOptions)
+        : PublicRenderingOptions =
+        withLayout name (FelizLayout.toGiraffe layout) options
 
     /// Register additional redirects (in addition to whatever is
     /// loaded from `<contentRoot>/redirects.csv` at startup).
     /// File-loaded entries take precedence on duplicate `From`.
-    let withRedirects (redirects: Redirect list) (app: PublicRenderingServerApp) : PublicRenderingServerApp = {
-        app with
-            Redirects = app.Redirects @ redirects
+    let withRedirects (redirects: Redirect list) (options: PublicRenderingOptions) : PublicRenderingOptions = {
+        options with
+            Redirects = options.Redirects @ redirects
     }
 
     /// Register a JSON-LD builder by name. Built-ins (`article` /
@@ -448,11 +353,11 @@ module PublicRenderingServerApp =
     let withStructuredDataBuilder
         (name: string)
         (builder: PublicPage -> string)
-        (app: PublicRenderingServerApp)
-        : PublicRenderingServerApp =
+        (options: PublicRenderingOptions)
+        : PublicRenderingOptions =
         {
-            app with
-                StructuredDataBuilders = Map.add name builder app.StructuredDataBuilders
+            options with
+                StructuredDataBuilders = Map.add name builder options.StructuredDataBuilders
         }
 
     /// Supply an explicit `IPublicContentApi` impl. The default
@@ -461,8 +366,8 @@ module PublicRenderingServerApp =
     /// `ServerConfig.PublicRendering`. Use this hook to wrap the
     /// default with an `IEntityStore<PublicPage>` overlay or
     /// substitute a custom backing store entirely.
-    let withContentApi (api: IPublicContentApi) (app: PublicRenderingServerApp) : PublicRenderingServerApp = {
-        app with
+    let withContentApi (api: IPublicContentApi) (options: PublicRenderingOptions) : PublicRenderingOptions = {
+        options with
             ContentApiOverride = Some api
     }
 
@@ -472,8 +377,8 @@ module PublicRenderingServerApp =
     /// can publish — either by composing `withAIPublishAuthoriser`
     /// alongside this toggle, or by accepting that every AI user in
     /// the deployment can write to the public-page surface.
-    let withAIPublishEnabled (enabled: bool) (app: PublicRenderingServerApp) : PublicRenderingServerApp = {
-        app with
+    let withAIPublishEnabled (enabled: bool) (options: PublicRenderingOptions) : PublicRenderingOptions = {
+        options with
             AIPublishEnabled = enabled
     }
 
@@ -486,10 +391,10 @@ module PublicRenderingServerApp =
     /// must be set for gated publish to work.
     let withAIPublishAuthoriser
         (authoriser: Microsoft.AspNetCore.Http.HttpContext -> Async<bool>)
-        (app: PublicRenderingServerApp)
-        : PublicRenderingServerApp =
+        (options: PublicRenderingOptions)
+        : PublicRenderingOptions =
         {
-            app with
+            options with
                 AIPublishAuthoriser = Some(AIPublishAuthoriser authoriser)
         }
 
@@ -503,10 +408,10 @@ module PublicRenderingServerApp =
     /// (GP 11) when not set.
     let withAIPublishGuardrails
         (guardrails: NarrativePublishGuardrails)
-        (app: PublicRenderingServerApp)
-        : PublicRenderingServerApp =
+        (options: PublicRenderingOptions)
+        : PublicRenderingOptions =
         {
-            app with
+            options with
                 AIPublishGuardrails = guardrails
         }
 
@@ -516,9 +421,9 @@ module PublicRenderingServerApp =
     /// surface every Narrative-bodied page matching the
     /// `Collection` filter, sorted by `PublishedAt` descending,
     /// capped at `MaxEntries`.
-    let withFeed (config: NarrativeFeedConfig) (app: PublicRenderingServerApp) : PublicRenderingServerApp = {
-        app with
-            Feeds = app.Feeds @ [ config ]
+    let withFeed (config: NarrativeFeedConfig) (options: PublicRenderingOptions) : PublicRenderingOptions = {
+        options with
+            Feeds = options.Feeds @ [ config ]
     }
 
     /// Phase 97 — register a per-tag Atom feed: the taxonomy-axis
@@ -528,9 +433,9 @@ module PublicRenderingServerApp =
     let withTagFeed
         (tag: string)
         (config: NarrativeFeedConfig)
-        (app: PublicRenderingServerApp)
-        : PublicRenderingServerApp =
-        withFeed { config with Tag = Some tag } app
+        (options: PublicRenderingOptions)
+        : PublicRenderingOptions =
+        withFeed { config with Tag = Some tag } options
 
     /// Phase 97 — register one per-tag feed for each tag in `tags` (the
     /// whole-taxonomy fan-out). Each feed is served at
@@ -540,8 +445,8 @@ module PublicRenderingServerApp =
         (baseTitle: string)
         (template: NarrativeFeedConfig)
         (tags: string list)
-        (app: PublicRenderingServerApp)
-        : PublicRenderingServerApp =
+        (options: PublicRenderingOptions)
+        : PublicRenderingOptions =
         tags
         |> List.fold
             (fun acc tag ->
@@ -553,7 +458,7 @@ module PublicRenderingServerApp =
                             SelfUrl = sprintf "/tag/%s/feed.atom" tag
                     }
                     acc)
-            app
+            options
 
     /// Phase 83 — register a request-time `IContentSource`. The default
     /// impl consults registered sources after the file + entity-overlay
@@ -568,9 +473,9 @@ module PublicRenderingServerApp =
     /// calls is byte-for-byte identical to the pre-83 file+overlay chain.
     /// Ignored when `withContentApi` supplies an explicit
     /// `IPublicContentApi` — a custom content API owns its own resolution.
-    let withContentSource (source: IContentSource) (app: PublicRenderingServerApp) : PublicRenderingServerApp = {
-        app with
-            ContentSources = app.ContentSources @ [ source ]
+    let withContentSource (source: IContentSource) (options: PublicRenderingOptions) : PublicRenderingOptions = {
+        options with
+            ContentSources = options.ContentSources @ [ source ]
     }
 
     /// Phase 100 — enable the `/tag/{slug}` taxonomy surface with no
@@ -579,26 +484,29 @@ module PublicRenderingServerApp =
     /// automatically (the wiring deferred in Phase 90). No-op when the
     /// deployment supplies its own `IPublicContentApi` via `withContentApi`
     /// (that impl owns its own resolution).
-    let withTaxonomy (app: PublicRenderingServerApp) : PublicRenderingServerApp = { app with TaxonomyEnabled = true }
+    let withTaxonomy (options: PublicRenderingOptions) : PublicRenderingOptions = {
+        options with
+            TaxonomyEnabled = true
+    }
 
     /// Phase 100 — load a `nav.yaml` file at compose time and register the
     /// parsed tree as a `NavCatalog` DI singleton (resolvable by content
     /// sources / custom handlers). The tree is also stored on the record
-    /// (`app.Nav`) so a compose-time consumer can capture it for a layout.
+    /// (`options.Nav`) so a compose-time consumer can capture it for a layout.
     /// A missing / empty file registers an empty nav (no error).
-    let withNav (navYamlPath: string) (app: PublicRenderingServerApp) : PublicRenderingServerApp =
+    let withNav (navYamlPath: string) (options: PublicRenderingOptions) : PublicRenderingOptions =
         let nav =
             if System.IO.File.Exists navYamlPath then
                 NavTree.parseYaml (System.IO.File.ReadAllText navYamlPath)
             else
                 []
 
-        { app with Nav = nav }
+        { options with Nav = nav }
 
     /// Phase 100 — register a pre-parsed nav tree directly (when the
     /// consumer built it in code rather than from a `nav.yaml` file).
-    let withNavTree (nav: NavNode list) (app: PublicRenderingServerApp) : PublicRenderingServerApp = {
-        app with
+    let withNavTree (nav: NavNode list) (options: PublicRenderingOptions) : PublicRenderingOptions = {
+        options with
             Nav = nav
     }
 
@@ -613,8 +521,8 @@ module PublicRenderingServerApp =
     /// Off by default (GP 11 / GP 13): a pipeline that never calls this has
     /// no `/search` route. Even when composed, the route declines (falls
     /// through to 404) when no `IRetrievalPipeline` is registered.
-    let withSemanticSearch (config: SemanticSearchConfig) (app: PublicRenderingServerApp) : PublicRenderingServerApp = {
-        app with
+    let withSemanticSearch (config: SemanticSearchConfig) (options: PublicRenderingOptions) : PublicRenderingOptions = {
+        options with
             SemanticSearch = Some config
     }
 
@@ -633,11 +541,11 @@ module PublicRenderingServerApp =
     /// content-source pages with no frontmatter).
     ///
     ///     // single-instance:
-    ///     |> PublicRenderingServerApp.withRenderCache (InMemoryRenderCache.create ())
+    ///     |> PublicRenderingOptions.withRenderCache (InMemoryRenderCache.create ())
     ///     // multi-instance (shared blob container):
-    ///     |> PublicRenderingServerApp.withRenderCache (BlobRenderCache.create storage)
-    let withRenderCache (cache: IRenderCache) (app: PublicRenderingServerApp) : PublicRenderingServerApp = {
-        app with
+    ///     |> PublicRenderingOptions.withRenderCache (BlobRenderCache.create storage)
+    let withRenderCache (cache: IRenderCache) (options: PublicRenderingOptions) : PublicRenderingOptions = {
+        options with
             RenderCache = Some cache
     }
 
@@ -648,8 +556,8 @@ module PublicRenderingServerApp =
     /// uncached-by-frontmatter page for 5 minutes with
     /// stale-while-revalidate. No effect unless `withRenderCache` is also
     /// composed. Defaults to `NoCache` (pure per-request).
-    let withRenderCacheDefaultPolicy (policy: CachePolicy) (app: PublicRenderingServerApp) : PublicRenderingServerApp = {
-        app with
+    let withRenderCacheDefaultPolicy (policy: CachePolicy) (options: PublicRenderingOptions) : PublicRenderingOptions = {
+        options with
             RenderCacheDefaultPolicy = policy
     }
 
@@ -662,10 +570,10 @@ module PublicRenderingServerApp =
     /// invalidator object owns it.
     let withRenderCacheInvalidation
         (invalidator: IRenderCacheInvalidation)
-        (app: PublicRenderingServerApp)
-        : PublicRenderingServerApp =
+        (options: PublicRenderingOptions)
+        : PublicRenderingOptions =
         {
-            app with
+            options with
                 RenderCacheInvalidation = Some invalidator
         }
 
@@ -685,8 +593,8 @@ module PublicRenderingServerApp =
     /// `NoopEdgeCache.create ()` composes the declared no-op, which is
     /// free (GP 13) and useful as an explicit statement that this
     /// deployment has no edge.
-    let withEdgeCache (edgeCache: IEdgeCache) (app: PublicRenderingServerApp) : PublicRenderingServerApp = {
-        app with
+    let withEdgeCache (edgeCache: IEdgeCache) (options: PublicRenderingOptions) : PublicRenderingOptions = {
+        options with
             EdgeCache = Some edgeCache
     }
 
@@ -695,10 +603,10 @@ module PublicRenderingServerApp =
     /// Ignored unless `withEdgeCache` is also composed.
     let withEdgeCachePathsForSlug
         (pathsForSlug: string -> string list)
-        (app: PublicRenderingServerApp)
-        : PublicRenderingServerApp =
+        (options: PublicRenderingOptions)
+        : PublicRenderingOptions =
         {
-            app with
+            options with
                 EdgeCachePathsForSlug = Some pathsForSlug
         }
 
@@ -711,8 +619,8 @@ module PublicRenderingServerApp =
     /// coalescer (e.g. a Redis lock keyed by `RenderKey`) so a cold key is
     /// rendered once across the whole fleet, not once per replica. No effect
     /// unless `withRenderCache` is also composed.
-    let withRenderCoalescer (coalescer: IRenderCoalescer) (app: PublicRenderingServerApp) : PublicRenderingServerApp = {
-        app with
+    let withRenderCoalescer (coalescer: IRenderCoalescer) (options: PublicRenderingOptions) : PublicRenderingOptions = {
+        options with
             RenderCoalescer = Some coalescer
     }
 
@@ -730,8 +638,8 @@ module PublicRenderingServerApp =
     /// emits validators. Uses `ConditionalGetSettings.defaults`
     /// (`Cache-Control: public, max-age=0, must-revalidate`); use
     /// `withConditionalGetCacheControl` for a custom `Cache-Control`.
-    let withConditionalGet (app: PublicRenderingServerApp) : PublicRenderingServerApp = {
-        app with
+    let withConditionalGet (options: PublicRenderingOptions) : PublicRenderingOptions = {
+        options with
             ConditionalGet = Some ConditionalGetSettings.defaults
     }
 
@@ -740,10 +648,10 @@ module PublicRenderingServerApp =
     /// let edges hold the page for 5 minutes between revalidations).
     let withConditionalGetCacheControl
         (cacheControl: string)
-        (app: PublicRenderingServerApp)
-        : PublicRenderingServerApp =
+        (options: PublicRenderingOptions)
+        : PublicRenderingOptions =
         {
-            app with
+            options with
                 ConditionalGet = Some { CacheControl = cacheControl }
         }
 
@@ -763,15 +671,15 @@ module PublicRenderingServerApp =
     /// sitemap can never disagree.
     ///
     ///     // single-instance, host + key derived automatically:
-    ///     |> PublicRenderingServerApp.withIndexNow
+    ///     |> PublicRenderingOptions.withIndexNow
     ///         { IndexNowOptions.enabled with Host = Some "example.com" }
     ///     // multi-instance (shared blob-backed resume state):
-    ///     |> PublicRenderingServerApp.withIndexNow
+    ///     |> PublicRenderingOptions.withIndexNow
     ///         { IndexNowOptions.enabled with
     ///             StateStore = Some(BlobIndexNowStateStore.create storage) }
-    let withIndexNow (options: IndexNowOptions) (app: PublicRenderingServerApp) : PublicRenderingServerApp = {
-        app with
-            IndexNow = options
+    let withIndexNow (indexNow: IndexNowOptions) (options: PublicRenderingOptions) : PublicRenderingOptions = {
+        options with
+            IndexNow = indexNow
     }
 
     /// Phase 114 — register a satellite website served by this instance.
@@ -782,7 +690,7 @@ module PublicRenderingServerApp =
     /// composition — serve the default (`ServerConfig`-level) site
     /// unchanged (GP 11). Call once per site:
     ///
-    ///     |> PublicRenderingServerApp.withSite
+    ///     |> PublicRenderingOptions.withSite
     ///         (PublicSite.create "docs" [ "docs.example.com" ]
     ///             "https://docs.example.com" (ContentRoot docsContent))
     ///
@@ -790,9 +698,9 @@ module PublicRenderingServerApp =
     /// + `redirects.csv`); entity overlay, content sources, search,
     /// taxonomy, and AI publish remain default-site surfaces (Atom
     /// feeds went per-site in Phase 115 via `PublicSiteDef.Feeds`).
-    let withSite (site: PublicSiteDef) (app: PublicRenderingServerApp) : PublicRenderingServerApp = {
-        app with
-            Sites = app.Sites @ [ site ]
+    let withSite (site: PublicSiteDef) (options: PublicRenderingOptions) : PublicRenderingOptions = {
+        options with
+            Sites = options.Sites @ [ site ]
     }
 
     /// Phase 148 — emit a self-referencing `<link rel="canonical">` for
@@ -810,7 +718,10 @@ module PublicRenderingServerApp =
     /// emits before `</head>` — so the tag reaches the wire without editing
     /// any layout. Off by default (GP 11): a pipeline that never calls this
     /// renders byte-for-byte the pre-148 head output.
-    let withSelfCanonical (app: PublicRenderingServerApp) : PublicRenderingServerApp = { app with SelfCanonical = true }
+    let withSelfCanonical (options: PublicRenderingOptions) : PublicRenderingOptions = {
+        options with
+            SelfCanonical = true
+    }
 
     /// Phase 149 — opt into the sitemap response cache: the `/sitemap.xml`
     /// handler memoises its generated XML body keyed on the universe digest,
@@ -823,8 +734,8 @@ module PublicRenderingServerApp =
     /// rebuilds the body per request, byte-for-byte pre-149. The cached body
     /// is byte-identical to the uncached one. Applies to the default site;
     /// each satellite site gets its own cache instance.
-    let withSitemapResponseCache (app: PublicRenderingServerApp) : PublicRenderingServerApp = {
-        app with
+    let withSitemapResponseCache (options: PublicRenderingOptions) : PublicRenderingOptions = {
+        options with
             SitemapResponseCache = true
     }
 
@@ -836,10 +747,10 @@ module PublicRenderingServerApp =
     /// shards and the static export.
     let withSitemapDefaultLastmod
         (date: System.DateTimeOffset)
-        (app: PublicRenderingServerApp)
-        : PublicRenderingServerApp =
+        (options: PublicRenderingOptions)
+        : PublicRenderingOptions =
         {
-            app with
+            options with
                 SitemapDefaultLastmod = Some date
         }
 
@@ -848,8 +759,8 @@ module PublicRenderingServerApp =
     /// Defaults to 50,000 (the sitemaps.org per-file cap). Below the
     /// threshold the sitemap stays a single `<urlset>`, byte-for-byte
     /// pre-150.
-    let withSitemapShardThreshold (threshold: int) (app: PublicRenderingServerApp) : PublicRenderingServerApp = {
-        app with
+    let withSitemapShardThreshold (threshold: int) (options: PublicRenderingOptions) : PublicRenderingOptions = {
+        options with
             SitemapShardThreshold = threshold
     }
 
@@ -858,8 +769,8 @@ module PublicRenderingServerApp =
     /// child sitemap) instead of blind numeric slices. `keyOf slug` names
     /// the shard a slug belongs to (e.g. the first path segment). Only takes
     /// effect past the threshold.
-    let withSitemapClusterKey (keyOf: Slug -> string) (app: PublicRenderingServerApp) : PublicRenderingServerApp = {
-        app with
+    let withSitemapClusterKey (keyOf: Slug -> string) (options: PublicRenderingOptions) : PublicRenderingOptions = {
+        options with
             SitemapClusterKey = Some keyOf
     }
 
@@ -884,8 +795,8 @@ module PublicRenderingServerApp =
     /// pre-737 workaround (`sitemap: exclude` alongside `robots: noindex`)
     /// keeps working — the two mechanisms are a union of exclusions, so
     /// adopting the flag needs no content edit.
-    let withSitemapNoindexExclusion (app: PublicRenderingServerApp) : PublicRenderingServerApp = {
-        app with
+    let withSitemapNoindexExclusion (options: PublicRenderingOptions) : PublicRenderingOptions = {
+        options with
             SitemapExcludeNoindex = true
     }
 
@@ -893,15 +804,15 @@ module PublicRenderingServerApp =
     /// default config (`/search-index.json` over the file-backed universe).
     /// Off by default → no endpoint (GP 11 / GP 13). Per-site aware: under a
     /// `SiteRegistry` each site indexes its own universe.
-    let withSearchIndex (app: PublicRenderingServerApp) : PublicRenderingServerApp = {
-        app with
+    let withSearchIndex (options: PublicRenderingOptions) : PublicRenderingOptions = {
+        options with
             SearchIndex = Some SearchIndexConfig.defaults
     }
 
     /// Phase 157 — mount the search-index endpoint with an explicit config
     /// (custom path / `Cache-Control` / consumer `EntrySource`).
-    let withSearchIndexConfig (config: SearchIndexConfig) (app: PublicRenderingServerApp) : PublicRenderingServerApp = {
-        app with
+    let withSearchIndexConfig (config: SearchIndexConfig) (options: PublicRenderingOptions) : PublicRenderingOptions = {
+        options with
             SearchIndex = Some config
     }
 
@@ -909,1135 +820,1092 @@ module PublicRenderingServerApp =
     /// Production deployments typically set `false` since content
     /// is baked at deploy time and a long-lived watcher leaks file
     /// handles on read-only file systems.
-    let withHotReload (enabled: bool) (app: PublicRenderingServerApp) : PublicRenderingServerApp = {
-        app with
+    let withHotReload (enabled: bool) (options: PublicRenderingOptions) : PublicRenderingOptions = {
+        options with
             HotReload = enabled
     }
 
-    // ─── Preflight validators (Investigate-gaps #5 + #8) ───────────────
+// ─── Preflight validators (Investigate-gaps #5 + #8) ───────────────
 
-    /// Warn when an in-process `InMemoryRenderCache` is composed on a
-    /// declared multi-instance deployment (`ReplicaCount > 1`). The
-    /// cache dict is process-local, so each replica caches and
-    /// invalidates SSR pages independently — one replica can serve stale
-    /// HTML while another serves fresh, and a CMS slug-purge only clears
-    /// the replica that handled it. Warning (not Error): a deployment may
-    /// knowingly run a per-replica cache. Compose
-    /// `BlobRenderCache.create storage` to share the cache across replicas.
-    type private RenderCacheInstanceValidator(usingInMemory: bool, replicaCount: int) =
-        interface ConfigValidation.IConfigValidator with
-            member _.Name = "public-rendering-render-cache-instance"
-            member _.Timeout = ConfigValidation.IConfigValidator.defaultTimeout
+/// Warn when an in-process `InMemoryRenderCache` is composed on a
+/// declared multi-instance deployment (`ReplicaCount > 1`). The
+/// cache dict is process-local, so each replica caches and
+/// invalidates SSR pages independently — one replica can serve stale
+/// HTML while another serves fresh, and a CMS slug-purge only clears
+/// the replica that handled it. Warning (not Error): a deployment may
+/// knowingly run a per-replica cache. Compose
+/// `BlobRenderCache.create storage` to share the cache across replicas.
+type private RenderCacheInstanceValidator(usingInMemory: bool, replicaCount: int) =
+    interface ConfigValidation.IConfigValidator with
+        member _.Name = "public-rendering-render-cache-instance"
+        member _.Timeout = ConfigValidation.IConfigValidator.defaultTimeout
 
-            member _.Validate() = async {
-                if usingInMemory && replicaCount > 1 then
-                    return
-                        ConfigValidation.Warning(
-                            sprintf
-                                "PublicRendering is composed with the in-process InMemoryRenderCache and ServerConfig.ReplicaCount = %d. The cache is process-local: each replica caches and invalidates SSR pages independently — one replica can serve stale HTML while another serves fresh, and a CMS slug-purge only clears the replica that handled it. Compose BlobRenderCache.create storage (shared across replicas) for multi-instance deployments."
-                                replicaCount
-                        )
-                else
-                    return ConfigValidation.Ok
-            }
+        member _.Validate() = async {
+            if usingInMemory && replicaCount > 1 then
+                return
+                    ConfigValidation.Warning(
+                        sprintf
+                            "PublicRendering is composed with the in-process InMemoryRenderCache and ServerConfig.MultiInstance.ReplicaCount = %d. The cache is process-local: each replica caches and invalidates SSR pages independently — one replica can serve stale HTML while another serves fresh, and a CMS slug-purge only clears the replica that handled it. Compose BlobRenderCache.create storage (shared across replicas) for multi-instance deployments."
+                            replicaCount
+                    )
+            else
+                return ConfigValidation.Ok
+        }
 
-    /// Reject a non-positive sitemap shard threshold at startup. A
-    /// `withSitemapShardThreshold 0` (or negative) is silently accepted
-    /// at compose and only defensively clamped (`max 1`) at request time,
-    /// so the misconfiguration is invisible until a crawler hits
-    /// `/sitemap.xml`. Error: a non-positive threshold is never intended.
-    type private SitemapShardThresholdValidator(threshold: int) =
-        interface ConfigValidation.IConfigValidator with
-            member _.Name = "public-rendering-sitemap-shard-threshold"
-            member _.Timeout = ConfigValidation.IConfigValidator.defaultTimeout
+/// Reject a non-positive sitemap shard threshold at startup. A
+/// `withSitemapShardThreshold 0` (or negative) is silently accepted
+/// at compose and only defensively clamped (`max 1`) at request time,
+/// so the misconfiguration is invisible until a crawler hits
+/// `/sitemap.xml`. Error: a non-positive threshold is never intended.
+type private SitemapShardThresholdValidator(threshold: int) =
+    interface ConfigValidation.IConfigValidator with
+        member _.Name = "public-rendering-sitemap-shard-threshold"
+        member _.Timeout = ConfigValidation.IConfigValidator.defaultTimeout
 
-            member _.Validate() = async {
-                if threshold <= 0 then
-                    return
-                        ConfigValidation.Error(
-                            sprintf
-                                "PublicRenderingServerApp.withSitemapShardThreshold was set to %d. The shard threshold is the URL count above which sitemap.xml becomes a sitemap-index; it must be a positive integer (the sitemaps.org per-file cap is 50,000). Set a positive value or leave the default."
-                                threshold
-                        )
-                else
-                    return ConfigValidation.Ok
-            }
+        member _.Validate() = async {
+            if threshold <= 0 then
+                return
+                    ConfigValidation.Error(
+                        sprintf
+                            "PublicRenderingOptions.withSitemapShardThreshold was set to %d. The shard threshold is the URL count above which sitemap.xml becomes a sitemap-index; it must be a positive integer (the sitemaps.org per-file cap is 50,000). Set a positive value or leave the default."
+                            threshold
+                    )
+            else
+                return ConfigValidation.Ok
+        }
 
-    /// Phase 1039 — every published, public file-tier page names a
-    /// registered layout (or none, with a default to take). Error: such a
-    /// page would 500 on every request. It reads the gated enumeration
-    /// (`ListPagesPublic`, Phase 632), so a draft or an audience-gated page
-    /// is not checked here; it, and every page a request-time source
-    /// produces, is refused per request by the handlers instead.
-    type private LayoutNameResolvedValidator
-        (root: ContentRoot, layouts: Map<LayoutName, PublicPage -> XmlNode>, logger: ILogger) =
-        interface ConfigValidation.IConfigValidator with
-            member _.Name = "public-rendering-layout-name-resolved"
-            member _.Timeout = ConfigValidation.IConfigValidator.defaultTimeout
+/// Phase 1039 — every published, public file-tier page names a
+/// registered layout (or none, with a default to take). Error: such a
+/// page would 500 on every request. It reads the gated enumeration
+/// (`ListPagesPublic`, Phase 632), so a draft or an audience-gated page
+/// is not checked here; it, and every page a request-time source
+/// produces, is refused per request by the handlers instead.
+type private LayoutNameResolvedValidator
+    (root: ContentRoot, layouts: Map<LayoutName, PublicPage -> XmlNode>, logger: ILogger) =
+    interface ConfigValidation.IConfigValidator with
+        member _.Name = "public-rendering-layout-name-resolved"
+        member _.Timeout = ConfigValidation.IConfigValidator.defaultTimeout
 
-            member _.Validate() = async {
-                use loader = new MarkdownContentLoader(root, logger, hotReload = false)
-                let api = PublicContentApiImpl.create loader None []
-                let! pages = api.ListPagesPublic(System.DateTimeOffset.UtcNow, "")
+        member _.Validate() = async {
+            use loader = new MarkdownContentLoader(root, logger, hotReload = false)
+            let api = PublicContentApiImpl.create loader None []
+            let! pages = api.ListPagesPublic(System.DateTimeOffset.UtcNow, "")
 
-                match PublicLayouts.refusedPages layouts pages with
-                | [] -> return ConfigValidation.Ok
-                | refused -> return ConfigValidation.Error("PublicRendering: " + LayoutRefusal.describeAll refused)
-            }
+            match PublicLayouts.refusedPages layouts pages with
+            | [] -> return ConfigValidation.Ok
+            | refused -> return ConfigValidation.Error("PublicRendering: " + LayoutRefusal.describeAll refused)
+        }
 
-    /// Phase 1039 — the compose-registered layouts with the default bound
-    /// (`PublicLayouts.withDefault`); raises `LayoutRefusedException` when
-    /// two or more layouts are registered and none is declared the default,
-    /// or the declared default is not registered.
-    let private resolvedLayouts (app: PublicRenderingServerApp) : Map<LayoutName, PublicPage -> XmlNode> =
-        match PublicLayouts.withDefault app.DefaultLayout app.Layouts with
+/// Phase 1039 — the compose-registered layouts with the default bound
+/// (`PublicLayouts.withDefault`); raises `LayoutRefusedException` when
+/// two or more layouts are registered and none is declared the default,
+/// or the declared default is not registered.
+let private resolvedLayouts (options: PublicRenderingOptions) : Map<LayoutName, PublicPage -> XmlNode> =
+    match PublicLayouts.withDefault options.DefaultLayout options.Layouts with
+    | Ok layouts -> layouts
+    | Error refusal -> raise (LayoutRefusedException [ "PublicRenderingOptions", refusal ])
+
+/// Phase 1039 — a satellite site's own layouts (empty → the shared,
+/// resolved ones), refused the same way: a site with two or more
+/// layouts binds its default under `PublicLayouts.unnamed`.
+let private siteLayoutsOf
+    (sharedLayouts: Map<LayoutName, PublicPage -> XmlNode>)
+    (site: PublicSiteDef)
+    : Map<LayoutName, PublicPage -> XmlNode> =
+    if Map.isEmpty site.Layouts then
+        sharedLayouts
+    else
+        match PublicLayouts.withDefault None site.Layouts with
         | Ok layouts -> layouts
-        | Error refusal -> raise (LayoutRefusedException [ "PublicRenderingServerApp", refusal ])
+        | Error refusal -> raise (LayoutRefusedException [ sprintf "site '%s'" site.Name, refusal ])
 
-    /// Phase 1039 — a satellite site's own layouts (empty → the shared,
-    /// resolved ones), refused the same way: a site with two or more
-    /// layouts binds its default under `PublicLayouts.unnamed`.
-    let private siteLayoutsOf
-        (sharedLayouts: Map<LayoutName, PublicPage -> XmlNode>)
-        (site: PublicSiteDef)
-        : Map<LayoutName, PublicPage -> XmlNode> =
-        if Map.isEmpty site.Layouts then
-            sharedLayouts
-        else
-            match PublicLayouts.withDefault None site.Layouts with
-            | Ok layouts -> layouts
-            | Error refusal -> raise (LayoutRefusedException [ sprintf "site '%s'" site.Name, refusal ])
+/// The public-rendering companion's `apply`: every
+/// public-rendering-specific contribution (DI registrations, sitemap +
+/// redirect + export + feed + page handlers, `PublicPageEntity`
+/// registration, optional `INarrativePagePublisher` /
+/// `AIPublishAuthoriser` / `ILayoutCatalog` registrations) onto `app`,
+/// returning the composed result without driving it. When the resolved
+/// `ServerConfig.PublicRendering = NoPublicRendering`, returns `app`
+/// unchanged — zero contribution, and no companion marker.
+///
+/// **Advanced.** Consumers compose public rendering with
+/// `withPublicRendering`. Hidden from IntelliSense via `[<EditorBrowsable>]`.
+[<System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)>]
+let composePublicRendering (options: PublicRenderingOptions) (app: ServerApp) : ServerApp =
+    match (ServerApp.effectiveConfig app).PublicRendering with
+    | NoPublicRendering ->
+        // Strip-imports path: zero contribution. Same shape as if
+        // the consumer never imported the companion. No companion
+        // marker — a later `withPublicRendering` on the same
+        // pipeline composes freely.
+        app
+    | EnabledPublicRendering root ->
+        // Phase 80c conflict validator — fail fast if PublicRendering
+        // has already been composed onto this pipeline (e.g.
+        // `withPublicRendering ... |> withPublicRendering ...`).
+        // Pre-empts the cascading duplicate-route-mount /
+        // duplicate-entity-registration failures that the second
+        // composition would otherwise surface deep inside
+        // `compose` or at first request.
+        ServerApp.ensureCompanionNotAlreadyComposed "ToolUp.PublicRendering" app
 
-    /// Phase 80c composition seam — apply every public-rendering-specific
-    /// contribution (DI registrations, sitemap + redirect + export +
-    /// feed + page handlers, `PublicPageEntity` registration, optional
-    /// `INarrativePagePublisher` / `AIPublishAuthoriser` /
-    /// `ILayoutCatalog` registrations) onto the inner `ServerApp`,
-    /// returning the composed result without driving it.
-    /// `PublicRenderingServerApp.run` calls this and then
-    /// `ServerApp.run`; the `PublicRenderingCompose.withPublicRendering`
-    /// builder calls it without invoking `ServerApp.run`, so the same
-    /// PublicRendering contributions can stack with Forms / AI / RAG
-    /// contributions onto one composition root (Phase 1h pattern
-    /// extended to PublicRendering — see migration doc 80c).
-    ///
-    /// When `ServerConfig.PublicRendering = NoPublicRendering`, returns
-    /// `app.Base` unchanged — zero contribution, byte-for-byte
-    /// equivalent to a base `ServerApp` of the same `Base`. The
-    /// companion marker is NOT appended in the strip-imports case so a
-    /// later `withPublicRendering` on the same pipeline still composes
-    /// freely.
-    ///
-    /// **Advanced.** Consumers should use `PublicRenderingServerApp.run`
-    /// (or `PublicRenderingCompose.withPublicRendering` for hybrid
-    /// composition) unless they are wrapping the composed `ServerApp`
-    /// for further transformation. Hidden from IntelliSense via
-    /// `[<EditorBrowsable>]`.
-    [<System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)>]
-    let composePublicRendering (app: PublicRenderingServerApp) : ServerApp =
-        match app.Base.Config.PublicRendering with
-        | NoPublicRendering ->
-            // Strip-imports path: zero contribution. Same shape as if
-            // the consumer never imported the companion. No companion
-            // marker — a later `withPublicRendering` on the same
-            // pipeline composes freely.
-            app.Base
-        | EnabledPublicRendering root ->
-            // Phase 80c conflict validator — fail fast if PublicRendering
-            // has already been composed onto this pipeline (e.g.
-            // `withPublicRendering ... |> withPublicRendering ...`).
-            // Pre-empts the cascading duplicate-route-mount /
-            // duplicate-entity-registration failures that the second
-            // composition would otherwise surface deep inside
-            // `compose` or at first request.
-            ServerApp.ensureCompanionNotAlreadyComposed "ToolUp.PublicRendering" app.Base
+        // Preflight validators (Investigate-gaps #5 + #8). Registered
+        // before the rest of compose so they ride the standard
+        // startup aggregator: the render-cache one warns on a
+        // process-local cache under declared multi-instance, the
+        // sitemap one fails closed on a non-positive shard threshold.
+        let usingInMemoryRenderCache =
+            match options.RenderCache with
+            | Some cache ->
+                match box cache with
+                | :? InMemoryRenderCache -> true
+                | _ -> false
+            | None -> false
 
-            // Preflight validators (Investigate-gaps #5 + #8). Registered
-            // before the rest of compose so they ride the standard
-            // startup aggregator: the render-cache one warns on a
-            // process-local cache under declared multi-instance, the
-            // sitemap one fails closed on a non-positive shard threshold.
-            let usingInMemoryRenderCache =
-                match app.RenderCache with
+        let app =
+            app
+            |> ServerApp.withConfigValidator (
+                RenderCacheInstanceValidator(
+                    usingInMemoryRenderCache,
+                    (ServerApp.effectiveConfig app).MultiInstance.ReplicaCount
+                )
+                :> ConfigValidation.IConfigValidator
+            )
+            |> ServerApp.withConfigValidator (
+                SitemapShardThresholdValidator(options.SitemapShardThreshold) :> ConfigValidation.IConfigValidator
+            )
+            |> fun app ->
+                // Phase 1039 — the file-tier page set is known at startup;
+                // a supplied content API owns its own pages.
+                match options.ContentApiOverride with
+                | Some _ -> app
+                | None ->
+                    let logger =
+                        app.Logger
+                        |> Option.defaultWith (fun () -> ConsoleLogger.ConsoleLogger() :> ILogger)
+
+                    ServerApp.withConfigValidator
+                        (LayoutNameResolvedValidator(root, resolvedLayouts options, logger)
+                        :> ConfigValidation.IConfigValidator)
+                        app
+
+        // Phase 1039 — the default bound, or compose refuses here.
+        let layouts = resolvedLayouts options
+        let composeRedirects = options.Redirects
+        let hotReload = options.HotReload
+        let explicitApi = options.ContentApiOverride
+        let selfCanonical = options.SelfCanonical // Phase 148
+        let aiPublishEnabled = options.AIPublishEnabled
+        let aiPublishAuthoriser = options.AIPublishAuthoriser
+        let aiPublishGuardrails = options.AIPublishGuardrails // Phase 91
+        let feeds = options.Feeds
+        let contentSources = options.ContentSources
+        let taxonomyEnabled = options.TaxonomyEnabled // Phase 100
+        let navTree = options.Nav // Phase 100
+        let semanticSearch = options.SemanticSearch // Phase 91
+
+        // Phase 1039 — the search page's configured layout is known at
+        // compose, so a name nobody registered is refused here.
+        match semanticSearch |> Option.bind _.Layout with
+        | Some name ->
+            match PublicLayouts.resolve layouts name with
+            | Ok _ -> ()
+            | Error refusal -> raise (LayoutRefusedException [ "SemanticSearchConfig.Layout", refusal ])
+        | None -> ()
+
+        // Phase 1039 — every satellite site's own layouts resolve a default.
+        for site in options.Sites do
+            siteLayoutsOf layouts site |> ignore
+
+        let renderCache = options.RenderCache
+        let renderCacheDefaultPolicy = options.RenderCacheDefaultPolicy
+        let renderCoalescer = options.RenderCoalescer
+        let conditionalGetSettings = options.ConditionalGet // Phase 147
+        let indexNowOptions = options.IndexNow // Phase 109
+        let satelliteDefs = options.Sites // Phase 114
+        let sitemapResponseCacheEnabled = options.SitemapResponseCache // Phase 149
+
+        // Phase 150 — the sharding + universal-lastmod knobs, shared by
+        // the runtime sitemap/shard handlers and the static export.
+        let sitemapSharding: SitemapGenerator.SitemapShardingOptions = {
+            Threshold = options.SitemapShardThreshold
+            ClusterKey = options.SitemapClusterKey
+            DefaultLastmod = options.SitemapDefaultLastmod |> Option.map (fun d -> d.ToString("yyyy-MM-dd"))
+        }
+
+        // Phase 737 — the universe knobs, shared by the runtime
+        // sitemap/shard handlers AND the IndexNow universe thunks
+        // below. Both must read the same options: IndexNow does not
+        // merely expose the universe, it PUSHES it, so a universe that
+        // excluded a noindex page from the sitemap while still pushing
+        // it for indexing would restate the very contradiction the flag
+        // exists to close.
+        let sitemapUniverse: SitemapGenerator.SitemapUniverseOptions = {
+            ExcludeNoindex = options.SitemapExcludeNoindex
+        }
+
+        let searchIndexConfig = options.SearchIndex // Phase 157
+
+        // Resolve the slug-purge surface for the publish / CMS
+        // invalidation hook (Phase 84). Prefer an explicit
+        // `withRenderCacheInvalidation`; otherwise fall back to the
+        // cache itself when it implements `IRenderCacheInvalidation`
+        // (both default impls do). `None` → publishing doesn't purge
+        // (no cache composed, or a custom cache with no slug-purge).
+        let originCacheInvalidator: IRenderCacheInvalidation option =
+            match options.RenderCacheInvalidation with
+            | Some inv -> Some inv
+            | None ->
+                match renderCache with
                 | Some cache ->
                     match box cache with
-                    | :? InMemoryRenderCache -> true
-                    | _ -> false
-                | None -> false
+                    | :? IRenderCacheInvalidation as inv -> Some inv
+                    | _ -> None
+                | None -> None
 
-            let app =
-                app
-                |> withConfigValidator (
-                    RenderCacheInstanceValidator(usingInMemoryRenderCache, app.Base.Config.ReplicaCount)
-                    :> ConfigValidation.IConfigValidator
+        // Phase 472 — wrap the origin-cache invalidator so a publish
+        // also purges the edge. When an `IEdgeCache` is composed but
+        // no origin render cache is (a perfectly ordinary CDN-fronted
+        // deployment — the edge IS the cache), the wrap still
+        // happens, over a no-op inner purge: "there is no origin
+        // cache to clear" and "there is no edge to purge" are
+        // independent facts, and a publish must still reach the edge.
+        //
+        // With no `IEdgeCache` composed this is the identity, so the
+        // pre-472 invalidator is registered exactly as before.
+        //
+        // Phase 740 — a FUNCTION of the container rather than a
+        // value, because the edge fan-out now carries the
+        // deployment's metrics sink so its purge outcomes are
+        // counted, and the sink is only resolvable once a provider
+        // exists. Whether an invalidator exists at all is still
+        // decidable without one (`hasRenderCacheInvalidator`), so
+        // the registration decisions below are unchanged; only
+        // WHEN the object is built moved.
+        let renderCacheInvalidatorFor (services: System.IServiceProvider) : IRenderCacheInvalidation option =
+            match options.EdgeCache with
+            | None -> originCacheInvalidator
+            | Some edge ->
+                let inner =
+                    originCacheInvalidator
+                    |> Option.defaultValue (NoopRenderCacheInvalidation() :> IRenderCacheInvalidation)
+
+                let pathsForSlug =
+                    options.EdgeCachePathsForSlug
+                    |> Option.defaultValue RenderCacheEdgePaths.forSlug
+
+                let metered = EdgeCache.withMetricsFrom services edge
+
+                Some(EdgeAwareRenderCacheInvalidation.createWith pathsForSlug app.Logger metered inner)
+
+        // Whether `renderCacheInvalidatorFor` will yield an
+        // invalidator, decided from the composition alone. Exactly
+        // the `isSome` of what the function returns, for every
+        // container: the edge arm always yields `Some`, and the
+        // no-edge arm yields the origin invalidator either way.
+        let hasRenderCacheInvalidator =
+            options.EdgeCache.IsSome || originCacheInvalidator.IsSome
+
+        // The invalidator a container resolves, falling back to the
+        // no-op purge rather than throwing. Unreachable when
+        // `hasRenderCacheInvalidator` is false, which is the only
+        // condition under which the registrations below fire.
+        let resolveRenderCacheInvalidator (services: System.IServiceProvider) : IRenderCacheInvalidation =
+            renderCacheInvalidatorFor services
+            |> Option.defaultValue (NoopRenderCacheInvalidation() :> IRenderCacheInvalidation)
+
+        // Auto-register `PublicPageEntity` against the base
+        // `ServerApp` so the default impl's entity-store fallthrough
+        // on `GetPage` has a recognised type. Idempotent against
+        // consumer-supplied `withEntity` calls (the registry
+        // dedupes by `EntityType` string).
+        let appWithEntity = ServerApp.withEntity PublicPageEntity.registration app
+
+        // Capture the public base URL for the sitemap handler.
+        // Fall back to an empty string when unset — search engines
+        // get relative-shaped `<loc>` entries which are still
+        // valid for same-host fetches.
+        let publicBaseUrl =
+            (ServerApp.effectiveConfig appWithEntity).PublicBaseUrl
+            |> Option.defaultValue ""
+
+        // Resolve the SDK logger from the base `ServerApp.Logger`
+        // (set via `withLogger`); fall back to `ConsoleLogger`
+        // matching the pattern in `RAGCompose` so the loader's
+        // diagnostics surface even when `withLogger` was skipped.
+        let prLogger =
+            appWithEntity.Logger
+            |> Option.defaultWith (fun () -> ConsoleLogger.ConsoleLogger() :> ILogger)
+
+        // Phase 114 — build the satellite-site registry once at compose
+        // time (per-site loader + file-tier content API; layouts fall
+        // back to the shared map) and register the startup validator.
+        // `None` when no sites are composed — the handler chain below
+        // then uses the pre-114 single-site construction byte-for-byte
+        // (GP 11) and nothing here allocates (GP 13).
+        let siteRegistry =
+            if List.isEmpty satelliteDefs then
+                None
+            else
+                Some(SiteRegistry.build satelliteDefs layouts prLogger hotReload)
+
+        let appWithEntity =
+            if List.isEmpty satelliteDefs then
+                appWithEntity
+            else
+                ServerApp.withConfigValidator (MultiSiteConfigValidator(satelliteDefs, layouts)) appWithEntity
+
+        // Phase 109 — resolve the IndexNow host + ownership key once at
+        // compose time. Host falls back to the sitemap's public base URL;
+        // the key is derived from a STABLE seed (the host) so the
+        // `/{key}.txt` endpoint and every submission's keyLocation agree
+        // and the key never churns on a content edit.
+        let indexNowHost = IndexNow.resolveHost indexNowOptions publicBaseUrl
+        let indexNowKey = IndexNow.resolveKey indexNowOptions indexNowHost
+
+        // IndexNow needs a resolvable host (an explicit `Host` or a
+        // `PublicBaseUrl` to derive one from) to produce the absolute
+        // URLs + `keyLocation` the spec requires. Enabled-but-no-host is
+        // a misconfiguration: warn once and treat as inactive rather than
+        // emit relative URLs every engine would reject.
+        let indexNowActive =
+            indexNowOptions.Enabled && not (System.String.IsNullOrWhiteSpace indexNowHost)
+
+        if indexNowOptions.Enabled && not indexNowActive then
+            prLogger.Warn
+                "IndexNow: enabled but no host could be resolved (set IndexNowOptions.Host or ServerConfig.PublicBaseUrl); IndexNow is inactive."
+
+        // Phase 115 — per-site IndexNow: each satellite gets its own
+        // declared host (from its BaseUrl), its own stable ownership
+        // key (host-seeded, same derivation contract as the default
+        // site), and its own resumable submission over its own page
+        // universe. Satellites with no resolvable host are skipped
+        // (the multi-site validator already warns on a bad BaseUrl).
+        let satelliteIndexNow: (SiteRuntime * string * string) list =
+            match siteRegistry with
+            | Some registry when indexNowActive ->
+                registry.Sites
+                |> List.choose (fun site ->
+                    let siteHost = IndexNow.hostFromBaseUrl site.Def.BaseUrl
+
+                    if System.String.IsNullOrWhiteSpace siteHost then
+                        None
+                    else
+                        Some(site, siteHost, IndexNow.resolveKey indexNowOptions siteHost))
+            | _ -> []
+
+        // ─── DI registrations ────────────────────────────────
+        let registeredLayoutNames = PublicLayouts.registered layouts
+
+        let publicRenderingServiceConfig (services: IServiceCollection) =
+            // Phase 988 — the page handler owns extensionless GETs, so
+            // the SPA shell fallback must let the router answer first
+            // and serve the shell only where no page (or other route)
+            // did. Without this, a deployment shipping a client bundle
+            // serves the shell for every SSR slug.
+            SpaFallbackPrecedence.useRouterFirst services |> ignore
+
+            services
+                .AddSingleton<MarkdownContentLoader>(
+                    System.Func<System.IServiceProvider, MarkdownContentLoader>(fun _sp ->
+                        new MarkdownContentLoader(root, prLogger, hotReload))
                 )
-                |> withConfigValidator (
-                    SitemapShardThresholdValidator(app.SitemapShardThreshold) :> ConfigValidation.IConfigValidator
-                )
-                |> fun app ->
-                    // Phase 1039 — the file-tier page set is known at startup;
-                    // a supplied content API owns its own pages.
-                    match app.ContentApiOverride with
-                    | Some _ -> app
-                    | None ->
-                        let logger =
-                            app.Base.Logger
-                            |> Option.defaultWith (fun () -> ConsoleLogger.ConsoleLogger() :> ILogger)
+                .AddSingleton<IPublicContentApi>(
+                    System.Func<System.IServiceProvider, IPublicContentApi>(fun sp ->
+                        let api =
+                            match explicitApi with
+                            | Some api -> api
+                            | None ->
+                                let loader = sp.GetService(typeof<MarkdownContentLoader>) :?> MarkdownContentLoader
 
-                        withConfigValidator
-                            (LayoutNameResolvedValidator(root, resolvedLayouts app, logger)
-                            :> ConfigValidation.IConfigValidator)
-                            app
-
-            // Phase 1039 — the default bound, or compose refuses here.
-            let layouts = resolvedLayouts app
-            let composeRedirects = app.Redirects
-            let hotReload = app.HotReload
-            let explicitApi = app.ContentApiOverride
-            let selfCanonical = app.SelfCanonical // Phase 148
-            let aiPublishEnabled = app.AIPublishEnabled
-            let aiPublishAuthoriser = app.AIPublishAuthoriser
-            let aiPublishGuardrails = app.AIPublishGuardrails // Phase 91
-            let feeds = app.Feeds
-            let contentSources = app.ContentSources
-            let taxonomyEnabled = app.TaxonomyEnabled // Phase 100
-            let navTree = app.Nav // Phase 100
-            let semanticSearch = app.SemanticSearch // Phase 91
-
-            // Phase 1039 — the search page's configured layout is known at
-            // compose, so a name nobody registered is refused here.
-            match semanticSearch |> Option.bind _.Layout with
-            | Some name ->
-                match PublicLayouts.resolve layouts name with
-                | Ok _ -> ()
-                | Error refusal -> raise (LayoutRefusedException [ "SemanticSearchConfig.Layout", refusal ])
-            | None -> ()
-
-            // Phase 1039 — every satellite site's own layouts resolve a default.
-            for site in app.Sites do
-                siteLayoutsOf layouts site |> ignore
-
-            let renderCache = app.RenderCache
-            let renderCacheDefaultPolicy = app.RenderCacheDefaultPolicy
-            let renderCoalescer = app.RenderCoalescer
-            let conditionalGetSettings = app.ConditionalGet // Phase 147
-            let indexNowOptions = app.IndexNow // Phase 109
-            let satelliteDefs = app.Sites // Phase 114
-            let sitemapResponseCacheEnabled = app.SitemapResponseCache // Phase 149
-
-            // Phase 150 — the sharding + universal-lastmod knobs, shared by
-            // the runtime sitemap/shard handlers and the static export.
-            let sitemapSharding: SitemapGenerator.SitemapShardingOptions = {
-                Threshold = app.SitemapShardThreshold
-                ClusterKey = app.SitemapClusterKey
-                DefaultLastmod = app.SitemapDefaultLastmod |> Option.map (fun d -> d.ToString("yyyy-MM-dd"))
-            }
-
-            // Phase 737 — the universe knobs, shared by the runtime
-            // sitemap/shard handlers AND the IndexNow universe thunks
-            // below. Both must read the same options: IndexNow does not
-            // merely expose the universe, it PUSHES it, so a universe that
-            // excluded a noindex page from the sitemap while still pushing
-            // it for indexing would restate the very contradiction the flag
-            // exists to close.
-            let sitemapUniverse: SitemapGenerator.SitemapUniverseOptions = {
-                ExcludeNoindex = app.SitemapExcludeNoindex
-            }
-
-            let searchIndexConfig = app.SearchIndex // Phase 157
-
-            // Resolve the slug-purge surface for the publish / CMS
-            // invalidation hook (Phase 84). Prefer an explicit
-            // `withRenderCacheInvalidation`; otherwise fall back to the
-            // cache itself when it implements `IRenderCacheInvalidation`
-            // (both default impls do). `None` → publishing doesn't purge
-            // (no cache composed, or a custom cache with no slug-purge).
-            let originCacheInvalidator: IRenderCacheInvalidation option =
-                match app.RenderCacheInvalidation with
-                | Some inv -> Some inv
-                | None ->
-                    match renderCache with
-                    | Some cache ->
-                        match box cache with
-                        | :? IRenderCacheInvalidation as inv -> Some inv
-                        | _ -> None
-                    | None -> None
-
-            // Phase 472 — wrap the origin-cache invalidator so a publish
-            // also purges the edge. When an `IEdgeCache` is composed but
-            // no origin render cache is (a perfectly ordinary CDN-fronted
-            // deployment — the edge IS the cache), the wrap still
-            // happens, over a no-op inner purge: "there is no origin
-            // cache to clear" and "there is no edge to purge" are
-            // independent facts, and a publish must still reach the edge.
-            //
-            // With no `IEdgeCache` composed this is the identity, so the
-            // pre-472 invalidator is registered exactly as before.
-            //
-            // Phase 740 — a FUNCTION of the container rather than a
-            // value, because the edge fan-out now carries the
-            // deployment's metrics sink so its purge outcomes are
-            // counted, and the sink is only resolvable once a provider
-            // exists. Whether an invalidator exists at all is still
-            // decidable without one (`hasRenderCacheInvalidator`), so
-            // the registration decisions below are unchanged; only
-            // WHEN the object is built moved.
-            let renderCacheInvalidatorFor (services: System.IServiceProvider) : IRenderCacheInvalidation option =
-                match app.EdgeCache with
-                | None -> originCacheInvalidator
-                | Some edge ->
-                    let inner =
-                        originCacheInvalidator
-                        |> Option.defaultValue (NoopRenderCacheInvalidation() :> IRenderCacheInvalidation)
-
-                    let pathsForSlug =
-                        app.EdgeCachePathsForSlug |> Option.defaultValue RenderCacheEdgePaths.forSlug
-
-                    let metered = EdgeCache.withMetricsFrom services edge
-
-                    Some(EdgeAwareRenderCacheInvalidation.createWith pathsForSlug app.Base.Logger metered inner)
-
-            // Whether `renderCacheInvalidatorFor` will yield an
-            // invalidator, decided from the composition alone. Exactly
-            // the `isSome` of what the function returns, for every
-            // container: the edge arm always yields `Some`, and the
-            // no-edge arm yields the origin invalidator either way.
-            let hasRenderCacheInvalidator =
-                app.EdgeCache.IsSome || originCacheInvalidator.IsSome
-
-            // The invalidator a container resolves, falling back to the
-            // no-op purge rather than throwing. Unreachable when
-            // `hasRenderCacheInvalidator` is false, which is the only
-            // condition under which the registrations below fire.
-            let resolveRenderCacheInvalidator (services: System.IServiceProvider) : IRenderCacheInvalidation =
-                renderCacheInvalidatorFor services
-                |> Option.defaultValue (NoopRenderCacheInvalidation() :> IRenderCacheInvalidation)
-
-            // Auto-register `PublicPageEntity` against the base
-            // `ServerApp` so the default impl's entity-store fallthrough
-            // on `GetPage` has a recognised type. Idempotent against
-            // consumer-supplied `withEntity` calls (the registry
-            // dedupes by `EntityType` string).
-            let appWithEntity = ServerApp.withEntity PublicPageEntity.registration app.Base
-
-            // Capture the public base URL for the sitemap handler.
-            // Fall back to an empty string when unset — search engines
-            // get relative-shaped `<loc>` entries which are still
-            // valid for same-host fetches.
-            let publicBaseUrl = appWithEntity.Config.PublicBaseUrl |> Option.defaultValue ""
-
-            // Resolve the SDK logger from the base `ServerApp.Logger`
-            // (set via `withLogger`); fall back to `ConsoleLogger`
-            // matching the pattern in `RAGCompose` so the loader's
-            // diagnostics surface even when `withLogger` was skipped.
-            let prLogger =
-                appWithEntity.Logger
-                |> Option.defaultWith (fun () -> ConsoleLogger.ConsoleLogger() :> ILogger)
-
-            // Phase 114 — build the satellite-site registry once at compose
-            // time (per-site loader + file-tier content API; layouts fall
-            // back to the shared map) and register the startup validator.
-            // `None` when no sites are composed — the handler chain below
-            // then uses the pre-114 single-site construction byte-for-byte
-            // (GP 11) and nothing here allocates (GP 13).
-            let siteRegistry =
-                if List.isEmpty satelliteDefs then
-                    None
-                else
-                    Some(SiteRegistry.build satelliteDefs layouts prLogger hotReload)
-
-            let appWithEntity =
-                if List.isEmpty satelliteDefs then
-                    appWithEntity
-                else
-                    ServerApp.withConfigValidator (MultiSiteConfigValidator(satelliteDefs, layouts)) appWithEntity
-
-            // Phase 109 — resolve the IndexNow host + ownership key once at
-            // compose time. Host falls back to the sitemap's public base URL;
-            // the key is derived from a STABLE seed (the host) so the
-            // `/{key}.txt` endpoint and every submission's keyLocation agree
-            // and the key never churns on a content edit.
-            let indexNowHost = IndexNow.resolveHost indexNowOptions publicBaseUrl
-            let indexNowKey = IndexNow.resolveKey indexNowOptions indexNowHost
-
-            // IndexNow needs a resolvable host (an explicit `Host` or a
-            // `PublicBaseUrl` to derive one from) to produce the absolute
-            // URLs + `keyLocation` the spec requires. Enabled-but-no-host is
-            // a misconfiguration: warn once and treat as inactive rather than
-            // emit relative URLs every engine would reject.
-            let indexNowActive =
-                indexNowOptions.Enabled && not (System.String.IsNullOrWhiteSpace indexNowHost)
-
-            if indexNowOptions.Enabled && not indexNowActive then
-                prLogger.Warn
-                    "IndexNow: enabled but no host could be resolved (set IndexNowOptions.Host or ServerConfig.PublicBaseUrl); IndexNow is inactive."
-
-            // Phase 115 — per-site IndexNow: each satellite gets its own
-            // declared host (from its BaseUrl), its own stable ownership
-            // key (host-seeded, same derivation contract as the default
-            // site), and its own resumable submission over its own page
-            // universe. Satellites with no resolvable host are skipped
-            // (the multi-site validator already warns on a bad BaseUrl).
-            let satelliteIndexNow: (SiteRuntime * string * string) list =
-                match siteRegistry with
-                | Some registry when indexNowActive ->
-                    registry.Sites
-                    |> List.choose (fun site ->
-                        let siteHost = IndexNow.hostFromBaseUrl site.Def.BaseUrl
-
-                        if System.String.IsNullOrWhiteSpace siteHost then
-                            None
-                        else
-                            Some(site, siteHost, IndexNow.resolveKey indexNowOptions siteHost))
-                | _ -> []
-
-            // ─── DI registrations ────────────────────────────────
-            let registeredLayoutNames = PublicLayouts.registered layouts
-
-            let publicRenderingServiceConfig (services: IServiceCollection) =
-                // Phase 988 — the page handler owns extensionless GETs, so
-                // the SPA shell fallback must let the router answer first
-                // and serve the shell only where no page (or other route)
-                // did. Without this, a deployment shipping a client bundle
-                // serves the shell for every SSR slug.
-                SpaFallbackPrecedence.useRouterFirst services |> ignore
-
-                services
-                    .AddSingleton<MarkdownContentLoader>(
-                        System.Func<System.IServiceProvider, MarkdownContentLoader>(fun _sp ->
-                            new MarkdownContentLoader(root, prLogger, hotReload))
-                    )
-                    .AddSingleton<IPublicContentApi>(
-                        System.Func<System.IServiceProvider, IPublicContentApi>(fun sp ->
-                            let api =
-                                match explicitApi with
-                                | Some api -> api
-                                | None ->
-                                    let loader = sp.GetService(typeof<MarkdownContentLoader>) :?> MarkdownContentLoader
-
-                                    let entityStore =
-                                        sp.GetService(typeof<IEntityStore>)
-                                        |> Option.ofObj
-                                        |> Option.map (fun x -> x :?> IEntityStore)
-
-                                    // Phase 100 — `withTaxonomy` registers the
-                                    // tag-index source over a base API (file +
-                                    // overlay only, no source-tier recursion),
-                                    // so no hand-wired `listPages` thunk is
-                                    // needed.
-                                    let taxonomySources =
-                                        if taxonomyEnabled then
-                                            let baseApi = PublicContentApiImpl.create loader entityStore []
-                                            [ TaxonomyHandler.tagIndexSourceFromApi baseApi ]
-                                        else
-                                            []
-
-                                    PublicContentApiImpl.create loader entityStore (contentSources @ taxonomySources)
-
-                            // Phase 148 — wrap so a self-referencing canonical
-                            // reaches the wire for the default site without
-                            // editing any layout (the wrap adds a
-                            // `head:canonical` envelope the page handler emits).
-                            if selfCanonical then
-                                NarrativeLayout.SelfCanonical.wrap publicBaseUrl api
-                            else
-                                api)
-                    )
-                    // Phase 1107 — the reader roles each publishing scope's
-                    // publications declare, for the platform's publication
-                    // reader admin (a grant may name no other role).
-                    .AddSingleton<IPublicationReaderRoleSource>(
-                        System.Func<System.IServiceProvider, IPublicationReaderRoleSource>(fun sp ->
-                            PublicationReaderRoles.fromApi (
-                                sp.GetService(typeof<IPublicContentApi>) :?> IPublicContentApi
-                            ))
-                    )
-                    .AddSingleton<ILayoutCatalog>(
-                        // Phase 80b — always exposed when public
-                        // rendering is enabled. Read-only view; no
-                        // authorisation concern.
-                        System.Func<System.IServiceProvider, ILayoutCatalog>(fun _sp ->
-                            PublicRenderingLayoutCatalog.create registeredLayoutNames)
-                    )
-                    // Phase 100 — `withNav` registers the parsed nav tree
-                    // as a NavCatalog singleton (content sources / custom
-                    // handlers resolve it). Always registered when public
-                    // rendering is enabled; empty when `withNav` unused.
-                    .AddSingleton<NavCatalog>(
-                        System.Func<System.IServiceProvider, NavCatalog>(fun _sp -> { Nav = navTree })
-                    )
-                |> fun s ->
-                    // Phase 80b — INarrativePagePublisher registration
-                    // is conditional on AIPublishEnabled. When off,
-                    // the slot stays empty and the AI tool's DI
-                    // resolution returns null → tool gracefully
-                    // degrades with the "no publisher registered"
-                    // error.
-                    if aiPublishEnabled then
-                        s.AddSingleton<INarrativePagePublisher>(
-                            System.Func<System.IServiceProvider, INarrativePagePublisher>(fun sp ->
-                                // Resolve the entity store at request time
-                                // rather than at registration so any decorator
-                                // wired by the consumer (encrypted store,
-                                // audit-logged store, etc.) participates.
-                                let entityStore = sp.GetService(typeof<IEntityStore>) :?> IEntityStore
-
-                                // Phase 109 — resolve the IndexNow service (if
-                                // composed) so a successful publish pings the
-                                // slug. `None` when no IndexNow is wired.
-                                let indexNowSvc =
-                                    sp.GetService(typeof<IIndexNowService>)
+                                let entityStore =
+                                    sp.GetService(typeof<IEntityStore>)
                                     |> Option.ofObj
-                                    |> Option.map (fun x -> x :?> IIndexNowService)
+                                    |> Option.map (fun x -> x :?> IEntityStore)
 
-                                PublicRenderingNarrativePagePublisher.create
-                                    entityStore
-                                    registeredLayoutNames
-                                    (renderCacheInvalidatorFor sp)
-                                    aiPublishGuardrails
-                                    indexNowSvc)
+                                // Phase 100 — `withTaxonomy` registers the
+                                // tag-index source over a base API (file +
+                                // overlay only, no source-tier recursion),
+                                // so no hand-wired `listPages` thunk is
+                                // needed.
+                                let taxonomySources =
+                                    if taxonomyEnabled then
+                                        let baseApi = PublicContentApiImpl.create loader entityStore []
+                                        [ TaxonomyHandler.tagIndexSourceFromApi baseApi ]
+                                    else
+                                        []
+
+                                PublicContentApiImpl.create loader entityStore (contentSources @ taxonomySources)
+
+                        // Phase 148 — wrap so a self-referencing canonical
+                        // reaches the wire for the default site without
+                        // editing any layout (the wrap adds a
+                        // `head:canonical` envelope the page handler emits).
+                        if selfCanonical then
+                            NarrativeLayout.SelfCanonical.wrap publicBaseUrl api
+                        else
+                            api)
+                )
+                // Phase 1107 — the reader roles each publishing scope's
+                // publications declare, for the platform's publication
+                // reader admin (a grant may name no other role).
+                .AddSingleton<IPublicationReaderRoleSource>(
+                    System.Func<System.IServiceProvider, IPublicationReaderRoleSource>(fun sp ->
+                        PublicationReaderRoles.fromApi (sp.GetService(typeof<IPublicContentApi>) :?> IPublicContentApi))
+                )
+                .AddSingleton<ILayoutCatalog>(
+                    // Phase 80b — always exposed when public
+                    // rendering is enabled. Read-only view; no
+                    // authorisation concern.
+                    System.Func<System.IServiceProvider, ILayoutCatalog>(fun _sp ->
+                        PublicRenderingLayoutCatalog.create registeredLayoutNames)
+                )
+                // Phase 100 — `withNav` registers the parsed nav tree
+                // as a NavCatalog singleton (content sources / custom
+                // handlers resolve it). Always registered when public
+                // rendering is enabled; empty when `withNav` unused.
+                .AddSingleton<NavCatalog>(
+                    System.Func<System.IServiceProvider, NavCatalog>(fun _sp -> { Nav = navTree })
+                )
+            |> fun s ->
+                // Phase 80b — INarrativePagePublisher registration
+                // is conditional on AIPublishEnabled. When off,
+                // the slot stays empty and the AI tool's DI
+                // resolution returns null → tool gracefully
+                // degrades with the "no publisher registered"
+                // error.
+                if aiPublishEnabled then
+                    s.AddSingleton<INarrativePagePublisher>(
+                        System.Func<System.IServiceProvider, INarrativePagePublisher>(fun sp ->
+                            // Resolve the entity store at request time
+                            // rather than at registration so any decorator
+                            // wired by the consumer (encrypted store,
+                            // audit-logged store, etc.) participates.
+                            let entityStore = sp.GetService(typeof<IEntityStore>) :?> IEntityStore
+
+                            // Phase 109 — resolve the IndexNow service (if
+                            // composed) so a successful publish pings the
+                            // slug. `None` when no IndexNow is wired.
+                            let indexNowSvc =
+                                sp.GetService(typeof<IIndexNowService>)
+                                |> Option.ofObj
+                                |> Option.map (fun x -> x :?> IIndexNowService)
+
+                            PublicRenderingNarrativePagePublisher.create
+                                entityStore
+                                registeredLayoutNames
+                                (renderCacheInvalidatorFor sp)
+                                aiPublishGuardrails
+                                indexNowSvc)
+                    )
+                else
+                    s
+            |> fun s ->
+                // Phase 80b — AIPublishAuthoriser registration.
+                // When unset, the AI tool's DI resolution returns
+                // null and the tool treats every request as
+                // authorised (subject to AIPublishEnabled gating).
+                match aiPublishAuthoriser with
+                | Some a -> s.AddSingleton<AIPublishAuthoriser>(a)
+                | None -> s
+            |> fun s ->
+                // Phase 84 — render-cache registrations. When a cache
+                // is composed, register `IRenderCache` (the page
+                // handler activates its cached path on seeing it in
+                // DI), the `RenderCacheSettings` carrying the default
+                // policy, and the `IRenderCacheInvalidation` slug-purge
+                // surface (so Phase 91 / CMS code can resolve it). When
+                // no cache is composed, none of these are registered →
+                // the page handler runs the pre-84 path (GP 11 / 13).
+                //
+                // Phase 472 — the edge fan-out is NOT part of this
+                // block, and deliberately so: it is registered below
+                // whether or not a render cache exists, because an
+                // edge-fronted deployment commonly has no origin
+                // cache at all.
+                match renderCache with
+                | None -> s
+                | Some cache ->
+                    let s = s.AddSingleton<IRenderCache>(cache)
+
+                    let s =
+                        s.AddSingleton<RenderCacheSettings>(
+                            {
+                                RenderCacheSettings.defaults with
+                                    DefaultPolicy = renderCacheDefaultPolicy
+                            }
+                        )
+
+                    // Phase 199 — register the render-cache request
+                    // coalescer as a singleton alongside the cache (the
+                    // page handler resolves it to single-flight cold-key
+                    // misses). A custom one (`withRenderCoalescer`, e.g. a
+                    // distributed coalescer) wins; otherwise the
+                    // process-local default.
+                    let s =
+                        s.AddSingleton<IRenderCoalescer>(
+                            renderCoalescer |> Option.defaultWith InProcessRenderCoalescer.create
+                        )
+
+                    if hasRenderCacheInvalidator then
+                        s.AddSingleton<IRenderCacheInvalidation>(
+                            System.Func<System.IServiceProvider, IRenderCacheInvalidation>(
+                                resolveRenderCacheInvalidator
+                            )
                         )
                     else
                         s
-                |> fun s ->
-                    // Phase 80b — AIPublishAuthoriser registration.
-                    // When unset, the AI tool's DI resolution returns
-                    // null and the tool treats every request as
-                    // authorised (subject to AIPublishEnabled gating).
-                    match aiPublishAuthoriser with
-                    | Some a -> s.AddSingleton<AIPublishAuthoriser>(a)
-                    | None -> s
-                |> fun s ->
-                    // Phase 84 — render-cache registrations. When a cache
-                    // is composed, register `IRenderCache` (the page
-                    // handler activates its cached path on seeing it in
-                    // DI), the `RenderCacheSettings` carrying the default
-                    // policy, and the `IRenderCacheInvalidation` slug-purge
-                    // surface (so Phase 91 / CMS code can resolve it). When
-                    // no cache is composed, none of these are registered →
-                    // the page handler runs the pre-84 path (GP 11 / 13).
-                    //
-                    // Phase 472 — the edge fan-out is NOT part of this
-                    // block, and deliberately so: it is registered below
-                    // whether or not a render cache exists, because an
-                    // edge-fronted deployment commonly has no origin
-                    // cache at all.
-                    match renderCache with
-                    | None -> s
-                    | Some cache ->
-                        let s = s.AddSingleton<IRenderCache>(cache)
+            |> fun s ->
+                // Phase 472 — register the composed `IEdgeCache` (so
+                // other surfaces — the media companion, an ops
+                // endpoint — resolve the SAME edge this deployment
+                // publishes through) and, when no render cache was
+                // composed above, the edge-wrapped invalidator that
+                // block could not register. Nothing is registered
+                // when no edge is composed (GP 13).
+                match options.EdgeCache with
+                | None -> s
+                | Some edge ->
+                    let s = s.AddSingleton<IEdgeCache>(edge)
 
-                        let s =
-                            s.AddSingleton<RenderCacheSettings>(
-                                {
-                                    RenderCacheSettings.defaults with
-                                        DefaultPolicy = renderCacheDefaultPolicy
+                    match renderCache, hasRenderCacheInvalidator with
+                    | None, true ->
+                        s.AddSingleton<IRenderCacheInvalidation>(
+                            System.Func<System.IServiceProvider, IRenderCacheInvalidation>(
+                                resolveRenderCacheInvalidator
+                            )
+                        )
+                    | _ -> s
+            |> fun s ->
+                // Phase 147 — cache-independent conditional-GET. When
+                // `withConditionalGet` is composed (and no render cache is
+                // registered), the page handler's uncached path emits
+                // validators + honours 304 on seeing this in DI. Absent →
+                // the uncached path is byte-for-byte pre-147 (GP 11 / 13).
+                match conditionalGetSettings with
+                | Some cg -> s.AddSingleton<ConditionalGetSettings>(cg)
+                | None -> s
+            |> fun s ->
+                // Phase 109 — IndexNow registrations. When active,
+                // register the `IIndexNowService` (the publish-ping +
+                // manual / ops resubmit surface) and — when
+                // `SubmitOnStartup` — an `IHostedService` that fires the
+                // resumable bulk submission once at startup. When inactive
+                // (not composed / disabled / no host), nothing is
+                // registered → no service, no hosted service (GP 11 / 13).
+                if not indexNowActive then
+                    s
+                else
+                    // One shared `HttpClient` for the whole submission
+                    // surface (avoids socket exhaustion). Captured by the
+                    // singleton service factory below.
+                    let httpClient =
+                        new System.Net.Http.HttpClient(Timeout = System.TimeSpan.FromSeconds 30.0)
+
+                    let stateStore =
+                        indexNowOptions.StateStore
+                        |> Option.defaultWith (fun () -> FileIndexNowStateStore.create ())
+
+                    let s =
+                        s.AddSingleton<IIndexNowService>(
+                            System.Func<System.IServiceProvider, IIndexNowService>(fun sp ->
+                                let metrics =
+                                    match sp.GetService(typeof<ToolUp.Platform.Infra.Metrics.IMetricsSink>) with
+                                    | :? ToolUp.Platform.Infra.Metrics.IMetricsSink as m -> m
+                                    | _ ->
+                                        ToolUp.Platform.Infra.Metrics.NoOpMetricsSink()
+                                        :> ToolUp.Platform.Infra.Metrics.IMetricsSink
+
+                                let postFn body =
+                                    IndexNow.postWith httpClient indexNowOptions.Endpoint body
+
+                                // Resolve the content API + sources at call
+                                // time so any decorator participates and a
+                                // republish since startup is reflected in
+                                // the submitted universe.
+                                let universe () = async {
+                                    let api = sp.GetService(typeof<IPublicContentApi>) :?> IPublicContentApi
+
+                                    // Phase 632 — gated enumeration.
+                                    // IndexNow does not merely expose
+                                    // the universe, it PUSHES it to
+                                    // search engines, so an ungated
+                                    // read here is the loudest leak of
+                                    // the set.
+                                    let now = System.DateTimeOffset.UtcNow
+                                    let! pages = api.ListPagesPublic(now, "")
+                                    let! dyn = ContentSource.enumerateAll contentSources
+                                    return SitemapGenerator.entriesAtWith sitemapUniverse now pages dyn
                                 }
-                            )
 
-                        // Phase 199 — register the render-cache request
-                        // coalescer as a singleton alongside the cache (the
-                        // page handler resolves it to single-flight cold-key
-                        // misses). A custom one (`withRenderCoalescer`, e.g. a
-                        // distributed coalescer) wins; otherwise the
-                        // process-local default.
-                        let s =
-                            s.AddSingleton<IRenderCoalescer>(
-                                renderCoalescer |> Option.defaultWith InProcessRenderCoalescer.create
-                            )
-
-                        if hasRenderCacheInvalidator then
-                            s.AddSingleton<IRenderCacheInvalidation>(
-                                System.Func<System.IServiceProvider, IRenderCacheInvalidation>(
-                                    resolveRenderCacheInvalidator
+                                IndexNowService(
+                                    indexNowOptions,
+                                    indexNowHost,
+                                    indexNowKey,
+                                    publicBaseUrl,
+                                    stateStore,
+                                    postFn,
+                                    metrics,
+                                    prLogger,
+                                    universe
                                 )
-                            )
+                                :> IIndexNowService)
+                        )
+
+                    // Every startup submission below runs once at start:
+                    // a one-shot outbound submission of the site this
+                    // process serves, on every profile (the web tier is
+                    // the one tier certain to compose the site), once
+                    // per replica start and never as a loop.
+                    let config = (ServerApp.effectiveConfig app)
+
+                    let s =
+                        if indexNowOptions.SubmitOnStartup then
+                            Hosting.register
+                                s
+                                (BackgroundUnit.create "indexnow-startup-submission" OnceAtStart (fun sp ->
+                                    let svc = sp.GetService(typeof<IIndexNowService>) :?> IIndexNowService
+
+                                    IndexNowStartupService(svc, prLogger)
+                                    :> Microsoft.Extensions.Hosting.IHostedService))
                         else
                             s
-                |> fun s ->
-                    // Phase 472 — register the composed `IEdgeCache` (so
-                    // other surfaces — the media companion, an ops
-                    // endpoint — resolve the SAME edge this deployment
-                    // publishes through) and, when no render cache was
-                    // composed above, the edge-wrapped invalidator that
-                    // block could not register. Nothing is registered
-                    // when no edge is composed (GP 13).
-                    match app.EdgeCache with
-                    | None -> s
-                    | Some edge ->
-                        let s = s.AddSingleton<IEdgeCache>(edge)
 
-                        match renderCache, hasRenderCacheInvalidator with
-                        | None, true ->
-                            s.AddSingleton<IRenderCacheInvalidation>(
-                                System.Func<System.IServiceProvider, IRenderCacheInvalidation>(
-                                    resolveRenderCacheInvalidator
-                                )
-                            )
-                        | _ -> s
-                |> fun s ->
-                    // Phase 147 — cache-independent conditional-GET. When
-                    // `withConditionalGet` is composed (and no render cache is
-                    // registered), the page handler's uncached path emits
-                    // validators + honours 304 on seeing this in DI. Absent →
-                    // the uncached path is byte-for-byte pre-147 (GP 11 / 13).
-                    match conditionalGetSettings with
-                    | Some cg -> s.AddSingleton<ConditionalGetSettings>(cg)
-                    | None -> s
-                |> fun s ->
-                    // Phase 109 — IndexNow registrations. When active,
-                    // register the `IIndexNowService` (the publish-ping +
-                    // manual / ops resubmit surface) and — when
-                    // `SubmitOnStartup` — an `IHostedService` that fires the
-                    // resumable bulk submission once at startup. When inactive
-                    // (not composed / disabled / no host), nothing is
-                    // registered → no service, no hosted service (GP 11 / 13).
-                    if not indexNowActive then
+                    // Phase 115 — one startup submission per satellite
+                    // site, each over its own host / key / universe.
+                    // Satellite state rides a per-site file store (an
+                    // operator-supplied `StateStore` applies to the
+                    // default site only — documented limitation).
+                    if not indexNowOptions.SubmitOnStartup then
                         s
                     else
-                        // One shared `HttpClient` for the whole submission
-                        // surface (avoids socket exhaustion). Captured by the
-                        // singleton service factory below.
-                        let httpClient =
-                            new System.Net.Http.HttpClient(Timeout = System.TimeSpan.FromSeconds 30.0)
+                        (s, satelliteIndexNow)
+                        ||> List.fold (fun s (site, siteHost, siteKey) ->
+                            let safeName =
+                                site.Def.Name
+                                |> String.map (fun c -> if System.Char.IsLetterOrDigit c || c = '-' then c else '-')
 
-                        let stateStore =
-                            indexNowOptions.StateStore
-                            |> Option.defaultWith (fun () -> FileIndexNowStateStore.create ())
+                            let siteStatePath =
+                                System.IO.Path.Combine(
+                                    System.IO.Path.GetTempPath(),
+                                    sprintf "toolup-indexnow-last-submission-%s.json" safeName
+                                )
 
-                        let s =
-                            s.AddSingleton<IIndexNowService>(
-                                System.Func<System.IServiceProvider, IIndexNowService>(fun sp ->
-                                    let metrics =
-                                        match sp.GetService(typeof<ToolUp.Platform.Metrics.IMetricsSink>) with
-                                        | :? ToolUp.Platform.Metrics.IMetricsSink as m -> m
-                                        | _ ->
-                                            ToolUp.Platform.Metrics.NoOpMetricsSink()
-                                            :> ToolUp.Platform.Metrics.IMetricsSink
-
-                                    let postFn body =
-                                        IndexNow.postWith httpClient indexNowOptions.Endpoint body
-
-                                    // Resolve the content API + sources at call
-                                    // time so any decorator participates and a
-                                    // republish since startup is reflected in
-                                    // the submitted universe.
-                                    let universe () = async {
-                                        let api = sp.GetService(typeof<IPublicContentApi>) :?> IPublicContentApi
-
-                                        // Phase 632 — gated enumeration.
-                                        // IndexNow does not merely expose
-                                        // the universe, it PUSHES it to
-                                        // search engines, so an ungated
-                                        // read here is the loudest leak of
-                                        // the set.
-                                        let now = System.DateTimeOffset.UtcNow
-                                        let! pages = api.ListPagesPublic(now, "")
-                                        let! dyn = ContentSource.enumerateAll contentSources
-                                        return SitemapGenerator.entriesAtWith sitemapUniverse now pages dyn
-                                    }
-
-                                    IndexNowService(
-                                        indexNowOptions,
-                                        indexNowHost,
-                                        indexNowKey,
-                                        publicBaseUrl,
-                                        stateStore,
-                                        postFn,
-                                        metrics,
-                                        prLogger,
-                                        universe
-                                    )
-                                    :> IIndexNowService)
-                            )
-
-                        // Phase 1051 — every startup submission below is
-                        // exempt from the profile matrix, with this reason.
-                        let indexNowStartupReason =
-                            "a one-shot outbound submission of the site this process serves: the web tier is the one tier certain to compose the site, so gating it off WebOnly would stop submissions in a WebOnly-plus-worker fleet"
-
-                        let s =
-                            if indexNowOptions.SubmitOnStartup then
-                                (s
-                                 |> ProcessProfileGate.exempt "IndexNow startup submission" indexNowStartupReason)
-                                    .AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(
-                                        System.Func<System.IServiceProvider, Microsoft.Extensions.Hosting.IHostedService>
-                                            (fun sp ->
-                                                let svc = sp.GetService(typeof<IIndexNowService>) :?> IIndexNowService
-
-                                                IndexNowStartupService(svc, prLogger)
-                                                :> Microsoft.Extensions.Hosting.IHostedService)
-                                    )
-                            else
+                            Hosting.register
                                 s
+                                (BackgroundUnit.create
+                                    (sprintf "indexnow-startup-submission:%s" safeName)
+                                    OnceAtStart
+                                    (fun sp ->
+                                        let metrics =
+                                            match
+                                                sp.GetService(typeof<ToolUp.Platform.Infra.Metrics.IMetricsSink>)
+                                            with
+                                            | :? ToolUp.Platform.Infra.Metrics.IMetricsSink as m -> m
+                                            | _ ->
+                                                ToolUp.Platform.Infra.Metrics.NoOpMetricsSink()
+                                                :> ToolUp.Platform.Infra.Metrics.IMetricsSink
 
-                        // Phase 115 — one startup submission per satellite
-                        // site, each over its own host / key / universe.
-                        // Satellite state rides a per-site file store (an
-                        // operator-supplied `StateStore` applies to the
-                        // default site only — documented limitation).
-                        if not indexNowOptions.SubmitOnStartup then
-                            s
-                        else
-                            (s, satelliteIndexNow)
-                            ||> List.fold (fun s (site, siteHost, siteKey) ->
-                                let safeName =
-                                    site.Def.Name
-                                    |> String.map (fun c ->
-                                        if System.Char.IsLetterOrDigit c || c = '-' then c else '-')
+                                        let postFn body =
+                                            IndexNow.postWith httpClient indexNowOptions.Endpoint body
 
-                                let siteStatePath =
-                                    System.IO.Path.Combine(
-                                        System.IO.Path.GetTempPath(),
-                                        sprintf "toolup-indexnow-last-submission-%s.json" safeName
-                                    )
+                                        // Phase 632 — gated enumeration
+                                        // per satellite site, same as
+                                        // the default site above.
+                                        let universe () = async {
+                                            let now = System.DateTimeOffset.UtcNow
+                                            let! pages = site.Api.ListPagesPublic(now, "")
+                                            return SitemapGenerator.entriesAtWith sitemapUniverse now pages []
+                                        }
 
-                                (s
-                                 |> ProcessProfileGate.exempt
-                                     (sprintf "IndexNow startup submission (%s)" site.Def.Name)
-                                     indexNowStartupReason)
-                                    .AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(
-                                        System.Func<
-                                            System.IServiceProvider,
-                                            Microsoft.Extensions.Hosting.IHostedService
-                                         >
-                                            (fun sp ->
-                                                let metrics =
-                                                    match
-                                                        sp.GetService(typeof<ToolUp.Platform.Metrics.IMetricsSink>)
-                                                    with
-                                                    | :? ToolUp.Platform.Metrics.IMetricsSink as m -> m
-                                                    | _ ->
-                                                        ToolUp.Platform.Metrics.NoOpMetricsSink()
-                                                        :> ToolUp.Platform.Metrics.IMetricsSink
+                                        let svc =
+                                            IndexNowService(
+                                                indexNowOptions,
+                                                siteHost,
+                                                siteKey,
+                                                site.Def.BaseUrl,
+                                                FileIndexNowStateStore.createAt siteStatePath,
+                                                postFn,
+                                                metrics,
+                                                prLogger,
+                                                universe
+                                            )
+                                            :> IIndexNowService
 
-                                                let postFn body =
-                                                    IndexNow.postWith httpClient indexNowOptions.Endpoint body
-
-                                                // Phase 632 — gated enumeration
-                                                // per satellite site, same as
-                                                // the default site above.
-                                                let universe () = async {
-                                                    let now = System.DateTimeOffset.UtcNow
-                                                    let! pages = site.Api.ListPagesPublic(now, "")
-                                                    return SitemapGenerator.entriesAtWith sitemapUniverse now pages []
-                                                }
-
-                                                let svc =
-                                                    IndexNowService(
-                                                        indexNowOptions,
-                                                        siteHost,
-                                                        siteKey,
-                                                        site.Def.BaseUrl,
-                                                        FileIndexNowStateStore.createAt siteStatePath,
-                                                        postFn,
-                                                        metrics,
-                                                        prLogger,
-                                                        universe
-                                                    )
-                                                    :> IIndexNowService
-
-                                                IndexNowStartupService(svc, prLogger)
-                                                :> Microsoft.Extensions.Hosting.IHostedService)
-                                    ))
-                |> fun s ->
-                    // Phase 114 — expose the satellite-site registry to
-                    // consumer-supplied custom handlers. Not registered when
-                    // no sites are composed (GP 13).
-                    match siteRegistry with
-                    | Some registry -> s.AddSingleton<SiteRegistry>(registry)
-                    | None -> s
-
-            // ─── Handler chain ───────────────────────────────────
-            // Order: sitemap (specific route) → redirect (path-match
-            // short-circuit) → export (?format= short-circuit) →
-            // page (catch-all by slug, default HTML). All resolve
-            // `IPublicContentApi` + `MarkdownContentLoader` per-request
-            // from `ctx.RequestServices` so the DI singleton is shared.
-            // Phase 149 — conditional-GET sitemap handler options. The
-            // validators (ETag / Last-Modified / Cache-Control + 304) are
-            // always emitted; the response cache is opt-in and gets one
-            // instance per logical site (default site here; satellites get
-            // their own below) so the single-slot memo never thrashes
-            // between sites.
-            let defaultSitemapOptions: SitemapGenerator.SitemapHandlerOptions = {
-                SitemapGenerator.SitemapHandlerOptions.defaults with
-                    ResponseCache =
-                        if sitemapResponseCacheEnabled then
-                            Some(SitemapGenerator.SitemapCache())
-                        else
-                            None
-                    Sharding = sitemapSharding // Phase 150
-                    Universe = sitemapUniverse // Phase 737
-            }
-
-            // Phase 150 — per-site base carries the sharding knobs even when
-            // the response cache is off; the per-site map below adds a cache
-            // instance per site when the cache is enabled.
-            let siteSitemapBaseOptions: SitemapGenerator.SitemapHandlerOptions = {
-                SitemapGenerator.SitemapHandlerOptions.defaults with
-                    Sharding = sitemapSharding
-                    Universe = sitemapUniverse // Phase 737
-            }
-
-            let siteSitemapOptions: Map<string, SitemapGenerator.SitemapHandlerOptions> =
+                                        IndexNowStartupService(svc, prLogger)
+                                        :> Microsoft.Extensions.Hosting.IHostedService)))
+            |> fun s ->
+                // Phase 114 — expose the satellite-site registry to
+                // consumer-supplied custom handlers. Not registered when
+                // no sites are composed (GP 13).
                 match siteRegistry with
-                | Some registry when sitemapResponseCacheEnabled ->
-                    registry.Sites
-                    |> List.map (fun site ->
-                        site.Def.Name,
-                        {
-                            siteSitemapBaseOptions with
-                                ResponseCache = Some(SitemapGenerator.SitemapCache())
-                        })
-                    |> Map.ofList
-                | _ -> Map.empty
+                | Some registry -> s.AddSingleton<SiteRegistry>(registry)
+                | None -> s
 
-            let sitemapHandler: HttpHandler =
-                route "/sitemap.xml"
+        // ─── Handler chain ───────────────────────────────────
+        // Order: sitemap (specific route) → redirect (path-match
+        // short-circuit) → export (?format= short-circuit) →
+        // page (catch-all by slug, default HTML). All resolve
+        // `IPublicContentApi` + `MarkdownContentLoader` per-request
+        // from `ctx.RequestServices` so the DI singleton is shared.
+        // Phase 149 — conditional-GET sitemap handler options. The
+        // validators (ETag / Last-Modified / Cache-Control + 304) are
+        // always emitted; the response cache is opt-in and gets one
+        // instance per logical site (default site here; satellites get
+        // their own below) so the single-slot memo never thrashes
+        // between sites.
+        let defaultSitemapOptions: SitemapGenerator.SitemapHandlerOptions = {
+            SitemapGenerator.SitemapHandlerOptions.defaults with
+                ResponseCache =
+                    if sitemapResponseCacheEnabled then
+                        Some(SitemapGenerator.SitemapCache())
+                    else
+                        None
+                Sharding = sitemapSharding // Phase 150
+                Universe = sitemapUniverse // Phase 737
+        }
+
+        // Phase 150 — per-site base carries the sharding knobs even when
+        // the response cache is off; the per-site map below adds a cache
+        // instance per site when the cache is enabled.
+        let siteSitemapBaseOptions: SitemapGenerator.SitemapHandlerOptions = {
+            SitemapGenerator.SitemapHandlerOptions.defaults with
+                Sharding = sitemapSharding
+                Universe = sitemapUniverse // Phase 737
+        }
+
+        let siteSitemapOptions: Map<string, SitemapGenerator.SitemapHandlerOptions> =
+            match siteRegistry with
+            | Some registry when sitemapResponseCacheEnabled ->
+                registry.Sites
+                |> List.map (fun site ->
+                    site.Def.Name,
+                    {
+                        siteSitemapBaseOptions with
+                            ResponseCache = Some(SitemapGenerator.SitemapCache())
+                    })
+                |> Map.ofList
+            | _ -> Map.empty
+
+        let sitemapHandler: HttpHandler =
+            route "/sitemap.xml"
+            >=> fun next ctx ->
+                let api =
+                    ctx.RequestServices.GetService(typeof<IPublicContentApi>) :?> IPublicContentApi
+
+                // Phase 95 — include content-source-enumerated dynamic
+                // routes (e.g. `/tag/{x}`) so crawlers discover them.
+                let enumerate () =
+                    ContentSource.enumerateAll contentSources
+
+                SitemapGenerator.handlerWith defaultSitemapOptions publicBaseUrl api enumerate next ctx
+
+        // Phase 150 — shard-file handler (`/sitemap-<name>.xml`). Active
+        // only past the threshold; declines (falls through) otherwise.
+        let sitemapShardHandler: HttpHandler =
+            fun next ctx ->
+                let api =
+                    ctx.RequestServices.GetService(typeof<IPublicContentApi>) :?> IPublicContentApi
+
+                let enumerate () =
+                    ContentSource.enumerateAll contentSources
+
+                SitemapGenerator.shardHandler defaultSitemapOptions publicBaseUrl api enumerate next ctx
+
+        // Phase 157 — search-index endpoint. Mounted only when
+        // `withSearchIndex` is composed; declines otherwise (no route).
+        let searchIndexHandler: HttpHandler =
+            match searchIndexConfig with
+            | None -> fun _ _ -> skipPipeline
+            | Some config ->
+                fun next ctx ->
+                    let api =
+                        ctx.RequestServices.GetService(typeof<IPublicContentApi>) :?> IPublicContentApi
+
+                    let enumerate () =
+                        ContentSource.enumerateAll contentSources
+
+                    SearchIndexEmitter.handler config publicBaseUrl api enumerate next ctx
+
+        let redirectHandler: HttpHandler =
+            fun next ctx ->
+                let loader =
+                    ctx.RequestServices.GetService(typeof<MarkdownContentLoader>) :?> MarkdownContentLoader
+
+                let allRedirects = loader.Redirects @ composeRedirects
+                RedirectMap.handler allRedirects next ctx
+
+        let exportHandler: HttpHandler =
+            fun next ctx ->
+                let api =
+                    ctx.RequestServices.GetService(typeof<IPublicContentApi>) :?> IPublicContentApi
+
+                NarrativeExportHandler.handler api next ctx
+
+        let pageHandler: HttpHandler =
+            fun next ctx ->
+                let api =
+                    ctx.RequestServices.GetService(typeof<IPublicContentApi>) :?> IPublicContentApi
+
+                PublicPageHandler.handler api layouts next ctx
+
+        // Phase 80b — one handler per registered feed, each
+        // mounted at its configured SelfUrl. The route check uses
+        // the standard Giraffe `route` combinator so feed URLs
+        // short-circuit before the catch-all page handler.
+        let feedHandlers: HttpHandler list =
+            feeds
+            |> List.map (fun feedConfig ->
+                route feedConfig.SelfUrl
                 >=> fun next ctx ->
                     let api =
                         ctx.RequestServices.GetService(typeof<IPublicContentApi>) :?> IPublicContentApi
 
-                    // Phase 95 — include content-source-enumerated dynamic
-                    // routes (e.g. `/tag/{x}`) so crawlers discover them.
-                    let enumerate () =
-                        ContentSource.enumerateAll contentSources
+                    NarrativeFeedHandler.handler feedConfig api next ctx)
 
-                    SitemapGenerator.handlerWith defaultSitemapOptions publicBaseUrl api enumerate next ctx
+        // Phase 89 — token-gated preview route. Mounted at the fixed
+        // `/preview` path so it short-circuits before the catch-all
+        // page handler; serves an unpublished page only with a valid
+        // share token (declines otherwise).
+        let previewHandler: HttpHandler =
+            fun next ctx ->
+                let api =
+                    ctx.RequestServices.GetService(typeof<IPublicContentApi>) :?> IPublicContentApi
 
-            // Phase 150 — shard-file handler (`/sitemap-<name>.xml`). Active
-            // only past the threshold; declines (falls through) otherwise.
-            let sitemapShardHandler: HttpHandler =
-                fun next ctx ->
-                    let api =
-                        ctx.RequestServices.GetService(typeof<IPublicContentApi>) :?> IPublicContentApi
+                ContentPreview.previewHandler api layouts next ctx
 
-                    let enumerate () =
-                        ContentSource.enumerateAll contentSources
+        // Phase 91 — semantic-search SSR endpoint. Mounted before the
+        // catch-all page handler so `/search` short-circuits. The
+        // pipeline is resolved per-request from DI (the RAG companion
+        // registers `IRetrievalPipeline`); when absent the handler
+        // declines and `/search` falls through to the 404 path.
+        let searchHandlers: HttpHandler list =
+            match semanticSearch with
+            | None -> []
+            | Some cfg -> [
+                route "/search"
+                >=> fun next ctx ->
+                    match ctx.RequestServices.GetService(typeof<IRetrievalPipeline.IRetrievalPipeline>) with
+                    | :? IRetrievalPipeline.IRetrievalPipeline as pipeline ->
+                        SemanticSearchHandler.handle cfg pipeline layouts next ctx
+                    // Decline via `skipPipeline` (None) so the
+                    // surrounding `choose` advances; `next ctx`
+                    // would end the chain as an unwritten 200.
+                    | _ -> skipPipeline
+              ]
 
-                    SitemapGenerator.shardHandler defaultSitemapOptions publicBaseUrl api enumerate next ctx
-
-            // Phase 157 — search-index endpoint. Mounted only when
-            // `withSearchIndex` is composed; declines otherwise (no route).
-            let searchIndexHandler: HttpHandler =
-                match searchIndexConfig with
-                | None -> fun _ _ -> skipPipeline
-                | Some config ->
-                    fun next ctx ->
-                        let api =
-                            ctx.RequestServices.GetService(typeof<IPublicContentApi>) :?> IPublicContentApi
-
-                        let enumerate () =
-                            ContentSource.enumerateAll contentSources
-
-                        SearchIndexEmitter.handler config publicBaseUrl api enumerate next ctx
-
-            let redirectHandler: HttpHandler =
-                fun next ctx ->
-                    let loader =
-                        ctx.RequestServices.GetService(typeof<MarkdownContentLoader>) :?> MarkdownContentLoader
-
-                    let allRedirects = loader.Redirects @ composeRedirects
-                    RedirectMap.handler allRedirects next ctx
-
-            let exportHandler: HttpHandler =
-                fun next ctx ->
-                    let api =
-                        ctx.RequestServices.GetService(typeof<IPublicContentApi>) :?> IPublicContentApi
-
-                    NarrativeExportHandler.handler api next ctx
-
-            let pageHandler: HttpHandler =
-                fun next ctx ->
-                    let api =
-                        ctx.RequestServices.GetService(typeof<IPublicContentApi>) :?> IPublicContentApi
-
-                    PublicPageHandler.handler api layouts next ctx
-
-            // Phase 80b — one handler per registered feed, each
-            // mounted at its configured SelfUrl. The route check uses
-            // the standard Giraffe `route` combinator so feed URLs
-            // short-circuit before the catch-all page handler.
-            let feedHandlers: HttpHandler list =
-                feeds
-                |> List.map (fun feedConfig ->
-                    route feedConfig.SelfUrl
-                    >=> fun next ctx ->
-                        let api =
-                            ctx.RequestServices.GetService(typeof<IPublicContentApi>) :?> IPublicContentApi
-
-                        NarrativeFeedHandler.handler feedConfig api next ctx)
-
-            // Phase 89 — token-gated preview route. Mounted at the fixed
-            // `/preview` path so it short-circuits before the catch-all
-            // page handler; serves an unpublished page only with a valid
-            // share token (declines otherwise).
-            let previewHandler: HttpHandler =
-                fun next ctx ->
-                    let api =
-                        ctx.RequestServices.GetService(typeof<IPublicContentApi>) :?> IPublicContentApi
-
-                    ContentPreview.previewHandler api layouts next ctx
-
-            // Phase 91 — semantic-search SSR endpoint. Mounted before the
-            // catch-all page handler so `/search` short-circuits. The
-            // pipeline is resolved per-request from DI (the RAG companion
-            // registers `IRetrievalPipeline`); when absent the handler
-            // declines and `/search` falls through to the 404 path.
-            let searchHandlers: HttpHandler list =
-                match semanticSearch with
-                | None -> []
-                | Some cfg -> [
-                    route "/search"
-                    >=> fun next ctx ->
-                        match ctx.RequestServices.GetService(typeof<IRetrievalPipeline.IRetrievalPipeline>) with
-                        | :? IRetrievalPipeline.IRetrievalPipeline as pipeline ->
-                            SemanticSearchHandler.handle cfg pipeline layouts next ctx
-                        // Decline via `skipPipeline` (None) so the
-                        // surrounding `choose` advances; `next ctx`
-                        // would end the chain as an unwritten 200.
-                        | _ -> skipPipeline
-                  ]
-
-            // Phase 109 — IndexNow ownership-key endpoint `/{key}.txt`.
-            // Mounted before the catch-all page handler; it claims only the
-            // exact key slug and declines (falls through) for any other
-            // `/*.txt`. Empty when IndexNow is inactive (GP 11 / 13).
-            let indexNowHandlers: HttpHandler list =
-                if not indexNowActive then
-                    []
-                else
-                    match siteRegistry with
-                    | None -> [ IndexNowKeyHandler.routes indexNowKey ]
-                    | Some registry ->
-                        // Phase 115 — each satellite host answers its own
-                        // ownership key (the keyLocation its submissions
-                        // declare); unmatched hosts serve the default key.
-                        let satelliteKeyHandlers =
-                            satelliteIndexNow
-                            |> List.map (fun (site, _, siteKey) ->
-                                SiteGate.forSite registry site.Def.Name (IndexNowKeyHandler.routes siteKey))
-
-                        satelliteKeyHandlers
-                        @ [ SiteGate.forDefaultSite registry (IndexNowKeyHandler.routes indexNowKey) ]
-
-            // Phase 114 — host-aware dispatch. When a satellite-site
-            // registry exists, the per-request content surfaces (sitemap /
-            // redirects / narrative export / preview / page) resolve the
-            // site claiming the request's host and serve from its content
-            // API + layouts + redirects + base URL; unmatched hosts fall
-            // through to the default handlers built above. With no sites
-            // registered, every handler below IS the default handler —
-            // byte-for-byte the pre-114 chain (GP 11). Feeds, semantic
-            // search, taxonomy, and IndexNow remain default-site surfaces
-            // in v1 (Phase 115 lifts the SEO/export set per-site).
-            let siteAware (forSite: SiteRuntime -> HttpHandler) (defaultHandler: HttpHandler) : HttpHandler =
+        // Phase 109 — IndexNow ownership-key endpoint `/{key}.txt`.
+        // Mounted before the catch-all page handler; it claims only the
+        // exact key slug and declines (falls through) for any other
+        // `/*.txt`. Empty when IndexNow is inactive (GP 11 / 13).
+        let indexNowHandlers: HttpHandler list =
+            if not indexNowActive then
+                []
+            else
                 match siteRegistry with
-                | None -> defaultHandler
+                | None -> [ IndexNowKeyHandler.routes indexNowKey ]
                 | Some registry ->
+                    // Phase 115 — each satellite host answers its own
+                    // ownership key (the keyLocation its submissions
+                    // declare); unmatched hosts serve the default key.
+                    let satelliteKeyHandlers =
+                        satelliteIndexNow
+                        |> List.map (fun (site, _, siteKey) ->
+                            SiteGate.forSite registry site.Def.Name (IndexNowKeyHandler.routes siteKey))
+
+                    satelliteKeyHandlers
+                    @ [ SiteGate.forDefaultSite registry (IndexNowKeyHandler.routes indexNowKey) ]
+
+        // Phase 114 — host-aware dispatch. When a satellite-site
+        // registry exists, the per-request content surfaces (sitemap /
+        // redirects / narrative export / preview / page) resolve the
+        // site claiming the request's host and serve from its content
+        // API + layouts + redirects + base URL; unmatched hosts fall
+        // through to the default handlers built above. With no sites
+        // registered, every handler below IS the default handler —
+        // byte-for-byte the pre-114 chain (GP 11). Feeds, semantic
+        // search, taxonomy, and IndexNow remain default-site surfaces
+        // in v1 (Phase 115 lifts the SEO/export set per-site).
+        let siteAware (forSite: SiteRuntime -> HttpHandler) (defaultHandler: HttpHandler) : HttpHandler =
+            match siteRegistry with
+            | None -> defaultHandler
+            | Some registry ->
+                fun next ctx ->
+                    match SiteRegistry.tryResolve ctx registry with
+                    | Some site -> forSite site next ctx
+                    | None -> defaultHandler next ctx
+
+        let sitemapHandler =
+            siteAware
+                (fun site ->
+                    let opts =
+                        siteSitemapOptions
+                        |> Map.tryFind site.Def.Name
+                        |> Option.defaultValue siteSitemapBaseOptions
+
+                    route "/sitemap.xml"
+                    >=> SitemapGenerator.handlerWith opts site.Def.BaseUrl site.Api (fun () -> async.Return []))
+                sitemapHandler
+
+        // Phase 150 — per-site shard handler (host-aware). Each site
+        // shards its own universe past the threshold; the default-site
+        // shard handler serves unmatched hosts.
+        let sitemapShardHandler =
+            siteAware
+                (fun site ->
+                    let opts =
+                        siteSitemapOptions
+                        |> Map.tryFind site.Def.Name
+                        |> Option.defaultValue siteSitemapBaseOptions
+
+                    SitemapGenerator.shardHandler opts site.Def.BaseUrl site.Api (fun () -> async.Return []))
+                sitemapShardHandler
+
+        // Phase 157 — per-site search index (host-aware). Each site
+        // indexes its own universe; unmatched hosts serve the default.
+        let searchIndexHandler =
+            match searchIndexConfig with
+            | None -> searchIndexHandler
+            | Some config ->
+                siteAware
+                    (fun site ->
+                        SearchIndexEmitter.handler config site.Def.BaseUrl site.Api (fun () -> async.Return []))
+                    searchIndexHandler
+
+        let redirectHandler =
+            siteAware
+                (fun site ->
                     fun next ctx ->
-                        match SiteRegistry.tryResolve ctx registry with
-                        | Some site -> forSite site next ctx
-                        | None -> defaultHandler next ctx
+                        // Per-request read so hot-reloaded redirects.csv
+                        // edits flow through, matching the default path.
+                        RedirectMap.handler (site.Loader.Redirects @ site.Def.Redirects) next ctx)
+                redirectHandler
 
-            let sitemapHandler =
-                siteAware
-                    (fun site ->
-                        let opts =
-                            siteSitemapOptions
-                            |> Map.tryFind site.Def.Name
-                            |> Option.defaultValue siteSitemapBaseOptions
+        let exportHandler =
+            siteAware (fun site -> NarrativeExportHandler.handler site.Api) exportHandler
 
-                        route "/sitemap.xml"
-                        >=> SitemapGenerator.handlerWith opts site.Def.BaseUrl site.Api (fun () -> async.Return []))
-                    sitemapHandler
+        let previewHandler =
+            siteAware (fun site -> ContentPreview.previewHandler site.Api site.Layouts) previewHandler
 
-            // Phase 150 — per-site shard handler (host-aware). Each site
-            // shards its own universe past the threshold; the default-site
-            // shard handler serves unmatched hosts.
-            let sitemapShardHandler =
-                siteAware
-                    (fun site ->
-                        let opts =
-                            siteSitemapOptions
-                            |> Map.tryFind site.Def.Name
-                            |> Option.defaultValue siteSitemapBaseOptions
+        let pageHandler =
+            siteAware
+                (fun site ->
+                    // Phase 148 — satellite self-canonical resolves to the
+                    // satellite's own `BaseUrl`, so a page served on a
+                    // `withSite` host self-canonicalises to that host.
+                    let siteApi =
+                        if selfCanonical then
+                            NarrativeLayout.SelfCanonical.wrap site.Def.BaseUrl site.Api
+                        else
+                            site.Api
 
-                        SitemapGenerator.shardHandler opts site.Def.BaseUrl site.Api (fun () -> async.Return []))
-                    sitemapShardHandler
+                    PublicPageHandler.handlerKeyed (Some site.Def.Name) siteApi site.Layouts)
+                pageHandler
 
-            // Phase 157 — per-site search index (host-aware). Each site
-            // indexes its own universe; unmatched hosts serve the default.
-            let searchIndexHandler =
-                match searchIndexConfig with
-                | None -> searchIndexHandler
-                | Some config ->
-                    siteAware
-                        (fun site ->
-                            SearchIndexEmitter.handler config site.Def.BaseUrl site.Api (fun () -> async.Return []))
-                        searchIndexHandler
+        // Phase 115 — feeds become host-scoped when sites exist:
+        // compose-level `withFeed` registrations serve the default
+        // site's hosts only, and each site's `PublicSiteDef.Feeds`
+        // mount host-gated against that site's own content API. With
+        // no sites, feed handlers are untouched (GP 11).
+        let feedHandlers =
+            match siteRegistry with
+            | None -> feedHandlers
+            | Some registry -> feedHandlers |> List.map (SiteGate.forDefaultSite registry)
 
-            let redirectHandler =
-                siteAware
-                    (fun site ->
-                        fun next ctx ->
-                            // Per-request read so hot-reloaded redirects.csv
-                            // edits flow through, matching the default path.
-                            RedirectMap.handler (site.Loader.Redirects @ site.Def.Redirects) next ctx)
-                    redirectHandler
+        let satelliteFeedHandlers: HttpHandler list =
+            match siteRegistry with
+            | None -> []
+            | Some registry ->
+                registry.Sites
+                |> List.collect (fun site ->
+                    site.Def.Feeds
+                    |> List.map (fun feedConfig ->
+                        let feedRoute =
+                            route feedConfig.SelfUrl
+                            >=> fun next ctx -> NarrativeFeedHandler.handler feedConfig site.Api next ctx
 
-            let exportHandler =
-                siteAware (fun site -> NarrativeExportHandler.handler site.Api) exportHandler
+                        SiteGate.forSite registry site.Def.Name feedRoute))
 
-            let previewHandler =
-                siteAware (fun site -> ContentPreview.previewHandler site.Api site.Layouts) previewHandler
+        let publicRenderingHandlers =
+            [ sitemapHandler; sitemapShardHandler ] // Phase 150 — shard route after the index
+            @ indexNowHandlers
+            @ [ redirectHandler; exportHandler ]
+            @ feedHandlers
+            @ satelliteFeedHandlers
+            @ searchHandlers
+            @ [ searchIndexHandler ] // Phase 157 — search-index endpoint (declines when not composed)
+            @ [ previewHandler; pageHandler ]
 
-            let pageHandler =
-                siteAware
-                    (fun site ->
-                        // Phase 148 — satellite self-canonical resolves to the
-                        // satellite's own `BaseUrl`, so a page served on a
-                        // `withSite` host self-canonicalises to that host.
-                        let siteApi =
-                            if selfCanonical then
-                                NarrativeLayout.SelfCanonical.wrap site.Def.BaseUrl site.Api
-                            else
-                                site.Api
+        appWithEntity
+        |> ServerApp.addContribution (Contribution.routes publicRenderingCompanion publicRenderingHandlers)
+        |> ServerApp.addContribution (Contribution.service publicRenderingCompanion publicRenderingServiceConfig)
+        |> ServerApp.withCompanionMarker "ToolUp.PublicRendering"
 
-                        PublicPageHandler.handlerKeyed (Some site.Def.Name) siteApi site.Layouts)
-                    pageHandler
+/// Build-time static export of a public-rendering deployment. Each
+/// function reads the deployment and the companion options it composes,
+/// as a `ServerApp * PublicRenderingOptions` pair: the configuration and
+/// logger from the deployment, everything else from the options.
+module PublicRenderingExport =
 
-            // Phase 115 — feeds become host-scoped when sites exist:
-            // compose-level `withFeed` registrations serve the default
-            // site's hosts only, and each site's `PublicSiteDef.Feeds`
-            // mount host-gated against that site's own content API. With
-            // no sites, feed handlers are untouched (GP 11).
-            let feedHandlers =
-                match siteRegistry with
-                | None -> feedHandlers
-                | Some registry -> feedHandlers |> List.map (SiteGate.forDefaultSite registry)
-
-            let satelliteFeedHandlers: HttpHandler list =
-                match siteRegistry with
-                | None -> []
-                | Some registry ->
-                    registry.Sites
-                    |> List.collect (fun site ->
-                        site.Def.Feeds
-                        |> List.map (fun feedConfig ->
-                            let feedRoute =
-                                route feedConfig.SelfUrl
-                                >=> fun next ctx -> NarrativeFeedHandler.handler feedConfig site.Api next ctx
-
-                            SiteGate.forSite registry site.Def.Name feedRoute))
-
-            let publicRenderingHandlers =
-                [ sitemapHandler; sitemapShardHandler ] // Phase 150 — shard route after the index
-                @ indexNowHandlers
-                @ [ redirectHandler; exportHandler ]
-                @ feedHandlers
-                @ satelliteFeedHandlers
-                @ searchHandlers
-                @ [ searchIndexHandler ] // Phase 157 — search-index endpoint (declines when not composed)
-                @ [ previewHandler; pageHandler ]
-
-            let baseExt = appWithEntity.Extensions
-
-            let mergedExt: ComposeExtensions = {
-                baseExt with
-                    Handlers = baseExt.Handlers @ publicRenderingHandlers
-            }
-
-            let final =
-                {
-                    appWithEntity with
-                        Extensions = mergedExt
-                }
-                |> ServerApp.addContribution (
-                    Contribution.service
-                        (ComponentId.forCompanionSlot "ToolUp.PublicRendering")
-                        publicRenderingServiceConfig
-                )
-
-            // Phase 80c — append the PublicRendering marker so a
-            // second `withPublicRendering` on the same pipeline trips
-            // the entry-guard above.
-            final |> ServerApp.withCompanionMarker "ToolUp.PublicRendering"
-
-    /// Drive the final composition. Registers the sitemap / redirect /
-    /// export / feed / page handlers, wires the `IPublicContentApi` +
-    /// `MarkdownContentLoader` + optional `INarrativePagePublisher`
-    /// into DI, and delegates to `ServerApp.run`. When
-    /// `ServerConfig.PublicRendering = NoPublicRendering`, short-
-    /// circuits to `ServerApp.run app.Base` — byte-for-byte the same
-    /// shape as the pre-Phase-38 base path. Phase 80c — implementation
-    /// is now `composePublicRendering >> ServerApp.run`; consumers
-    /// needing to stack PublicRendering with Forms / AI / RAG
-    /// companions on one composition root call
-    /// `PublicRenderingCompose.withPublicRendering` directly instead.
-    let run (app: PublicRenderingServerApp) : int =
-        composePublicRendering app |> ServerApp.run
-
-    /// Build-time terminus. Mirrors `run` but writes the rendered
-    /// site to disk under `outputDir` instead of starting Kestrel,
-    /// producing a static HTML tree hostable on Azure Static Web Apps,
-    /// Netlify, GitHub Pages, S3 + CloudFront, etc. See
-    /// `StaticExport.run` for the output layout and behaviour.
+    /// Build-time terminus. Writes the rendered site to disk under
+    /// `outputDir` instead of starting Kestrel, producing a static HTML
+    /// tree hostable on Azure Static Web Apps, Netlify, GitHub Pages,
+    /// S3 + CloudFront, etc. See `StaticExport.run` for the output layout
+    /// and behaviour.
     ///
     /// Requires `ServerConfig.PublicRendering = EnabledPublicRendering`
-    /// and at least one registered layout — same invariants as `run`,
-    /// including the declared default (Phase 1039).
-    let exportStatic (outputDir: string) (app: PublicRenderingServerApp) : Async<int> =
+    /// and at least one registered layout — same invariants as
+    /// `withPublicRendering`, including the declared default (Phase 1039).
+    let exportStatic (outputDir: string) (app: ServerApp, options: PublicRenderingOptions) : Async<int> =
         StaticExport.run
-            app.Base.Config
-            (resolvedLayouts app)
-            app.ContentApiOverride
-            app.ContentSources
-            app.Base.Logger
+            (ServerApp.effectiveConfig app)
+            (resolvedLayouts options)
+            options.ContentApiOverride
+            options.ContentSources
+            app.Logger
             outputDir
 
-    /// Phase 93 — static export with operational extensions: per-locale
-    /// trees, host-config emission (`staticwebapp.config.json` / `_redirects`
-    /// / `_headers`), and a build-time internal-link / asset check. Passes
-    /// the compose-registered redirects (`app.Redirects`) through to the
-    /// host-config emitter. `StaticExportOptions.defaults` reproduces the
-    /// `exportStatic` single-tree behaviour.
     /// Phase 150 — the compose-level sitemap sharding + universal-lastmod
     /// knobs (`withSitemapDefaultLastmod` / `withSitemapShardThreshold` /
     /// `withSitemapClusterKey`) as a `SitemapShardingOptions`, so the static
     /// export emits the index + shards on the same rules the runtime handler
     /// uses.
-    let private appSitemapSharding (app: PublicRenderingServerApp) : SitemapGenerator.SitemapShardingOptions = {
-        Threshold = app.SitemapShardThreshold
-        ClusterKey = app.SitemapClusterKey
-        DefaultLastmod = app.SitemapDefaultLastmod |> Option.map (fun d -> d.ToString("yyyy-MM-dd"))
+    let private sitemapSharding (options: PublicRenderingOptions) : SitemapGenerator.SitemapShardingOptions = {
+        Threshold = options.SitemapShardThreshold
+        ClusterKey = options.SitemapClusterKey
+        DefaultLastmod = options.SitemapDefaultLastmod |> Option.map (fun d -> d.ToString("yyyy-MM-dd"))
     }
 
     /// Phase 737 — the compose-level sitemap universe knob
     /// (`withSitemapNoindexExclusion`) as a `SitemapUniverseOptions`, so
     /// the static export advertises exactly what the runtime handler would.
-    let private appSitemapUniverse (app: PublicRenderingServerApp) : SitemapGenerator.SitemapUniverseOptions = {
-        ExcludeNoindex = app.SitemapExcludeNoindex
+    let private sitemapUniverse (options: PublicRenderingOptions) : SitemapGenerator.SitemapUniverseOptions = {
+        ExcludeNoindex = options.SitemapExcludeNoindex
     }
 
+    /// Phase 93 — static export with operational extensions: per-locale
+    /// trees, host-config emission (`staticwebapp.config.json` / `_redirects`
+    /// / `_headers`), and a build-time internal-link / asset check. Passes
+    /// the compose-registered redirects (`options.Redirects`) through to the
+    /// host-config emitter. `StaticExportOptions.defaults` reproduces the
+    /// `exportStatic` single-tree behaviour.
     let exportStaticWith
-        (options: StaticExportOptions)
+        (exportOptions: StaticExportOptions)
         (outputDir: string)
-        (app: PublicRenderingServerApp)
+        (app: ServerApp, options: PublicRenderingOptions)
         : Async<int> =
         StaticExport.runWith
             {
-                options with
-                    SitemapSharding = appSitemapSharding app // Phase 150
-                    SitemapUniverse = appSitemapUniverse app // Phase 737
+                exportOptions with
+                    SitemapSharding = sitemapSharding options
+                    SitemapUniverse = sitemapUniverse options
             }
-            app.Redirects
-            app.Base.Config
-            (resolvedLayouts app)
-            app.ContentApiOverride
-            app.ContentSources
-            app.Base.Logger
+            options.Redirects
+            (ServerApp.effectiveConfig app)
+            (resolvedLayouts options)
+            options.ContentApiOverride
+            options.ContentSources
+            app.Logger
             outputDir
 
     /// Phase 115 — multi-site static export. Writes the default site to
@@ -2045,44 +1913,44 @@ module PublicRenderingServerApp =
     /// `withSite` satellite to `outputDir/sites/<Name>/`, every tree
     /// rendered with that site's content root + layouts (shared fallback)
     /// + redirects and a `sitemap.xml` on that site's `BaseUrl`. Host-
-    /// config emission (`options.HostConfigs`) applies per tree from that
-    /// tree's redirects. Satellites export file-tier content only (no
+    /// config emission (`exportOptions.HostConfigs`) applies per tree from
+    /// that tree's redirects. Satellites export file-tier content only (no
     /// entity overlay / content sources — the Phase 114 scope cut).
     /// Returns the total page count across every tree.
     let exportStaticAllWith
-        (options: StaticExportOptions)
+        (exportOptions: StaticExportOptions)
         (outputDir: string)
-        (app: PublicRenderingServerApp)
+        (app: ServerApp, options: PublicRenderingOptions)
         : Async<int> =
         async {
-            let! total = exportStaticWith options outputDir app
+            let! total = exportStaticWith exportOptions outputDir (app, options)
 
             let mutable sum = total
 
-            for site in app.Sites do
+            for site in options.Sites do
                 let siteConfig = {
-                    app.Base.Config with
+                    ServerApp.effectiveConfig app with
                         PublicRendering = EnabledPublicRendering site.ContentRoot
                         PublicBaseUrl = Some site.BaseUrl
                 }
 
-                let siteLayouts = siteLayoutsOf (resolvedLayouts app) site
+                let siteLayouts = siteLayoutsOf (resolvedLayouts options) site
 
                 let siteDir = System.IO.Path.Combine(outputDir, "sites", site.Name)
 
                 let! n =
                     StaticExport.runWith
                         {
-                            options with
-                                SitemapSharding = appSitemapSharding app // Phase 150
-                                SitemapUniverse = appSitemapUniverse app // Phase 737
+                            exportOptions with
+                                SitemapSharding = sitemapSharding options
+                                SitemapUniverse = sitemapUniverse options
                         }
                         site.Redirects
                         siteConfig
                         siteLayouts
                         None
                         []
-                        app.Base.Logger
+                        app.Logger
                         siteDir
 
                 sum <- sum + n
@@ -2092,60 +1960,32 @@ module PublicRenderingServerApp =
 
     /// Phase 115 — `exportStaticAllWith` with default options. The
     /// multi-site analogue of `exportStatic`.
-    let exportStaticAll (outputDir: string) (app: PublicRenderingServerApp) : Async<int> =
-        exportStaticAllWith StaticExportOptions.defaults outputDir app
+    let exportStaticAll (outputDir: string) (app: ServerApp, options: PublicRenderingOptions) : Async<int> =
+        exportStaticAllWith StaticExportOptions.defaults outputDir (app, options)
 
-// ─── Additive companion-set extension `withPublicRendering` (Phase 80c) ──
-//
-// Stack PublicRendering contributions onto an existing `ServerApp` pipeline
-// alongside Forms / AI / RAG / future companions, without forcing the
-// deployment to commit to `PublicRenderingServerApp.run` as the terminal
-// call. Mirrors Phase 1h's `FormsCompose.withForms` / `AICompose.withAI`
-// shape exactly; see the Phase 1h migration doc + the Phase 80c migration
-// doc for the hybrid-composition pattern.
+// ─── The public-rendering companion on a `ServerApp` ────────────────
 
-/// Phase 80c — stack PublicRendering contributions onto an existing
-/// `ServerApp` pipeline. The `configure` function builds
-/// public-rendering-specific state (layouts, redirects, JSON-LD builders,
-/// hot-reload toggle, content-API override, AI-publish gating, Atom feeds)
-/// on a fresh `PublicRenderingServerApp` whose `Base` is the input
-/// `ServerApp`. The configurator should call only PublicRendering-specific
-/// helpers (`PublicRenderingServerApp.withLayout` / `withRedirects` /
-/// `withFeed` / etc.); the delegating helpers (`withConfig` / `withAuth` /
-/// …) exist on `PublicRenderingServerApp` for backcompat but calling them
-/// inside the configurator overwrites the base `ServerApp`'s existing
-/// configuration. Set base configuration on the outer pipeline before
-/// calling `withPublicRendering`.
+/// **Sets** the public-rendering companion: the layouts, redirects, feeds
+/// and handlers `options` describes are composed once, when the deployment
+/// resolves, onto the deployment as every builder left it — so a
+/// `ServerApp` builder applied after this call still reaches it. A second
+/// call replaces the first. When the resolved
+/// `ServerConfig.PublicRendering = NoPublicRendering` the companion
+/// contributes nothing, so a deployment can opt into public rendering by
+/// flipping the `ServerConfig` field at startup without changing its
+/// composition root.
 ///
-/// Calling `withPublicRendering` twice on the same pipeline composes
-/// PublicRendering twice — the Phase 80c conflict validator (mirroring the
-/// Phase 1h convention via `ServerApp.ensureCompanionNotAlreadyComposed`)
-/// surfaces this at compose time with a clear single-line diagnostic
-/// naming the companion + resolution paths, instead of cascading into
-/// double-mounted-route / duplicate-entity-registration failures.
-///
-/// When `ServerConfig.PublicRendering = NoPublicRendering`, the call is
-/// a no-op pass-through — same strip-imports guarantee as
-/// `PublicRenderingServerApp.run`. The companion marker is NOT appended
-/// in that case, so a later `withPublicRendering` on the same pipeline
-/// composes freely (a deployment can opt into PublicRendering by flipping
-/// the `ServerConfig` field at startup without changing its composition
-/// root).
-///
-/// Example — PublicRendering + a domain module on one pipeline:
+/// Example — public rendering + a domain module on one pipeline:
 ///
 ///     ServerApp.empty
 ///     |> ServerApp.withConfig config
 ///     |> ServerApp.withStorage storage
 ///     |> ServerApp.addModule myAdminModule
-///     |> PublicRenderingCompose.withPublicRendering (fun pr ->
-///         pr
-///         |> PublicRenderingServerApp.withLayout "page" pageLayout
-///         |> PublicRenderingServerApp.withLayout "article" articleLayout
-///         |> PublicRenderingServerApp.withFeed myAtomFeed)
+///     |> PublicRenderingCompose.withPublicRendering (
+///         PublicRenderingOptions.create ()
+///         |> PublicRenderingOptions.withLayout "page" pageLayout
+///         |> PublicRenderingOptions.withLayout "article" articleLayout
+///         |> PublicRenderingOptions.withFeed myAtomFeed)
 ///     |> ServerApp.run
-/// **Adds** the companion: its handlers, and its registrations as a contribution under its own id.
-let withPublicRendering (configure: PublicRenderingServerApp -> PublicRenderingServerApp) (app: ServerApp) : ServerApp =
-    PublicRenderingServerApp.createFrom app
-    |> configure
-    |> PublicRenderingServerApp.composePublicRendering
+let withPublicRendering (options: PublicRenderingOptions) (app: ServerApp) : ServerApp =
+    ServerApp.withCompanion publicRenderingCompanion (composePublicRendering options) app

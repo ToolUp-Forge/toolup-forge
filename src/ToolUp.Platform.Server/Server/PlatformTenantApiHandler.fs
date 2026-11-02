@@ -1,9 +1,12 @@
-module ToolUp.Platform.PlatformTenantApiHandler
+module ToolUp.Platform.Compose.PlatformTenantApiHandler
 
 open System.Collections.Concurrent
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Jobs
 
 // ─── Phase 54 — IPlatformTenantApi server handler ────────────────────
 //
@@ -111,7 +114,7 @@ let platformTenantApi (ctx: HttpContext) : IPlatformTenantApi =
         | _ -> TenantLifecycleSnapshot()
 
     // Phase 54e — durable backing for the last summary. Registered under
-    // `EnabledTenantLifecycle`; `None` only in minimal/test wiring, where
+    // `FeatureMode.Enabled`; `None` only in minimal/test wiring, where
     // the process-local snapshot remains the sole backing (prior Phase 54
     // behaviour). The snapshot is a read-through cache in front of it.
     let summaryStore =

@@ -1,9 +1,9 @@
-module ToolUp.Platform.PerScopeKeyResolverDistributedValidator
+module ToolUp.Platform.Config.PerScopeKeyResolverDistributedValidator
 
 open System
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
-open ToolUp.Platform.BlobEncryption
+open ToolUp.Platform.Infra.BlobEncryption
 open ToolUp.Platform.ConfigValidation
 
 // ─── Gap #1 / Phase 458 — PerScopeKeyResolver multi-instance cache coherence ──
@@ -45,14 +45,14 @@ open ToolUp.Platform.ConfigValidation
 // `MultiInstanceAdminCoherenceValidator`,
 // `AICancellationDispatchInstanceValidator`,
 // `ShareTokenRateLimiterDistributionValidator`) all read
-// `config.ReplicaCount`. The env var is only ONE of the two ways that
+// `config.MultiInstance.ReplicaCount`. The env var is only ONE of the two ways that
 // field is populated — `ServerConfig.fromEnv` parses it, but a
-// deployment that sets `{ config with ReplicaCount = 3 }` in code never
+// deployment that sets `{ config with MultiInstance = { config.MultiInstance with ReplicaCount = 3 } }` in code never
 // touches the environment. Such a deployment tripped every other
 // topology validator and silently skipped this one: the single
 // HARD-ERROR guard in the set, protecting the crypto-shred contract,
 // was the one that could be bypassed by configuring in the ordinary
-// way. Now `max config.ReplicaCount <env>` — either declaration counts,
+// way. Now `max config.MultiInstance.ReplicaCount <env>` — either declaration counts,
 // and a stale env var can only ever raise the count, never lower a
 // declared one.
 //
@@ -96,9 +96,6 @@ open ToolUp.Platform.ConfigValidation
 [<Literal>]
 let private ReplicaCountEnvVar = ConfigKeys.Names.replicaCount
 
-[<Literal>]
-let private NotificationChannelEnvVar = ConfigKeys.Names.notificationChannel
-
 // Phase 698 — both keys resolve through the Phase-696 `ConfigResolution`
 // seam. This validator gates a tenant's crypto-erasure guarantee on the
 // declared topology, so reading a different value from the one the
@@ -117,16 +114,12 @@ let private envReplicaCount () =
 /// it is what this validator gated on before Phase 458 and a deployment
 /// may still be setting only it.
 let internal declaredReplicaCount (config: ServerConfig) =
-    max config.ReplicaCount (envReplicaCount ())
+    max config.MultiInstance.ReplicaCount (envReplicaCount ())
 
+// One reader for the key: `in-process` is in-process here exactly as it is
+// in the channel selector.
 let private isDistributedChannelEnv () =
-    match
-        ConfigResolution.tryValue NotificationChannelEnvVar
-        |> Option.map (fun v -> v.Trim().ToLowerInvariant())
-    with
-    | Some "inprocess"
-    | None -> false
-    | Some _ -> true
+    not (NotificationChannel.isInProcess (NotificationChannel.selectedChannel ()))
 
 /// What a composed registration for `'T` lets a preflight see WITHOUT
 /// building the container (building it would create different singletons
@@ -243,7 +236,7 @@ let internal perScopeResolver
 
 /// Gap #1 / Phase 458 — config validator that refuses startup when
 /// `PerScopeKeyResolver` is active in a deployment declaring more than one
-/// replica (`ServerConfig.ReplicaCount` or `TOOLUP_REPLICA_COUNT`) and the
+/// replica (`ServerConfig.MultiInstance.ReplicaCount` or `TOOLUP_REPLICA_COUNT`) and the
 /// destruction broadcast cannot reach a sibling — because the resolver was
 /// never wired to a channel, or because the wired channel cannot leave the
 /// process. Crypto-shredding is silently incoherent in either case.
@@ -282,7 +275,7 @@ type PerScopeKeyResolverDistributedValidator
                     return
                         Error(
                             sprintf
-                                "PerScopeKeyResolver is active with %d declared replicas (ServerConfig.ReplicaCount / TOOLUP_REPLICA_COUNT), but WireToChannel was never invoked on it — the resolver holds no INotificationChannel, so DestroyKey publishes no destruction broadcast at all. A crypto-shred on one replica evicts only that replica's cache and deletes the shared secret; every OTHER replica keeps decrypting the destroyed scope's blobs from its own warm cache for up to the 5-minute sliding TTL, and no EncryptionKeyDestroyAcknowledged audit rows are recorded to reveal it. This breaks the Phase 22 crypto-shred contract for GDPR right-to-erasure / contract-termination workflows. Compose the resolver through ServerApp.withEncryptedBlobStorage — compose calls WireToChannel for every PerScopeKeyResolver it composes — or call WireToChannel yourself with the distributed channel before startup completes. Single-instance deployments (ReplicaCount = 1) do not need it and are not affected."
+                                "PerScopeKeyResolver is active with %d declared replicas (ServerConfig.MultiInstance.ReplicaCount / TOOLUP_REPLICA_COUNT), but WireToChannel was never invoked on it — the resolver holds no INotificationChannel, so DestroyKey publishes no destruction broadcast at all. A crypto-shred on one replica evicts only that replica's cache and deletes the shared secret; every OTHER replica keeps decrypting the destroyed scope's blobs from its own warm cache for up to the 5-minute sliding TTL, and no EncryptionKeyDestroyAcknowledged audit rows are recorded to reveal it. This breaks the Phase 22 crypto-shred contract for GDPR right-to-erasure / contract-termination workflows. Compose the resolver through ServerApp.withEncryptedBlobStorage — compose calls WireToChannel for every PerScopeKeyResolver it composes — or call WireToChannel yourself with the distributed channel before startup completes. Single-instance deployments (ReplicaCount = 1) do not need it and are not affected."
                                 replicas
                         )
                 else
@@ -296,7 +289,7 @@ type PerScopeKeyResolverDistributedValidator
                         return
                             Error(
                                 sprintf
-                                    "PerScopeKeyResolver is active with %d declared replicas (ServerConfig.ReplicaCount / TOOLUP_REPLICA_COUNT) but the composed INotificationChannel is in-process (InMemoryNotificationChannel / NoOpNotificationChannel, or TOOLUP_NOTIFICATION_CHANNEL unset / 'inprocess') — the cross-silo cache-invalidation path that DestroyKey relies on is non-functional. A DestroyKey call on one silo evicts only that silo's cache; other silos continue to decrypt the destroyed scope's blobs until their 5-minute sliding TTL elapses, violating the Phase 22 crypto-shred contract for GDPR right-to-erasure / contract-termination workflows. Switch to a distributed channel: ServerConfig.Notifications = RedisNotifications \"<connection-string>\" (or TOOLUP_NOTIFICATION_CHANNEL=redis + TOOLUP_REDIS_CONNECTION=<conn-string>) — the Redis companion at src/NotificationChannels/Redis/ ships today. This is the same env var Phase 6l.F's job-scheduler-instance validator names. No escape hatch — there's no legitimate single-process equivalent for the cross-silo broadcast. Confirm the wiring afterwards on the /dev/inspect \"Crypto-shred fanout\" panel."
+                                    "PerScopeKeyResolver is active with %d declared replicas (ServerConfig.MultiInstance.ReplicaCount / TOOLUP_REPLICA_COUNT) but the composed INotificationChannel is in-process (InMemoryNotificationChannel / NoOpNotificationChannel, or TOOLUP_NOTIFICATION_CHANNEL unset / 'inprocess') — the cross-silo cache-invalidation path that DestroyKey relies on is non-functional. A DestroyKey call on one silo evicts only that silo's cache; other silos continue to decrypt the destroyed scope's blobs until their 5-minute sliding TTL elapses, violating the Phase 22 crypto-shred contract for GDPR right-to-erasure / contract-termination workflows. Switch to a distributed channel: ServerConfig.Notifications = RedisNotifications \"<connection-string>\" (or TOOLUP_NOTIFICATION_CHANNEL=redis + TOOLUP_REDIS_CONNECTION=<conn-string>) — the Redis companion at src/NotificationChannels/Redis/ ships today. This is the same env var Phase 6l.F's job-scheduler-instance validator names. No escape hatch — there's no legitimate single-process equivalent for the cross-silo broadcast. Confirm the wiring afterwards on the /dev/inspect \"Crypto-shred fanout\" panel."
                                     replicas
                             )
                     else

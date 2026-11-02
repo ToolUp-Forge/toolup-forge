@@ -8,11 +8,12 @@ open System.IO
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.IVectorStore
-open ToolUp.Platform.IEmbeddingProvider
-open ToolUp.Platform.IRetrievalPipeline
+open ToolUp.Platform.Infra.IVectorStore
+open ToolUp.Platform.Infra.IEmbeddingProvider
+open ToolUp.Platform.Infra.IRetrievalPipeline
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.RAG.StaticCorpus
+open ToolUp.Platform.Infra
 
 // ─── Phase 502 — metadata-filtered retrieval, parity pack ────────────
 //
@@ -260,7 +261,7 @@ let private filterBehaviours (bind: unit -> Bound) =
 // 502.A taught both pipelines to HONOUR `Filters`; it did not make the
 // field reachable from the AI path. `RAGPromptBuilder.withRetrievalToolAware`
 // constructs its own `RetrievalRequest`, so a deployment composing
-// `RAGServerApp` — and the AI panel talking to it — could not scope a query
+// RAG — and the AI panel talking to it — could not scope a query
 // however willing the pipeline was. The behaviours below pin the two
 // carriers that close that (`RetrievalDefaults.Filters`, the operator's
 // deployment-wide bound; `PromptContext.RetrievalFilters`, the per-turn one
@@ -296,6 +297,7 @@ let private promptContextWith (perRequest: Map<string, string> option) : ToolUp.
     ShortCircuit = ref None
     PlannedAnswerId = ref None
     Scope = ResolvedScope.anonymous
+    Services = ToolUp.AI.SystemPromptBuilder.PromptContext.noServices
 }
 
 /// Run the tool-aware builder with the given deployment + per-request

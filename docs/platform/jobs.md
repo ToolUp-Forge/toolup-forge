@@ -272,7 +272,7 @@ async {
 }
 ```
 
-Off by default (`ServerConfig.JobProgress = NoJobProgress`), in which case the call is a no-op costing one interface dispatch (GP 13). The checkpoint model, the reserved `_platform.jobs.progress` notification key, and the coalescing rule that never sheds the terminal checkpoint are documented in [`external-compute.md`](external-compute.md#progress-checkpoints), alongside the reconciliation poll that gives externally-run jobs progress with no handler code.
+Off by default (`ServerConfig.JobProgress = FeatureMode.Disabled`), in which case the call is a no-op costing one interface dispatch (GP 13). The checkpoint model, the reserved `_platform.jobs.progress` notification key, and the coalescing rule that never sheds the terminal checkpoint are documented in [`external-compute.md`](external-compute.md#progress-checkpoints), alongside the reconciliation poll that gives externally-run jobs progress with no handler code.
 
 ## `JobApi` ToolUp.Remoting surface
 
@@ -498,8 +498,8 @@ let config = {
     ServerConfig.defaults with
         // NoJobScheduler (the default) | InProcessJobScheduler
         JobScheduler = InProcessJobScheduler
-        // NoJobProgress (the default) | EnabledJobProgress
-        JobProgress = EnabledJobProgress
+        // FeatureMode.Disabled (the default) | FeatureMode.Enabled
+        JobProgress = FeatureMode.Enabled
 }
 ```
 

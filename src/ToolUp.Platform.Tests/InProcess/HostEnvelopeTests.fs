@@ -6,6 +6,9 @@ open FSharp.Reflection
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
 open ToolUp.Platform.FileProcessor
+open ToolUp.Platform.Config
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 588 — host-envelope descriptor ─────────────────────────────
 //
@@ -109,20 +112,20 @@ let private reflectedCompanionInterfaces () : Set<string> =
 /// Recompute the enum-like `ServerConfig` knob names straight off the
 /// record type.
 let private reflectedKnobNames () : Set<string> =
-    FSharpType.GetRecordFields typeof<ServerConfig>
-    |> Array.choose (fun field ->
-        let t = field.PropertyType
+    let rec names (record: Type) = [
+        for field in FSharpType.GetRecordFields record do
+            let t = field.PropertyType
 
-        if FSharpType.IsUnion t then
-            let cases = FSharpType.GetUnionCases t
+            if ComposableSurface.isConcernRecord t then
+                yield! names t
+            elif FSharpType.IsUnion t then
+                let cases = FSharpType.GetUnionCases t
 
-            if cases.Length > 0 && cases |> Array.forall (fun c -> c.GetFields().Length = 0) then
-                Some field.Name
-            else
-                None
-        else
-            None)
-    |> Set.ofArray
+                if cases.Length > 0 && cases |> Array.forall (fun c -> c.GetFields().Length = 0) then
+                    yield field.Name
+    ]
+
+    names typeof<ServerConfig> |> Set.ofList
 
 /// Recompute the component-kind labels straight off the union.
 let private reflectedKindLabels () : Set<string> =
@@ -313,7 +316,7 @@ let tests =
 
             Expect.equal
                 profile.KnobResolved
-                (string app.Config.ProcessProfile)
+                (string app.Config.MultiInstance.ProcessProfile)
                 "the resolved value is read off the live ServerConfig, not a hand-listed copy"
 
         // ── platform build ───────────────────────────────────────────

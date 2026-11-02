@@ -3,6 +3,7 @@ module ToolUp.Platform.Tests.Contracts.IPeerNonFSharpSdkContract
 open Expecto
 open ToolUp.Platform
 open ToolUp.InterPlatform
+open ToolUp.Platform.Infra
 
 // ─── Phase 18e — non-F# peer SDK (schema + generators) contract pack ─
 //

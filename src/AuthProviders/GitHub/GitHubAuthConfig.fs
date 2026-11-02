@@ -5,6 +5,7 @@ module ToolUp.AuthProviders.GitHubAuthConfig
 
 open System
 open ToolUp.Platform
+open ToolUp.Platform.Compose
 
 // ─── GitHub auth-provider config + builders ──────────────────────────
 //

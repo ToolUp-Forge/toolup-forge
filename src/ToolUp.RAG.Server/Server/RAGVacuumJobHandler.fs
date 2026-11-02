@@ -8,14 +8,17 @@ open System.Diagnostics
 open System.Text
 open ToolUp.Platform
 open ToolUp.Platform.VectorKnowledgeTypes
-open ToolUp.Platform.IVectorStore
+open ToolUp.Platform.Infra.IVectorStore
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 14w — RAGVacuumJobHandler ──────────────────────────────
 //
 // `IJobHandler` registered under `VacuumHandlerName`
 // (`_platform.rag.tombstone-vacuum`) and scheduled by `composeRAG` on
 // a cron trigger (default daily 03:00 UTC) when a deployment opts in
-// via `RAGServerApp.withVacuumSchedule`.
+// via `RagOptions.withVacuumSchedule`.
 //
 // **Why this exists.** `IVectorStore.DeleteChunk` is a tombstone write
 // (Phase 14h) — it stamps `_deletedAt` and keeps the entry so

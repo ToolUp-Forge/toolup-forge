@@ -1,8 +1,9 @@
-module ToolUp.Platform.SurfaceEnforcement
+module ToolUp.Platform.Scope.SurfaceEnforcement
 
 open System
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
+open ToolUp.Platform.Config
 
 // ─── SurfaceEnforcementMiddleware — Phase 66 Stream A.5 + A.6 ────────
 //
@@ -198,7 +199,7 @@ module SurfaceRequirementRegistry =
     /// * `/api/ai/events`, `/api/notifications` → `public_` only
     ///   when `SseAuthMode = QueryParamFallback` (the carve-out the
     ///   retired middleware applied to the EventSource handshake).
-    /// * Each entry in `config.PeerRoutePrefixes` → `public_`. The
+    /// * Each entry in `config.MultiInstance.PeerRoutePrefixes` → `public_`. The
     ///   peer-bearer middleware authenticates these requests via
     ///   its own gate; the matrix admit check is a no-op for them.
     /// * In deployments without any authenticated surface (only
@@ -223,12 +224,12 @@ module SurfaceRequirementRegistry =
         let exactCsrf = ("GET", "/api/csrf-token"), SurfaceRequirement.public_
 
         let exactSse =
-            match config.SseAuthMode with
+            match config.SecurityPosture.SseAuthMode with
             | QueryParamFallback -> sseRoutes |> List.map (fun p -> ("GET", p), SurfaceRequirement.public_)
             | CookieRequired -> []
 
         let peerPrefixBridge =
-            config.PeerRoutePrefixes
+            config.MultiInstance.PeerRoutePrefixes
             |> List.map (fun p -> toLower p, SurfaceRequirement.public_)
 
         let surfacesBridge =

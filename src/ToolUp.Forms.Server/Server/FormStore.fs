@@ -3,11 +3,13 @@ module ToolUp.Forms.FormStore
 open ToolUp.Platform
 open ToolUp.Platform.EntityTypes
 open ToolUp.Platform.EntityQueryTypes
-open ToolUp.Platform.IEntityStore
+open ToolUp.Platform.Infra.IEntityStore
 open ToolUp.Platform.Metrics
 open ToolUp.Forms.FormSchema
 open ToolUp.Forms.FormSubmission
 open ToolUp.Forms.IFormStore
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
 
 // ─── Phase 21 — Default IFormStore implementation ───────────────────
 //
@@ -51,7 +53,7 @@ let private ListSchemasFailedIdSampleLimit = 5
 
 /// SDK-owned metric registrations for `FormStore` so deployment-side
 /// sinks pre-allocate the series at compose time. Wired through
-/// `FormsCompose.run` into `ServerApp.MetricRegistrations`. Same
+/// `FormsCompose.withForms` into `ServerApp.MetricRegistrations`. Same
 /// pattern as `ActionLedgerMetrics.registrations`.
 let metricRegistrations: MetricRegistration list = [
     {

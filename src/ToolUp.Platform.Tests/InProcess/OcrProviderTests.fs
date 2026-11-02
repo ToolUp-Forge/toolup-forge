@@ -9,7 +9,7 @@ open UglyToad.PdfPig.Fonts.Standard14Fonts
 open UglyToad.PdfPig.Writer
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.IOcrProvider
+open ToolUp.Platform.Infra.IOcrProvider
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.RAG.IngestionTypes
 open ToolUp.RAG.OcrProviders.Tesseract.TesseractOcrProvider
@@ -20,6 +20,10 @@ open KnowledgeBase.ServerApiDeps
 open KnowledgeBase.ServerApiDocuments
 open KnowledgeBase.ServerOriginalSourceResolver
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 500 — OCR companion + "OCR unavailable" signal ────────────
 //
@@ -117,7 +121,7 @@ let private blankPdf () : byte[] =
 let private noOpOcr: IOcrProvider =
     ToolUp.RAG.NoOpDocUnderstanding.createOcrProvider ()
 
-let private noOpTables: ToolUp.Platform.ITableExtractor.ITableExtractor =
+let private noOpTables: ToolUp.Platform.Infra.ITableExtractor.ITableExtractor =
     ToolUp.RAG.NoOpDocUnderstanding.createTableExtractor ()
 
 /// A stand-in companion. Deliberately provider-agnostic: the extraction

@@ -1,9 +1,10 @@
-module ToolUp.Platform.DataIngestionJobHandler
+module ToolUp.Platform.Jobs.DataIngestionJobHandler
 
 open System.Text.Json
 open System.Text.Json.Nodes
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
+open ToolUp.Platform.Infra
 
 // ─── DataIngestionJobHandler ─────────────────────────────────────
 //

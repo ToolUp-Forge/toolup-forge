@@ -2,6 +2,10 @@ module ToolUp.Platform.Tests.InProcess.NotificationSilentlySkippedTests
 
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Tests ────────────────────────────────────────────────────────────
 //

@@ -65,115 +65,290 @@ module Proc =
                 printStarting x
                 x
             |> Array.map redirect
-            |> Array.Parallel.map Proc.run
+            |> Array.Parallel.map Fake.Core.Proc.run
 
-let private createProcess exe args dir =
-    CreateProcess.fromRawCommand exe args
-    |> CreateProcess.withWorkingDirectory dir
-    |> CreateProcess.ensureExitCode
+    /// Inherit the console, echo the command line, add nothing to the
+    /// environment, never time out.
+    let options: ProcOptions = {
+        Environment = []
+        Redirect = false
+        TraceCommand = true
+        Timeout = None
+    }
 
-let private dotnet args dir = createProcess "dotnet" args dir
-let private docker args dir = createProcess "docker" args dir
+    /// The FAKE process `execWith` starts, before redirection — for callers
+    /// that compose FAKE's process model directly (`Parallel.run`).
+    let create (o: ProcOptions) (exe: string) (args: string list) (dir: string) : CreateProcess<ProcessResult<unit>> =
+        let c =
+            o.Environment
+            |> List.fold
+                (fun c (name, value) -> CreateProcess.setEnvironmentVariable name value c)
+                (CreateProcess.fromRawCommand exe args |> CreateProcess.withWorkingDirectory dir)
 
-let private createProcessFromPath processName args dir =
-    let path =
-        match ProcessUtils.tryFindFileOnPath processName with
+        let c =
+            if o.TraceCommand then
+                c
+            else
+                CreateProcess.disableTraceCommand c
+
+        o.Timeout |> Option.fold (fun c limit -> CreateProcess.withTimeout limit c) c
+
+    /// Run `exe args` in `dir` under `o`. Never raises for a non-zero exit:
+    /// the code is in the result, and `ensure` turns it into a failure.
+    let execWith (o: ProcOptions) (exe: string) (args: string list) (dir: string) : ProcResult =
+        let c = create o exe args dir
+        let clock = Diagnostics.Stopwatch.StartNew()
+
+        let code, out, err =
+            if o.Redirect then
+                let r = c |> CreateProcess.redirectOutput |> Fake.Core.Proc.run
+                r.ExitCode, r.Result.Output, r.Result.Error
+            else
+                (Fake.Core.Proc.run c).ExitCode, "", ""
+
+        {
+            Command = c.CommandLine
+            ExitCode = code
+            StdOut = out
+            StdErr = err
+            Elapsed = clock.Elapsed
+        }
+
+    /// Run `exe args` in `dir`, inheriting the console.
+    let exec (exe: string) (args: string list) (dir: string) : ProcResult = execWith options exe args dir
+
+    /// Run `exe args` in `dir`, capturing standard output and error.
+    let redirected (exe: string) (args: string list) (dir: string) : ProcResult =
+        execWith { options with Redirect = true } exe args dir
+
+    /// The result unchanged when it exited 0; otherwise raise, naming the
+    /// exit code and the command line.
+    let ensure (result: ProcResult) : ProcResult =
+        if result.ExitCode <> 0 then
+            failwithf "Process exit code '%d' <> 0. Command Line: %s" result.ExitCode result.Command
+
+        result
+
+    /// The full path of `name` on PATH; raises with `missing name` when it
+    /// is not there.
+    let onPath (missing: string -> string) (name: string) : string =
+        match ProcessUtils.tryFindFileOnPath name with
         | Some path -> path
-        | None ->
-            $"{processName} was not found in path. Please install it and make sure it's available from your path."
-            |> failwith
+        | None -> failwith (missing name)
 
-    createProcess path args dir
+/// `git`, run the one way a build driver reads it: captured and not echoed.
+module Git =
 
-let private npm args dir = createProcessFromPath "npm" args dir
-let private run proc arg dir = proc arg dir |> Proc.run |> ignore
+    let private quiet = {
+        Proc.options with
+            Redirect = true
+            TraceCommand = false
+    }
+
+    /// `git args` in `root`. The exit code is the caller's to read.
+    let run (root: string) (args: string list) : ProcResult = Proc.execWith quiet "git" args root
+
+    /// `git args` in `root`, killed and raising when it outlives `limit`.
+    let within (limit: TimeSpan) (root: string) (args: string list) : ProcResult =
+        Proc.execWith { quiet with Timeout = Some limit } "git" args root
+
+    /// The standard output of `git args` in `root`; raises on a non-zero exit.
+    let read (root: string) (args: string list) : string = (run root args |> Proc.ensure).StdOut
+
+/// Splitting a process's output into lines.
+module Lines =
+
+    /// The non-blank lines of `text`, each trimmed, in order. CRLF and LF
+    /// both end a line.
+    let ofOutput (text: string) : string list =
+        text.Replace("\r\n", "\n").Split('\n')
+        |> Array.map _.Trim()
+        |> Array.filter (String.IsNullOrWhiteSpace >> not)
+        |> List.ofArray
+
+/// Path spelling shared by the driver's reports.
+[<RequireQualifiedAccess>]
+module Paths =
+
+    /// `path` with every backslash turned into a forward slash.
+    let toSlash (path: string) : string = path.Replace('\\', '/')
+
+/// The driver's command line, parsed once. `execute` and every target read
+/// the same parse, so no target re-reads the process arguments for itself.
+module Flags =
+
+    /// The target `argv` requests: the first argument when it is not an
+    /// option, else `Run`.
+    let targetOf (argv: string seq) : string =
+        match List.ofSeq argv with
+        | t :: _ when not (t.StartsWith("--", StringComparison.Ordinal)) -> t
+        | _ -> "Run"
+
+    /// The options the SDK's own targets read: `AddHeaders` / `Codemod`
+    /// take `--check`, `Codemod` takes `--phase <n>`, `execute` takes
+    /// `--module <name>`.
+    let sdk: FlagSpec = {
+        Switches = [ "--check" ]
+        Valued = [ "--module"; "--phase" ]
+    }
+
+    /// Two specs accepted together.
+    let union (a: FlagSpec) (b: FlagSpec) : FlagSpec = {
+        Switches = List.distinct (a.Switches @ b.Switches)
+        Valued = List.distinct (a.Valued @ b.Valued)
+    }
+
+    let private walk (strict: bool) (spec: FlagSpec) (argv: string list) : Result<Flags, string> =
+        let target = targetOf argv
+
+        let valued (a: string) = List.contains a spec.Valued
+
+        let known (a: string) =
+            valued a || List.contains a spec.Switches
+
+        let accepted () =
+            spec.Switches @ (spec.Valued |> List.map (sprintf "%s <value>"))
+            |> List.sort
+            |> String.concat ", "
+
+        let rec go args switches values positionals =
+            match args with
+            | [] ->
+                Ok {
+                    Target = target
+                    Positionals = List.rev positionals
+                    Switches = switches
+                    Values = values
+                }
+            | (a: string) :: tail when a.StartsWith("--", StringComparison.Ordinal) ->
+                match tail with
+                | v :: rest when valued a -> go rest switches (Map.add a v values) positionals
+                | [] when strict && valued a -> Error(sprintf "the option `%s` needs a value." a)
+                | _ when strict && not (known a) ->
+                    Error(sprintf "unknown option `%s`. The accepted options are: %s." a (accepted ()))
+                | _ -> go tail (Set.add a switches) values positionals
+            | a :: tail -> go tail switches values (a :: positionals)
+
+        let rest =
+            if List.tryHead argv = Some target then
+                List.tail argv
+            else
+                argv
+
+        go rest Set.empty Map.empty []
+
+    /// Parse `argv` against `spec`. An option the spec does not declare is
+    /// refused by name, as is a valued option with no value.
+    let parse (spec: FlagSpec) (argv: string seq) : Result<Flags, string> = walk true spec (List.ofSeq argv)
+
+    /// Parse `argv`, reading an undeclared `--name` (and a valued option
+    /// with no value) as a switch. Never refuses. For the
+    /// SDK's own targets inside a consumer's driver, whose other options the
+    /// SDK cannot know.
+    let lenient (spec: FlagSpec) (argv: string seq) : Flags =
+        match walk false spec (List.ofSeq argv) with
+        | Ok flags -> flags
+        | Error why -> invalidOp why
+
+    /// Whether the switch `name` was given.
+    let has (name: string) (flags: Flags) : bool = flags.Switches.Contains name
+
+    /// The value given for `name`, if any.
+    let value (name: string) (flags: Flags) : string option = flags.Values.TryFind name
+
+/// Scratch directories a gate builds outside the repository.
+module Scratch =
+
+    /// `<system temp>/<name>`: short, so Windows MAX_PATH stays away from
+    /// fsc, and outside every repository, so no ancestor MSBuild or NuGet
+    /// file leaks into what is built there.
+    let root (name: string) : string =
+        IO.Path.Combine(IO.Path.GetTempPath(), name)
+
+/// The publication-boundary matching rule: one denylist token per line,
+/// matched case-insensitively, word-bounded at an alphanumeric end, any run
+/// of whitespace in a multi-word token matching any run, `re:` for a raw
+/// regex. The token list itself is private and read at run time; only the
+/// public canary is written here.
+module Neutrality =
+
+    // OSS-BOUNDARY-EXEMPT: the public canary itself, which the boundary check always enforces.
+    /// The public-safe token always enforced, so a scan with no private list
+    /// still proves it ran.
+    [<Literal>]
+    let Canary = "PRIVATE-VOCAB-CANARY"
+
+    /// The untracked token file at a repository root.
+    let tokenFileName = "neutrality-tokens.local.txt"
+
+    /// The tokens in `lines`: trimmed, blank lines and `#` comments dropped.
+    let parseTokens (lines: string seq) : string list =
+        lines
+        |> Seq.map _.Trim()
+        |> Seq.filter (fun l -> l <> "" && not (l.StartsWith "#"))
+        |> Seq.toList
+
+    /// The private token list for the repository at `root`: the token file
+    /// when it exists, else the semicolon-separated environment variable
+    /// `variable` (a development knob the caller names, not a deployment
+    /// setting); `None` when neither supplies a token.
+    let externalTokens (root: string) (variable: string) : string list option =
+        let file = IO.Path.Combine(root, tokenFileName)
+
+        let tokens =
+            if IO.File.Exists file then
+                parseTokens (IO.File.ReadAllLines file)
+            else
+                match Environment.GetEnvironmentVariable variable with
+                | null
+                | "" -> []
+                | value -> parseTokens (value.Split ';')
+
+        match tokens with
+        | [] -> None
+        | some -> Some some
+
+    /// The regex one denylist entry compiles to.
+    let toRegex (token: string) : Text.RegularExpressions.Regex =
+        let options =
+            Text.RegularExpressions.RegexOptions.IgnoreCase
+            ||| Text.RegularExpressions.RegexOptions.CultureInvariant
+
+        if token.StartsWith("re:", StringComparison.OrdinalIgnoreCase) then
+            Text.RegularExpressions.Regex(token.Substring 3, options)
+        else
+            let isWord (c: char) = Char.IsLetterOrDigit c || c = '_'
+
+            let body =
+                token.Split([| ' '; '\t' |], StringSplitOptions.RemoveEmptyEntries)
+                |> Array.map Text.RegularExpressions.Regex.Escape
+                |> String.concat @"\s+"
+
+            let edge (c: char option) =
+                if c |> Option.exists isWord then @"\b" else ""
+
+            Text.RegularExpressions.Regex(edge (Seq.tryHead token) + body + edge (Seq.tryLast token), options)
+
+    /// The canary and the external tokens, each beside its regex.
+    let rules (external: string list option) : (string * Text.RegularExpressions.Regex) list =
+        Canary :: (external |> Option.defaultValue [])
+        |> List.map (fun t -> t, toRegex t)
+
+// The SDK targets' own process shapes, over `Proc`.
+let private run exe args dir =
+    Proc.exec exe args dir |> Proc.ensure |> ignore
+
+let private npmMissing name =
+    $"{name} was not found in path. Please install it and make sure it's available from your path."
+
+let private npm args dir =
+    run (Proc.onPath npmMissing "npm") args dir
+
+let private dotnetProcess args dir =
+    Proc.create Proc.options "dotnet" args dir |> CreateProcess.ensureExitCode
 
 let private runParallel processes =
     processes |> Proc.Parallel.run |> ignore
-
-// ─── Template-gate package closure ───────────────────────────────────
-
-/// Phase 754 — the stranger's-package guard.
-///
-/// The template gates (`VerifyTemplates`,
-/// `VerifyPackagedModuleTemplate`) supply the SDK packages the gated
-/// scaffolds reference by packing them from source at a throwaway
-/// version into a scratch feed. Each entry was a bare package-id
-/// STRING, and the project to pack was derived from it by
-/// `sprintf "src/%s/%s.fsproj"` — so the id and the producing project
-/// were the same fact spelled once, and an id this repo does not
-/// produce could not be expressed at all.
-///
-/// That coupling broke the moment a package's `PackageId` stopped
-/// matching its directory (this phase, moving the AG Grid / AG Charts
-/// bindings to `ToolUp.Feliz.*` while their projects stay at
-/// `src/Feliz.*/`), and the failure it was implicitly guarding against
-/// is not hypothetical: Phase 307 found `Feliz.AgGrid` / `Feliz.AgCharts`
-/// missing from the closure, and because BOTH ids exist on nuget.org as
-/// unrelated packages by another author, restore did not fail — it
-/// silently served a STRANGER'S package, and only the NU1603 escalation
-/// turned that into an error.
-///
-/// So the id and the project are now declared separately, and the two
-/// are RECONCILED against what the pack actually produced: after the
-/// pack loop, every declared id must appear in the scratch feed as
-/// `<id>.<version>.nupkg`. An id no project in this repo produces has
-/// no such file, and the gate says so by name instead of proceeding to
-/// a restore that will quietly resolve it from nuget.org.
-///
-/// Pure so it is provable in both directions from the Build test pack
-/// (`TemplateGateTests`) — a guard that has never been seen to fail is
-/// not known to work.
-module TemplateGate =
-
-    /// One package the template gate must supply: the id consumers
-    /// resolve, and the in-repo project that produces it. They are not
-    /// the same string in general, and assuming they were is the defect
-    /// this type exists to remove.
-    type GatePackage = {
-        /// The `PackageId` the packed project emits — the name a
-        /// consumer's `PackageReference` resolves, and the name NuGet
-        /// caches under.
-        Id: string
-        /// Repo-relative path to the producing `.fsproj`.
-        Project: string
-    }
-
-    /// Declare a gate package. `id` is the emitted `PackageId`; `project`
-    /// the repo-relative `.fsproj` that emits it.
-    let package id project = { Id = id; Project = project }
-
-    /// Declared ids for which the pack produced no `<id>.<version>.nupkg`,
-    /// in declaration order.
-    ///
-    /// `producedFiles` may be full paths or bare file names — only the
-    /// file name is read. Matching is case-insensitive because NuGet
-    /// package ids are, and a case-only difference between the
-    /// declaration and the emitted `PackageId` would otherwise be
-    /// reported as a stranger's package on a case-sensitive filesystem
-    /// and pass on Windows.
-    let unproducedIds (version: string) (declared: GatePackage list) (producedFiles: string seq) : string list =
-        let produced =
-            producedFiles
-            |> Seq.map (fun path -> IO.Path.GetFileName(path: string))
-            |> Set.ofSeq
-            |> Set.map (fun name -> name.ToLowerInvariant())
-
-        declared
-        |> List.filter (fun p -> not (produced.Contains((sprintf "%s.%s.nupkg" p.Id version).ToLowerInvariant())))
-        |> List.map _.Id
-
-    /// The failure message for `unproducedIds`. Names the ids, the class,
-    /// and the two ways the declaration can be wrong — because the
-    /// remedy differs: a typo is fixed in the list, a genuinely-absent
-    /// package means the closure names something the repo does not own.
-    let report (gate: string) (version: string) (unproduced: string list) =
-        sprintf
-            "%s: %d declared gate package id(s) were NOT produced by this repo's own pack at %s: %s. This is the stranger's-package class (Phase 307): the scratch feed cannot serve the id, so restore falls through to nuget.org and may resolve an UNRELATED package of the same name published by someone else. Either the id is misspelled in the gate closure, or its `Project` does not emit that `PackageId` — check `<PackageId>` in the declared project. Never silence this by removing the id: the packages the closure names are the ones the scaffolds actually resolve."
-            gate
-            (List.length unproduced)
-            version
-            (String.concat ", " unproduced)
 
 // ─── Phase 1096 — every test project runs or is excluded by name ────
 
@@ -341,6 +516,448 @@ module Gate =
         | [] -> Ok()
         | found -> Error found
 
+    // ─── The manifest ───────────────────────────────────────────────
+
+    /// A row as the fold sees it: the lane decision already taken by the
+    /// driver that knows its lanes. `Selected` is whether this process's
+    /// lane runs it; a row that runs only elsewhere (`Where` without
+    /// `Local`) is registered too, so the fold can say what it did not run.
+    type Registered = {
+        Name: string
+        Kind: LegKind
+        Where: Set<Site>
+        Reads: Input list
+        Budget: TimeSpan option
+        Floor: Floor option
+        Selected: bool
+    }
+
+    let private registry = ResizeArray<Registered>()
+
+    /// Register one row of the repository's gate manifest. `current` is the
+    /// lane this process runs; the row is selected when its `Lanes` carry
+    /// it. Registering a name twice is refused rather than run twice — a
+    /// repeated registration is a build script that composed itself twice,
+    /// and two `PASS` lines for one leg would double-count against a CI floor.
+    let register (current: 'Lane) (leg: GateLeg<'Lane>) : unit =
+        if registry |> Seq.exists (fun r -> r.Name = leg.Name) then
+            failwithf "Gate.register: a leg named `%s` is already registered." leg.Name
+
+        registry.Add {
+            Name = leg.Name
+            Kind = leg.Kind
+            Where = leg.Where
+            Reads = leg.Reads
+            Budget = leg.Budget
+            Floor = leg.Floor
+            Selected = Set.contains current leg.Lanes
+        }
+
+    /// Every registered row, in registration order.
+    let registered () : Registered list = List.ofSeq registry
+
+    /// The `ExpectoPack` rows `VerifyAll` runs locally, as the `TestPack`
+    /// view a consumer's `BuildConfig` carries.
+    let packs (manifest: GateLeg<'Lane> list) : TestPack list = [
+        for row in manifest do
+            match row.Kind with
+            | LegKind.ExpectoPack project when Set.contains Site.Local row.Where -> TestPack.create row.Name project
+            | LegKind.ExpectoPack _
+            | LegKind.Body _
+            | LegKind.Script _ -> ()
+    ]
+
+    /// How many rows the named CI job runs — CI's floor on the count of
+    /// `PASS` lines that job's summary block must carry.
+    let ciFloor (job: string) (manifest: GateLeg<'Lane> list) : int =
+        manifest
+        |> List.filter (fun r -> Set.contains (Site.Ci job) r.Where)
+        |> List.length
+
+    /// The pack rows whose test sources read nothing: the `pure` lane.
+    let pureRows (manifest: GateLeg<'Lane> list) : GateLeg<'Lane> list =
+        manifest
+        |> List.filter (fun r ->
+            List.isEmpty r.Reads
+            && (match r.Kind with
+                | LegKind.ExpectoPack _ -> Set.contains Site.Local r.Where
+                | LegKind.Body _
+                | LegKind.Script _ -> false))
+
+    /// The environment variables among `reads`.
+    let envInputs (reads: Input list) : string list =
+        reads
+        |> List.choose (function
+            | Input.Env name -> Some name
+            | Input.Tree
+            | Input.Git
+            | Input.Node
+            | Input.Browser
+            | Input.Docker
+            | Input.Network -> None)
+
+    /// The variables cleared from `row`'s environment when it runs: every
+    /// `Env` input some other row declares and this row does not, so a pack
+    /// cannot read a credential it did not name. A row's own allowlist is
+    /// `envInputs row.Reads`.
+    let scrubbedFor (rows: Registered list) (row: Registered) : string list =
+        let mine = envInputs row.Reads |> Set.ofList
+
+        rows
+        |> List.collect (fun r -> envInputs r.Reads)
+        |> List.distinct
+        |> List.filter (fun name -> not (mine.Contains name))
+
+    let siteName (site: Site) =
+        match site with
+        | Site.Local -> "local"
+        | Site.Ci job -> "ci:" + job
+        | Site.Release -> "release"
+
+    let inputName (input: Input) =
+        match input with
+        | Input.Tree -> "Tree"
+        | Input.Git -> "Git"
+        | Input.Node -> "Node"
+        | Input.Browser -> "Browser"
+        | Input.Docker -> "Docker"
+        | Input.Network -> "Network"
+        | Input.Env name -> "Env " + name
+
+    /// A process exit code as a verdict: 0 passes, anything else fails
+    /// naming the code — the shape every runner that reports only an exit
+    /// status gets.
+    let verdictOfExit (code: int) : Verdict =
+        if code = 0 then
+            Verdict.Pass None
+        else
+            Verdict.Fail(sprintf "exit %d" code)
+
+    /// A body whose only verdict is to raise, as a verdict: a `Failure`
+    /// (`failwith`) is the body's own red, named; any other exception is a
+    /// harness fault and propagates.
+    let verdictOf (body: unit -> unit) : Verdict =
+        try
+            body ()
+            Verdict.Pass None
+        with Failure reason ->
+            Verdict.Fail reason
+
+    /// Apply a row's floor to its verdict. `readHighWater` reads the mark a
+    /// `HighWater` file holds. A `FromRegistry` floor is the leg's own
+    /// script's to apply and passes through; a floor over a `Pass` that
+    /// reported no count is a fault in the row, not a pass.
+    let judge (name: string) (floor: Floor option) (readHighWater: string -> int) (verdict: Verdict) : Verdict =
+        match floor, verdict with
+        | None, v
+        | Some(Floor.FromRegistry _), v
+        | _, (Verdict.Fail _ as v)
+        | _, (Verdict.Pending _ as v) -> v
+        | Some _, Verdict.Pass None ->
+            Verdict.Fail(
+                sprintf
+                    "%s carries a floor but reported no case count; a floor over an unknown count holds nothing."
+                    name
+            )
+        | Some(Floor.AtLeast least), Verdict.Pass(Some cases) when cases < least ->
+            Verdict.Fail(
+                sprintf
+                    "only %d case(s) ran, below the floor of %d. A run this small means the harness matched almost nothing — check its output path and entry point before lowering the floor."
+                    cases
+                    least
+            )
+        | Some(Floor.Exactly exact), Verdict.Pass(Some cases) when cases <> exact ->
+            Verdict.Fail(
+                sprintf
+                    "%d case(s) ran; the floor is exactly %d. Adding or removing a case edits the row's floor in the same commit; fewer than declared almost always means a case was skipped. Do not lower the floor to make this green."
+                    cases
+                    exact
+            )
+        | Some(Floor.HighWater file), Verdict.Pass(Some cases) when cases < readHighWater file ->
+            Verdict.Fail(
+                sprintf
+                    "only %d case(s) ran, below the recorded high-water mark of %d (%s). The mark may only fall by hand, in the same commit as the argued loss."
+                    cases
+                    (readHighWater file)
+                    file
+            )
+        | Some _, (Verdict.Pass _ as v) -> v
+
+    /// The leg token on a summary line, byte-for-byte what CI counts:
+    /// `PASS` and `FAIL (…)` as they have always been, `PENDING (…)` for
+    /// an arm whose named input was absent.
+    let statusToken (verdict: Verdict) =
+        let firstLine (s: string) = s.Replace("\r", "").Split('\n').[0]
+
+        match verdict with
+        | Verdict.Pass _ -> "PASS"
+        | Verdict.Fail reason -> sprintf "FAIL (%s)" (firstLine reason)
+        | Verdict.Pending reason -> sprintf "PENDING (%s)" (firstLine reason)
+
+    let mutable private lastRunResults: (string * Verdict * TimeSpan) list = []
+
+    /// What the last aggregate in this process ran: each leg's name, verdict
+    /// and wall clock, for the admission record a driver writes.
+    let lastRun () = lastRunResults
+
+    let internal recordRun (results: (string * Verdict * TimeSpan) list) = lastRunResults <- results
+
+// ─── Build census ────────────────────────────────────────────────────
+
+/// The per-project build census: what each solution project
+/// costs to build, how big it is and where it sits in the reference graph,
+/// written to `build-census.json` so a split or a gate budget follows
+/// measured cost rather than folder size.
+///
+/// The reader takes MSBuild's `-clp:PerformanceSummary` text rather than a
+/// binary log, so the package takes no MSBuild reader dependency. That text
+/// is only per-project when the build runs with `-graph`: in a plain
+/// solution build a project's time includes every second it spent blocked
+/// on an unbuilt reference, which on this tree put most leaves near the
+/// whole build's wall clock. `buildArgs` is therefore the one command whose
+/// summary `readSummary` is valid for.
+module Census =
+
+    /// The census file, at the repository root.
+    let fileName = "build-census.json"
+
+    /// The `dotnet` arguments of the census build: the whole solution,
+    /// rebuilt from scratch as a graph build, the summary written to
+    /// `logFile` and nothing else to the console.
+    let buildArgs (solution: string) (logFile: string) : string list = [
+        "build"
+        solution
+        "-graph"
+        "--no-incremental"
+        "-nologo"
+        "-v:q"
+        sprintf "-flp:PerformanceSummary;Verbosity=quiet;LogFile=%s" logFile
+    ]
+
+    let private row =
+        Text.RegularExpressions.Regex(@"^\s*(\d+) ms\s+(\S.*?\.\w+proj)\s+\d+ calls\s*$")
+
+    let private key (path: string) =
+        path.Replace('\\', '/').ToLowerInvariant()
+
+    /// The project rows under `heading`, summed per project. A section ends
+    /// at a blank line or the next summary heading; its target rows name no
+    /// project file and are skipped.
+    let private section (heading: string) (lines: string list) : (string * float) list =
+        match lines |> List.skipWhile (fun l -> l.Trim() <> heading) with
+        | [] -> []
+        | _ :: body ->
+            body
+            |> List.takeWhile (fun l -> l.Trim() <> "" && not (l.TrimEnd().EndsWith "Summary:"))
+            |> List.choose (fun l ->
+                let m = row.Match l
+
+                if m.Success then
+                    Some(m.Groups[2].Value, float m.Groups[1].Value / 1000.0)
+                else
+                    None)
+            |> List.groupBy (fst >> key)
+            |> List.map (fun (_, rows) -> fst rows.Head, List.sumBy snd rows)
+
+    /// Every project the `Project Performance Summary` names, with its
+    /// evaluation time from the `Project Evaluation Performance Summary`.
+    /// Text with no summary reads as no projects.
+    let readSummary (text: string) : ProjectCost list =
+        let lines = text.Replace("\r\n", "\n").Split('\n') |> List.ofArray
+
+        let evaluation =
+            section "Project Evaluation Performance Summary:" lines
+            |> List.map (fun (p, s) -> key p, s)
+            |> Map.ofList
+
+        section "Project Performance Summary:" lines
+        |> List.map (fun (project, seconds) -> {
+            Project = project
+            CompileSeconds = seconds
+            EvaluationSeconds = evaluation.TryFind(key project) |> Option.defaultValue 0.0
+        })
+
+    let private includes (item: string) (projectXml: string) : string list =
+        Xml.Linq.XDocument.Parse(projectXml).Descendants()
+        |> Seq.filter (fun e -> e.Name.LocalName = item)
+        |> Seq.choose (fun e -> e.Attribute(Xml.Linq.XName.Get "Include") |> Option.ofObj)
+        |> Seq.map _.Value
+        |> List.ofSeq
+
+    /// The `Include` of every `ProjectReference` in a project file's text.
+    let references (projectXml: string) : string list = includes "ProjectReference" projectXml
+
+    /// The `Include` of every `Compile` item in a project file's text that
+    /// names one file: no wildcard, no property.
+    let compileItems (projectXml: string) : string list =
+        includes "Compile" projectXml
+        |> List.filter (fun i -> not (i.Contains "*" || i.Contains "$("))
+
+    /// The census rows. `projects` is each solution project's repo-relative
+    /// path with the repo-relative projects it references and its line
+    /// count; `costs` are matched to it through their path relative to
+    /// `root`. A project the summary does not name costs 0. Fan-in and
+    /// fan-out count solution projects only. Most expensive first, then by
+    /// path.
+    let assemble
+        (root: string)
+        (costs: ProjectCost list)
+        (projects: (string * string list * int) list)
+        : CensusEntry list =
+        let rootKey = (key root).TrimEnd('/') + "/"
+
+        // A string prefix rather than `Path.GetRelativePath`, so a summary
+        // written on one OS reads the same on another.
+        let relativeKey (path: string) =
+            let k = key path
+
+            if k.StartsWith(rootKey, StringComparison.Ordinal) then
+                k.Substring rootKey.Length
+            else
+                k
+
+        let costOf = costs |> List.map (fun c -> relativeKey c.Project, c) |> Map.ofList
+
+        let inSolution = projects |> List.map (fun (p, _, _) -> key p) |> Set.ofList
+
+        let referencesOf =
+            projects
+            |> List.map (fun (p, refs, _) ->
+                key p, refs |> List.map key |> List.filter inSolution.Contains |> Set.ofList)
+            |> Map.ofList
+
+        projects
+        |> List.map (fun (project, _, lines) ->
+            let k = key project
+            let cost = costOf.TryFind k
+
+            {
+                Project = Paths.toSlash project
+                CompileSeconds = cost |> Option.map _.CompileSeconds |> Option.defaultValue 0.0
+                EvaluationSeconds = cost |> Option.map _.EvaluationSeconds |> Option.defaultValue 0.0
+                Lines = lines
+                FanIn = referencesOf |> Map.filter (fun _ refs -> refs.Contains k) |> Map.count
+                FanOut = referencesOf[k].Count
+            })
+        |> List.sortBy (fun e -> -e.CompileSeconds, e.Project)
+
+    /// Each solution project of the repository at `root` with its
+    /// references (repo-relative) and the lines in its `Compile` items, the
+    /// input `assemble` takes. A missing source file counts 0 lines.
+    let projectGraph (root: string) (solutionProjects: string list) : (string * string list * int) list =
+        solutionProjects
+        |> List.map (fun project ->
+            let path = IO.Path.Combine(root, project)
+            let dir = IO.Path.GetDirectoryName path
+            let xml = IO.File.ReadAllText path
+
+            let local (inc: string) =
+                IO.Path.Combine(dir, inc.Replace('\\', '/'))
+
+            let relative (inc: string) =
+                IO.Path.GetRelativePath(root, IO.Path.GetFullPath(local inc)) |> Paths.toSlash
+
+            let lines =
+                compileItems xml
+                |> List.sumBy (fun inc ->
+                    let file = local inc
+
+                    if IO.File.Exists file then
+                        Seq.length (IO.File.ReadLines file)
+                    else
+                        0)
+
+            Paths.toSlash project, references xml |> List.map relative, lines)
+
+    /// This machine as the census records it: OS, architecture and logical
+    /// processor count. Never the host name — the file is committed, and a
+    /// host name identifies a private machine without saying anything a
+    /// reader of the figures can use.
+    let machine () : string =
+        sprintf
+            "%s %s, %d logical processors"
+            Runtime.InteropServices.RuntimeInformation.OSDescription
+            (string Runtime.InteropServices.RuntimeInformation.OSArchitecture)
+            System.Environment.ProcessorCount
+
+    let private round1 (x: float) = Math.Round(x, 1)
+
+    /// The census as `build-census.json` text: indented, rows in the order
+    /// given, seconds to one decimal place, LF line ends.
+    let render (census: BuildCensus) : string =
+        use stream = new IO.MemoryStream()
+
+        do
+            use w =
+                new Text.Json.Utf8JsonWriter(
+                    stream,
+                    Text.Json.JsonWriterOptions(
+                        Indented = true,
+                        Encoder = Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+                    )
+                )
+
+            w.WriteStartObject()
+            w.WriteString("treeSha", census.TreeSha)
+            w.WriteString("machine", census.Machine)
+            w.WriteString("measuredAt", census.MeasuredAt)
+            w.WriteNumber("wallSeconds", round1 census.WallSeconds)
+            w.WriteNumber("totalCompileSeconds", round1 (census.Projects |> List.sumBy _.CompileSeconds))
+            w.WriteString("command", census.Command)
+            w.WriteStartArray("projects")
+
+            for e in census.Projects do
+                w.WriteStartObject()
+                w.WriteString("project", e.Project)
+                w.WriteNumber("compileSeconds", round1 e.CompileSeconds)
+                w.WriteNumber("evaluationSeconds", round1 e.EvaluationSeconds)
+                w.WriteNumber("lines", e.Lines)
+                w.WriteNumber("fanIn", e.FanIn)
+                w.WriteNumber("fanOut", e.FanOut)
+                w.WriteEndObject()
+
+            w.WriteEndArray()
+            w.WriteEndObject()
+
+        Text.Encoding.UTF8.GetString(stream.ToArray()).Replace("\r\n", "\n") + "\n"
+
+    /// The project paths a `build-census.json` text names, or why it names
+    /// none.
+    let projectSet (censusJson: string) : Result<string list, string> =
+        try
+            use doc = Text.Json.JsonDocument.Parse censusJson
+
+            match doc.RootElement.TryGetProperty "projects" with
+            | true, projects when projects.ValueKind = Text.Json.JsonValueKind.Array ->
+                projects.EnumerateArray()
+                |> Seq.map (fun p -> p.GetProperty("project").GetString())
+                |> List.ofSeq
+                |> Ok
+            | _ -> Error "it has no `projects` array"
+        with ex ->
+            Error(sprintf "it does not parse (%s)" ex.Message)
+
+    /// The `--check` verdict: findings, empty when the census names exactly
+    /// the solution's projects. Timings are not compared — they move machine
+    /// to machine; a project added or removed is what makes the file stale.
+    let check (censusJson: string) (solutionText: string) : string list =
+        match projectSet censusJson with
+        | Error why -> [ sprintf "%s cannot be read: %s." fileName why ]
+        | Ok named ->
+            let current = Gate.solutionProjects solutionText
+            let keys (ps: string list) = ps |> List.map key |> Set.ofList
+            let missing = Set.difference (keys current) (keys named)
+            let gone = Set.difference (keys named) (keys current)
+
+            [
+                for p in current do
+                    if missing.Contains(key p) then
+                        yield sprintf "%s is in the solution but not in %s." p fileName
+                for p in named do
+                    if gone.Contains(key p) then
+                        yield sprintf "%s is in %s but no longer in the solution." p fileName
+            ]
+
 // ─── Aggregating gate runner ─────────────────────────────────────────
 
 /// Runs a set of INDEPENDENT gate legs and reports on all of them.
@@ -364,12 +981,20 @@ module Gate =
 /// reach it regardless.
 module internal Aggregate =
 
-    /// One leg of an aggregating gate. `Run` returns the leg's exit code
-    /// (0 = pass) and does its own tracing, so each caller keeps the
-    /// per-leg log lines it already emitted.
-    type Leg = { Name: string; Run: unit -> int }
+    /// One leg of an aggregating gate. `Run` returns the leg's `Verdict`
+    /// and does its own tracing, so each caller keeps the per-leg log
+    /// lines it already emitted.
+    type Leg = { Name: string; Run: unit -> Verdict }
 
-    let leg name run = { Name = name; Run = run }
+    /// A leg whose body answers with an exit code (0 = pass): the shape
+    /// every child process gives.
+    let leg name (run: unit -> int) = {
+        Name = name
+        Run = fun () -> Gate.verdictOfExit (run ())
+    }
+
+    /// A leg whose body answers with its verdict.
+    let legOf name (run: unit -> Verdict) = { Name = name; Run = run }
 
     /// Run every leg in order, summarise all of them, then raise if any
     /// failed.
@@ -386,44 +1011,49 @@ module internal Aggregate =
     /// exits 0 having run nothing when its pack list is empty), counting
     /// lines that match `PASS` / `FAIL` under the `<label> summary:`
     /// header. Those tokens must stay unique to the per-leg lines, which
-    /// is why the headline below says "failed" and not "FAILED".
+    /// is why the headline below says "failed" and not "FAILED" — and why
+    /// a `Pending` leg prints `PENDING`, which matches neither.
     let runAll (label: string) (noun: string) (legs: Leg list) : unit =
-        let results = ResizeArray<string * int>()
+        let results = ResizeArray<string * Verdict * TimeSpan>()
 
         try
             for leg in legs do
-                let exitCode =
+                let clock = Diagnostics.Stopwatch.StartNew()
+
+                let verdict =
                     try
                         leg.Run()
                     with ex ->
                         Trace.traceError (sprintf "%s: %s raised — %s" label leg.Name ex.Message)
-                        1
+                        Verdict.Fail("raised: " + ex.Message)
 
-                results.Add(leg.Name, exitCode)
+                results.Add(leg.Name, verdict, clock.Elapsed)
         finally
             // `finally` so a genuinely fatal abort still reports what had
             // run by then; the catch above is what keeps the ordinary
             // failing case complete.
+            Gate.recordRun (List.ofSeq results)
             Trace.tracefn ""
             Trace.tracefn "%s summary:" label
 
-            for name, exitCode in results do
-                let status =
-                    if exitCode = 0 then
-                        "PASS"
-                    else
-                        sprintf "FAIL (exit %d)" exitCode
+            for name, verdict, _ in results do
+                Trace.tracefn "  %s — %s" (Gate.statusToken verdict) name
 
-                Trace.tracefn "  %s — %s" status name
-
-        let failures = results |> Seq.filter (fun (_, c) -> c <> 0) |> Seq.toList
+        let failures =
+            results
+            |> Seq.choose (fun (n, v, _) ->
+                match v with
+                | Verdict.Fail reason -> Some(n, reason)
+                | Verdict.Pass _
+                | Verdict.Pending _ -> None)
+            |> Seq.toList
 
         if List.isEmpty failures then
             Trace.tracefn "%s: all %d %s(s) passed." label results.Count noun
         else
             let named =
                 failures
-                |> List.map (fun (n, c) -> sprintf "%s (exit %d)" n c)
+                |> List.map (fun (n, reason) -> sprintf "%s (%s)" n (reason.Replace("\r", "").Split('\n').[0]))
                 |> String.concat "; "
 
             let headline =
@@ -434,6 +1064,536 @@ module internal Aggregate =
             // inside FAKE's error block.
             Trace.tracefn "%s" headline
             failwith headline
+
+// ─── Template-gate package closure ───────────────────────────────────
+
+/// Phase 754 — the stranger's-package guard.
+///
+/// The template gates (`VerifyTemplates`,
+/// `VerifyPackagedModuleTemplate`) supply the SDK packages the gated
+/// scaffolds reference by packing them from source at a throwaway
+/// version into a scratch feed. Each entry was a bare package-id
+/// STRING, and the project to pack was derived from it by
+/// `sprintf "src/%s/%s.fsproj"` — so the id and the producing project
+/// were the same fact spelled once, and an id this repo does not
+/// produce could not be expressed at all.
+///
+/// That coupling broke the moment a package's `PackageId` stopped
+/// matching its directory (this phase, moving the AG Grid / AG Charts
+/// bindings to `ToolUp.Feliz.*` while their projects stay at
+/// `src/Feliz.*/`), and the failure it was implicitly guarding against
+/// is not hypothetical: Phase 307 found `Feliz.AgGrid` / `Feliz.AgCharts`
+/// missing from the closure, and because BOTH ids exist on nuget.org as
+/// unrelated packages by another author, restore did not fail — it
+/// silently served a STRANGER'S package, and only the NU1603 escalation
+/// turned that into an error.
+///
+/// So the id and the project are now declared separately, and the two
+/// are RECONCILED against what the pack actually produced: after the
+/// pack loop, every declared id must appear in the scratch feed as
+/// `<id>.<version>.nupkg`. An id no project in this repo produces has
+/// no such file, and the gate says so by name instead of proceeding to
+/// a restore that will quietly resolve it from nuget.org.
+///
+/// Pure so it is provable in both directions from the Build test pack
+/// (`TemplateGateTests`) — a guard that has never been seen to fail is
+/// not known to work.
+module TemplateGate =
+
+    /// One package the template gate must supply: the id consumers
+    /// resolve, and the in-repo project that produces it. They are not
+    /// the same string in general, and assuming they were is the defect
+    /// this type exists to remove.
+    type GatePackage = {
+        /// The `PackageId` the packed project emits — the name a
+        /// consumer's `PackageReference` resolves, and the name NuGet
+        /// caches under.
+        Id: string
+        /// Repo-relative path to the producing `.fsproj`.
+        Project: string
+    }
+
+    /// Declare a gate package. `id` is the emitted `PackageId`; `project`
+    /// the repo-relative `.fsproj` that emits it.
+    let package id project = { Id = id; Project = project }
+
+    /// Declared ids for which the pack produced no `<id>.<version>.nupkg`,
+    /// in declaration order.
+    ///
+    /// `producedFiles` may be full paths or bare file names — only the
+    /// file name is read. Matching is case-insensitive because NuGet
+    /// package ids are, and a case-only difference between the
+    /// declaration and the emitted `PackageId` would otherwise be
+    /// reported as a stranger's package on a case-sensitive filesystem
+    /// and pass on Windows.
+    let unproducedIds (version: string) (declared: GatePackage list) (producedFiles: string seq) : string list =
+        let produced =
+            producedFiles
+            |> Seq.map (fun path -> IO.Path.GetFileName(path: string))
+            |> Set.ofSeq
+            |> Set.map (fun name -> name.ToLowerInvariant())
+
+        declared
+        |> List.filter (fun p -> not (produced.Contains((sprintf "%s.%s.nupkg" p.Id version).ToLowerInvariant())))
+        |> List.map _.Id
+
+    /// The failure message for `unproducedIds`. Names the ids, the class,
+    /// and the two ways the declaration can be wrong — because the
+    /// remedy differs: a typo is fixed in the list, a genuinely-absent
+    /// package means the closure names something the repo does not own.
+    let report (gate: string) (version: string) (unproduced: string list) =
+        sprintf
+            "%s: %d declared gate package id(s) were NOT produced by this repo's own pack at %s: %s. This is the stranger's-package class (Phase 307): the scratch feed cannot serve the id, so restore falls through to nuget.org and may resolve an UNRELATED package of the same name published by someone else. Either the id is misspelled in the gate closure, or its `Project` does not emit that `PackageId` — check `<PackageId>` in the declared project. Never silence this by removing the id: the packages the closure names are the ones the scaffolds actually resolve."
+            gate
+            (List.length unproduced)
+            version
+            (String.concat ", " unproduced)
+
+    // ─── The private packages folder ─────────────────────────────────
+    //
+    // A template gate restores its scaffolds against a THROWAWAY package
+    // version, so a stale extracted copy from an earlier run must never be
+    // what restore resolves. Guessing the machine's global-packages folder
+    // and evicting that version there is not enough: a `globalPackagesFolder`
+    // in any nuget.config on NuGet's search path overrides both
+    // `NUGET_PACKAGES` and the default, so the eviction can no-op on a folder
+    // NuGet is not reading, and the gate goes green over the previous run's
+    // package. And even the right shared folder is shared by every worktree
+    // on the machine, so two gates running at once evict each other
+    // mid-restore. So each run gets its OWN packages folder under the calling
+    // repository's `obj/` (per-worktree by construction), and the gate points
+    // `NUGET_PACKAGES` at it for every child it spawns. There is nothing
+    // ambient to get wrong, and no other checkout can see the folder.
+
+    /// The private packages folder a template gate points `NUGET_PACKAGES`
+    /// at. Pure: a function of the repository root only.
+    let privatePackagesFolder (repoRoot: string) : string =
+        IO.Path.Combine(repoRoot, "obj", "template-gate-packages")
+
+    /// What `evict` removed, and where — the gate prints both, so a reader
+    /// can tell a cold run (nothing removed) from one that needed it.
+    type EvictionReport = {
+        /// The private packages folder evicted.
+        Folder: string
+        /// The package ids (top-level subfolder names) present before the
+        /// evict and now gone, sorted. NuGet lays a global-packages folder out
+        /// as `<folder>/<id>/<version>/`, so a top-level name IS a package id.
+        Removed: string list
+    }
+
+    /// Wipe the private packages folder and leave it present but empty. Safe
+    /// to delete wholesale: nothing but the gate's own restores writes there.
+    let evict (folder: string) : EvictionReport =
+        let removed =
+            if IO.Directory.Exists folder then
+                IO.Directory.EnumerateDirectories folder
+                |> Seq.map IO.Path.GetFileName
+                |> Seq.sort
+                |> Seq.toList
+            else
+                []
+
+        if IO.Directory.Exists folder then
+            IO.Directory.Delete(folder, true)
+
+        IO.Directory.CreateDirectory folder |> ignore
+        { Folder = folder; Removed = removed }
+
+    // ─── The gate as data ────────────────────────────────────────────
+
+    /// The version every gate packs its closure at and every scaffold is
+    /// told to resolve. Packing at the tree's own version would be a
+    /// same-version repack, and NuGet would serve whatever was extracted
+    /// last rather than this run's source.
+    let version = "0.0.0-templategate"
+
+    /// Which tree a `Neutral` check scans.
+    type NeutralScope =
+        /// The template's own files in the repository.
+        | TemplateFiles
+        /// The repository the template scaffolded.
+        | ScaffoldedTree
+
+    /// One check a template gate makes beyond building.
+    type Check =
+        /// The template's vendored copy of an SDK file equals the region of
+        /// the source before the marker line: a copy drifts silently by
+        /// construction, and a template ships it as conformant.
+        | VendoredPack of source: string * vendored: string * marker: string
+        /// Every `ToolUp.*` package in the restore graph resolved at the gate
+        /// version — the NU1603 escalation read off `project.assets.json`.
+        /// `Some path` reads that one scaffold-relative file; `None` reads
+        /// every one under the scaffold.
+        | StrayPins of assets: string option
+        /// The scaffold's packed nupkg carries every `required` entry and no
+        /// `forbidden` one.
+        | NupkgLayout of required: string list * forbidden: string list
+        /// No publication-boundary token in the scope. The private token list
+        /// is the repository's token file, else the environment variable
+        /// `tokensVariable` names.
+        | Neutral of scope: NeutralScope * tokensVariable: string
+
+    /// One step of an instantiated scaffold's own pipeline, run in the
+    /// scaffold directory.
+    type Step =
+        /// `dotnet <args>`, which must exit 0.
+        | Dotnet of args: string list
+        /// A check, at this point in the pipeline.
+        | Verify of Check
+
+    /// A template the gate instantiates outside the repository with
+    /// `dotnet new`, then runs.
+    type Instantiation = {
+        /// The repo-relative template directory.
+        Template: string
+        /// The template's `dotnet new` short name.
+        ShortName: string
+        /// The `-n` name, and the scaffold's directory under the scratch root.
+        Name: string
+        /// Extra `dotnet new` arguments, after `-o`.
+        Args: string list
+        /// The scratch root's name under the system temp directory.
+        Scratch: string
+        /// The scaffold's pipeline, in order.
+        Steps: Step list
+    }
+
+    /// What the gate builds.
+    type Scaffold =
+        /// Root-inheriting template projects, each built where it lies.
+        | InPlace of projects: string list
+        /// A whole-repository template, scaffolded and run.
+        | Instantiate of Instantiation
+
+    /// One template gate: everything that differs between the gates, as data.
+    type TemplateGateSpec = {
+        /// The target name, which prefixes every line the gate prints.
+        Name: string
+        /// The packages packed at `version` into the feed.
+        Closure: GatePackage list
+        /// The repo-relative scratch feed directory, one per gate.
+        Feed: string
+        /// Checks run before anything is packed.
+        Checks: Check list
+        Scaffold: Scaffold
+        /// The closing line on success.
+        Done: string
+    }
+
+    /// The `dotnet build` arguments for one in-place template project:
+    /// built at the gate version, the scratch feed ADDED to the sources
+    /// (the templates still need nuget.org), and NU1603 escalated so a
+    /// closure missing a package fails by name rather than resolving an
+    /// older one.
+    let inPlaceBuildArgs (feedDir: string) (project: string) : string list = [
+        "build"
+        project
+        sprintf "-p:ToolUpSdkVersion=%s" version
+        sprintf "-p:RestoreAdditionalProjectSources=%s" feedDir
+        "-warnaserror:NU1603"
+        "--nologo"
+    ]
+
+    /// The `dotnet new` arguments that scaffold `i` into `scaffoldDir`
+    /// against the gate version and the scratch feed (forward-slashed: it
+    /// lands in an F# string and in nuget.config).
+    let instantiateArgs (i: Instantiation) (scaffoldDir: string) (feedDir: string) : string list =
+        [ "new"; i.ShortName; "-n"; i.Name; "-o"; scaffoldDir ]
+        @ i.Args
+        @ [ "--sdk-version"; version; "--feed"; Paths.toSlash feedDir ]
+
+    /// The drift finding for a vendored copy, `None` when it matches.
+    let vendoredFinding
+        (gate: string)
+        (source: string, vendored: string, marker: string)
+        (sourceText: string)
+        (vendoredText: string)
+        : string option =
+        let normalise (s: string) =
+            s.Replace("\r\n", "\n").Replace("\r", "\n").TrimEnd()
+
+        let markerIndex = sourceText.IndexOf(marker, StringComparison.Ordinal)
+
+        if markerIndex < 0 then
+            Some(
+                sprintf
+                    "%s: could not find the laws/self-test boundary marker %s in %s. The vendored-copy drift check cannot run; re-establish the marker or update this target."
+                    gate
+                    marker
+                    source
+            )
+        elif normalise (sourceText.Substring(0, markerIndex)) <> normalise vendoredText then
+            Some(
+                sprintf
+                    "%s: the vendored conformance pack has drifted from the SDK's.%sRe-copy the laws region:%s  the first %d characters of %s (everything before `%s`) into %s."
+                    gate
+                    Environment.NewLine
+                    Environment.NewLine
+                    markerIndex
+                    source
+                    marker
+                    vendored
+            )
+        else
+            None
+
+    /// The `ToolUp.*` packages a restore graph resolved at a version other
+    /// than the gate's, distinct, in first-seen order.
+    let strayPins (assetsTexts: string seq) : (string * string) list =
+        assetsTexts
+        |> Seq.collect (fun text ->
+            Text.RegularExpressions.Regex.Matches(text, "\"(ToolUp\\.[A-Za-z.]+)/([^\"]+)\"")
+            |> Seq.map (fun m -> m.Groups[1].Value, m.Groups[2].Value))
+        |> Seq.filter (fun (_, v) -> v <> version)
+        |> Seq.distinct
+        |> List.ofSeq
+
+    /// What is wrong with a packed nupkg's entries, empty when nothing is.
+    let layoutFindings (required: string list) (forbidden: string list) (entries: Set<string>) : string list = [
+        match required |> List.filter (fun r -> not (entries.Contains r)) with
+        | [] -> ()
+        | missing ->
+            sprintf
+                "the packed nupkg is missing %s. A consumer's Fable build resolves the client tier from these paths."
+                (String.concat ", " missing)
+        for f in forbidden do
+            if entries.Contains f then
+                sprintf "%s is packed — declared server-only, so it must never reach a consumer's Fable compile." f
+    ]
+
+    /// Every boundary-token hit in `files` (path beside its lines), as
+    /// `path:line  'token'`. `masked` are literal values the gate itself
+    /// substituted (the scratch feed's machine path), removed from each line
+    /// before matching: they are this machine's, not the template's.
+    let neutralHits
+        (rules: (string * Text.RegularExpressions.Regex) list)
+        (masked: string list)
+        (files: (string * string[]) seq)
+        : string list =
+        files
+        |> Seq.collect (fun (path, lines) ->
+            lines
+            |> Seq.mapi (fun i line -> i + 1, masked |> List.fold (fun (l: string) m -> l.Replace(m, "")) line)
+            |> Seq.collect (fun (n, line) ->
+                rules
+                |> Seq.filter (fun (_, rx) -> rx.IsMatch line)
+                |> Seq.map (fun (token, _) -> sprintf "%s:%d  '%s'" path n token)))
+        |> List.ofSeq
+
+    /// The text files under `root` a `Neutral` check reads, relative path
+    /// beside lines; build output and installed packages skipped.
+    let private scannedFiles (root: string) : (string * string[]) seq =
+        let skipped = [ "bin"; "obj"; "node_modules"; "output" ]
+
+        IO.Directory.EnumerateFiles(root, "*", IO.SearchOption.AllDirectories)
+        |> Seq.filter (fun path ->
+            let segments = IO.Path.GetRelativePath(root, path).Split([| '\\'; '/' |])
+            not (segments |> Array.exists (fun s -> List.contains s skipped)))
+        |> Seq.map (fun path -> IO.Path.GetRelativePath(root, path), IO.File.ReadAllLines path)
+
+    // ─── The gate, run ───────────────────────────────────────────────
+
+    /// Run one template gate in the current directory (the repository root):
+    /// the pre-checks, a scratch feed packed with the closure at `version`
+    /// under a private packages folder, the closure reconciled against what
+    /// was packed, then the scaffold — each in-place project built and
+    /// aggregated, or the template instantiated outside the repository and
+    /// its pipeline run. Raises on the first failure, except that in-place
+    /// projects are independent and all reported.
+    let run (spec: TemplateGateSpec) : unit =
+        let root = Fake.IO.Path.getFullName "."
+        let feedDir = Fake.IO.Path.getFullName spec.Feed
+
+        let ensure (exe: string) (args: string list) (dir: string) =
+            let r = Proc.exec exe args dir
+
+            if r.ExitCode <> 0 then
+                failwithf "%s: `%s %s` exited %d (in %s)" spec.Name exe (String.concat " " args) r.ExitCode dir
+
+        let check (scaffoldDir: string) (c: Check) =
+            match c with
+            | VendoredPack(source, vendored, marker) ->
+                match
+                    vendoredFinding
+                        spec.Name
+                        (source, vendored, marker)
+                        (IO.File.ReadAllText source)
+                        (IO.File.ReadAllText vendored)
+                with
+                | Some finding -> failwith finding
+                | None -> Trace.tracefn "▶ %s: vendored conformance pack matches %s" spec.Name source
+            | Neutral(scope, tokensVariable) ->
+                let rules = Neutrality.rules (Neutrality.externalTokens root tokensVariable)
+                let fullList = rules.Length > 1
+
+                let label, masked, dir =
+                    match scope with
+                    | TemplateFiles ->
+                        let template =
+                            match spec.Scaffold with
+                            | Instantiate i -> i.Template
+                            | InPlace _ ->
+                                failwithf "%s: a TemplateFiles check needs an instantiated template." spec.Name
+
+                        "the template's files", [], Fake.IO.Path.getFullName template
+                    | ScaffoldedTree -> "the scaffolded repository", [ Paths.toSlash feedDir ], scaffoldDir
+
+                match neutralHits rules masked (scannedFiles dir) with
+                | [] ->
+                    Trace.tracefn
+                        "▶ %s: %s carries no banned vocabulary (%s)"
+                        spec.Name
+                        label
+                        (if fullList then
+                             sprintf "%d tokens" rules.Length
+                         else
+                             "NEUTRALITY TOKEN SOURCE ABSENT: only the public canary was enforced")
+                | hits ->
+                    failwithf
+                        "%s: the publication boundary is broken in %s, %d reference(s) to private vocabulary:%s%s%sThis template is Apache-2.0 public; neutralise the wording."
+                        spec.Name
+                        label
+                        hits.Length
+                        Environment.NewLine
+                        (hits |> List.truncate 40 |> String.concat Environment.NewLine)
+                        Environment.NewLine
+            | StrayPins assets ->
+                let files =
+                    match assets with
+                    | Some relative ->
+                        let file = IO.Path.Combine(scaffoldDir, relative)
+
+                        if not (IO.File.Exists file) then
+                            failwithf "%s: no restore graph at %s — the scaffold did not restore." spec.Name file
+
+                        [ file ]
+                    | None ->
+                        IO.Directory.EnumerateFiles(scaffoldDir, "project.assets.json", IO.SearchOption.AllDirectories)
+                        |> List.ofSeq
+
+                match strayPins (files |> Seq.map IO.File.ReadAllText) with
+                | [] -> ()
+                | pins ->
+                    failwithf
+                        "%s: %d ToolUp.* package(s) resolved at a version other than %s — the gate closure is incomplete, so the scaffold built against a MIX of current source and a released SDK: %s. Add the named package(s) to the gate's `Closure`."
+                        spec.Name
+                        (List.length pins)
+                        version
+                        (pins |> List.map (fun (p, v) -> sprintf "%s@%s" p v) |> String.concat ", ")
+            | NupkgLayout(required, forbidden) ->
+                let name =
+                    match spec.Scaffold with
+                    | Instantiate i -> i.Name
+                    | InPlace _ -> failwithf "%s: a NupkgLayout check needs an instantiated template." spec.Name
+
+                let nupkg =
+                    IO.Directory.GetFiles(feedDir, name + ".*.nupkg")
+                    |> Array.filter (fun p -> not (p.EndsWith(".snupkg", StringComparison.OrdinalIgnoreCase)))
+                    |> Array.sort
+                    |> Array.tryLast
+
+                match nupkg with
+                | None -> failwithf "%s: the scaffold's Pack produced no %s nupkg in %s." spec.Name name feedDir
+                | Some path ->
+                    use archive = IO.Compression.ZipFile.OpenRead path
+
+                    let entries =
+                        archive.Entries |> Seq.map (fun e -> Paths.toSlash e.FullName) |> Set.ofSeq
+
+                    match layoutFindings required forbidden entries with
+                    | [] ->
+                        Trace.tracefn "▶ %s: %s carries a conformant fable/ layout" spec.Name (IO.Path.GetFileName path)
+                    | findings -> failwithf "%s: %s" spec.Name (String.concat " " findings)
+
+        for c in spec.Checks do
+            check root c
+
+        Shell.deleteDir feedDir
+        Directory.ensure feedDir
+
+        let packages = privatePackagesFolder root
+        let eviction = evict packages
+
+        Trace.tracefn
+            "▶ %s: private packages folder %s (evicted %d prior entr%s: %s)"
+            spec.Name
+            eviction.Folder
+            eviction.Removed.Length
+            (if eviction.Removed.Length = 1 then "y" else "ies")
+            (String.concat ", " eviction.Removed)
+
+        Environment.SetEnvironmentVariable("NUGET_PACKAGES", packages)
+
+        // Fail-fast, unlike the in-place builds below: every build reads
+        // these packages, so a failed pack makes the rest meaningless.
+        for pkg in spec.Closure do
+            if not (IO.File.Exists(Fake.IO.Path.getFullName pkg.Project)) then
+                failwithf
+                    "%s: gate package %s declares project %s, which does not exist. Fix the `Project` in the gate's `Closure`."
+                    spec.Name
+                    pkg.Id
+                    pkg.Project
+
+            Trace.tracefn "▶ %s: packing %s (%s) @ %s" spec.Name pkg.Id pkg.Project version
+
+            ensure
+                "dotnet"
+                [
+                    "pack"
+                    pkg.Project
+                    sprintf "-p:Version=%s" version
+                    "-o"
+                    feedDir
+                    "--nologo"
+                ]
+                "."
+
+        match unproducedIds version spec.Closure (IO.Directory.EnumerateFiles(feedDir, "*.nupkg")) with
+        | [] -> ()
+        | unproduced -> failwith (report spec.Name version unproduced)
+
+        match spec.Scaffold with
+        | InPlace projects ->
+            // Each project is what a separate `dotnet new` produces, so a
+            // broken one costs its own signal and not the others'.
+            projects
+            |> List.map (fun proj ->
+                Aggregate.leg proj (fun () ->
+                    Trace.tracefn "▶ %s: building %s" spec.Name proj
+
+                    // A consumer's fresh copy has no obj/ or bin/, and NuGet
+                    // replays a leftover project.assets.json's warnings
+                    // rather than resolving again.
+                    let projDir = IO.Path.GetDirectoryName(Fake.IO.Path.getFullName proj)
+                    Shell.deleteDir (IO.Path.Combine(projDir, "obj"))
+                    Shell.deleteDir (IO.Path.Combine(projDir, "bin"))
+                    (Proc.exec "dotnet" (inPlaceBuildArgs feedDir proj) ".").ExitCode))
+            |> Aggregate.runAll spec.Name "template project"
+        | Instantiate i ->
+            let scratchRoot = Scratch.root i.Scratch
+            let scaffoldDir = IO.Path.Combine(scratchRoot, i.Name)
+            Shell.deleteDir scratchRoot
+            Directory.ensure scaffoldDir
+
+            let templatePath = Fake.IO.Path.getFullName i.Template
+
+            // A machine may carry an earlier install of the same identity,
+            // and `install` refuses rather than replacing it.
+            Proc.exec "dotnet" [ "new"; "uninstall"; templatePath ] "." |> ignore
+            ensure "dotnet" [ "new"; "install"; templatePath ] "."
+
+            try
+                ensure "dotnet" (instantiateArgs i scaffoldDir feedDir) "."
+
+                for step in i.Steps do
+                    match step with
+                    | Dotnet args -> ensure "dotnet" args scaffoldDir
+                    | Verify c -> check scaffoldDir c
+            finally
+                Proc.exec "dotnet" [ "new"; "uninstall"; templatePath ] "." |> ignore
+
+        if spec.Done <> "" then
+            Trace.tracefn "▶ %s: %s" spec.Name spec.Done
 
 // ─── Phase 803 — extra legs a repository composes into `VerifyAll` ──
 
@@ -460,8 +1620,8 @@ module internal Aggregate =
 /// aggregate, never fail-fast. The leg appears in the `VerifyAll
 /// summary:` block as one more `PASS` / `FAIL` line, which is a CI
 /// contract: a repository whose CI counts those lines against a floor
-/// bumps the floor in the same commit it registers a leg (forge's
-/// `EXPECTED_PACKS` did, 24 → 25).
+/// renders the floor from its gate manifest (forge's `EXPECTED_PACKS`),
+/// and `Gate.register` is where the leg becomes a row of it.
 ///
 /// **What it is NOT.** A pack: `TestPacks` are Expecto runners built
 /// once and launched as dlls, and the build-once step, the
@@ -471,20 +1631,36 @@ module internal Aggregate =
 [<RequireQualifiedAccess>]
 module VerifyLeg =
 
-    let private registered = ResizeArray<string * (unit -> int)>()
-
-    /// Register a leg by name. Registering the same name twice is refused
-    /// rather than run twice: a repeated registration is a build script
-    /// that composed itself twice, and two `PASS` lines for one leg would
-    /// double-count against a CI floor.
+    /// Register a leg by name: a `Body` row of the gate manifest that runs
+    /// locally in every lane and reads the tree, through `Gate.register`,
+    /// which keeps the refusal of a repeated name.
     let register (name: string) (run: unit -> int) : unit =
-        if registered |> Seq.exists (fun (n, _) -> n = name) then
-            failwithf "VerifyLeg.register: a leg named `%s` is already registered." name
+        Gate.register () {
+            Name = name
+            Kind = LegKind.Body(fun () -> Gate.verdictOfExit (run ()))
+            Lanes = set [ () ]
+            Where = set [ Site.Local ]
+            Reads = [ Input.Tree ]
+            Budget = None
+            Floor = None
+        }
 
-        registered.Add(name, run)
-
-    /// The legs registered so far, in registration order.
-    let registeredLegs () : (string * (unit -> int)) list = List.ofSeq registered
+    /// The `Body` rows registered so far, in registration order, as the
+    /// exit-code legs they were registered as (a non-zero code for a
+    /// failed or pending verdict).
+    let registeredLegs () : (string * (unit -> int)) list = [
+        for row in Gate.registered () do
+            match row.Kind with
+            | LegKind.Body run ->
+                row.Name,
+                fun () ->
+                    match run () with
+                    | Verdict.Pass _ -> 0
+                    | Verdict.Fail _
+                    | Verdict.Pending _ -> 1
+            | LegKind.ExpectoPack _
+            | LegKind.Script _ -> ()
+    ]
 
 // ─── Build configuration ───────────────────────────────────────────
 
@@ -531,10 +1707,7 @@ module internal TestPackHost =
         let build (what: string) (args: string list) =
             Trace.tracefn "▶ VerifyAll: building %s" what
 
-            let result =
-                CreateProcess.fromRawCommand "dotnet" args
-                |> CreateProcess.withWorkingDirectory "."
-                |> Proc.run
+            let result = Proc.exec "dotnet" args "."
 
             if result.ExitCode <> 0 then
                 failwithf
@@ -561,15 +1734,12 @@ module internal TestPackHost =
     /// itself resolves the answer from.
     let resolveTargetPath (project: string) : Result<string, string> =
         let result =
-            CreateProcess.fromRawCommand "dotnet" [ "msbuild"; project; "-getProperty:TargetPath"; "-nologo" ]
-            |> CreateProcess.withWorkingDirectory "."
-            |> CreateProcess.redirectOutput
-            |> Proc.run
+            Proc.redirected "dotnet" [ "msbuild"; project; "-getProperty:TargetPath"; "-nologo" ] "."
 
         if result.ExitCode <> 0 then
             Error(sprintf "could not resolve TargetPath for %s (dotnet msbuild exit %d)" project result.ExitCode)
         else
-            let path = result.Result.Output.Trim()
+            let path = result.StdOut.Trim()
 
             if String.IsNullOrWhiteSpace path then
                 Error(sprintf "dotnet msbuild reported an empty TargetPath for %s" project)
@@ -578,28 +1748,55 @@ module internal TestPackHost =
             else
                 Ok path
 
-    /// Run one pack and return its exit code. The signature is the shape
-    /// `Aggregate.leg` wants: trace what is happening, never throw for an
-    /// ordinary failure, and hand back the code so the summary can name it.
-    let runPack (extraArgs: string list) (pack: TestPack) : int =
+    /// Expecto's JUnit summary carries no `tests` attribute; the cases are
+    /// its `<testcase` elements.
+    let private junitCase = Text.RegularExpressions.Regex(@"<testcase\b")
+
+    /// Run one pack and return its verdict. Trace what is happening, never
+    /// throw for an ordinary failure, and hand back the verdict so the
+    /// summary can name it. The case count is read from the JUnit summary
+    /// Expecto writes (`--junit-summary`), a structured record, never from
+    /// its coloured console line; a pack that wrote none passes with no
+    /// count. `scrub` names the variables cleared from the child's
+    /// environment (`Gate.scrubbedFor`), so the pack reads only the inputs
+    /// its row declares.
+    let runPack (extraArgs: string list) (scrub: string list) (pack: TestPack) : Verdict =
         Trace.tracefn "▶ VerifyAll: %s (%s)" pack.Name pack.Project
 
         match resolveTargetPath pack.Project with
         | Error message ->
             Trace.traceError (sprintf "VerifyAll: %s — %s" pack.Name message)
-            1
+            Verdict.Fail message
         | Ok dll ->
+            let summaryDir = Scratch.root "toolup-verifyall"
+            IO.Directory.CreateDirectory summaryDir |> ignore
+            let summary = IO.Path.Combine(summaryDir, pack.Name + ".junit.xml")
+            IO.File.Delete summary
+
             // The working directory is the caller's, which is what
             // `dotnet run --project` also handed the child (measured, not
             // assumed — `dotnet run` does NOT move the child into the
             // project directory). Any pack resolving a path relative to
             // cwd therefore sees exactly what it saw before.
             let result =
-                CreateProcess.fromRawCommand "dotnet" (dll :: extraArgs)
-                |> CreateProcess.withWorkingDirectory "."
-                |> Proc.run
+                Proc.execWith
+                    {
+                        Proc.options with
+                            Environment = scrub |> List.map (fun name -> name, "")
+                    }
+                    "dotnet"
+                    (dll :: extraArgs @ [ "--junit-summary"; summary ])
+                    "."
 
-            result.ExitCode
+            let cases =
+                if IO.File.Exists summary then
+                    Some(junitCase.Matches(IO.File.ReadAllText summary).Count)
+                else
+                    None
+
+            match Gate.verdictOfExit result.ExitCode with
+            | Verdict.Pass _ -> Verdict.Pass cases
+            | other -> other
 
 // ─── Resilient package push (Phase 1016) ─────────────────────────────
 
@@ -876,8 +2073,15 @@ module BuildConfig =
 
 // ─── FAKE pipeline ─────────────────────────────────────────────────
 
+/// The arguments `init` was given. The SDK's own targets read their options
+/// from this one parse rather than from the process command line.
+let mutable private invocation: string[] = [||]
+
+let private invocationFlags () = Flags.lenient Flags.sdk invocation
+
 /// Initialise the FAKE execution context
 let init (argv: string[]) =
+    invocation <- argv
     let execContext = Context.FakeExecutionContext.Create false "build.fsx" []
     Context.setExecutionContext (Context.RuntimeContext.Fake execContext)
 
@@ -889,7 +2093,7 @@ let registerTargets (config: BuildConfig) =
 
     Target.create "Clean" (fun _ ->
         Shell.cleanDir deployPath
-        run dotnet [ "fable"; "clean"; "--yes" ] clientPath)
+        run "dotnet" [ "fable"; "clean"; "--yes" ] clientPath)
 
     Target.create "KillStaleProcesses" (fun _ ->
         // Stop stale esbuild processes that may hold file locks in THIS project's
@@ -899,17 +2103,17 @@ let registerTargets (config: BuildConfig) =
         Trace.tracefn "Stopping stale esbuild processes under %s..." nodeModules
         StaleEsbuild.stopUnder nodeModules (Trace.tracefn "%s") |> ignore)
 
-    Target.create "RestoreClientDependencies" (fun _ -> run npm [ "ci"; "--include=optional" ] clientPath)
+    Target.create "RestoreClientDependencies" (fun _ -> npm [ "ci"; "--include=optional" ] clientPath)
 
-    Target.create "Build" (fun _ -> run dotnet [ "build" ] serverPath)
+    Target.create "Build" (fun _ -> run "dotnet" [ "build" ] serverPath)
 
     Target.create "Bundle" (fun _ ->
-        run dotnet [ "build"; config.ServerProject; "-c"; "Release" ] "."
+        run "dotnet" [ "build"; config.ServerProject; "-c"; "Release" ] "."
 
         [
-            "server", dotnet [ "publish"; "-c"; "Release"; "-o"; deployPath ] serverPath
+            "server", dotnetProcess [ "publish"; "-c"; "Release"; "-o"; deployPath ] serverPath
             "client",
-            dotnet
+            dotnetProcess
                 [
                     "fable"
                     "-o"
@@ -933,14 +2137,14 @@ let registerTargets (config: BuildConfig) =
             | m -> CreateProcess.setEnvironmentVariable "TOOLUP_MODULE" m p
 
         let serverProcess =
-            dotnet [ "watch"; "run"; "--no-restore" ] serverPath
+            dotnetProcess [ "watch"; "run"; "--no-restore" ] serverPath
             |> CreateProcess.setEnvironmentVariable "SERVER_PORT" (string config.Port)
             |> applyModuleFilter
 
         [
             "server", serverProcess
             "client",
-            dotnet
+            dotnetProcess
                 [
                     "fable"
                     "watch"
@@ -958,9 +2162,9 @@ let registerTargets (config: BuildConfig) =
         ]
         |> runParallel)
 
-    Target.create "Docker" (fun _ -> run docker [ "compose"; "up"; "-d" ] ".")
+    Target.create "Docker" (fun _ -> run "docker" [ "compose"; "up"; "-d" ] ".")
 
-    Target.create "Format" (fun _ -> run dotnet [ "fantomas"; "." ] ".")
+    Target.create "Format" (fun _ -> run "dotnet" [ "fantomas"; "." ] ".")
 
     Target.create "VerifyAll" (fun _ ->
         // Canonical "run every Expecto test pack" aggregator. Each pack
@@ -1002,18 +2206,61 @@ let registerTargets (config: BuildConfig) =
             | "" -> []
             | v -> v.Split(' ', StringSplitOptions.RemoveEmptyEntries) |> List.ofArray
 
-        // Phase 803 — the legs the repository registered through
-        // `VerifyLeg.register`, run after every pack in registration
-        // order. Each is one more line in the summary block.
-        let extraLegs =
-            VerifyLeg.registeredLegs ()
-            |> List.map (fun (name, run) -> Aggregate.leg name run)
+        // The gate manifest's rows, in registration order: a repository
+        // that registers rows (`Gate.register`) runs its selected `Local`
+        // ones; a `TestPacks` entry no row names is a pack row with the
+        // default reads, so a consumer's `BuildConfig` alone is a manifest.
+        // Each row is one line in the summary block.
+        let rows = Gate.registered ()
 
-        match config.TestPacks, extraLegs with
-        | [], [] ->
+        let packRows =
+            rows
+            |> List.choose (fun r ->
+                match r.Kind with
+                | LegKind.ExpectoPack project -> Some(project, r)
+                | LegKind.Body _
+                | LegKind.Script _ -> None)
+            |> Map.ofList
+
+        let unregisteredPacks: Gate.Registered list = [
+            for pack in config.TestPacks do
+                if not (packRows.ContainsKey pack.Project) then
+                    {
+                        Name = pack.Name
+                        Kind = LegKind.ExpectoPack pack.Project
+                        Where = set [ Site.Local ]
+                        Reads = [ Input.Tree ]
+                        Budget = None
+                        Floor = None
+                        Selected = true
+                    }
+        ]
+
+        let allRows = unregisteredPacks @ rows
+
+        let toRun =
+            allRows |> List.filter (fun r -> r.Selected && Set.contains Site.Local r.Where)
+
+        let elsewhere =
+            allRows |> List.filter (fun r -> not (Set.contains Site.Local r.Where))
+
+        let packs = [
+            for r in toRun do
+                match r.Kind with
+                | LegKind.ExpectoPack project -> TestPack.create r.Name project
+                | LegKind.Body _
+                | LegKind.Script _ -> ()
+        ]
+
+        let readHighWater (file: string) = int ((IO.File.ReadAllText file).Trim())
+
+        let clock = Diagnostics.Stopwatch.StartNew()
+
+        match toRun with
+        | [] ->
             Trace.tracefn
                 "VerifyAll: BuildConfig.TestPacks is empty — nothing to run. Populate `TestPacks` in your `BuildConfig` to opt in."
-        | packs, _ ->
+        | _ ->
             // Outside the aggregate on purpose. The aggregate's whole
             // value is "every leg ran, here is what each did"; a failed
             // build means no leg CAN run, so folding it in as a leg would
@@ -1024,11 +2271,51 @@ let registerTargets (config: BuildConfig) =
             if not (List.isEmpty packs) then
                 TestPackHost.buildOnce packs
 
-            let packLegs =
-                packs
-                |> List.map (fun pack -> Aggregate.leg pack.Name (fun () -> TestPackHost.runPack extraTestArgs pack))
+            let legs =
+                toRun
+                |> List.map (fun row ->
+                    Aggregate.legOf row.Name (fun () ->
+                        let verdict =
+                            match row.Kind with
+                            | LegKind.ExpectoPack project ->
+                                TestPackHost.runPack
+                                    extraTestArgs
+                                    (Gate.scrubbedFor allRows row)
+                                    (TestPack.create row.Name project)
+                            | LegKind.Body run -> run ()
+                            | LegKind.Script path ->
+                                Gate.verdictOfExit (Proc.exec "pwsh" [ "-NoProfile"; "-File"; path ] ".").ExitCode
 
-            Aggregate.runAll "VerifyAll" "pack" (packLegs @ extraLegs))
+                        Gate.judge row.Name row.Floor readHighWater verdict))
+
+            try
+                Aggregate.runAll "VerifyAll" "pack" legs
+            finally
+                // The trailer: the rows this run did not run because they
+                // run elsewhere, each with the inputs that put it there —
+                // what a green here does not cover — and the one measured
+                // duration, printed once, where `GateTimings` folds it from.
+                if not (List.isEmpty elsewhere) then
+                    Trace.tracefn "VerifyAll did not run %d row(s) that run elsewhere:" elsewhere.Length
+
+                    for row in elsewhere do
+                        Trace.tracefn
+                            "  %s — %s; reads %s"
+                            row.Name
+                            (match row.Where |> Set.toList |> List.map Gate.siteName with
+                             | [] -> "operator-run"
+                             | sites -> String.concat ", " sites)
+                            (match row.Reads with
+                             | [] -> "nothing"
+                             | reads -> reads |> List.map Gate.inputName |> String.concat ", ")
+
+                let elapsed = clock.Elapsed
+
+                Trace.tracefn
+                    "VerifyAll: %d row(s) in %d:%02d wall clock on this run."
+                    toRun.Length
+                    (int elapsed.TotalMinutes)
+                    elapsed.Seconds)
 
     Target.create "Pack" (fun _ ->
         // Pack each public-surface SDK fsproj into the local NuGet feed
@@ -1058,13 +2345,9 @@ let registerTargets (config: BuildConfig) =
         // the summary names every project that did not pack.
         let results = ResizeArray<string * int>()
 
-        // Per-project process WITHOUT the file-top `dotnet` shim's
-        // `ensureExitCode` decorator, so a non-zero exit is captured
-        // rather than thrown.
+        // Unchecked, so a non-zero exit is captured rather than thrown.
         let packProject proj =
-            CreateProcess.fromRawCommand "dotnet" [ "pack"; proj; "-c"; "Release"; "-o"; outputDir; "--nologo" ]
-            |> CreateProcess.withWorkingDirectory "."
-            |> Proc.run
+            Proc.exec "dotnet" [ "pack"; proj; "-c"; "Release"; "-o"; outputDir; "--nologo" ] "."
 
         try
             for proj in projects do
@@ -1134,7 +2417,7 @@ let registerTargets (config: BuildConfig) =
         for proj in projects do
             Trace.tracefn "Packing %s for publish..." proj
 
-            run dotnet [ "pack"; proj; "-c"; "Release"; "-o"; artifactsDir; "--nologo" ] "."
+            run "dotnet" [ "pack"; proj; "-c"; "Release"; "-o"; artifactsDir; "--nologo" ] "."
 
         // Phase 182 — gated SBOM (+ optional provenance sidecar) emission.
         // Off unless TOOLUP_EMIT_SBOM is set (GP 11/13); CI's
@@ -1212,9 +2495,7 @@ let registerTargets (config: BuildConfig) =
             Trace.tracefn "Pushing %s..." (System.IO.Path.GetFileName nupkg)
 
             let result =
-                CreateProcess.fromRawCommand "dotnet" (NugetPush.pushArgs pushPolicy source token nupkg)
-                |> CreateProcess.withWorkingDirectory "."
-                |> Proc.run
+                Proc.exec "dotnet" (NugetPush.pushArgs pushPolicy source token nupkg) "."
 
             result.ExitCode
 
@@ -1254,23 +2535,21 @@ let registerTargets (config: BuildConfig) =
 
         Trace.tracefn "Running `dotnet list %s package --include-transitive --format json`..." slnFile
 
-        let psi = System.Diagnostics.ProcessStartInfo()
-        psi.FileName <- "dotnet"
+        let listed =
+            Proc.execWith
+                {
+                    Proc.options with
+                        Redirect = true
+                        TraceCommand = false
+                }
+                "dotnet"
+                [ "list"; slnFile; "package"; "--include-transitive"; "--format"; "json" ]
+                "."
 
-        for arg in [ "list"; slnFile; "package"; "--include-transitive"; "--format"; "json" ] do
-            psi.ArgumentList.Add(arg)
+        if listed.ExitCode <> 0 then
+            failwithf "dotnet list package failed (exit %d): %s" listed.ExitCode listed.StdErr
 
-        psi.RedirectStandardOutput <- true
-        psi.RedirectStandardError <- true
-        psi.UseShellExecute <- false
-
-        use proc = System.Diagnostics.Process.Start(psi)
-        let stdout = proc.StandardOutput.ReadToEnd()
-        let stderr = proc.StandardError.ReadToEnd()
-        proc.WaitForExit()
-
-        if proc.ExitCode <> 0 then
-            failwithf "dotnet list package failed (exit %d): %s" proc.ExitCode stderr
+        let stdout = listed.StdOut
 
         // Parse the JSON output. Schema:
         // { "projects": [ { "frameworks": [ { "topLevelPackages": [...], "transitivePackages": [...] } ] } ] }
@@ -1518,7 +2797,7 @@ let registerTargets (config: BuildConfig) =
             |> Option.map snd
             |> Option.defaultValue forgeNativeHeader
 
-        let checkOnly = Environment.GetCommandLineArgs() |> Array.contains "--check"
+        let checkOnly = Flags.has "--check" (invocationFlags ())
 
         let packsFableSource (proj: string) =
             (System.IO.File.ReadAllText proj).Contains "PackagePath=\"fable"
@@ -1625,22 +2904,28 @@ let registerTargets (config: BuildConfig) =
     // Opt-in: a consumer who never runs it is byte-for-byte unaffected
     // (GP 13); the SDK runtime surface is untouched.
     Target.create "Codemod" (fun _ ->
-        let argv = Environment.GetCommandLineArgs() |> Array.toList
-        let checkOnly = argv |> List.contains "--check"
+        let flags = invocationFlags ()
+        let checkOnly = Flags.has "--check" flags
 
-        // The directory is the first non-flag token AFTER the target
-        // name. Read from the process argv rather than `p.Context.Arguments`
-        // for the reason VerifyDocSnippets gives: FAKE's own parser never
-        // hands trailing options to the target.
-        let root =
-            match argv |> List.skipWhile ((<>) "Codemod") with
-            | _ :: rest -> rest |> List.tryFind (fun a -> not (a.StartsWith "--"))
-            | [] -> None
+        // The directory is the first non-option argument after the target.
+        let root = List.tryHead flags.Positionals
+
+        // `--phase 877` applies one migration's rules only — what a consumer
+        // adopting one release wants, and what the SDK's own tree needs
+        // when the rename it carries lands (every other rule would then
+        // rewrite the names the SDK itself still defines).
+        let only =
+            match Flags.value "--phase" flags with
+            | None -> []
+            | Some phase ->
+                match Codemod.migrationOfPhase phase with
+                | Some m -> [ m ]
+                | None -> failwithf "Codemod: no migration is labelled Phase %s" phase
 
         match root with
-        | None -> failwith "Codemod: usage — dotnet run -- Codemod <consumer-source-dir> [--check]"
+        | None -> failwith "Codemod: usage — dotnet run -- Codemod <consumer-source-dir> [--check] [--phase <n>]"
         | Some dir ->
-            let plan = Codemod.plan (System.IO.Path.GetFullPath dir)
+            let plan = Codemod.planFor only (System.IO.Path.GetFullPath dir)
             Trace.tracefn "%s" (Codemod.renderSummary plan)
             Trace.tracefn "%s" (Codemod.renderFindings plan)
 
@@ -1675,7 +2960,7 @@ let registerTargets (config: BuildConfig) =
                     // rewritten at this point, and the remedy is one
                     // command.
                     try
-                        run dotnet ("fantomas" :: files) "."
+                        run "dotnet" ("fantomas" :: files) "."
                     with e ->
                         failwithf
                             "Codemod: %d file(s) were rewritten but `dotnet fantomas` failed (%s). Run `dotnet tool restore` then `dotnet fantomas <the rewritten files>` to finish the format pass."
@@ -1701,25 +2986,14 @@ let registerTargets (config: BuildConfig) =
 /// Execute the FAKE pipeline
 let execute (argv: string[]) =
     try
-        let argList = argv |> Array.toList
+        let flags = Flags.lenient Flags.sdk argv
 
-        // Parse --module flag and propagate as environment variable
-        let rec findModule =
-            function
-            | "--module" :: name :: _ -> Some name
-            | _ :: rest -> findModule rest
-            | [] -> None
-
-        match findModule argList with
+        // `--module` is propagated as an environment variable.
+        match Flags.value "--module" flags with
         | Some m -> Environment.SetEnvironmentVariable("TOOLUP_MODULE", m)
         | None -> ()
 
-        let target =
-            match argList with
-            | t :: _ when not (t.StartsWith "--") -> t
-            | _ -> "Run"
-
-        Target.runOrDefault target
+        Target.runOrDefault flags.Target
 
         0
     with e ->

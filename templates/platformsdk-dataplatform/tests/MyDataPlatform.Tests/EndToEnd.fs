@@ -16,6 +16,10 @@ open ToolUp.Platform
 open ToolUp.AuthProviders
 open MyDataPlatform.Server
 open MyDataPlatform.Tests.Scripted
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
 // ─── The whole application, end to end, on a loopback port ────────
 //

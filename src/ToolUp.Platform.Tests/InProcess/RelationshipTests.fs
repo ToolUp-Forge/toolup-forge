@@ -5,11 +5,12 @@ open System.IO
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.DataObjectStore
+open ToolUp.Platform.Infra.DataObjectStore
 open ToolUp.Platform.EntityTypes
 open ToolUp.Platform.EntityQueryTypes
-open ToolUp.Platform.EntityStore
-open ToolUp.Platform.IEntityStore
+open ToolUp.Platform.Infra.EntityStore
+open ToolUp.Platform.Infra.IEntityStore
+open ToolUp.Platform.Infra
 
 // ─── Phase 19c — declarative relationship edges ─────────────────────
 //

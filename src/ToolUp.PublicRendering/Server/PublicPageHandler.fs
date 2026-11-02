@@ -7,6 +7,9 @@ open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.Primitives
 open ToolUp.Platform
 open ToolUp.Platform.Metrics
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Compose
 
 /// Phase 1039 — why a page's layout could not be resolved. Every site that
 /// frames a page (the page handler, `/preview`, `/search`, static export,
@@ -39,7 +42,7 @@ module LayoutRefusal =
             sprintf "layout '%s' is not registered (registered: %s)" (LayoutName.value requested) (names registered)
         | LayoutRefusal.NoDefaultLayout registered ->
             sprintf
-                "the page names no layout and no default layout is declared among the registered layouts (%s); declare one with PublicRenderingServerApp.withDefaultLayout"
+                "the page names no layout and no default layout is declared among the registered layouts (%s); declare one with PublicRenderingOptions.withDefaultLayout"
                 (names registered)
         | LayoutRefusal.UnknownDefaultLayout(declared, registered) ->
             sprintf

@@ -7,6 +7,8 @@ open System.Text.Json
 open System.Text.RegularExpressions
 open Expecto
 open ToolUp.Platform.ConfigKeys
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 214 — config-key registry coverage + reference-doc golden ──
 //
@@ -42,6 +44,11 @@ let private schemaPath () =
 /// note cite one string.
 let private operationsDocPath () =
     Path.Combine(repoRoot (), OperationsDoc.DocPath.Replace('/', Path.DirectorySeparatorChar))
+
+/// The page whose generated region states every key's direction and the
+/// boot seal's coverage.
+let private deploymentDocPath () =
+    Path.Combine(repoRoot (), DeploymentDoc.DocPath)
 
 let private regenModeOn () =
     match Environment.GetEnvironmentVariable "TOOLUP_REGEN_CONFIG_REFERENCE" with
@@ -120,10 +127,10 @@ let private bindingToVar (root: string) =
         |> File.ReadAllText
 
     let start = registrySource.IndexOf "module Names ="
-    let stop = registrySource.IndexOf "let all: ConfigKeyDescriptor list ="
+    let stop = registrySource.IndexOf "let keys: ConfigKey list ="
     let namesModule = registrySource.Substring(start, stop - start)
 
-    Regex.Matches(namesModule, "let\\s+(\\w+)\\s*=\\s*\"(TOOLUP_[A-Z0-9_]+)\"")
+    Regex.Matches(namesModule, "let\\s+(\\w+)\\s*=\\s*\"((?:TOOLUP|SERVER)_[A-Z0-9_]+)\"")
     |> Seq.map (fun m -> m.Groups[1].Value, m.Groups[2].Value)
     |> Map.ofSeq
 
@@ -406,6 +413,153 @@ let tests =
                 (Set.intersect declared secrets)
                 "no secret key may appear in the schema: the loader refuses it with no hatch, and the schema is what tells the operator that before they type the value"
 
+        testCase "DEPLOYMENT.md's generated region matches the registry (regenerable)"
+        <| fun _ ->
+            let path = deploymentDocPath ()
+            Expect.isTrue (File.Exists path) (sprintf "%s is missing." path)
+            let committed = File.ReadAllText path |> normalise
+
+            match DeploymentDoc.splice keys committed with
+            | Error problem -> failtest problem
+            | Ok expected ->
+                if regenModeOn () then
+                    File.WriteAllText(path, expected)
+                else
+                    Expect.equal
+                        committed
+                        expected
+                        "DEPLOYMENT.md's generated region (directions and seal coverage) is stale. Regenerate with `dotnet run --project Build.fsproj -- GenerateConfigReference`."
+
+        testCase "a planted drift in DEPLOYMENT.md's generated region fails the comparison"
+        <| fun _ ->
+            // The gate above compares the page with its own region re-rendered.
+            // Plant a drift in a page that was current and check the same
+            // comparison sees it, so the gate is shown able to go red.
+            let page = "# Page\n\nprose\n\n" + DeploymentDoc.render keys + "\n\nmore prose\n"
+
+            Expect.equal (DeploymentDoc.splice keys page) (Ok page) "a current page re-renders to itself"
+
+            let planted =
+                page.Replace(
+                    "| `TOOLUP_REQUIRE_HTTPS` | **stops startup** (protective) |",
+                    "| `TOOLUP_REQUIRE_HTTPS` | reads as `false` (permissive) |"
+                )
+
+            Expect.notEqual planted page "the plant must change the page, or this test proves nothing"
+
+            Expect.notEqual
+                (DeploymentDoc.splice keys planted)
+                (Ok planted)
+                "a hand edit inside the generated region must not survive the comparison"
+
+            Expect.equal (DeploymentDoc.splice keys planted) (Ok page) "regeneration restores the region"
+
+        testCase "every key the binder reads has a descriptor, SERVER_PORT included"
+        <| fun _ ->
+            // `ServerConfig.fromEnv` names each key by its `Names` binding and
+            // resolves it through `ConfigKeys.key`, so this enumerates the
+            // binder's reads from its source and holds each to the registry.
+            let root = repoRoot ()
+
+            let path =
+                Path.Combine(root, "src", "ToolUp.Platform.Server", "Server", "Config", "ServerConfigFromEnv.fs")
+
+            // The binder is the `ServerConfig` module: everything before the
+            // escape-hatch validator that shares its file.
+            let text =
+                let whole = File.ReadAllText path
+                let stop = whole.IndexOf "module EscapeHatchTokenValidator"
+                Expect.isGreaterThan stop 0 "the escape-hatch validator no longer follows the binder"
+                whole.Substring(0, stop)
+
+            let bindingToVar = bindingToVar root
+
+            let cited =
+                Regex.Matches(text, "(?<![\\w.])(?:ConfigKeys\\.)?Names\\.(\\w+)")
+                |> Seq.map (fun m -> m.Groups[1].Value)
+                |> Set.ofSeq
+
+            Expect.isGreaterThan
+                (Set.count cited)
+                90
+                "parsed suspiciously few key citations out of the binder — the parse is probably wrong, and an empty parse passes vacuously"
+
+            let unbound = cited |> Set.filter (not << bindingToVar.ContainsKey)
+
+            Expect.isEmpty unbound "the binder cites Names bindings the registry source does not define"
+
+            let reads = cited |> Set.map (fun binding -> bindingToVar[binding])
+            let registered = keys |> List.map _.EnvVar |> Set.ofList
+
+            Expect.isEmpty
+                (Set.difference reads registered)
+                "every key the binder reads must have a ConfigKey in ConfigKeys.keys"
+
+            for processKey in [ Names.serverPort; Names.serverBindAddress ] do
+                Expect.isTrue
+                    (reads.Contains processKey)
+                    (sprintf "the binder must read %s through the registry" processKey)
+
+            // Nothing reaches around the registry: no key name as a string
+            // literal, no direct environment read, and one seam read — the
+            // helper every binding goes through.
+            let literals =
+                Regex.Matches(text, "\"((?:TOOLUP|SERVER)_[A-Z0-9_]+)\"")
+                |> Seq.map (fun m -> m.Groups[1].Value)
+                |> List.ofSeq
+
+            Expect.isEmpty literals "a key name appears as a string literal in the binder; name it by its Names binding"
+
+            Expect.isFalse
+                (text.Contains "Environment.GetEnvironmentVariable")
+                "the binder reads the environment directly; resolve through the key instead"
+
+            Expect.equal
+                (Regex.Matches(text, "ConfigResolution\\.try").Count)
+                1
+                "the binder resolves keys through exactly one helper (rawValue)"
+
+            // A default in a message is the key's typed default, interpolated,
+            // never a number written into the text.
+            Expect.isFalse
+                (Regex.IsMatch(text, "[Dd]efault \\(?[0-9]"))
+                "a log message states a default as a literal; take it from the key"
+
+        testCase "a typed default is one of a union's choices, and a bounded integer default is within its bounds"
+        <| fun _ ->
+            for k in keys do
+                match k.Kind with
+                | ConfigKeyKind.EnumKey(choices, _, Some token) ->
+                    Expect.contains
+                        choices
+                        token
+                        (sprintf "%s defaults to %s, which is not one of its choices" k.EnvVar token)
+                | ConfigKeyKind.IntKey(bounds, Some n) ->
+                    Expect.isTrue
+                        ((bounds.Min |> Option.forall (fun lo -> n >= lo))
+                         && (bounds.Max |> Option.forall (fun hi -> n <= hi)))
+                        (sprintf "%s defaults to %d, outside its own bounds" k.EnvVar n)
+                | _ -> ()
+
+        testCase "every secret a server reads seals by presence, tooling is unsealed, and every unsealed key says why"
+        <| fun _ ->
+            for k in keys do
+                if k.IsSecret && k.Category <> ToolingCategory then
+                    Expect.equal
+                        k.Seal
+                        SealPosture.SealPresence
+                        (sprintf "%s is a secret; sealing its value would write the credential into the seal" k.EnvVar)
+
+                match k.Seal with
+                | SealPosture.Unsealed reason ->
+                    Expect.isFalse (String.IsNullOrWhiteSpace reason) (sprintf "%s is unsealed with no reason" k.EnvVar)
+                | _ ->
+                    // DEPLOYMENT.md states the tooling section is unsealed as a whole.
+                    Expect.notEqual
+                        k.Category
+                        ToolingCategory
+                        (sprintf "%s is a tooling key, which no running server reads, yet it is sealed" k.EnvVar)
+
         testCase "every TOOLUP_ env var in shipped source has a descriptor"
         <| fun _ ->
             let registered = all |> List.map _.EnvVar |> Set.ofList
@@ -449,13 +603,13 @@ let tests =
             let namesModule =
                 let text = File.ReadAllText registryPath
                 let start = text.IndexOf "module Names ="
-                let stop = text.IndexOf "let all: ConfigKeyDescriptor list ="
+                let stop = text.IndexOf "let keys: ConfigKey list ="
                 Expect.isGreaterThan start -1 "Names module not found in the registry source"
-                Expect.isGreaterThan stop start "`all` does not follow the Names module"
+                Expect.isGreaterThan stop start "`keys` does not follow the Names module"
                 text.Substring(start, stop - start)
 
             let bound =
-                Regex.Matches(namesModule, "let\\s+\\w+\\s*=\\s*\"(TOOLUP_[A-Z0-9_]+)\"")
+                Regex.Matches(namesModule, "let\\s+\\w+\\s*=\\s*\"((?:TOOLUP|SERVER)_[A-Z0-9_]+)\"")
                 |> Seq.map (fun m -> m.Groups[1].Value)
                 |> Set.ofSeq
 
@@ -521,7 +675,7 @@ let tests =
 
             // The `fromEnv` region: everything from the seam helper every
             // parser funnels through to the end of the file.
-            let regionStart = text.IndexOf "let private envVar"
+            let regionStart = text.IndexOf "let private rawValue"
 
             Expect.isGreaterThan regionStart -1 "the `fromEnv` region was not found in ServerConfigFromEnv.fs"
 
@@ -538,7 +692,7 @@ let tests =
             let secrets = all |> List.filter _.IsSecret |> List.map _.EnvVar |> Set.ofList
 
             let fromEnvRegionKeys =
-                Regex.Matches(region, "ConfigKeys\\.Names\\.(\\w+)")
+                Regex.Matches(region, "(?<![\\w.])(?:ConfigKeys\\.)?Names\\.(\\w+)")
                 |> Seq.choose (fun m -> Map.tryFind m.Groups[1].Value bindingToVar)
                 |> Set.ofSeq
 
@@ -701,7 +855,7 @@ let tests =
                     Environment.NewLine
                     (findings |> List.map (sprintf "  - %s") |> String.concat Environment.NewLine))
 
-        testCase "registry is well-formed (unique, TOOLUP_-prefixed, described)"
+        testCase "registry is well-formed (unique, TOOLUP_-prefixed or process-binding, described)"
         <| fun _ ->
             let names = all |> List.map _.EnvVar
 
@@ -710,8 +864,14 @@ let tests =
                 (names |> List.distinct |> List.length)
                 "duplicate EnvVar in ConfigKeys.all"
 
+            // The two process-binding keys keep the names the hosting
+            // convention gives them; every other key is TOOLUP_-prefixed.
+            let processBinding = set [ Names.serverPort; Names.serverBindAddress ]
+
             for d in all do
-                Expect.isTrue (d.EnvVar.StartsWith "TOOLUP_") (sprintf "env var %s is not TOOLUP_-prefixed" d.EnvVar)
+                Expect.isTrue
+                    (d.EnvVar.StartsWith "TOOLUP_" || processBinding.Contains d.EnvVar)
+                    (sprintf "env var %s is neither TOOLUP_-prefixed nor a process-binding key" d.EnvVar)
 
                 Expect.isFalse
                     (String.IsNullOrWhiteSpace d.Description)

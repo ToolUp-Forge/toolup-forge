@@ -11,13 +11,17 @@ open ToolUp.Platform
 open ToolUp.Platform.AI
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Grounding
-open ToolUp.Platform.IRetrievalPipeline
-open ToolUp.Platform.IRagTelemetry
+open ToolUp.Platform.Infra.IRetrievalPipeline
+open ToolUp.Platform.Infra.IRagTelemetry
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.AI.SystemPromptBuilder
 open ToolUp.Facts
 open ToolUp.RAG
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 708 — the fact-clause feeder ──────────────────────────────
 //
@@ -41,13 +45,6 @@ let private newScope () = "team-" + Guid.NewGuid().ToString("N")
 
 /// Phase 821 — a `ResolvedScope` for a test scope id, through the same
 /// internal mint the scope-resolution middleware uses.
-let private resolved (scopeId: string) : ResolvedScope =
-    StorageScopeResolver.ScopeResolution.ofStorageScope {
-        ScopeId = scopeId
-        Container = "container-" + scopeId
-        Persist = true
-    }
-
 let private q2: TemporalExtent = {
     From = DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc)
     To = DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc)
@@ -133,9 +130,9 @@ let private plannerOver (compiler: TripleCompiler) : IAnswerPlanner * IFactStore
     AnswerPlanner.create store gate (Some registry) events compiler, store, events
 
 let private assertFact (store: IFactStore) (scope: string) (d: FactDraft) : Fact =
-    match store.Assert(scope, d) |> Async.RunSynchronously with
+    match store.Assert(TestScope.resolved scope, d) |> Async.RunSynchronously with
     | Ok fact -> fact
-    | Error e -> failtestf "assert failed: %s" e
+    | Error e -> failtestf "assert failed: %s" (FactStoreError.describe e)
 
 /// A stub pipeline that records the request it was handed and returns a
 /// fixed match list. The recorded request is the whole point: the feeder's
@@ -175,11 +172,6 @@ type private RecordingTelemetry() =
 /// guard exists for.
 type private HangingPlanner() =
     interface IFactClausePlanner with
-        member _.PlanClauses(_: string, _: string, _: string) = async {
-            do! Async.Sleep 60_000
-            return PlannedFactClauses.none
-        }
-
         member _.PlanClauses(_: ResolvedScope, _: string, _: string) = async {
             do! Async.Sleep 60_000
             return PlannedFactClauses.none
@@ -189,10 +181,6 @@ type private HangingPlanner() =
 /// same way a timeout does.
 type private FaultingPlanner() =
     interface IFactClausePlanner with
-        member _.PlanClauses(_: string, _: string, _: string) : Async<PlannedFactClauses> = async {
-            return failwith "compiler exploded"
-        }
-
         member _.PlanClauses(_: ResolvedScope, _: string, _: string) : Async<PlannedFactClauses> = async {
             return failwith "compiler exploded"
         }
@@ -233,6 +221,7 @@ let private contextFor (question: string) : PromptContext = {
     ShortCircuit = ref None
     PlannedAnswerId = ref None
     Scope = ResolvedScope.anonymous
+    Services = ToolUp.AI.SystemPromptBuilder.PromptContext.noServices
 }
 
 // ── The projection: plan steps → clauses (708.A) ──────────────────
@@ -248,7 +237,7 @@ let projectionTests =
             assertFact store scope (draftFor "acme" "revenue" (Scalar 21800m)) |> ignore
 
             let feeder = AnswerPlanClausePlanner.create planner :> IFactClausePlanner
-            let! planned = feeder.PlanClauses(scope, "user-1", "what was acme revenue?")
+            let! planned = feeder.PlanClauses(TestScope.resolved scope, "user-1", "what was acme revenue?")
 
             match planned.Clauses with
             | [ clause ] ->
@@ -273,7 +262,7 @@ let projectionTests =
             let planner, _, _ = plannerOver compiler.Compiler
 
             let feeder = AnswerPlanClausePlanner.create planner :> IFactClausePlanner
-            let! planned = feeder.PlanClauses(newScope (), "user-1", "what were acme sales?")
+            let! planned = feeder.PlanClauses(TestScope.resolved (newScope ()), "user-1", "what were acme sales?")
 
             Expect.isTrue (PlannedFactClauses.isEmpty planned) "an unresolvable question pushes nothing"
             Expect.equal planned PlannedFactClauses.none "it contributes exactly the none value"
@@ -288,7 +277,7 @@ let projectionTests =
             let planner, _, _ = plannerOver compiler.Compiler
 
             let feeder = AnswerPlanClausePlanner.create planner :> IFactClausePlanner
-            let! planned = feeder.PlanClauses(newScope (), "user-1", "what was acme revenue?")
+            let! planned = feeder.PlanClauses(TestScope.resolved (newScope ()), "user-1", "what was acme revenue?")
 
             Expect.isTrue (PlannedFactClauses.isEmpty planned) "an unanswerable-for-data triple pushes nothing"
         }
@@ -303,7 +292,7 @@ let projectionTests =
             assertFact store scope (draftFor "acme" "revenue" (Scalar 21800m)) |> ignore
 
             let feeder = AnswerPlanClausePlanner.create planner :> IFactClausePlanner
-            let! planned = feeder.PlanClauses(scope, "user-1", "acme revenue and acme revenue?")
+            let! planned = feeder.PlanClauses(TestScope.resolved scope, "user-1", "acme revenue and acme revenue?")
 
             Expect.equal planned.Clauses.Length 1 "duplicate triples collapse"
         }
@@ -327,7 +316,10 @@ let promptPathTests =
 
             // Phase 821 — the prompt path hands the planner the scope the
             // request resolved to, so the seeded scope is the minted one.
-            let ctx = { ctx with Scope = resolved scope }
+            let ctx = {
+                ctx with
+                    Scope = TestScope.resolved scope
+            }
 
             let builder =
                 RAGPromptBuilder.withRetrievalPlanned
@@ -410,7 +402,7 @@ let promptPathTests =
                 builderB {
                     contextFor "what was acme revenue?" with
                         Access = AccessContext.unrestricted (AuthenticatedUser(newScope ()))
-                        Scope = resolved seeded
+                        Scope = TestScope.resolved seeded
                 }
 
             Expect.isSome (clauseOf pipelineB) "the minted scope is the one the plan resolved in"
@@ -618,11 +610,14 @@ let reuseTests =
             assertFact store scope (draftFor "acme" "revenue" (Scalar 21800m)) |> ignore
 
             let feeder = AnswerPlanClausePlanner.create planner
-            let! planned = (feeder :> IFactClausePlanner).PlanClauses(scope, "user-1", "what was acme revenue?")
+
+            let! planned =
+                (feeder :> IFactClausePlanner).PlanClauses(TestScope.resolved scope, "user-1", "what was acme revenue?")
 
             Expect.equal compiler.Calls 1 "one compile so far"
 
-            let! recorded = (feeder :> IPlannedAnswerRecorder).RecordPlanned(scope, "msg-1", planned.PlanId)
+            let! recorded =
+                (feeder :> IPlannedAnswerRecorder).RecordPlanned(TestScope.resolved scope, "msg-1", planned.PlanId)
 
             Expect.isTrue recorded "the retained plan was found and recorded"
             Expect.equal compiler.Calls 1 "recording did NOT recompile the question"
@@ -644,7 +639,7 @@ let reuseTests =
             let planner, _, _ = plannerOver compiler.Compiler
             let feeder = AnswerPlanClausePlanner.create planner :> IPlannedAnswerRecorder
 
-            let! recorded = feeder.RecordPlanned(newScope (), "msg-1", "plan-does-not-exist")
+            let! recorded = feeder.RecordPlanned(TestScope.resolved (newScope ()), "msg-1", "plan-does-not-exist")
 
             Expect.isFalse recorded "an unrecoverable plan id degrades; the answer still stands"
         }
@@ -659,12 +654,13 @@ let reuseTests =
             let feeder = AnswerPlanClausePlanner.createWithRetention planner 1
             let clausePlanner = feeder :> IFactClausePlanner
 
-            let! first = clausePlanner.PlanClauses(scope, "user-1", "what was acme revenue?")
-            let! _second = clausePlanner.PlanClauses(scope, "user-1", "and again?")
+            let! first = clausePlanner.PlanClauses(TestScope.resolved scope, "user-1", "what was acme revenue?")
+            let! _second = clausePlanner.PlanClauses(TestScope.resolved scope, "user-1", "and again?")
 
             Expect.isNone (feeder.TryPlan first.PlanId) "the older plan was evicted at the bound"
 
-            let! recorded = (feeder :> IPlannedAnswerRecorder).RecordPlanned(scope, "msg-1", first.PlanId)
+            let! recorded =
+                (feeder :> IPlannedAnswerRecorder).RecordPlanned(TestScope.resolved scope, "msg-1", first.PlanId)
 
             Expect.isFalse recorded "an evicted plan records as a miss, never a throw"
         }
@@ -672,13 +668,16 @@ let reuseTests =
 
 // ── Compose (708.A / GP 13) ───────────────────────────────────────
 
-let private composedUnder (knob: FactStoreMode) : ServiceProvider =
+let private composedUnder (knob: FeatureMode) : ServiceProvider =
     let app =
         {
             ServerApp.empty with
                 Config = {
                     ServerConfig.defaults with
-                        FactStore = knob
+                        Stores = {
+                            ServerConfig.defaults.Stores with
+                                FactStore = knob
+                        }
                 }
         }
         |> FactsCompose.withFactStore
@@ -700,8 +699,8 @@ let private composedUnder (knob: FactStoreMode) : ServiceProvider =
 let composeTests =
     testList "Phase 708 compose registration" [
 
-        test "EnabledFactStore registers the clause planner on the same knob as the store" {
-            let sp = composedUnder EnabledFactStore
+        test "FeatureMode.Enabled registers the clause planner on the same knob as the store" {
+            let sp = composedUnder FeatureMode.Enabled
 
             Expect.isFalse
                 (isNull (box (sp.GetService<IFactClausePlanner>())))
@@ -713,7 +712,7 @@ let composeTests =
         }
 
         test "the planner and the recorder are ONE instance — a split pair would empty the retention" {
-            let sp = composedUnder EnabledFactStore
+            let sp = composedUnder FeatureMode.Enabled
 
             let asPlanner = sp.GetRequiredService<IFactClausePlanner>()
             let asRecorder = sp.GetRequiredService<IPlannedAnswerRecorder>()
@@ -723,8 +722,8 @@ let composeTests =
                 "both faces resolve to the same object, so plans retained by one are visible to the other"
         }
 
-        test "NoFactStore registers no feeder — a fact-less composition is byte-identical (GP 11 / GP 13)" {
-            let sp = composedUnder NoFactStore
+        test "FeatureMode.Disabled registers no feeder — a fact-less composition is byte-identical (GP 11 / GP 13)" {
+            let sp = composedUnder FeatureMode.Disabled
 
             Expect.isTrue (isNull (sp.GetService(typeof<IFactClausePlanner>))) "no feeder in a no-store composition"
 

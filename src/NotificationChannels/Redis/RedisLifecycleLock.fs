@@ -4,6 +4,7 @@ open System
 open System.Threading
 open StackExchange.Redis
 open ToolUp.Platform
+open ToolUp.Platform.Compose
 
 // ─── Phase 54h — distributed offboard exclusion lock over Redis ──────
 //

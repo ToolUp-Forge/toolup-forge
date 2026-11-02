@@ -56,22 +56,23 @@ There is deliberately no `TOOLUP_*` variable for the API key: it stays in `ISecr
 
 Every variable above is in the [configuration reference](../reference/config-reference.md), and may be set in a deployment manifest rather than the environment.
 
-## 3. Switch from `AIServerApp.create` to `RAGServerApp.create`
+## 3. Switch from `AICompose.withAI` to `RAGCompose.withRAG`
 
 ```fsharp
 open ToolUp.RAG
 
-// Curried, and the second argument is the platform-wide IProviderProfile
-// store (the Phase 43.A successor to IUserAIConfigStore).
-RAGServerApp.create aiProviderFactory providerProfile embedder
-|> RAGServerApp.withConfig serverConfig
-|> RAGServerApp.withAuth authProvider
-|> RAGServerApp.withStorage blobStorage
-|> RAGServerApp.addModules modules
-|> RAGServerApp.run
+// `RagOptions.create` is curried, and the second argument is the
+// platform-wide IProviderProfile store.
+ServerApp.empty
+|> ServerApp.withConfig serverConfig
+|> ServerApp.withAuth authProvider
+|> ServerApp.withStorage blobStorage
+|> ServerApp.addModules modules
+|> RAGCompose.withRAG (RagOptions.create aiProviderFactory providerProfile embedder)
+|> ServerApp.run
 ```
 
-`RAGServerApp` is a flat superset of `AIServerApp`. Every `AIServerApp.with*` helper is mirrored on `RAGServerApp`. AI tools are not passed here — each module contributes its own through `ServerModule.withAITools`. Plus RAG-specific tuning:
+`RagOptions` is the RAG companion's options record; `RAGCompose.withRAG` sets the companion on the deployment. RAG composes the AI tier itself, so a deployment composing RAG does not also call `AICompose.withAI`: the AI tier's settings ride `RagOptions` (`RagOptions.withAIConfig`, `RagOptions.withModuleAIContexts`, or `RagOptions.withAIOptions` to set the whole `AIOptions`). Base builders (`ServerApp.withConfig`, `withAuth`, `addModules`, ...) stay on the `ServerApp` pipeline, and either side of `withRAG` works — the tier is composed when the deployment resolves. AI tools are not passed here — each module contributes its own through `ServerModule.withAITools`. The RAG-specific tuning is a chain of `RagOptions.with*` setters on the options:
 
 - `withTopK 10` — how many chunks to retrieve per query (default 5; clamped to ≥ 1).
 - `withMinScore (Some 0.4)` — drop matches at or below this score, in the composed pipeline's score space: the fused score normalised onto `[0, 1]` within each query's candidate pool by default, cosine similarity when composed `withoutSparseIndex` (see [the Phase 866 migration note](../migrations/866-retrieval-score-scale.md)). Takes a `float option`; the default is `None`, i.e. no gate at all. Clamped to `[0.0, 0.99]` so a fat-fingered threshold cannot silently filter out every match.
@@ -194,7 +195,7 @@ let myDataVectorisationHandler: VectorisationHandler = {
 }
 ```
 
-Handlers are registered on the **module**, not on `RAGServerApp` — that is what keeps a module self-contained:
+Handlers are registered on the **module**, not on `RagOptions` — that is what keeps a module self-contained:
 
 ```fsharp
 ServerModule.create "MyModule"

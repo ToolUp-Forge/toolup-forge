@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-namespace ToolUp.Platform
+namespace ToolUp.Platform.Infra
+
+open ToolUp.Platform
 
 open System.Collections.Concurrent
 
@@ -23,7 +25,7 @@ open System.Collections.Concurrent
 
 /// Dev/test in-memory `ITimeSeriesStore`. **Not for production** — unbounded
 /// in-memory retention, no durability. Composed by
-/// `ServerConfig.TimeSeriesStore = InMemoryTimeSeriesStore`.
+/// `ServerConfig.Stores.TimeSeriesStore = InMemoryTimeSeriesStore`.
 type InMemoryTimeSeriesStore() =
     // scopeId -> series -> points (append order; sorted on query).
     let data =

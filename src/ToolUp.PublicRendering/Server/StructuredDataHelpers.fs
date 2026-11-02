@@ -3,6 +3,7 @@ namespace ToolUp.PublicRendering
 open System.Text.Json
 open System.Text.Encodings.Web
 open ToolUp.Platform.Narrative
+open ToolUp.Platform.Infra
 
 /// JSON-LD emitters for the five most common schema.org types on
 /// content sites. Each returns a JSON string ready to embed as
@@ -12,7 +13,7 @@ open ToolUp.Platform.Narrative
 /// All emitters read from `PublicPage.Frontmatter`; missing keys
 /// degrade to empty strings rather than throwing. Layout authors
 /// register them by name via
-/// `PublicRenderingServerApp.withStructuredDataBuilder` and call
+/// `PublicRenderingOptions.withStructuredDataBuilder` and call
 /// out from the layout body.
 module StructuredDataHelpers =
     let private opt = Option.defaultValue ""
@@ -255,7 +256,7 @@ module StructuredDataHelpers =
     /// `og:url` when the document carries a `CanonicalUrl`,
     /// `og:locale` when `Lang` is set, and
     /// `article:published_time` / `article:modified_time` when
-    /// `Provenance.GeneratedAt` is present.
+    /// `NarrativeProvenance.GeneratedAt` is present.
     let openGraphFromNarrative (page: PublicPage) (doc: NarrativeDocument) : (string * string) list = [
         "og:title",
         (if System.String.IsNullOrWhiteSpace page.Title then

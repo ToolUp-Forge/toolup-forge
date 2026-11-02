@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.PlatformAdminAuthorization
+module ToolUp.Platform.Scope.PlatformAdminAuthorization
 
 open System.Threading.Tasks
 open Microsoft.AspNetCore.Http

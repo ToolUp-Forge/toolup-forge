@@ -9,6 +9,7 @@ open Giraffe.ViewEngine
 open ToolUp.Platform
 open ToolUp.Platform.Narrative
 open ToolUp.PublicRendering
+open ToolUp.Platform.Compose
 
 // ─── Phase 90 — site structure: nav tree + taxonomy ─────────────────
 //

@@ -5,6 +5,8 @@ module ToolUp.Platform.Tests.InProcess.CommandPaletteContractTests
 
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Phase 571.D — command-palette visibility parity ─────────────────
 //

@@ -1,0 +1,189 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Description>ToolUp.Platform server tier, Config part: configuration resolution and the environment binder, profiles, the config store and its migrations, feature flags and the startup config validators. Referenced by ToolUp.Platform.Server, which most applications reference instead.</Description>
+        <PackageTags>fsharp;sdk;server;configuration</PackageTags>
+    </PropertyGroup>
+    <!-- One part of the server tier, cut along a contiguous run of its compile
+         order (docs/migrations/1193-platform-server-subsystem-assemblies.md). It references only
+         the parts before it; ToolUp.Platform.Server references every part, so a consumer of that
+         package id resolves this one transitively. The sources stay under
+         ../ToolUp.Platform.Server/ with their namespaces unchanged. -->
+    <ItemGroup>
+        <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\ToolUp.Platform.Server.Remoting\ToolUp.Platform.Server.Remoting.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Server.Infra\ToolUp.Platform.Server.Infra.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- The parts after this one, the umbrella and the test packs that already read the
+             server tier's internals before the cut. -->
+        <InternalsVisibleTo Include="ToolUp.Platform.Server.Scope" />
+        <InternalsVisibleTo Include="ToolUp.Platform.Server.Jobs" />
+        <InternalsVisibleTo Include="ToolUp.Platform.Server.Audit" />
+        <InternalsVisibleTo Include="ToolUp.Platform.Server" />
+        <InternalsVisibleTo Include="ToolUp.Platform.Tests" />
+        <InternalsVisibleTo Include="ToolUp.DataSources.Tests" />
+        <InternalsVisibleTo Include="ToolUp.Cli.Tests" />
+        <InternalsVisibleTo Include="ToolUp.Reporting.Tests" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="..\ToolUp.Platform.Server\Server\Config\ConfigResolution.fs" />
+        <!-- The listen-address resolution and its preflight.
+             Before ServerConfigFromEnv.fs, whose SERVER_BIND_ADDRESS read
+             validates through it; ComposeBootstrap.fs applies the plan. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\ServerBinding.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Config\ServerConfigFromEnv.fs" />
+        <!-- The deployment configuration manifest loader:
+             discovery, strict JSON parse, unknown/secret-key refusals,
+             SHA-256 over the raw bytes, and installation into Core's
+             `ConfigResolution` seam. Server-side because Core ships its
+             source for Fable consumers and cannot carry System.IO. Before
+             ConsoleLogger.fs, which installs the manifest before building
+             the logger — the log level is itself a bindable key. -->
+        <!-- The configuration-profile registry + selector.
+             Before ConfigResolver.fs, which selects the profile in the
+             same pass that installs the manifest. Depends only on Core
+             (the built-in bundles are registry data, the rung is the
+             resolution seam's), so it sits as early as the loader does. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\ConfigProfiles.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\ConfigResolver.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Infra\ConsoleLogger.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Api.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Notifications\NotificationChannel.fs" />
+        <!-- Fire-and-forget starts that catch, log and are drained
+             at stop, and the observed start of a
+             fire-and-forget write with its warning. Depends only on Core
+             (ILogger, ProviderExceptions) and ASP.NET Core's HttpContext; before
+             its first user (the SSE mismatch audit below). -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\Background.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Auth\IdentitySanitiser.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Auth\HeaderAuthProvider.fs" />
+        <!-- `BlobStorage.fromEnv` (env-var-driven dispatch).
+             Module name is `BlobStorageEnv` because `BlobStorage` is
+             reserved in Core for the interface module. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\Infra\BlobStorageFromEnv.fs" />
+        <!-- `EmbeddingProviderEnv.fromEnv` (env-var-driven
+             embedding-provider selection). Module name is
+             `EmbeddingProviderEnv` because `IEmbeddingProvider` is
+             reserved for the interface module compiled above. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\Infra\EmbeddingProviderFromEnv.fs" />
+        <!-- Mapping dry-run validation seam + default BCL-only
+             validator (compiled before ColumnMappingApiHandler + ComposeStores). -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\IMappingDryRunValidator.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\MappingDryRunValidator.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\ResultStore.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Infra\FileSecretStore.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Infra\EncryptedSecretStore.fs" />
+        <!-- `SecretStore.fromEnv` (env-var-driven dispatch
+             with cloud-companion resolver list). -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\Infra\SecretStoreFromEnv.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\ConversationStore.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Providers\ProviderOAuthConnect.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\PerScopeKeyResolver.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\LocalStorageEncryptionValidator.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\PerScopeKeyResolverDistributedValidator.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\KeyDestroyAckCoverageValidator.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\ConfigValidator.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\BlobStorageSelectionValidator.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\ServiceStatusBoardDepsValidator.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\UnknownConfigKeyValidator.fs" />
+        <!-- The value-level companion to the name-level
+             guard above: TOOLUP_TRACE_CATEGORIES values that no composed
+             emission site declared. Anywhere after Server\Logger.fs
+             (the registry it reads) and before
+             Compose/ComposeConfigValidators.fs, which registers it. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\TraceCategoriesValidator.fs" />
+        <!-- Preflight guard + /dev/inspect panel over the
+             composed IEventStore decorator chain. Reads only Platform.Core's
+             EventStoreChain (the position model) and ConfigValidation, never
+             the concrete decorators, so its position is set only by its
+             registrar: anywhere before Compose/ComposeConfigValidators.fs and
+             Compose/ComposeRuntimeServices.fs. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\EventStoreChainValidator.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\SurfaceCoherenceValidator.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\SmokeTestHandler.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\IUserClaims.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\EncryptedSecretStoreModeValidator.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\OAuthSecretEncryptionModeValidator.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\SecretStoreAtRestPostureValidator.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\PublicBaseUrlFormatValidator.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\OAuthStateStoreInstanceValidator.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\RateLimitModeValidator.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\RateLimitConfigValidator.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\RateLimiterInstanceValidator.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\IdempotencyStoreInstanceValidator.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\StaticPathBehaviourValidator.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\MaxRequestBodyBytesValidator.fs" />
+        <!-- The format/range gate over every registered
+             IntKey, and the unbounded-event-retention warning. Both read
+             only the config registry and the resolution seam, so
+             anywhere before Compose/ComposeConfigValidators.fs, which
+             registers them. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\IntConfigKeyValidator.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\EventStoreRetentionValidator.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\CorsConfigValidator.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\LocalSecretFilePermissionsValidator.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\OAuthFlowValidator.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Teams\TeamManagement.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\MaintenanceApiHandler.fs" />
+        <!-- OAuth 1.0a three-legged flow routes. Placed here
+             (not with the other OAuth1a substrate files) because it depends
+             on the later Giraffe / TeamManagement / AccessContext surface. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\OAuth1aFlowHandler.fs" />
+        <!-- Module data-migration substrate (server half):
+             chain resolution + registry, the blob-backed status store, the
+             runner + its startup sweep, and the IDataMigrationApi handler.
+             Placed after Teams\TeamManagement.fs because the sweep enumerates
+             scopes via ITeamStore and the handler reuses the Owner/Admin
+             role gate; before BuildRouteHandlers mounts the route and
+             ComposeStores registers the singletons. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\MigrationRegistry.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\MigrationStatusStore.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\MigrationRunner.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\MigrationApiHandler.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Config\IConfigStore.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Config\ConfigStore.fs" />
+        <!-- Config schema-evolution server half: pure chain
+             resolution, the declared registry, the per-process drift tracker,
+             and the IConfigStore decorator that applies all three on the read
+             path. After ConfigStore.fs (reuses its projectToRecord /
+             tryProjectExact / toRawMap so the decorator projects a migrated
+             map through exactly the same semantics). -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\Config\ConfigMigrationRegistry.fs" />
+        <!-- The "Pending Config Migrations" /dev/inspect panel
+             (gap audit Gap 7). After ConfigMigrationRegistry.fs, whose
+             support record it reads. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\Config\ConfigMigrationDevDiagnostics.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Config\ConfigHandler.fs" />
+        <!-- IUserSchemaApi ToolUp.Remoting handler (Owner/Admin
+             gated writes). After WebhookApiHandler (same handler shape) +
+             TeamManagement (the role gate); before BuildRouteHandlers mounts
+             it. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\UserSchemaApiHandler.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\IFeatureFlagStore.fs" />
+        <!-- Read-only external flag-resolution seam. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\IFlagSource.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\FeatureFlagStore.fs" />
+        <!-- Additive flag-source registry consumed by
+             FlagEvaluator.createWithSources. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\FeatureFlagSources.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\FlagEvaluator.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\FeatureFlagHandler.fs" />
+        <!-- credential-suffix allowlist, extracted at the third
+             consumer (ConfigDriftDetector, DiagnosticBundleHandler,
+             ApplianceSupportBundle.SuffixFloor). Dependency-free — BCL
+             only — so it can sit ahead of every surface that redacts. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\RedactionAllowlist.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\ConfigDriftDetector.fs" />
+        <!-- DataProtection key-ring backend preflight. After
+             BlobXmlRepository.fs (shares its BlobDpKeyRing constants). -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\DataProtectionBackendValidator.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\LocaleResolver.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="FSharp.Core" />
+    </ItemGroup>
+</Project>

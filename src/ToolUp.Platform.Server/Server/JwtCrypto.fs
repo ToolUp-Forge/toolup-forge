@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.JwtCrypto
+module ToolUp.Platform.Infra.JwtCrypto
+
+open ToolUp.Platform
 
 // Shared HS256 / HMAC primitives for the symmetric-JWT validators that
 // previously each carried a verbatim copy (StaticJwtAuthProvider, the

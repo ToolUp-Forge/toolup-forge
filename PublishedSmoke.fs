@@ -149,11 +149,24 @@ let awaitedIds (expectedIds: string seq) (independentlyVersioned: string seq) (p
     |> Seq.distinctBy (fun id -> id.ToLowerInvariant())
     |> List.ofSeq
 
-/// The published ids under `root` whose project declares its own
-/// `<Version>`. A text read, like `SdkManifest.discover` that it rides on.
+/// The published ids under `root` that are off the release's line: every
+/// package on a companion version group (`version-groups.json`), which
+/// carries its own number and may not be re-released at all, and any project
+/// that declares its own `<Version>`. A text read, like `SdkManifest.discover`
+/// that it rides on. The core never depends on a companion line (the groups
+/// check refuses it), so leaving these out cannot drop a dependency a probe
+/// restores at the tag's version.
 let independentlyVersionedIn (root: string) : string list =
+    let groups =
+        match SdkManifest.loadVersionGroups root with
+        | Ok groups -> groups
+        | Error e -> failwithf "VerifyPublishedPackages: %s" e
+
     SdkManifest.discover root
-    |> List.filter (fun p -> declaresOwnVersion (IO.File.ReadAllText(IO.Path.Combine(root, p.ProjectPath))))
+    |> List.filter (fun p ->
+        SdkManifest.groupOf groups p.ProjectPath
+        |> Option.exists (fun g -> not g.Lockstep)
+        || declaresOwnVersion (IO.File.ReadAllText(IO.Path.Combine(root, p.ProjectPath))))
     |> List.map _.PackageId
 
 /// `awaitedIds` over the tree at `root` — the one call the target makes.
@@ -593,3 +606,162 @@ let smokeJobReport (findings: string list) =
         (List.length findings)
         Environment.NewLine
         (findings |> List.map (sprintf "  - %s") |> String.concat Environment.NewLine)
+// ─── Phase 1200 — the on-demand import resolves where a feed consumer compiles ───
+//
+// Phase 1168 put AG Grid and AG Charts behind `importValueDynamic`, a dynamic
+// import of a module in another file. Fable 5 spells that import from the
+// project's output extension — `.js` whenever the consumer passes `--outDir` —
+// while a package source under `fable_modules/` is always written as `.fs.js`
+// (`File.changeExtensionButUseDefaultExtensionInFableModules`). A project
+// reference build writes `AgGridRuntime.js` and never notices. The first FEED
+// consumer of 0.38.0 did: Vite refused the bundle on `Could not resolve
+// './AgGridRuntime.js'`. Every forge gate compiled the two packages by project
+// reference, so none of them could have seen it.
+//
+// The remedy is in the package: a `<Runtime>.js` beside the `<Runtime>.fs`,
+// packed under `fable/`, re-exporting the compiled `./<Runtime>.fs.js`. Two
+// rules keep it honest. The PACKAGING rule, decidable offline over the source
+// tree, says every module a packed source reaches through `importValueDynamic`
+// ships that shim and packs it. The RESOLUTION rule, run by the feed-consumer
+// leg after a real Fable compile from a feed, says every `import("./…")` a
+// compiled `fable_modules` file spells names a file on disk — the exact
+// question Vite asks, without a Vite.
+
+let private importValueDynamicPattern =
+    Regex(@"importValueDynamic\s+((?:[A-Za-z_]\w*\.)+)[A-Za-z_]\w*", RegexOptions.Compiled)
+
+/// The fully-qualified modules a source file imports on demand, e.g.
+/// `Feliz.AgGridRuntime` for `importValueDynamic Feliz.AgGridRuntime.Grid`.
+let dynamicallyImportedModules (sourceText: string) : string list =
+    importValueDynamicPattern.Matches sourceText
+    |> Seq.map (fun m -> m.Groups[1].Value.TrimEnd '.')
+    |> Seq.distinct
+    |> List.ofSeq
+
+/// The one line a shim must carry: the re-export of its compiled sibling.
+let shimReExport (runtimeStem: string) =
+    sprintf "export * from \"./%s.fs.js\";" runtimeStem
+
+let private moduleDeclarationPattern (moduleName: string) =
+    Regex(@"(?m)^\s*module\s+" + Regex.Escape moduleName + @"\s*$")
+
+let private fablePackIncludePattern =
+    Regex(@"<Content\s+Include=""([^""]*)""[^>]*PackagePath=""fable\\?""", RegexOptions.Compiled)
+
+/// What is wrong with a package directory's on-demand imports, over its files as
+/// `(relative path, text)` pairs — empty means every dynamically imported module
+/// ships a packed shim. Pure, so the rule is proven offline in both directions;
+/// `dynamicImportShimFindingsIn` reads a directory into this shape.
+let dynamicImportShimFindings (files: (string * string) list) : string list =
+    let sources =
+        files
+        |> List.filter (fun (path, _) -> path.EndsWith(".fs", StringComparison.Ordinal))
+
+    let fileNamed (name: string) =
+        files
+        |> List.tryFind (fun (path, _) -> String.Equals(IO.Path.GetFileName path, name, StringComparison.Ordinal))
+
+    let packedByFsproj (shimName: string) =
+        files
+        |> List.exists (fun (path, text) ->
+            path.EndsWith(".fsproj", StringComparison.Ordinal)
+            && fablePackIncludePattern.Matches text
+               |> Seq.exists (fun m ->
+                   m.Groups[1].Value.Split(';')
+                   |> Array.exists (fun item -> String.Equals(item.Trim(), shimName, StringComparison.Ordinal))))
+
+    [
+        for importer, text in sources do
+            for moduleName in dynamicallyImportedModules text do
+                let declaring =
+                    sources
+                    |> List.tryFind (fun (_, candidate) -> (moduleDeclarationPattern moduleName).IsMatch candidate)
+
+                match declaring with
+                | None -> ()
+                | Some(runtimePath, _) ->
+                    let stem = IO.Path.GetFileNameWithoutExtension runtimePath
+                    let shimName = stem + ".js"
+
+                    match fileNamed shimName with
+                    | None ->
+                        yield
+                            sprintf
+                                "%s imports `%s` on demand, but %s ships no `%s` beside it. Fable spells that import as `./%s` and a feed consumer's `fable_modules/` holds `%s.fs.js`, so the bundle cannot resolve it."
+                                importer
+                                moduleName
+                                (IO.Path.GetFileName runtimePath)
+                                shimName
+                                shimName
+                                stem
+                    | Some(_, shimText) ->
+                        if not (shimText.Contains(shimReExport stem)) then
+                            yield
+                                sprintf
+                                    "`%s` does not re-export its compiled sibling: it must carry the line `%s`."
+                                    shimName
+                                    (shimReExport stem)
+
+                        if not (packedByFsproj shimName) then
+                            yield
+                                sprintf
+                                    "`%s` is not in the package's `fable/` payload: name it in the `<Content … PackagePath=\"fable\\\">` include, or a consumer restores a package without it."
+                                    shimName
+    ]
+
+/// The packaging rule over a real package directory (its `.fs`, `.js` and `.fsproj` files).
+let dynamicImportShimFindingsIn (packageDir: string) : string list =
+    [ "*.fs"; "*.js"; "*.fsproj" ]
+    |> List.collect (fun pattern -> IO.Directory.GetFiles(packageDir, pattern) |> List.ofArray)
+    |> List.map (fun path -> IO.Path.GetFileName path, IO.File.ReadAllText path)
+    |> dynamicImportShimFindings
+
+let dynamicImportShimReport (packageDir: string) (findings: string list) =
+    sprintf
+        "%s: an on-demand import will not resolve for a feed consumer (%d finding(s)):%s%s"
+        packageDir
+        (List.length findings)
+        Environment.NewLine
+        (findings |> List.map (sprintf "  - %s") |> String.concat Environment.NewLine)
+
+let private dynamicImportSpecifierPattern =
+    Regex(@"import\(\s*""(\.{1,2}/[^""]+)""\s*\)", RegexOptions.Compiled)
+
+/// The `(importer, specifier)` pairs among compiled files whose relative dynamic
+/// import names nothing, given the files as `(path, text)` and `exists` over
+/// full paths. Pure, for the same reason as the rule above.
+let unresolvedDynamicImports (exists: string -> bool) (files: (string * string) list) : (string * string) list = [
+    for importer, text in files do
+        for m in dynamicImportSpecifierPattern.Matches text do
+            let specifier = m.Groups[1].Value
+
+            let target =
+                IO.Path.GetFullPath(IO.Path.Combine(IO.Path.GetDirectoryName importer, specifier))
+
+            if not (exists target) then
+                yield importer, specifier
+]
+
+/// The resolution rule over a Fable output directory: every `*.js` under its
+/// `fable_modules/` (the package sources a feed consumer compiled) is read, and
+/// each relative dynamic import is resolved against the disk.
+let unresolvedDynamicImportsIn (outputDir: string) : (string * string) list =
+    let modules = IO.Path.Combine(outputDir, "fable_modules")
+
+    if not (IO.Directory.Exists modules) then
+        []
+    else
+        IO.Directory.GetFiles(modules, "*.js", IO.SearchOption.AllDirectories)
+        |> Array.map (fun path -> path, IO.File.ReadAllText path)
+        |> List.ofArray
+        |> unresolvedDynamicImports IO.File.Exists
+
+let unresolvedDynamicImportsReport (outputDir: string) (unresolved: (string * string) list) =
+    sprintf
+        "%s: %d on-demand import(s) a compiled package spells name no file, so a Vite bundle of this output fails:%s%s"
+        outputDir
+        (List.length unresolved)
+        Environment.NewLine
+        (unresolved
+         |> List.map (fun (importer, specifier) -> sprintf "  - %s imports `%s`" importer specifier)
+         |> String.concat Environment.NewLine)

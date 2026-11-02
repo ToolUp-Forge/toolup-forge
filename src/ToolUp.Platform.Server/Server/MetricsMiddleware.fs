@@ -1,4 +1,8 @@
-namespace ToolUp.Platform.Metrics
+namespace ToolUp.Platform.Audit.Metrics
+
+open ToolUp.Platform
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Metrics
 
 open System
 open System.Diagnostics
@@ -178,7 +182,7 @@ module StandardMetrics =
         {
             Module = None
             Definition = {
-                Name = ToolUp.Platform.AuditLog.AuditMetrics.WriteFailuresTotal
+                Name = ToolUp.Platform.Audit.AuditLog.AuditMetrics.WriteFailuresTotal
                 Kind = Counter
                 Description = "Audit events that failed to persist (event-store write threw)"
                 Unit = "1"
@@ -194,7 +198,7 @@ module StandardMetrics =
         {
             Module = None
             Definition = {
-                Name = ToolUp.Platform.AuditLog.AuditMetrics.ChainHeadUnreadableTotal
+                Name = ToolUp.Platform.Audit.AuditLog.AuditMetrics.ChainHeadUnreadableTotal
                 Kind = Counter
                 Description =
                     "Permission audit writes whose scope chain head could not be read (record written unchained)"
@@ -211,7 +215,7 @@ module StandardMetrics =
         {
             Module = None
             Definition = {
-                Name = ToolUp.Platform.AdAnalyticsApiHandler.AdAnalyticsMetrics.RateLimitStoreFailuresTotal
+                Name = ToolUp.Platform.Audit.AdAnalyticsApiHandler.AdAnalyticsMetrics.RateLimitStoreFailuresTotal
                 Kind = Counter
                 Description = "Ad-analytics requests admitted because the rate-limit store failed (fail-open)"
                 Unit = "1"
@@ -221,7 +225,7 @@ module StandardMetrics =
         {
             Module = None
             Definition = {
-                Name = ToolUp.Platform.AdAnalyticsApiHandler.AdAnalyticsMetrics.MalformedPayloadsTotal
+                Name = ToolUp.Platform.Audit.AdAnalyticsApiHandler.AdAnalyticsMetrics.MalformedPayloadsTotal
                 Kind = Counter
                 Description = "Ad-analytics events dropped because the posted payload did not deserialise"
                 Unit = "1"
@@ -231,7 +235,7 @@ module StandardMetrics =
     ]
 
     /// SDK standard registrations — registered unconditionally by
-    /// `compose` when `MetricsEndpoint = EnabledMetricsEndpoint`.
+    /// `compose` when `MetricsEndpoint = FeatureMode.Enabled`.
     ///
     /// Phase 740 — the edge-purge outcome counters are declared beside
     /// their emission in `IEdgeCache.fs` (which compiles before this
@@ -247,8 +251,8 @@ module StandardMetrics =
     /// anything.
     let registrations: MetricRegistration list =
         coreRegistrations
-        @ ToolUp.Platform.EdgePurgeMetrics.registrations
-        @ ToolUp.Platform.DatadogReadbackMetrics.registrations
+        @ ToolUp.Platform.Infra.EdgePurgeMetrics.registrations
+        @ ToolUp.Platform.Infra.DatadogReadbackMetrics.registrations
 
 module private RouteClassifier =
     /// Bucket the request path to a stable two-segment prefix to

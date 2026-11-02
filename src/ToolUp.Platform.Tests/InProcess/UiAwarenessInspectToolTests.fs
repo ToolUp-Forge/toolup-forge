@@ -34,6 +34,8 @@ open ToolUp.AI.UiAwareness
 open ToolUp.AI.UiAwareness.Server
 open ToolUp.RAG
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 type private StubProviderFactory() =
     interface IAIProviderFactory with
@@ -54,11 +56,16 @@ type private StubProviderProfile() =
         member _.ResolveEntry(_, _, _) = async { return None }
         member _.SetEntryHealth(_, _, _) = async { return Ok() }
 
-let private baseApp () : AIServerApp =
-    AIServerApp.create (StubProviderFactory() :> IAIProviderFactory) (StubProviderProfile() :> IProviderProfile)
+let private baseApp () : ServerApp =
+    ServerApp.empty
+    |> ToolUp.AI.AICompose.withAI (
+        ToolUp.AI.AICompose.AIOptions.create
+            (StubProviderFactory() :> IAIProviderFactory)
+            (StubProviderProfile() :> IProviderProfile)
+    )
 
-let private inspectDefs (app: AIServerApp) =
-    app.Base.AITools
+let private inspectDefs (app: ServerApp) =
+    app.AITools
     |> List.map fst
     |> List.filter (fun d -> d.Name = InspectActiveModuleToolName)
 
@@ -93,22 +100,24 @@ let private composeTests =
             let once = baseApp () |> AICompose.register
             let twice = once |> AICompose.register
             Expect.equal (List.length (inspectDefs twice)) 1 "a second register appends nothing"
-            Expect.equal (List.length twice.Base.AITools) (List.length once.Base.AITools) "tool count unchanged"
+            Expect.equal (List.length twice.AITools) (List.length once.AITools) "tool count unchanged"
         }
 
         test "an app that does not compose the companion carries no inspect tool" {
-            Expect.isEmpty (inspectDefs (baseApp ())) "composeAI must not auto-wire the companion (GP 13)"
+            Expect.isEmpty
+                (inspectDefs (ServerApp.resolve (baseApp ())))
+                "composeAI must not auto-wire the companion (GP 13)"
         }
 
         test "register leaves every existing registration in place and in order" {
             let before = baseApp ()
             let after = before |> AICompose.register
 
-            let names (a: AIServerApp) =
-                a.Base.AITools |> List.map (fun (d, _) -> d.Name)
+            let names (a: ServerApp) =
+                a.AITools |> List.map (fun (d, _) -> d.Name)
 
             Expect.equal
-                (names after |> List.truncate (List.length before.Base.AITools))
+                (names after |> List.truncate (List.length before.AITools))
                 (names before)
                 "pre-existing tools are untouched"
         }
@@ -157,7 +166,7 @@ type private InspectAuthorizer() =
     interface IClientToolAuthorizer with
         member _.Authorize(toolName, _argsJson, _activeModule, _activePage) =
             if toolName = InspectActiveModuleToolName then
-                Allow
+                ClientToolAuthDecision.Allow
             else
                 Deny $"ui-awareness test policy denied '{toolName}'"
 

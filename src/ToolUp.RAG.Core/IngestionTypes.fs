@@ -326,7 +326,7 @@ type InMemoryIngestionQueueStore(?maxDeliveryAttempts: int, ?name: string) =
 /// bounded channel so a 10k-document spike is rejected at the door rather
 /// than silently buffering and quietly tripping the embedding provider's
 /// rate limiter. Default capacity 5,000 pending document jobs — tune via
-/// `RAGServerApp.withIngestionQueueCapacity` for deployments with bursty
+/// `RagOptions.withIngestionQueueCapacity` for deployments with bursty
 /// uploads or stricter memory budgets.
 ///
 /// Per-document granularity (rather than per-chunk) lets the background

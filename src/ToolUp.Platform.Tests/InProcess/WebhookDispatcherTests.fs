@@ -15,8 +15,11 @@ open Microsoft.Extensions.Hosting
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Secrets
-open ToolUp.Platform.Tracing
+open ToolUp.Platform.Infra.Tracing
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
 
 // ─── Phase 968 (a) — the dequeue loop backs off, and ends when closed ───
 //
@@ -219,16 +222,20 @@ let private buildService (logger: ILogger) =
     let storage = InMemoryBlobStorage.InMemoryBlobStorage() :> IBlobStorage
 
     WebhookDispatcher.create
-        (WebhookRegistry.createRegistry storage)
-        (WebhookRegistry.createDeliveryLog storage)
-        (InMemoryEventStore.InMemoryEventStore() :> IEventStore)
-        (new HttpClient())
-        WebhookRetryPolicy.defaults
-        logger
-        (NoOpActivitySink() :> IActivitySink)
-        emptySecretStore
-        (fun () -> permissiveRateLimiter)
-        { AllowedHosts = [] }
+        ({
+            Registry = (WebhookRegistry.createRegistry storage)
+            DeliveryLog = (WebhookRegistry.createDeliveryLog storage)
+            EventStore = (InMemoryEventStore.InMemoryEventStore() :> IEventStore)
+            HttpClient = (new HttpClient())
+            RetryPolicy = WebhookRetryPolicy.defaults
+            Logger = logger
+            ActivitySink = (NoOpActivitySink() :> IActivitySink)
+            SecretStore = emptySecretStore
+            GetRateLimiter = (fun () -> permissiveRateLimiter)
+            UrlPolicy = { AllowedHosts = [] }
+        }
+        : WebhookDispatcher.WebhookDeps)
+        WebhookDispatcher.WebhookOptions.defaults
 
 /// Complete the service's private queue, as a writer that is done would.
 let private completeQueue (svc: WebhookDispatcher.WebhookDispatcherService) =

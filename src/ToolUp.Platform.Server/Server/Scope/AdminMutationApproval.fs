@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.AdminMutationApproval
+module ToolUp.Platform.Scope.AdminMutationApproval
 
 open System
 open System.Security.Cryptography
@@ -10,7 +10,7 @@ open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.PermissionStore
+open ToolUp.Platform.Scope.PermissionStore
 
 // ─── Dual control for sensitive admin mutations (Phase 555) ──────────
 //
@@ -126,7 +126,22 @@ let canonicalForm (mutation: AdminMutation) : string =
                 $"{userId}{{{inner}}}")
             |> String.concat ";"
 
-        $"set-team-permissions|defaults:{modules p.Defaults}|members:{members}|exposure:{exposure}|grants:{grants}"
+        // Page-save grants are part of what an approver approves. Rendered
+        // only when present, so the fingerprint of every proposal that
+        // carries none is the one it had before the field existed.
+        let pages =
+            if isNull (box p.Pages) || Map.isEmpty p.Pages then
+                ""
+            else
+                p.Pages
+                |> Map.toList
+                |> List.map (fun (userId, grants) ->
+                    let tokens = grants |> List.map PageGrant.toToken |> List.sort |> String.concat ","
+                    $"{userId}=[{tokens}]")
+                |> String.concat ";"
+                |> sprintf "|pages:%s"
+
+        $"set-team-permissions|defaults:{modules p.Defaults}|members:{members}|exposure:{exposure}|grants:{grants}{pages}"
     | AdminMutation.SetMemberPermissions(userId, moduleName, permissions) ->
         $"set-member-permissions|user:{userId}|module:{moduleName}|perms:[{perms permissions}]"
     | AdminMutation.SetTeamDefaults defaults -> $"set-team-defaults|defaults:{modules defaults}"
@@ -208,7 +223,18 @@ type BlobAdminMutationApprovalStore(storage: IBlobStorage, ?logger: ILogger) =
 
     let deserialise (bytes: byte[]) =
         try
-            Some(JsonSerializer.Deserialize<PendingAdminMutation>(Encoding.UTF8.GetString bytes, jsonOptions))
+            let pending =
+                JsonSerializer.Deserialize<PendingAdminMutation>(Encoding.UTF8.GetString bytes, jsonOptions)
+
+            // A proposal parked before the permission document carried
+            // page grants reads that field back as null; it proposed none.
+            match pending.Mutation with
+            | AdminMutation.SetTeamPermissions p when isNull (box p.Pages) ->
+                Some {
+                    pending with
+                        Mutation = AdminMutation.SetTeamPermissions { p with Pages = Map.empty }
+                }
+            | _ -> Some pending
         with _ ->
             None
 

@@ -6,6 +6,7 @@ open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open SharedTypes
 open KnowledgeBase.ServerIndexStorage
+open ToolUp.Platform.Compose
 
 // ─── Startup ingestion-recovery scan ──────────────────────────────
 //
@@ -55,7 +56,7 @@ open KnowledgeBase.ServerIndexStorage
 // (with full extractor wiring) is a follow-up phase.
 //
 // Which scopes are swept: since Phase 723 a deployment composing
-// `RAGServerApp.withScopeEnumerator` gets them enumerated (the default
+// `RagOptions.withScopeEnumerator` gets them enumerated (the default
 // adapts `ITeamStore.ListTeams` plus the well-known `_platform` /
 // `_deployment` containers) and needs no hand-written list at all. The
 // explicit-list form below remains for deployments that enumerate their
@@ -108,7 +109,7 @@ let documentIndexSurface (storage: IBlobStorage) : IIngestionRecoverySurface =
 /// status as `Failed` with a restart-interrupted reason. Returns the
 /// total number of documents marked.
 ///
-/// Run once from the consumer's composition root **before** `RAGServerApp.run`
+/// Run once from the consumer's composition root **before** `ServerApp.run`
 /// (or equivalent), passing the list of containers the consumer manages.
 /// Per-container errors are logged and skipped — one bad container's
 /// index doesn't block scanning the rest.

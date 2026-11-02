@@ -40,23 +40,22 @@ At no point does any analytical module reference the DataManager or any other mo
 
 `SessionFileStore.AddFile` fires registered post-save hooks via `Async.Start` after the file has been persisted. Hooks are how companions extend the upload pipeline without touching `FileManagement.fs` — `ToolUp.RAG` registers a vectorisation hook here so newly-uploaded documents get embedded and indexed; future audit / notification publishers register the same way.
 
-Hooks are configured at startup, not per-request:
+Hooks are registered in DI at startup, not per-request:
 
 ```fsharp
+open Microsoft.Extensions.DependencyInjection
 open ProcessedDataTypes
 
-// The one surviving file-level mutable in FileManagement.fs — a
-// registration list companions write to BEFORE `compose` runs. The
-// fourth tuple element is the uploading user's id (`AddFile`'s
-// `createdBy`), distinct from `StorageScope.ScopeId`, which is the
-// team in team scopes.
-let mutable internal pendingPostSaveHooks:
-    (ProcessedData * ProcessedFileEntry * StorageScope * string -> Async<unit>) list = []
-
-let configurePostSaveHooks hooks = pendingPostSaveHooks <- hooks
+// A companion registers a hook by factory, so it is built from the
+// services the running app composed. The fourth tuple element is the
+// uploading user's id (`AddFile`'s `createdBy`), distinct from
+// `StorageScope.ScopeId`, which is the team in team scopes.
+let registerHook (services: IServiceCollection) =
+    services.AddSingleton<FileManagement.PostSaveHook>(fun (sp: System.IServiceProvider) ->
+        FileManagement.PostSaveHook(fun (processed, entry, scope, createdBy) -> async { () }))
 ```
 
-RAG's `composeWithRAG` calls `configurePostSaveHooks [ vectorisationHook ]` once. `compose` then **drains** the list into the `FileManagementRuntime` record it builds (`PostSaveHooks`, plus `PostSaveHooksLogger = Some resolvedLogger`) and resets it to `[]`, so a second compose run — integration tests that bring the host up repeatedly — starts clean. Everything the hooks pipeline reads at request time comes off that per-compose record, not off a mutable; `FileManagementRuntime.empty` is what a harness bypassing `compose` sees.
+The RAG tier (composed by `RAGCompose.withRAG`) registers its vectorisation hook this way. `compose` registers the `FileManagementRuntime` record by factory, and the container folds every registered `PostSaveHook` into it (`PostSaveHooks`, plus `PostSaveHooksLogger = Some resolvedLogger`), in registration order. Everything the hooks pipeline reads at request time comes off that record, not off a mutable; `FileManagementRuntime.empty` is what a harness bypassing `compose` sees.
 
 **Failure routing.** Each hook is wrapped in a `try / with` shim before `Async.Parallel | Async.Start`:
 
@@ -97,7 +96,7 @@ The `Bundle` target builds for production: `dotnet publish` for the server, `dot
 | **Project count** | 3 (Shared, Server, Client) | 1 SDK + N modules + thin entry points |
 | **Shared types** | One Shared project | Each module owns its SharedTypes.fs |
 | **Client compilation** | All .fs files listed in Client.fsproj | Props injection — Client.fs is the only listed file |
-| **Server composition** | Hardcoded in Server.fs | `ServerApp` / `AIServerApp` / `RAGServerApp` fluent pipeline over `SDK.Server.compose` (plain `WebApplication.CreateBuilder` internally) |
+| **Server composition** | Hardcoded in Server.fs | `ServerApp` fluent pipeline (AI / RAG via `AICompose.withAI` / `RAGCompose.withRAG`) over `SDK.Server.compose` (plain `WebApplication.CreateBuilder` internally) |
 | **Elmish program** | Defined in App.fs / Index.fs | `SDK.Client.run` — shell MVU in SDK |
 | **Module addition** | Edit Shared, Server, and Client | Add props import + one `register()` call |
 | **Module removal** | Remove from Shared, Server, Client | Remove props import + one `register()` call |

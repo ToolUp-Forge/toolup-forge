@@ -17,6 +17,12 @@ open ToolUp.Platform.Metrics
 open ToolUp.AuthProviders
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.InProcess.MockOidcServer
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Config
+open ToolUp.Platform.Config.Auth
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
 // ─── Recording metrics sink (Phase 9e.A) ────────────────────────────
 //
@@ -58,7 +64,7 @@ let private withHeader (name: string) (value: string) (ctx: HttpContext) =
 // `provider.ValidateRequest`. Callers building a custom context via
 // `mkContext () |> withHeader …` pipe through `toReq` at the end.
 let private toReq (ctx: HttpContext) =
-    ToolUp.Platform.RequestContextBuilder.ofHttpContext ctx
+    ToolUp.Platform.Scope.RequestContextBuilder.ofHttpContext ctx
 
 // ─── HS256 JWT minter (tests only) ──────────────────────────────────
 

@@ -7,6 +7,10 @@ open System.Text.RegularExpressions
 open System.Threading.Tasks
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
 // ─── Phase 467 — constant-time token compare + admin-token throttle ────
 //

@@ -3,7 +3,7 @@
 
 /// Discovery, strict parse, refusals and hashing for the deployment
 /// configuration manifest — the loader behind the `ConfigResolution` seam.
-module ToolUp.Platform.ConfigResolver
+module ToolUp.Platform.Config.ConfigResolver
 
 open System
 open System.IO

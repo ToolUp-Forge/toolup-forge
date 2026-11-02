@@ -10,6 +10,9 @@ open Microsoft.AspNetCore.Http
 open ToolUp.Platform
 open ToolUp.Platform.Narrative
 open ToolUp.PublicRendering
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Sitemap (Phase 149/150) + search index (Phase 157) ─────────────
 //
@@ -562,8 +565,8 @@ let private phase38EgressTests =
                 mkPageStatus "live" Published
                 mkPageStatus "secret-launch" PublishStatus.Draft
                 mkPageStatus "retired" Archived
-                mkPageStatus "embargoed" (Scheduled(now.AddDays 7.0))
-                mkPageStatus "released" (Scheduled(now.AddDays -7.0))
+                mkPageStatus "embargoed" (PublishStatus.Scheduled(now.AddDays 7.0))
+                mkPageStatus "released" (PublishStatus.Scheduled(now.AddDays -7.0))
             ]
 
             let slugs =
@@ -629,7 +632,7 @@ let private phase38EgressTests =
                 NarrativeFeedHandler.selectEntriesAt now NarrativeFeedConfig.defaults [
                     withDoc "live" Published "Published Post"
                     withDoc "secret-launch" PublishStatus.Draft "Project Nightingale"
-                    withDoc "embargoed" (Scheduled(now.AddDays 7.0)) "Embargoed Announcement"
+                    withDoc "embargoed" (PublishStatus.Scheduled(now.AddDays 7.0)) "Embargoed Announcement"
                 ]
 
             let titles = entries |> List.map _.Title
@@ -645,7 +648,7 @@ let private phase38EgressTests =
         testCase "a scheduled page crosses into the sitemap exactly at its publish instant"
         <| fun _ ->
             let at = DateTimeOffset.Parse "2026-06-01T12:00:00Z"
-            let page = mkPageStatus "embargoed" (Scheduled at)
+            let page = mkPageStatus "embargoed" (PublishStatus.Scheduled at)
 
             let slugsAt (now: DateTimeOffset) =
                 SitemapGenerator.entriesAt now [ page ] [] |> List.map (fun (Slug s, _) -> s)

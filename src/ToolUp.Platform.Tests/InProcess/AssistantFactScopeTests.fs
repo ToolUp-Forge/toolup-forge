@@ -28,12 +28,17 @@ open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.AI
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.StorageScopeResolver
+open ToolUp.Platform.Scope.StorageScopeResolver
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.AI
 open ToolUp.AI.AIAssistantHandler
 open ToolUp.Facts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 let private queryArgs =
     """{"subject_hierarchy":"brand","subject_path":"acme","metric":"revenue"}"""
@@ -63,9 +68,9 @@ let private revenue (value: decimal) : FactDraft = {
 }
 
 let private assertOk (store: IFactStore) (scopeId: string) (draft: FactDraft) : Fact =
-    match store.Assert(scopeId, draft) |> Async.RunSynchronously with
+    match store.Assert(TestScope.resolved scopeId, draft) |> Async.RunSynchronously with
     | Ok fact -> fact
-    | Error e -> failtestf "assert failed: %s" e
+    | Error e -> failtestf "assert failed: %s" (FactStoreError.describe e)
 
 /// The model: one `query_facts` call, then an answer. It records the
 /// result the tool returned, which is what the test reads.
@@ -139,7 +144,10 @@ let private servicesWith (model: IAIProvider) : ServiceProvider =
             ServerApp.empty with
                 Config = {
                     ServerConfig.defaults with
-                        FactStore = EnabledFactStore
+                        Stores = {
+                            ServerConfig.defaults.Stores with
+                                FactStore = FeatureMode.Enabled
+                        }
                 }
         }
         |> FactsCompose.withFactStore

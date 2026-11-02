@@ -4,6 +4,9 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Auth
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
 // ─── Phase 66 Stream B.2 — SurfaceCoherenceValidator tests ───────────
 //
@@ -44,10 +47,13 @@ let private nonHeaderAuth () : IAuthProvider =
         member _.IsCryptographicallyVerified = true
     }
 
-let private cfg (surfaces: SurfaceProfile list) (shareTokenStore: ShareTokenStoreMode) = {
+let private cfg (surfaces: SurfaceProfile list) (shareTokenStore: FeatureMode) = {
     ServerConfig.defaults with
         Surfaces = surfaces
-        ShareTokenStore = shareTokenStore
+        Stores = {
+            ServerConfig.defaults.Stores with
+                ShareTokenStore = shareTokenStore
+        }
 }
 
 [<Tests>]
@@ -58,7 +64,7 @@ let tests =
 
         test "Happy path — Surfaces.individual + HeaderAuth + no overrides → Ok" {
             let result =
-                validate (cfg Surfaces.individual NoShareTokenStore) (Some(headerAuth ())) [] [] 0
+                validate (cfg Surfaces.individual FeatureMode.Disabled) (Some(headerAuth ())) [] [] 0
 
             Expect.equal result Ok "coherent single-surface deployment passes"
         }
@@ -70,7 +76,7 @@ let tests =
             let overrides = [ ("POST", "/api/team/add-member"), SurfaceRequirement.teamScoped ]
 
             let result =
-                validate (cfg surfaces EnabledShareTokenStore) (Some(headerAuth ())) [] overrides 0
+                validate (cfg surfaces FeatureMode.Enabled) (Some(headerAuth ())) [] overrides 0
 
             Expect.equal result Ok "coherent mixed-mode deployment passes"
         }
@@ -78,7 +84,7 @@ let tests =
         // ─── Rule 1 — Surfaces is empty ─────────────────────────────
 
         test "Rule 1 — empty Surfaces → Error" {
-            let result = validate (cfg [] NoShareTokenStore) (Some(headerAuth ())) [] [] 0
+            let result = validate (cfg [] FeatureMode.Disabled) (Some(headerAuth ())) [] [] 0
 
             match result with
             | Error msg ->
@@ -92,7 +98,8 @@ let tests =
         test "Rule 2 — duplicate Anonymous constructors → Error" {
             let surfaces = [ SurfaceProfile.anonymous; SurfaceProfile.anonymousPersistent ]
 
-            let result = validate (cfg surfaces NoShareTokenStore) (Some(headerAuth ())) [] [] 0
+            let result =
+                validate (cfg surfaces FeatureMode.Disabled) (Some(headerAuth ())) [] [] 0
 
             match result with
             | Error msg ->
@@ -104,7 +111,8 @@ let tests =
         test "Rule 2 — duplicate Team constructors (team + multiTeam) → Error" {
             let surfaces = [ SurfaceProfile.team; SurfaceProfile.multiTeam ]
 
-            let result = validate (cfg surfaces NoShareTokenStore) (Some(headerAuth ())) [] [] 0
+            let result =
+                validate (cfg surfaces FeatureMode.Disabled) (Some(headerAuth ())) [] [] 0
 
             match result with
             | Error msg -> Expect.stringContains msg "Team × 2" "team + multiTeam both produce Team"
@@ -117,7 +125,7 @@ let tests =
             let moduleDefaults = [ "/api/forms/", SurfaceRequirement.teamScoped ]
 
             let result =
-                validate (cfg Surfaces.individual NoShareTokenStore) (Some(headerAuth ())) moduleDefaults [] 0
+                validate (cfg Surfaces.individual FeatureMode.Disabled) (Some(headerAuth ())) moduleDefaults [] 0
 
             match result with
             | Error msg ->
@@ -131,7 +139,7 @@ let tests =
             let moduleDefaults = [ "/api/private/", SurfaceRequirement.userOrTeam ]
 
             let result =
-                validate (cfg Surfaces.anonymous NoShareTokenStore) (Some(headerAuth ())) moduleDefaults [] 0
+                validate (cfg Surfaces.anonymous FeatureMode.Disabled) (Some(headerAuth ())) moduleDefaults [] 0
 
             match result with
             | Error msg ->
@@ -148,7 +156,7 @@ let tests =
             ]
 
             let result =
-                validate (cfg Surfaces.individual NoShareTokenStore) (Some(headerAuth ())) [] overrides 0
+                validate (cfg Surfaces.individual FeatureMode.Disabled) (Some(headerAuth ())) [] overrides 0
 
             match result with
             | Error msg ->
@@ -158,30 +166,31 @@ let tests =
             | other -> failtestf "expected Error, got %A" other
         }
 
-        // ─── Rule 5 — ClaimBearer + NoShareTokenStore explicit ──────
+        // ─── Rule 5 — ClaimBearer + FeatureMode.Disabled explicit ──────
 
-        test "Rule 5 — Surfaces contains ClaimBearer + ShareTokenStore=NoShareTokenStore → Warning" {
+        test "Rule 5 — Surfaces contains ClaimBearer + ShareTokenStore=FeatureMode.Disabled → Warning" {
             let surfaces = [ SurfaceProfile.individual; SurfaceProfile.claimBearer ]
 
-            let result = validate (cfg surfaces NoShareTokenStore) (Some(headerAuth ())) [] [] 0
+            let result =
+                validate (cfg surfaces FeatureMode.Disabled) (Some(headerAuth ())) [] [] 0
 
             match result with
             | Warning msg ->
                 Expect.stringContains msg "ClaimBearer" "names the surface"
-                Expect.stringContains msg "NoShareTokenStore" "names the store setting"
+                Expect.stringContains msg "FeatureMode.Disabled" "names the store setting"
                 Expect.stringContains msg "auto-promote" "explains the auto-promotion fallback"
             | other -> failtestf "expected Warning, got %A" other
         }
 
-        // ─── Rule 6 — EnabledShareTokenStore + no ClaimBearer ───────
+        // ─── Rule 6 — FeatureMode.Enabled + no ClaimBearer ───────
 
-        test "Rule 6 — ShareTokenStore=EnabledShareTokenStore + Surfaces.individual → Warning" {
+        test "Rule 6 — ShareTokenStore=FeatureMode.Enabled + Surfaces.individual → Warning" {
             let result =
-                validate (cfg Surfaces.individual EnabledShareTokenStore) (Some(headerAuth ())) [] [] 0
+                validate (cfg Surfaces.individual FeatureMode.Enabled) (Some(headerAuth ())) [] [] 0
 
             match result with
             | Warning msg ->
-                Expect.stringContains msg "EnabledShareTokenStore" "names the store setting"
+                Expect.stringContains msg "FeatureMode.Enabled" "names the store setting"
                 Expect.stringContains msg "no SurfaceProfile.ClaimBearer" "explains the gap"
             | other -> failtestf "expected Warning, got %A" other
         }
@@ -190,7 +199,7 @@ let tests =
 
         test "Rule 7 — Surfaces.anonymous + non-HeaderAuth provider → Warning" {
             let result =
-                validate (cfg Surfaces.anonymous NoShareTokenStore) (Some(nonHeaderAuth ())) [] [] 0
+                validate (cfg Surfaces.anonymous FeatureMode.Disabled) (Some(nonHeaderAuth ())) [] [] 0
 
             match result with
             | Warning msg ->
@@ -202,7 +211,7 @@ let tests =
 
         test "Rule 7 — Surfaces.anonymous + HeaderAuthProvider → Ok (the dev path)" {
             let result =
-                validate (cfg Surfaces.anonymous NoShareTokenStore) (Some(headerAuth ())) [] [] 0
+                validate (cfg Surfaces.anonymous FeatureMode.Disabled) (Some(headerAuth ())) [] [] 0
 
             Expect.equal result Ok "anon + HeaderAuth is the canonical dev shape"
         }
@@ -210,7 +219,7 @@ let tests =
         // ─── Rule 8 — Non-Anonymous surface + no auth provider ──────
 
         test "Rule 8 — Surfaces.individual + authProvider = None → Error" {
-            let result = validate (cfg Surfaces.individual NoShareTokenStore) None [] [] 0
+            let result = validate (cfg Surfaces.individual FeatureMode.Disabled) None [] [] 0
 
             match result with
             | Error msg ->
@@ -220,7 +229,7 @@ let tests =
         }
 
         test "Rule 8 — Surfaces.team + authProvider = None → Error" {
-            let result = validate (cfg Surfaces.team NoShareTokenStore) None [] [] 0
+            let result = validate (cfg Surfaces.team FeatureMode.Disabled) None [] [] 0
 
             match result with
             | Error msg -> Expect.stringContains msg "Team" "names the surface label"
@@ -228,7 +237,7 @@ let tests =
         }
 
         test "Rule 8 — Surfaces.anonymous + authProvider = None → Ok (anon needs no auth)" {
-            let result = validate (cfg Surfaces.anonymous NoShareTokenStore) None [] [] 0
+            let result = validate (cfg Surfaces.anonymous FeatureMode.Disabled) None [] [] 0
             Expect.equal result Ok "anonymous-only deployment does not require an auth provider"
         }
 
@@ -239,7 +248,8 @@ let tests =
             // The deployment has a Team surface so Rule 10 does not fire.
             let surfaces = [ SurfaceProfile.individual; SurfaceProfile.team ]
 
-            let result = validate (cfg surfaces NoShareTokenStore) (Some(headerAuth ())) [] [] 1
+            let result =
+                validate (cfg surfaces FeatureMode.Disabled) (Some(headerAuth ())) [] [] 1
 
             match result with
             | Warning msg ->
@@ -256,7 +266,7 @@ let tests =
             let surfaces = [ SurfaceProfile.individual; SurfaceProfile.claimBearer ]
 
             let result =
-                validate (cfg surfaces EnabledShareTokenStore) (Some(headerAuth ())) [] [] 1
+                validate (cfg surfaces FeatureMode.Enabled) (Some(headerAuth ())) [] [] 1
 
             match result with
             | Warning msg ->
@@ -268,7 +278,7 @@ let tests =
 
         test "Rules 9+10 — decorator wired + Surfaces.individual (no Team, no ClaimBearer) → Warning naming both gaps" {
             let result =
-                validate (cfg Surfaces.individual NoShareTokenStore) (Some(headerAuth ())) [] [] 1
+                validate (cfg Surfaces.individual FeatureMode.Disabled) (Some(headerAuth ())) [] [] 1
 
             match result with
             | Warning msg ->
@@ -279,7 +289,7 @@ let tests =
 
         test "Rules 9+10 — decorator wired + teamWithShareTokens → Ok (both surfaces present)" {
             let result =
-                validate (cfg Surfaces.teamWithShareTokens EnabledShareTokenStore) (Some(headerAuth ())) [] [] 1
+                validate (cfg Surfaces.teamWithShareTokens FeatureMode.Enabled) (Some(headerAuth ())) [] [] 1
 
             Expect.equal result Ok "decorator + team + claimBearer is the canonical RevokeOnIssuerRemoved shape"
         }
@@ -289,7 +299,7 @@ let tests =
         test "Error wins over Warning when both fire" {
             // Empty Surfaces (Error) + decorator wired (Warning). The
             // aggregator should return Error.
-            let result = validate (cfg [] NoShareTokenStore) (Some(headerAuth ())) [] [] 1
+            let result = validate (cfg [] FeatureMode.Disabled) (Some(headerAuth ())) [] [] 1
 
             match result with
             | Error _ -> ()
@@ -301,7 +311,7 @@ let tests =
         test "Validator metadata is well-formed" {
             let v =
                 SurfaceCoherenceValidator.SurfaceCoherenceValidator(
-                    cfg Surfaces.individual NoShareTokenStore,
+                    cfg Surfaces.individual FeatureMode.Disabled,
                     Some(headerAuth ()),
                     [],
                     [],
@@ -316,7 +326,7 @@ let tests =
         test "Validator routes through the IConfigValidator.Validate path" {
             let v =
                 SurfaceCoherenceValidator.SurfaceCoherenceValidator(
-                    cfg [] NoShareTokenStore,
+                    cfg [] FeatureMode.Disabled,
                     Some(headerAuth ()),
                     [],
                     [],

@@ -15,6 +15,9 @@ open KnowledgeBase.ServerApiDocuments
 open KnowledgeBase.ServerBulkImport
 open KnowledgeBase.ServerOriginalSourceResolver
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 511 — bulk / programmatic KB import ───────────────────────
 //

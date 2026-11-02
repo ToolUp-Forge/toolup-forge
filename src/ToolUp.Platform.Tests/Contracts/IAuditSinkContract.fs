@@ -3,6 +3,8 @@ module ToolUp.Platform.Tests.Contracts.IAuditSinkContract
 open System
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Audit
 
 /// Phase 9g — contract assertions every `IAuditSink` implementation
 /// must satisfy. Bound by `InProcess` test files that supply a factory

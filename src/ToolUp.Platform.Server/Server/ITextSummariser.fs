@@ -1,4 +1,6 @@
-module ToolUp.Platform.ITextSummariser
+module ToolUp.Platform.Infra.ITextSummariser
+
+open ToolUp.Platform
 
 /// Optional companion to chunking. Summarises a chunk in the context of
 /// its parent document, producing a short preamble (typically 50–100

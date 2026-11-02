@@ -1,16 +1,18 @@
-module ToolUp.Platform.ComposeTenantLifecycle
+module ToolUp.Platform.Compose.ComposeTenantLifecycle
 
 open System
 open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.DependencyInjection.Extensions
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
 
 // ─── Phase 54 — tenant-lifecycle compose step ────────────────────────
 //
 // Registers the four first-party `ITenantLifecycle` hooks + the
 // process-local `TenantLifecycleSnapshot` when
-// `ServerConfig.TenantLifecycle = EnabledTenantLifecycle`. Each hook is
+// `ServerConfig.TenantLifecycle = FeatureMode.Enabled`. Each hook is
 // registered via the factory overload so it captures the runtime
 // `IServiceProvider` and resolves its substrate lazily on every call
 // (stateless between invocations, GP 12 rule 4); a hook whose substrate
@@ -18,7 +20,7 @@ open ToolUp.Platform.BlobStorage
 // under the enabled mode is safe regardless of which other subsystems
 // the deployment composed.
 //
-// **Phase 54e additions** (also gated on `EnabledTenantLifecycle`):
+// **Phase 54e additions** (also gated on `FeatureMode.Enabled`):
 //   * the blob-backed `ILifecycleSummaryStore` — durable last-summary
 //     backing for `GetLifecycleSummary` (survives restart + visible
 //     across replicas), in front of which the snapshot is a cache;
@@ -26,7 +28,7 @@ open ToolUp.Platform.BlobStorage
 //     `ITenantLifecycle` hook by name, mirroring the way
 //     `HealthCheckAggregator` health probes are surfaced.
 //
-// `NoTenantLifecycle` (the default) is a no-op — no hooks, no snapshot,
+// `FeatureMode.Disabled` (the default) is a no-op — no hooks, no snapshot,
 // no store, no contributor, no `/api/_platform/tenants/*` route (the
 // route mount in `BuildRouteHandlers` gates on the same field). Zero
 // cost when unused (GP 13).
@@ -64,8 +66,8 @@ type private TenantLifecycleDiagnosticsContributor(sp: IServiceProvider) =
 /// durable summary store + dev-diagnostics contributor.
 let registerTenantLifecycle (services: IServiceCollection) (config: ServerConfig) : unit =
     match config.TenantLifecycle with
-    | NoTenantLifecycle -> ()
-    | EnabledTenantLifecycle ->
+    | FeatureMode.Disabled -> ()
+    | FeatureMode.Enabled ->
         services.AddSingleton<PlatformTenantApiHandler.TenantLifecycleSnapshot>(
             PlatformTenantApiHandler.TenantLifecycleSnapshot()
         )
@@ -103,48 +105,28 @@ let registerTenantLifecycle (services: IServiceCollection) (config: ServerConfig
         // Phase 54 under the default (the in-process lock serialises).
         services.TryAddSingleton<ILifecycleLock>(InProcessLifecycleLock.shared)
 
-        services.AddSingleton<ITenantLifecycle>(fun (sp: IServiceProvider) -> EncryptionKeyLifecycle.create sp)
-        |> ignore
-
-        services.AddSingleton<ITenantLifecycle>(fun (sp: IServiceProvider) -> MembershipCacheLifecycle.create sp)
-        |> ignore
-
-        services.AddSingleton<ITenantLifecycle>(fun (sp: IServiceProvider) -> JobSchedulerLifecycle.create sp)
-        |> ignore
-
-        services.AddSingleton<ITenantLifecycle>(fun (sp: IServiceProvider) -> DataSubjectRequestLifecycle.create sp)
-        |> ignore
-
-        // Phase 54d — conversation-store offboard purge (core-tier; the
-        // conversation substrate lives in `ToolUp.Platform.Server`, not a
-        // companion). Self-`Skipped`s when no `IConversationStore` is
-        // composed, so registering it unconditionally under the enabled
-        // mode is safe.
-        services.AddSingleton<ITenantLifecycle>(fun (sp: IServiceProvider) -> ConversationStoreLifecycle.create sp)
-        |> ignore
-
-        // Phase 545 — user-scope membership teardown (`PurgeUser`
-        // symmetry). Self-`Skipped`s on non-user scopes and when no
-        // `ITeamStore` is composed, so registering it unconditionally
-        // under the enabled mode is safe.
-        services.AddSingleton<ITenantLifecycle>(fun (sp: IServiceProvider) -> UserMembershipTeardownLifecycle.create sp)
-        |> ignore
-
-        // Phase 54g — provisioning hooks that do real work. Each
-        // self-`Skipped`s when its substrate is inactive (no `IConfigStore` /
-        // `ITeamStore` / `PerScopeKeyResolver`), so registering them
-        // unconditionally under the enabled mode is safe. They make
-        // `OnProvisioned` symmetric with the offboard hooks: seed default
+        // The first-party hooks, registered as values. Each answers
+        // `Skipped` when its substrate is not composed (`TenantHook`), so
+        // registering every one under the enabled mode is safe. The
+        // offboard hooks: crypto-shred the scope's key, evict the team
+        // membership cache, cancel the scope's jobs, erase subject data,
+        // purge conversations, tear down a user's memberships. The
+        // provisioning hooks, symmetric with them: seed default
         // `_platform` config, bootstrap the owner team, pre-create the
         // per-scope encryption key.
-        services.AddSingleton<ITenantLifecycle>(fun (sp: IServiceProvider) -> ConfigSeedLifecycle.create sp)
-        |> ignore
+        let addHook (hook: TenantHook<'dep>) =
+            services.AddSingleton<ITenantLifecycle>(fun (sp: IServiceProvider) -> TenantHook.asLifecycle hook sp)
+            |> ignore
 
-        services.AddSingleton<ITenantLifecycle>(fun (sp: IServiceProvider) -> OwnerTeamBootstrapLifecycle.create sp)
-        |> ignore
-
-        services.AddSingleton<ITenantLifecycle>(fun (sp: IServiceProvider) -> EncryptionKeyProvisionLifecycle.create sp)
-        |> ignore
+        addHook EncryptionKeyLifecycle.hook
+        addHook MembershipCacheLifecycle.hook
+        addHook JobSchedulerLifecycle.hook
+        addHook DataSubjectRequestLifecycle.hook
+        addHook ConversationStoreLifecycle.hook
+        addHook UserMembershipTeardownLifecycle.hook
+        addHook ConfigSeedLifecycle.hook
+        addHook OwnerTeamBootstrapLifecycle.hook
+        addHook EncryptionKeyProvisionLifecycle.hook
 
         // Phase 54a — register the background offboard job handler with the
         // scheduler at startup, so `DeprovisionTenantAsync` can enqueue +
@@ -154,16 +136,12 @@ let registerTenantLifecycle (services: IServiceCollection) (config: ServerConfig
         // present). `RegisterHandler` is idempotent; a no-op when no
         // `IJobScheduler` is composed — `DeprovisionTenantAsync` then
         // returns its clear "requires an IJobScheduler" error and the inline
-        // paths are unaffected (GP 13). Exempt from the profile matrix
-        // (Phase 1051): a handler registration, placed by the scheduler's
-        // own gate.
-        services
-        |> ProcessProfileGate.exempt
-            "Phase 54a tenant-lifecycle handler registration"
-            ProcessProfileGate.SchedulerRegistrationReason
-        |> fun s ->
-            s.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(fun (sp: IServiceProvider) ->
-                ProcessProfileGate.atStart (fun () ->
+        // paths are unaffected (GP 13). Once at start: a handler
+        // registration, placed by the scheduler's own unit.
+        Hosting.register
+            services
+            (BackgroundUnit.create "tenant-lifecycle-handler-registration" OnceAtStart (fun sp ->
+                Hosting.atStart (fun () ->
                     match sp.GetService(typeof<IJobScheduler>) with
                     | :? IJobScheduler as scheduler ->
                         scheduler.RegisterHandler(
@@ -179,5 +157,5 @@ let registerTenantLifecycle (services: IServiceCollection) (config: ServerConfig
                             TenantLifecycleAggregator.ScheduledDeprovisionHandlerName,
                             ScheduledDeprovisionJobHandler.create sp
                         )
-                    | _ -> ()))
+                    | _ -> ())))
         |> ignore

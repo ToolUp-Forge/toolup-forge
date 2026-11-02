@@ -3,6 +3,9 @@ module ToolUp.Platform.Tests.Contracts.IServiceAccountStoreContract
 open System
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
 // ─── IServiceAccountStore contract pack (Phase 527) ──────────────────
 //

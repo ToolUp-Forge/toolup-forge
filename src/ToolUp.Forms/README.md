@@ -31,7 +31,7 @@ Shipped surface (commit-stable across Phase 21):
 | Default impls | [`Server/FormStore.fs`](Server/FormStore.fs), [`Server/WorkflowEngine.fs`](Server/WorkflowEngine.fs) | over `IEntityStore` (Phase 19) + `IAuditLog` (Phase 9) |
 | Validation | [`Server/FormValidator.fs`](Server/FormValidator.fs) | `validate`, `CustomValidator`, `CustomValidatorRegistry` |
 | API handler | [`Server/FormApiHandler.fs`](Server/FormApiHandler.fs) | `formApi` ToolUp.Remoting handler with Owner/Admin gating |
-| Compose pipeline | [`Server/FormsCompose.fs`](Server/FormsCompose.fs) | `FormsServerApp` record + `run`, `DefaultedFormStore` decorator |
+| Compose pipeline | [`Server/FormsCompose.fs`](Server/FormsCompose.fs) | `FormsOptions` + `withForms`, `DefaultedFormStore` decorator |
 | Client renderer | [`Client/FormRenderer.fs`](Client/FormRenderer.fs) | `FormRenderer` Feliz component |
 | Client list | [`Client/FormSubmissionsList.fs`](Client/FormSubmissionsList.fs) | `FormSubmissionsList` table |
 | Client badge | [`Client/WorkflowBadge.fs`](Client/WorkflowBadge.fs) | `WorkflowBadge` pill |
@@ -94,22 +94,30 @@ let severityGuard : WorkflowGuard = fun (submission, _ctx) -> async {
     | _ -> return Error "Only Major or Critical bugs can be closed."
 }
 
-let config = { ServerConfig.defaults with
-                 Port = 5000; Surfaces = Surfaces.team
-                 EntityStore = EnabledEntityStore }   // REQUIRED — Forms rides on Phase 19
+let config = {
+    ServerConfig.defaults with
+        Port = 5000; Surfaces = Surfaces.team
+        Stores = {
+            ServerConfig.defaults.Stores with
+                EntityStore = FeatureMode.Enabled
+        }
+}   // REQUIRED — Forms rides on Phase 19
 
 [<EntryPoint>]
 let main _ =
-    FormsServerApp.create ()
-    |> FormsServerApp.withConfig config
-    |> FormsServerApp.withAuth (StaticJwtAuthProvider(...))
-    |> FormsServerApp.withFormSchema bugReportSchema
-    |> FormsServerApp.withWorkflow triageWorkflow
-    |> FormsServerApp.withGuard "severity-major-or-critical" severityGuard
-    |> FormsServerApp.run
+    ServerApp.empty
+    |> ServerApp.withConfig config
+    |> ServerApp.withAuth (StaticJwtAuthProvider(...))
+    |> FormsCompose.withForms (
+        FormsOptions.create ()
+        |> FormsOptions.withFormSchema bugReportSchema
+        |> FormsOptions.withWorkflow triageWorkflow
+        |> FormsOptions.withGuard "severity-major-or-critical" severityGuard
+    )
+    |> ServerApp.run
 ```
 
-The Forms API is mounted at `/api/IFormApi/*` once `FormsServerApp.run` boots. Client code calls it via `FormsClient.proxy`.
+The Forms API is mounted at `/api/IFormApi/*` once a deployment composing `FormsCompose.withForms` boots. Client code calls it via `FormsClient.proxy`.
 
 ## How to define a custom validator
 
@@ -121,7 +129,7 @@ let isStaffEmail : CustomValidator = fun raw ->
     else Error "Email must be on the example.com domain."
 
 // In the compose root:
-|> FormsServerApp.withCustomValidator "staff-email" isStaffEmail
+|> FormsOptions.withCustomValidator "staff-email" isStaffEmail
 
 // In the schema:
 { Key = "email"; DisplayName = "Work email"; Description = None;
@@ -139,7 +147,7 @@ let notifyApprover : WorkflowAction = fun (submission, _ctx) -> async {
     do! someTransactionalSink.Send (...)
 }
 
-|> FormsServerApp.withAction "notify-approver" notifyApprover
+|> FormsOptions.withAction "notify-approver" notifyApprover
 ```
 
 ## Publishable surveys (Phase 21b)
@@ -148,7 +156,7 @@ A `FormSchema` with `Visibility = Publishable` is a *survey* — distributable t
 
 **End-to-end flow:**
 
-1. **Author the schema** — flip `Visibility = Publishable` on a `FormSchema` and `SaveSchema`. Per-tenant configurable so a deployment can carry a global default schema (`FormsServerApp.withFormSchema`) and let teams override it.
+1. **Author the schema** — flip `Visibility = Publishable` on a `FormSchema` and `SaveSchema`. Per-tenant configurable so a deployment can carry a global default schema (`FormsOptions.withFormSchema`) and let teams override it.
 
 2. **Issue invitations** — `IFormApi.IssueTokens` (Owner/Admin gated) takes a list of opaque recipient handles and returns `(handle, tokenId, url, expiresAt)` rows. Three real-world distribution flows:
    - **Platform dispatches email** — `IFormApi.DispatchInvitationsByEmail` (slice 6, optional). Requires a transactional sink (`ServerApp.withTransactionalSink`); writes ephemeral `respondent:{tokenId}` address-book entries so PII never crosses the notification wire.
@@ -162,7 +170,7 @@ A `FormSchema` with `Visibility = Publishable` is a *survey* — distributable t
 5. **Multi-survey admin** — `IFormApi.ListSchemasOverview` returns every survey in scope with status (`Draft` / `Active` / `Closed`) and metric summaries in one call. `SurveyListView` is the matching stateless Feliz component. `IFormApi.CloseSurvey` closes a survey by flipping `Visibility` to `Internal`, bulk-revoking outstanding tokens, or both.
 
 **Required substrate:**
-- `ServerConfig.ShareTokenStore = EnabledShareTokenStore` — the SDK's HMAC-signed token primitive (Phase 21b slice 1)
+- `ServerConfig.Stores.ShareTokenStore = FeatureMode.Enabled` — the SDK's HMAC-signed token primitive (Phase 21b slice 1)
 - `ServerConfig.PublicBaseUrl = Some "https://your-host.example.com"` — for `IssueTokens` URL composition
 - `ServerConfig.AnonymousRoutePrefixes` includes `/api/public/forms/` — `FormsCompose` registers this automatically
 - Optional: `ServerApp.withTransactionalSink (...)` if `DispatchInvitationsByEmail` is wanted

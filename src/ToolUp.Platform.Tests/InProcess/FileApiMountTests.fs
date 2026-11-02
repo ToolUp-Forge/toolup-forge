@@ -40,6 +40,8 @@ open Giraffe
 open ProcessedDataTypes
 open ToolUp.Platform
 open ToolUp.Platform.FileProcessor
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Fixtures ─────────────────────────────────────────────────────────
 
@@ -71,8 +73,8 @@ let private composedRouter (dataTypes: DataType list) : HttpHandler list =
             []
             None
             NoNotifications
-            (ref None)
-            (ref None)
+            None
+            None
 
     [ handlers.Router [] ]
 

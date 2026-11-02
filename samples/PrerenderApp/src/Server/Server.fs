@@ -4,6 +4,7 @@
 module PrerenderApp.Server
 
 open ToolUp.Platform
+open ToolUp.Platform.Config
 
 // ─── Phase 57 worked example — server composition ────────────────
 //

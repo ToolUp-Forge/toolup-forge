@@ -76,14 +76,14 @@ module HostRouteRegistration =
             (fun captures ctx -> reg.Resolve captures ctx)
             reg.Enumerate
 
-    /// Register a hosted module's routes into a `PublicRenderingServerApp`:
+    /// Register a hosted module's routes into `PublicRenderingOptions`:
     /// one `IContentSource` per registration, appended via the Phase 83
     /// `withContentSource` (append-only — GP 11). The order is preserved, so
     /// a more specific literal route registered first is consulted before a
     /// capturing one.
     let register
         (registrations: HostRouteRegistration list)
-        (app: PublicRenderingServerApp)
-        : PublicRenderingServerApp =
+        (options: PublicRenderingOptions)
+        : PublicRenderingOptions =
         registrations
-        |> List.fold (fun acc reg -> PublicRenderingServerApp.withContentSource (toContentSource reg) acc) app
+        |> List.fold (fun acc reg -> PublicRenderingOptions.withContentSource (toContentSource reg) acc) options

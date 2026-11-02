@@ -3,11 +3,13 @@ module ToolUp.Platform.Tests.InProcess.LocalEmbeddingScopeTests
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.IVectorStore
-open ToolUp.Platform.IRetrievalPipeline
-open ToolUp.Platform.IEmbeddingProvider
+open ToolUp.Platform.Infra.IVectorStore
+open ToolUp.Platform.Infra.IRetrievalPipeline
+open ToolUp.Platform.Infra.IEmbeddingProvider
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Phase 14z — scope-keyed LocalEmbeddingProvider ──────────────────
 //
@@ -528,7 +530,7 @@ let capabilityProbeTests =
         }
 
         test "the family composes AS an IEmbeddingProvider, reporting the Deployment scope's identity" {
-            // It has to be an `IEmbeddingProvider` at all — `RAGServerApp.create`
+            // It has to be an `IEmbeddingProvider` at all — `RagOptions.create`
             // takes one — and any caller that does not probe (a health check,
             // a diagnostic) must get a working embedder rather than a throw.
             let family = LocalEmbeddingProvider.createScoped ()
@@ -583,14 +585,14 @@ let capabilityProbeTests =
 type private CountingEmbeddingCache() =
     let entries =
         System.Collections.Concurrent.ConcurrentDictionary<
-            ToolUp.Platform.IEmbeddingCache.EmbeddingCacheKey,
+            ToolUp.Platform.Infra.IEmbeddingCache.EmbeddingCacheKey,
             float32 array
          >()
 
     member _.Keys = entries.Keys |> Seq.toList
     member _.Count = entries.Count
 
-    interface ToolUp.Platform.IEmbeddingCache.IEmbeddingCache with
+    interface ToolUp.Platform.Infra.IEmbeddingCache.IEmbeddingCache with
         member _.TryGet key = async {
             match entries.TryGetValue key with
             | true, v -> return Some v
@@ -611,7 +613,7 @@ let cacheKeyingTests =
             let cached =
                 ToolUp.RAG.CachingEmbeddingProvider.create
                     family
-                    (cache :> ToolUp.Platform.IEmbeddingCache.IEmbeddingCache)
+                    (cache :> ToolUp.Platform.Infra.IEmbeddingCache.IEmbeddingCache)
 
             let factory =
                 match ScopedEmbedding.tryFactory cached with
@@ -642,7 +644,7 @@ let cacheKeyingTests =
             let cached =
                 ToolUp.RAG.CachingEmbeddingProvider.create
                     family
-                    (cache :> ToolUp.Platform.IEmbeddingCache.IEmbeddingCache)
+                    (cache :> ToolUp.Platform.Infra.IEmbeddingCache.IEmbeddingCache)
 
             let factory = (ScopedEmbedding.tryFactory cached).Value
             let scoped = factory.For(VectorScope.Team "a")
@@ -668,7 +670,7 @@ let cacheKeyingTests =
             let cached =
                 ToolUp.RAG.CachingEmbeddingProvider.create
                     stateless
-                    (cache :> ToolUp.Platform.IEmbeddingCache.IEmbeddingCache)
+                    (cache :> ToolUp.Platform.Infra.IEmbeddingCache.IEmbeddingCache)
 
             Expect.isFalse
                 (ScopedEmbedding.isScopeKeyed cached)
@@ -776,7 +778,7 @@ let private harness (embedder: IEmbeddingProvider) (rows: (VectorScope * string 
         new ToolUp.RAG.RetrievalPipeline.RetrievalPipeline(
             store :> IVectorStore,
             embedder,
-            platformKnowledgeBase = EnabledPlatformKnowledgeBase
+            platformKnowledgeBase = FeatureMode.Enabled
         )
         :> IRetrievalPipeline
 

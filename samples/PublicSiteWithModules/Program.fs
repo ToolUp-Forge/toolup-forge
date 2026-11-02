@@ -2,8 +2,10 @@ module PublicSiteWithModules.Program
 
 open System
 open ToolUp.Platform
-open ToolUp.Platform.Server
+open ToolUp.Platform.Compose.Server
 open ToolUp.PublicRendering
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 /// Phase 82 — the canonical hybrid composition root. Combines:
 ///
@@ -56,7 +58,8 @@ let main _ =
     |> ServerApp.withConfig config
     |> ServerApp.withLogger logger
     |> ServerApp.addModule Notes.serverModule
-    |> PublicRenderingCompose.withPublicRendering (fun pr ->
-        pr
-        |> PublicRenderingCompose.PublicRenderingServerApp.withLayout (LayoutName "page") Layouts.landingPage)
+    |> PublicRenderingCompose.withPublicRendering (
+        PublicRenderingOptions.create ()
+        |> PublicRenderingOptions.withLayout (LayoutName "page") Layouts.landingPage
+    )
     |> ServerApp.run

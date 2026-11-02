@@ -6,6 +6,7 @@ namespace ToolUp.PublicRendering
 open System
 open System.Security.Cryptography
 open System.Text
+open ToolUp.Platform.Compose
 
 // ─── Phase 84 — SSR render cache + incremental regeneration ──────────
 //

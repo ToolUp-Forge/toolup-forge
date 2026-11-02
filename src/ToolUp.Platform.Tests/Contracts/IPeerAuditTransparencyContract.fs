@@ -4,6 +4,8 @@ open System
 open Expecto
 open ToolUp.Platform
 open ToolUp.InterPlatform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Phase 18a — cross-deployment audit transparency contract pack ───
 //

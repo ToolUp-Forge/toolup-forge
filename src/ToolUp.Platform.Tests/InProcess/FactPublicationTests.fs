@@ -39,12 +39,19 @@ open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.Grounding
 open ToolUp.Platform.Secrets
-open ToolUp.Platform.StorageScopeResolver
+open ToolUp.Platform.Scope.StorageScopeResolver
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Facts
 open ToolUp.ArtefactSigning
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Fixtures ────────────────────────────────────────────────────────
 
@@ -426,16 +433,16 @@ let private world () = worldWith defaults
 /// Commit a run of the source table in a team's own scope.
 let private commitSource (w: World) (teamId: string) (rows: FactTableRow list) : unit =
     let run =
-        w.Writer.OpenRun(teamId, regionalSales.Id)
+        w.Writer.OpenRun(TestScope.resolved teamId, regionalSales.Id)
         |> Async.RunSynchronously
         |> Result.defaultWith (fun e -> failtestf "open: %s" (FactTableWriteError.describe e))
 
-    w.Writer.WriteRows(teamId, run.RunId, rows)
+    w.Writer.WriteRows(TestScope.resolved teamId, run.RunId, rows)
     |> Async.RunSynchronously
     |> Result.defaultWith (fun e -> failtestf "write: %s" (FactTableWriteError.describe e))
     |> ignore
 
-    w.Writer.Commit(teamId, run.RunId)
+    w.Writer.Commit(TestScope.resolved teamId, run.RunId)
     |> Async.RunSynchronously
     |> Result.defaultWith (fun e -> failtestf "commit: %s" (FactTableWriteError.describe e))
     |> ignore
@@ -474,7 +481,9 @@ let private published (w: World) (source: string) (grantId: string) : Publicatio
 
 /// Every current fact in a scope.
 let private currentFacts (w: World) (scopeId: string) : Fact list =
-    w.Store.Query(scopeId, FactQuery.all) |> Async.RunSynchronously
+    w.Store.Query(TestScope.resolved scopeId, FactQuery.all)
+    |> TestScope.ok
+    |> Async.RunSynchronously
 
 /// The target's current, present (non-absent) facts of the group table.
 let private groupRows (w: World) : Fact list =
@@ -495,7 +504,7 @@ let private population (w: World) (prefix: string list option) : PopulationResul
 
     w.Store.QueryPopulation(teamScope group, query)
     |> Async.RunSynchronously
-    |> Result.defaultWith (fun e -> failtestf "population: %s" e)
+    |> Result.defaultWith (fun e -> failtestf "population: %s" (FactStoreError.describe e))
 
 let private publicationEvents (w: World) (scopeId: string) : (ModuleEvent * FactPublicationEvent) list =
     w.Events.ReadBySource(scopeId, FactEvents.SourceModule)
@@ -552,7 +561,7 @@ let private consolidationTests =
             let receipt = published w north grant.GrantId
 
             let origin =
-                w.Writer.Status(north, regionalSales.Id)
+                w.Writer.Status(TestScope.resolved north, regionalSales.Id)
                 |> Async.RunSynchronously
                 |> Result.map (fun s -> s.LastCommit.Value.Watermark |> FactTableWatermark.render)
                 |> Result.defaultWith (fun _ -> failtest "status")
@@ -578,12 +587,12 @@ let private consolidationTests =
             published w north grant.GrantId |> ignore
 
             let run =
-                match w.Writer.Runs(group, "group-sales") |> Async.RunSynchronously with
+                match w.Writer.Runs(TestScope.resolved group, "group-sales") |> Async.RunSynchronously with
                 | Ok [ run ] -> run
                 | other -> failtestf "expected the one publication run, got %A" other
 
             let status =
-                w.Writer.Status(group, "group-sales")
+                w.Writer.Status(TestScope.resolved group, "group-sales")
                 |> Async.RunSynchronously
                 |> Result.defaultWith (fun e -> failtestf "status: %s" (FactTableWriteError.describe e))
 
@@ -691,7 +700,10 @@ let private grantTests =
             Expect.isEmpty (currentFacts w group) "the target's scope holds none of them"
 
             for fact in northFacts do
-                let seen = w.Store.Get(teamScope group, fact.FactId) |> Async.RunSynchronously
+                let seen =
+                    w.Store.Get(teamScope group, fact.FactId)
+                    |> TestScope.ok
+                    |> Async.RunSynchronously
 
                 Expect.isNone seen "a source fact id resolves to nothing in the target's scope"
 
@@ -1249,14 +1261,17 @@ let private auditTests =
                 ServerApp.empty with
                     Config = {
                         ServerApp.empty.Config with
-                            FactStore = NoFactStore
+                            Stores = {
+                                ServerApp.empty.Config.Stores with
+                                    FactStore = FeatureMode.Disabled
+                            }
                     }
             }
 
             let composed =
                 FactsCompose.withFactPublication (FactPublicationConfig.create [ groupTarget ]) app
 
-            Expect.isTrue (obj.ReferenceEquals(app, composed)) "NoFactStore: the very same app"
+            Expect.isTrue (obj.ReferenceEquals(app, composed)) "FeatureMode.Disabled: the very same app"
         }
     ]
 
@@ -1330,7 +1345,7 @@ let private composedWriterTests =
                 Expect.equal notice.New 2 "both rows are new to the target"
 
                 let runs =
-                    w.Writer.Runs(group, groupSales.Id)
+                    w.Writer.Runs(TestScope.resolved group, groupSales.Id)
                     |> Async.RunSynchronously
                     |> Result.defaultWith (fun e -> failtestf "runs: %s" (FactTableWriteError.describe e))
 
@@ -1643,6 +1658,7 @@ let private cellAt (w: World) (metricId: string) (path: string list) : Fact list
             }
             (MetricRef metricId)
     )
+    |> TestScope.ok
     |> Async.RunSynchronously
 
 let private delegateTargetTests =
@@ -1675,7 +1691,7 @@ let private delegateTargetTests =
             | other -> failtestf "expected one current fact, got %d" other.Length
 
             let runs =
-                w.Writer.Runs(group, groupSales.Id)
+                w.Writer.Runs(TestScope.resolved group, groupSales.Id)
                 |> Async.RunSynchronously
                 |> Result.defaultWith (fun e -> failtestf "runs: %s" (FactTableWriteError.describe e))
 
@@ -1838,12 +1854,34 @@ let startupTests =
                     ServerApp.empty with
                         Config = {
                             ServerApp.empty.Config with
-                                FactStore = EnabledFactStore
+                                Stores = {
+                                    ServerApp.empty.Config.Stores with
+                                        FactStore = FeatureMode.Enabled
+                                }
                         }
                 }
                 |> FactsCompose.withCoherenceChecksConfig CoherenceConfig.defaults (Trigger.CronTrigger "0 3 * * *") [
-                    north
+                    {
+                        Name = north
+                        UserId = "svc-" + north
+                        DisplayName = "the north sweep principal"
+                    }
                 ]
+
+            // The platform's declared-principal resolver, bound to a resolver
+            // that resolves the sweep principal to the north shard.
+            let declared =
+                DeclaredPrincipalResolver(fun _ ->
+                    async.Return(
+                        Ok(
+                            {
+                                ScopeId = north
+                                Container = north
+                                Persist = true
+                            }
+                            : StorageScope
+                        )
+                    ))
 
             let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
             let scheduler = HeldScheduler()
@@ -1857,6 +1895,7 @@ let startupTests =
                     NotificationChannel.InMemoryNotificationChannel(None) :> INotificationChannel
                 )
                 .AddSingleton<IJobScheduler>(scheduler)
+                .AddSingleton<DeclaredPrincipalResolver>(declared)
             |> ignore
 
             let configured =

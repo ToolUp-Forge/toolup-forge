@@ -4,7 +4,11 @@ open System
 open Expecto
 open ToolUp.Platform
 open ToolUp.InterPlatform
+open ToolUp.Platform.Tests.InProcess.PeerTestComposition
 open ToolUp.InterPlatform.PeerCompose
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 595 — aggregate peer surface + gateway composition ────────
 //
@@ -83,7 +87,10 @@ let private sharedPack: DataVocabularyPack = {
 
 let private enabledConfig = {
     ServerConfig.defaults with
-        PeerSubstrate = EnabledPeerSubstrate
+        MultiInstance = {
+            ServerConfig.defaults.MultiInstance with
+                PeerSubstrate = FeatureMode.Enabled
+        }
         PinnedVocabularyPacks = [ sharedPack ]
 }
 
@@ -109,26 +116,34 @@ let private catalogueImpl: CatalogueContract = {
 /// `alpha` — serves the fronted orders contract plus an internal ledger
 /// contract the group deliberately does not expose.
 let private alphaApp () =
-    PeerServerApp.create ()
-    |> PeerServerApp.withConfig enabledConfig
-    |> PeerServerApp.withLocalPeer alphaPeer
-    |> PeerServerApp.withContract (fun fusion ->
-        JsonRpcPeerHost.contract<OrdersContract> ordersId [ v1; v11 ] fusion (ordersImpl "alpha"))
-    |> PeerServerApp.withContract (fun fusion ->
-        JsonRpcPeerHost.contract<LedgerContract> ledgerId [ v1 ] fusion ledgerImpl)
+    PeerComposition.create ()
+    |> PeerComposition.app (ServerApp.withConfig enabledConfig)
+    |> PeerComposition.options (PeerOptions.withLocalPeer alphaPeer)
+    |> PeerComposition.options (
+        PeerOptions.withContract (fun fusion ->
+            JsonRpcPeerHost.contract<OrdersContract> ordersId [ v1; v11 ] fusion (ordersImpl "alpha"))
+    )
+    |> PeerComposition.options (
+        PeerOptions.withContract (fun fusion ->
+            JsonRpcPeerHost.contract<LedgerContract> ledgerId [ v1 ] fusion ledgerImpl)
+    )
 
 /// `beta` — serves the fronted catalogue contract, consumes one contract
 /// satisfied inside the group (orders) and one satisfied outside it.
 let private betaApp () =
-    PeerServerApp.create ()
-    |> PeerServerApp.withConfig enabledConfig
-    |> PeerServerApp.withLocalPeer betaPeer
-    |> PeerServerApp.withContract (fun fusion ->
-        JsonRpcPeerHost.contract<CatalogueContract> catalogueId [ v1 ] fusion catalogueImpl)
-    |> PeerServerApp.withConsumedContract (
-        PeerSurface.consumes<ExternalDirectoryContract> directoryId [ v1 ] "registry"
+    PeerComposition.create ()
+    |> PeerComposition.app (ServerApp.withConfig enabledConfig)
+    |> PeerComposition.options (PeerOptions.withLocalPeer betaPeer)
+    |> PeerComposition.options (
+        PeerOptions.withContract (fun fusion ->
+            JsonRpcPeerHost.contract<CatalogueContract> catalogueId [ v1 ] fusion catalogueImpl)
     )
-    |> PeerServerApp.withConsumedContract (PeerSurface.consumes<OrdersContract> ordersId [ v1 ] "any-member")
+    |> PeerComposition.options (
+        PeerOptions.withConsumedContract (PeerSurface.consumes<ExternalDirectoryContract> directoryId [ v1 ] "registry")
+    )
+    |> PeerComposition.options (
+        PeerOptions.withConsumedContract (PeerSurface.consumes<OrdersContract> ordersId [ v1 ] "any-member")
+    )
 
 let private alphaMember () : AggregateMember = {
     Target = target alphaPeer
@@ -238,12 +253,12 @@ let private inProcessClient (members: (string * IPlatformPeer) list) (log: Resiz
     }
 
 /// Register a composed app's contracts on a fresh in-process peer — the
-/// same thing `PeerCompose.run` does at first `IPlatformPeer` resolution,
+/// same thing `PeerCompose.withPeer` does at first `IPlatformPeer` resolution,
 /// without standing up a host.
-let private peerOf (app: PeerServerApp) : IPlatformPeer =
+let private peerOf (app: PeerComposition) : IPlatformPeer =
     let platformPeer = DefaultPlatformPeer() :> IPlatformPeer
 
-    for builder in app.Contracts do
+    for builder in (snd app).Contracts do
         platformPeer.RegisterContract (builder None).Registration
 
     platformPeer
@@ -269,11 +284,16 @@ let private gatewayFixture (members: AggregateMember list) (exposure: AggregateE
         inProcessClient [ alphaPeer.PeerId, peerOf (alphaApp ()); betaPeer.PeerId, peerOf (betaApp ()) ] log
 
     let composed =
-        PeerServerApp.create ()
-        |> PeerServerApp.withConfig {
-            ServerConfig.defaults with
-                PeerSubstrate = EnabledPeerSubstrate
-        }
+        PeerComposition.create ()
+        |> PeerComposition.app (
+            ServerApp.withConfig {
+                ServerConfig.defaults with
+                    MultiInstance = {
+                        ServerConfig.defaults.MultiInstance with
+                            PeerSubstrate = FeatureMode.Enabled
+                    }
+            }
+        )
         |> PeerGateway.withAggregate client members exposure
 
     match composed with
@@ -420,15 +440,17 @@ let tests =
                     Surface =
                         PeerSurface.describe (
                             betaApp ()
-                            |> PeerServerApp.withConfig {
-                                enabledConfig with
-                                    PinnedVocabularyPacks = [
-                                        {
-                                            sharedPack with
-                                                Version = { Major = 2; Minor = 0 }
-                                        }
-                                    ]
-                            }
+                            |> PeerComposition.app (
+                                ServerApp.withConfig {
+                                    enabledConfig with
+                                        PinnedVocabularyPacks = [
+                                            {
+                                                sharedPack with
+                                                    Version = { Major = 2; Minor = 0 }
+                                            }
+                                        ]
+                                }
+                            )
                         )
             }
 
@@ -445,10 +467,12 @@ let tests =
                     Surface =
                         PeerSurface.describe (
                             betaApp ()
-                            |> PeerServerApp.withConfig {
-                                enabledConfig with
-                                    PinnedVocabularyPacks = []
-                            }
+                            |> PeerComposition.app (
+                                ServerApp.withConfig {
+                                    enabledConfig with
+                                        PinnedVocabularyPacks = []
+                                }
+                            )
                         )
             }
 
@@ -490,8 +514,10 @@ let tests =
                     Surface =
                         PeerSurface.describe (
                             betaApp ()
-                            |> PeerServerApp.withContract (fun fusion ->
-                                JsonRpcPeerHost.contract<OrdersContract> ordersId [ v1 ] fusion (ordersImpl "beta"))
+                            |> PeerComposition.options (
+                                PeerOptions.withContract (fun fusion ->
+                                    JsonRpcPeerHost.contract<OrdersContract> ordersId [ v1 ] fusion (ordersImpl "beta"))
+                            )
                         )
             }
 
@@ -580,15 +606,21 @@ let tests =
             // whole acceptance criterion: an external consumer cannot tell
             // a gateway-fronted group from one deployment.
             let singleInstance =
-                PeerServerApp.create ()
-                |> PeerServerApp.withConfig enabledConfig
-                |> PeerServerApp.withLocalPeer groupPeer
-                |> PeerServerApp.withContract (fun fusion ->
-                    JsonRpcPeerHost.contract<OrdersContract> ordersId [ v1; v11 ] fusion (ordersImpl "single"))
-                |> PeerServerApp.withContract (fun fusion ->
-                    JsonRpcPeerHost.contract<CatalogueContract> catalogueId [ v1 ] fusion catalogueImpl)
-                |> PeerServerApp.withConsumedContract (
-                    PeerSurface.consumes<ExternalDirectoryContract> directoryId [ v1 ] "registry"
+                PeerComposition.create ()
+                |> PeerComposition.app (ServerApp.withConfig enabledConfig)
+                |> PeerComposition.options (PeerOptions.withLocalPeer groupPeer)
+                |> PeerComposition.options (
+                    PeerOptions.withContract (fun fusion ->
+                        JsonRpcPeerHost.contract<OrdersContract> ordersId [ v1; v11 ] fusion (ordersImpl "single"))
+                )
+                |> PeerComposition.options (
+                    PeerOptions.withContract (fun fusion ->
+                        JsonRpcPeerHost.contract<CatalogueContract> catalogueId [ v1 ] fusion catalogueImpl)
+                )
+                |> PeerComposition.options (
+                    PeerOptions.withConsumedContract (
+                        PeerSurface.consumes<ExternalDirectoryContract> directoryId [ v1 ] "registry"
+                    )
                 )
                 |> PeerSurface.describe
 
@@ -642,8 +674,10 @@ let tests =
             // above exists to catch.
             let drifted =
                 app
-                |> PeerServerApp.withContract (fun fusion ->
-                    JsonRpcPeerHost.contract<LedgerContract> ledgerId [ v1 ] fusion ledgerImpl)
+                |> PeerComposition.options (
+                    PeerOptions.withContract (fun fusion ->
+                        JsonRpcPeerHost.contract<LedgerContract> ledgerId [ v1 ] fusion ledgerImpl)
+                )
 
             match PeerGateway.surface (referenceMembers ()) referenceExposure drifted with
             | Error errors -> failtestf "the gateway surface was expected to resolve but reported %A" errors
@@ -751,17 +785,22 @@ let tests =
             let client = inProcessClient [] (ResizeArray())
 
             let result =
-                PeerServerApp.create ()
-                |> PeerServerApp.withConfig {
-                    ServerConfig.defaults with
-                        PeerSubstrate = EnabledPeerSubstrate
-                }
+                PeerComposition.create ()
+                |> PeerComposition.app (
+                    ServerApp.withConfig {
+                        ServerConfig.defaults with
+                            MultiInstance = {
+                                ServerConfig.defaults.MultiInstance with
+                                    PeerSubstrate = FeatureMode.Enabled
+                            }
+                    }
+                )
                 |> PeerGateway.withAggregate client (referenceMembers ()) {
                     referenceExposure with
                         Contracts = [ expose "example.absent" ]
                 }
 
-            // `PeerServerApp` holds closures, so the Result is matched
+            // `PeerOptions` holds closures, so the Result is matched
             // rather than compared.
             match result with
             | Ok _ -> failtest "a gateway that cannot say what it fronts must not compose"

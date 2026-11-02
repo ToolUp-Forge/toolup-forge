@@ -11,16 +11,20 @@ open System.Text.Json
 open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
-open ToolUp.Platform.StorageScopeResolver
+open ToolUp.Platform.Scope.StorageScopeResolver
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Grounding
-open ToolUp.Platform.IVectorStore
-open ToolUp.Platform.IEmbeddingProvider
-open ToolUp.Platform.IRetrievalPipeline
+open ToolUp.Platform.Infra.IVectorStore
+open ToolUp.Platform.Infra.IEmbeddingProvider
+open ToolUp.Platform.Infra.IRetrievalPipeline
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Facts
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 558 — fact-resolver compose wiring ────────────────────────
 //
@@ -33,7 +37,7 @@ open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 // (`FactsCompose.withFactStore` registers store + gate + resolver
 // together), and the composed Stage-1 loop: a store-asserted fact answers
 // a fact-clause retrieval as the top source with disclosure filtering
-// armed, while a `NoFactStore` deployment retrieves byte-identically.
+// armed, while a `FeatureMode.Disabled` deployment retrieves byte-identically.
 
 // ── Shared harness ────────────────────────────────────────────────
 
@@ -72,9 +76,9 @@ let private draft (metric: string) (period: TemporalExtent) (inputHashes: string
 }
 
 let private assertFact (store: IFactStore) (scope: string) (d: FactDraft) : Fact =
-    match store.Assert(scope, d) |> Async.RunSynchronously with
+    match store.Assert(TestScope.resolved scope, d) |> Async.RunSynchronously with
     | Ok fact -> fact
-    | Error e -> failtestf "assert failed: %s" e
+    | Error e -> failtestf "assert failed: %s" (FactStoreError.describe e)
 
 /// A real (Phase 519) registry carrying one declared metric.
 let private registryWith (staleness: StalenessPolicy) (displayFormat: string) : IMetricRegistry =
@@ -124,7 +128,7 @@ let resolverTests =
             let resolver =
                 FactStoreFactResolver.create store (Some(registryWith UntilSuperseded "N0"))
 
-            let! resolved = resolver.Resolve(scope, clauseFor "revenue")
+            let! resolved = resolver.Resolve(TestScope.resolved scope, clauseFor "revenue")
 
             match resolved with
             | [ r ] ->
@@ -151,7 +155,7 @@ let resolverTests =
             // Reconstruct "what we knew" at the original's transaction time.
             let! resolved =
                 resolver.Resolve(
-                    scope,
+                    TestScope.resolved scope,
                     {
                         clauseFor "revenue" with
                             AsOf = Some original.AsOf
@@ -172,7 +176,7 @@ let resolverTests =
             | other -> failtestf "expected the superseded head, got %A" other
 
             // The same clause with no AsOf resolves the current head, fresh.
-            let! current = resolver.Resolve(scope, clauseFor "revenue")
+            let! current = resolver.Resolve(TestScope.resolved scope, clauseFor "revenue")
 
             Expect.equal
                 (current |> List.map (fun r -> r.FactId, r.Freshness))
@@ -197,14 +201,14 @@ let resolverTests =
             let insideWindow =
                 FactStoreFactResolver.createWithClock store registry (fun () -> assertedAt.AddMinutes 30.0)
 
-            let! fresh = insideWindow.Resolve(scope, clauseFor "revenue")
+            let! fresh = insideWindow.Resolve(TestScope.resolved scope, clauseFor "revenue")
             Expect.equal (fresh |> List.map _.Freshness) [ FactFresh ] "fresh inside the window"
 
             // Past the window: stale since AsOf + window, with no successor.
             let pastWindow =
                 FactStoreFactResolver.createWithClock store registry (fun () -> assertedAt.AddHours 2.0)
 
-            let! stale = pastWindow.Resolve(scope, clauseFor "revenue")
+            let! stale = pastWindow.Resolve(TestScope.resolved scope, clauseFor "revenue")
 
             match stale with
             | [ r ] ->
@@ -225,7 +229,7 @@ let resolverTests =
 
             // No registry composed at all — the grounding-free deployment.
             let resolver = FactStoreFactResolver.create store None
-            let! resolved = resolver.Resolve(scope, clauseFor "margin")
+            let! resolved = resolver.Resolve(TestScope.resolved scope, clauseFor "margin")
 
             Expect.equal
                 (resolved |> List.map (fun r -> r.Rendering, r.Freshness))
@@ -251,7 +255,7 @@ let resolverTests =
 
             let! resolved =
                 resolver.Resolve(
-                    scope,
+                    TestScope.resolved scope,
                     {
                         clauseFor "revenue" with
                             PeriodFrom = Some q1.From
@@ -271,10 +275,10 @@ let resolverTests =
 
             let resolver = FactStoreFactResolver.create store None
 
-            let! own = resolver.Resolve(scopeA, clauseFor "revenue")
+            let! own = resolver.Resolve(TestScope.resolved scopeA, clauseFor "revenue")
             Expect.equal (List.length own) 1 "resolvable in its own scope"
 
-            let! foreign = resolver.Resolve(scopeB, clauseFor "revenue")
+            let! foreign = resolver.Resolve(TestScope.resolved scopeB, clauseFor "revenue")
             Expect.isEmpty foreign "structurally unreachable from another scope"
         }
     ]
@@ -284,13 +288,16 @@ let resolverTests =
 /// Build the fact-tier DI exactly the way a composed deployment does:
 /// `FactsCompose.withFactStore` under the given knob, its service config
 /// run over a substrate-seeded collection. Returns the built provider.
-let private builtProviderUnder (knob: FactStoreMode) : ServiceProvider =
+let private builtProviderUnder (knob: FeatureMode) : ServiceProvider =
     let app =
         {
             ServerApp.empty with
                 Config = {
                     ServerConfig.defaults with
-                        FactStore = knob
+                        Stores = {
+                            ServerConfig.defaults.Stores with
+                                FactStore = knob
+                        }
                 }
         }
         |> FactsCompose.withFactStore
@@ -311,16 +318,16 @@ let private builtProviderUnder (knob: FactStoreMode) : ServiceProvider =
 let registrationTests =
     testList "Phase 558 one-knob registration" [
 
-        test "EnabledFactStore registers the resolver alongside the store + gate — one knob, never three" {
-            let sp = builtProviderUnder EnabledFactStore
+        test "FeatureMode.Enabled registers the resolver alongside the store + gate — one knob, never three" {
+            let sp = builtProviderUnder FeatureMode.Enabled
 
             Expect.isFalse (isNull (box (sp.GetService<IFactStore>()))) "IFactStore resolves"
             Expect.isFalse (isNull (box (sp.GetService<IFactDisclosureGate>()))) "IFactDisclosureGate resolves"
             Expect.isFalse (isNull (box (sp.GetService<IFactResolver>()))) "IFactResolver resolves"
         }
 
-        test "NoFactStore registers none of the fact tier" {
-            let sp = builtProviderUnder NoFactStore
+        test "FeatureMode.Disabled registers none of the fact tier" {
+            let sp = builtProviderUnder FeatureMode.Disabled
 
             Expect.isTrue (isNull (box (sp.GetService<IFactResolver>()))) "no resolver"
             Expect.isTrue (isNull (box (sp.GetService<IFactDisclosureGate>()))) "no gate"
@@ -399,7 +406,7 @@ let composedLoopTests =
     testList "Phase 558 composed Stage-1 loop" [
 
         testCaseAsync
-            "EnabledFactStore + RAG: a store-asserted fact answers the clause as the top source, freshness-stamped, with the gate armed"
+            "FeatureMode.Enabled + RAG: a store-asserted fact answers the clause as the top source, freshness-stamped, with the gate armed"
         <| async {
             let vectorStore, dispose = newVectorStore ()
 
@@ -410,7 +417,7 @@ let composedLoopTests =
                         Metadata = Map.empty
                     }
 
-                let sp = builtProviderUnder EnabledFactStore
+                let sp = builtProviderUnder FeatureMode.Enabled
                 let factStore = sp.GetRequiredService<IFactStore>()
 
                 // The pipeline hands the resolver the request's resolved
@@ -462,7 +469,7 @@ let composedLoopTests =
                 dispose.Dispose()
         }
 
-        testCaseAsync "NoFactStore ⇒ retrieval is byte-identical to a fact-less pipeline (GP 11 / GP 13)"
+        testCaseAsync "FeatureMode.Disabled ⇒ retrieval is byte-identical to a fact-less pipeline (GP 11 / GP 13)"
         <| async {
             let vectorStore, dispose = newVectorStore ()
 
@@ -475,9 +482,9 @@ let composedLoopTests =
 
                 let ctx = AccessContext.unrestricted (AuthenticatedUser "u")
 
-                // The NoFactStore composition: withFactStore is a no-op, so
+                // The FeatureMode.Disabled composition: withFactStore is a no-op, so
                 // the pickup resolves nothing and the ctor args are omitted.
-                let composed = pipelineOver vectorStore (builtProviderUnder NoFactStore)
+                let composed = pipelineOver vectorStore (builtProviderUnder FeatureMode.Disabled)
 
                 // A pipeline that never had fact wiring at all.
                 let plain =
@@ -512,7 +519,7 @@ let divergenceTests =
             let vectorStore, dispose = newVectorStore ()
 
             try
-                let sp = builtProviderUnder EnabledFactStore
+                let sp = builtProviderUnder FeatureMode.Enabled
                 let factStore = sp.GetRequiredService<IFactStore>()
 
                 // The resolver minted the user's own scope; the access
@@ -580,7 +587,7 @@ let divergenceTests =
             let vectorStore, dispose = newVectorStore ()
 
             try
-                let sp = builtProviderUnder EnabledFactStore
+                let sp = builtProviderUnder FeatureMode.Enabled
                 let factStore = sp.GetRequiredService<IFactStore>()
                 let userFact = assertFact factStore "u" (draft "revenue" q2 [ "h-user" ] 21800m)
 

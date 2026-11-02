@@ -9,7 +9,7 @@ open System
 //
 // SDK-level interface for the email-keyed pending-invitation substrate
 // (Phase 5h). Two SDK-shipped impls bind to it, auto-selected by
-// `compose` on `ServerConfig.ReplicaCount`: `InMemoryPendingInviteStore`
+// `compose` on `ServerConfig.MultiInstance.ReplicaCount`: `InMemoryPendingInviteStore`
 // — a single-instance blob+lock+cache impl carried forward from Phase
 // 3d — and `BlobPendingInviteStore`, the ETag-based multi-instance
 // default over the Phase 600 `IConditionalBlobStorage` seam. Neither

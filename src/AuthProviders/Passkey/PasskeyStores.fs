@@ -11,6 +11,7 @@ open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Secrets
 open ToolUp.AuthProviders.Passkey.PasskeyTypes
+open ToolUp.Platform.Jobs
 
 // ─── Challenge store — short-TTL, single-use ─────────────────────────
 //

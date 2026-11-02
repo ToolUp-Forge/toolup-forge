@@ -10,7 +10,8 @@ open System.Threading
 open System.Threading.Tasks
 open Expecto
 open ToolUp.Platform.Secrets
-open ToolUp.Platform.IEmbeddingProvider
+open ToolUp.Platform.Infra.IEmbeddingProvider
+open ToolUp.Platform.Infra
 
 // ─── Phase 459 — the three properties C/D pin, tested on the wire ────
 //

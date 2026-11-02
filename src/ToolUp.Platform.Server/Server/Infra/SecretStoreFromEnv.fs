@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.SecretStore
+module ToolUp.Platform.Config.SecretStore
 
 open System
 open ToolUp.Platform
 open ToolUp.Platform.Secrets
+open ToolUp.Platform.Infra
 
 /// Resolver for one cloud-KMS-backed `ISecretStore` companion. The
 /// consumer threads in one entry per companion the deployment has

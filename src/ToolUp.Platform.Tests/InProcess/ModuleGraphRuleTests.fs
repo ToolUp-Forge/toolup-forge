@@ -4,6 +4,7 @@ open Expecto
 open ToolUp.Elmish
 open Feliz
 open ToolUp.Platform
+open ToolUp.Platform.Compose
 
 // ─── Phase 583 — module-graph composition rules ───────────────────────
 //

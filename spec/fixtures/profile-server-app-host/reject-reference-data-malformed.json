@@ -1,0 +1,1 @@
+{"kind":"appRoot","base":"serverApp","layers":[],"id":"reject-reference-data-malformed","children":[{"kind":"referenceData","source":"../fiscal-445.csv","contentHash":"sha256:4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c","columns":[{"name":"weekStart","type":"date"},{"name":"fiscalWeek","type":"integer"}],"id":"fiscal-445","children":[]}]}

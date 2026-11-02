@@ -15,6 +15,7 @@ open ToolUp.Platform.AI
 open ToolUp.AI
 open ToolUp.Remoting.Server
 open ToolUp.Remoting.Json.SystemTextJson
+open ToolUp.Platform.Jobs
 
 // ─── Phase 69c.F — the legacy AI channel is byte-pinned across the migration ──
 //

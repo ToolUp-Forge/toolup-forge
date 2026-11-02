@@ -82,7 +82,7 @@ type PlatformAdminApi = {
     /// content access). Used by the Platform Admin module's Settings
     /// tab to render the current state.
     [<AllowAnonymous>]
-    GetPlatformKnowledgeBase: unit -> Async<PlatformKnowledgeBaseMode>
+    GetPlatformKnowledgeBase: unit -> Async<FeatureMode>
 
     /// Set the runtime
     /// `PlatformKnowledgeBase` mode. Gated on `canModifyPlatformConfig`.
@@ -92,5 +92,5 @@ type PlatformAdminApi = {
     /// only updated on successful save).
     [<RequiresRole "PlatformAdmin">]
     [<Audit "PolicyChanged">]
-    SetPlatformKnowledgeBase: PlatformKnowledgeBaseMode -> Async<Result<unit, string>>
+    SetPlatformKnowledgeBase: FeatureMode -> Async<Result<unit, string>>
 }

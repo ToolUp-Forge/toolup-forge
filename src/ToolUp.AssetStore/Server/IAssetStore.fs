@@ -3,6 +3,8 @@
 
 namespace ToolUp.AssetStore
 
+open ToolUp.Platform.Infra
+
 // ─── Phase 186 — running the upload-validation seam ──────────────
 //
 // `IUploadValidator` / `UploadValidation` / `UploadRejection` are

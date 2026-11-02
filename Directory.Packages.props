@@ -175,6 +175,17 @@
          npm imports (react, react-dom, ag-grid, ag-charts) are the ones the
          client tier's consumers already install. -->
     <PackageVersion Include="Fuaran.UI.Renderer" Version="$(FuaranUIVersion)" />
+    <!-- The published Apache-2.0 op vocabulary a stored page's
+         layers are written in (ToolUp.Platform.Server only): the hash-chained
+         `Fuaran.Core.OpStream` each layer is, the tree-op vocabulary
+         (`Fuaran.UI.Ops.Abstractions`), its apply engine and wire decoder
+         (`Fuaran.UI.Ops`) and the canonical JSON its ops and documents hash
+         under (`Fuaran.UI.OpStream.Abstractions`). One pin per producing
+         repository, as above; no pin moves. -->
+    <PackageVersion Include="Fuaran.Core.OpStream" Version="$(FuaranCoreVersion)" />
+    <PackageVersion Include="Fuaran.UI.Ops.Abstractions" Version="$(FuaranUIVersion)" />
+    <PackageVersion Include="Fuaran.UI.Ops" Version="$(FuaranUIVersion)" />
+    <PackageVersion Include="Fuaran.UI.OpStream.Abstractions" Version="$(FuaranUIVersion)" />
     <!-- Phase 195 — compile-time auth/audit analyzer (src/ToolUp.Remoting.Analyzers).
          0.36.0 tracks the F# 10 FCS line (FSharp.Compiler.Service 43.10.101);
          the analyzer package consumes it host-provided (PrivateAssets="all").

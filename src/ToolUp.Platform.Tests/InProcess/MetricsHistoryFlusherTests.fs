@@ -8,7 +8,11 @@ open Expecto
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.Metrics
-open ToolUp.Platform.MetricsHistoryFlusher
+open ToolUp.Platform.Infra.MetricsHistoryFlusher
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 829 — metrics history ────────────────────────────────────
 //
@@ -109,6 +113,7 @@ let private valuesOf (store: ITimeSeriesStore) (series: string) = async {
 let private hostedServicesFor (config: ServerConfig) =
     let services = ServiceCollection()
     ComposeObservability.registerMetricsHistory (services :> IServiceCollection) config noopLogger
+    Hosting.admit services config |> ignore
 
     services
     |> Seq.filter (fun d -> d.ServiceType = typeof<Microsoft.Extensions.Hosting.IHostedService>)
@@ -341,7 +346,10 @@ let tests =
             test "the enabled mode registers the flusher" {
                 let config = {
                     ServerConfig.defaults with
-                        MetricsHistory = EnabledMetricsHistory MetricsHistoryConfig.defaults
+                        Observability = {
+                            ServerConfig.defaults.Observability with
+                                MetricsHistory = EnabledMetricsHistory MetricsHistoryConfig.defaults
+                        }
                 }
 
                 Expect.equal (hostedServicesFor config) 1 "one hosted service"
@@ -350,7 +358,10 @@ let tests =
             test "a serverless host registers nothing even when enabled" {
                 let config = {
                     ServerConfig.defaults with
-                        MetricsHistory = EnabledMetricsHistory MetricsHistoryConfig.defaults
+                        Observability = {
+                            ServerConfig.defaults.Observability with
+                                MetricsHistory = EnabledMetricsHistory MetricsHistoryConfig.defaults
+                        }
                         ServerlessHost = ServerlessHost
                 }
 

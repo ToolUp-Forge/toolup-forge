@@ -12,6 +12,8 @@
 open ToolUp.Elmish
 open ToolUp.Forms.Workflow
 open ToolUp.Forms.FormApi
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 [<AutoOpen>]
 module PageAmbient =
@@ -42,7 +44,7 @@ module PageAmbient =
     let npsSchema: FormSchema = failwith "ambient"
 
     /// What the composition root already holds by the time it reaches
-    /// `FormsServerApp`.
+    /// the Forms companion.
     let authProvider: IAuthProvider = failwith "ambient"
 
     let modules: ServerModule list = failwith "ambient"

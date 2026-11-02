@@ -4,6 +4,7 @@ open Expecto
 open ToolUp.Platform.SmokeTests
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Jobs.SmokeTests
 
 // ─── Fake `ISmokeTest` impls bound to the contract pack ──────────────
 //

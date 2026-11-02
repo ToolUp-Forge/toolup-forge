@@ -9,6 +9,10 @@ open System.Text
 open ToolUp.Platform
 open ToolUp.Platform.Metrics
 open ToolUp.Platform.Usage
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Infra.Usage
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 742 — delivered-egress reconciliation ──────────────────────
 //
@@ -827,9 +831,8 @@ module DeliveredEgressJob =
 
     /// The declaration a deployment hands to its existing scheduled-job
     /// composition. Deliberately a VALUE rather than a compose-time
-    /// mutation of `MediaLibraryServerApp`: the media composition root is
-    /// unchanged by this phase, so a deployment that ingests nothing is
-    /// byte-identical to Phase 473 (GP 11) and one that does opts in
+    /// mutation of the media companion: a deployment that ingests nothing
+    /// composes exactly what it composed without it (GP 11) and one that does opts in
     /// through the path it already uses for every other job.
     ///
     /// The default cadence is hourly, which is not arbitrary: the slower

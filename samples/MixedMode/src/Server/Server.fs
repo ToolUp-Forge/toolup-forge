@@ -4,7 +4,9 @@
 module MixedMode.Server
 
 open ToolUp.Platform
-open ToolUp.Platform.Server
+open ToolUp.Platform.Compose.Server
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 66 Stream F.5 — mixed-mode worked example ─────────────
 //
@@ -18,8 +20,8 @@ open ToolUp.Platform.Server
 //   - `Team _` in Surfaces  → ITeamStore registered (default
 //     BlobTeamStore).
 //   - `ClaimBearer _` in Surfaces → IShareTokenStore auto-promotes
-//     to BlobShareTokenStore (since ServerConfig.ShareTokenStore
-//     stays at its NoShareTokenStore default).
+//     to BlobShareTokenStore (since ServerConfig.Stores.ShareTokenStore
+//     stays at its FeatureMode.Disabled default).
 //   - `Anonymous _` in Surfaces → no extra substrate.
 //
 // SurfaceCoherenceValidator (Stream B.2) verifies each module's

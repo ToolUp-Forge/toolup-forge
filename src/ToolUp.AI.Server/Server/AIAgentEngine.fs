@@ -15,6 +15,11 @@ open ToolUp.Platform.Metrics
 open ToolUp.AI
 open ToolUp.AI.AIToolRegistry
 open ToolUp.AI.SystemPromptBuilder
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 /// Classification of tool-invocation failures, as the loop observes them.
 /// Each case is a `ToolOutcome` (`ToolInvocationError.toOutcome`), which is
@@ -849,10 +854,10 @@ module private Dispatch =
         let allowlist =
             match def.Location, turn.Services.ClientToolAuthorizer with
             | ClientResident, Some auth -> auth.Authorize(def.Name, tc.Arguments, turn.ActiveModule, turn.ActivePage)
-            | _ -> Allow
+            | _ -> ClientToolAuthDecision.Allow
 
         match allowlist with
-        | Deny reason ->
+        | ClientToolAuthDecision.Deny reason ->
             logger.Warn(
                 sprintf
                     "ClientResident tool '%s' denied by server-side allowlist (activeModule=%A): %s"
@@ -863,7 +868,7 @@ module private Dispatch =
 
             do! Telemetry.denial turn def.Name reason
             return Error(Denied(tc.Name, reason))
-        | Allow ->
+        | ClientToolAuthDecision.Allow ->
             // Held on effect CLASS first, then the deployment's
             // `IToolApprovalPolicy`; with neither composed this grants.
             let! approval =

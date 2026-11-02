@@ -5,6 +5,9 @@ open System
 open ToolUp.Platform
 open ToolUp.Platform.FileProcessor
 open ToolUp.Platform.VectorisationTypes
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 691 — the seam gate's first production call site ───────────
 //

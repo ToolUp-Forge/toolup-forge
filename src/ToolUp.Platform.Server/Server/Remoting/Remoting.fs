@@ -149,7 +149,7 @@ module Remoting =
     /// when off") with a default-bridge sink that's wired-but-dormant
     /// — the canonical case is `Api.make`'s default
     /// `IRemotingTelemetry` bridging to forge's `IMetricsSink`, which
-    /// resolves to `NoOpMetricsSink` on `NoMetricsEndpoint` deployments.
+    /// resolves to `NoOpMetricsSink` on `FeatureMode.Disabled` deployments.
     ///
     /// The gate is invoked once per request (cheap); the gate function
     /// itself is expected to memoise its decision since the underlying

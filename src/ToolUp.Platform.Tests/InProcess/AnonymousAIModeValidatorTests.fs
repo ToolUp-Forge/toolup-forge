@@ -6,6 +6,8 @@ open ToolUp.Platform
 open ToolUp.Platform.AI
 open ToolUp.Platform.ConfigValidation
 open ToolUp.AI
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 6m — Anonymous surface + AI + no anonymous rate limit ─────
 //
@@ -85,7 +87,10 @@ let private cfg (surfaces: SurfaceProfile list) (rateLimit: RateLimitConfig) (ha
     ServerConfig.defaults with
         Surfaces = surfaces
         RateLimit = rateLimit
-        AcceptAnonymousModeWithAI = hatch
+        RiskAcknowledgements = {
+            ServerConfig.defaults.RiskAcknowledgements with
+                AcceptAnonymousModeWithAI = hatch
+        }
 }
 
 let private validator (config: ServerConfig) (factory: IAIProviderFactory) : IConfigValidator =

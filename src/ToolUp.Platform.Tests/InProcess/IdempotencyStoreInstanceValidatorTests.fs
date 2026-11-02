@@ -6,10 +6,15 @@ open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
 open ToolUp.Remoting.Server
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 let private cfg (replicaCount: int) : ServerConfig = {
     ServerConfig.defaults with
-        ReplicaCount = replicaCount
+        MultiInstance = {
+            ServerConfig.defaults.MultiInstance with
+                ReplicaCount = replicaCount
+        }
 }
 
 /// A `ServiceCollection` with the in-memory default `IIdempotencyStore`

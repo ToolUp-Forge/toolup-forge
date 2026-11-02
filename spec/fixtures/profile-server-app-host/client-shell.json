@@ -1,0 +1,1 @@
+{"kind":"appRoot","base":"serverApp","layers":[],"shortName":"ProfileClientShell","id":"profile-client-shell","children":[{"kind":"clientShell","id":"clientShell","children":[]}]}

@@ -8,52 +8,43 @@ open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.Auth
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.Server
+open ToolUp.Platform.Compose.Server
 open ToolUp.AuthProviders.Passkey.PasskeyTypes
 open ToolUp.AuthProviders.Passkey.PasskeyConfigValidator
 open ToolUp.AuthProviders.Passkey.PasskeyHost
 open ToolUp.AuthProviders.PasskeyAuthProvider
+open ToolUp.Platform.Compose
 
-// ─── PasskeyServerApp composition root ───────────────────────────────
+// ─── The passkey companion: `withPasskey` ─────────────────────────────
 //
-// Mirrors `PeerServerApp` (InterPlatform): wraps a base `ServerApp` and,
-// at `run`, wires the passkey companion in one fold —
+// The passkey ceremonies are a companion composed onto a `ServerApp`, not a
+// record that wraps one. Its options are the `PasskeyConfig` record;
+// `withPasskey config` registers the companion with
+// `ServerApp.withCompanion`, so it is applied once, when the deployment
+// resolves, to the deployment as every builder left it:
 //   • sets the app `IAuthProvider` to `PasskeyAuthProvider` (validates
 //     the minted platform session JWTs on every request),
 //   • registers the `PasskeyConfigValidator` startup preflight,
-//   • mounts the ceremony routes onto the SDK route chain via
-//     `ComposeExtensions.Handlers`, and
+//   • contributes the ceremony routes, and
 //   • registers the `PasskeyRuntime` DI singleton (Fido2 verifier +
 //     credential/challenge stores) built over the resolved
 //     `IBlobStorage`.
 //
 // Core carries no Fido2NetLib reference (GP 13): a deployment that never
-// composes `PasskeyServerApp` pays nothing and the default composition
+// composes the passkey companion pays nothing and the default composition
 // is unchanged.
+//
+//     ServerApp.empty
+//     |> ServerApp.withStorage storage
+//     |> PasskeyCompose.withPasskey config
+//     |> ServerApp.run
 
-/// Wraps a base `ServerApp` with the passkey companion configuration.
-type PasskeyServerApp = {
-    Base: ServerApp
-    Config: PasskeyConfig
-}
+/// The passkey companion's identity: the slot `withPasskey` composes under
+/// and the owner of its contributions.
+let passkeyCompanion: ComponentId =
+    ComponentId.forCompanionSlot "ToolUp.AuthProviders.Passkey"
 
-/// Start a passkey companion over a base `ServerApp` and its config.
-let create (config: PasskeyConfig) (baseApp: ServerApp) : PasskeyServerApp = { Base = baseApp; Config = config }
-
-/// Replace the base `ServerApp` (for chaining SDK `ServerApp.with*`
-/// helpers before `run`).
-/// **Sets** the base app.
-let withBase (baseApp: ServerApp) (app: PasskeyServerApp) : PasskeyServerApp = { app with Base = baseApp }
-
-/// Replace the passkey configuration.
-let withConfig (config: PasskeyConfig) (app: PasskeyServerApp) : PasskeyServerApp = { app with Config = config }
-
-/// Compose + run. Folds the auth provider, preflight validator, ceremony
-/// routes, and runtime DI singleton into the base app, then delegates to
-/// `ServerApp.run`.
-let run (app: PasskeyServerApp) =
-    let config = app.Config
-
+let private composePasskey (config: PasskeyConfig) (app: ServerApp) : ServerApp =
     let runtimeServiceConfig (services: IServiceCollection) =
         services.AddSingleton<PasskeyRuntime>(
             Func<IServiceProvider, PasskeyRuntime>(fun sp ->
@@ -61,20 +52,16 @@ let run (app: PasskeyServerApp) =
                 PasskeyRuntime.create config blobs)
         )
 
-    let baseApp =
-        app.Base
-        |> ServerApp.withAuth (PasskeyAuthProvider(config) :> IAuthProvider)
-        |> ServerApp.withConfigValidator (PasskeyConfigValidator(config) :> ConfigValidation.IConfigValidator)
+    app
+    |> ServerApp.withAuth (PasskeyAuthProvider(config) :> IAuthProvider)
+    |> ServerApp.withConfigValidator (PasskeyConfigValidator(config) :> ConfigValidation.IConfigValidator)
+    |> ServerApp.addContribution (Contribution.routes passkeyCompanion [ PasskeyHost.routes ])
+    |> ServerApp.addContribution (Contribution.service passkeyCompanion runtimeServiceConfig)
 
-    let baseExt = baseApp.Extensions
-
-    let mergedExt: ComposeExtensions = {
-        baseExt with
-            Handlers = baseExt.Handlers @ [ PasskeyHost.routes ]
-    }
-
-    { baseApp with Extensions = mergedExt }
-    |> ServerApp.addContribution (
-        Contribution.service (ComponentId.forCompanionSlot "ToolUp.AuthProviders.Passkey") runtimeServiceConfig
-    )
-    |> ServerApp.run
+/// **Sets** the passkey companion: the auth provider, preflight validator,
+/// ceremony routes and runtime DI singleton `config` describes are composed
+/// once, when the deployment resolves, onto the deployment as every builder
+/// left it — so a `ServerApp` builder applied after this call still reaches
+/// it. A second call replaces the first.
+let withPasskey (config: PasskeyConfig) (app: ServerApp) : ServerApp =
+    ServerApp.withCompanion passkeyCompanion (composePasskey config) app

@@ -1,4 +1,4 @@
-module ToolUp.Platform.AuditFallbackStore
+module ToolUp.Platform.Audit.AuditFallbackStore
 
 open System
 open System.IO

@@ -5,7 +5,7 @@
 ToolUp Platform is a modular F# full-stack SDK for building production multi-tenant analytical applications. It ships as a set of independently-versioned NuGet packages under the `ToolUp.*` namespace; consumers compose them with their own domain modules.
 
 Core foundations:
-- **Server**: Giraffe over ASP.NET Core; the in-tree **ToolUp.Remoting** transport (distributed inside `ToolUp.Platform.Server`) for type-safe APIs. Consumers write `open ToolUp.Remoting.Server` / `open ToolUp.Remoting.Giraffe`; no separate `PackageReference` is needed.
+- **Server**: Giraffe over ASP.NET Core; the in-tree **ToolUp.Remoting** transport (the `ToolUp.Platform.Server.Remoting` part, which `ToolUp.Platform.Server` references) for type-safe APIs. Consumers write `open ToolUp.Remoting.Server` / `open ToolUp.Remoting.Giraffe`; no separate `PackageReference` is needed.
 - **Client**: Fable + Feliz (React bindings) with the in-tree **ToolUp.Elmish** MVU runtime (distributed inside `ToolUp.Platform.Client`). Consumers write `open ToolUp.Elmish` and see classical Elm Architecture plus ToolUp additions (`IDispatcher<'msg>`, `Prefetch<'a>`, structured `ErrorContext`, `EffectHandle` lifetimes, `Cmd.OfRemoting`).
 - **Build**: FAKE targets in a Pack-able `ToolUp.Platform.Build` package.
 
@@ -15,18 +15,19 @@ Both substrates began as forks — ToolUp.Remoting from Zaid Ajaj's Fable.Remoti
 
 `0.x.y` while the public surface is unstable. Per the SemVer-on-`0.x` policy: minor bumps may include breaking changes, patch bumps are non-breaking. `1.0.0` is declared once the surface is judged stable.
 
-**The bump is checked against the diff, not trusted (Phase 260).** `dotnet run --project Build.fsproj -- VerifySemVerBump` classifies the public surface between the last release tag and this tree — per package, with the same comparer the [approval gate](#public-api-approval-baselines-phase-175) runs — rolls the classes up to the one lockstep `<Version>`, and FAILS when the declared version implies a smaller bump than the diff demands. Add `--propose` to report without failing. It never edits the version: the proposal is a floor, and a deliberately larger bump is never wrong. It runs at release from `publish-nuget.yml`, not in `verify.ps1`; the rule it applies is exercised on every commit by the `ToolUp.Platform.Build.Tests` pack. Note what it diffs and why: on a tree that passes the approval gate the working surface and its baselines are IDENTICAL (that gate fails in both directions since Phase 618), so the only diff that still carries information is the one between RELEASES. Rationale, the two policy tables, and the failure modes: [`docs/migrations/260-semver-bump-from-api-diff.md`](docs/migrations/260-semver-bump-from-api-diff.md).
+**The bump is checked against the diff, not trusted (Phase 260).** `dotnet run --project Build.fsproj -- VerifySemVerBump` classifies the public surface between the last release tag and this tree — per package, with the same comparer the [approval gate](#public-api-approval-baselines-phase-175) runs — rolls the classes up per **version group**, and FAILS a group whose declared version implies a smaller bump than its own packages moved by. Add `--propose` to report without failing. It never edits the version: the proposal is a floor, and a deliberately larger bump is never wrong. It runs at release from `publish-nuget.yml`, not in `verify.ps1`; the rule it applies is exercised on every commit by the `ToolUp.Platform.Build.Tests` pack. Note what it diffs and why: on a tree that passes the approval gate the working surface and its baselines are IDENTICAL (that gate fails in both directions since Phase 618), so the only diff that still carries information is the one between RELEASES. Rationale, the two policy tables, and the failure modes: [`docs/migrations/260-semver-bump-from-api-diff.md`](docs/migrations/260-semver-bump-from-api-diff.md).
 
 **Release candidates, and the soak gate a major is promoted through (Phase 263).** Release candidates exist ONLY for majors from 1.0 on: a tag `vX.0.0-rc.N` (X ≥ 1) publishes the lockstep packages to nuget.org as the SemVer-2 prerelease `X.0.0-rc.N` — the tree keeps declaring the bare `X.0.0`; the label lives only on the tag, and a consumer that does not opt into prereleases never resolves one. The first candidate is `1.0.0-rc.1`; 0.x releases, minors and patches publish stable directly. `publish-nuget.yml` runs `VerifyReleaseChannel` before minting a credential: it refuses any tag other than `vX.Y.Z` / `vX.0.0-rc.N` (X ≥ 1) and any tag that does not name the tree's `<Version>` (before it, every tag published `<Version>` whatever it said). A major is promoted only from a candidate nuget.org has served for the soak window (14 days by default; `release-channel.json` holds the default and per-release overrides, each with a mandatory reason) with no BREAKING surface change since (additive growth does not block), from a descendant commit, with the Phase 257 scorecard all-green (`dotnet run --project Build.fsproj -- VerifyRcPromotion` before tagging). Rules in `ReleaseChannel.fs`; the operator flow in [`docs/platform/release-process.md`](docs/platform/release-process.md). **The scorecard is rendered on demand, never committed** (Phase 1096): `dotnet run --project Build.fsproj -- V1Readiness` writes `docs/reference/v1-readiness.md`, which is gitignored — the committed render it replaces had gone nine releases stale, because no workflow regenerates it. None does until Phase 925 or Phase 847 gives it a run; render it locally (after `git fetch --tags`) when you need it.
 
-Each companion package versions independently — `ToolUp.Platform.Core 0.3.0` can pair with `ToolUp.AI 0.5.0`. Compatibility documented per release. For coordinated bumps, consumers use the `ToolUp.Sdk` meta-manifest: a one-line `<ToolUpSdkVersion>` property in `Directory.Packages.props` resolves every `ToolUp.*` package at the same version.
+**Version groups: the core is one lockstep line; each companion family has its own.** [`version-groups.json`](version-groups.json) puts every packable project on exactly one group, by project-path glob. The core group (`ToolUp.Platform.*`, `ToolUp.AI.*`, the feature tiers, transport and wire, `ToolUp.Sdk`) is the one `lockstep` line: its version IS `<Version>` in `Directory.Build.props`, the number the release tag names. Each companion family (`audit-sinks`, `storage`, `data-sources`, `auth-providers`, … and the `stripe` / `workflow` / `experiments` lines) has its own version, so a break in one audit sink demands a bump of the audit-sink line, not of the SDK. `GenerateSdkManifest` renders the file into `Directory.Build.props` (each project packs at its group's version) and into the `ToolUp.Sdk` manifest (each package resolves through its group's property); `SdkManifestTests` fails on a packable project in no group, a project in two, a dead glob, a project-level `<Version>` that disagrees with its group, or a core package depending on a companion. A consumer pins `<ToolUpSdkVersion>` and gets the core at that version and every family at the version released beside it; a family's own property (`<ToolUpAuditSinksVersion>`, …) moves that family alone. One `v*` tag per release, named by the core; a release candidate and its soak are the core's. The model and the rulings: [`docs/platform/release-process.md`](docs/platform/release-process.md#version-groups--one-lockstep-core-a-line-per-companion-family); the consumer edit: [`docs/migrations/1196-version-groups.md`](docs/migrations/1196-version-groups.md).
 
 ## Repo layout
 
 ```
 toolup-forge/
 ├── src/
-│   ├── ToolUp.Platform.{Core,Server,Client,Build}/   # core SDK (4 packages)
+│   ├── ToolUp.Platform.{Core,Server,Client,Build}/   # core SDK; Server is the umbrella over the six parts below
+│   ├── ToolUp.Platform.Server.{Remoting,Infra,Config,Scope,Jobs,Audit}/ # the server tier's part assemblies (sources stay under ToolUp.Platform.Server/)
 │   ├── ToolUp.Platform.UI/                           # the standalone UI toolkit (Feliz component library)
 │   ├── ToolUp.AI.{Core,Server,Client}/               # AI agent loop + SSE + tools
 │   ├── ToolUp.Platform.Transport/                    # lowest tier: HTTP seam, RetryPolicy, retry loop (FSharp.Core only)
@@ -82,37 +83,51 @@ Pure infrastructure with zero domain knowledge. Per-tier packages:
 
 - **`Core`** — shared types + interfaces (`ILogger`, `IBlobStorage`, `IAuthProvider`, `IAIProvider`, `INotificationChannel`, `IHealthCheck`, `IConfigValidator`, `IEventStore`, `ISecretStore`, etc.). No server or client deps; the "minimum viable consumer" floor. Source ships in the nupkg under `fable/` for Fable consumers.
 - **`Server`** — Giraffe-over-ASP.NET Core implementation: `ServerApp` composition root, `StorageScope` / scope resolvers, `ITeamStore`, `IConfigStore`, `IPermissionStore`, `IEntityStore`, `IDataObjectStore`, `IShareTokenStore`, `IJobScheduler`, `IDataIngestor`, `IAuditLog`, transactional dispatch, rate limiting, security headers middleware, `MetricsMiddleware`, `RequestTimingMiddleware`, OAuth flow handler, encryption-at-rest decorator, default in-process implementations of every interface, etc.
+  **The tier is seven assemblies (Phase 1193).** `ToolUp.Platform.Server` is the umbrella: it holds file management and the composition root (`ServerApp`, the plan, boot, preflight, the composition and module surfaces) and references six parts, each cut along a contiguous run of the tier's compile order and referencing only the parts before it:
+
+  | Part | Holds |
+  |---|---|
+  | `ToolUp.Platform.Server.Remoting` | the transport: codecs, decoder gates, dispatcher, Giraffe and ASP.NET Core adapters |
+  | `ToolUp.Platform.Server.Infra` | the substrate: logging, metrics and RAG seams; event, log, data-object, dataset, entity, result and lineage stores; compute dispatch; model registry types; data sources; secret stores; health checks |
+  | `ToolUp.Platform.Server.Config` | config resolution and the env binder, profiles, the config store, migrations, feature flags, the config validators |
+  | `ToolUp.Platform.Server.Scope` | auth providers, scope resolution, teams, sessions, permissions and grants, share tokens, service accounts, the security middleware |
+  | `ToolUp.Platform.Server.Jobs` | the job store and scheduler, notifications, presence, transactional dispatch, webhooks |
+  | `ToolUp.Platform.Server.Audit` | the audit log and replication, artefact signing, classification, consent, erasure, data-subject requests, evidence |
+
+  A consumer references `ToolUp.Platform.Server` and gets every part transitively. The sources all stay under `src/ToolUp.Platform.Server/` and each part's `.fsproj` compiles its run from there, so a file's part is read from the project files, not from its folder. The parts' order is the dependency order: a file may only use files in its own part or an earlier one. Which file sits where, the files that reach across two subsystems, and what the cut costs and saves: [`docs/migrations/1193-platform-server-subsystem-assemblies.md`](docs/migrations/1193-platform-server-subsystem-assemblies.md).
+
+  **A namespace names the part (Phase 1198).** Every file a part compiles declares that part's namespace — `ToolUp.Platform.Infra`, `.Config`, `.Scope`, `.Jobs`, `.Audit` — and a file placed in a part other than the one its name says takes the namespace of the part it is PLACED in, so the map from namespace to assembly is a function and the opens a file carries say which assemblies it reaches. The umbrella has two: `ToolUp.Platform.Compose` for the composition root and lifecycle, `ToolUp.Platform.Files` for its five file-management sources. The Remoting part keeps the remoting library's `ToolUp.Remoting.Server` (and `.Giraffe`, `.AspNetCore`), with its one platform-named module under `ToolUp.Remoting.Server.Http`; `ToolUp.Platform.Remoting` is a module of the client tier and is not used. A sub-namespace a file had keeps its tail under the part (`ToolUp.Platform.Infra.Metrics`, `ToolUp.Platform.Scope.Teams`). **`ToolUp.Platform.Core` stays flat:** its types cross the wire or are shared with the client tier (GP 10), and a Core type only the server uses is still Core, so Core declares `namespace ToolUp.Platform` throughout and no Core file moves. A file in a part sees Core only through an explicit `open ToolUp.Platform` (F# opens no enclosing namespace on its own) and an earlier part only through its namespace; a new server file opens what it uses. The file-by-file map, the consumer codemod (`dev-scripts/codemod-1198-namespaces.ps1`, the Codemod target's `--phase 1198`) and the opens-map evidence: [`docs/migrations/1198-subsystem-namespaces.md`](docs/migrations/1198-subsystem-namespaces.md).
 - **`Client`** — Fable + Feliz shell with the in-tree ToolUp.Elmish runtime (under `Client/Elmish/`): MVU, sidebar navigation, the app-shell layout, `AuthUIProvider` delegate registry, `NotificationClient` (SSE), `ToastCentre`, `ProcessedDataContext`. Source ships in the nupkg under `fable/`. The AG Grid / AG Charts bindings are no longer part of this tier — Phase 344 promoted them to the standalone `Feliz.AgGrid` / `Feliz.AgCharts` packages, which the tier depends on (the compat re-exports under the old module names were retired in Phase 815). Nor is the `UIToolkit` component set — Phase 307 promoted it, the icon primitives and the typed prop helpers to `ToolUp.Platform.UI`, which the tier likewise depends on; there every namespace is preserved, so no re-export was needed.
 - **`UI`** — the toolkit `ToolUp.Platform.Client` composes and re-exposes: `Toolup.UIToolkit.*` (design tokens, typography, form controls, tabular + KPI views, empty / error / loading state views), `ToolUp.Platform.{Icon,Icons}`, and the `{Svg,Data,Aria}Prop` typed `prop.custom` helpers. Depends on `Platform.Core` only, so a consumer can take the components without the SDK client tier. `Layout.fs` — the shell composition half of the same namespace — deliberately stayed in `Client`.
 - **`Build`** — FAKE pipeline targets (`Run` / `Bundle` / `Format` / `Pack` / `ThirdPartyNotices`).
 
 ### `ToolUp.AI` — AI assistant companion
 
-Agent loop, SSE streaming, conversation persistence, tool registry, system-prompt composition (platform + team + module layers), `composeWithAI`. Built on `IAIProvider` (extension point in `Platform.Core`).
+Agent loop, SSE streaming, conversation persistence, tool registry, system-prompt composition (platform + team + module layers), `AICompose.withAI`. Built on `IAIProvider` (extension point in `Platform.Core`).
 
 `AIAssistantMode` DU (in `ToolUp.AI.Core/Shared/AITypes.fs`):
 - `NoAIAssistant` — no AI module or side panel (default)
 - `DefaultAIAssistant` — built-in AI module with SDK defaults
 - `ConfiguredAIAssistant of AIAssistantBranding` — built-in AI module with custom branding
 
-Apps wanting AI call `AIServerApp.run` (from `ToolUp.AI.Server/Server/AICompose.fs`); apps without AI use `ServerApp.run` directly. `AIServerApp` is a flat superset of `ServerApp` — same fluent shape, AI-specific helpers added.
+Apps wanting AI compose the companion onto their `ServerApp`: `app |> AICompose.withAI (AIOptions.create factory providerProfile |> AIOptions.withAIConfig …) |> ServerApp.run` (`ToolUp.AI.Server/Server/AICompose.fs`). `AIOptions` holds the AI tier's own settings; the tier is composed when the deployment resolves, so every `ServerApp` builder works on either side of `withAI`.
 
 ### `ToolUp.RAG` — retrieval-augmented generation
 
-Chunking, vector store, retrieval pipeline, ingestion + reembedding background services, `RAGPromptBuilder`, `composeWithRAG`. Built on `IEmbeddingProvider` + `IVectorStore` + `IRetrievalPipeline` extension points (in `Platform.Server`).
+Chunking, vector store, retrieval pipeline, ingestion + reembedding background services, `RAGPromptBuilder`, `RAGCompose.withRAG`. Built on `IEmbeddingProvider` + `IVectorStore` + `IRetrievalPipeline` extension points (in `Platform.Server`).
 
-Apps wanting RAG call `RAGServerApp.run` (from `ToolUp.RAG.Server/Server/RAGCompose.fs`); `RAGServerApp` is a flat superset of `AIServerApp`. Per-deployment tuning via `withTopK` / `withMinScore` / `withMergeStrategy` / `withSnippetCharLimit` / `withOriginFilter` / `withGroundingMode` / `withIngestionConcurrency` / `withIngestionQueueCapacity` / `withTelemetry`.
+Apps wanting RAG compose `app |> RAGCompose.withRAG (RagOptions.create factory providerProfile embedder |> …) |> ServerApp.run` (`ToolUp.RAG.Server/Server/RAGCompose.fs`); RAG composes the AI tier itself (`RagOptions.AI`), so such a deployment does not also call `withAI`. Per-deployment tuning via `RagOptions` `withTopK` / `withMinScore` / `withMergeStrategy` / `withSnippetCharLimit` / `withOriginFilter` / `withGroundingMode` / `withIngestionConcurrency` / `withIngestionQueueCapacity` / `withTelemetry`.
 
 ### `ToolUp.KnowledgeBase` — document KB
 
 User-facing canonical consumer of `ToolUp.RAG`: document upload, multi-format extraction (PDF / PPTX / DOCX / XLSX / CSV), ingestion-status surfacing, narrative-commit, notes, AI-context. Three integration contracts external KB replacements must honour:
 1. NarrativeCommit handler — call `Toolup.NarrativeCommit.install` with a submit handler
-2. `IIngestionStatusObserver` — wired explicitly into `composeWithRAG`
+2. `IIngestionStatusObserver` — wired explicitly with `RagOptions.withIngestionObserver`
 3. Notification-key contract — `"KnowledgeBase.IngestionStatus"` is the published wire format the AI side panel subscribes to.
 
 ### `ToolUp.Forms` — schema-driven forms
 
-`FormSchema` / `Submission` / `WorkflowDefinition` / `FormError` types, validation engine, workflow engine, `FormsServerApp` composition. Supports publishable surveys (`FormVisibility.Publishable`) via the SDK's `IShareTokenStore` substrate (HMAC-SHA256-signed tokens, blob-backed claim store, per-token rate-limit partition).
+`FormSchema` / `Submission` / `WorkflowDefinition` / `FormError` types, validation engine, workflow engine, `FormsCompose.withForms` (a companion taking `FormsOptions`). Supports publishable surveys (`FormVisibility.Publishable`) via the SDK's `IShareTokenStore` substrate (HMAC-SHA256-signed tokens, blob-backed claim store, per-token rate-limit partition).
 
 Public-form surface adds `IPublicFormApi` (token-gated submit at `/api/public/forms/`), `PublicEmbed` (`/r/{token}` standalone Feliz component), `SurveyDashboardView` / `SurveyListView`.
 
@@ -144,7 +159,7 @@ Test pack: `src/ToolUp.Stripe.Tests` (Expecto; wired into `dotnet run -- VerifyA
 
 Opt-in, server-only companion that lets one deployment call a **typed contract** hosted by another ToolUp deployment (a *peer*) over the wire. A contract is an ordinary record of functions (same shape ToolUp.Remoting uses for in-deployment APIs); the substrate produces a typed initiator proxy (`JsonRpcPeerClient.create<'TApi>`) on the caller and a fail-closed JSON-RPC 2.0 host (`JsonRpcPeerHost.contract` + `routes`) on the receiver. Wire format is **JSON-RPC 2.0 over HTTP** — a deliberately open, language-neutral peer contract, *not* the in-tree ToolUp.Remoting transport. Two method shapes: immediate (`… -> Async<'T>`) and long-running (`… -> Async<PeerJobHandle<'T>>`, fused onto `IJobScheduler`). Identity rides a fail-closed HS256 JWT layer (`JwtPeerAuthProvider`, keys read per-call from `ISecretStore`); the receiver rebuilds the call context from the *validated* principal, never the self-asserted wire body.
 
-Selected by `ServerConfig.PeerSubstrate = EnabledPeerSubstrate` (default `NoPeerSubstrate`). Compose with `PeerServerApp.run` (the `PeerCompose` companion root), which wraps a base `ServerApp`, registers the peer DI singletons from already-present substrate (`IBlobStorage` / `ISecretStore` / optionally `IJobScheduler` / `IAuditLog`), and mounts `/peer/v1/*`. When `NoPeerSubstrate`, `run` short-circuits byte-for-byte to `ServerApp.run` — zero cost when unused (GP 13). See [`src/InterPlatform/README.md`](src/InterPlatform/README.md) + [`TECHNICAL_GUIDE.md`](src/InterPlatform/TECHNICAL_GUIDE.md).
+Selected by `ServerConfig.PeerSubstrate = EnabledPeerSubstrate` (default `NoPeerSubstrate`). Compose with `PeerCompose.withPeer` (a companion taking `PeerOptions`), which registers the peer DI singletons from already-present substrate (`IBlobStorage` / `ISecretStore` / optionally `IJobScheduler` / `IAuditLog`) and mounts `/peer/v1/*` when the deployment resolves. When `NoPeerSubstrate`, the companion contributes nothing — zero cost when unused (GP 13). See [`src/InterPlatform/README.md`](src/InterPlatform/README.md) + [`TECHNICAL_GUIDE.md`](src/InterPlatform/TECHNICAL_GUIDE.md).
 
 ## Guiding Principles
 
@@ -297,16 +312,30 @@ When adding a new store substrate (an `IXxxStore` + its types), the canonical sp
   are Fable-compilable. Register the file in `ToolUp.Platform.Core.fsproj` near `DataObjectTypes.fs`.
 - **Server-only interface + default impl → `src/ToolUp.Platform.Server/Server/IXxxStore.fs` +
   `XxxStore.fs`** (canonical precedent: `IDataObjectStore` — types in Core, interface in Server).
+  **Register both in the `ToolUp.Platform.Server.Infra` part's `.fsproj`** (Phase 1193), beside
+  `IDataObjectStore.fs` / `DataObjectStore.fs`: a persistence substrate is Infra. Only when the store's
+  interface or default needs a later subsystem does it go there instead — the earliest part that
+  holds everything it uses (a store that audits its writes goes in `Audit`, one that schedules
+  jobs in `Jobs`). The compile order enforces it: a file placed in a part before one it uses does
+  not compile. Its `Contribution` and any `ServerApp` builder stay in the umbrella
+  (`ToolUp.Platform.Server.fsproj`), which is where the composition root lives.
 - **Crypto-addressed / server-only-compute types stay in Server** — e.g. SHA-256-addressed envelope
   types use `System.Security.Cryptography`, which is not Fable-compilable, and belong in
   `Platform.Server/Server/` even though "types" usually go to Core.
-- **Opt-in wiring (GP 13):** an `XxxStoreMode` DU + a `ServerConfig.Xxx` field defaulting to `NoXxx`
-  (the DU under `Shared/Config/`, the field in `SDK.Shared.fs`, its default in
-  `Shared/Config/ServerConfigDefaults.fs`, any env binding in the server tier's
-  `Server/Config/ServerConfigFromEnv.fs`); a `registerXxxStore` helper in `Server/Compose/ComposeStores.fs`
-  (`TryAddSingleton` with a lazy factory); called from `Server/SDK.Server.fs` next to
-  `registerTimeSeriesStore`. Note a new `ServerConfig` field retypes the record ctor and forces a
-  Core api-baseline regen (see [Public-API approval baselines](#public-api-approval-baselines-phase-175)).
+- **Opt-in wiring (GP 13) — one `FeatureMode` field, one `ConfigKey`, one `Contribution` (Phase 877).**
+  A store is on or off, and that fact has one type: `Xxx: FeatureMode` (default `FeatureMode.Disabled`)
+  on the concern record it belongs to — `Stores` for a persistence substrate, the top level for a
+  subsystem composed over the stores — with its default in that concern's `defaults` in
+  `Shared/Config/ServerConfigDefaults.fs`. Its environment key is a `ConfigKey` in `ConfigKeys.keys`
+  (the binder in `Server/Config/ServerConfigFromEnv.fs` reads it with `enabledDisabled` and takes
+  parser, default and direction from the entry; nothing else is written for the key). Its wiring is
+  a `Contribution` under the store's `ComponentId` (`Contribution.service owner register`, admitted
+  when the field is `Enabled`), not a `registerXxxStore` helper called from `SDK.Server.fs`. Never
+  mint an `XxxStoreMode` union for an on/off store: the forty that existed were one boolean shape
+  with forty parsers, and Phase 877 deleted them. A mode that carries a payload, has a third case, or
+  chooses between substrates keeps its own type. A field added to a concern record retypes only that
+  record's ctor: the Core baseline regenerates, and no downstream baseline moves unless its own
+  public record embeds the concern (see [Public-API approval baselines](#public-api-approval-baselines-phase-175)).
 
 **Vendor dependencies never enter `ToolUp.Platform.*` (GP 1).** `ToolUp.Tabular` carries
 `DocumentFormat.OpenXml` for its XLSX leg, and its `.fsproj` says so: the vendor dep stays there. Do
@@ -403,11 +432,11 @@ dotnet run -- Format                # fantomas
 dotnet run -- ThirdPartyNotices     # regenerate THIRD_PARTY_NOTICES.md
 ```
 
-**Do not run `dotnet test` against the solution or these projects.** They are Expecto console runners (`<OutputType>Exe</OutputType>` + a `Program.fs` entry point), so `dotnet test` exits 0 having run nothing — a silent false-green. Each runner exits non-zero on failure; the real non-breakage gate is a full `dotnet build ToolUp.Forge.sln` (catches cross-companion breakage that per-project builds miss) plus every Expecto suite `VerifyAll` runs with 0 failures (`BuildConfig.TestPacks` in `Build.fs` is the authoritative list — **30 packs as of Phase 1096**; this file deliberately does not restate it, having gone stale twice doing so. Every `*.Tests.fsproj` in the solution, or on disk under `src/`, `tests/` or `tools/`, is a row there or a named exclusion with its reason in `gateExclusions` beside it, and the `GateReconcile` leg of `VerifyAll` — in every lane — is red otherwise, so a test project can no longer sit in the solution, build on every push and be run by nothing. `AIProviders` is env-gated — clean on a fresh checkout, asserts live when an API-key env var is set), plus the Fable-tier `AI.Client.Tests` runner (Node's built-in `node:test` against the Fable-transpiled output; runs via the `node --import ./register-loader.mjs --test output/Program.js` invocation shown above). **Since Phase 803 that Fable runner is a LEG of `VerifyAll`** — registered from `Build.fs` through the SDK's `VerifyLeg.register` seam and run after the packs (outside the `pure` lane), so `verify.ps1` cannot go green on a tree whose client tier does not transpile. It reports as `PASS — Fable` in the same summary block, which is why CI's `EXPECTED_PACKS` floor (34 since Phase 1096) counts legs as well as packs. **Since Phase 904 a second leg sits beside it, `Samples`** (`VerifySamples`): it builds every `*.fsproj` under `samples/` one at a time, asserts the count built against an independent enumeration of the directory (a deliberately skipped sample is named, with its reason, in `SampleGate.excluded`), and — in the full lane only, about ten minutes for the six Fable samples — transpiles the Fable ones too. The fast lane still builds every sample. **Since Phase 776 a third leg, `Analyzers`** (`VerifyAnalyzers`), runs the `ToolUp.Remoting.Analyzers` TUA rules over every tracked `src/**/*.fs` and reconciles the sites with the committed inventory `src/ToolUp.Remoting.Analyzers/analyzer-inventory.json` (a new site, a count the tree no longer needs, a stale exclusion or a hand-edited `docs/platform/analyzer-rules.md` is red); about six seconds, so it runs in `fast` as well as `full`.
+**Do not run `dotnet test` against the solution or these projects.** They are Expecto console runners (`<OutputType>Exe</OutputType>` + a `Program.fs` entry point), so `dotnet test` exits 0 having run nothing — a silent false-green. Each runner exits non-zero on failure; the real non-breakage gate is a full `dotnet build ToolUp.Forge.sln` (catches cross-companion breakage that per-project builds miss) plus every Expecto suite `VerifyAll` runs with 0 failures (`GateManifest.rows` in `GateManifest.fs` is the one list — every pack, leg and CI-only check is a row there, and `BuildConfig.TestPacks` is derived from the `Local` pack rows; this file deliberately does not restate the count, having gone stale twice doing so. Every `*.Tests.fsproj` in the solution, or on disk under `src/`, `tests/` or `tools/`, is a pack row there or a named exclusion with its reason in `GateManifest.exclusions` beside it, and the `GateReconcile` row of `VerifyAll` — in every lane — is red otherwise, so a test project can no longer sit in the solution, build on every push and be run by nothing. `AIProviders` is env-gated — clean on a fresh checkout, asserts live when an API-key env var is set), plus the Fable-tier `AI.Client.Tests` runner (Node's built-in `node:test` against the Fable-transpiled output; runs via the `node --import ./register-loader.mjs --test output/Program.js` invocation shown above). **Since Phase 803 that Fable runner is a LEG of `VerifyAll`** — a `Body` row of the gate manifest, run after the packs (outside the `pure` lane), so `verify.ps1` cannot go green on a tree whose client tier does not transpile. It reports as `PASS — Fable` in the same summary block, which is why CI's `EXPECTED_PACKS` floor, rendered from the manifest, counts legs as well as packs. **Since Phase 904 a second leg sits beside it, `Samples`** (`VerifySamples`): it builds every `*.fsproj` under `samples/` one at a time, asserts the count built against an independent enumeration of the directory (a deliberately skipped sample is named, with its reason, in `SampleGate.excluded`), and — in the full lane only, about ten minutes for the six Fable samples — transpiles the Fable ones too. The fast lane still builds every sample. **Since Phase 776 a third leg, `Analyzers`** (`VerifyAnalyzers`), runs the `ToolUp.Remoting.Analyzers` TUA rules over every tracked `src/**/*.fs` and reconciles the sites with the committed inventory `src/ToolUp.Remoting.Analyzers/analyzer-inventory.json` (a new site, a count the tree no longer needs, a stale exclusion or a hand-edited `docs/platform/analyzer-rules.md` is red); about six seconds, so it runs in `fast` as well as `full`.
 
-**Shortcut for the full Expecto matrix**: `dotnet run --project Build.fsproj -- VerifyAll` runs every pack in `BuildConfig.TestPacks` sequentially (the authoritative list in `Build.fs`) with a per-pack summary at the end — the canonical "run everything" invocation. Each per-pack `dotnet run --project` shown above is still the right shape for iteration on one pack.
+**Shortcut for the full Expecto matrix**: `dotnet run --project Build.fsproj -- VerifyAll` runs every `Local` pack row of the gate manifest sequentially, then its legs, with a per-row summary at the end — the canonical "run everything" invocation. Each per-pack `dotnet run --project` shown above is still the right shape for iteration on one pack.
 
-**Gate lanes — `TOOLUP_TEST_LANE` (Phase 762).** The full gate is tens of minutes — every pack plus the legs, the `Samples` leg (Phase 904) among them — and `VerifyAll` prints the measured figure itself once Phase 1098 lands, so this file states none. A dispatched worker has to spend it twice: once to learn whether its own change is green, once on the folded tree. Set `TOOLUP_TEST_LANE` to spend minutes on the first and the full gate only on the second.
+**Gate lanes — `TOOLUP_TEST_LANE` (Phase 762).** The full gate is tens of minutes — every pack plus the legs, the `Samples` leg (Phase 904) among them — and `VerifyAll` prints the measured figure at the end of every run (`dotnet run --project Build.fsproj -- GateTimings` folds the runs recorded in `.git/fuaran-gate/verify-runs.jsonl` into per-lane and per-row medians), so this file states none. A dispatched worker has to spend it twice: once to learn whether its own change is green, once on the folded tree. Set `TOOLUP_TEST_LANE` to spend minutes on the first and the full gate only on the second.
 
 ```powershell
 pwsh ./verify.ps1                                     # full (unset) — the pre-phase gate, unchanged
@@ -431,9 +460,9 @@ The lane filter is applied **after** the Phase 722 registration guard, not befor
 
 **Shortcut for the Fable tier**: `dotnet run --project Build.fsproj -- VerifyFable` (Phase 614) runs the client-tier harness end to end — `dotnet tool restore`, `npm ci`, `dotnet fable -o output --noCache`, then `node --test` over the transpiled output. It asserts the TAP **pass / fail counts**, not just the exit status, because `node --test` exits 0 when it matched no test file at all; a harness that stopped emitting cases is otherwise indistinguishable from a green run. The floor is a lower bound (currently 100 against 258 shipped cases), so adding a case never needs an edit here. The same recipe is the body of the `Fable` leg `VerifyAll` runs (Phase 803) — the target is the shortcut for iterating on that tier alone; the leg is what makes the canonical gate cover it.
 
-**Shortcut for the template content**: `dotnet run --project Build.fsproj -- VerifyTemplates` compiles the `dotnet new` scaffolds under `templates/`. It packs the package closure the templates reference (`ToolUp.Platform.{Core,Client,Server,Transport}` + `ToolUp.AI.Wire` + `ToolUp.Graph.{InMemory,Core}`, plus the `ToolUp.Feliz.*` bindings — `templateGatePackages` in `Build.fs` is the authoritative list) at a throwaway `0.0.0-templategate` version into a scratch feed, then builds each template against it.
+**Shortcut for the template content**: `dotnet run --project Build.fsproj -- VerifyTemplates` compiles the `dotnet new` scaffolds under `templates/`. It packs the package closure the templates reference (`ToolUp.Platform.{Core,Client,Server,Transport}` and the six `ToolUp.Platform.Server.*` parts + `ToolUp.AI.Wire` + `ToolUp.Graph.{InMemory,Core}`, plus the `ToolUp.Feliz.*` bindings — `TemplateGatePackages.templates` in `TemplateGatePackages.fs` is the authoritative list) at a throwaway `0.0.0-templategate` version into a scratch feed, then builds each template against it.
 
-The throwaway version is load-bearing, not cosmetic: packing at `$(ToolUpSdkVersion)` would be a same-version repack, and NuGet would resolve from the already-extracted global-packages entry — so the gate would compile the templates against **whatever was packed last** rather than current source. The target wipes those cache entries first. NU1603 is escalated to an error for the same reason: it fires when a gate-versioned package declares a `ToolUp.*` dependency that was not packed at the gate version, and NuGet then silently falls back to an older feed version. **Adding an SDK→SDK dependency therefore fails this gate by name** until the package is added to `templateGatePackages` in `Build.fs`.
+The throwaway version is load-bearing, not cosmetic: packing at `$(ToolUpSdkVersion)` would be a same-version repack, and NuGet would resolve from the already-extracted global-packages entry — so the gate would compile the templates against **whatever was packed last** rather than current source. The target wipes those cache entries first. NU1603 is escalated to an error for the same reason: it fires when a gate-versioned package declares a `ToolUp.*` dependency that was not packed at the gate version, and NuGet then silently falls back to an older feed version. **Adding an SDK→SDK dependency therefore fails this gate by name** until the package is added to `TemplateGatePackages.templates` in `TemplateGatePackages.fs`.
 
 `templates/safer/` and `templates/platformsdk-solution/` are deliberately **not** covered — they are standalone solutions carrying their own `nuget.config` (a `../local-nuget-feed` path resolved relative to the consumer's instantiated location) and, in `safer`'s case, a literal `TOOLUP_SDK_VERSION` placeholder substituted at instantiation. Neither is buildable in-repo without rewriting what makes it a template; gating them needs an instantiate-then-build harness.
 
@@ -442,30 +471,34 @@ The throwaway version is load-bearing, not cosmetic: packing at `$(ToolUpSdkVers
 Three things it checks that a build alone would not:
 
 - **The vendored contract pack has not drifted.** The template's test project copies the laws region of `src/ToolUp.Platform.Tests/Contracts/ModuleContract.fs`, because that project is `IsPackable=false` and copying is the documented adoption route for every SDK contract pack. A copy drifts silently by construction, and this one ships to consumers as "born conformant", so it is compared against its source (up to the `// ── a conforming reference module` boundary — the self-test half stays SDK-side).
-- **Every `ToolUp.*` resolved at the gate version.** The equivalent of `VerifyTemplates`' NU1603 escalation, read off the scaffold's `project.assets.json` rather than passed as a warning flag — the scaffold runs its own build driver, so there is nowhere to inject one. A stray version means `packagedModuleTemplateGatePackages` is missing a package and the scaffold compiled against a MIX of current source and a released SDK.
+- **Every `ToolUp.*` resolved at the gate version.** The equivalent of `VerifyTemplates`' NU1603 escalation, read off the scaffold's `project.assets.json` rather than passed as a warning flag — the scaffold runs its own build driver, so there is nowhere to inject one. A stray version means `TemplateGatePackages.packagedModule` is missing a package and the scaffold compiled against a MIX of current source and a released SDK.
 - **The produced nupkg's `fable/` layout**, which is the half a pre-`Pack` declaration check structurally cannot prove: the shadow project, the four client sources and the icon asset are present, and `Server.fs` is not.
 
 Adding an SDK→SDK dependency reachable from the packaged-module template therefore fails this gate by name, exactly as it does the other one. All three checks were demonstrated red before landing — a drifted vendored copy, a client file dropped from the shadow project, and a client id pinned away from the server's — each naming its own law.
 
 ### What CI actually gates (Phase 614)
 
-Written down here so the next reader does not have to re-derive it from `.github/workflows/checks.yml` — three phases in one batch had to. **Read the "gates?" column, not the job list**: a job existing is not the same as a job gating.
+**The table below is GENERATED** from the gate manifest — `GateManifest.rows` in `GateManifest.fs`, each row's `Where` saying which `checks.yml` job runs it — by `dotnet run --project Build.fsproj -- Gate --render`, and held byte-for-byte by `GateManifestTests`; `Gate --check` refuses a drift. Edit the rows, never the table. **Read the "Gates?" column, not the job list**: a job existing is not the same as a job gating. `Reads` is the union of the rows' declared inputs; a job's rows that read nothing are the `pure` lane's members.
 
-| Job | Checks | Gates? |
-|---|---|---|
-| `spdx-headers` | Apache-2.0 SPDX header on every Fable-packed source file | yes |
-| `fantomas` | `dotnet fantomas --check .` over the repo | yes |
-| `dco` | `Signed-off-by:` on every commit in a PR | PR only |
-| `fable-wire-smoke` | `ToolUp.Platform.Transport` and `ToolUp.AI.Wire` compile + round-trip on both the .NET and Fable hosts | yes |
-| `ai-wire-conformance` | the connector mappers produce identical output across both hosts, over one corpus | yes |
-| **`fable-tier`** | the **client-tier `node:test` harness** (131 cases, every Sidebar pack) via `VerifyFable` | **yes** |
-| **`verify-all`** | `dotnet build ToolUp.Forge.sln` then **every `BuildConfig.TestPacks` pack** via `VerifyAll`, plus its registered legs — since Phase 803 the Fable-tier harness again, as the last leg | **yes** |
-| `doc-snippets` | every in-scope `fsharp` block under `docs/**` compiles, via `VerifyDocSnippets` | yes |
-| `source-citations` | every backticked API name in a comment resolves, via `VerifySourceCitations`; and (Phase 863) no production line under `src/` discards the `Result` of a blob `Upload` / `UploadWithETag` unless it carries a `// best-effort-write: <why>` marker, via `VerifyUploadResults` | yes |
-| `cloud-parity` | the `ToolUp.Cloud.Parity.Tests` pack with the Azurite emulator leg armed | yes |
-| **`templates`** | the **`dotnet new` scaffolds under `templates/`** compile, via `VerifyTemplates`; the packaged-module template scaffolds, builds, passes both conformance layers and packs, via `VerifyPackagedModuleTemplate`; and the data-platform template scaffolds, builds and passes its tests, via `VerifyDataPlatformTemplate` (Phase 1036) | **yes** |
-| **`browser-smoke`** | eight real-browser scenarios via `VerifyBrowserSmoke` — and, as the compile that gets them there, **the only CI transpilation of `ToolUp.Offline.Client`** | **yes** |
-| `perf-budget` | every block of the committed `perf-budgets.json`, via `dev-scripts/perf-budget-gate.ps1 -TeethCheck`: the minimal shape's cold start + hot path; the **client** budgets (Phase 849) — boot, decode per response and view per dispatch under Node, plus the **production bundle sizes** of the minimal client sample and the SDK shell (Phase 909); and the fact and retrieval paths under concurrent **load** (Phase 886) | runs; **not yet a required check** |
+<!-- gate-manifest:ci-table:begin -->
+| Job | Rows of the gate manifest it runs | Reads | Gates? |
+|---|---|---|---|
+| `spdx-headers` | — (CI-only: a shell lint over the Fable-packed sources' headers; no driver target) | — | yes |
+| `fantomas` | — (CI-only: the formatter's own `--check`, which `verify.ps1` also runs) | — | yes |
+| `dco` | — (CI-only: a commit-message lint; PR only, since direct-to-main is this repo's integration path) | — | PR only |
+| `fable-wire-smoke` | WireTests, WireFable | Tree, Node | yes |
+| `ai-wire-conformance` | WireConformance, WireConformanceFable | Tree, Node | yes |
+| `verify-all` | 39 rows, every `Local` row of the full lane: Platform, Forms, Scheduling, AIProviders, Stripe, Build, RemotingAnalyzers, Cli, Voice, AICookbooks, Algorithms, AlgorithmProviders, CloudParity, ArtefactSigning, ReportingDocx, ReportingXlsx, DataSources, OpenXml, OpenXmlSpreadsheet, AssetStore, SvgRasterizerSkia, Reporting, Offline, CompanionsIsolation, AIEvaluation, TriageCalibration, Tabular, Classification, DataSubject, ReportingHtmlPdf, GateReconcile, Fable, Samples, Analyzers, ScopeLiterals, ServiceConfigFold, FuaranCoResolution, FuaranCoBuild, MergeDrivers | Tree, Git, Docker, Network, Browser, Node, 104 env var(s) | yes |
+| `cloud-parity` | CloudParity | Tree, Docker, 8 env var(s) | yes |
+| `fable-tier` | Fable | Tree, Node | yes |
+| `doc-snippets` | DocSnippets | Tree | yes |
+| `source-citations` | SourceCitations, UploadResults | Tree | yes |
+| `templates` | Templates, PackagedModuleTemplate, DataPlatformTemplate | Tree, Network | yes |
+| `browser-smoke` | BrowserSmoke | Tree, Node, Browser | yes |
+| `perf-budget` | PerfBudget | Tree, Node | runs; not yet a required check |
+<!-- gate-manifest:ci-table:end -->
+
+**A new gate is a row.** The places that used to restate the list of what the gate runs — `BuildConfig.TestPacks`, the pure-lane set, the `VerifyLeg.register` sites, CI's `EXPECTED_PACKS`, this table, `VerifyGate`'s gated targets and stale-holder bound, the scrubbed-environment allowlist each pack is launched under, and the trailer `VerifyAll` prints naming the CI-only rows it did not run — are renders of `GateManifest.rows`. A row names its project, body or script, its lanes, where it runs (`Local` under `VerifyAll`; `Ci <job>`; `Release`), what it reads (`Tree`, `Git`, `Node`, `Browser`, `Docker`, `Network`, `Env <name>` — the `pure` lane is the pack rows with `Reads = []`, held by the grep `PureLaneTests` re-runs), its measured `Budget` and its `Floor` (`AtLeast` / `Exactly` a case count, a `HighWater` file, or `FromRegistry proofs.json`). Every leg returns a `Verdict` — `Pass cases`, `Fail reason`, or `Pending reason` for an arm its named input gates — and `Aggregate` prints the summary block from them: a `PENDING` line is counted in neither `PASS` nor `FAIL`. `dotnet run -- Gate --run <row>` runs one row on its own, which is how the CI-only jobs invoke theirs.
 
 Everything marked "yes" runs on every push to `main` and every PR against it. `dco` is PR-only because direct-to-main is this repo's normal integration path, so signed-off discipline there relies on the local commit template. `perf-budget` likewise runs on every push and PR but is not in the branch-protection rule yet — the state the seven test gates were in before 2026-09-12; see [`CONTRIBUTING.md`](CONTRIBUTING.md#required-checks-on-main-maintainer-setup).
 
@@ -483,7 +516,7 @@ Everything marked "yes" runs on every push to `main` and every PR against it. `d
 
 Both test gates were local-only until Phase 614. `fable-tier` was demonstrated red on a scratch branch against a deliberately broken `node:test` case before landing, because an unproven CI gate is precisely the failure mode it exists to prevent. `verify-all` shipped dispatch-only because the .NET suite turned out **not to be green on Linux**; Phase 617 fixed the four blockers and promoted it. Neither was ever made green by excluding packs or swallowing exit codes — that trades a gate for a tick.
 
-Both jobs are written so they **cannot pass vacuously**. `verify-all` parses the `VerifyAll summary:` block and fails unless at least `EXPECTED_PACKS` packs report `PASS` (the floor **tracks the shipped pack count** — raised 12→14 at Phase 731 and 14→19 on 2026-08-27, each time after a lag had left the newest packs able to vanish silently; it is a LOWER bound, so an unbumped floor never goes red, which is exactly why **adding a pack should bump it in the same commit** — and a leg registered through `VerifyLeg.register` counts the same way, since it is one more `PASS` line in the block: 24→25 at Phase 803 for the Fable leg, 25→27 on 2026-09-27 for the `AIEvaluation` (Phase 514) and `TriageCalibration` (Phase 663) packs, 27→28 at Phase 904 for the `Samples` leg, 28→29 at Phase 776 for the `Analyzers` leg, 29→34 at Phase 1096 for the four formerly-unrun packs and the `GateReconcile` leg) — the target legitimately exits 0 with an empty `BuildConfig.TestPacks`, which would otherwise read as green. `VerifyFable` fails unless the TAP summary exists and clears its case floor, because `node --test` exits 0 when it matched no test file at all.
+Both jobs are written so they **cannot pass vacuously**. `verify-all` parses the `VerifyAll summary:` block and fails unless at least `EXPECTED_PACKS` packs report `PASS` (the floor is **rendered from the gate manifest**: `EXPECTED_PACKS` is `Gate.ciFloor`, the count of rows whose `Where` carries `Ci "verify-all"` — a leg counts the same way as a pack, since it is one more `PASS` line in the block — and `dotnet run -- Gate --check` refuses a drift between the two while `Gate --render` writes it, so a new row moves the floor without a hand count) — the target legitimately exits 0 with an empty `BuildConfig.TestPacks`, which would otherwise read as green. `VerifyFable` fails unless the TAP summary exists and clears its case floor, because `node --test` exits 0 when it matched no test file at all.
 
 #### Two traps the Linux gate exposed (Phase 617)
 
@@ -504,7 +537,7 @@ New code cites no phase in a source comment: the phase's recorded outcome is the
 
 ### Fast iteration
 
-`dotnet build ToolUp.Forge.sln` evaluates ~50 fsprojs (~1.5–6 minutes); a one-shot Fable compile is similarly expensive. Use:
+`dotnet build ToolUp.Forge.sln` compiles every project in the solution. This file states no count and no duration, having gone stale doing so: [`build-census.json`](build-census.json) records each project's build seconds, lines, fan-in and fan-out, and the clean build's wall clock, for the machine and tree that measured it (regenerate with `dotnet run --project Build.fsproj -- Census`; see [`docs/platform/testing-conventions.md`](docs/platform/testing-conventions.md#the-build-census-what-each-project-costs-to-build)). A one-shot Fable compile is similarly expensive. Use:
 
 ```bash
 # Targeted fsproj build
@@ -515,6 +548,21 @@ dotnet watch build --project src/ToolUp.Platform.Server/
 ```
 
 Full-sln verification is for end-of-task / pre-commit, not per-edit.
+
+**Compiler levers: what an incremental build recompiles.** `Directory.Build.props` declares `ProduceReferenceAssembly`
+on. It is also the SDK default, and the declaration keeps it on. A dependant compiles against the reference assembly,
+so an edit that leaves a project's public surface unchanged recompiles only that project. An internal edit to
+`ToolUp.Platform.Server` rebuilds 2 projects instead of 129. A public change still rebuilds every dependant, and the
+approval gate still renders the implementation DLLs in `bin/`. **One gap: F#'s reference assembly does not change when
+a `[<Literal>]` is added or its value changes.** After touching a literal, build its dependants clean
+(`--no-incremental`), or an incremental build keeps the old value. **The same gap, measured by Phase 1193: the
+reference assembly's identity also stays put when an `InternalsVisibleTo` is added, or when a type its surface names
+moves to another assembly.** The copy into `obj/<config>/<tfm>/ref/` is skipped, and a dependant goes on compiling
+against the stale copy. The symptoms are an internal that is "not accessible" or a nonsense type error in a project
+whose source did not change. Build clean once after such a change. `ParallelCompilation` is deliberately unset: measured
+here it slowed both bottleneck projects, and the compiler marks it test-only (FS0075). `ToolUp.Platform.Build.Tests`
+(`CompilerLeversTests.fs`) holds both decisions. The tables and the re-measure rule are in
+[`docs/migrations/1195-compiler-levers.md`](docs/migrations/1195-compiler-levers.md).
 
 ## Build verification
 
@@ -609,11 +657,17 @@ touches public surface:
   author the sibling's baseline.
 - **A failing baseline names an assembly, not a cause** — confirm attribution with `git log -- <source
   files>` before writing it into a commit message.
-- **Design corollary:** a new opt-in feature that would widen a shared record's ctor can instead
-  ship as a NEW options record + NEW builder entry points — existing builders delegate with a
-  behaviour-preserving default (GP 11). Since Phase 618 the new surface still needs its assemblies'
-  baselines regenerated (additions are a named, surgical regen rather than a silent pass), but the
-  existing types' baselines stay untouched and no consumer breaks.
+- **Design corollary (ruled 2026-10-23, landed by Phase 877):** a new opt-in is a `FeatureMode` key on
+  the concern record it belongs to (`ServerConfig.Stores`, `Observability`, `SecurityPosture`,
+  `MultiInstance`, `RiskAcknowledgements`, or the top level for a subsystem) plus its `ConfigKey` in
+  the registry and, where it registers anything, a `Contribution`. It widens that one concern
+  record's ctor, so the Core baseline regenerates by name and nothing downstream does unless its own
+  public record embeds the concern. The older escape — a NEW options record + NEW builder entry
+  points so an existing shared record's ctor never widens — is still right for a feature that needs
+  more than a toggle (a payload, several knobs), with existing builders delegating under a
+  behaviour-preserving default (GP 11); it is not a reason to keep a toggle out of its concern record.
+  Since Phase 618 any new surface needs its assemblies' baselines regenerated (additions are a named,
+  surgical regen rather than a silent pass), and the existing types' baselines stay untouched.
 - **Marking a member `[<Obsolete>]` moves the baseline, and the notice is gated (Phase 258).** The
   renderer emits a SEPARATE `…  (obsolete)` marker line beside the member's unchanged token, so a
   deprecation scores as an addition (regenerate, commit in the same PR) and never as a removal — the

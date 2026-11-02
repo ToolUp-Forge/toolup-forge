@@ -2,8 +2,10 @@ module ToolUp.Platform.Tests.InProcess.ModuleQueryBusTests
 
 open Expecto
 open ToolUp.Platform
-open ToolUp.Platform.Tracing
+open ToolUp.Platform.Infra.Tracing
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── InMemoryModuleQueryBus — IModuleQueryBus contract binding ───
 //

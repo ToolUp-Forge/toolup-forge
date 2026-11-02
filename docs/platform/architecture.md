@@ -21,7 +21,7 @@ A consuming app has two thin composition roots (server + client) that list modul
 
 ### Server
 
-The server composition root assembles every module as a `ServerModule` record, composes them into an `ServerApp` / `AIServerApp` / `RAGServerApp` pipeline, and calls `.run`.
+The server composition root assembles every module as a `ServerModule` record, composes them into a `ServerApp` pipeline (with `AICompose.withAI` / `RAGCompose.withRAG` adding the AI / RAG companions), and calls `ServerApp.run`.
 
 ```fsharp skip=fragment
 let mySalesModule =
@@ -40,25 +40,33 @@ ServerApp.empty
 
 `ServerApp.run` returns an `int` exit code — slot directly into `[<EntryPoint>]`.
 
-For AI / RAG, use the flat-superset variants:
+For AI / RAG, add the companion to the same pipeline with its `withX` entry point:
 
 ```fsharp skip=fragment
 // + AI
-AIServerApp.create aiProviderFactory providerProfile
-|> AIServerApp.withConfig config
-|> AIServerApp.addModules modules
-|> AIServerApp.run
+ServerApp.empty
+|> ServerApp.withConfig config
+|> ServerApp.addModules modules
+|> AICompose.withAI (
+    AIOptions.create aiProviderFactory providerProfile
+    |> AIOptions.withAIConfig assistantConfig
+)
+|> ServerApp.run
 
-// + RAG (which wraps AI)
-RAGServerApp.create aiProviderFactory providerProfile embeddingProvider
-|> RAGServerApp.withConfig config
+// + RAG (which composes the AI tier itself — no separate `withAI`)
+ServerApp.empty
+|> ServerApp.withConfig config
 // AI tools ride on the module that owns them — `ServerModule.withAITools`
 // — so they arrive with `addModules`.
-|> RAGServerApp.addModules modules
-|> RAGServerApp.run
+|> ServerApp.addModules modules
+|> RAGCompose.withRAG (
+    RagOptions.create aiProviderFactory providerProfile embeddingProvider
+    |> RagOptions.withTopK 8
+)
+|> ServerApp.run
 ```
 
-`AIServerApp` is a flat superset of `ServerApp` — same fluent shape, AI-specific helpers added. `RAGServerApp` is a flat superset of `AIServerApp`. There's no "compose" magic; each tier adds its own surface.
+`AIOptions` and `RagOptions` are plain options records carrying only their companion's own knobs; the deployment itself (config, auth, storage, modules) stays on the `ServerApp` pipeline. `withAI` / `withRAG` set the companion on the deployment, and the tier is composed once, when the deployment resolves, onto the deployment as every builder left it — so any `ServerApp` builder works on either side of them.
 
 ### Client
 
@@ -117,8 +125,8 @@ The Elmish shell handles sidebar navigation, module state management, file manag
 - Built-in `Data Manager` module (file upload + per-data-type management) — auto-injected when modules declare data types
 - Built-in `Team Manager` module — auto-injected when `ClientConfig.Surfaces` includes a `Team` profile
 - Built-in `Platform Admin` sidebar group with role-management, health monitoring, and Platform KB administration modules (gated by `PlatformRole`)
-- Built-in `Users` admin module — **opt-in** (default off). Set `ClientConfig.PlatformUsers = DefaultPlatformUsers` to add it to the Platform-Admin sidebar group. It lists every principal the substrate has evidence for (`IPlatformTenantApi.ListPrincipals` — a derived, read-only projection over memberships, `user-*` scopes, and sign-in audit), flags team-less accounts via a filter toggle, and drives the tenant-lifecycle offboard flow (preview → confirm → summary, honouring the offboard-confirmation-token mode) per user against the `user-<id>` scope. The default `NoPlatformUsers` omits it entirely, so an existing deployment is byte-for-byte unchanged; pair with `ServerConfig.TenantLifecycle = EnabledTenantLifecycle` server-side for the per-row offboard actions (the list still renders without it — the actions degrade to an error banner).
-- Built-in `Audit Trail` module — fills the `AuditViewer` shell slot, admitted in any non-Anonymous mode (`ClientConfig.Slots.AuditViewer`; `SlotFill.Empty` removes it). Owner/Admin read surface over the deployment's own audit rows: filter bar, paged table, per-event payload detail, CSV export. Pair with `ServerConfig.AuditLog = EnabledAuditLog` — it renders its "no audit events" state under the default `NoAuditLog`. See [Reading the trail in-app](#reading-the-trail-in-app--auditlogui).
+- Built-in `Users` admin module — **opt-in** (default off). Set `ClientConfig.PlatformUsers = DefaultPlatformUsers` to add it to the Platform-Admin sidebar group. It lists every principal the substrate has evidence for (`IPlatformTenantApi.ListPrincipals` — a derived, read-only projection over memberships, `user-*` scopes, and sign-in audit), flags team-less accounts via a filter toggle, and drives the tenant-lifecycle offboard flow (preview → confirm → summary, honouring the offboard-confirmation-token mode) per user against the `user-<id>` scope. The default `NoPlatformUsers` omits it entirely, so an existing deployment is byte-for-byte unchanged; pair with `ServerConfig.TenantLifecycle = FeatureMode.Enabled` server-side for the per-row offboard actions (the list still renders without it — the actions degrade to an error banner).
+- Built-in `Audit Trail` module — fills the `AuditViewer` shell slot, admitted in any non-Anonymous mode (`ClientConfig.Slots.AuditViewer`; `SlotFill.Empty` removes it). Owner/Admin read surface over the deployment's own audit rows: filter bar, paged table, per-event payload detail, CSV export. Pair with `ServerConfig.AuditLog = FeatureMode.Enabled` — it renders its "no audit events" state under the default `FeatureMode.Disabled`. See [Reading the trail in-app](#reading-the-trail-in-app--auditlogui).
 - Built-in `Composition` module — fills the `CompositionInspector` shell slot, admitted in any non-Anonymous mode (`ClientConfig.Slots.CompositionInspector`; `SlotFill.Empty` removes it). Owner/Admin read surface over what this deployment declared at compose time: five pages (composition manifest / surface descriptors / invariant rules with their preflight verdict / grounding + disclosure envelope / provenance substrate), each exporting its own canonical JSON. No server-side knob to pair — the snapshot is registered by `ServerApp.run`. See [Reading the composition in-app](#reading-the-composition-in-app--compositioninspectorui).
 - Built-in `ToastCentre` — fixed-position toast renderer subscribing to `NotificationClient`
 - Built-in `AI Settings` module — auto-injected when `ClientConfig.Surfaces` includes any non-Anonymous profile
@@ -220,7 +228,7 @@ Two knobs, one on each tier, and they do different jobs:
 
 | Knob | Default | Effect |
 |---|---|---|
-| `ServerConfig.AuditLog` | `NoAuditLog` | The substrate. `NoAuditLog` records nothing, and the viewer's own methods short-circuit to an empty result under it — so a deployment that has switched the trail off is never shown residue recorded before it did. |
+| `ServerConfig.AuditLog` | `FeatureMode.Disabled` | The substrate. `FeatureMode.Disabled` records nothing, and the viewer's own methods short-circuit to an empty result under it — so a deployment that has switched the trail off is never shown residue recorded before it did. |
 | `ClientConfig.Slots.AuditViewer` | `SlotFill.Default` | The module. `SlotFill.Empty` removes the module, its sidebar entry, its routes on the client and every call it would make. `SlotFill.Configured` re-labels it; `SlotFill.External` replaces it (the replacement takes the slot's position and gate — see [Replacing a built-in](modules.md#replacing-a-built-in--shell-slots)). |
 
 The `/api/_platform/audit/*` route is mounted unconditionally, for the same reason `/api/_platform/usage/*` is: a proxy that 404s cannot tell an operator "this deployment keeps no audit trail" from "this deployment is broken", and the module's empty state says the first one plainly. Mounting it costs a route and nothing else — the handler is gated and scope-isolated before it reads anything.
@@ -251,7 +259,7 @@ Two knobs, and they do different jobs:
 
 | Knob | Default | Effect |
 |---|---|---|
-| Composition entry point | — | The snapshot the pages read is registered by `ServerApp.run` (and therefore by `AIServerApp.run` / `RAGServerApp.run`, which delegate to it). A host composed through the lower-level `compose` registers none, and every page then says so plainly rather than rendering an empty composition — which would read as "this deployment composes nothing". |
+| Composition entry point | — | The snapshot the pages read is registered by `ServerApp.run` (which also resolves any `AICompose.withAI` / `RAGCompose.withRAG` companion). A host composed through the lower-level `compose` registers none, and every page then says so plainly rather than rendering an empty composition — which would read as "this deployment composes nothing". |
 | `ClientConfig.Slots.CompositionInspector` | `SlotFill.Default` | The module. `SlotFill.Empty` removes the module, its sidebar entry, its five routes and every call it would make. `SlotFill.Configured` re-labels it; `SlotFill.External` replaces it. |
 
 There is no `ServerConfig` knob, deliberately: the substrate this surface reads is the composition itself, and a deployment cannot compose without one.
@@ -293,7 +301,7 @@ For multi-silo deployments, a distributed companion (Akka.NET / Orleans / Hangfi
 
 ## Data ingestion
 
-Opt in via `ServerConfig.DataIngestion = EnabledDataIngestion`. Substrate:
+Opt in via `ServerConfig.DataIngestion = FeatureMode.Enabled`. Substrate:
 
 - `IDataSource` — connector contract (`Connect` / `ListTables` / `GetSchema` / `Query` over `DataSourceCallContext`).
 - `IDataSourceConfigStore` — per-scope connector configurations (blob-backed default).
@@ -311,7 +319,7 @@ Two shipped key resolvers:
 - `SingleKeyResolver` — one platform-wide key.
 - `PerScopeKeyResolver` — per-tenant; `IMemoryCache` with 5-min sliding TTL; `DestroyKey` for crypto-shred (tenant offboarding for GDPR / contract termination — complete on the serving replica when the call returns, minute-grain replica-fanout time across the fleet via an `INotificationChannel` broadcast).
 
-  **That fanout time is a promise about a WIRED deployment, and the wiring is not automatic.** The broadcast rides whatever `INotificationChannel` is composed; the default in-process channel does not leave the process, so on `ServerConfig.ReplicaCount > 1` with the default channel the destroy is complete on the serving replica and *nowhere else* — every other replica keeps serving the destroyed key from its cache until the 5-minute sliding TTL happens to expire it, which is silent and is precisely the outcome a crypto-shred exists to prevent. A multi-instance deployment therefore composes a distributed channel (the Redis companion is the shipped reference). `PerScopeKeyResolverDistributedValidator` fails preflight on that combination rather than letting it start.
+  **That fanout time is a promise about a WIRED deployment, and the wiring is not automatic.** The broadcast rides whatever `INotificationChannel` is composed; the default in-process channel does not leave the process, so on `ServerConfig.MultiInstance.ReplicaCount > 1` with the default channel the destroy is complete on the serving replica and *nowhere else* — every other replica keeps serving the destroyed key from its cache until the 5-minute sliding TTL happens to expire it, which is silent and is precisely the outcome a crypto-shred exists to prevent. A multi-instance deployment therefore composes a distributed channel (the Redis companion is the shipped reference). `PerScopeKeyResolverDistributedValidator` fails preflight on that combination rather than letting it start.
 
 Custom resolvers (per-`(scopeId, userId)`, BYOK, KMS-backed) plug in against the same interface. Provider-specific preflight validators (`AwsS3EncryptionAtRestValidator`, `AzureBlobEncryptionAtRestValidator`, `GcsEncryptionAtRestValidator`) confirm encryption-at-rest is enabled at the bucket level.
 
@@ -336,7 +344,7 @@ type IHealthCheck =
 
 Companions self-register via `services.AddSingleton<IHealthCheck>(instance)`; deployments wire them via `ServerApp.withHealthCheck`. The shipped companion probes cover Redis, AI providers (Claude / OpenAI), embedding providers, HNSW vector store, storage providers (AWS / Azure / GCS), and notification sinks (SMTP / SendGrid / Twilio / WebPush).
 
-The `HealthStateTracker` (opt-in via `ServerConfig.HealthStateTracking = true`) runs probes on a wall-clock-aligned 1-min tick and emits `HealthStateChanged` audit events after 3 consecutive observations of a new status (single-observation flaps absorbed). Operator surface: the SDK-built-in `HealthMonitorUI` admin module.
+The `HealthStateTracker` (opt-in via `ServerConfig.Observability.HealthStateTracking = true`) runs probes on a wall-clock-aligned 1-min tick and emits `HealthStateChanged` audit events after 3 consecutive observations of a new status (single-observation flaps absorbed). Operator surface: the SDK-built-in `HealthMonitorUI` admin module.
 
 The metrics layer (`IMetricsSink`) emits per-request and SDK-internal metrics. Default `PrometheusMetricsSink` exposes `/metrics` in OpenMetrics text format with per-metric cardinality cap. The OpenTelemetry companion (`ToolUp.Metrics.OpenTelemetry`) implements the same interface over BCL `System.Diagnostics.Metrics.Meter` for OTLP export.
 

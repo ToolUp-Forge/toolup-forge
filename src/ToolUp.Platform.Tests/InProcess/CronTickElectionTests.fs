@@ -8,8 +8,12 @@ open System.Threading.Tasks
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.Tracing
+open ToolUp.Platform.Infra.Tracing
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 766 — the cron tick is a single-leader election ───────────
 //
@@ -202,18 +206,26 @@ let private replicaOver (storage: IBlobStorage) (eventStore: IEventStore) (handl
     let logger = RecordingLogger()
 
     let scheduler =
-        new JobScheduler.InProcessJobScheduler(
-            store,
-            eventStore,
-            silentChannel,
+        JobScheduler.create
+            ({
+                Store = store
+                EventStore = eventStore
+                NotificationChannel = silentChannel
+                Config = {
+                    ServerConfig.defaults with
+                        MultiInstance = {
+                            ServerConfig.defaults.MultiInstance with
+                                ProcessProfile = WorkerOnly
+                        }
+                }
+                Logger = logger
+                ActivitySink = NoOpActivitySink() :> IActivitySink
+            }
+            : JobScheduler.SchedulerDeps)
             {
-                ServerConfig.defaults with
-                    ProcessProfile = WorkerOnly
-            },
-            logger,
-            NoOpActivitySink() :> IActivitySink,
-            distributedLock = lck
-        )
+                JobScheduler.SchedulerOptions.defaults with
+                    DistributedLock = Some lck
+            }
 
     (scheduler :> IJobScheduler).RegisterHandler("election-handler", handler)
 

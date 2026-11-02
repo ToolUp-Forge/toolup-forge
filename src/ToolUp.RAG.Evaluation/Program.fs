@@ -5,7 +5,7 @@ open System.IO
 open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
-open ToolUp.Platform.IRetrievalPipeline
+open ToolUp.Platform.Infra.IRetrievalPipeline
 open ToolUp.RAG.InMemoryVectorStore
 open ToolUp.RAG.InMemoryBM25Index
 open ToolUp.RAG.RetrievalPipeline
@@ -15,6 +15,8 @@ open ToolUp.SparseIndices.Snowball
 open ToolUp.SparseIndices.Cjk
 open ToolUp.SparseIndices.Postgres
 open ToolUp.RAG.Evaluation.EvalTypes
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
 
 // ─── Wiring helpers ───────────────────────────────────────────────
 
@@ -129,7 +131,7 @@ let private buildPipeline
 
     // The smoke fixture is entirely `Platform`-scoped. `authorisedScopes`
     // filters `Platform` out unless the Platform KB is enabled, and the
-    // constructor defaults to `NoPlatformKnowledgeBase` — so without this
+    // constructor defaults to `FeatureMode.Disabled` — so without this
     // the pipeline early-returns `[]` for every query and the harness
     // scores 0.000 (the regression this restores: the eval is a
     // measurement tool, it must enable the KB scope its fixture lives in).
@@ -140,7 +142,7 @@ let private buildPipeline
             embedder = embedder,
             sparseIndex = leg.Index,
             tracer = tracer,
-            platformKnowledgeBase = EnabledPlatformKnowledgeBase
+            platformKnowledgeBase = FeatureMode.Enabled
         )
         :> IRetrievalPipeline,
         leg.Teardown)

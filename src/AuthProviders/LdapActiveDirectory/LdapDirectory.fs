@@ -5,6 +5,7 @@ module ToolUp.AuthProviders.LdapDirectory
 
 open System
 open System.Text
+open ToolUp.Platform.Infra
 
 // ─── Directory seam ──────────────────────────────────────────────────
 //

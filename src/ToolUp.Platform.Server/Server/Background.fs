@@ -12,7 +12,9 @@
 /// work through its async context, with no signature change anywhere below
 /// it — and tracks it until it ends, so `StopAsync` can wait for it within
 /// the host's shutdown window.
-module ToolUp.Platform.Background
+module ToolUp.Platform.Config.Background
+
+open ToolUp.Platform
 
 open System
 open System.Collections.Concurrent

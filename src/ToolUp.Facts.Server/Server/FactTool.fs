@@ -10,6 +10,9 @@ open Microsoft.AspNetCore.Http
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.VectorKnowledgeTypes
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
 /// What a fact tool is handed for one call: the composed fact store and
 /// disclosure gate, the metric registry when one is composed, and the

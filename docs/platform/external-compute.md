@@ -77,12 +77,12 @@ The option is load-bearing. A backend that cannot report progress returns `None`
 
 `ExternalComputeError.Retriable` is a field, not an exception type. The caller reads it to decide whether to re-submit, which means the decision serialises across the wire, persists in a job payload, and survives a process restart. Construct errors with `ExternalComputeError.retriable` / `ExternalComputeError.terminal`.
 
-## The `NoExternalCompute` default
+## The `FeatureMode.Disabled` default
 
-`ServerConfig.ExternalCompute` defaults to `NoExternalCompute`, and a bare deployment composes without noticing this substrate exists:
+`ServerConfig.ExternalCompute` defaults to `FeatureMode.Disabled`, and a bare deployment composes without noticing this substrate exists:
 
 ```fsharp
-// Builds and runs unchanged — ExternalCompute = NoExternalCompute.
+// Builds and runs unchanged — ExternalCompute = FeatureMode.Disabled.
 ServerApp.empty |> ServerApp.run
 ```
 
@@ -121,11 +121,11 @@ Selecting a backend is one config line plus the companion's own registration:
 ```fsharp
 let config = {
     ServerConfig.defaults with
-        ExternalCompute = CustomExternalCompute
+        ExternalCompute = FeatureMode.Enabled
 }
 ```
 
-`CustomExternalCompute` makes `compose` register **nothing**, leaving the deployment's own `IExternalComputeDispatcher` singleton in DI — the same shape as `CustomTelemetrySink` and `CustomDatasetStore`. Backends live as companions under `src/ExternalCompute/`, so the backend's transport or SDK never reaches `ToolUp.Platform.*` (GP 1).
+`FeatureMode.Enabled` makes `compose` register **nothing**, leaving the deployment's own `IExternalComputeDispatcher` singleton in DI — the same shape as `FeatureMode.Enabled` and `CustomDatasetStore`. Backends live as companions under `src/ExternalCompute/`, so the backend's transport or SDK never reaches `ToolUp.Platform.*` (GP 1).
 
 ## The isolated execution profile
 
@@ -339,7 +339,7 @@ Set the key. The guard is not a substitute for it — the scheduler cannot see i
 
 ### Enabling it
 
-Reconciliation runs only when the deployment composed an actual backend — `ServerConfig.ExternalCompute = CustomExternalCompute` plus an `IExternalComputeDispatcher` singleton in DI. A deployment on the `NoExternalCompute` default pays nothing: the pass short-circuits before touching the store, so the tick gains no queries at all (GP 13), and no existing handler's behaviour changes (GP 11).
+Reconciliation runs only when the deployment composed an actual backend — `ServerConfig.ExternalCompute = FeatureMode.Enabled` plus an `IExternalComputeDispatcher` singleton in DI. A deployment on the `FeatureMode.Disabled` default pays nothing: the pass short-circuits before touching the store, so the tick gains no queries at all (GP 13), and no existing handler's behaviour changes (GP 11).
 
 One wiring caveat worth knowing, because it fails quietly otherwise: compose finds the dispatcher by inspecting the service collection, so an **instance** registration is seen and a **factory** registration is not (a factory cannot be invoked before the provider is built without constructing a second instance). Register the instance:
 
@@ -347,7 +347,7 @@ One wiring caveat worth knowing, because it fails quietly otherwise: compose fin
 services.AddSingleton<IExternalComputeDispatcher>(myDispatcher)
 ```
 
-If compose cannot find it, it logs a warning naming both remedies rather than silently leaving reconciliation off — the alternative being a deployment that hands off successfully and then waits forever. The other remedy is to construct the scheduler directly with `JobScheduler.createWithExternalCompute`.
+If compose cannot find it, it logs a warning naming both remedies rather than silently leaving reconciliation off — the alternative being a deployment that hands off successfully and then waits forever. The other remedy is to construct the scheduler directly: `JobScheduler.create deps { JobScheduler.SchedulerOptions.defaults with ExternalDispatcher = Some myDispatcher }`.
 
 Two operational notes. Reconciliation is batched per scope (`AwaitingExternalRuns`' `limit`) so one saturated scope cannot starve another's reconciliation; a scope with more outstanding hand-offs than the batch size gets the remainder on the next tick, and nothing is dropped. And each run is reconciled under its job's dispatch lease, so a deployment that composed a store-backed [`IDistributedLock`](../platform/jobs.md) gets multi-instance double-poll protection for free.
 
@@ -443,7 +443,7 @@ Neither the secret nor the work payload appears in either event.
 
 ### Enabling it
 
-The route is mounted only when `ServerConfig.ExternalCompute = CustomExternalCompute`. A deployment on the `NoExternalCompute` default has no such path — the Giraffe terminal middleware answers a clean 404, and there is no hosted service, no middleware and no allocation (GP 13).
+The route is mounted only when `ServerConfig.ExternalCompute = FeatureMode.Enabled`. A deployment on the `FeatureMode.Disabled` default has no such path — the Giraffe terminal middleware answers a clean 404, and there is no hosted service, no middleware and no allocation (GP 13).
 
 **The path is `/_platform/...` and not `/api/...`, deliberately — do not move it.** Both the surface-enforcement middleware and the CSRF middleware are scoped to `/api/*`, so this route is outside the session-auth and double-submit-token envelope. That is what lets a GPU service POST to it with nothing but its per-handle secret; relocating it under `/api/` would demand an XSRF token from a caller that has no browser, no cookie jar and no way to obtain one, and every backend would start failing with `csrf_validation_failed`. The endpoint pays for that exemption itself: it authenticates every request against the handle's own secret hash, refuses uniformly, throttles per source address, and audits both outcomes. Same posture as the anonymous `/_platform/signing-key/` route.
 
@@ -719,11 +719,11 @@ This is the read a typed long-running-operation handle needs to populate a `Runn
 let config = {
     ServerConfig.defaults with
         JobScheduler = InProcessJobScheduler
-        JobProgress = EnabledJobProgress
+        JobProgress = FeatureMode.Enabled
 }
 ```
 
-Default is `NoJobProgress`. On the default, `ctx.Progress` is a no-op reporter, no `IJobProgressSink` is registered in DI, and not one notification or event is generated — a handler can report unconditionally and an opted-out deployment pays one interface dispatch per call (GP 13). Nothing is registered under `NoJobProgress` on purpose: a resolvable no-op sink would invite consumer code to resolve and report against a deployment that asked for none.
+Default is `FeatureMode.Disabled`. On the default, `ctx.Progress` is a no-op reporter, no `IJobProgressSink` is registered in DI, and not one notification or event is generated — a handler can report unconditionally and an opted-out deployment pays one interface dispatch per call (GP 13). Nothing is registered under `FeatureMode.Disabled` on purpose: a resolvable no-op sink would invite consumer code to resolve and report against a deployment that asked for none.
 
 `compose` takes the sink **from the scheduler** rather than building a second one. That matters: the fan-out sink holds the per-job rate-limit state, so two instances would each keep their own window and a chatty handler would publish at twice the configured rate — the flood the coalescer exists to prevent, reintroduced by duplication.
 
@@ -814,7 +814,7 @@ An internal GPU training service. It answers a submit with `{"job":{"id":"…"}}
 open System.Net.Http
 open ToolUp.Platform.ExternalCompute.Http
 open ToolUp.Platform.Secrets
-open ToolUp.Platform.Server
+open ToolUp.Platform.Compose.Server
 
 let composeTrainingCompute (secrets: ISecretStore) (httpClient: HttpClient) (logger: ILogger) =
     let jobs = "https://training.internal/api/jobs"
@@ -849,7 +849,7 @@ let composeTrainingCompute (secrets: ISecretStore) (httpClient: HttpClient) (log
     |> HttpComputeCompose.withHttpCompute config secrets httpClient logger
 ```
 
-`withHttpCompute` folds in everything the companion contributes: the dispatcher singleton, the readiness probe, the startup preflight, and `ServerConfig.ExternalCompute = CustomExternalCompute`. **That last part is not cosmetic** — under the `NoExternalCompute` default compose registers the no-op dispatcher, and a later registration of the same service type is what `GetService` resolves, so leaving the mode alone would make whether real work is submitted depend on registration order. A deployment that never calls the helper keeps the default and pays nothing (GP 11 + GP 13).
+`withHttpCompute` folds in everything the companion contributes: the dispatcher singleton, the readiness probe, the startup preflight, and `ServerConfig.ExternalCompute = FeatureMode.Enabled`. **That last part is not cosmetic** — under the `FeatureMode.Disabled` default compose registers the no-op dispatcher, and a later registration of the same service type is what `GetService` resolves, so leaving the mode alone would make whether real work is submitted depend on registration order. A deployment that never calls the helper keeps the default and pays nothing (GP 11 + GP 13).
 
 Environment-bound alternative: `HttpComputeConfig.fromEnv ()` returns `None` unless `TOOLUP_EXTERNAL_COMPUTE=http`, and otherwise `Ok config` or `Error problems` — every problem at once, rather than one exception per restart — read from `TOOLUP_EXTERNAL_COMPUTE_HTTP_*` variables.
 

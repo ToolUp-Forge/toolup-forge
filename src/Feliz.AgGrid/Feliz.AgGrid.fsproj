@@ -41,6 +41,7 @@
     <PackageTags>fsharp;fable;feliz;react;ag-grid;datagrid;bindings</PackageTags>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="AgGridRuntime.fs" />
     <Compile Include="AgGrid.fs" />
     <Content Include="package.json" />
     <!-- Phase 852: the Fable pack pins the grid props compare. -->
@@ -51,7 +52,7 @@
        package loader extracts and compiles source directly. Mirrors the
        Feliz / Fable.Elmish convention. -->
   <ItemGroup>
-    <Content Include="**\*.fsproj;**\*.fs" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
+    <Content Include="**\*.fsproj;**\*.fs;AgGridRuntime.js" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="FSharp.Core" />

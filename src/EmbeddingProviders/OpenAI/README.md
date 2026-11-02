@@ -73,7 +73,7 @@ When transient retries exhaust `MaxAttempts`, the call raises `EmbeddingProvider
 Off by default. Opt in with `withEmbedderCircuitBreaker`:
 
 ```fsharp skip=fragment
-open ToolUp.Platform.IEmbeddingProvider
+open ToolUp.Platform.Infra.IEmbeddingProvider
 
 let embedder =
     OpenAIEmbeddingOptions.defaults

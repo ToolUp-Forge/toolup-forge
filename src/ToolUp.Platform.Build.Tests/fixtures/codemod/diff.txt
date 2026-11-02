@@ -131,6 +131,94 @@
 @@ L20 [1077-history-window-constant]
 -let window = AIAssistantServerConfig.DefaultMaxHistoryMessages
 +let window = AgentLoopLimits.DefaultHistoryWindow
+--- a/src/Server/Config.fs
++++ b/src/Server/Config.fs
+@@ L7 [877-record-update]
+-let config = {
++let config = {
++    ServerConfig.defaults with
++        Port = 5000
++        Surfaces = Surfaces.team
++        Stores = {
++            ServerConfig.defaults.Stores with
++                // the entity store backs the catalog
++                EntityStore = FeatureMode.Enabled
++        }
++        AuditLog = FeatureMode.Enabled
++        SecurityPosture = {
++            ServerConfig.defaults.SecurityPosture with
++                RequireHttps = true
++        }
++        Observability = {
++            ServerConfig.defaults.Observability with
++                SlowRequestThresholdOverrides =
++                    Map.ofList [
++                        "/api/slow", TimeSpan.FromSeconds 5.0
++                    ]
++        }
++        MultiInstance = {
++            ServerConfig.defaults.MultiInstance with
++                ReplicaCount = 3
++        }
++        RiskAcknowledgements = {
++            ServerConfig.defaults.RiskAcknowledgements with
++                AcceptEphemeralRagIndex = true
++        }
++}
+@@ L12 [877-feature-mode-on]
+-        EntityStore = EnabledEntityStore
++        EntityStore = FeatureMode.Enabled
+@@ L13 [877-feature-mode-on]
+-        AuditLog = EnabledAuditLog
++        AuditLog = FeatureMode.Enabled
+@@ L24 [877-feature-mode-off]
+-let trial = { ServerConfig.defaults with Port = 1; ShareTokenStore = ShareTokenStoreMode.EnabledShareTokenStore; Webhooks = NoWebhooks }
++let trial = { ServerConfig.defaults with Port = 1; ShareTokenStore = ShareTokenStoreMode.EnabledShareTokenStore; Webhooks = FeatureMode.Disabled }
+@@ L24 [877-feature-mode-on]
+-let trial = { ServerConfig.defaults with Port = 1; ShareTokenStore = ShareTokenStoreMode.EnabledShareTokenStore; Webhooks = FeatureMode.Disabled }
++let trial = { ServerConfig.defaults with Port = 1; ShareTokenStore = FeatureMode.Enabled; Webhooks = FeatureMode.Disabled }
+@@ L24 [877-record-update]
+-let trial = { ServerConfig.defaults with Port = 1; ShareTokenStore = FeatureMode.Enabled; Webhooks = FeatureMode.Disabled }
++let trial = {
++    ServerConfig.defaults with
++        Port = 1
++        Stores = {
++            ServerConfig.defaults.Stores with
++                ShareTokenStore = FeatureMode.Enabled
++        }
++        Webhooks = FeatureMode.Disabled
++}
+@@ L28 [877-record-update]
+-    {
++    {
++        app.Config with
++            SecurityPosture = {
++                app.Config.SecurityPosture with
++                    SecurityHardening = StrictSecurityHardening
++            }
++            Stores = {
++                app.Config.Stores with
++                    FactStore = FeatureMode.Enabled
++            }
++    }
+@@ L31 [877-feature-mode-on]
+-            FactStore = EnabledFactStore
++            FactStore = FeatureMode.Enabled
+@@ L42 [877-feature-mode-type]
+-let describe (mode: AuditLogMode) =
++let describe (mode: FeatureMode) =
+@@ L44 [877-feature-mode-off]
+-    | NoAuditLog -> "off"
++    | FeatureMode.Disabled -> "off"
+@@ L45 [877-feature-mode-on]
+-    | EnabledAuditLog -> "on"
++    | FeatureMode.Enabled -> "on"
+@@ L50 [877-config-member]
+-    config.ReplicaCount, cfg.EventStore, deps.EventStore, config.AcceptEphemeralRagIndex, config.Port
++    config.ReplicaCount, cfg.Stores.EventStore, deps.EventStore, config.AcceptEphemeralRagIndex, config.Port
+@@ L50 [877-moved-member]
+-    config.ReplicaCount, cfg.Stores.EventStore, deps.EventStore, config.AcceptEphemeralRagIndex, config.Port
++    config.MultiInstance.ReplicaCount, cfg.Stores.EventStore, deps.EventStore, config.RiskAcknowledgements.AcceptEphemeralRagIndex, config.Port
 --- a/src/Server/Connectors.fs
 +++ b/src/Server/Connectors.fs
 @@ L8 [1095-capabilities-member]
@@ -148,6 +236,25 @@
 -    { new IDataSource with
 +    { new IDataSource with
 +        member this.Capabilities = { ConnectorCapabilities.none with Native = Some(this :?> IEmitsNativePayload) }
+--- a/src/Server/Facts.fs
++++ b/src/Server/Facts.fs
+@@ L3 [1157-resolved-scope-id]
+-let receipt scope drafts = store.AssertBatch(scope.ScopeId, drafts)
++let receipt scope drafts = store.AssertBatch(scope, drafts)
+@@ L4 [1157-resolved-scope-id]
+-let ranked ctx query = store.QueryPopulation(ctx.Scope.ScopeId, query)
++let ranked ctx query = store.QueryPopulation(ctx.Scope, query)
+@@ L5 [1157-render-offenders]
+-let refused drafts offenders = Error(FactWrite.renderOffenders (List.length drafts) offenders)
++let refused drafts offenders = Error(FactStoreError.describe offenders)
+@@ L6 [1157-same-container]
+-let options = CoverageNarrativeOptions.sameContainer "coverage-reader"
++let options = CoverageNarrativeOptions.everyScope "coverage-reader"
+--- a/src/Server/Hosting.fs
++++ b/src/Server/Hosting.fs
+@@ L16 [1067-at-start]
+-        ProcessProfileGate.atStart (fun () -> scheduler.RegisterHandler("my-handler", handler)))
++        Hosting.atStart (fun () -> scheduler.RegisterHandler("my-handler", handler)))
 --- a/src/Server/Jobs.fs
 +++ b/src/Server/Jobs.fs
 @@ L6 [1066-schedule-result-type]
@@ -192,6 +299,18 @@
 @@ L6 [73-remoting-namespace]
 -open Fable.Remoting.Giraffe
 +open ToolUp.Remoting.Giraffe
+@@ L13 [877-record-update]
+-let config = {
++let config = {
++    ServerConfig.defaults with
++        Surfaces = Surfaces.individual
++        RiskAcknowledgements = {
++            ServerConfig.defaults.RiskAcknowledgements with
++                AcceptHeaderAuthWhenAuthRequired = true
++                AcceptPlaintextSecretsWhenAuthRequired = true
++        }
++        RateLimit = Some RateLimitPolicy.defaults
++}
 @@ L15 [66-mode-field]
 -        Mode = Individual
 +        Surfaces = Surfaces.individual
@@ -235,4 +354,4 @@
 @@ L41 [73-remoting-namespace]
 -let legacyJson = Fable.Remoting.Json.FableJsonConverter()
 +let legacyJson = ToolUp.Remoting.Json.FableJsonConverter()
-Codemod: 69 rewrite(s) across 11 file(s) pending.
+Codemod: 88 rewrite(s) across 14 file(s) pending.

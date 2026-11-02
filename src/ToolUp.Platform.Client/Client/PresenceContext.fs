@@ -18,7 +18,7 @@ open ToolUp.Platform
 //
 // **Two ways `provider` gets mounted, and both are supported:**
 //   * **Phase 622 (batteries-included).** `ClientConfig.Presence =
-//     EnabledPresence` makes the SDK shell mount it — `PresenceMount`
+//     FeatureMode.Enabled` makes the SDK shell mount it — `PresenceMount`
 //     owns the heartbeat, the roster refresh and the `_platform.*` fold.
 //     No deployment wiring at all.
 //   * **Phase 442 (hand-mounted).** The deployment mounts `provider`
@@ -39,7 +39,7 @@ open ToolUp.Platform
 // `IEntityLockStore`), so it stays neutral about the wire.
 //
 // Opt-in (GP 13): outside a provider the hooks return empty / no-lock,
-// so an isolated render (tests, a deployment on `NoPresence`) degrades
+// so an isolated render (tests, a deployment on `FeatureMode.Disabled`) degrades
 // cleanly to "nobody here, nothing locked".
 
 [<Emit("setInterval($0, $1)")>]

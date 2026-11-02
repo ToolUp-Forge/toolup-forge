@@ -1,4 +1,4 @@
-module ToolUp.Platform.IRetrievalPipeline
+module ToolUp.Platform.Infra.IRetrievalPipeline
 
 open ToolUp.Platform
 open ToolUp.Platform.VectorKnowledgeTypes

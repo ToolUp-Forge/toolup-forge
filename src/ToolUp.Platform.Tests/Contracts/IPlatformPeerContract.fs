@@ -5,6 +5,11 @@ open System.Collections.Concurrent
 open Expecto
 open ToolUp.Platform
 open ToolUp.InterPlatform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── IPlatformPeerContract — Phase 18 contract pack ──────────────────
 //

@@ -4,6 +4,7 @@ open Expecto
 open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
+open ToolUp.Platform.Scope
 
 // ─── Phase 136 — share-link token-leak hardening ────────────────────
 //

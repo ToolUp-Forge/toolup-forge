@@ -4,7 +4,7 @@ Enterprise AG Grid + AG Chart prompt-builder companion for `ToolUp.AI` (Phase 12
 
 ## What it does
 
-The Enterprise twin of `ToolUp.AICookbooks.AgChart`. Exposes a `SystemPromptBuilder` a deployment composes into `composeWithAI`'s prompt list, so the in-app AI assistant authors Enterprise charts and grids in F# against the typed bindings — Sankey / Sunburst / Treemap / Candlestick / Ohlc / Heatmap / Waterfall / Box-plot / Range series and Sparkline, plus Set Filter, Multi Filter, Master-Detail, Excel export, Status Bar, Sidebar, SSRM and custom aggregations.
+The Enterprise twin of `ToolUp.AICookbooks.AgChart`. Exposes a `SystemPromptBuilder` a deployment composes into the assistant's `SystemPrompt`, so the in-app AI assistant authors Enterprise charts and grids in F# against the typed bindings — Sankey / Sunburst / Treemap / Candlestick / Ohlc / Heatmap / Waterfall / Box-plot / Range series and Sparkline, plus Set Filter, Multi Filter, Master-Detail, Excel export, Status Bar, Sidebar, SSRM and custom aggregations.
 
 Extraction reuses `AgChartAICookbook`'s section parse and token bound (`## Critical constraints` + `## The shortest possible chart`, ~600 tokens, truncated on a line boundary), keyed to the Enterprise heading and the Enterprise `COOKBOOK.md`.
 
@@ -19,14 +19,17 @@ open ToolUp.AI
 
 let enterpriseGuidance = AgGridEnterpriseAICookbook.systemPromptBuilder (Some logger)
 
-AIServerApp.create aiProviderFactory providerProfile
-|> AIServerApp.withAIConfig {
-    Branding = branding
-    SystemPrompt = Some enterpriseGuidance
-    MaxHistoryMessages = None
-    AISurfaceDerivation = TrustClient
-}
-|> AIServerApp.run
+serverApp
+|> AICompose.withAI (
+    AIOptions.create aiProviderFactory providerProfile
+    |> AIOptions.withAIConfig {
+        Branding = branding
+        SystemPrompt = Some enterpriseGuidance
+        MaxHistoryMessages = None
+        AISurfaceDerivation = TrustClient
+    }
+)
+|> ServerApp.run
 ```
 
 ## Cookbook resolution

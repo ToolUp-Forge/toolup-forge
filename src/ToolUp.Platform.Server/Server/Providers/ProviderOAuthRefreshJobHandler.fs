@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.ProviderOAuthRefreshJobHandler
+module ToolUp.Platform.Jobs.ProviderOAuthRefreshJobHandler
 
 open System
 open System.Text.Json
@@ -9,6 +9,8 @@ open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.Providers
 open ToolUp.Platform.Secrets
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
 
 // ─── Phase 43.B — provider-entry OAuth token auto-refresh ─────────
 //

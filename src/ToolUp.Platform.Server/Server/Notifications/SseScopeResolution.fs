@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.SseScopeResolution
+module ToolUp.Platform.Jobs.SseScopeResolution
 
 open System
 open System.Threading.Tasks
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
+open ToolUp.Platform.Config
 
 // ─── Phase 117 — shared SSE scope resolution ─────────────────────────
 //

@@ -107,7 +107,7 @@ and AIToolResultBudget =
     | NoResultBudget            // legitimately-large contract — never elide
 ```
 
-Metadata only — the executor is server-side and lives in `ToolUp.AI.RegisteredTool` alongside the rest of the AI runtime, so a module can declare tools without referencing the AI companion. Module-declared tools live in `Server.fs`; the composition root registers them via `ServerModule.withAITools [...]` or directly via `AIServerApp.withAITools`.
+Metadata only — the executor is server-side and lives in `ToolUp.AI.RegisteredTool` alongside the rest of the AI runtime, so a module can declare tools without referencing the AI companion. Module-declared tools live in `Server.fs`; the composition root registers them via `ServerModule.withAITools [...]`; tools whose executor answers the record form ride `AIOptions.withAIAnsweringTools`.
 
 ### `ToolParameterSchema`
 
@@ -311,19 +311,20 @@ and ToolCallTiming = {
 
 ## `ToolUp.AI.Server`
 
-### `AIServerApp`
+### `AIOptions` and `AICompose.withAI`
 
-Flat superset of `ServerApp`. The fluent shape:
+The AI companion's options record: the two required AI inputs plus the AI tier's own settings. It does not wrap a `ServerApp` — the deployment is built with the ordinary `ServerApp` builders, and `AICompose.withAI` sets the AI companion on it.
 
 ```fsharp
+open Microsoft.AspNetCore.Http
 open ToolUp.Platform.Providers
 open ToolUp.AI.SystemPromptBuilder
 
-type AIServerApp = {
-    Base: ServerApp
+type AIOptions = {
     AIProviderFactory: IAIProviderFactory
-    /// Canonical platform-wide BYOK store. Mirrored onto `Base.ProviderProfile`
-    /// by `create` so a non-AI handler in the same app can resolve it from DI.
+    /// Canonical platform-wide BYOK store. Mirrored onto the deployment's
+    /// `ProviderProfile` when the tier is composed, so a non-AI handler in the
+    /// same app can resolve it from DI.
     ProviderProfile: IProviderProfile
     /// `None` lets the composer auto-promote a blob-backed store when an
     /// `ISecretStore` is registered in DI.
@@ -333,35 +334,47 @@ type AIServerApp = {
     PlatformProviders: DefaultAIProviderFactory.AIPlatformProvider list
     AIConfig: AIAssistantServerConfig option
     ModuleAIContexts: ModuleAIContext list
+    DenialRateAlert: AIDenialRateMonitor.AIDenialRateAlertPolicy option
+    ConsentMode: AIConsentMode
+    ToolEffects: ToolEffectEnvelope.ToolEffectComposition option
+    AIAnsweringTools: (AIToolDefinition * (HttpContext -> string -> Async<ToolHelpers.ToolAnswer>)) list
+    ReflectionTools: bool
 }
 ```
 
-AI tools are not an `AIServerApp` field — each module contributes them through `ServerModule.withAITools`, and they aggregate on the inner `Base.AITools`.
-
-Constructors:
+AI tools are not an `AIOptions` field — each module contributes them through `ServerModule.withAITools`, and they aggregate on the deployment's `ServerApp.AITools`, which the tier reads when it is composed.
 
 ```fsharp skip=signature
-module AIServerApp =
-    val create: IAIProviderFactory -> IProviderProfile -> AIServerApp
-    /// Lift an existing `ServerApp` so AI contributions stack onto whatever it
-    /// already carries.
-    val createFrom: IAIProviderFactory -> IProviderProfile -> ServerApp -> AIServerApp
+module AIOptions =
+    val create: IAIProviderFactory -> IProviderProfile -> AIOptions
+    val withProviderProfile: IProviderProfile -> AIOptions -> AIOptions
+    val withPlatformAIKeyStore: IPlatformAIKeyStore -> AIOptions -> AIOptions
+    val withPlatformProvider: DefaultAIProviderFactory.AIPlatformProvider -> AIOptions -> AIOptions
+    val withAIConfig: AIAssistantServerConfig -> AIOptions -> AIOptions
+    val withModuleAIContexts: ModuleAIContext list -> AIOptions -> AIOptions
+    val withDenialRateAlert: AIDenialRateMonitor.AIDenialRateAlertPolicy -> AIOptions -> AIOptions
+    val withAIConsentMode: AIConsentMode -> AIOptions -> AIOptions
+    val withToolEffects: CompositionProfile -> ToolPolicy -> AIOptions -> AIOptions
+    val withReflectionTools: AIOptions -> AIOptions
+    val withAIAnsweringTools:
+        (AIToolDefinition * (HttpContext -> string -> Async<ToolHelpers.ToolAnswer>)) list -> AIOptions -> AIOptions
+
+module AICompose =
+    /// Sets the AI companion: composed once, when the deployment resolves,
+    /// onto the deployment as every builder left it.
+    val withAI: AIOptions -> ServerApp -> ServerApp
+    // Deployment-level AI settings — `ServerApp -> ServerApp`:
+    val withAnswerVerifier: AnswerVerifier.AnswerGateMode -> AnswerVerifier.IAnswerVerifier -> ServerApp -> ServerApp
+    val withNumericFidelityGate: AnswerVerifier.AnswerGateMode -> ServerApp -> ServerApp
+    val withAnswerProvenanceAnchors: IAnswerProvenanceAnchors -> ServerApp -> ServerApp
+    val withFastPathTriage: FastPathTriageResolver.FastPathTriageConfig -> ServerApp -> ServerApp
+    val withConversationRetention: ConversationRetentionPolicy -> string list -> ServerApp -> ServerApp
+    val withConversationTitling: ConversationTitlingPolicy -> ServerApp -> ServerApp
+    val withTeamConversationVisibility:
+        TeamConversationVisibility -> TeamConversationVisibility list -> ServerApp -> ServerApp
 ```
 
-Mirrored `ServerApp` builders (each delegates to the inner `Base`):
-- `withConfig`, `withAuth`, `withLogger`, `withStorage`, `withNotifications`, `withUserDirectory`, `withCspContributor`, `withTransactionalSink`, `withHealthCheck`, `withConfigValidator`, `withEncryptedBlobStorage`, `withMetricsSink`, `withRateLimitDescriptor`, `withEntity`, `withJobHandler`, `withScheduledJob`, `withBackfillMissedTicks`, `withEventTriggerCatchUp`, `withAuditFailurePolicy`, `withEntityOutbox`, `withExtensions`, `withPreMiddleware`, `withPostMiddleware`, `addModule`, `addModules`.
-
-AI-specific builders:
-- `withProviderProfile: IProviderProfile -> AIServerApp -> AIServerApp`
-- `withPlatformAIKeyStore: IPlatformAIKeyStore -> AIServerApp -> AIServerApp`
-- `withPlatformProvider: DefaultAIProviderFactory.AIPlatformProvider -> AIServerApp -> AIServerApp`
-- `withAIConfig: AIAssistantServerConfig -> AIServerApp -> AIServerApp`
-- `withModuleAIContexts: ModuleAIContext list -> AIServerApp -> AIServerApp`
-- `withAnswerVerifier`, `withNumericFidelityGate`, `withFastPathTriage`
-
-Terminal:
-- `run: AIServerApp -> int` — `composeAI >> ServerApp.run`.
-- `composeAI: AIServerApp -> ServerApp` — the composition seam, for stacking AI contributions alongside another companion on one composition root.
+Because the tier is composed at resolve, every `ServerApp` builder (`withConfig`, `withAuth`, `withStorage`, `addModules`, …) works on either side of `withAI`, and the pipeline ends in `ServerApp.run`. A second `withAI` replaces the first. A deployment composing RAG does not call `withAI`: `RAGCompose.withRAG` composes the AI tier itself from its `RagOptions.AI`.
 
 ### `AIAssistantServerConfig`
 
@@ -484,23 +497,7 @@ and AgentLoopContext = {
 }
 ```
 
-The function is the agent's heart. Most apps don't call it directly — `AIServerApp.run` wires it via `AIAssistantHandler`. Exposed for advanced cases (custom assistant flows, agent-as-a-tool patterns).
-
-### `AICompose`
-
-```fsharp skip=signature
-module AICompose =
-    val composeWithAI:
-        baseApp: ServerApp ->
-        aiFactory: AIProviderFactory ->
-        aiConfigStore: IUserAIConfigStore ->
-        aiTools: AIToolDefinition list ->
-        aiConfig: AIAssistantServerConfig option ->
-        moduleAIContexts: ModuleAIContext list ->
-        int
-```
-
-Called internally by `AIServerApp.run`. Returns the same `int` exit code as `ServerApp.run`. Exposed for callers that want to bypass the `AIServerApp` record shape and pass arguments directly.
+The function is the agent's heart. Most apps don't call it directly — `AICompose.withAI` wires it via `AIAssistantHandler`. Exposed for advanced cases (custom assistant flows, agent-as-a-tool patterns).
 
 ## `ToolUp.AI.Client`
 
@@ -578,7 +575,7 @@ Under `SourceModule = "_platform.ai.fastpath"`:
 
 ## HTTP endpoints
 
-Auto-injected by `AIServerApp.run`:
+Auto-injected by `AICompose.withAI`:
 
 - `POST /api/IAIAssistantApi/SubmitMessage` — ToolUp.Remoting
 - `POST /api/IAIAssistantApi/GetConversation`

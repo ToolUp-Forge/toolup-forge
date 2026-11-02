@@ -10,11 +10,12 @@ open Expecto
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.IVectorStore
-open ToolUp.Platform.IEmbeddingProvider
-open ToolUp.Platform.IQueryRewriter
-open ToolUp.Platform.IRetrievalPipeline
+open ToolUp.Platform.Infra.IVectorStore
+open ToolUp.Platform.Infra.IEmbeddingProvider
+open ToolUp.Platform.Infra.IQueryRewriter
+open ToolUp.Platform.Infra.IRetrievalPipeline
 open ToolUp.Platform.VectorKnowledgeTypes
+open ToolUp.Platform.Infra
 
 // ─── Phase 506 — the compose pickup for `IQueryRewriter` ─────────────
 //
@@ -25,7 +26,7 @@ open ToolUp.Platform.VectorKnowledgeTypes
 // looks for a registered `IQueryRewriter` and threads it into the pipeline
 // constructor. Until this file, that step was covered only by "it compiles".
 //
-// The probe is deliberately a probe rather than a `RAGServerApp` field (the
+// The probe is deliberately a probe rather than a `RagOptions` field (the
 // opt-in already has a home in DI, so the compose surface grows no knob),
 // which is precisely why it needs a test of its own: there is no builder
 // call whose absence would be noticed. Dropped, mistyped, or ordered after

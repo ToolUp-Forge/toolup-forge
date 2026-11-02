@@ -15,8 +15,12 @@ open Microsoft.Extensions.Hosting
 open Giraffe
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.Tracing
+open ToolUp.Platform.Infra.Tracing
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 320 — completion-callback ingress + idempotent resolution ──
 //
@@ -502,28 +506,38 @@ let private build (dispatcher: IExternalComputeDispatcher) (handleStore: IExtern
     let scheduler =
         match handleStore with
         | Some hs ->
-            new JobScheduler.InProcessJobScheduler(
-                jobStore,
-                eventStore,
-                channel,
-                ServerConfig.defaults,
-                silentLogger,
-                NoOpActivitySink() :> IActivitySink,
-                distributedLock = InProcessDistributedLock.create (),
-                externalDispatcher = dispatcher,
-                externalHandleStore = hs
-            )
+            JobScheduler.create
+                ({
+                    Store = jobStore
+                    EventStore = eventStore
+                    NotificationChannel = channel
+                    Config = ServerConfig.defaults
+                    Logger = silentLogger
+                    ActivitySink = NoOpActivitySink() :> IActivitySink
+                }
+                : JobScheduler.SchedulerDeps)
+                {
+                    JobScheduler.SchedulerOptions.defaults with
+                        DistributedLock = Some(InProcessDistributedLock.create ())
+                        ExternalDispatcher = Some dispatcher
+                        ExternalHandleStore = Some hs
+                }
         | None ->
-            new JobScheduler.InProcessJobScheduler(
-                jobStore,
-                eventStore,
-                channel,
-                ServerConfig.defaults,
-                silentLogger,
-                NoOpActivitySink() :> IActivitySink,
-                distributedLock = InProcessDistributedLock.create (),
-                externalDispatcher = dispatcher
-            )
+            JobScheduler.create
+                ({
+                    Store = jobStore
+                    EventStore = eventStore
+                    NotificationChannel = channel
+                    Config = ServerConfig.defaults
+                    Logger = silentLogger
+                    ActivitySink = NoOpActivitySink() :> IActivitySink
+                }
+                : JobScheduler.SchedulerDeps)
+                {
+                    JobScheduler.SchedulerOptions.defaults with
+                        DistributedLock = Some(InProcessDistributedLock.create ())
+                        ExternalDispatcher = Some dispatcher
+                }
 
     {
         Store = jobStore
@@ -563,32 +577,37 @@ let private buildPair
         let scheduler =
             match handleStore with
             | Some hs ->
-                new JobScheduler.InProcessJobScheduler(
-                    jobStore,
-                    eventStore,
-                    channel,
-                    ServerConfig.defaults,
-                    silentLogger,
-                    NoOpActivitySink() :> IActivitySink,
-                    // A DISTINCT lock per instance — two replicas do not
-                    // share an in-process mutex, and pretending they do is
-                    // how a single-instance test claims a distributed
-                    // guarantee.
-                    distributedLock = InProcessDistributedLock.create (),
-                    externalDispatcher = dispatcher,
-                    externalHandleStore = hs
-                )
+                JobScheduler.create
+                    ({
+                        Store = jobStore
+                        EventStore = eventStore
+                        NotificationChannel = channel
+                        Config = ServerConfig.defaults
+                        Logger = silentLogger
+                        ActivitySink = NoOpActivitySink() :> IActivitySink
+                    }
+                    : JobScheduler.SchedulerDeps)
+                    {
+                        JobScheduler.SchedulerOptions.defaults with
+                            ExternalDispatcher = Some dispatcher
+                            ExternalHandleStore = Some hs
+                    }
             | None ->
-                new JobScheduler.InProcessJobScheduler(
-                    jobStore,
-                    eventStore,
-                    channel,
-                    ServerConfig.defaults,
-                    silentLogger,
-                    NoOpActivitySink() :> IActivitySink,
-                    distributedLock = InProcessDistributedLock.create (),
-                    externalDispatcher = dispatcher
-                )
+                JobScheduler.create
+                    ({
+                        Store = jobStore
+                        EventStore = eventStore
+                        NotificationChannel = channel
+                        Config = ServerConfig.defaults
+                        Logger = silentLogger
+                        ActivitySink = NoOpActivitySink() :> IActivitySink
+                    }
+                    : JobScheduler.SchedulerDeps)
+                    {
+                        JobScheduler.SchedulerOptions.defaults with
+                            DistributedLock = Some(InProcessDistributedLock.create ())
+                            ExternalDispatcher = Some dispatcher
+                    }
 
         {
             Store = jobStore
@@ -1421,11 +1440,11 @@ let private composeTests =
                 }
 
             // `ServerConfig.defaults` carries `ExternalCompute =
-            // NoExternalCompute`, which is the whole point of the pin. The
+            // FeatureMode.Disabled`, which is the whole point of the pin. The
             // scheduler IS composed here, so the absence below is the
             // external-compute gate and not "no scheduler, nothing
             // registered".
-            Expect.equal ServerConfig.defaults.ExternalCompute NoExternalCompute "the default is off"
+            Expect.equal ServerConfig.defaults.ExternalCompute FeatureMode.Disabled "the default is off"
 
             let config = {
                 ServerConfig.defaults with
@@ -1440,9 +1459,10 @@ let private composeTests =
                 channel
                 silentLogger
                 (NoOpActivitySink() :> IActivitySink)
-                (ref None)
-                (ref None)
                 None
+                (LateBound<IJobScheduler option>("job scheduler", None))
+                None
+                InProcessDistributedLock.shared
             |> ignore
 
             let registered (t: Type) =
@@ -1467,7 +1487,7 @@ let private composeTests =
 
             let config = {
                 ServerConfig.defaults with
-                    ExternalCompute = CustomExternalCompute
+                    ExternalCompute = FeatureMode.Enabled
                     JobScheduler = InProcessJobScheduler
             }
 
@@ -1479,9 +1499,10 @@ let private composeTests =
                 channel
                 silentLogger
                 (NoOpActivitySink() :> IActivitySink)
-                (ref None)
-                (ref None)
                 None
+                (LateBound<IJobScheduler option>("job scheduler", None))
+                None
+                InProcessDistributedLock.shared
             |> ignore
 
             let registered (t: Type) =
@@ -1511,7 +1532,7 @@ let private composeTests =
 
             let config = {
                 ServerConfig.defaults with
-                    ExternalCompute = CustomExternalCompute
+                    ExternalCompute = FeatureMode.Enabled
                     JobScheduler = InProcessJobScheduler
             }
 
@@ -1523,9 +1544,10 @@ let private composeTests =
                 channel
                 silentLogger
                 (NoOpActivitySink() :> IActivitySink)
-                (ref None)
-                (ref None)
                 None
+                (LateBound<IJobScheduler option>("job scheduler", None))
+                None
+                InProcessDistributedLock.shared
             |> ignore
 
             let registered (t: Type) =

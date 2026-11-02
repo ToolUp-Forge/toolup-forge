@@ -112,13 +112,13 @@ hashing rule; nothing server-side applies them to submitted specs.)
 ## Composing the model registry (Phase 728)
 
 `IDataObjectStore` and `IResultStore` are composed for you; `IDatasetStore` arrives with
-`ServerConfig.Datasets`. **`IModelRegistry` is composed by neither — it needs an explicit opt-in
+`ServerConfig.Stores.Datasets`. **`IModelRegistry` is composed by neither — it needs an explicit opt-in
 leg**, and this section exists because that was previously true and undocumented, so a deployment
 found out from a `SubstrateDisabled "model registry"` refusal on its first request:
 
 ```fsharp skip=fragment
 ServerApp.empty
-|> ServerApp.withConfig { ServerConfig.defaults with ModelExecution = EnabledModelExecutionApi }
+|> ServerApp.withConfig { ServerConfig.defaults with ModelExecution = FeatureMode.Enabled }
 |> ServerApp.withModelExecution ComposeModelExecution.ModelExecutionComposeOptions.defaults
 ```
 

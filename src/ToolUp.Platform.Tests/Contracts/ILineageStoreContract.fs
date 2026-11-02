@@ -3,6 +3,7 @@ module ToolUp.Platform.Tests.Contracts.ILineageStoreContract
 open System
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Infra
 
 /// Contract test list for any `ILineageStore` implementation. The
 /// factory returns `(store, scopeA, scopeB)` — scopes are

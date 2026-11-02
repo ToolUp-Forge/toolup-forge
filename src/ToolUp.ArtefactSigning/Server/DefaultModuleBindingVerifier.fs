@@ -8,6 +8,7 @@ open System.IO
 open System.Security.Cryptography
 open System.Text
 open ToolUp.Platform
+open ToolUp.Platform.Compose
 
 // ─── Phase 165 — default module-binding verifier ────────────────────────
 //

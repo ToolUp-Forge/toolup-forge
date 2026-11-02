@@ -1,0 +1,1 @@
+{"kind":"appRoot","base":"serverApp","layers":[],"id":"reject-knob-value-unregistered-data-subject-requests","children":[{"kind":"serverConfig","id":"serverConfig","children":[{"kind":"configKnob","key":"DataSubjectRequests","value":"enabled","id":"knob-dataSubjectRequests","children":[]}]}]}

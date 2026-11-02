@@ -2465,7 +2465,7 @@ module PlatformDecoders =
 
     /// Generated decoder for `JobDefinition` — one combinator per field or case, read off the type's own shape.
     let jobDefinition: Decoder<JobDefinition> =
-        Decode.succeed (fun jobId scopeId handler payload trigger idempotency retryPolicy shardKey precision status createdAt createdBy nextRunAt lastRunAt lastRunStatus lastRunError consecutiveFailures tags -> ({
+        Decode.succeed (fun jobId scopeId handler payload trigger idempotency retryPolicy shardKey precision status createdAt createdBy nextRunAt lastRunAt lastRunStatus lastRunError consecutiveFailures tags lastRunWarning -> ({
             JobId = jobId
             ScopeId = scopeId
             Handler = handler
@@ -2484,6 +2484,7 @@ module PlatformDecoders =
             LastRunError = lastRunError
             ConsecutiveFailures = consecutiveFailures
             Tags = tags
+            LastRunWarning = lastRunWarning
         }: JobDefinition))
         |> Decode.apply (Decode.field "JobId" 0 Decode.asGuid)
         |> Decode.apply (Decode.field "ScopeId" 1 Decode.asString)
@@ -2503,6 +2504,7 @@ module PlatformDecoders =
         |> Decode.apply (Decode.field "LastRunError" 15 (Decode.option Decode.asString))
         |> Decode.apply (Decode.field "ConsecutiveFailures" 16 Decode.asInt32)
         |> Decode.apply (Decode.field "Tags" 17 (Decode.asMap Decode.asString Decode.asString))
+        |> Decode.apply (Decode.field "LastRunWarning" 18 (Decode.option Decode.asString))
 
     /// Generated decoder for `ExternalHandle` — one combinator per field or case, read off the type's own shape.
     let externalHandle: Decoder<ExternalHandle> =
@@ -2521,7 +2523,7 @@ module PlatformDecoders =
 
     /// Generated decoder for `JobRun` — one combinator per field or case, read off the type's own shape.
     let jobRun: Decoder<JobRun> =
-        Decode.succeed (fun runId jobId scopeId attempt startedAt completedAt status error durationMs externalHandle -> ({
+        Decode.succeed (fun runId jobId scopeId attempt startedAt completedAt status error durationMs externalHandle warning -> ({
             RunId = runId
             JobId = jobId
             ScopeId = scopeId
@@ -2532,6 +2534,7 @@ module PlatformDecoders =
             Error = error
             DurationMs = durationMs
             ExternalHandle = externalHandle
+            Warning = warning
         }: JobRun))
         |> Decode.apply (Decode.field "RunId" 0 Decode.asGuid)
         |> Decode.apply (Decode.field "JobId" 1 Decode.asGuid)
@@ -2543,6 +2546,7 @@ module PlatformDecoders =
         |> Decode.apply (Decode.field "Error" 7 (Decode.option Decode.asString))
         |> Decode.apply (Decode.field "DurationMs" 8 (Decode.option Decode.asInt64))
         |> Decode.apply (Decode.field "ExternalHandle" 9 (Decode.option externalHandle))
+        |> Decode.apply (Decode.field "Warning" 10 (Decode.option Decode.asString))
 
     /// Generated decoder for `ScheduleError` — one combinator per field or case, read off the type's own shape.
     let scheduleError: Decoder<ScheduleError> =
@@ -2823,24 +2827,34 @@ module PlatformDecoders =
         |> Decode.apply (Decode.field "Justification" 2 Decode.asString)
         |> Decode.apply (Decode.field "ConsentedBy" 3 (Decode.option Decode.asString))
 
+    /// Generated decoder for `PageGrant` — one combinator per field or case, read off the type's own shape.
+    let pageGrant: Decoder<PageGrant> =
+        Decode.union "PageGrant" (function
+            | 0 -> Some(Decode.case0 PageGrant.SavePlatform)
+            | 1 -> Some(Decode.case0 PageGrant.SaveTeam)
+            | 2 -> Some(Decode.case0 PageGrant.SaveOwn)
+            | _ -> None)
+
     /// Generated decoder for `TeamPermissions` — one combinator per field or case, read off the type's own shape.
     let teamPermissions: Decoder<TeamPermissions> =
-        Decode.succeed (fun defaults members exposure grants -> ({
+        Decode.succeed (fun defaults members exposure grants pages -> ({
             Defaults = defaults
             Members = members
             Exposure = exposure
             Grants = grants
+            Pages = pages
         }: TeamPermissions))
         |> Decode.apply (Decode.field "Defaults" 0 (Decode.asMap Decode.asString (Decode.list modulePermission)))
         |> Decode.apply (Decode.field "Members" 1 (Decode.asMap Decode.asString (Decode.asMap Decode.asString (Decode.list modulePermission))))
         |> Decode.apply (Decode.field "Exposure" 2 (Decode.asMap Decode.asString moduleExposure))
         |> Decode.apply (Decode.field "Grants" 3 (Decode.asMap Decode.asString (Decode.asMap Decode.asString moduleGrantRecord)))
+        |> Decode.apply (Decode.field "Pages" 4 (Decode.asMap Decode.asString (Decode.list pageGrant)))
 
-    /// Generated decoder for `PlatformKnowledgeBaseMode` — one combinator per field or case, read off the type's own shape.
-    let platformKnowledgeBaseMode: Decoder<PlatformKnowledgeBaseMode> =
-        Decode.union "PlatformKnowledgeBaseMode" (function
-            | 0 -> Some(Decode.case0 PlatformKnowledgeBaseMode.NoPlatformKnowledgeBase)
-            | 1 -> Some(Decode.case0 PlatformKnowledgeBaseMode.EnabledPlatformKnowledgeBase)
+    /// Generated decoder for `FeatureMode` — one combinator per field or case, read off the type's own shape.
+    let featureMode: Decoder<FeatureMode> =
+        Decode.union "FeatureMode" (function
+            | 0 -> Some(Decode.case0 FeatureMode.Disabled)
+            | 1 -> Some(Decode.case0 FeatureMode.Enabled)
             | _ -> None)
 
     /// Generated decoder for `PlatformInfo` — one combinator per field or case, read off the type's own shape.
@@ -3163,8 +3177,9 @@ module PlatformDecoders =
         typeof<PartyRef>.FullName
         typeof<GrantPolicy>.FullName
         typeof<ModuleGrantRecord>.FullName
+        typeof<PageGrant>.FullName
         typeof<TeamPermissions>.FullName
-        typeof<PlatformKnowledgeBaseMode>.FullName
+        typeof<FeatureMode>.FullName
         typeof<PlatformInfo>.FullName
         typeof<TeamMembership>.FullName
         typeof<TeamCreationPolicy>.FullName
@@ -3496,8 +3511,9 @@ module PlatformDecoders =
         RemotingDecoders.register<PartyRef> partyRef
         RemotingDecoders.register<GrantPolicy> grantPolicy
         RemotingDecoders.register<ModuleGrantRecord> moduleGrantRecord
+        RemotingDecoders.register<PageGrant> pageGrant
         RemotingDecoders.register<TeamPermissions> teamPermissions
-        RemotingDecoders.register<PlatformKnowledgeBaseMode> platformKnowledgeBaseMode
+        RemotingDecoders.register<FeatureMode> featureMode
         RemotingDecoders.register<PlatformInfo> platformInfo
         RemotingDecoders.register<TeamMembership> teamMembership
         RemotingDecoders.register<TeamCreationPolicy> teamCreationPolicy
@@ -3830,8 +3846,9 @@ module PlatformDecoders =
         RemotingDecoders.verifyThrough<PartyRef> gate draws seed partyRef
         RemotingDecoders.verifyThrough<GrantPolicy> gate draws seed grantPolicy
         RemotingDecoders.verifyThrough<ModuleGrantRecord> gate draws seed moduleGrantRecord
+        RemotingDecoders.verifyThrough<PageGrant> gate draws seed pageGrant
         RemotingDecoders.verifyThrough<TeamPermissions> gate draws seed teamPermissions
-        RemotingDecoders.verifyThrough<PlatformKnowledgeBaseMode> gate draws seed platformKnowledgeBaseMode
+        RemotingDecoders.verifyThrough<FeatureMode> gate draws seed featureMode
         RemotingDecoders.verifyThrough<PlatformInfo> gate draws seed platformInfo
         RemotingDecoders.verifyThrough<TeamMembership> gate draws seed teamMembership
         RemotingDecoders.verifyThrough<TeamCreationPolicy> gate draws seed teamCreationPolicy
@@ -4017,7 +4034,7 @@ module PlatformDecoders =
         "MaintenanceApi", [ typeof<Result<int, string>>.FullName ], true
         "ModelExecutionApi", [ typeof<Result<ModelExecutionReceipt, ModelExecutionRefusal>>.FullName; typeof<Result<ModelExecutionOutcome, ModelExecutionRefusal>>.FullName; typeof<Result<ModelExecutionOutcomePage, ModelExecutionRefusal>>.FullName; typeof<Result<ModelExecutionDatasetVersion, ModelExecutionRefusal>>.FullName ], true
         "PermissionApi", [ typeof<Result<TeamPermissions, string>>.FullName; typeof<Result<unit, string>>.FullName ], true
-        "PlatformAdminApi", [ typeof<bool>.FullName; typeof<string list>.FullName; typeof<Result<unit, string>>.FullName; typeof<PlatformKnowledgeBaseMode>.FullName ], true
+        "PlatformAdminApi", [ typeof<bool>.FullName; typeof<string list>.FullName; typeof<Result<unit, string>>.FullName; typeof<FeatureMode>.FullName ], true
         "PlatformInfoApi", [ typeof<PlatformInfo>.FullName ], true
         "TeamApi", [ typeof<Result<TeamInfo, string>>.FullName; typeof<TeamInfo list>.FullName; typeof<Result<unit, string>>.FullName; typeof<TeamMembership list>.FullName; typeof<string option>.FullName; typeof<TeamCreationPolicy>.FullName; typeof<Result<TeamSummary list, string>>.FullName ], true
         "TeamOutputVisibilityApi", [ typeof<TeamOutputVisibilityView>.FullName; typeof<Result<TeamOutputVisibilityView, string>>.FullName ], true

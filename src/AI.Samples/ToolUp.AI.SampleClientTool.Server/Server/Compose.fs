@@ -3,7 +3,7 @@
 
 module ToolUp.AI.SampleClientTool.Server.Compose
 
-// ─── Phase 46.B — Sample companion server compose ────────────────────
+// ─── Sample companion server compose ────────────────────
 //
 // Registers the sample calculator as a `ClientResident` AI tool —
 // stripped to the minimum: one tool, no module translation layer,
@@ -13,14 +13,14 @@ module ToolUp.AI.SampleClientTool.Server.Compose
 //
 // Reference-only — not a production companion. Two reasons:
 //   1. No authorizer is wired by default. The seam-absent default in
-//      `AIAgentEngine.runAgentLoop` is `Allow`, so this companion
+//      `AIAgentEngine.Loop.run` is `Allow`, so this companion
 //      composed without `registerWithPolicy` lets the AI fire the
 //      tool unrestricted. Fine for a docs / sample / contract-pack
 //      binding subject; not fine for any real deployment.
 //   2. The tool body itself is a calculator. A real companion would
 //      be wired to a domain-specific surface.
 //
-// Phase 539 — a sibling reference companion, `ToolUp.AI.UiAwareness`,
+// A sibling reference companion, `ToolUp.AI.UiAwareness`,
 // sits alongside this one showing the other `ClientResident` shape:
 // no-argument and read-only (a module's declared `withInspectState`
 // projection) rather than argument-taking (this calculator). See
@@ -29,10 +29,11 @@ module ToolUp.AI.SampleClientTool.Server.Compose
 
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
-open ToolUp.Platform.Server
+open ToolUp.Platform.Compose.Server
 open ToolUp.AI
-open ToolUp.AI.AICompose
 open ToolUp.AI.SampleClientTool
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 /// Tool definition the agent loop sees. `Location = ClientResident`
 /// means the executor below never runs — the loop emits a
@@ -92,26 +93,18 @@ let private clientResidentStub _ctx _argsJson = async {
 /// subject and for the InProcess round-trip test. Not suitable for
 /// any deployment that doesn't want the model to call the tool
 /// unrestricted.
-let register (app: AIServerApp) : AIServerApp = {
+let register (app: ServerApp) : ServerApp = {
     app with
-        Base = {
-            app.Base with
-                AITools = app.Base.AITools @ [ toolDefinition, clientResidentStub ]
-        }
+        AITools = app.AITools @ [ toolDefinition, clientResidentStub ]
 }
 
 /// Register the sample tool with an operator-supplied
 /// `IClientToolAuthorizer`. The authorizer is added with
 /// `ServerApp.addServiceConfig` so the agent loop's DI
 /// resolution finds it; the tool definition is appended to
-/// `Base.AITools` the same way as `register`.
-let registerWithPolicy (authorizer: IClientToolAuthorizer) (app: AIServerApp) : AIServerApp =
+/// `AITools` the same way as `register`.
+let registerWithPolicy (authorizer: IClientToolAuthorizer) (app: ServerApp) : ServerApp =
     let svc (s: IServiceCollection) =
         s.AddSingleton<IClientToolAuthorizer>(authorizer)
 
-    let registered = register app
-
-    {
-        registered with
-            Base = registered.Base |> ServerApp.addServiceConfig svc
-    }
+    register app |> ServerApp.addServiceConfig svc

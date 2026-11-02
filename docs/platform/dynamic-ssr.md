@@ -67,15 +67,18 @@ let clientPages =
 ## Registering sources
 
 ```fsharp
-PublicRenderingServerApp.create ()
-|> PublicRenderingServerApp.withConfig config
-|> PublicRenderingServerApp.withLayout (LayoutName "page") pageLayout
-|> PublicRenderingServerApp.withContentSource statusPage
-|> PublicRenderingServerApp.withContentSource clientPages   // order = resolution order
-|> PublicRenderingServerApp.run
+ServerApp.empty
+|> ServerApp.withConfig config
+|> withPublicRendering (
+    PublicRenderingOptions.create ()
+    |> PublicRenderingOptions.withLayout (LayoutName "page") pageLayout
+    |> PublicRenderingOptions.withContentSource statusPage
+    |> PublicRenderingOptions.withContentSource clientPages   // order = resolution order
+)
+|> ServerApp.run
 ```
 
-The compose root lives in `ToolUp.PublicRendering.PublicRenderingCompose`, which is `[<AutoOpen>]` under its namespace: `open ToolUp.PublicRendering` brings in the builder alongside the types and the source / layout helpers, so a composition file needs no second `open`. Opening the module explicitly, or spelling the calls `PublicRenderingCompose.PublicRenderingServerApp.…`, both still work.
+The compose root lives in `ToolUp.PublicRendering.PublicRenderingCompose`, which is `[<AutoOpen>]` under its namespace: `open ToolUp.PublicRendering` brings in the builder alongside the types and the source / layout helpers, so a composition file needs no second `open`. Opening the module explicitly, or spelling the calls `PublicRenderingCompose.withPublicRendering` / `PublicRenderingCompose.PublicRenderingOptions.…`, both still work.
 
 Multiple `withContentSource` calls compose; resolution is in registration order, first `Some` wins. The helper composes additively the same way `withLayout` / `withFeed` do.
 
@@ -203,11 +206,14 @@ The shipped `TaxonomyHandler.tagIndexSource` already does this (it enumerates on
 Discoverability (above) is *passive*: it makes pages crawlable and waits for engines to come. For a site with tens of thousands of long-tail pages, that wait is months. [IndexNow](https://www.indexnow.org/) is the *active* channel — push URLs to participating engines (Bing, Yandex, Seznam, Naver; Google indirectly via Bing's index-share signal) the moment content changes. Opt in with `withIndexNow`:
 
 ```fsharp
-PublicRenderingServerApp.create ()
-|> PublicRenderingServerApp.withConfig config   // PublicBaseUrl = Some "https://example.com"
-|> PublicRenderingServerApp.withLayout (LayoutName "page") pageLayout
-|> PublicRenderingServerApp.withIndexNow IndexNowOptions.enabled
-|> PublicRenderingServerApp.run
+ServerApp.empty
+|> ServerApp.withConfig config   // PublicBaseUrl = Some "https://example.com"
+|> withPublicRendering (
+    PublicRenderingOptions.create ()
+    |> PublicRenderingOptions.withLayout (LayoutName "page") pageLayout
+    |> PublicRenderingOptions.withIndexNow IndexNowOptions.enabled
+)
+|> ServerApp.run
 ```
 
 This serves an ownership-key file at `/{key}.txt`, fires a resumable bulk submission of the whole public URL universe at startup, and pushes each page the moment it's published. The submission walks the **same** URL universe the sitemap emits (`SitemapGenerator.entries`), so the push channel and the sitemap can never disagree. The submission is **resumable per batch** — a restart re-pushes only the batches that previously failed, never the whole universe — and a content-based deploy signature means a restart with unchanged content does nothing. Multi-instance deployments share resume state via `BlobIndexNowStateStore.create storage`. Off by default (GP 11 / GP 13): a pipeline without `withIndexNow` registers no route, no hosted service, and no allocation. See [`docs/migrations/109-indexnow-push-indexing.md`](../migrations/109-indexnow-push-indexing.md).

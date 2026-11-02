@@ -1,6 +1,6 @@
 # Release process — stable releases, release candidates, and the soak gate
 
-Every `ToolUp.*` package in the lockstep line is published to **nuget.org** by
+Every `ToolUp.*` package is published to **nuget.org** by
 [`publish-nuget.yml`](../../.github/workflows/publish-nuget.yml), and only by it: a tag push triggers
 it, Trusted Publishing mints a one-hour key, and nothing else in this repository can publish. This page
 is the operator's flow for the two channels that workflow serves.
@@ -22,6 +22,67 @@ A consumer that did not ask for a prerelease never resolves one: NuGet excludes 
 floating and latest-stable resolution. That is what keeps the stable channel untouched by a candidate,
 and it is standard NuGet behaviour, not something this repository enforces.
 
+## Version groups — one lockstep core, a line per companion family
+
+Every packable project is on exactly one **version group**, declared in
+[`version-groups.json`](../../version-groups.json) by repo-relative project-file glob (`*` within one
+path segment, `**` across segments).
+
+- **The core** is the one `lockstep` group: `ToolUp.Platform.*`, `ToolUp.AI.*`, the feature tiers
+  (Facts, Forms, RAG, KnowledgeBase, Scheduling, Reporting, …), the transport and wire packages, the
+  Feliz bindings, `ToolUp.Sdk` and `ToolUp.Platform.Build`. Its version **is** the `<Version>` in
+  `Directory.Build.props`, the number the release tag names. A new subsystem assembly under
+  `src/ToolUp.Platform.*/` joins it by pattern.
+- **Each companion family** (`audit-sinks`, `notification-channels`, `data-sources`, `storage`,
+  `secrets`, `auth-providers`, …, and the lines that were already independent: `stripe`, `workflow`,
+  `experiments`, `webhooks`, `feature-flag-providers`) is a group with its own version.
+
+What follows from the file, all of it checked:
+
+- **Packing.** `Directory.Build.props` carries a region generated from the file: one property per
+  companion group and the per-project assignment, so each project packs at its group's version. A
+  project-level `<Version>` (the `-alpha` and Stripe lines) still wins, and must equal its group's.
+- **The bump check** (`VerifySemVerBump`) classifies each package as before and rolls the classes up
+  **per group**. A group fails when its declared version implies a smaller bump than its own packages
+  moved by; `--propose` reports per group. The core advances at every release. A companion group whose
+  packages did not move, at the version it was released at, is not re-released, unless a group it
+  depends on broke: its published packages were compiled against the surface that broke, so it ships
+  again, at least as a patch. The first instance is 0.39.0: the core broke, so `stripe` (0.2.0 to 0.2.1)
+  and `feature-flag-providers` (0.1.0-alpha to 0.1.1-alpha) each take a patch although their own
+  surfaces did not move.
+- **The manifest.** `ToolUp.Sdk.props` resolves every package through its group's property:
+  `ToolUpSdkVersion` for the core, `ToolUp<Family>Version` for a family. Each family property defaults
+  to the version that family shipped at beside the core release, so a consumer pinning only
+  `ToolUpSdkVersion` restores everything. Setting a family's property moves that family alone
+  ([`docs/migrations/1196-version-groups.md`](../migrations/1196-version-groups.md)).
+- **The CHANGELOG** renders one subsection per group that moved, headed by the group and the version
+  it shipped at. Releases from before groups render as they always did.
+- **The invariants**, held by `SdkManifestTests` on every push and by `GenerateSdkManifest --check` at
+  release: every packable project in exactly one group; no glob that claims nothing; the core group's
+  version equal to `<Version>`; and no core package depending on a companion package. The last one is
+  what lets a candidate run pack the core alone.
+
+Edit a version or a glob in the file, then run
+`dotnet run --project Build.fsproj -- GenerateSdkManifest` to rewrite both generated regions.
+
+### The operator's rulings
+
+Recorded 2026-11-01 under the operator's standing ruling for this work ("do what is best for the
+long-term quality of the platform").
+
+1. **Soak scope: the core group only.** The release-candidate soak (below) applies to the core. A
+   companion group publishes without a soak of its own, riding the core's release act: on a candidate
+   run every companion group is made non-packable, and the soak's "no breaking change since the
+   candidate" rule reads core packages only. A companion family that needs a soak later gets it as a
+   declared property of its group, not as a second ladder.
+2. **Tag model: one `v*` tag per release, named by the core version.** The publish workflow packs every
+   project at its group's version; there are no group tags. A release in which only a companion group
+   moved still takes a core PATCH, so a tag exists and the release has a number to be recorded under.
+3. **Ledger act: unchanged.** A release is recorded against this repository's core property
+   (`<Version>` / `ToolUpSdkVersion`), one version declaration per repository, exactly as before; the
+   group lines are recorded in `version-groups.json` and the CHANGELOG, and recording a group's own
+   release act is a change to the release tooling, not to this repository.
+
 ## What the workflow checks, in order, before any key exists
 
 1. **`VerifyReleaseChannel`** (Phase 263) — reads the tag and refuses:
@@ -35,10 +96,11 @@ and it is standard NuGet behaviour, not something this repository enforces.
 
    For a candidate it exports `TOOLUP_RELEASE_CORE` / `TOOLUP_RELEASE_PRERELEASE` to the rest of the
    job, and [`Directory.Build.targets`](../../Directory.Build.targets) stamps `-rc.N` onto every
-   lockstep package. Packages on their own version line (the `-alpha` companions, the Stripe line) are
-   **skipped** for a candidate run — an RC must never be the run that first publishes a stable version
-   of anything.
-2. **`GenerateSdkManifest --check`** (Phase 326) and **`VerifySemVerBump`** (Phase 260) — unchanged.
+   core package. Every package on a companion version group is **skipped** for a candidate run (ruling 1
+   above): an RC must never be the run that first publishes a stable version of anything, and a
+   companion line has no candidate of its own.
+2. **`GenerateSdkManifest --check`** (Phase 326) — the manifest lists every package, and both generated
+   regions are the render of `version-groups.json` — and **`VerifySemVerBump`** (Phase 260), per group.
 3. **`Changelog`** — renders `CHANGELOG.md` on the tag and keeps it as the run's `changelog` artefact
    (see [The CHANGELOG is rendered at release](#the-changelog-is-rendered-at-release)).
 4. Login, pack, push, provenance attestation — unchanged.
@@ -132,7 +194,7 @@ A major's candidate is **promotion-eligible** only when all of these hold:
 | Rule | Measured by |
 |---|---|
 | nuget.org has served it for **≥ the soak window** (14 days by default) | the registration leaf's `published` time for every package the smoke job probes — the latest of them starts the clock; unlisted or unreadable is *not* soaked |
-| **no BREAKING public-surface change** since it | the api-baselines at the candidate tag vs. the promoting tree, classified by the same comparer `VerifySemVerBump` uses (the doc-coverage sidecar excluded). Additive growth does not block — a consumer who validated the candidate loses nothing to it — and is printed in the run log; a break forces a new candidate |
+| **no BREAKING public-surface change** since it | the api-baselines at the candidate tag vs. the promoting tree, classified by the same comparer `VerifySemVerBump` uses (the doc-coverage sidecar excluded), over the CORE packages only — a companion line is not held to the candidate (ruling 1). Additive growth does not block — a consumer who validated the candidate loses nothing to it — and is printed in the run log; a break forces a new candidate |
 | the promoting commit **descends** from it | `git merge-base --is-ancestor` |
 | the Phase 257 **scorecard is all-green** | `V1Readiness`, every row `pass` |
 

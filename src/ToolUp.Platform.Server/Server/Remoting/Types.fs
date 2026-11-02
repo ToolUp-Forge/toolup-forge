@@ -639,7 +639,7 @@ type RemotingOptions<'context, 'serverImpl> = {
     /// (substring, stopwatch, record, tag map, sink dispatch). Used by
     /// `Api.make` to honour GP 13 when the default `IMetricsSink`
     /// resolves to `NoOpMetricsSink` — the seam pays nothing per
-    /// request on the canonical `NoMetricsEndpoint` deployment shape.
+    /// request on the canonical `FeatureMode.Disabled` deployment shape.
     ///
     /// Default `None` — the dispatcher emits whenever `Telemetry =
     /// Some _` (the original behaviour). Consumer-supplied sinks pass

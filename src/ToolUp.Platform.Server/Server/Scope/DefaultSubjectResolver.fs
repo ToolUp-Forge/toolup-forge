@@ -1,10 +1,10 @@
-module ToolUp.Platform.DefaultSubjectResolver
+module ToolUp.Platform.Scope.DefaultSubjectResolver
 
 open System
 open Microsoft.Extensions.Caching.Memory
 open ToolUp.Platform
 open ToolUp.Platform.Auth
-open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Config.TeamManagement
 
 // ─── DefaultSubjectResolver — Phase 66 Stream A.3 ────────────────────
 //

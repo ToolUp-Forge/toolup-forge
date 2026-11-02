@@ -54,7 +54,7 @@ The structured `PeerError` rides in the error object's `Data` field (serialised)
 
 ### Request-body ceiling
 
-`POST /peer/v1/{contractId}` reads the inbound body under a configurable ceiling — `PeerWireLimits.MaxRequestBytes`, **8 MiB by default**, set with `PeerServerApp.withWireLimits`. Over-ceiling requests answer `413` with a structured `PeerRequestTooLarge` naming the limit.
+`POST /peer/v1/{contractId}` reads the inbound body under a configurable ceiling — `PeerWireLimits.MaxRequestBytes`, **8 MiB by default**, set with `PeerOptions.withWireLimits`. Over-ceiling requests answer `413` with a structured `PeerRequestTooLarge` naming the limit.
 
 The ceiling is enforced twice, because either check alone is bypassable: a declared `Content-Length` over the limit is refused without reading a byte, and a request that declares nothing (chunked transfer-encoding, which the *caller* chooses) is stopped by a bounded read the moment it passes the limit. So the receiver never buffers more than the ceiling of a payload it has not agreed to — auth-gating bounds *who* can send one, not *how large* it is.
 
@@ -68,7 +68,7 @@ The other `/peer/v1/*` routes are `GET` and carry no body.
 
 The SDK ships **two unrelated ways** for one deployment to authenticate another, and they are legitimately different tools rather than two attempts at one:
 
-- **The static-bearer substrate** — `ServerConfig.PeerRoutePrefixes` + `PeerBearerAuthMiddleware` (Phase 37 / Phase 137), in `ToolUp.Platform.Server`. A caller names itself in `X-Peer-Name` and presents a shared secret read from `ISecretStore` at `peers/{peerName}/bearer`; a constant-time match stamps `HttpContext.Items["PeerName"]` and the request continues.
+- **The static-bearer substrate** — `ServerConfig.MultiInstance.PeerRoutePrefixes` + `PeerBearerAuthMiddleware` (Phase 37 / Phase 137), in `ToolUp.Platform.Server`. A caller names itself in `X-Peer-Name` and presents a shared secret read from `ISecretStore` at `peers/{peerName}/bearer`; a constant-time match stamps `HttpContext.Items["PeerName"]` and the request continues.
 - **The signed-JWT substrate** — this companion. Per-call HS256 (or Phase 343 ES256 / RS256) tokens, validated fail-closed by `IPeerAuthProvider` inside the `/peer/v1/*` handlers.
 
 They are **not** the same guarantee, and the gap is the whole reason this section exists:
@@ -99,7 +99,7 @@ They are **not** the same guarantee, and the gap is the whole reason this sectio
 | `NoPeerAuthSurface` | neither substrate composed |
 | `SignedPeerAuthOnly` | this companion alone — the strongest posture |
 | `StaticBearerOnly` | the bearer flavour on prefixes of its own; legitimate |
-| `StaticBearerOnReservedNamespace` | bearer prefix covers `/peer/v1/`, but `PeerSubstrate = NoPeerSubstrate`, so nothing is shadowed **yet** |
+| `StaticBearerOnReservedNamespace` | bearer prefix covers `/peer/v1/`, but `PeerSubstrate = FeatureMode.Disabled`, so nothing is shadowed **yet** |
 | `BothSubstratesDisjoint` | both composed, disjoint prefixes — the documented coexistence |
 | `StaticBearerShadowsSignedPeer` | the defect: the host is serving and a bearer prefix covers its namespace |
 
@@ -173,7 +173,7 @@ A long-running contract method has shape `… -> Async<PeerJobHandle<'T>>`. It c
 
 ### Clean-room gate
 
-A contract composed with `PeerServerApp.withCleanRoomTemplate contractId template` has its `PeerContractRegistration.Dispatch` wrapped by `CleanRoomGate.wrap`, so the composed privacy floor is applied to **every** answer of **every** method on that contract — by the substrate, not by the handler. A handler that never calls `ICleanRoomBroker.Enforce` (the shape Phase 18b's broker relied on and nothing checked) cannot release row-level data: its answer travels down the wrapper, which is the only route `IPlatformPeer` has to the wire.
+A contract composed with `PeerOptions.withCleanRoomTemplate contractId template` has its `PeerContractRegistration.Dispatch` wrapped by `CleanRoomGate.wrap`, so the composed privacy floor is applied to **every** answer of **every** method on that contract — by the substrate, not by the handler. A handler that never calls `ICleanRoomBroker.Enforce` (the shape Phase 18b's broker relied on and nothing checked) cannot release row-level data: its answer travels down the wrapper, which is the only route `IPlatformPeer` has to the wire.
 
 Three invariants are checked by the wrapper regardless of which `ICleanRoomBroker` is resolved — the seam is substitutable, the composed floor is not:
 
@@ -185,7 +185,7 @@ The broker's own `Enforce` runs between (1) and (3) and is where the suppression
 
 A withhold reaches the caller as `PeerCleanRoomWithheld templateId` (code `-32008`, HTTP `200` like every other structured dispatch outcome) carrying **no quantitative detail**: the broker's reasons name cohort sizes, and a caller able to vary its query and read them back has a counting oracle over the protected data. The full reason is recorded receiver-side as a `PeerCleanRoomDecision` audit row; the Phase 18a audit-transparency contract is the deliberate, caller-scoped route to any of it.
 
-`withCleanRoomTemplate` naming a contract id the deployment does not host is a composition defect and `run` refuses to start — an inert privacy gate that looks composed is the failure this seam exists to remove. `PeerServerApp.auditCleanRoomTemplates` reports the same finding as data for a deployment's own preflight.
+`withCleanRoomTemplate` naming a contract id the deployment does not host is a composition defect and the deployment refuses to start — an inert privacy gate that looks composed is the failure this seam exists to remove. `PeerCompose.auditCleanRoomTemplates` reports the same finding as data for a deployment's own preflight.
 
 A composition that never calls `withCleanRoomTemplate` wraps nothing, probes nothing, and registers the same `PeerContractRegistration` values it did before (GP 11 / GP 13). The raw `ICleanRoomBroker` API is unchanged for bespoke callers — notably any caller that has a caller-requested gate to compose, which the peer wire format does not carry.
 
@@ -231,7 +231,7 @@ Known boundaries — each a single "follow-up", not a hidden bug:
 - **Single audit event** — only `PeerCallCompleted`. No `PeerCallStarted` (no in-flight visibility), no separate handshake audit. The handshake-transparency surface is Phase 18a.
 - **In-memory handshake** — `InMemoryPeerHandshake` negotiates against the local peer's live capabilities + a direct capability fetch; there is no cached / persisted negotiation result. Sophisticated negotiation (capability intersection policy, downgrade rules) is Phase 18d.
 - **No fan-out / cascade minting** — the cascade fields (`Route`, `HopsRemaining`, `RootRequestId`, `ParentRequestId`) and the `Delegated` `UserContext` case are *reserved and enforced* (loop + hop guards run) but the foundation does not itself mint a multi-hop cascade or aggregate fan-out results. `IPeerFanout` / `IPeerCascade` + federation trust anchors are a follow-on substrate phase.
-- **Long-running result GC — closed (Phase 316), with one boundary left.** `BlobPeerJobResultStore` now honours a `PeerJobRetentionPolicy` (`Ttl` / `DeleteOnRead` / `GraceWindow`), defaulting to a generous 30-day TTL. Enforcement is lazy — an expired document reads as absent and is deleted on that read — so a result nobody ever polls occupies storage until something reads it or an external sweep runs. Configuring the policy from compose (`PeerServerApp.withJobRetention`) is not yet wired: a deployment overriding it registers its own `IPeerJobResultStore` constructed with the desired policy.
+- **Long-running result GC — closed (Phase 316), with one boundary left.** `BlobPeerJobResultStore` now honours a `PeerJobRetentionPolicy` (`Ttl` / `DeleteOnRead` / `GraceWindow`), defaulting to a generous 30-day TTL. Enforcement is lazy — an expired document reads as absent and is deleted on that read — so a result nobody ever polls occupies storage until something reads it or an external sweep runs. Configuring the policy from compose (`PeerOptions.withJobRetention`) is not yet wired: a deployment overriding it registers its own `IPeerJobResultStore` constructed with the desired policy.
 - **Single signing-key per peer** — `peers/{peerId}/signing-key` is one symmetric secret; there is no key-id / rotation-overlap window (rotate by replacing the secret; in-flight 5-minute tokens signed with the old key fail closed after the swap). Asymmetric (RS256 / EdDSA) peer keys are out of scope for the foundation.
 - **`alg` is HS256-only** — by design (the fail-closed default). A deployment that wants asymmetric keys supplies its own `IPeerAuthProvider`.
 - **Host-only local identity** — `withLocalPeer` is optional; a host-only deployment that never calls peers leaves it `None`, and the calling-side singletons fail closed (no signing key for an empty id) if actually used. No compile-time enforcement that a calling deployment set it.

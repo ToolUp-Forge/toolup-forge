@@ -33,7 +33,7 @@ open ToolUp.Forms.FormSubmission
 type CustomValidator = string -> Result<unit, string>
 
 /// Registry of name → predicate. Populated at compose time via
-/// `FormsServerApp.withCustomValidator`; immutable for process
+/// `FormsOptions.withCustomValidator`; immutable for process
 /// lifetime.
 type CustomValidatorRegistry = Map<string, CustomValidator>
 

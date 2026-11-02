@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-namespace ToolUp.Platform
+namespace ToolUp.Platform.Jobs
+
+open ToolUp.Platform
+open ToolUp.Platform.Infra
 
 open System
 open System.Collections.Concurrent
@@ -29,8 +32,8 @@ open ToolUp.Remoting.Json.SystemTextJson
 // per-scope sharding with no cross-scope ordering claim, expiry
 // precision declared by the implementation's heartbeat window.
 //
-// Composition: `ServerConfig.Presence = EnabledPresence` registers the
-// in-memory default into DI (see `ComposeNotifications`); `NoPresence`
+// Composition: `ServerConfig.Presence = FeatureMode.Enabled` registers the
+// in-memory default into DI (see `ComposeNotifications`); `FeatureMode.Disabled`
 // (the default) registers nothing.
 //
 // **This is the substrate the platform builds on** — Phase 622.A decided

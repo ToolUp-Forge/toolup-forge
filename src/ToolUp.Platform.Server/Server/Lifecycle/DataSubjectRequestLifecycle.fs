@@ -1,4 +1,4 @@
-module ToolUp.Platform.DataSubjectRequestLifecycle
+module ToolUp.Platform.Compose.DataSubjectRequestLifecycle
 
 open System
 open System.Security.Cryptography
@@ -6,8 +6,9 @@ open System.Text
 open System.Text.Json.Nodes
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.IDataExporter
-open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Audit.IDataExporter
+open ToolUp.Platform.Config.TeamManagement
+open ToolUp.Platform.Audit
 
 // ─── Phase 54 — first-party data-erasure lifecycle hook ──────────────
 //
@@ -48,106 +49,102 @@ open ToolUp.Platform.TeamManagement
 // a tenant is stood up.
 
 /// Resolve the subject set whose data the offboard must erase.
-let private subjectsFor (services: IServiceProvider) (scopeId: string) : Async<Result<string list, string>> = async {
-    match ScopeKey.tryParseContainer scopeId with
-    | Some(ScopeKey.Team teamId) ->
-        match services.GetService(typeof<ITeamStore>) with
-        | :? ITeamStore as store ->
-            let! members = store.GetTeamMembers teamId
-            return Ok(members |> List.map _.UserId)
-        | _ -> return Error "team scope offboard requires an ITeamStore to enumerate member subjects"
-    | Some(ScopeKey.User userId) -> return Ok [ userId ]
-    | _ -> return Ok [ scopeId ]
+/// What the data-erasure hook acts with: the registered erasure handlers
+/// and, for a team scope, the team store that enumerates its subjects.
+type ErasureSubstrate = {
+    Handlers: IErasureHandler list
+    Teams: ITeamStore option
 }
 
-type DataSubjectRequestLifecycle(services: IServiceProvider) =
-    interface ITenantLifecycle with
-        member _.Name = "data-erasure"
+let private teamStoreOf (services: IServiceProvider) : ITeamStore option =
+    match services.GetService(typeof<ITeamStore>) with
+    | :? ITeamStore as store -> Some store
+    | _ -> None
 
-        member _.OnProvisioned(_scopeId, _actorUserId) = async {
-            return
-                LifecycleHookResult.Skipped
-                    "no provisioning action — there is no subject data to erase when a tenant is stood up"
-        }
+let private subjectsFor (teams: ITeamStore option) (scopeId: string) : Async<Result<string list, string>> = async {
+    match ScopeId.parse scopeId with
+    | ScopeKind.Team teamId ->
+        match teams with
+        | Some store ->
+            let! members = store.GetTeamMembers teamId
+            return Ok(members |> List.map _.UserId)
+        | None -> return Error "team scope offboard requires an ITeamStore to enumerate member subjects"
+    | ScopeKind.User userId -> return Ok [ userId ]
+    | ScopeKind.Other scopeId -> return Ok [ scopeId ]
+}
 
-        member _.OnDeprovisioned(scopeId, _actorUserId) = async {
-            // MS DI resolves `seq<T>` to an empty enumerable when nothing
-            // is registered; guard against a provider that returns null
-            // (a bare custom `IServiceProvider`) so the hook degrades to
-            // Skipped rather than throwing.
+/// The first-party data-erasure hook, as a value. MS DI resolves `seq<T>`
+/// to an empty enumerable when nothing is registered; a provider that
+/// returns null (a bare custom `IServiceProvider`) reads as no handlers too.
+let hook: TenantHook<ErasureSubstrate> = {
+    Name = "data-erasure"
+    Requires = "an IErasureHandler (subject-data erasure)"
+    Resolve =
+        fun services ->
             let handlers =
                 match services.GetService(typeof<seq<IErasureHandler>>) with
                 | :? seq<IErasureHandler> as hs -> List.ofSeq hs
                 | _ -> []
 
             if List.isEmpty handlers then
-                return LifecycleHookResult.Skipped "no IErasureHandler registered (subject-data erasure not wired)"
+                None
             else
-                let! subjectsResult = subjectsFor services scopeId
+                Some {
+                    Handlers = handlers
+                    Teams = teamStoreOf services
+                }
+    // There is no subject data to erase when a tenant is stood up.
+    OnProvisioned = None
+    OnDeprovisioned =
+        Some(fun substrate scopeId _ -> async {
+            match! subjectsFor substrate.Teams scopeId with
+            | Error reason -> return LifecycleHookResult.Skipped reason
+            | Ok subjects ->
+                let errors = ResizeArray<string>()
 
-                match subjectsResult with
-                | Error reason -> return LifecycleHookResult.Skipped reason
-                | Ok subjects ->
-                    let errors = ResizeArray<string>()
+                for subject in subjects do
+                    for handler in substrate.Handlers do
+                        let! result = handler.Erase(scopeId, subject, ErasurePolicy.HardDelete)
 
-                    for subject in subjects do
-                        for handler in handlers do
-                            let! result = handler.Erase(scopeId, subject, ErasurePolicy.HardDelete)
+                        match result with
+                        | Ok _ -> ()
+                        | Error err -> errors.Add(sprintf "%s/%s: %A" handler.Name subject err)
 
-                            match result with
-                            | Ok _ -> ()
-                            | Error err -> errors.Add(sprintf "%s/%s: %A" handler.Name subject err)
+                if errors.Count > 0 then
+                    return LifecycleHookResult.Failed(String.Join("; ", errors))
+                else
+                    return LifecycleHookResult.Completed
+        })
+    // Mutation-free preview: the affected-record counts every handler's
+    // Preview (NOT Erase) reports across the offboard's subject set — the
+    // same subject resolution the erasure uses, so the preview counts
+    // exactly what the offboard would erase.
+    Preview =
+        Some(fun substrate scopeId _ -> async {
+            match! subjectsFor substrate.Teams scopeId with
+            | Error reason -> return 0, sprintf "subject set unavailable: %s" reason
+            | Ok subjects ->
+                let mutable total = 0
 
-                    if errors.Count > 0 then
-                        return LifecycleHookResult.Failed(String.Join("; ", errors))
-                    else
-                        return LifecycleHookResult.Completed
-        }
+                for subject in subjects do
+                    for handler in substrate.Handlers do
+                        let! summary = handler.Preview(scopeId, subject, ErasurePolicy.HardDelete)
+                        total <- total + summary.RecordsAffected
 
-    // Phase 54c — mutation-free preview: sum the affected-record counts
-    // every registered IErasureHandler.Preview (NOT Erase) reports across
-    // the offboard's subject set. Reuses the same subject resolution the
-    // erasure path uses, so the preview counts exactly what the offboard
-    // would erase.
-    interface ITenantLifecyclePreview with
-        member _.OnDeprovisionPreview(scopeId, _actorUserId) = async {
-            let handlers =
-                match services.GetService(typeof<seq<IErasureHandler>>) with
-                | :? seq<IErasureHandler> as hs -> List.ofSeq hs
-                | _ -> []
-
-            if List.isEmpty handlers then
                 return
-                    LifecyclePreviewItem.affecting "data-erasure" 0 "no IErasureHandler registered — nothing to erase"
-            else
-                match! subjectsFor services scopeId with
-                | Error reason ->
-                    return
-                        LifecyclePreviewItem.affecting "data-erasure" 0 (sprintf "subject set unavailable: %s" reason)
-                | Ok subjects ->
-                    let mutable total = 0
-
-                    for subject in subjects do
-                        for handler in handlers do
-                            let! summary = handler.Preview(scopeId, subject, ErasurePolicy.HardDelete)
-                            total <- total + summary.RecordsAffected
-
-                    return
-                        LifecyclePreviewItem.affecting
-                            "data-erasure"
-                            total
-                            (sprintf
-                                "%d record(s) across %d store(s) would be erased for %d subject(s)"
-                                total
-                                handlers.Length
-                                subjects.Length)
-        }
+                    total,
+                    sprintf
+                        "%d record(s) across %d store(s) would be erased for %d subject(s)"
+                        total
+                        substrate.Handlers.Length
+                        subjects.Length
+        })
+}
 
 /// Construct the first-party data-erasure lifecycle hook. Resolves the
 /// registered erasure handlers (+ optional team store) from `services`
 /// on every call.
-let create (services: IServiceProvider) : ITenantLifecycle =
-    DataSubjectRequestLifecycle(services) :> ITenantLifecycle
+let create (services: IServiceProvider) : ITenantLifecycle = TenantHook.asLifecycle hook services
 
 /// Phase 54j — produce the durable export archive for `scopeId` as the
 /// pre-step of an export-then-erase offboard. Resolves every registered
@@ -170,7 +167,7 @@ let exportArchive (services: IServiceProvider) (scopeId: string) : Async<Result<
     else
         match services.GetService(typeof<IBlobStorage>) with
         | :? IBlobStorage as blob ->
-            match! subjectsFor services scopeId with
+            match! subjectsFor (teamStoreOf services) scopeId with
             | Error reason -> return Error(sprintf "subject set unavailable: %s" reason)
             | Ok subjects ->
                 let segments = ResizeArray<ExportSegment>()

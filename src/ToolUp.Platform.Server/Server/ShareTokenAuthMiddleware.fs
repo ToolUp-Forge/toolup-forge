@@ -1,8 +1,9 @@
-module ToolUp.Platform.ShareTokenAuth
+module ToolUp.Platform.Scope.ShareTokenAuth
 
 open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.Primitives
 open ToolUp.Platform
+open ToolUp.Platform.Config
 
 // ─── ShareTokenAuthMiddleware — Phase 66 Stream A.4 ──────────────────
 //

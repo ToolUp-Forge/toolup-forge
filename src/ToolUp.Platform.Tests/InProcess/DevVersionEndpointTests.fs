@@ -44,6 +44,8 @@ open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Hosting
 open Giraffe
 open ToolUp.Platform
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Fixtures ─────────────────────────────────────────────────────────
 
@@ -76,16 +78,7 @@ let private devRoutesFor (enableDevEndpoints: bool) : HttpHandler list =
     }
 
     let routeHandlers =
-        BuildRouteHandlers.buildRouteHandlers
-            config
-            []
-            []
-            ComposeExtensions.empty
-            []
-            None
-            NoNotifications
-            (ref None)
-            (ref None)
+        BuildRouteHandlers.buildRouteHandlers config [] [] ComposeExtensions.empty [] None NoNotifications None None
 
     routeHandlers.DevDiagnosticsRoutes emptyCapture
 

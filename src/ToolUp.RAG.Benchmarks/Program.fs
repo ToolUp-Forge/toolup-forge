@@ -5,6 +5,7 @@ open System.IO
 open ToolUp.RAG.Benchmarks.PipelineFactory
 open ToolUp.RAG.Benchmarks.BenchmarkRunner
 open ToolUp.RAG.Benchmarks.ReportWriter
+open ToolUp.Platform.Infra
 
 // ─── CLI parsing ─────────────────────────────────────────────────
 

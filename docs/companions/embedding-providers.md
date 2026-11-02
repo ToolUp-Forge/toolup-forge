@@ -50,9 +50,13 @@ Setup:
 // `IEmbeddingProvider`.
 let embedder = LocalEmbeddingProvider.create ()
 
-RAGServerApp.create aiProviderFactory providerProfile embedder
-// ... the deployment's other RAGServerApp.with* calls ...
-|> RAGServerApp.run
+ServerApp.empty
+// ... the deployment's ServerApp.with* calls ...
+|> RAGCompose.withRAG (
+    RagOptions.create aiProviderFactory providerProfile embedder
+    // ... the deployment's other RagOptions.with* calls ...
+)
+|> ServerApp.run
 ```
 
 No API key needed. No network calls. Pure in-process.
@@ -73,23 +77,27 @@ Setup:
 // sibling, and `create` already returns `IEmbeddingProvider`.
 let embedder = OpenAIEmbeddingProvider.create secretStore
 
-RAGServerApp.create aiProviderFactory providerProfile embedder
-// ... the deployment's other RAGServerApp.with* calls ...
-|> RAGServerApp.run
+ServerApp.empty
+// ... the deployment's ServerApp.with* calls ...
+|> RAGCompose.withRAG (
+    RagOptions.create aiProviderFactory providerProfile embedder
+    // ... the deployment's other RagOptions.with* calls ...
+)
+|> ServerApp.run
 ```
 
 Store API key under `_platform` scope, key name `OPENAI_API_KEY`. The provider pulls per-call.
 
 Cost: ~$0.02 per 1M tokens for `text-embedding-3-small`. A 1000-document KB with 50 chunks each at ~500 tokens per chunk = 25M tokens = ~$0.50 once. Re-embedding on model swap = same cost again.
 
-Latency: ~50-200ms per embed call (OpenAI's API). Pair with `CachingEmbeddingProvider` (auto-wrapped by `composeWithRAG`) so repeated queries / re-embeds hit the cache.
+Latency: ~50-200ms per embed call (OpenAI's API). Pair with `CachingEmbeddingProvider` (auto-wrapped by `RAGCompose.withRAG`) so repeated queries / re-embeds hit the cache.
 
 ## Caching layer
 
 The SDK auto-wraps any registered `IEmbeddingProvider` with `CachingEmbeddingProvider` — LRU cache, keyed by an `EmbeddingCacheKey`: the `(ProviderId, ModelId, Dimensions)` `EmbeddingVersion` plus `SHA256(text)`.
 
 ```fsharp
-open ToolUp.Platform.IEmbeddingProvider
+open ToolUp.Platform.Infra.IEmbeddingProvider
 
 type EmbeddingCacheKey = {
     Version: EmbeddingVersion
@@ -122,17 +130,21 @@ Replace the in-memory cache with a Redis-backed companion:
 ```fsharp
 open ToolUp.RAG.EmbeddingCaches.Redis
 
-RAGServerApp.create aiProviderFactory providerProfile embedder
-|> RAGServerApp.withEmbeddingCache (RedisEmbeddingCache.create connectionString None)
-// ... the deployment's other RAGServerApp.with* calls ...
-|> RAGServerApp.run
+ServerApp.empty
+// ... the deployment's ServerApp.with* calls ...
+|> RAGCompose.withRAG (
+    RagOptions.create aiProviderFactory providerProfile embedder
+    |> RagOptions.withEmbeddingCache (RedisEmbeddingCache.create connectionString None)
+    // ... the deployment's other RagOptions.with* calls ...
+)
+|> ServerApp.run
 ```
 
 `RedisEmbeddingCache.create : string -> ILogger option -> IEmbeddingCache` connects with the shipped defaults and owns the multiplexer. Use `fromMultiplexer` to share a connection pool the deployment already owns (the same `IConnectionMultiplexer` backing `RedisNotificationChannel` / `RedisDistributedLock`), or `createWith` to override `RedisEmbeddingCacheOptions`.
 
 The Redis cache survives process restarts and serves across multiple app instances. Useful at scale.
 
-It also **lifts** the `team-mode-shared-embedding-cache` preflight warning. That validator fires when the process-local `InMemoryEmbeddingCache` is active in `Team` / `MultiTeam` mode with `ReplicaCount > 1`, because each replica then keeps its own entries for the same text. A cross-replica cache removes that divergence, so the warning stops applying rather than being suppressed — `ServerConfig.AcceptSharedEmbeddingCacheInTeamMode` stays `false`. Composing `InMemoryEmbeddingCache` through the hook by hand is accepted and behaves exactly as the default, warning included: what lifts the warning is the cache spanning replicas, not the hook being called.
+It also **lifts** the `team-mode-shared-embedding-cache` preflight warning. That validator fires when the process-local `InMemoryEmbeddingCache` is active in `Team` / `MultiTeam` mode with `ReplicaCount > 1`, because each replica then keeps its own entries for the same text. A cross-replica cache removes that divergence, so the warning stops applying rather than being suppressed — `ServerConfig.RiskAcknowledgements.AcceptSharedEmbeddingCacheInTeamMode` stays `false`. Composing `InMemoryEmbeddingCache` through the hook by hand is accepted and behaves exactly as the default, warning included: what lifts the warning is the cache spanning replicas, not the hook being called.
 
 ## Version stamping + re-embedding
 
@@ -233,9 +245,13 @@ Wire:
 ```fsharp
 let embedder = MyVendor.EmbeddingProvider.create secretStore "myvendor-large"
 
-RAGServerApp.create aiProviderFactory providerProfile embedder
-// ... the deployment's other RAGServerApp.with* calls ...
-|> RAGServerApp.run
+ServerApp.empty
+// ... the deployment's ServerApp.with* calls ...
+|> RAGCompose.withRAG (
+    RagOptions.create aiProviderFactory providerProfile embedder
+    // ... the deployment's other RagOptions.with* calls ...
+)
+|> ServerApp.run
 ```
 
 Author an `IHealthCheck` + `IConfigValidator` for self-registration.
@@ -246,7 +262,7 @@ See [`rag/extending.md`](../rag/extending.md) for the full guide.
 
 - Production embedding provider — `LocalEmbeddingProvider` is dev-only.
 - API keys in `ISecretStore`, scoped to `_platform`.
-- `CachingEmbeddingProvider` wrapping enabled (auto-applied by `composeWithRAG`).
+- `CachingEmbeddingProvider` wrapping enabled (auto-applied by `RAGCompose.withRAG`).
 - Distributed cache (Redis) for multi-instance deployments.
 - Health probe + config validator self-register.
 - Model-swap procedure documented for operators — re-embed after swap, audit `KnowledgeChunkReembedded` events.

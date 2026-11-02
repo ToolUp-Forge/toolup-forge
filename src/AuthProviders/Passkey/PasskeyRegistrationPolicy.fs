@@ -7,6 +7,8 @@ open System.Text
 open ToolUp.Platform
 open ToolUp.Platform.Auth
 open ToolUp.AuthProviders.Passkey.PasskeyTypes
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config.Auth
 
 // ─── 443.B — registration policy (secure by default) ─────────────────
 //

@@ -5,10 +5,10 @@
 # still be folded into this file in the same PR.
 ToolUp.RAG.StaticCorpus.HashingEmbeddingProvider (class)
 ToolUp.RAG.StaticCorpus.HashingEmbeddingProvider.DefaultDimensions : System.Int32 (literal)
-ToolUp.RAG.StaticCorpus.HashingEmbeddingProvider.create(System.Int32) : ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider
-ToolUp.RAG.StaticCorpus.HashingEmbeddingProvider.createDefault() : ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider
+ToolUp.RAG.StaticCorpus.HashingEmbeddingProvider.create(System.Int32) : ToolUp.Platform.Infra.IEmbeddingProvider+IEmbeddingProvider
+ToolUp.RAG.StaticCorpus.HashingEmbeddingProvider.createDefault() : ToolUp.Platform.Infra.IEmbeddingProvider+IEmbeddingProvider
 ToolUp.RAG.StaticCorpus.HashingEmbeddingProvider.embed(System.Int32, System.String) : System.Single[]
 ToolUp.RAG.StaticCorpus.StaticCorpusRetrievalPipeline (class)
-ToolUp.RAG.StaticCorpus.StaticCorpusRetrievalPipeline.create(ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider, ToolUp.RAG.StaticCorpus.StaticCorpus) : ToolUp.Platform.IRetrievalPipeline+IRetrievalPipeline
-ToolUp.RAG.StaticCorpus.StaticCorpusRetrievalPipeline.loadFromFile(ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider, System.String) : ToolUp.Platform.IRetrievalPipeline+IRetrievalPipeline
-ToolUp.RAG.StaticCorpus.StaticCorpusRetrievalPipeline.loadFromStream(ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider, System.IO.Stream) : ToolUp.Platform.IRetrievalPipeline+IRetrievalPipeline
+ToolUp.RAG.StaticCorpus.StaticCorpusRetrievalPipeline.create(ToolUp.Platform.Infra.IEmbeddingProvider+IEmbeddingProvider, ToolUp.RAG.StaticCorpus.StaticCorpus) : ToolUp.Platform.Infra.IRetrievalPipeline+IRetrievalPipeline
+ToolUp.RAG.StaticCorpus.StaticCorpusRetrievalPipeline.loadFromFile(ToolUp.Platform.Infra.IEmbeddingProvider+IEmbeddingProvider, System.String) : ToolUp.Platform.Infra.IRetrievalPipeline+IRetrievalPipeline
+ToolUp.RAG.StaticCorpus.StaticCorpusRetrievalPipeline.loadFromStream(ToolUp.Platform.Infra.IEmbeddingProvider+IEmbeddingProvider, System.IO.Stream) : ToolUp.Platform.Infra.IRetrievalPipeline+IRetrievalPipeline

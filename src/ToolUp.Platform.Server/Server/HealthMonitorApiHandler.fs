@@ -1,11 +1,12 @@
-module ToolUp.Platform.HealthMonitorApiHandler
+module ToolUp.Platform.Compose.HealthMonitorApiHandler
 
 open System
 open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.HealthChecks
-open ToolUp.Platform.ConfigValidatorAggregator
+open ToolUp.Platform.Compose.ConfigValidatorAggregator
+open ToolUp.Platform.Infra
 
 // ─── Phase 9p — HealthMonitorApi handler ─────────────────────────────
 //

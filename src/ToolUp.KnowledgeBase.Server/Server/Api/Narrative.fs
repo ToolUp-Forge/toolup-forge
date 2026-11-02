@@ -12,6 +12,8 @@ open KnowledgeBase.ServerExtractors
 open KnowledgeBase.ServerIndexStorage
 open KnowledgeBase.ServerIngestionObserver
 open KnowledgeBase.ServerApiDeps
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 /// Phase 525.D — the narrative-commit egress door. When the fact
 /// companion's disclosure gate is composed, a document whose Metric spans
@@ -34,11 +36,11 @@ open KnowledgeBase.ServerApiDeps
 let private disclosureRefusalFor (deps: KnowledgeApiDeps) (document: NarrativeDocument) : Async<string option> = async {
     match deps.DisclosureGate with
     | None -> return None
-    | Some gate ->
+    | Some(gate, factScope) ->
         match NarrativeFacts.factRefs document |> Set.toList with
         | [] -> return None
         | refs ->
-            let! verdicts = gate.Check(deps.Scope.ScopeId, deps.UserId, FactNarrativePublication, refs)
+            let! verdicts = gate.Check(factScope, deps.UserId, FactNarrativePublication, refs)
 
             let offending =
                 verdicts
@@ -231,7 +233,7 @@ let ingestNarrative
                             let chunkId = sprintf "%s:chunk:%d" docId i
                             let! report = lifecycle.DeleteChunk deps.VectorScope chunkId
 
-                            if not (ToolUp.Platform.IIndexLifecycle.IndexLifecycleReport.isClean report) then
+                            if not (ToolUp.Platform.Infra.IIndexLifecycle.IndexLifecycleReport.isClean report) then
                                 orphanIds <- chunkId :: orphanIds
 
                                 deps.Logger.Warn(
@@ -240,7 +242,7 @@ let ingestNarrative
                                         chunkId
                                         docId
                                         deps.Scope.ScopeId
-                                        (ToolUp.Platform.IIndexLifecycle.IndexLifecycleReport.summarise report)
+                                        (ToolUp.Platform.Infra.IIndexLifecycle.IndexLifecycleReport.summarise report)
                                 )
 
                         if not (List.isEmpty orphanIds) then
@@ -443,7 +445,7 @@ let private performReset (deps: KnowledgeApiDeps) : Async<Result<unit, string>> 
             for doc in priorDocs do
                 let! report = lifecycle.DeleteDocument deps.VectorScope doc.Id doc.ChunkCount
 
-                if not (ToolUp.Platform.IIndexLifecycle.IndexLifecycleReport.isClean report) then
+                if not (ToolUp.Platform.Infra.IIndexLifecycle.IndexLifecycleReport.isClean report) then
                     let survivors = report.SurvivingChunkIds |> List.map snd |> List.distinct
 
                     orphanIds <- survivors @ orphanIds
@@ -453,7 +455,7 @@ let private performReset (deps: KnowledgeApiDeps) : Async<Result<unit, string>> 
                             "[KnowledgeBase] ResetIndex chunk delete completed partially for docId=%s (scope=%s): %s"
                             doc.Id
                             deps.Scope.ScopeId
-                            (ToolUp.Platform.IIndexLifecycle.IndexLifecycleReport.summarise report)
+                            (ToolUp.Platform.Infra.IIndexLifecycle.IndexLifecycleReport.summarise report)
                     )
 
             orphanChunkCount <- (orphanIds |> List.distinct |> List.length)
@@ -521,7 +523,7 @@ let private performReset (deps: KnowledgeApiDeps) : Async<Result<unit, string>> 
         match deps.EmbeddingProvider with
         | Some embedder ->
             try
-                do! ToolUp.Platform.IEmbeddingProvider.ScopedEmbedding.resetScope embedder deps.VectorScope
+                do! ToolUp.Platform.Infra.IEmbeddingProvider.ScopedEmbedding.resetScope embedder deps.VectorScope
             with ex ->
                 deps.Logger.Warn(
                     sprintf
@@ -560,7 +562,7 @@ let private performReset (deps: KnowledgeApiDeps) : Async<Result<unit, string>> 
         // anything retrievable (GP 6 + GP 9). `IAuditLog.Record` is
         // contractually best-effort and swallows its own failures, so an
         // audit gap never fails the reset. No-op when no `IAuditLog` is
-        // composed (test harness / `NoAuditLog` deployment).
+        // composed (test harness / `FeatureMode.Disabled` deployment).
         match deps.AuditLog with
         | Some auditLog ->
             do!

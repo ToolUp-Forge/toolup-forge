@@ -1,12 +1,13 @@
-module ToolUp.Platform.UsageQueryApiHandler
+module ToolUp.Platform.Scope.UsageQueryApiHandler
 
 open System
 open System.Globalization
 open System.Text
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
-open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Config.TeamManagement
 open ToolUp.Platform.Usage
+open ToolUp.Platform.Infra.Usage
 
 // ─── Phase 9d — Usage admin API handler ──────────────────────────
 //

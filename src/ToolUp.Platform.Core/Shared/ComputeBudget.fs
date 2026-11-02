@@ -594,24 +594,3 @@ module ComputeBudgetPolicy =
         match limits.MaxRunDuration, declared with
         | Some cap, None -> Some cap
         | _, declared -> declared
-
-/// Phase 451 — selects the compute-budget substrate. Default:
-/// `NoComputeBudget` — no store is registered, no dispatcher is decorated,
-/// and no enqueue path consults anything, so a deployment that does not
-/// budget its compute is byte-for-byte the deployment it was before this
-/// phase (GP 11 + GP 13).
-///
-/// Binary rather than a no-op-default DU (the `AuditLogMode` /
-/// `UsageMeteringMode` shape, not the `ExternalComputeMode` one): a
-/// "no-op budget store" that admits everything would be a resolvable
-/// service whose only behaviour is to be absent, and every call site would
-/// still have to ask it. Registering nothing means the enforcement code is
-/// not merely inert but unreachable.
-type ComputeBudgetMode =
-    /// No compute budgets (default). Nothing is registered and nothing is
-    /// consulted.
-    | NoComputeBudget
-    /// Blob-backed budgets: `IComputeBudgetStore` is registered, the
-    /// composed `IExternalComputeDispatcher` is wrapped in the budget
-    /// decorator, and the fit-enqueue path consults the same store.
-    | EnabledComputeBudget

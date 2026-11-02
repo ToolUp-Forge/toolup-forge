@@ -309,7 +309,7 @@ See [`ai/extending.md`](../ai/extending.md) for the full provider authoring guid
 - `AIFallbackPolicy = PermissiveWithPlatformFallback` (or `StrictBYOK`) for deployments where users should supply their own keys (cost-attribution).
 - Per-user / per-team rate limits via `ServerConfig.RateLimit`.
 - Per-tenant cost ceilings via custom middleware reading `AILatencyRecord` events.
-- `AIServerApp.withConfigValidator` for provider preflight probes — `ClaudeAIProviderValidator` / `OpenAIProviderValidator` (when shipped per-provider).
+- `ServerApp.withConfigValidator` for provider preflight probes — `ClaudeAIProviderValidator` / `OpenAIProviderValidator` (when shipped per-provider).
 - `/health/ai` probes per-provider — verifies API key + endpoint reachability.
 - `Anonymous` mode + AI is a cost-control red flag; see [`ai/README.md`](../ai/README.md) "When NOT to use this companion".
 

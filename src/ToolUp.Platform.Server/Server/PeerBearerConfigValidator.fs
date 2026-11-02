@@ -1,13 +1,14 @@
-module ToolUp.Platform.PeerBearerConfigValidator
+module ToolUp.Platform.Scope.PeerBearerConfigValidator
 
 open System
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
 open ToolUp.Platform.Secrets
+open ToolUp.Platform.Config
 
 // ─── Phase 37 — peer-bearer config preflight ─────────────────────────
 //
-// Warns when `ServerConfig.PeerRoutePrefixes` is non-empty but the
+// Warns when `ServerConfig.MultiInstance.PeerRoutePrefixes` is non-empty but the
 // `ISecretStore` has no entries under the `peers/` prefix. That
 // combination ships a deployment that advertises peer-routable
 // endpoints but cannot actually authenticate any peer: every request
@@ -42,7 +43,7 @@ type PeerBearerConfigValidator(config: ServerConfig, secretStore: ISecretStore, 
         member _.Timeout = timeout
 
         member _.Validate() = async {
-            if List.isEmpty config.PeerRoutePrefixes then
+            if List.isEmpty config.MultiInstance.PeerRoutePrefixes then
                 return Ok
             else
                 let! keys = secretStore.ListKeys PeerBearerAuthMiddleware.SecretStoreScope
@@ -54,7 +55,7 @@ type PeerBearerConfigValidator(config: ServerConfig, secretStore: ISecretStore, 
                     return
                         Warning(
                             sprintf
-                                "ServerConfig.PeerRoutePrefixes contains %d prefix(es) but ISecretStore has no entries under '_platform' scope matching 'peers/{peerName}/bearer'. Every peer request will be rejected with 401 (RejectionReason.NoSecretConfigured) until at least one peer bearer is seeded via `secretStore.SetSecret(\"_platform\", $\"peers/{peerName}/bearer\", token)`. If your secret store does not support ListKeys (env-var-only stores), this warning is expected and can be acknowledged at the deployment-bootstrap level."
-                                config.PeerRoutePrefixes.Length
+                                "ServerConfig.MultiInstance.PeerRoutePrefixes contains %d prefix(es) but ISecretStore has no entries under '_platform' scope matching 'peers/{peerName}/bearer'. Every peer request will be rejected with 401 (RejectionReason.NoSecretConfigured) until at least one peer bearer is seeded via `secretStore.SetSecret(\"_platform\", $\"peers/{peerName}/bearer\", token)`. If your secret store does not support ListKeys (env-var-only stores), this warning is expected and can be acknowledged at the deployment-bootstrap level."
+                                config.MultiInstance.PeerRoutePrefixes.Length
                         )
         }

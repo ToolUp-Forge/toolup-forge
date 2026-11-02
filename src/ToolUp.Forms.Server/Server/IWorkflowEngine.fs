@@ -10,7 +10,7 @@ open ToolUp.Forms.Workflow
 // Server-side abstraction over named workflow definitions. Default
 // implementation (`ToolUp.Forms.WorkflowEngine`) holds an immutable
 // `Map<WorkflowId, WorkflowDefinition>` populated at compose time via
-// `FormsServerApp.withWorkflow`, plus name-keyed registries for
+// `FormsOptions.withWorkflow`, plus name-keyed registries for
 // guards (predicates that can veto a transition) and actions
 // (side-effects that run after persistence).
 //

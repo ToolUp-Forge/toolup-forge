@@ -1,9 +1,12 @@
-module ToolUp.Platform.ComposeAuth
+module ToolUp.Platform.Compose.ComposeAuth
 
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.Auth
 open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
 
 // ─── compose phase: auth provider + Platform Admin store ─────────────
 //
@@ -107,10 +110,13 @@ let registerPlatformAdminStore
     (resolvedBlobStorage: IBlobStorage)
     (auditLog: IAuditLog)
     (resolvedLogger: ILogger)
+    (distributedLock: IDistributedLock)
     : IPlatformAdminStore =
 
+    // The deployment's composed lock, so the admin store's write
+    // serialisation excludes across replicas whenever that lock is shared.
     let platformAdminStore: IPlatformAdminStore =
-        PlatformAdminStore.BlobBackedPlatformAdminStore(resolvedBlobStorage, auditLog) :> _
+        PlatformAdminStore.BlobBackedPlatformAdminStore(resolvedBlobStorage, auditLog, distributedLock) :> _
 
     services.AddSingleton<IPlatformAdminStore>(platformAdminStore) |> ignore
 

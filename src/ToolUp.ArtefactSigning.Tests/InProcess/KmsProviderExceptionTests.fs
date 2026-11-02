@@ -8,6 +8,8 @@ open System.Threading
 open System.Threading.Tasks
 open Expecto
 open ToolUp.ArtefactSigning
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Phase 972 — the cloud-KMS signers classify a missing key ───────────
 //

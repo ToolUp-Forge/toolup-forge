@@ -1,9 +1,10 @@
-module ToolUp.Platform.InviteEmailCapabilityValidator
+module ToolUp.Platform.Scope.InviteEmailCapabilityValidator
 
 open System
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Config
 
 // ─── Phase 247 — invite-by-email capability preflight ────────────────
 //
@@ -26,7 +27,7 @@ open ToolUp.Platform.ConfigValidation
 // **Warning, not an Error** — a deployment may legitimately run
 // invite-by-email in an "operator tells the invitee out of band" posture
 // (the pre-0.5.7 behaviour), so the signal is advisory with an explicit
-// acknowledgement knob (`ServerConfig.AcceptInviteByEmailWithoutDirectory`
+// acknowledgement knob (`ServerConfig.RiskAcknowledgements.AcceptInviteByEmailWithoutDirectory`
 // / `TOOLUP_ACCEPT_INVITE_BY_EMAIL_WITHOUT_DIRECTORY=1`).
 //
 // Self-gates to `Ok` for any deployment that is non-team, anonymous, has
@@ -65,12 +66,12 @@ type InviteEmailCapabilityValidator(config: ServerConfig, services: IServiceColl
             if
                 relevant
                 && not (directoryRegistered ())
-                && not config.AcceptInviteByEmailWithoutDirectory
+                && not config.RiskAcknowledgements.AcceptInviteByEmailWithoutDirectory
             then
                 return
                     Warning(
                         sprintf
-                            "ServerConfig.Surfaces = %s mounts the team invite-by-email surface (ITeamInviteApi.IssuePendingInviteByEmail), but no IUserDirectory companion is registered. The pending invite is still recorded — the invitee auto-joins on their next sign-in — but the invitation EMAIL is never sent and the invite-form recipient typeahead degrades to a free-text box, both silently. Wire an IUserDirectory companion (e.g. ToolUp.AuthProviders.EntraDirectory with a sender identity) so invite emails actually send, or set ServerConfig.AcceptInviteByEmailWithoutDirectory = true (TOOLUP_ACCEPT_INVITE_BY_EMAIL_WITHOUT_DIRECTORY=1) to acknowledge the out-of-band-notification posture and silence this warning. After fixing, verify in the HealthMonitorUI admin tab (production-safe) or /dev/inspect Validators panel (debug builds only)."
+                            "ServerConfig.Surfaces = %s mounts the team invite-by-email surface (ITeamInviteApi.IssuePendingInviteByEmail), but no IUserDirectory companion is registered. The pending invite is still recorded — the invitee auto-joins on their next sign-in — but the invitation EMAIL is never sent and the invite-form recipient typeahead degrades to a free-text box, both silently. Wire an IUserDirectory companion (e.g. ToolUp.AuthProviders.EntraDirectory with a sender identity) so invite emails actually send, or set ServerConfig.RiskAcknowledgements.AcceptInviteByEmailWithoutDirectory = true (TOOLUP_ACCEPT_INVITE_BY_EMAIL_WITHOUT_DIRECTORY=1) to acknowledge the out-of-band-notification posture and silence this warning. After fixing, verify in the HealthMonitorUI admin tab (production-safe) or /dev/inspect Validators panel (debug builds only)."
                             (DeploymentConfig.surfacesLabel config)
                     )
             else

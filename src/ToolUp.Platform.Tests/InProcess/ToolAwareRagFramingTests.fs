@@ -3,9 +3,10 @@ module ToolUp.Platform.Tests.InProcess.ToolAwareRagFramingTests
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.VectorKnowledgeTypes
-open ToolUp.Platform.IRetrievalPipeline
+open ToolUp.Platform.Infra.IRetrievalPipeline
 open ToolUp.AI.SystemPromptBuilder
 open ToolUp.RAG
+open ToolUp.Platform.Infra
 
 // ─── Phase 14r — Tool-aware RAG framing ──────────────────────────────
 //
@@ -60,6 +61,7 @@ let private mkContext () : PromptContext = {
     ShortCircuit = ref None
     PlannedAnswerId = ref None
     Scope = ResolvedScope.anonymous
+    Services = ToolUp.AI.SystemPromptBuilder.PromptContext.noServices
 }
 
 /// Phase 538 — a tool that DECLARES the live-interface capability. Named

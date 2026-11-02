@@ -10,6 +10,10 @@ open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.AI
 open ToolUp.AI.AIToolRegistry
 open ToolUp.AI.ToolHelpers
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Jobs.SmokeTests
+open ToolUp.Platform.Compose
 
 /// Built-in AI tools for surfacing narrative output produced on other
 /// pages or earlier in the session. The assistant can list the user's
@@ -50,17 +54,6 @@ let private disclosureGateOf (ctx: HttpContext) : IFactDisclosureGate option =
     | :? IFactDisclosureGate as gate -> Some gate
     | _ -> None
 
-/// The caller's resolved storage-scope id — the same tenant boundary
-/// `NarrativePublisher` scopes reads by, and the shard the fact store
-/// resolves fact ids within (GP 4).
-let private scopeIdOf (ctx: HttpContext) : string =
-    match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-    | true, (:? StorageScope as scope) -> scope.ScopeId
-    | _ ->
-        match ctx.Items.TryGetValue "ToolUp.UserId" with
-        | true, (:? string as id) -> id
-        | _ -> "anonymous"
-
 let private userIdOf (ctx: HttpContext) : string =
     match ctx.Items.TryGetValue "ToolUp.UserId" with
     | true, (:? string as id) -> id
@@ -81,7 +74,8 @@ let private deniedFactsIn
             match NarrativeFacts.factRefs document |> Set.toList with
             | [] -> return []
             | refs ->
-                let! verdicts = gate.Check(scopeIdOf ctx, userIdOf ctx, surface, refs)
+                let! verdicts =
+                    gate.Check(StorageScopeResolver.ScopeResolution.forRequest ctx, userIdOf ctx, surface, refs)
 
                 return
                     verdicts
@@ -446,7 +440,7 @@ let private publishDefinition: AIToolDefinition = {
             Name = "layout"
             Type = "string"
             Description =
-                "Optional layout name to render under. Must match a layout registered via `PublicRenderingServerApp.withLayout`. Omitted → the deployment's default layout; a name that is not registered is refused."
+                "Optional layout name to render under. Must match a layout registered via `PublicRenderingOptions.withLayout`. Omitted → the deployment's default layout; a name that is not registered is refused."
             Required = false
             Default = None
         }

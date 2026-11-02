@@ -2,7 +2,7 @@
 
 Opt-in **Model Context Protocol server host** for ToolUp.Platform. An external LLM or agent stack connects to a deployment with its own credential, discovers exactly the tools it has been granted, and invokes them — with every interaction recorded under the agent's identity.
 
-Companion package. A deployment that does not compose `McpServerApp.run` is byte-for-byte unchanged: no handler, no DI registration, no middleware (GP 13).
+Companion package. A deployment that does not compose `McpCompose.withMcp` is byte-for-byte unchanged: no handler, no DI registration, no middleware (GP 13).
 
 ## What it is
 
@@ -23,18 +23,28 @@ open ToolUp.AI.AICompose
 open ToolUp.AI.McpHost
 open ToolUp.AI.McpHost.McpCompose
 
-AIServerApp.create factory providerProfile
-|> AIServerApp.withConfig { config with ServiceAccounts = EnabledServiceAccounts }
-|> AIServerApp.withStorage blobStorage
-|> AIServerApp.withAIConfig assistant
-|> McpServerApp.create
-|> McpServerApp.withServerVersion "1.4.0"
-|> McpServerApp.withDefaultPolicy {
-    Budget = AgentBudget.callsPer BudgetPeriod.Daily 500M
-    RateLimit = Some { MaxCalls = 60; Window = PerMinute }
-   }
-|> McpServerApp.run
+ServerApp.empty
+|> ServerApp.withConfig {
+    config with
+        Stores = {
+            config.Stores with
+                ServiceAccounts = EnabledServiceAccounts
+        }
+}
+|> ServerApp.withStorage blobStorage
+|> AICompose.withAI (AIOptions.create factory providerProfile |> AIOptions.withAIConfig assistant)
+|> McpCompose.withMcp (
+    McpOptions.create ()
+    |> McpOptions.withServerVersion "1.4.0"
+    |> McpOptions.withDefaultPolicy {
+        Budget = AgentBudget.callsPer BudgetPeriod.Daily 500M
+        RateLimit = Some { MaxCalls = 60; Window = PerMinute }
+       }
+)
+|> ServerApp.run
 ```
+
+`McpCompose.withMcp` sets the MCP host companion; it does not compose the AI tier it projects, so compose that beside it with `AICompose.withAI` (or `RAGCompose.withRAG`). Both are composed when the deployment resolves, so the order of the lines does not matter.
 
 `ServiceAccounts = EnabledServiceAccounts` is a hard precondition — the host authenticates agents with service-account bearer tokens and nothing else, so a composition without it is refused at startup rather than answering `401` to every call.
 

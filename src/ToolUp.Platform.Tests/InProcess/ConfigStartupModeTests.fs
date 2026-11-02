@@ -4,9 +4,9 @@ open System
 open Expecto
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform.ConfigValidation
-open ToolUp.Platform.ConfigValidatorAggregator
+open ToolUp.Platform.Compose.ConfigValidatorAggregator
 open ToolUp.Platform.ConfigKeys
-open ToolUp.Platform.StartupModes
+open ToolUp.Platform.Compose.StartupModes
 
 // ─── Phase 214 — --print-config / --validate-config startup modes ─────
 //

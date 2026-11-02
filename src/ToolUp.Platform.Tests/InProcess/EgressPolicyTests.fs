@@ -36,6 +36,9 @@ open ToolUp.Platform.DeploymentVerification
 // mirror instead of naming `TaintLabel` — and spelling it out at the
 // call site is what keeps that direction legible in the probes.
 open ToolUp.Platform.VectorKnowledgeTypes
+open ToolUp.Platform.Config
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Doubles ───────────────────────────────────────────────────────────
 

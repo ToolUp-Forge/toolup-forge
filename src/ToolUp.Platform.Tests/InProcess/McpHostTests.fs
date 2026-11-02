@@ -56,6 +56,10 @@ open ToolUp.AI.McpHost
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
 // ─── Stub provider factory + profile (compose-only; never invoked) ───
 
@@ -765,23 +769,24 @@ let tests =
 
         testCase "NoMcpHost contributes no handler"
         <| fun () ->
-            let baseApp =
-                AICompose.AIServerApp.create (StubProviderFactory()) (StubProviderProfile())
-
             let withAccounts =
-                baseApp
-                |> AICompose.AIServerApp.withConfig {
-                    baseApp.Base.Config with
-                        ServiceAccounts = EnabledServiceAccounts
+                ServerApp.empty
+                |> ServerApp.withConfig {
+                    ServerConfig.defaults with
+                        Stores = {
+                            ServerConfig.defaults.Stores with
+                                ServiceAccounts = EnabledServiceAccounts
+                        }
                 }
+                |> AICompose.withAI (AICompose.AIOptions.create (StubProviderFactory()) (StubProviderProfile()))
 
-            let composedWith = McpCompose.McpServerApp.create withAccounts
+            let composedWith = McpCompose.McpOptions.create ()
 
             let composedWithout =
-                composedWith |> McpCompose.McpServerApp.withMcpHost McpCompose.NoMcpHost
+                composedWith |> McpCompose.McpOptions.withMcpHost McpCompose.NoMcpHost
 
-            let handlerCount (app: McpCompose.McpServerApp) =
-                (McpCompose.McpServerApp.compose app).Extensions.Handlers.Length
+            let handlerCount (options: McpCompose.McpOptions) =
+                (withAccounts |> McpCompose.withMcp options |> ServerApp.resolve).Extensions.Handlers.Length
 
             Expect.equal
                 (handlerCount composedWithout)
@@ -791,17 +796,17 @@ let tests =
 
         testCase "a composition with no service accounts is refused at compose, not at the first request"
         <| fun () ->
-            let baseApp =
-                AICompose.AIServerApp.create (StubProviderFactory()) (StubProviderProfile())
-
-            let app = McpCompose.McpServerApp.create baseApp
+            let app =
+                ServerApp.empty
+                |> AICompose.withAI (AICompose.AIOptions.create (StubProviderFactory()) (StubProviderProfile()))
+                |> McpCompose.withMcp (McpCompose.McpOptions.create ())
 
             // The host authenticates agents one way and one way only, so a
             // composition without that middleware serves nothing but 401 —
             // a deployment that looks composed and is not. The refusal names
             // the property and the remedy.
             Expect.throws
-                (fun () -> McpCompose.McpServerApp.compose app |> ignore)
+                (fun () -> ServerApp.resolve app |> ignore)
                 "ServiceAccounts = NoServiceAccounts leaves no credential for an agent to present"
 
         // ── the authorisation decision, directly ─────────────────────

@@ -20,15 +20,15 @@ let blockListValidator : CustomValidator =
             Ok ()
 ```
 
-Register on `FormsServerApp`:
+Register on `FormsOptions`:
 
 ```fsharp
 open ToolUp.Forms.FormsCompose
 
-let app =
-    FormsServerApp.create ()
+let formsOptions =
+    FormsOptions.create ()
     // ...
-    |> FormsServerApp.withCustomValidator "blocklist-check" blockListValidator
+    |> FormsOptions.withCustomValidator "blocklist-check" blockListValidator
 ```
 
 Reference from a `FormSchema`:
@@ -113,14 +113,14 @@ let creditCheckPassed: WorkflowGuard =
     }
 ```
 
-Register on `FormsServerApp`:
+Register on `FormsOptions`:
 
 ```fsharp
-let app =
-    FormsServerApp.create ()
+let formsOptions =
+    FormsOptions.create ()
     // ...
-    |> FormsServerApp.withGuard "has-proposal-attached" hasProposalAttached
-    |> FormsServerApp.withGuard "credit-check-passed" creditCheckPassed
+    |> FormsOptions.withGuard "has-proposal-attached" hasProposalAttached
+    |> FormsOptions.withGuard "credit-check-passed" creditCheckPassed
 ```
 
 Reference from a `WorkflowDefinition`:
@@ -208,17 +208,17 @@ Register:
 open ToolUp.Forms.Workflow
 open ToolUp.Forms.FormsCompose
 
-let app =
-    FormsServerApp.create ()
+let formsOptions =
+    FormsOptions.create ()
     // ...
     // The actions are registered as-is: each resolves its own collaborators
     // from ctx.Services, so there is nothing to partially apply here.
-    |> FormsServerApp.withAction "send-welcome-email" sendWelcomeEmail
-    |> FormsServerApp.withAction "kickoff-onboarding" kickoffOnboardingJob
+    |> FormsOptions.withAction "send-welcome-email" sendWelcomeEmail
+    |> FormsOptions.withAction "kickoff-onboarding" kickoffOnboardingJob
     // Best-effort courtesy mail: a lost send is not worth a dead-letter row.
-    |> FormsServerApp.withActionPolicy "send-welcome-email" LogOnly
+    |> FormsOptions.withActionPolicy "send-welcome-email" LogOnly
     // Load-bearing downstream work: abort the transition if it throws.
-    |> FormsServerApp.withActionPolicy "kickoff-onboarding" FailSubmission
+    |> FormsOptions.withActionPolicy "kickoff-onboarding" FailSubmission
 ```
 
 Reference from a `WorkflowDefinition`:
@@ -341,7 +341,7 @@ type IActionLedger =
 
 ### Default — `InMemoryActionLedger`
 
-`FormsServerApp.run` auto-defaults to `InMemoryActionLedger` if `withActionLedger` is not called. This is correct for dev and single-process deployments — survives in-process retries within the same process, but **does not survive a process restart**. The compose step prints an out-of-band warning to `stderr` in non-`Anonymous` modes so deployments running workflow-bearing forms in production see a clear signal they need a durable ledger.
+`withForms` auto-defaults to `InMemoryActionLedger` if `withActionLedger` is not called. This is correct for dev and single-process deployments — survives in-process retries within the same process, but **does not survive a process restart**. The compose step prints an out-of-band warning to `stderr` in non-`Anonymous` modes so deployments running workflow-bearing forms in production see a clear signal they need a durable ledger.
 
 ### Wiring a durable `IActionLedger`
 
@@ -379,15 +379,15 @@ type PostgresActionLedger(connectionString: string) =
         }
 ```
 
-Register on `FormsServerApp`:
+Register on `FormsOptions`:
 
 ```fsharp
 open ToolUp.Forms.FormsCompose
 
-let app =
-    FormsServerApp.create ()
+let formsOptions =
+    FormsOptions.create ()
     // ...
-    |> FormsServerApp.withActionLedger (PostgresActionLedger connStr :> IActionLedger)
+    |> FormsOptions.withActionLedger (PostgresActionLedger connStr :> IActionLedger)
 ```
 
 ### Conformance — `IActionLedgerContract`
@@ -455,7 +455,7 @@ The submission API still validates server-side via the schema's `ValidationRule`
 
 ## Submission analysers (extension stub)
 
-`IFormSubmissionAnalyser` is the extension point for richer analysis of submission corpora (sentiment, clustering, key-theme extraction). The default impl ships nothing; consumer companion packages plug in. `IAnalyserCache` memoises results across calls — wire via `FormsServerApp.withAnalyserCache` or let the compose step auto-construct a `ResultStoreAnalyserCache` when an `IResultStore` is in DI.
+`IFormSubmissionAnalyser` is the extension point for richer analysis of submission corpora (sentiment, clustering, key-theme extraction). The default impl ships nothing; consumer companion packages plug in. `IAnalyserCache` memoises results across calls — wire via `FormsOptions.withAnalyserCache` or let the compose step auto-construct a `ResultStoreAnalyserCache` when an `IResultStore` is in DI.
 
 Skeleton for a custom analyser:
 
@@ -501,7 +501,7 @@ type ClaudeBasedAnalyser(aiProvider: IAIProvider) =
         }
 ```
 
-Register the analyser in the DI container (the SDK's standard `services.AddSingleton<IFormSubmissionAnalyser>` pattern); `FormsServerApp.run` resolves `GetServices<IFormSubmissionAnalyser>()` per request and composes the registered analysers. Multiple analysers (one for sentiment, one for topic clustering) compose cleanly without a fan-out wrapper.
+Register the analyser in the DI container (the SDK's standard `services.AddSingleton<IFormSubmissionAnalyser>` pattern); the Forms companion resolves `GetServices<IFormSubmissionAnalyser>()` per request and composes the registered analysers. Multiple analysers (one for sentiment, one for topic clustering) compose cleanly without a fan-out wrapper.
 
 ## Multi-scope schema overrides
 
@@ -513,7 +513,7 @@ The lookup order on `GetSchema`:
 
 Scopes without overrides see the default; scopes with overrides see their version. Every `SaveSchema` write goes to the inner store unchanged — defaults are read-fallbacks, never written through.
 
-For deployments that **don't** want per-scope overrides, skip the default decorator by wiring your own `IFormStore` directly into the SDK's DI container before `FormsServerApp.run` resolves it. (Without a per-scope override the decorator's behaviour is identical to the inner store, so this is rarely worth the complexity.)
+For deployments that **don't** want per-scope overrides, skip the default decorator by wiring your own `IFormStore` directly into the SDK's DI container before the Forms companion resolves it. (Without a per-scope override the decorator's behaviour is identical to the inner store, so this is rarely worth the complexity.)
 
 ## Schema versioning
 
@@ -547,7 +547,7 @@ type PostgresFormStore(connectionString: string) =
 
 The `principal` on the three mutating members is the caller's `EntityPrincipal` (Phase 814) — the same value the entity store's mutating members take, so a drop-in store attributes writes the way the shipped one does. Wire via the SDK's DI registration (replacing the default `FormStore` factory). Conformance: bind to `IFormStoreContract` (in `ToolUp.Forms.Tests`) — the same pack passes for the shipped `FormStore` and any drop-in.
 
-The default `WorkflowEngine` constructor accepts `IFormStore`, `IAuditLog`, `IActionLedger`, `IMetricsSink`, a warn callback, plus the workflows / guards / actions / action-policies maps. Replacing it means mirroring that constructor shape so `FormsServerApp.run` can pass through.
+The default `WorkflowEngine` constructor accepts `IFormStore`, `IAuditLog`, `IActionLedger`, `IMetricsSink`, a warn callback, plus the workflows / guards / actions / action-policies maps. Replacing it means mirroring that constructor shape so the Forms companion can pass it through.
 
 ## `IShareTokenRateLimiter`
 
@@ -585,10 +585,10 @@ The interface is six-rule-portable by construction — identity by value, async 
 let myRedisLimiter: IShareTokenRateLimiter =
     MyCompany.RedisShareTokenRateLimiter(redisConnString) :> _
 
-FormsServerApp.create ()
-|> FormsServerApp.withShareTokenRateLimiter myRedisLimiter
+ServerApp.empty
 // ...rest of pipeline
-|> FormsServerApp.run
+|> withForms (FormsOptions.create () |> FormsOptions.withShareTokenRateLimiter myRedisLimiter)
+|> ServerApp.run
 ```
 
 Without `withShareTokenRateLimiter`, the compose step auto-builds a fresh `InMemoryShareTokenRateLimiter` per process — fine for dev / single-replica deployments.

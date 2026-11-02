@@ -13,6 +13,8 @@
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Storage
 open ToolUp.Platform.NotificationChannels.RedisDistributedLock
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 [<AutoOpen>]
 module PageAmbient =

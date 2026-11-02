@@ -10,7 +10,7 @@
 /// `FileManagementApi`: `StorageScope` isolation is the enforcement, so
 /// Anonymous-mode deployments read/write mappings within their own
 /// session scope. Mounted only when `ServerConfig.ColumnMapping =
-/// EnabledColumnMapping`.
+/// FeatureMode.Enabled`.
 module ColumnMappingApi
 
 // Auth/audit attributes (`AllowAnonymous`, `Audit`) live under

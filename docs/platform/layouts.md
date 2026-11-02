@@ -7,7 +7,7 @@ Phase 92. Two related surfaces:
    `knowledgePortal`) built on the BrandKit primitives, so a consumer
    composes a brand-correct page in ~20 lines instead of hand-rolling
    `XmlNode` trees.
-2. **`PublicRenderingServerApp.withFelizLayout`** — registers a layout
+2. **`PublicRenderingOptions.withFelizLayout`** — registers a layout
    authored in the Feliz DSL (`Feliz.ViewEngine`) into the same layout
    registry as Giraffe layouts, for deployments sharing presentational
    component code with a Fable SPA. See
@@ -53,7 +53,7 @@ let articleLayout (page: PublicPage) =
         }
 
 // composition root:
-|> PublicRenderingServerApp.withLayout (LayoutName "bk-article") articleLayout
+|> PublicRenderingOptions.withLayout (LayoutName "bk-article") articleLayout
 ```
 
 `NarrativeLayout.renderBody` (or `renderBodyWith` for an embed
@@ -163,7 +163,7 @@ the layout code. Two contrasting sets that both style the same render:
 
 ```fsharp skip=fragment
 // layout authored in the Feliz DSL — PublicPage -> ReactElement
-|> PublicRenderingServerApp.withFelizLayout (LayoutName "feliz") FelizPageLayout.render
+|> PublicRenderingOptions.withFelizLayout (LayoutName "feliz") FelizPageLayout.render
 ```
 
 Same naming, fallback, caching, head-injection and gating semantics as

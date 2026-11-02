@@ -182,6 +182,15 @@ and the test pack asserts each one binds it.
   the reserved `_facts` source module, written after the commit.
 - **Listing order.** A point read is ordered by (hierarchy, metric, period
   start) as the contract says; ties are broken by content address.
+- **A fact's identity does not depend on the machine.** The content address
+  and the lineage key read each period endpoint through `Fact.instant`: a
+  `Utc` value as it is, an `Unspecified` value as UTC, a `Local` value
+  converted. `lineage_hash` is the hash of the lineage key of the fact the
+  row's `payload` reads back as, like every other column. So a row written,
+  migrated or verified on a machine in any zone carries the value a UTC
+  server computes. Rows keyed on a non-UTC host before this rule have a
+  shifted `lineage_hash`; `--verify` names them and `--ids` moves them (see
+  `docs/migrations/1178-fact-identity-timezone-independent.md`).
 
 ## Operating it
 
@@ -312,7 +321,9 @@ The CLI stays dependency-free: it starts the root in its
 builds the source over the composed `IBlobStorage`, takes the composed
 `PostgresFactStore` as the target, and audits into the composed event store,
 so no connection string or storage credential is ever a flag. `--ids` moves
-persisted fact ids onto the canonical frame through the same task.
+persisted fact ids onto the canonical frame through the same task, and then
+moves each stored `lineage_hash` that differs from the hash recomputed from
+its row's payload, in one guarded transaction per scope.
 `FactsMigrateTask.run` is the same entry point for a host that builds its own
 stores. The library form, for a console or script that references this
 package directly:

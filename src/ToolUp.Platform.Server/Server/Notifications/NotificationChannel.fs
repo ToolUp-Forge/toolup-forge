@@ -1,9 +1,9 @@
-module ToolUp.Platform.NotificationChannel
+module ToolUp.Platform.Config.NotificationChannel
 
 open System
 open System.Collections.Concurrent
 open ToolUp.Platform
-open ToolUp.Platform.Tracing
+open ToolUp.Platform.Infra.Tracing
 
 /// In-memory `INotificationChannel`. Keeps subscriptions in a
 /// concurrent dictionary keyed by subscription id; every `Publish`
@@ -175,6 +175,29 @@ let private envVar (name: string) = ConfigResolution.tryValue name
 ///     resolver returns `None`.
 ///   - unrecognised value — falls back to in-process with a Warn
 ///     naming the recognised values.
+/// The two spellings the registry accepts for the in-process channel.
+let private inProcessTokens = set [ "inprocess"; "in-process" ]
+
+/// The channel `TOOLUP_NOTIFICATION_CHANNEL` selects: trimmed, lower-cased,
+/// and the registry's default (`inprocess`) when the key is unset.
+///
+/// Every reader of the key goes through here — the selector below and the
+/// per-scope key-resolver preflight — so the two cannot disagree on what a
+/// token means. They did: the validator counted `in-process` as a
+/// distributed channel while this file read it as in-process.
+let selectedChannel () : string =
+    let key = ConfigKeys.key ConfigKeys.Names.notificationChannel
+
+    match
+        ConfigResolution.tryValue ConfigKeys.Names.notificationChannel
+        |> Option.map (fun v -> v.Trim().ToLowerInvariant())
+    with
+    | Some token when token <> "" -> token
+    | _ -> ConfigKeys.ConfigKey.defaultText key |> Option.defaultValue "inprocess"
+
+/// `true` when `selectedChannel ()` names the in-process channel.
+let isInProcess (channel: string) : bool = inProcessTokens.Contains channel
+
 let fromEnv
     (logger: ILogger)
     (resolvers: NotificationChannelResolver list)
@@ -185,17 +208,11 @@ let fromEnv
     let inProcess () =
         InMemoryNotificationChannel(Some logger) :> INotificationChannel, None, None
 
-    let chosen =
-        ConfigResolution.tryValue ConfigKeys.Names.notificationChannel
-        |> Option.map _.ToLowerInvariant()
-
-    match chosen with
-    | None
-    | Some "inprocess"
-    | Some "in-process" ->
+    match selectedChannel () with
+    | channel when isInProcess channel ->
         logger.Info "Notification channel: in-process (InMemoryNotificationChannel)"
         inProcess ()
-    | Some other ->
+    | other ->
         match
             resolvers
             |> List.tryFind (fun r -> r.Name.Equals(other, StringComparison.OrdinalIgnoreCase))

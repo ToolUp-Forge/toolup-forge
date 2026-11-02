@@ -6,6 +6,7 @@ namespace ToolUp.Facts
 open System
 open ToolUp.Platform
 open ToolUp.Platform.VectorKnowledgeTypes
+open ToolUp.Platform.Infra
 
 // ─── FactStoreFactResolver (Phase 558 — closes the Phase 522.B seam) ──
 //
@@ -177,8 +178,9 @@ type FactStoreFactResolver
 
     interface IFactResolver with
 
-        member _.Resolve(scopeId: string, clause: FactClause) : Async<ResolvedFact list> = async {
-            let! heads = store.Query(scopeId, toQuery clause)
+        member _.Resolve(scope: ResolvedScope, clause: FactClause) : Async<ResolvedFact list> = async {
+            let scopeId = scope.ScopeId
+            let! heads = store.Query(scope, toQuery clause) |> FactStoreResult.orRaiseAsync
 
             let metric = registry |> Option.bind (fun r -> r.TryGetMetric clause.Metric)
 
@@ -218,7 +220,7 @@ type FactStoreFactResolver
                     let! fact =
                         match recomputer with
                         | Some engine when changed && recomputePolicy = Grounding.OnQuery -> async {
-                            let! recomputed = FactInvalidation.recomputeNow store engine scopeId head
+                            let! recomputed = FactInvalidation.recomputeNow store engine scope head
 
                             return
                                 match recomputed with
@@ -237,7 +239,7 @@ type FactStoreFactResolver
                     // The head's successor, if a later assertion superseded
                     // it (possible when the clause reconstructs an earlier
                     // `AsOf` — the head-at-t may have been corrected since).
-                    let! chain = store.QuerySupersessionChain(scopeId, fact.FactId)
+                    let! chain = store.QuerySupersessionChain(scope, fact.FactId) |> FactStoreResult.orRaiseAsync
 
                     let successor = chain |> List.tryFind (fun g -> g.Supersedes = Some fact.FactId)
 

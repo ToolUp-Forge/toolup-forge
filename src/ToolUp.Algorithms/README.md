@@ -60,7 +60,7 @@ Each was implicit on the raw path and is explicit, echoed, and assertable here.
 | Registry + dispatch | [`Server/AlgorithmDispatcher.fs`](../ToolUp.Algorithms.Server/Server/AlgorithmDispatcher.fs) | duplicate-id rejection at compose, catalog projection, execution path |
 | AI tool family | [`Server/AlgorithmAITools.fs`](../ToolUp.Algorithms.Server/Server/AlgorithmAITools.fs) | `_algorithms.list` + one tool per algorithm |
 | `/dev/inspect` panel | [`Server/AlgorithmCatalogContributor.fs`](../ToolUp.Algorithms.Server/Server/AlgorithmCatalogContributor.fs) | the "Algorithms" panel |
-| Compose pipeline | [`Server/AlgorithmsCompose.fs`](../ToolUp.Algorithms.Server/Server/AlgorithmsCompose.fs) | `withAlgorithms`, `AlgorithmsServerApp` |
+| Compose pipeline | [`Server/AlgorithmsCompose.fs`](../ToolUp.Algorithms.Server/Server/AlgorithmsCompose.fs) | `withAlgorithms`, `AlgorithmsOptions` |
 | Client proxy | [`Client/AlgorithmsClient.fs`](../ToolUp.Algorithms.Client/Client/AlgorithmsClient.fs) | catalog listing |
 
 ## What this package does not contain
@@ -92,12 +92,12 @@ open ToolUp.Algorithms.AlgorithmsCompose
 ServerApp.empty
 |> ServerApp.withConfig config
 |> ServerApp.withStorage storage
-|> withAlgorithms (fun a -> a |> AlgorithmsServerApp.withProvider myProvider)
+|> withAlgorithms (AlgorithmsOptions.create () |> AlgorithmsOptions.withProvider myProvider)
 |> ServerApp.run
 ```
 
-Register every provider in one `withAlgorithms` call — a second call builds a second registry and
-the last DI registration wins.
+Register every provider in one `AlgorithmsOptions` — `withAlgorithms` sets the companion, so a second
+call replaces the first.
 
 Composing without providers is legal and useful during bring-up: you get an empty catalog, the
 `_algorithms.list` tool reporting nothing available, and no execution path.

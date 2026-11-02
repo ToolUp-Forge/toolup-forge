@@ -155,3 +155,84 @@ module RunOptions =
             { options with RunOptions.Inputs = [] }
         else
             options
+// ─── One record for every kind of run ────────────────────────────────
+//
+// Every run the plane keeps — a fact-table run, a fit, an evaluation and its
+// folds, a comparison, a promotion decision — is read as ONE envelope: its
+// kind, the scope it ran in, what it declared, where its input came from,
+// how it ended, and an id over the canonical frame with the kind's label
+// first, so two kinds can never share an id. Each kind keeps its own stored
+// record (the fields only it has); the envelope is that record's projection,
+// built by the reader in the scope the platform resolved for it.
+//
+// **The scope is a `ResolvedScope`, never a string.** What a store keeps at
+// rest names its shard; a projection takes the scope the reader resolved and
+// refuses a record stored under any other shard (`RunRecord.inScope`), so a
+// run read across shards cannot be built. Nothing here mints a scope.
+
+/// Where a run's input came from.
+[<RequireQualifiedAccess>]
+type RunProvenance =
+    /// Computed by the deployment.
+    | Computed
+    /// Imported under the named certificates.
+    | Imported of certificateRefs: string list
+
+/// How a run stands.
+[<RequireQualifiedAccess>]
+type RunOutcome =
+    /// Opened, not yet ended.
+    | Open
+    /// Ended with a result; `result` addresses what the run produced.
+    | Succeeded of result: string
+    /// Ended without a result; nothing was produced.
+    | Failed of reason: string
+    /// Ended by its producer without a result.
+    | Abandoned of reason: string
+
+/// One run of any kind, in the scope the platform resolved for its reader.
+type RunRecord = {
+    /// `RunRecord.id Kind <the kind's identity fields>`.
+    Id: string
+    /// What kind of run it is.
+    Kind: RunKind
+    /// The scope it ran in.
+    Scope: ResolvedScope
+    /// What the run is of: a table id, an artifact's key hash.
+    Subject: string
+    /// When it started, or for a run recorded once, when it was recorded (UTC).
+    StartedAt: DateTime
+    /// What it declared when it was opened; `RunOptions.empty` for a kind
+    /// that declares nothing.
+    Options: RunOptions
+    /// Where its input came from.
+    Provenance: RunProvenance
+    /// How it stands.
+    Outcome: RunOutcome
+}
+
+[<RequireQualifiedAccess>]
+module RunRecord =
+
+#if !FABLE_COMPILER
+    /// A run's id: the canonical frame's digest of the kind's label followed
+    /// by the kind's identity fields. Stored identity: never reorder a kind's
+    /// fields.
+    let id (kind: RunKind) (fields: string list) : string =
+        CanonicalFrame.digest (RunKind.label kind :: fields)
+#endif
+
+    /// `scope` when it is the shard a record was stored under: the check
+    /// every projection makes before it builds a record in the reader's
+    /// resolved scope. A record stored under another shard, or a reader with
+    /// the anonymous scope over a real shard, is refused by name.
+    let inScope (scope: ResolvedScope) (storedScopeId: string) : Result<ResolvedScope, string> =
+        if scope.ScopeId = storedScopeId then
+            Ok scope
+        else
+            Error(
+                sprintf
+                    "the run is stored under shard '%s' and cannot be read in a scope resolved for '%s'"
+                    storedScopeId
+                    scope.ScopeId
+            )

@@ -66,7 +66,7 @@ module ConsentState =
         required |> List.forall (fun c -> isGranted c state)
 
 /// Server-side audit row recorded when `ServerConfig.ConsentAudit =
-/// EnabledConsentAudit`. The anonymous-user id is the browser-local
+/// FeatureMode.Enabled`. The anonymous-user id is the browser-local
 /// UUID until [Phase 62](62-premium-claim-recognition.md) establishes
 /// an authenticated-user seam for consent state.
 type ConsentEvent = {
@@ -195,7 +195,7 @@ type ServerlessHostMode =
     /// Serverless-compatible composition. `compose` skips
     /// `BackgroundService` registrations; the host adapter drives the
     /// request pipeline per invocation. Pair with `JobScheduler =
-    /// NoJobScheduler`, `Webhooks = NoWebhooks`, and `Notifications =
+    /// NoJobScheduler`, `Webhooks = FeatureMode.Disabled`, and `Notifications =
     /// NoNotificationsExplicit` for a clean serverless shape; an
     /// inbound-only deployment that wants jobs runs a separate worker
     /// silo with `ProcessProfile = WorkerOnly` against the same
@@ -256,17 +256,6 @@ type RateLimitStoreMode =
     /// composition extension).
     | ExternalRateLimitStore
 
-/// Phase 59 — server-side consent-audit opt-in. Default
-/// `NoConsentAudit` strips the `/api/_platform/consent-audit`
-/// endpoint and no `ConsentEvent` is persisted server-side; client-
-/// side consent state still works (lives in the browser via
-/// `IConsentProvider`). `EnabledConsentAudit` mounts the endpoint
-/// and lands events via the configured `IAuditLog` for deployments
-/// needing demonstrable evidence of consent decisions.
-type ConsentAuditMode =
-    | NoConsentAudit
-    | EnabledConsentAudit
-
 /// Phase 159 — server-side durable per-subject consent-state store
 /// opt-in. Default `NoConsentStateStore` registers nothing — consent
 /// state lives only in the browser via `IConsentProvider` (Phase 59),
@@ -274,7 +263,7 @@ type ConsentAuditMode =
 /// registers the single-instance dev store (does NOT survive restart).
 /// `EntityBackedConsentStateStore` registers the durable production
 /// store over `IEntityStore` — requires `EntityStore =
-/// EnabledEntityStore` (the compose path prepends the `ConsentRecord`
+/// FeatureMode.Enabled` (the compose path prepends the `ConsentRecord`
 /// entity registration automatically). Distinct from `ConsentAudit`
 /// (which mounts the client-event audit endpoint); this is the
 /// authoritative server-side read-back store.
@@ -282,13 +271,3 @@ type ConsentStateStoreMode =
     | NoConsentStateStore
     | InMemoryConsentStateStore
     | EntityBackedConsentStateStore
-
-/// Phase 60 — server-side ad-analytics opt-in. Default
-/// `NoAdAnalytics` strips the `/api/_platform/ads/analytics`
-/// endpoint. `EnabledAdAnalytics` mounts the endpoint and lands
-/// `AdImpression` / `AdClick` audit events via `IAuditLog`. Distinct
-/// from the client-side `ClientConfig.AdPanel` mode that controls
-/// whether `<AdSlot>` Feliz components render at all.
-type AdAnalyticsMode =
-    | NoAdAnalytics
-    | EnabledAdAnalytics

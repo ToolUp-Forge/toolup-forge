@@ -5,11 +5,12 @@ open System.IO
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.DataObjectStore
-open ToolUp.Platform.EntityStore
-open ToolUp.Platform.IEntityStore
-open ToolUp.Platform.Consent.ConsentStateStore
+open ToolUp.Platform.Infra.DataObjectStore
+open ToolUp.Platform.Infra.EntityStore
+open ToolUp.Platform.Infra.IEntityStore
+open ToolUp.Platform.Audit.Consent.ConsentStateStore
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra
 
 // ─── Phase 159 — IConsentStateStore in-process bindings ──────────────
 //

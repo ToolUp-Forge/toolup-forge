@@ -15,7 +15,7 @@ open ToolUp.Platform.Narrative
 // data tag attached automatically.
 //
 // The helpers are layout-shape (`PublicPage -> XmlNode` and similar)
-// so they compose cleanly with `PublicRenderingServerApp.withLayout`.
+// so they compose cleanly with `PublicRenderingOptions.withLayout`.
 // Layouts can pick and mix: render the body via `Body.render`, the
 // JSON-LD via `Body.jsonLd`, and assemble the final `<html>` shell
 // per their own site conventions.
@@ -62,7 +62,7 @@ module NarrativeLayout =
     /// Convenience: project a `PublicPage` whose body is a
     /// `NarrativeDocument` into a `PrerenderMeta` suitable for the
     /// Phase 57 prerender route system. Title / Description come from
-    /// the page; the document's `Provenance.GeneratedAt` (if present)
+    /// the page; the document's `NarrativeProvenance.GeneratedAt` (if present)
     /// feeds `article:published_time` in the OpenGraph map. JSON-LD is
     /// the Article blob from `articleJsonLd`.
     ///
@@ -252,7 +252,7 @@ module NarrativeLayout =
         selfCanonical @ headTags page
 
     /// Phase 148 — self-referencing canonical injection over the content
-    /// API. `PublicRenderingServerApp.withSelfCanonical` wraps the
+    /// API. `PublicRenderingOptions.withSelfCanonical` wraps the
     /// resolved `IPublicContentApi` so every resolved page that declares
     /// no explicit canonical gains a `head:canonical` frontmatter key (the
     /// Phase 111 envelope) — which the handler's existing

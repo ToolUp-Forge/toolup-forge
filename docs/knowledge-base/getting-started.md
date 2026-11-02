@@ -42,13 +42,16 @@ let kbModule =
 let ingestionStatusObserver =
     KnowledgeBase.Server.makeIngestionStatusObserver blobStorage (Some notificationChannel) logger
 
-RAGServerApp.create aiProviderFactory providerProfile embedder
-|> RAGServerApp.withConfig serverConfig
-|> RAGServerApp.withAuth authProvider
-|> RAGServerApp.withStorage blobStorage
-|> RAGServerApp.addModules [ kbModule ]
-|> RAGServerApp.withIngestionObserver ingestionStatusObserver
-|> RAGServerApp.run
+ServerApp.empty
+|> ServerApp.withConfig serverConfig
+|> ServerApp.withAuth authProvider
+|> ServerApp.withStorage blobStorage
+|> ServerApp.addModules [ kbModule ]
+|> RAGCompose.withRAG (
+    RagOptions.create aiProviderFactory providerProfile embedder
+    |> RagOptions.withIngestionObserver ingestionStatusObserver
+)
+|> ServerApp.run
 ```
 
 The companion owns its own extraction and chunking path, so there is no KB `DataType` or `VectorisationHandler` to register — `withVectorisation` on a `ServerModule` is for a module contributing its OWN retrievable data. The observer surfaces per-document status to the UI via SSE.
@@ -82,19 +85,22 @@ The KB module supports a "Standing AI Context" page where the team can write per
 let standingContextBuilder =
     KnowledgeBase.Server.standingContextBuilder blobStorage (Some logger)
 
-RAGServerApp.create aiProviderFactory providerProfile embedder
+ServerApp.empty
 |> ...
-|> RAGServerApp.withAIConfig {
-    Branding = branding
-    SystemPrompt = Some (SystemPromptBuilder.compose [
-        SystemPromptBuilder.fromStatic "You are a helpful assistant. ..."
-        standingContextBuilder
-        // ... other builders (active module, RAG retrieval, etc.)
-    ])
-    Limits = AgentLoopLimits.defaults
-    AISurfaceDerivation = TrustClient
-}
-|> RAGServerApp.run
+|> RAGCompose.withRAG (
+    RagOptions.create aiProviderFactory providerProfile embedder
+    |> RagOptions.withAIConfig {
+        Branding = branding
+        SystemPrompt = Some (SystemPromptBuilder.compose [
+            SystemPromptBuilder.fromStatic "You are a helpful assistant. ..."
+            standingContextBuilder
+            // ... other builders (active module, RAG retrieval, etc.)
+        ])
+        Limits = AgentLoopLimits.defaults
+        AISurfaceDerivation = TrustClient
+    }
+)
+|> ServerApp.run
 ```
 
 The builder reads the team's standing context per outer turn (cheap blob read) and prepends it to the system prompt. KB never auto-injects — the deployment's composition root is the only place that sees both AI and KB.

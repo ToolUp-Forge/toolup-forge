@@ -44,7 +44,7 @@ End-to-end latency for a typical 10-page PDF: ~5-15 seconds.
 4. Writes the document metadata blob: `kb-documents/{documentId}.meta.json` — `{ DocumentId; FileName; ContentType; UploadedBy; UploadedAt; Source = UploadedFile; Status = Pending }`.
 5. Emits `DocumentUploaded` event under `_platform.kb`.
 
-The post-save hook in `IDataObjectStore` (when registered with `composeWithRAG`) triggers `kbVectorisationHandler.Vectorise`. The handler:
+The post-save hook in `IDataObjectStore` (when the deployment composes `RAGCompose.withRAG`) triggers `kbVectorisationHandler.Vectorise`. The handler:
 
 1. Reads the document bytes from `IBlobStorage`.
 2. Routes by content-type to the matching extractor.

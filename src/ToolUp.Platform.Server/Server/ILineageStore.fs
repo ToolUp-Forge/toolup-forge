@@ -1,4 +1,6 @@
-namespace ToolUp.Platform
+namespace ToolUp.Platform.Infra
+
+open ToolUp.Platform
 
 // ─── ILineageStore ───────────────────────────────────────────────
 //
@@ -9,13 +11,13 @@ namespace ToolUp.Platform
 // `ReadByType` and walk the resulting edge list in memory.
 //
 // **Optional registration.** `compose` only registers
-// `ILineageStore` when `ServerConfig.Lineage = EnabledLineageStore`,
+// `ILineageStore` when `ServerConfig.Lineage = FeatureMode.Enabled`,
 // and hands the same instance to the result store it builds, which
 // auto-emits links on `SaveResult` when it has one and ignores the
 // `inputs` parameter when it does not.
 //
 // **Durability (Phase 1027).** With `ServerConfig.LineageDurability =
-// EnabledDurableLineage`, a link `Record` fails on is staged and retried
+// FeatureMode.Enabled`, a link `Record` fails on is staged and retried
 // by `ResultStore.LineageOutbox` until recorded or dead-lettered. A
 // retry deduplicates through `GetAncestors` by `LinkId`, so an
 // implementation needs no idempotent `Record` of its own; it must return
@@ -38,7 +40,7 @@ module LineageSourceModule =
 
 /// Server-side interface for recording and querying lineage links.
 /// Registered in DI only when
-/// `ServerConfig.Lineage = EnabledLineageStore`.
+/// `ServerConfig.Lineage = FeatureMode.Enabled`.
 type ILineageStore =
     /// Persist a single `LineageLink` as a `ModuleEvent` in the
     /// underlying `IEventStore`. Returns `Error` when the event-store

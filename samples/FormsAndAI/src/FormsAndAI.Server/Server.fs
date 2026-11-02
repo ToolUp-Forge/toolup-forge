@@ -4,18 +4,21 @@
 module FormsAndAI.Server
 
 open ToolUp.Platform
-open ToolUp.Platform.IEntityStore
-open ToolUp.Platform.Server
+open ToolUp.Platform.Infra.IEntityStore
+open ToolUp.Platform.Compose.Server
 open ToolUp.Forms.FormSchema
 open ToolUp.Forms.Workflow
 open ToolUp.Forms.IWorkflowEngine
 open ToolUp.AI
 open ToolUp.AI.SystemPromptBuilder
 open ToolUp.AI.DefaultAIProviderFactory
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // Phase 1h reference composition root — Forms AND AI on the same
-// `ServerApp` pipeline via the additive `withForms` / `withAI`
-// extensions. See `samples/FormsAndAI/README.md` for the demo's scope
+// `ServerApp` pipeline via the `withForms` / `withAI`
+// companions. See `samples/FormsAndAI/README.md` for the demo's scope
 // (compile-target sample; not directly runnable without
 // `TOOLUP_ENTITY_STORE` enabled + a real `IAIProvider` companion).
 
@@ -55,7 +58,7 @@ let private stampSubmission: WorkflowAction =
         // Resolve services per-invocation — never capture transient
         // services at compose time. The cast is safe because the SDK
         // always registers `IEntityStore` (concrete impl varies per
-        // `ServerConfig.EntityStore`); deployments running without
+        // `ServerConfig.Stores.EntityStore`); deployments running without
         // an entity store would crash here at first transition,
         // which is the documented requirement of the Forms companion.
         let entityStore = ctx.Services.GetService(typeof<IEntityStore>) :?> IEntityStore
@@ -109,30 +112,25 @@ let main _ =
 
     // Canonical BYOK provider-profile store. Registered as the
     // `IProviderProfile` DI singleton so the AI factory + settings
-    // handler resolve it; also passed to `withAI` below as the
+    // handler resolve it; also passed to `AIOptions.create` below as the
     // required AI dependency.
     let providerProfile = BlobProviderProfile.create blobStorage
 
-    // The Phase 1h pipeline. Note the single `ServerApp.empty |> ... |>
-    // ServerApp.run` shape — no terminal `FormsServerApp.run` or
-    // `AIServerApp.run`. Pre-Phase-1h, a deployment that wanted both
-    // Forms and AI had to pick one root and drop the other.
+    // One `ServerApp.empty |> ... |> ServerApp.run` pipeline: each
+    // companion is composed onto the same root, with no terminal
+    // companion `run`.
     ServerApp.empty
     |> ServerApp.withConfig config
     |> ServerApp.withLogger logger
     |> ServerApp.withStorage blobStorage
-    |> ToolUp.Forms.FormsCompose.withForms (fun f ->
-        f
-        |> ToolUp.Forms.FormsCompose.FormsServerApp.withFormSchema demoSchema
-        |> ToolUp.Forms.FormsCompose.FormsServerApp.withWorkflow demoWorkflow
-        |> ToolUp.Forms.FormsCompose.FormsServerApp.withAction "stampSubmission" stampSubmission)
-    |> ToolUp.AI.AICompose.withAI aiFactory providerProfile (fun ai ->
-        ai |> ToolUp.AI.AICompose.AIServerApp.withAIConfig aiAssistantConfig)
-    // |> ToolUp.Forms.FormsCompose.withForms (fun f -> f)
-    //   ^ Phase 1h conflict validator — uncomment to see the
-    //     compose-time failure:
-    //       "ToolUp.Forms: companion already composed on this
-    //        ServerApp pipeline. ..."
-    //     instead of the pre-Phase-1h cascading
-    //     duplicate-entity-registration / double-mounted-route errors.
+    |> ToolUp.Forms.FormsCompose.withForms (
+        ToolUp.Forms.FormsCompose.FormsOptions.create ()
+        |> ToolUp.Forms.FormsCompose.FormsOptions.withFormSchema demoSchema
+        |> ToolUp.Forms.FormsCompose.FormsOptions.withWorkflow demoWorkflow
+        |> ToolUp.Forms.FormsCompose.FormsOptions.withAction "stampSubmission" stampSubmission
+    )
+    |> ToolUp.AI.AICompose.withAI (
+        ToolUp.AI.AICompose.AIOptions.create aiFactory providerProfile
+        |> ToolUp.AI.AICompose.AIOptions.withAIConfig aiAssistantConfig
+    )
     |> ServerApp.run

@@ -1,4 +1,4 @@
-module ToolUp.Platform.Server
+module ToolUp.Platform.Compose.Server
 
 open Giraffe
 open System
@@ -15,41 +15,47 @@ open ToolUp.Platform.Providers
 open ToolUp.Platform.FileProcessor
 open ToolUp.Platform.Auth
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.BlobEncryption
-open ToolUp.Platform.FileManagement
-open ToolUp.Platform.TeamManagement
-open ToolUp.Platform.PermissionStore
-open ToolUp.Platform.StorageScopeResolver
+open ToolUp.Platform.Infra.BlobEncryption
+open ToolUp.Platform.Files.FileManagement
+open ToolUp.Platform.Config.TeamManagement
+open ToolUp.Platform.Scope.PermissionStore
+open ToolUp.Platform.Scope.StorageScopeResolver
 open ToolUp.Platform.VectorisationTypes
-open ToolUp.Platform.WebhookDispatcher
+open ToolUp.Platform.Jobs.WebhookDispatcher
 open ToolUp.Platform.Usage
-open ToolUp.Platform.Middleware
-open ToolUp.Platform.SurfaceEnforcement
-open ToolUp.Platform.Tracing
-open ToolUp.Platform.RemotingHelpers
-open ToolUp.Platform.PlatformSchema
-open ToolUp.Platform.PlatformApiHandler
-open ToolUp.Platform.IDataExporter
+open ToolUp.Platform.Compose.Middleware
+open ToolUp.Platform.Scope.SurfaceEnforcement
+open ToolUp.Platform.Infra.Tracing
+open ToolUp.Platform.Compose.RemotingHelpers
+open ToolUp.Platform.Compose.PlatformSchema
+open ToolUp.Platform.Compose.PlatformApiHandler
+open ToolUp.Platform.Audit.IDataExporter
 open Microsoft.Extensions.Caching.Memory
 
-open ToolUp.Platform.ConfigurePipeline
-open ToolUp.Platform.BuildRouteHandlers
-open ToolUp.Platform.ComposeAudit
-open ToolUp.Platform.ComposeEncryption
-open ToolUp.Platform.TransientFault
-open ToolUp.Platform.ResilientBlobStorage
-open ToolUp.Platform.ResilientSecretStore
-open ToolUp.Platform.ComposeAuth
-open ToolUp.Platform.ComposeNotifications
-open ToolUp.Platform.ComposeJobs
-open ToolUp.Platform.ComposeDevDiagnostics
-open ToolUp.Platform.ComposeConfigValidators
-open ToolUp.Platform.ComposeRuntimeServices
-open ToolUp.Platform.ComposeStores
-open ToolUp.Platform.ComposeTeamRuntime
-open ToolUp.Platform.ComposeHealthSmoke
-open ToolUp.Platform.ComposeScopeResolver
-open ToolUp.Platform.ComposeBootstrap
+open ToolUp.Platform.Compose.ConfigurePipeline
+open ToolUp.Platform.Compose.BuildRouteHandlers
+open ToolUp.Platform.Compose.ComposeAudit
+open ToolUp.Platform.Compose.ComposeEncryption
+open ToolUp.Platform.Infra.TransientFault
+open ToolUp.Platform.Infra.ResilientBlobStorage
+open ToolUp.Platform.Infra.ResilientSecretStore
+open ToolUp.Platform.Compose.ComposeAuth
+open ToolUp.Platform.Compose.ComposeNotifications
+open ToolUp.Platform.Compose.ComposeJobs
+open ToolUp.Platform.Compose.ComposeDevDiagnostics
+open ToolUp.Platform.Compose.ComposeConfigValidators
+open ToolUp.Platform.Compose.ComposeRuntimeServices
+open ToolUp.Platform.Compose.ComposeStores
+open ToolUp.Platform.Compose.ComposeTeamRuntime
+open ToolUp.Platform.Compose.ComposeHealthSmoke
+open ToolUp.Platform.Compose.ComposeScopeResolver
+open ToolUp.Platform.Compose.ComposeBootstrap
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Usage
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
 
 /// Phase 1001 — the secret store a composition runs on, in one place.
 ///
@@ -72,6 +78,96 @@ let composeSecretStore
     supplied
     |> Option.defaultWith (fun () -> FileSecretStore.FileSecretStore() :> Secrets.ISecretStore)
     |> applySecretResilience secretResilience
+
+/// What `compose` builds a deployment from: the plan `ServerApp.run`
+/// resolves — the deployment's final configuration (every override folded),
+/// its accumulated registrations, and its contributions in plan order
+/// (`Contributions`, already folded into `Extensions` and
+/// `ConfigValidators`, carried so the manifest and `/dev/inspect` can
+/// project them).
+[<NoEquality; NoComparison>]
+type CompositionPlan = {
+    Handlers: HttpHandler list
+    DataTypes: DataType list
+    Config: ServerConfig
+    AuthProvider: IAuthProvider option
+    Extensions: ComposeExtensions
+    Logger: ILogger option
+    BlobStorage: IBlobStorage option
+    NotificationChannel: INotificationChannel option
+    QueryHandlers: (string * ModuleQueryHandler) list
+    DataTypeRegistrations: (string * DataType) list
+    TransactionalSinks: INotificationSink list
+    HealthChecks: HealthChecks.IHealthCheck list
+    ConfigValidators: ConfigValidation.IConfigValidator list
+    EncryptionKeyResolver: IBlobEncryptionKeyResolver option
+    EntityRegistrations: (EntityStore.EntityRegistry -> unit) list
+    QuotaPolicyOverride: ITeamQuotaPolicy option
+    CompanionMetricsSinks: Metrics.IMetricsSink list
+    AuditSinks: IAuditSink list
+    AuditReplicatorOptions: AuditReplicatorOptions option
+    ModuleMetricRegistrations: Metrics.MetricRegistration list
+    ActivitySinkOverride: IActivitySink option
+    RateLimitDescriptors: RateLimitDescriptor list
+    SmokeTests: SmokeTests.ISmokeTest list
+    PendingInviteStoreOverride: IPendingInviteStore option
+    SubjectMigratorOverride: IAnonymousSessionMigrator option
+    ShareTokenStoreDecorators: (IShareTokenStore -> IShareTokenStore) list
+    ModuleSurfaceDefaults: (string * SurfaceRequirement) list
+    RouteSurfaceOverrides: ((string * string) * SurfaceRequirement) list
+    ModuleRoutePrefixes: (string * string) list
+    ScheduledJobDeclarations: ScheduledJobDeclaration list
+    StorageResilience: ResilienceMode
+    SecretResilience: ResilienceMode
+    SecretStore: Secrets.ISecretStore option
+    SecretStorePreflightTimeout: TimeSpan option
+    DistributedLockOverride: IDistributedLock option
+    Contributions: Contribution list
+}
+
+[<RequireQualifiedAccess>]
+module CompositionPlan =
+
+    /// A plan composing `config` and nothing else: no handlers, no
+    /// registrations, no contributions, the default substrate choices.
+    let ofConfig (config: ServerConfig) : CompositionPlan = {
+        Handlers = []
+        DataTypes = []
+        Config = config
+        AuthProvider = None
+        Extensions = ComposeExtensions.empty
+        Logger = None
+        BlobStorage = None
+        NotificationChannel = None
+        QueryHandlers = []
+        DataTypeRegistrations = []
+        TransactionalSinks = []
+        HealthChecks = []
+        ConfigValidators = []
+        EncryptionKeyResolver = None
+        EntityRegistrations = []
+        QuotaPolicyOverride = None
+        CompanionMetricsSinks = []
+        AuditSinks = []
+        AuditReplicatorOptions = None
+        ModuleMetricRegistrations = []
+        ActivitySinkOverride = None
+        RateLimitDescriptors = []
+        SmokeTests = []
+        PendingInviteStoreOverride = None
+        SubjectMigratorOverride = None
+        ShareTokenStoreDecorators = []
+        ModuleSurfaceDefaults = []
+        RouteSurfaceOverrides = []
+        ModuleRoutePrefixes = []
+        ScheduledJobDeclarations = []
+        StorageResilience = NoResilience
+        SecretResilience = NoResilience
+        SecretStore = None
+        SecretStorePreflightTimeout = None
+        DistributedLockOverride = None
+        Contributions = []
+    }
 
 /// Compose a list of pre-built Giraffe HttpHandlers into a Saturn application.
 /// When dataTypes is non-empty, the file management API is auto-injected.
@@ -123,53 +219,61 @@ let composeSecretStore
 /// `HeaderAuthProviderModeValidator` refuses startup in any
 /// auth-requiring Mode, and `SkipPreflight` cannot bypass it).
 ///
-/// **Advanced.** Apps should use the `ServerApp` / `AIServerApp` /
-/// `RAGServerApp` record-based fluent API instead — `compose` is the
+/// **Advanced.** Apps should use the `ServerApp` record-based fluent API (with
+/// `AICompose.withAI` / `RAGCompose.withRAG` for the companions) instead — `compose` is the
 /// low-level entry point and its positional signature changes whenever
 /// new SDK features land. Hidden from IntelliSense via
 /// `[<EditorBrowsable>]`.
 [<System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)>]
-let compose
-    (handlers: HttpHandler list)
-    (dataTypes: DataType list)
-    (config: ServerConfig)
-    (authProvider: IAuthProvider option)
-    (extensions: ComposeExtensions)
-    (logger: ILogger option)
-    (blobStorage: IBlobStorage option)
-    (notificationChannel: INotificationChannel option)
-    (queryHandlers: (string * ModuleQueryHandler) list)
-    (dataTypeRegistrations: (string * DataType) list)
-    (transactionalSinks: INotificationSink list)
-    (healthChecks: HealthChecks.IHealthCheck list)
-    (configValidators: ConfigValidation.IConfigValidator list)
-    (encryptionKeyResolver: IBlobEncryptionKeyResolver option)
-    (entityRegistrations: (EntityStore.EntityRegistry -> unit) list)
-    (quotaPolicyOverride: ITeamQuotaPolicy option)
-    (companionMetricsSinks: Metrics.IMetricsSink list)
-    (auditSinks: IAuditSink list)
-    (auditReplicatorOptions: AuditReplicatorOptions option)
-    (moduleMetricRegistrations: Metrics.MetricRegistration list)
-    (activitySinkOverride: IActivitySink option)
-    (rateLimitDescriptors: RateLimitDescriptor list)
-    (smokeTests: SmokeTests.ISmokeTest list)
-    (pendingInviteStoreOverride: IPendingInviteStore option)
-    (subjectMigratorOverride: IAnonymousSessionMigrator option)
-    (shareTokenStoreDecorators: (IShareTokenStore -> IShareTokenStore) list)
-    (moduleSurfaceDefaults: (string * SurfaceRequirement) list)
-    (routeSurfaceOverrides: ((string * string) * SurfaceRequirement) list)
-    // Phase 637 — `(moduleId, routePrefix)` attribution for opt-in
-    // module-visibility route hardening. Same declarations as
-    // `moduleSurfaceDefaults`, keyed by module rather than requirement.
-    (moduleRoutePrefixes: (string * string) list)
-    (scheduledJobDeclarations: ScheduledJobDeclaration list)
-    (storageResilience: ResilienceMode)
-    (secretResilience: ResilienceMode)
-    (secretStore: Secrets.ISecretStore option)
-    // Phase 1038 — `ServerApp.withSecretStorePreflightTimeout`; `None` lets
-    // the store's kind choose (`ConfigValidator.secretStorePreflightTimeout`).
-    (secretStorePreflightTimeout: TimeSpan option)
-    =
+let compose (plan: CompositionPlan) =
+    let handlers = plan.Handlers
+    let dataTypes = plan.DataTypes
+    let config = plan.Config
+    let authProvider = plan.AuthProvider
+    let extensions = plan.Extensions
+    let logger = plan.Logger
+    let blobStorage = plan.BlobStorage
+    let notificationChannel = plan.NotificationChannel
+    let queryHandlers = plan.QueryHandlers
+    let dataTypeRegistrations = plan.DataTypeRegistrations
+    let transactionalSinks = plan.TransactionalSinks
+    let healthChecks = plan.HealthChecks
+    let configValidators = plan.ConfigValidators
+    let encryptionKeyResolver = plan.EncryptionKeyResolver
+    let entityRegistrations = plan.EntityRegistrations
+    let quotaPolicyOverride = plan.QuotaPolicyOverride
+    let companionMetricsSinks = plan.CompanionMetricsSinks
+    let auditSinks = plan.AuditSinks
+    let auditReplicatorOptions = plan.AuditReplicatorOptions
+    let moduleMetricRegistrations = plan.ModuleMetricRegistrations
+    let activitySinkOverride = plan.ActivitySinkOverride
+    let rateLimitDescriptors = plan.RateLimitDescriptors
+    let smokeTests = plan.SmokeTests
+    let pendingInviteStoreOverride = plan.PendingInviteStoreOverride
+    let subjectMigratorOverride = plan.SubjectMigratorOverride
+    let shareTokenStoreDecorators = plan.ShareTokenStoreDecorators
+    let moduleSurfaceDefaults = plan.ModuleSurfaceDefaults
+    let routeSurfaceOverrides = plan.RouteSurfaceOverrides
+    let moduleRoutePrefixes = plan.ModuleRoutePrefixes
+    let scheduledJobDeclarations = plan.ScheduledJobDeclarations
+    let storageResilience = plan.StorageResilience
+    let secretResilience = plan.SecretResilience
+    let secretStore = plan.SecretStore
+    let secretStorePreflightTimeout = plan.SecretStorePreflightTimeout
+    let distributedLockOverride = plan.DistributedLockOverride
+
+    // The deployment's cross-instance lease primitive, resolved FIRST so
+    // every subsystem constructed eagerly below takes the same instance:
+    // the job scheduler's dispatch mutex and cron-tick election, the
+    // webhook dispatcher's failure-state lease and the platform-admin
+    // store's write lock. Registered in DI further down, so a module
+    // resolving `IDistributedLock` gets the same one. The in-process default
+    // is a correct answer for a single instance and excludes nothing across
+    // replicas; a shared one (`RedisDistributedLock`, or any implementation
+    // over a store every replica reaches) is what lets the scheduler run on
+    // more than one replica.
+    let distributedLock =
+        distributedLockOverride |> Option.defaultValue InProcessDistributedLock.shared
 
     // Phase 9l — resolve the deployment's distributed-tracing sink.
     // Wrap of `OtelActivitySink` (or any custom companion) is opt-in
@@ -204,34 +308,9 @@ let compose
             (DeploymentConfig.hasMultiTeamSwitcher config)
             extensions.NotificationConsumers
 
-    // Typed cells for the concrete `PersistentEventStore` /
-    // `BlobJobStore` instances. `ref` (not `let mutable`) so
-    // `buildRouteHandlers` can capture them by reference for the
-    // MaintenanceApi thunks while the event-store / job-scheduler
-    // builders below populate them. Remain `None` when the deployment
-    // uses in-memory event store / no scheduler.
-    let persistentEventStoreInstance: PersistentEventStore.PersistentEventStore option ref =
-        ref None
-
-    let blobJobStoreInstance: JobStore.BlobJobStore option ref = ref None
-
-    let routeHandlers =
-        buildRouteHandlers
-            config
-            handlers
-            dataTypes
-            extensions
-            transactionalSinks
-            encryptionKeyResolver
-            effectiveNotifications
-            persistentEventStoreInstance
-            blobJobStoreInstance
-
     let serverPort =
-        match Environment.GetEnvironmentVariable "SERVER_PORT" with
-        | null
-        | "" -> string config.Port
-        | port -> port
+        ConfigResolution.tryValue ConfigKeys.Names.serverPort
+        |> Option.defaultWith (fun () -> string config.Port)
 
     // Fail fast on an out-of-range / non-numeric port. Without this the
     // raw string flows into `UseUrls($"http://<address>:{serverPort}")` and
@@ -242,15 +321,17 @@ let compose
     | true, p when p >= 1 && p <= 65535 -> ()
     | _ ->
         failwithf
-            "SERVER_PORT / ServerConfig.Port = %s is not a valid TCP port. Expected an integer in 1-65535 (set the SERVER_PORT environment variable or ServerConfig.Port to a valid port)."
+            "%s / ServerConfig.Port = %s is not a valid TCP port. Expected an integer in 1-65535 (set the %s environment variable or ServerConfig.Port to a valid port)."
+            ConfigKeys.Names.serverPort
             serverPort
+            ConfigKeys.Names.serverPort
 
     // Phase 1000 — the configured bind address: `SERVER_BIND_ADDRESS`, else
     // `ServerConfig.BindAddress`; `None` binds the loopback default. Read
     // here, beside the port, for consumers not using `fromEnv`, and failed
     // loud by name when it is not an IP literal or `localhost`.
     let bindAddress =
-        ServerBinding.configuredBindAddress config (ServerBinding.envValue ServerBinding.BindAddressEnvVar)
+        ServerBinding.configuredBindAddress config (ConfigResolution.tryValue ServerBinding.BindAddressEnvVar)
 
     let culture = CultureInfo "en-GB"
     CultureInfo.DefaultThreadCurrentCulture <- culture
@@ -348,9 +429,14 @@ let compose
                 | Some s -> s.Trim().ToLowerInvariant() = "json"
 
             if wantsJson then
-                JsonConsoleLogger.JsonConsoleLogger(config.LogLevel, config.TraceCategories) :> ILogger
+                JsonConsoleLogger.JsonConsoleLogger(
+                    config.Observability.LogLevel,
+                    config.Observability.TraceCategories
+                )
+                :> ILogger
             else
-                ConsoleLogger.ConsoleLogger(config.LogLevel, config.TraceCategories) :> ILogger)
+                ConsoleLogger.ConsoleLogger(config.Observability.LogLevel, config.Observability.TraceCategories)
+                :> ILogger)
 
     // ─── Phase 828 — the self-hosted log store ─────────────────────────
     //
@@ -405,25 +491,23 @@ let compose
     // (built and DI-registered further down in this function). The
     // post-save hook dispatch site reads it from the runtime.
 
-    // Resolve event store per config.EventStore.
+    // Resolve event store per config.Stores.EventStore.
     // - InMemoryOnly: thread-safe list, lost on restart.
     // - PersistentBlobBacked: blob-backed append-only store using
     //   the registered IBlobStorage (LocalFileStorage on disk by
     //   default; Azure / S3 / GCS when the app opts in).
-    // The `persistentEventStoreInstance` cell is hoisted to the top
-    // of `compose` (alongside `blobJobStoreInstance`) so the
-    // MaintenanceApi handler and the /dev/inspect index inspector
-    // can both capture it via thunks. Populate here in the
-    // `PersistentBlobBacked` branch.
-    let innerEventStore: IEventStore =
-        match config.EventStore with
-        | InMemoryOnly -> InMemoryEventStore.InMemoryEventStore() :> _
+    // The persistent store is kept as a value: the MaintenanceApi handler
+    // and the /dev/inspect index inspector hold the same instance.
+    let persistentEventStore =
+        match config.Stores.EventStore with
+        | InMemoryOnly -> None
         | PersistentBlobBacked retention ->
-            let store =
-                PersistentEventStore.PersistentEventStore(resolvedBlobStorage, retention)
+            Some(PersistentEventStore.PersistentEventStore(resolvedBlobStorage, retention))
 
-            persistentEventStoreInstance.Value <- Some store
-            store :> _
+    let innerEventStore: IEventStore =
+        match persistentEventStore with
+        | Some store -> store :> _
+        | None -> InMemoryEventStore.InMemoryEventStore() :> _
 
     // Phase 6d / Phase 1g webhook subsystem. Registry + delivery log
     // are blob-backed against the registered `IBlobStorage`; the
@@ -436,7 +520,7 @@ let compose
     // create/update/delete) writes through the wrapped store below —
     // admins *can* alert on those.
     //
-    // Phase 1g — `NoWebhooks` (the default) skips every registration:
+    // Phase 1g — `FeatureMode.Disabled` (the default) skips every registration:
     // no dispatcher `BackgroundService`, no `HookedEventStore`
     // decorator wrapping `IEventStore`, no `IWebhookRegistry` /
     // `IWebhookDeliveryLog` / `IWebhookDispatcher` DI services, and
@@ -465,19 +549,15 @@ let compose
     let effectiveInnerEventStore =
         effectiveInnerEventStore innerEventStore auditReplicatorSubsystem
 
-    // Phase 9v — chicken-and-egg break for the outbound rate limiter.
-    // The real `IRateLimiter` is constructed further down (after
-    // `auditLog` / `resolvedMetricsSink`, both of which transitively
-    // depend on the post-webhook event-store decorator chain), but the
-    // webhook dispatcher needs a stable reference now so its retry
-    // loop can call `Wait` per attempt. Mirrors the `jobSchedulerCell`
-    // pattern below: initialise with a pass-through (`NoOpRateLimiter`)
-    // so any `Wait` call during compose is silent; overwrite with the
-    // real instance once compose has built it. By the time the
-    // dispatcher's `BackgroundService.ExecuteAsync` actually invokes
-    // `Wait`, the cell holds the configured limiter.
-    let rateLimiterCell: IRateLimiter ref = ref (NoOpRateLimiter() :> IRateLimiter)
-    let rateLimiterLookup () = rateLimiterCell.Value
+    // The outbound rate limiter is built at a later stage than the webhook
+    // dispatcher that waits on it (the limiter needs the audit log and the
+    // metrics sink, which need the event-store chain the webhook decorator
+    // is part of). The dispatcher holds the slot; until the limiter's stage
+    // binds it, a `Wait` passes straight through.
+    let outboundRateLimiter =
+        LateBound<IRateLimiter>("outbound rate limiter", NoOpRateLimiter() :> IRateLimiter)
+
+    let rateLimiterLookup () = outboundRateLimiter.Current
 
     let webhookSubsystem =
         buildWebhookSubsystem
@@ -488,16 +568,16 @@ let compose
             resolvedActivitySink
             secretStore
             rateLimiterLookup
+            distributedLock
 
-    // Phase 9b — chicken-and-egg break for the job substrate. The
-    // notify-wrapper needs the scheduler to forward events to; the
-    // scheduler needs the (notifying) event store for its own
-    // emissions. Use a mutable cell that compose populates after
-    // constructing the scheduler — every Write *during compose*
-    // sees `None` and skips the notify, every Write *after compose*
-    // sees the registered scheduler and dispatches OnEvent triggers.
-    let jobSchedulerCell: IJobScheduler option ref = ref None
-    let jobSchedulerLookup () = jobSchedulerCell.Value
+    // The job scheduler and the job-notify event-store decorator need each
+    // other: the scheduler writes through the notifying store, and the
+    // store forwards events to the scheduler. The decorator holds the
+    // scheduler's slot and is dormant until the scheduler's stage binds it
+    // (a write during composition skips the notify).
+    let jobScheduler = LateBound<IJobScheduler option>("job scheduler", None)
+
+    let jobSchedulerLookup () = jobScheduler.Current
 
     // Phase 598 — one shared trigger watermark when the deployment
     // opted into event-trigger catch-up: `JobNotifyEventStore`
@@ -536,19 +616,13 @@ let compose
             jobSchedulerLookup
             jobTriggerWatermark
 
-    // Phase 114 — chicken-and-egg break for the audit-write-failure
-    // metric. The `EventStoreAuditLog` is constructed inside
-    // `buildNotificationStack` (below), but the resolved `IMetricsSink`
-    // is built further down (after `services` exists). Same pattern as
-    // `rateLimiterCell` / `jobSchedulerCell`: hand the audit log a
-    // reader over a cell holding a `NoOpMetricsSink` now; overwrite the
-    // cell with the resolved sink once compose builds it. The audit log
-    // reads the cell lazily and only on the failure path, so by the time
-    // a real write fails at runtime the cell holds the configured sink.
-    let metricsSinkCell: Metrics.IMetricsSink ref =
-        ref (Metrics.NoOpMetricsSink() :> Metrics.IMetricsSink)
+    // The metrics sink depends on nothing composed after it, so it is built
+    // here, before the audit log whose write-failure counter it receives,
+    // and registered with the other observability services below.
+    let metricsSinks =
+        buildMetricsSink config companionMetricsSinks moduleMetricRegistrations resolvedLogger
 
-    let metricsSinkLookup () = metricsSinkCell.Value
+    let metricsSinkLookup () = fst metricsSinks
 
     // Build the notification-stack substrate (extracted to
     // `ComposeNotifications.buildNotificationStack`). Pre-DI
@@ -579,7 +653,7 @@ let compose
     // `IShareTokenStore`. Fold-left applies decorators outside-in so
     // the LAST `withShareTokenStoreDecorator` call wraps the others
     // (matching the docstring contract on the builder). No-op when
-    // `ServerConfig.ShareTokenStore = NoShareTokenStore` — the
+    // `ServerConfig.Stores.ShareTokenStore = FeatureMode.Disabled` — the
     // underlying instance is `None` so the decorator list is
     // structurally unreachable. `SurfaceCoherenceValidator` (Stream
     // B.2) warns at startup when decorators are registered but no
@@ -656,35 +730,18 @@ let compose
     // `ComposeEncryption.registerEncryptionResolver`).
     registerEncryptionResolver services encryptionKeyResolver
 
-    // Phase 9i — SDK-wide cross-instance lease primitive. Registered
-    // UNCONDITIONALLY (not behind a config mode) so any subsystem or
-    // module can resolve an `IDistributedLock` without first checking
-    // whether the deployment composed one: the in-process default is
-    // always a correct answer for a single instance, and asking every
-    // consumer to handle absence is how three subsystems ended up
-    // re-deriving their own `SemaphoreSlim` instead.
-    //
-    // `InProcessDistributedLock.shared` is the SAME instance the eagerly
-    // constructed subsystems default to (the job scheduler's per-`JobId`
-    // dispatch mutex, `BlobBackedPlatformAdminStore`'s write lock), so an
-    // in-process acquirer of a given lock id contends with every other
-    // regardless of which path handed it the lock.
-    //
-    // **Overriding it with a companion.** A distributed deployment
-    // registers its own `AddSingleton<IDistributedLock>` from
-    // `ComposeExtensions.ServiceConfig`, which runs after this block —
-    // last registration wins for `GetRequiredService`, so every
-    // DI-resolving consumer gets the companion. The two compose-time
-    // subsystems above bind this default instance; threading a companion
-    // lock into those is the Phase 9c follow-on (it needs the lock
-    // resolved BEFORE their construction, i.e. a `compose` signature
-    // change, which is not worth spending on until a distributed
-    // scheduler companion exists to need it).
+    // The deployment's lease primitive (resolved at the head of `compose`),
+    // registered UNCONDITIONALLY so any subsystem or module resolves an
+    // `IDistributedLock` without first checking whether the deployment
+    // composed one. A module registering its own from
+    // `ComposeExtensions.ServiceConfig` still wins for `GetRequiredService`
+    // (last registration wins), but the subsystems `compose` builds eagerly
+    // take the composed one, so a shared lock belongs on
+    // `ServerApp.withDistributedLock`.
     //
     // GP 13 — an unused registration is one singleton and no hosted
     // service, no middleware, no allocation on any request path.
-    services.AddSingleton<IDistributedLock>(InProcessDistributedLock.shared)
-    |> ignore
+    services.AddSingleton<IDistributedLock>(distributedLock) |> ignore
 
     // Phase 118 — degraded-capability registry. Registered
     // unconditionally (best-effort sites must be able to register into it)
@@ -762,21 +819,21 @@ let compose
 
     // Phase 7b — user-authored schema store + migration job handler
     // (extracted to `ComposeStores.registerUserSchemaStore`). No-op unless
-    // `UserSchemaAuthoring = EnabledUserSchemaAuthoring`.
+    // `UserSchemaAuthoring = FeatureMode.Enabled`.
     registerUserSchemaStore services config
 
     // Phase 599 — entity-write outbox surface + relay drain (extracted
     // to `ComposeStores.registerEntityOutbox`). No-op unless
-    // `EntityOutbox = EnabledEntityOutbox` with the entity store on.
+    // `EntityOutbox = FeatureMode.Enabled` with the entity store on.
     registerEntityOutbox services config resolvedLogger
 
     // Phase 1027 — durable lineage: the lineage outbox + its relay drain
     // (`ComposeStores.registerLineageOutbox`). No-op unless
-    // `LineageDurability = EnabledDurableLineage` built an outbox.
+    // `LineageDurability = FeatureMode.Enabled` built an outbox.
     registerLineageOutbox services config lineageOutbox resolvedLogger
 
     // Phase 161 — time-series substrate. Conditional on
-    // `ServerConfig.TimeSeriesStore`; `NoTimeSeriesStore` (default) skips
+    // `ServerConfig.Stores.TimeSeriesStore`; `NoTimeSeriesStore` (default) skips
     // registration entirely; `CustomTimeSeriesStore` leaves the consumer's
     // companion singleton in place.
     registerTimeSeriesStore services config
@@ -796,7 +853,7 @@ let compose
     // `/api/observability/alerts`. A no-op when no rule is declared.
     ComposeObservability.registerObservabilityReadback services config
 
-    // Phase 448 — dataset substrate. Conditional on `ServerConfig.Datasets`;
+    // Phase 448 — dataset substrate. Conditional on `ServerConfig.Stores.Datasets`;
     // `NoDatasets` (default) skips registration entirely; `BlobDatasets`
     // registers the blob-backed default lazily; `CustomDatasetStore` leaves
     // the consumer's own `IDatasetStore` singleton in place.
@@ -819,14 +876,14 @@ let compose
     registerBackupCoordinator services config innerBlobStorage encryptionKeyResolver
 
     // Phase 528 — session registry. Conditional on
-    // `ServerConfig.SessionRegistry`; `NoSessionRegistry` (default) skips
+    // `ServerConfig.Stores.SessionRegistry`; `NoSessionRegistry` (default) skips
     // registration entirely, so neither the revocation middleware nor the
     // ISessionApi route has a store to resolve; `BlobSessionRegistry`
     // registers the blob-backed default lazily; `CustomSessionRegistry`
     // leaves the consumer's own `ISessionRegistry` singleton in place.
     registerSessionRegistry services config
     // Phase 527 — service-account substrate. Conditional on
-    // `ServerConfig.ServiceAccounts`; `NoServiceAccounts` (default) skips
+    // `ServerConfig.Stores.ServiceAccounts`; `NoServiceAccounts` (default) skips
     // registration entirely; `EnabledServiceAccounts` registers the
     // blob-backed default lazily; `CustomServiceAccountStore` leaves the
     // consumer's own `IServiceAccountStore` singleton in place.
@@ -837,29 +894,29 @@ let compose
     // CustomGraphStore leaves an engine companion's singleton in place.
     registerGraphStore services config
 
-    // Phase 163 — end-user telemetry sink. NoTelemetrySink (default)
-    // registers the NoOpTelemetrySink; CustomTelemetrySink leaves the
+    // Phase 163 — end-user telemetry sink. FeatureMode.Disabled (default)
+    // registers the NoOpTelemetrySink; FeatureMode.Enabled leaves the
     // consumer's companion sink in place.
     registerTelemetrySink services config
 
-    // Phase 318 — external-compute broker. NoExternalCompute (default)
+    // Phase 318 — external-compute broker. FeatureMode.Disabled (default)
     // registers the NoExternalComputeDispatcher lazily, so Submit is a
-    // typed not-configured refusal; CustomExternalCompute leaves the
+    // typed not-configured refusal; FeatureMode.Enabled leaves the
     // consumer's companion dispatcher in place.
     registerExternalCompute services config
 
     // Column-mapping substrate (mapping-aware Data Manager). Conditional
-    // on `ServerConfig.ColumnMapping`; `NoColumnMapping` (default) skips
+    // on `ServerConfig.ColumnMapping`; `FeatureMode.Disabled` (default) skips
     // registration entirely.
     registerColumnMappingStore services config
 
     // Phase 159 — durable per-subject consent-state store. Conditional
-    // on `ServerConfig.ConsentStateStore`; `NoConsentStateStore`
+    // on `ServerConfig.Stores.ConsentStateStore`; `NoConsentStateStore`
     // (default) registers nothing.
     registerConsentStateStore services config
 
     // Phase 6f.A — the external address book. Conditional on
-    // `ServerConfig.ExternalContactStore`; `NoExternalContactStore`
+    // `ServerConfig.Stores.ExternalContactStore`; `FeatureMode.Disabled`
     // (default) registers nothing.
     registerExternalContactStore services config
 
@@ -884,8 +941,8 @@ let compose
     let usageLogInstance =
         registerUsageMetering services config resolvedBlobStorage eventStore resolvedLogger quotaPolicyOverride
 
-    // Phase 451 — compute-budget governance. `NoComputeBudget` (default)
-    // registers nothing and wraps nothing. `EnabledComputeBudget` registers
+    // Phase 451 — compute-budget governance. `FeatureMode.Disabled` (default)
+    // registers nothing and wraps nothing. `FeatureMode.Enabled` registers
     // the blob-backed store + the shared guard and replaces the already-
     // registered IExternalComputeDispatcher instance with the budget
     // decorator. Deliberately AFTER registerUsageMetering (the guard meters
@@ -899,19 +956,7 @@ let compose
     // Returns the resolved `IMetricsSink` so the outbound rate
     // limiter downstream picks up the same instance.
     let resolvedMetricsSink =
-        registerMetricsAndObservability
-            services
-            config
-            companionMetricsSinks
-            moduleMetricRegistrations
-            resolvedActivitySink
-            resolvedLogger
-
-    // Phase 114 — populate the deferred metrics cell now that the real
-    // sink is resolved, so the audit log's write-failure counter
-    // (`toolup.audit.write_failures_total`) flows to the configured sink
-    // instead of the bootstrap no-op.
-    metricsSinkCell.Value <- resolvedMetricsSink
+        registerMetricsAndObservability services metricsSinks resolvedActivitySink
 
     // Core SDK singleton registrations (extracted to
     // `ComposeRuntimeServices.registerCoreSdkSingletons`).
@@ -939,7 +984,7 @@ let compose
     registerShareTokenStore services shareTokenStoreInstance
 
     // Phase 442 — register the presence + soft-lock substrate when
-    // `ServerConfig.Presence = EnabledPresence` (extracted to
+    // `ServerConfig.Presence = FeatureMode.Enabled` (extracted to
     // `ComposeNotifications.registerPresenceSubstrate`).
     registerPresenceSubstrate services notificationStack.PresenceSubstrate
 
@@ -949,10 +994,9 @@ let compose
     registerCrdtDocumentStore services notificationStack.CrdtDocumentStore
 
     // Phase 9v — outbound `IRateLimiter` registration (extracted to
-    // `ComposeRuntimeServices.registerOutboundRateLimiter`). Populates
-    // `rateLimiterCell` so the webhook dispatcher's per-attempt `Wait`
-    // calls (registered above with `rateLimiterLookup`) see the
-    // configured limiter instead of the pass-through default.
+    // `ComposeRuntimeServices.registerOutboundRateLimiter`). This stage
+    // binds `outboundRateLimiter`, so the webhook dispatcher's per-attempt
+    // `Wait` sees the configured limiter instead of the dormant pass-through.
     let rateLimiter =
         registerOutboundRateLimiter
             services
@@ -961,7 +1005,7 @@ let compose
             resolvedMetricsSink
             auditLog
             resolvedLogger
-            rateLimiterCell
+            outboundRateLimiter
 
     // Phase 6h follow-up — SSE `IDevDiagnosticsContributor` (extracted
     // to `ComposeRuntimeServices.registerSseDevDiagnosticsContributor`).
@@ -1015,20 +1059,25 @@ let compose
 
     // Phase 9p — opt-in HealthStateTracker BackgroundService (extracted
     // to `ComposeRuntimeServices.registerHealthStateTracker`). Gated
-    // on `config.HealthStateTracking` AND ProcessProfile matrix.
+    // on `config.Observability.HealthStateTracking` AND ProcessProfile matrix.
     registerHealthStateTracker services config auditLog resolvedLogger
 
     // Phase 178 — opt-in alert-rule / threshold engine BackgroundService
     // (extracted to `ComposeRuntimeServices.registerAlertRuleEngine`).
-    // Gated on a non-empty `config.AlertRules` AND the ProcessProfile
+    // Gated on a non-empty `config.Observability.AlertRules` AND the ProcessProfile
     // matrix. Passes the decorated `resolvedNotificationChannel` so
     // `ViaSink` deliveries route through the transactional dispatcher.
     registerAlertRuleEngine services config resolvedNotificationChannel resolvedLogger
 
     // Phase 9b — opt-in job scheduler (extracted to
-    // `ComposeJobs.registerJobScheduler`). Populates `jobSchedulerCell`
-    // so subsequent writes through the notify-wrapper forward to the
-    // scheduler.
+    // `ComposeJobs.registerJobScheduler`). This stage binds `jobScheduler`,
+    // so writes through the notify-wrapper forward to the scheduler.
+    let blobJobStore =
+        match config.JobScheduler with
+        | InProcessJobScheduler -> Some(JobStore.BlobJobStore(resolvedBlobStorage, eventStore))
+        | NoJobScheduler
+        | QuartzJobScheduler _ -> None
+
     let jobSchedulerInstance =
         registerJobScheduler
             services
@@ -1038,9 +1087,23 @@ let compose
             resolvedNotificationChannel
             resolvedLogger
             resolvedActivitySink
-            blobJobStoreInstance
-            jobSchedulerCell
+            blobJobStore
+            jobScheduler
             jobTriggerWatermark
+            distributedLock
+
+    // The routes are built once the stores they inspect exist.
+    let routeHandlers =
+        buildRouteHandlers
+            config
+            handlers
+            dataTypes
+            extensions
+            transactionalSinks
+            encryptionKeyResolver
+            effectiveNotifications
+            persistentEventStore
+            blobJobStore
 
     // Phase 10 — opt-in data ingestion (extracted to
     // `ComposeJobs.registerDataIngestion`). Includes the Phase 10b
@@ -1078,10 +1141,10 @@ let compose
         resolvedLogger
 
     // Phase 449 — opt-in model-fit envelope (extracted to
-    // `ComposeJobs.registerModelFitting`). `EnabledModelFitting` indexes the
+    // `ComposeJobs.registerModelFitting`). `FeatureMode.Enabled` indexes the
     // registered `IModelFitProvider` companions + binds the fit-run job
     // handler; requires `JobScheduler = InProcessJobScheduler` (misconfigured
-    // pair logs a Warn and skips). `NoModelFitting` (default) registers
+    // pair logs a Warn and skips). `FeatureMode.Disabled` (default) registers
     // nothing — zero cost (GP 13).
     registerModelFitting services config jobSchedulerInstance auditLog resolvedLogger
 
@@ -1200,7 +1263,7 @@ let compose
     // `TOOLUP_INITIAL_PLATFORM_ADMIN` (extracted to
     // `ComposeAuth.registerPlatformAdminStore`).
     let platformAdminStore =
-        registerPlatformAdminStore services config resolvedBlobStorage auditLog resolvedLogger
+        registerPlatformAdminStore services config resolvedBlobStorage auditLog resolvedLogger distributedLock
 
     // Phase 5f / 3d / 66 Stream B.2 — post-`PlatformAdminStore` config
     // validators (extracted to
@@ -1241,8 +1304,8 @@ let compose
 
     // Phase 54 — opt-in tenant-lifecycle hooks + snapshot (extracted to
     // `ComposeTenantLifecycle.registerTenantLifecycle`). Gated on
-    // `config.TenantLifecycle = EnabledTenantLifecycle`; the default
-    // `NoTenantLifecycle` is a no-op. Hooks resolve their substrate
+    // `config.TenantLifecycle = FeatureMode.Enabled`; the default
+    // `FeatureMode.Disabled` is a no-op. Hooks resolve their substrate
     // lazily from the built provider at request time, so this runs
     // before companion registrations without ordering coupling.
     ComposeTenantLifecycle.registerTenantLifecycle services config
@@ -1253,6 +1316,42 @@ let compose
     // `ServerApp.run` this is the consumer's own `ServiceConfig` followed by
     // every contribution on the app, in the order added
     // (`ServerApp.serviceConfig`), then the platform's run-time families.
+    // The notification channel DI consumers resolve is composed by factory
+    // (consent and send-policy filters over the stack's channel), so it
+    // exists once the container is built; the substrate hands companions a
+    // channel that forwards to it from that stage on.
+    let composedNotifications =
+        LateBound<INotificationChannel>("composed notification channel", resolvedNotificationChannel)
+
+    // The slot is bound inside the factory of a once-at-start unit, so the
+    // DI-resolved channel is read where the container builds it, before any
+    // other hosted unit starts or any request arrives.
+    Hosting.register
+        services
+        (BackgroundUnit.create "composed-notification-channel" OnceAtStart (fun sp ->
+            composedNotifications.Bind(sp.GetRequiredService<INotificationChannel>())
+            Hosting.atStart ignore))
+    |> ignore
+
+    // Every stage is built: hand the substrate to the staged contributions,
+    // which read it at this fixed point (`Contribution.staged`).
+    Substrate.register
+        {
+            Config = config
+            Storage = resolvedBlobStorage
+            SecretStore = secretStore
+            Logger = resolvedLogger
+            EventStore = eventStore
+            AuditLog = auditLog
+            Notifications = ComposedNotificationChannel(composedNotifications)
+            MetricsSink = resolvedMetricsSink
+            RateLimiter = rateLimiter
+            JobScheduler = jobSchedulerInstance
+            ActivitySink = resolvedActivitySink
+        }
+        services
+    |> ignore
+
     match extensions.ServiceConfig with
     | Some cfg -> cfg services |> ignore
     | None -> ()
@@ -1293,6 +1392,13 @@ let compose
         moduleRoutePrefixes
         subjectMigratorOverride
 
+    // Every unit of background work is registered by now — the SDK's own,
+    // the consumer's and every contribution's. Admission is decided here,
+    // once, against the deployment's final configuration (`Hosting.admit`),
+    // so no registration site's view of the configuration decides whether
+    // its unit runs.
+    Hosting.admit services config |> ignore
+
     // Phase 9a — capture the `IServiceCollection` descriptors before
     // `Build()` (extracted to
     // `ComposeDevDiagnostics.buildDevDiagnosticsCapture`). The capture
@@ -1306,8 +1412,8 @@ let compose
             handlers
             extensions
             effectiveNotifications
-            persistentEventStoreInstance
-            blobJobStoreInstance
+            persistentEventStore
+            blobJobStore
             services
 
     let devRoutes = routeHandlers.DevDiagnosticsRoutes devDiagnosticsCapture

@@ -12,6 +12,8 @@ open ToolUp.Platform.HealthChecks
 open ToolUp.Platform.Secrets
 open ToolUp.Scheduling.ICalendarBridge
 open ToolUp.Calendar.MicrosoftGraphOAuth
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Phase 831 — the Microsoft Graph bridge's readiness probe ───────
 //

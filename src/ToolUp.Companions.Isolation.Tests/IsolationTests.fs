@@ -15,6 +15,8 @@ open Expecto
 open ToolUp.Companions.Isolation
 open ToolUp.Companions.Isolation.Tests.Entries
 open ToolUp.Platform
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 let private request (args: string list) (input: byte[]) : IsolatedRequest = { Args = args; Input = input }
 

@@ -16,6 +16,7 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Secrets
 open ToolUp.ArtefactSigning
+open ToolUp.Platform.Audit
 
 // ─── The joined evidence bundle as a signed statement ────────────────
 //

@@ -8,10 +8,12 @@ open Microsoft.Extensions.Hosting
 open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
-open ToolUp.Platform.IEmbeddingProvider
-open ToolUp.Platform.IVectorStore
-open ToolUp.Platform.IRetrievalPipeline
+open ToolUp.Platform.Infra.IEmbeddingProvider
+open ToolUp.Platform.Infra.IVectorStore
+open ToolUp.Platform.Infra.IRetrievalPipeline
 open ToolUp.Platform.VectorKnowledgeTypes
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
 
 // ─── Rescan queue ─────────────────────────────────────────────────
 

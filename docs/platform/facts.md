@@ -5,7 +5,7 @@ store** — the typed *memory* tier of a grounded application. A numeric
 answer quotes facts verbatim; prose exists for comprehension, not recall.
 
 > Companion package — a deployment that composes no fact store
-> (`ServerConfig.FactStore = NoFactStore`, the default) is byte-for-byte
+> (`ServerConfig.Stores.FactStore = FeatureMode.Disabled`, the default) is byte-for-byte
 > unchanged (GP 13).
 
 ## What a fact is
@@ -93,16 +93,22 @@ open ToolUp.Facts
 
 let store = BlobFactStore.create blobStorage eventStore   // IFactStore
 
+// The scope is the one the platform resolved: on a request,
+// ScopeResolution.forRequest ctx; in a job, JobContext.Scope.
+let scope = ScopeResolution.forRequest ctx
+
 // Assert is idempotent under the content address; a changed input
 // supersedes the current lineage head with a derived edge.
-let! fact = store.Assert(scopeId, { Subject = subject; Metric = MetricRef "revenue"; ... })
+let! fact = store.Assert(scope, { Subject = subject; Metric = MetricRef "revenue"; ... })
 
-// Reconstruct the fact base as of a past transaction time (L4):
+// Reconstruct the fact base as of a past transaction time (L4). Every
+// member answers Result<_, FactStoreError>: a storage fault is an Error,
+// never a shorter answer.
 let! asOfMay3 =
-    store.Query(scopeId, FactQuery.forSubjectMetric subject metric |> FactQuery.asOf may3)
+    store.Query(scope, FactQuery.forSubjectMetric subject metric |> FactQuery.asOf may3)
 
 // Walk a lineage:
-let! chain = store.QuerySupersessionChain(scopeId, fact.FactId)
+let! chain = store.QuerySupersessionChain(scope, factId)
 ```
 
 Every `Assert` (and each derived supersession) emits a durable audit
@@ -140,7 +146,7 @@ drafts asserted one at a time; an unchanged draft is never a new fact).
 
 ```fsharp skip=fragment
 match FactWrite.prepare WriteShape.BatchAssert drafts with
-| Error offenders -> Error(FactWrite.renderOffenders (List.length drafts) offenders)
+| Error refused -> Error refused   // MalformedDrafts; FactStoreError.describe renders it
 | Ok request ->
     let plan = FactWrite.plan now isStored lineageFacts request
     // persist plan.Facts, apply plan.IndexDeltas, write plan.Audit, return plan.Receipt
@@ -152,10 +158,31 @@ The competition indicator and canonical selection of a read are likewise one def
 A blob store's surface maintenance after a write never fails the write (the surface is derived, and reads
 reconcile against the log), but each failed step is now counted on `BlobFactStore.SurfaceFaults` and logged.
 
-**The store's scope form is unchanged here.** `IFactStore` still has a `string` and a `ResolvedScope` form
-of every member, and reads still raise a storage fault rather than typing it. Removing the `string` forms
-needs a string-to-scope adapter that the `ResolvedScope` design deliberately does not offer; that decision
-is open and recorded in the migration note.
+### One scope form, one error (Phase 1157)
+
+`IFactStore` has seven members and one scope form: each takes a `ResolvedScope`, the value the platform's
+scope resolution minted, and answers `Result<_, FactStoreError>`. There is no string form and no adapter to
+one: a `ResolvedScope` is minted by the resolver and nowhere else, and what crosses a persistence or wire
+boundary is a `ScopeKey` (security rule TI-7). Where a caller gets its scope:
+
+| Caller | Its scope |
+|---|---|
+| a request (an AI tool, a handler, the browse API) | `ScopeResolution.forRequest ctx` |
+| a job (a recompute, a coherence sweep, a publication) | `JobContext.Scope`, re-minted by the runner from the job's sealed carrier; a job that carries none is refused by name |
+| standing work a deployment declares (a coherence sweep, its health probe, a peer egress route, a publication read) | a declared principal, resolved through the platform's `DeclaredPrincipalResolver` |
+
+`FactStoreError` has three cases that never blur: `MalformedDrafts` (a batch refused before anything was
+written, its offenders by position), `StorageFault` (the store could not read or write — on a read it is an
+`Error`, never an absent fact or a shorter list) and `Refused` (a population ordering the store cannot
+resolve). `FactStoreError.describe` renders each; `FactStoreResult.orRaise` reads an answer where the caller's
+own surface has no failure channel, raising `FactStoreFault` rather than reading a fault as nothing.
+
+The same holds one seam out: the disclosure gate, the clause planner, the answer planner (one plan path, no
+`PlanScope.Legacy`), the fact resolver, the provenance graph, the table writer, the import door, the narrative
+grounding and certificate seams and the narrative ingestor each take the resolved scope; the recompute path is
+one path over it (`RecomputeJobHandler.reactToDataChange`), and a data write whose writer resolved no scope for
+its shard reacts with nothing. The executors' operator members (`ExportScope`, `QueryShard`, …) stay keyed by
+shard id for the composition root's operator tasks.
 
 ## Point reads vs population reads
 
@@ -939,7 +966,7 @@ touched 5 rows by its executed plan, with no sequential scan (Phase 888,
 the live test arm; the same read enumerates the scope on the blob store
 below its index threshold).
 
-**The multi-replica guard.** With `ServerConfig.ReplicaCount > 1` and the
+**The multi-replica guard.** With `ServerConfig.MultiInstance.ReplicaCount > 1` and the
 blob store composed, `FactsCompose.withFactStore` registers
 `BlobFactStoreScaleValidator`: it counts each scope's fact census, warns
 above `BlobFactStoreScale.WarnAboveFacts` (50,000) facts in one scope, and
@@ -1299,9 +1326,44 @@ table runs over 200 SKUs, two months; each read warm):
 | `GetRunMovers` | 32 | 52 | 32 |
 | `GetFact`, with its chain | 4 | 6 | 4 |
 
+## What the fact browse lets a resolver set (Phase 1162)
+
+The browse (`FactBrowseView`, module `FactBrowseLinks.ModuleId`) is the client module every grounded deployment
+composes, so the instructions a user types about it, such as "open the category table", are the first worth resolving
+without a model turn. What a browser fast path can set is what the module's Elmish loop accepts as a message. A
+selection no message sets cannot be set by anything, whatever a declaration says about it.
+
+| Selection | Held in | Set by | Values |
+|---|---|---|---|
+| The table | `Model.SelectedTable` | `OpenTable tableId`, or the `FactBrowseLinks.OpenTableTopic` event | the ids in `Model.Tables`, the listing the server returned |
+| The metric filter | `Model.MetricFilter` | `FilterByMetric metric`, `ClearMetricFilter` | the listed tables' metrics |
+| The ranking | `Model.RowQuery` | `RowsRequested query` | the selected table's metrics, `TopOfRanking` or `BottomOfRanking`, a subject prefix, a page |
+| The run history page | `Model.Runs` | `RunsPageRequested page` | a page index |
+| The opened fact | `Model.Fact` | `OpenFact factId`, `CloseFact` | a fact id from a page of rows |
+| The page | the shell's route | `NavigationRequest.request (FactBrowseLinks.sidebarId route)` | `TablesRoute`, `TableRoute`, `RowsRoute` |
+
+Three things an instruction might name are not selections here:
+
+- **A day.** The browse reads each table's current run. Neither the model nor the read contract (`FactRowQuery`)
+  carries a day or an as-of; a row shows its period and nothing chooses one. A day control would be a read-contract
+  change before it could be a control.
+- **A level.** A table sits at one declared level (`FactTableListing.Level`), which the tables page and the table page
+  show. It is a property of the table, not a choice. The nearest selection is the ranking's subject prefix.
+- **A table's description as its name.** A description (see
+  [What a declared table is for](#what-a-declared-table-is-for-its-description)) reaches the client on the selected
+  table's detail (`FactTableDetail.Description`), not on the listing, so the browse holds no description for a table it
+  has not opened.
+
+The browse declares no fast-path fields. The field declarations a browser fast path reads belong to the resolver a host
+installs through `FastPathBridge.setResolver`, which builds on `ClientModule`, so no package in this SDK can depend on
+them. A declaration of that kind also composes the module's action decoder, so it needs the typed
+`ClientModule<Model, Msg>` before `ClientModule.register`, and `FactBrowseView.create` registers it internally and
+returns an `ErasedModule`. What would have to change, and why it is interim work until the browse moves off Feliz:
+[`1162-the-fact-browse-declares-its-controls.md`](../migrations/1162-the-fact-browse-declares-its-controls.md).
+
 ## Composition
 
-`ServerConfig.FactStore` (default `NoFactStore`) is the introspectable
+`ServerConfig.Stores.FactStore` (default `FeatureMode.Disabled`) is the introspectable
 slot the composition manifest / composable-surface descriptor report as
 the resolved fact-store kind. Compose the store today via
 `BlobFactStore.create` (over any `IBlobStorage`, auditing to `IEventStore`). The default
@@ -1444,13 +1506,17 @@ block with the presentation builders. It answers the record form a tool result c
 
 They live in their own package, `ToolUp.Facts.Presentation.Server`, because they bring the
 Fuaran-UI dependency; `ToolUp.Facts.Server` stays free of it. They are composed explicitly
-onto the AI composition, beside the three. They arm only with the fact store and the AI
+onto the AI options, beside the three: each takes and returns the pair `ServerApp * AIOptions`, because
+a tool rides `AIOptions.AIAnsweringTools` while its gate reads the deployment's config and its endpoint
+belongs to the deployment. They arm only with the fact store and the AI
 companion. A deployment that does not compose them has neither tool and no new dependency:
 
 ```fsharp skip=fragment
-AIServerApp.createFrom factory providerProfile app
-|> PresentationCompose.withRenderTools
-|> composeAI
+let app, ai =
+    (app, AIOptions.create factory providerProfile)
+    |> PresentationCompose.withRenderTools
+
+app |> AICompose.withAI ai |> ServerApp.run
 ```
 
 The tools take table, metric and level ids they cannot list, so a deployment names its fact
@@ -1506,10 +1572,12 @@ the render tools use. It is opt-in, idempotent, and arms only with the fact stor
 companion; a deployment that does not call it registers no pipeline tool and mounts no endpoint:
 
 ```fsharp skip=fragment
-AIServerApp.createFrom factory providerProfile app
-|> PresentationCompose.withRenderTools
-|> PresentationCompose.withPipelineTool
-|> composeAI
+let app, ai =
+    (app, AIOptions.create factory providerProfile)
+    |> PresentationCompose.withRenderTools
+    |> PresentationCompose.withPipelineTool
+
+app |> AICompose.withAI ai |> ServerApp.run
 ```
 
 The executor runs unchanged. The model reads its summary, and the assistant message carries one
@@ -1541,10 +1609,12 @@ than relax it, and no arithmetic runs inside a gate.
 A deployment opts in with one line beside the pipeline tool:
 
 ```fsharp skip=fragment
-AIServerApp.createFrom factory providerProfile app
-|> PresentationCompose.withPipelineTool
-|> PresentationCompose.withDerivedAssertions
-|> composeAI
+let app, ai =
+    (app, AIOptions.create factory providerProfile)
+    |> PresentationCompose.withPipelineTool
+    |> PresentationCompose.withDerivedAssertions
+
+app |> AICompose.withAI ai |> ServerApp.run
 ```
 
 The tool then declares an `assert` argument (`column`, `as_metric`, `level`) and the write it may make
@@ -1612,27 +1682,28 @@ warning — validator `fact-question-compiler` — says so and names the
 remedies. To keep the push door off deliberately, and silence the warning,
 choose the no-op compiler:
 `FactsCompose.withQuestionCompiler AnswerPlanner.noQuestionCompiler`.
-`RAGServerApp.withFactClausePlanning false` instead stops a RAG app from
+`RagOptions.withFactClausePlanning false` instead stops a RAG app from
 consulting the planner at all.
 
 #### Composing the tier onto a RAG app in one call
 
 ```fsharp skip=fragment
-RAGServerApp.create factory providerProfile embedder
-|> RAGServerApp.withFacts FactsCompose.withFactTier
-|> RAGServerApp.withConfig config
+ServerApp.empty
+|> RAGCompose.withRAG (
+    RagOptions.create factory providerProfile embedder
+    |> RagOptions.withFacts FactsCompose.withFactTier
+)
+|> ServerApp.withConfig config
+|> ServerApp.run
 ```
 
-`FactsCompose.withFactTier` switches `ServerConfig.FactStore` on and
-applies `withFactStore` and `withFactTableWriter`. `RAGServerApp.withFacts`
-applies it to the app's base when the app is **composed**, so it may sit on
-either side of `withConfig` — which replaces the whole `ServerConfig`,
-fact-store knob included, and used to make the hand-written
-`RAGServerApp.mapAI` route a silent no-op when it ran first. Because a RAG
-app always composes the AI tier, this one call arms both doors: the tools
-through the AI tier, the push door through the factory-backed compiler.
-The `mapAI` route still works when the knob is already on; `withFacts` is
-the order-independent form. The tier is passed in rather than referenced
+`FactsCompose.withFactTier` switches `ServerConfig.Stores.FactStore` on and
+applies `withFactStore` and `withFactTableWriter`. `RagOptions.withFacts`
+applies it to the deployment when the RAG tier is **composed**, at resolve,
+so `withRAG` may sit on either side of `withConfig` — which replaces the
+whole `ServerConfig`, fact-store knob included. Because a RAG app always
+composes the AI tier, this one call arms both doors: the tools through the
+AI tier, the push door through the factory-backed compiler. The tier is passed in rather than referenced
 because the fact companion is a separate package — a RAG app that composes
 no facts takes no dependency on it.
 
@@ -1642,5 +1713,5 @@ resolves nothing produces no clause and retrieval is exactly what it
 would have been. The compile can cost a provider call, so it is bounded
 (default 3 s) and degrades to no clause on overrun or fault — a turn is
 never blocked by planning. Turn it off with
-`RAGServerApp.withFactClausePlanning false` when the store is composed
+`RagOptions.withFactClausePlanning false` when the store is composed
 for its tool surface alone.

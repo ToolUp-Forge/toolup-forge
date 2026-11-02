@@ -4,6 +4,9 @@ open Expecto
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
 open ToolUp.Platform.FileProcessor
+open ToolUp.Platform.Config
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 284 — declarative composition descriptor + ofManifest ──────
 //
@@ -147,7 +150,7 @@ let tests =
         <| fun _ ->
             let config = {
                 ServerConfig.defaults with
-                    RateLimiter = EnabledRateLimiter
+                    RateLimiter = FeatureMode.Enabled
             }
 
             let d = CompositionDescriptor.create [] config
@@ -155,7 +158,7 @@ let tests =
 
             Expect.equal
                 built.Config.RateLimiter
-                EnabledRateLimiter
+                FeatureMode.Enabled
                 "the descriptor's config is carried onto the built app"
 
         // ── unknown component id fails readably (total) ───────────────

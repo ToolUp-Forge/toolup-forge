@@ -7,6 +7,7 @@ open System
 open System.Text
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Infra
 
 // ─── The remote-warehouse IDataSource contract pack ───────────────
 //

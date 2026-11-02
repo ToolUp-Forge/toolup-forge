@@ -31,6 +31,7 @@
     </ItemGroup>
     <!-- Test source files (contract packs + in-process bindings + runner). -->
     <ItemGroup>
+        <Compile Include="Support\TestScope.fs" />
         <Compile Include="Contracts\IBlobStorageContract.fs" />
         <Compile Include="Contracts\IProviderProfileContract.fs" />
         <Compile Include="Contracts\ITeamProviderResolverContract.fs" />
@@ -164,6 +165,7 @@
         <Compile Include="Contracts\IEvidencePackGeneratorContract.fs" />
         <Compile Include="Contracts\ArchitectureFitness.fs" />
         <Compile Include="Support\CacheReset.fs" />
+        <Compile Include="Support\TestSubstrate.fs" />
         <Compile Include="Support\SubjectWildcardAnalyzer.fs" />
         <Compile Include="..\ToolUp.Remoting.Analyzers\Recognition.fs" Link="Support\RemotingAnalyzerRecognition.fs" />
         <Compile Include="Support\MixedDimFixture.fs" />
@@ -345,6 +347,7 @@
         <Compile Include="InProcess\ComponentConfigTests.fs" />
         <Compile Include="InProcess\ComponentRequirementsTests.fs" />
         <Compile Include="InProcess\ComposableSurfaceTests.fs" />
+        <Compile Include="InProcess\CompositionProfileSurfaceTests.fs" />
         <Compile Include="InProcess\EventTopologyTests.fs" />
         <Compile Include="InProcess\DataFootprintTests.fs" />
         <Compile Include="InProcess\ScaleReadinessTests.fs" />
@@ -370,6 +373,7 @@
         <Compile Include="InProcess\ConfigStartupModeTests.fs" />
         <Compile Include="InProcess\ConfigResolverTests.fs" />
         <Compile Include="InProcess\ConfigProfileTests.fs" />
+        <Compile Include="InProcess\ConfigKeyReadBoolTests.fs" />
         <Compile Include="InProcess\UnknownConfigKeyValidatorTests.fs" />
         <Compile Include="InProcess\TraceCategoriesValidatorTests.fs" />
         <Compile Include="InProcess\AIProviderEnvValidatorTests.fs" />
@@ -640,6 +644,8 @@
         <Compile Include="InProcess\FactClauseFeederTests.fs" />
         <Compile Include="InProcess\RagFactTierTests.fs" />
         <Compile Include="InProcess\GroundedNarrativeTests.fs" />
+        <Compile Include="Contracts\IGroundedNarrativeRunContract.fs" />
+        <Compile Include="InProcess\NarrativeOffenceHistoryTests.fs" />
         <Compile Include="InProcess\ReportSubscriptionEarlierNames.fs" />
         <Compile Include="InProcess\ReportSubscriptionScopeTests.fs" />
         <Compile Include="InProcess\AssistantFactScopeTests.fs" />
@@ -731,6 +737,7 @@
         <Compile Include="InProcess\HomeOverviewTests.fs" />
         <Compile Include="InProcess\SubjectKindClientFlowTests.fs" />
         <Compile Include="InProcess\ServerConfigFromEnvTests.fs" />
+        <Compile Include="InProcess\ServerConfigSnapshotTests.fs" />
         <Compile Include="InProcess\ClientBrandLiftTests.fs" />
         <Compile Include="InProcess\CellProvenanceTests.fs" />
         <Compile Include="InProcess\AgChartExportTests.fs" />
@@ -778,6 +785,7 @@
              the tool-aware framing; not sealed (pre-860 canonical bytes pinned);
              readiness without RAG. After BuildTranscriptTests (StubSealer). -->
         <Compile Include="InProcess\CompositionManifestLiveInterfaceTests.fs" />
+        <Compile Include="InProcess\PeerTestComposition.fs" />
         <Compile Include="InProcess\PlatformPeerTests.fs" />
         <Compile Include="InProcess\PeerFederationTests.fs" />
         <Compile Include="InProcess\CleanRoomBrokerTests.fs" />
@@ -872,6 +880,7 @@
         <Compile Include="InProcess\FactBrowseTests.fs" />
         <Compile Include="InProcess\FactDeclarationsValidatorTests.fs" />
         <Compile Include="InProcess\DelegateFactTests.fs" />
+        <Compile Include="InProcess\FactsOperatorTaskTests.fs" />
         <Compile Include="InProcess\TeamOutputVisibilityTests.fs" />
         <Compile Include="InProcess\FactPublicationTests.fs" />
         <Compile Include="InProcess\FactTableRunTests.fs" />
@@ -889,6 +898,7 @@
         <Compile Include="InProcess\ServerAppSecretStoreTests.fs" />
         <Compile Include="InProcess\ServerAppOrderTests.fs" />
         <Compile Include="InProcess\ServerBindAddressTests.fs" />
+        <Compile Include="InProcess\PageDocumentStoreTests.fs" />
         <Compile Include="Support\FireAndForgetHarness.fs" />
         <Compile Include="InProcess\AuditFireAndForgetTests.fs" />
         <Compile Include="InProcess\StoreFireAndForgetTests.fs" />
@@ -898,6 +908,11 @@
         <Compile Include="InProcess\StreamAuthBothSignInsTests.fs" />
         <Compile Include="InProcess\DeliveryCompletedTests.fs" />
         <Compile Include="InProcess\FactPresentationTests.fs" />
+        <Compile Include="InProcess\PageRequestResolverTests.fs" />
+        <Compile Include="InProcess\LayoutToolsTests.fs" />
+        <Compile Include="InProcess\AppCompositionCorpus.fs" />
+        <Compile Include="InProcess\AppCompositionConformanceTests.fs" />
+        <Compile Include="InProcess\NarrativeCalculationTests.fs" />
         <Compile Include="Support\TestLane.fs" />
         <Compile Include="Support\TestLaneFilter.fs" />
         <Compile Include="Program.fs" />
@@ -982,6 +997,7 @@
         <ProjectReference Include="..\ToolUp.RAG.StaticCorpus.Server\ToolUp.RAG.StaticCorpus.Server.fsproj" />
         <ProjectReference Include="..\ToolUp.KnowledgeBase.Server\ToolUp.KnowledgeBase.Server.fsproj" />
         <ProjectReference Include="..\ToolUp.PublicRendering\ToolUp.PublicRendering.fsproj" />
+        <ProjectReference Include="..\ToolUp.Forms.Server\ToolUp.Forms.Server.fsproj" />
         <ProjectReference Include="..\ToolUp.AssetStore\ToolUp.AssetStore.fsproj" />
         <ProjectReference Include="..\Media\MediaLibrary\ToolUp.MediaLibrary.fsproj" />
         <ProjectReference Include="..\Media\FFmpeg\ToolUp.Media.FFmpeg.fsproj" />

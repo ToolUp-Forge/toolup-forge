@@ -1,4 +1,4 @@
-module ToolUp.Platform.SingleKeyResolver
+module ToolUp.Platform.Infra.SingleKeyResolver
 
 open System
 open System.Security.Cryptography
@@ -6,7 +6,7 @@ open System.Threading
 open ToolUp.Platform
 open ToolUp.Platform.Secrets
 open ToolUp.Platform.EncryptionTypes
-open ToolUp.Platform.BlobEncryption
+open ToolUp.Platform.Infra.BlobEncryption
 
 // ─── Phase 22 — SingleKeyResolver ───────────────────────────────────
 //

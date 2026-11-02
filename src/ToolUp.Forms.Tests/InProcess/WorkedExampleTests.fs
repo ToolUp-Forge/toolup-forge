@@ -5,7 +5,7 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Metrics
 open ToolUp.Platform.EntityTypes
-open ToolUp.Platform.IEntityStore
+open ToolUp.Platform.Infra.IEntityStore
 open ToolUp.Forms.FormSchema
 open ToolUp.Forms.FormSubmission
 open ToolUp.Forms.Workflow
@@ -18,6 +18,8 @@ open ToolUp.Forms.InMemoryActionLedger
 open ToolUp.Forms.FormValidator
 open ToolUp.Forms.Tests.InProcess.InMemoryEntityStore
 open ToolUp.Forms.Tests.InProcess.InMemoryAuditLog
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
 
 /// Minimal `IServiceProvider` for engine construction (Phase 1h). The
 /// worked example uses a single guard that reads from the submission's

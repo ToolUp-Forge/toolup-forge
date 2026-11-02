@@ -3,6 +3,7 @@ module ToolUp.Platform.Tests.Contracts.IPendingInviteStoreContract
 open System
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Infra
 
 // ─── IPendingInviteStore contract pack ──────────────────────────────
 //

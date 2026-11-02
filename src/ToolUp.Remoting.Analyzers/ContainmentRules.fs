@@ -11,8 +11,11 @@ namespace ToolUp.Remoting.Analyzers
 //     `GetServices` / the keyed forms / `RequestServices`) outside service
 //     registration. Sanctioned by shape: an occurrence inside the argument of
 //     a registration call (`AddSingleton` / `AddScoped` / `AddTransient` /
-//     `AddKeyed*` / `TryAdd*` / `AddHostedService`), or inside a binding that
-//     itself implements `GetService` (a provider delegating to its inner one).
+//     `AddKeyed*` / `TryAdd*` / `AddHostedService`, or the curried
+//     `BackgroundUnit.create` / `Hosting.deferredJobs`, whose factories run
+//     against the built container exactly as an `AddSingleton` one does), or
+//     inside a binding that itself implements
+//     `GetService` (a provider delegating to its inner one).
 //   * TUA002 — an `HttpClient` constructed without the platform egress
 //     handler. Sanctioned by shape: a construction whose arguments name
 //     `PlatformHttpClient`.
@@ -61,6 +64,19 @@ module ContainmentRules =
         "TryAdd"
         "AddHostedService"
     ]
+
+    /// Curried factories whose arguments are registration factories: the
+    /// qualifier and the function, matched as the last two names applied.
+    let private curriedRegistrations =
+        set [ "BackgroundUnit", "create"; "Hosting", "deferredJobs" ]
+
+    /// The function at the head of a curried application —
+    /// `BackgroundUnit.create "x" SharedWork (fun sp -> …)` yields
+    /// `BackgroundUnit.create` from every nested application.
+    let rec private applicationHead (expr: SynExpr) : SynExpr =
+        match expr with
+        | SynExpr.App(funcExpr = f) -> applicationHead f
+        | _ -> expr
 
     let private isRegistrationCall (name: string) =
         registrationPrefixes
@@ -149,6 +165,14 @@ module ContainmentRules =
                 ->
                 this.HttpClientConstructions.Add(r, args.Range)
             | SynExpr.App(funcExpr = f; argExpr = args; range = r) ->
+                let curried =
+                    match List.rev (idsOf (applicationHead f)) with
+                    | name :: qualifier :: _ -> curriedRegistrations.Contains(qualifier.idText, name.idText)
+                    | _ -> false
+
+                if curried then
+                    this.RegistrationArguments.Add args.Range
+
                 match appliedName f with
                 | Some name when isRegistrationCall name -> this.RegistrationArguments.Add args.Range
                 | Some "HttpClient" when isHttpClientType (idsOf f) -> this.HttpClientConstructions.Add(r, args.Range)

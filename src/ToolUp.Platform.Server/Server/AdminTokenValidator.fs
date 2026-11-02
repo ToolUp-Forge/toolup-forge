@@ -1,9 +1,10 @@
-module ToolUp.Platform.AdminTokenValidator
+module ToolUp.Platform.Scope.AdminTokenValidator
 
 open System
 open ToolUp.Platform
-open ToolUp.Platform.BlobEncryption
+open ToolUp.Platform.Infra.BlobEncryption
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Config
 
 // ─── Gap #8 — Admin-token discoverability for crypto-shred ──────────
 //

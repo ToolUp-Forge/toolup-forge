@@ -1,8 +1,9 @@
 module ToolUp.Platform.Tests.InProcess.LocalEmbeddingHashingTests
 
 open Expecto
-open ToolUp.Platform.IEmbeddingProvider
+open ToolUp.Platform.Infra.IEmbeddingProvider
 open ToolUp.Platform.VectorKnowledgeTypes
+open ToolUp.Platform.Infra
 
 // ─── Feature-hashed dimension assignment ─────────────────────────────
 //

@@ -6,8 +6,9 @@ namespace ToolUp.PublicRendering
 open Giraffe
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
-open ToolUp.Platform.IEntityStore
+open ToolUp.Platform.Infra.IEntityStore
 open ToolUp.Platform.Narrative
+open ToolUp.Platform.Infra
 
 // ─── Phase 80b — Site-wide Atom feed aggregator ──────────────────
 //

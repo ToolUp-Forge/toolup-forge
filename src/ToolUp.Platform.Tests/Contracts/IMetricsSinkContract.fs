@@ -6,6 +6,7 @@ open System.Threading.Tasks
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Metrics
+open ToolUp.Platform.Infra.Metrics
 
 // ─── IMetricsSink contract pack ──────────────────────────────────────
 //

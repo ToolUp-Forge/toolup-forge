@@ -13,6 +13,8 @@ open System
 open Expecto
 open ToolUp.Platform
 open ToolUp.Facts
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 let private silentLogger =
     { new ILogger with

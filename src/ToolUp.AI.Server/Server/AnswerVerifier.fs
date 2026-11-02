@@ -15,6 +15,10 @@ open ToolUp.Platform.Metrics
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.AI
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Numeric-fidelity answer gate (Phase 523) ────────────────────────
 //
@@ -34,7 +38,7 @@ open ToolUp.AI
 // deterministic numeric tier.
 //
 // **Opt-in; `Off` is byte-identical (GP 11 / GP 13).** The gate runs only
-// when a deployment composes `AIServerApp.withNumericFidelityGate` in a
+// when a deployment composes `AICompose.withNumericFidelityGate` in a
 // non-`Off` mode; absent, `runVerificationStage` short-circuits to the
 // answer verbatim with no verdict, no SSE event, no audit, no metric.
 
@@ -86,7 +90,7 @@ let VerifiedTotal = "toolup.ai.answer.verified"
 let UnmatchedTotal = "toolup.ai.answer.unmatched"
 
 /// SDK-owned answer-gate registrations. Wired by
-/// `AIServerApp.withNumericFidelityGate` into `ServerApp.MetricRegistrations`
+/// `AICompose.withNumericFidelityGate` into `ServerApp.MetricRegistrations`
 /// so `PrometheusMetricsSink` / `OtelMetricsSink` pre-allocate the series
 /// at compose time and emissions flow rather than silently drop. Same
 /// pattern as `AILatencyMetrics.registrations`.

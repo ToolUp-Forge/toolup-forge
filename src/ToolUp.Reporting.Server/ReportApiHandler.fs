@@ -6,6 +6,8 @@ open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Reporting
 open ToolUp.Reporting.IReportTemplateStore
 open ToolUp.Reporting.RendererRegistry
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Report API handler factory ──────────────────────────────────────
 //
@@ -116,14 +118,14 @@ let private withheldNoteSection (withheld: (string * string) list) : NarrativeSe
 let applyExportDisclosure
     (gate: IFactDisclosureGate)
     (principal: string)
-    (scopeId: string)
+    (scope: ToolUp.Platform.ResolvedScope)
     (document: NarrativeDocument)
     : Async<NarrativeDocument> =
     async {
         match NarrativeFacts.factRefs document |> Set.toList with
         | [] -> return document
         | refs ->
-            let! verdicts = gate.Check(scopeId, principal, FactExport, refs)
+            let! verdicts = gate.Check(scope, principal, FactExport, refs)
 
             let denied =
                 verdicts
@@ -188,8 +190,7 @@ let private expandsStructurally (renderer: IReportRenderer) (format: TemplateFor
 /// this routing is how one door becomes two doors that agree until they
 /// do not.
 let resolveValuesFor
-    (disclosure: (IFactDisclosureGate * string) option)
-    (scopeId: string)
+    (disclosure: (IFactDisclosureGate * string * ToolUp.Platform.ResolvedScope) option)
     (renderer: IReportRenderer)
     (format: TemplateFormat)
     (values: Map<string, PlaceholderValue>)
@@ -215,7 +216,7 @@ let resolveValuesFor
                     | NarrativeValue document ->
                         let! disclosed =
                             match disclosure with
-                            | Some(gate, principal) -> applyExportDisclosure gate principal scopeId document
+                            | Some(gate, principal, scope) -> applyExportDisclosure gate principal scope document
                             | None -> async.Return document
 
                         return
@@ -236,7 +237,7 @@ let resolveValuesFor
 /// the fact-disclosure gate when the deployment composes the fact tier.
 let private createCore
     (principal: string)
-    (disclosure: IFactDisclosureGate option)
+    (disclosure: (IFactDisclosureGate * ToolUp.Platform.ResolvedScope) option)
     (templateStore: IReportTemplateStore)
     (registry: RendererRegistry)
     (storeBlob: StoreBlob)
@@ -247,7 +248,8 @@ let private createCore
     // Phase 814 — the caller, as the template seam records it.
     let caller = EntityPrincipal.ofPrincipal principal
 
-    let disclosure = disclosure |> Option.map (fun gate -> gate, principal)
+    let disclosure =
+        disclosure |> Option.map (fun (gate, scope) -> gate, principal, scope)
 
     {
         ListTemplates = fun () -> templateStore.List scopeId
@@ -284,7 +286,7 @@ let private createCore
                         // Phase 534 — and the resolved value keeps its
                         // narrative shape when THIS renderer expands it
                         // structurally.
-                        let! values = resolveValuesFor disclosure scopeId renderer template.Format values
+                        let! values = resolveValuesFor disclosure renderer template.Format values
 
                         let! renderResult = renderer.Render(template, values)
 
@@ -336,8 +338,8 @@ let create
 /// 564.B): every fact ref carried by a `NarrativeValue` placeholder is
 /// checked through the supplied gate at the `FactExport` surface
 /// before rendering. `principal` is the resolved caller the gate
-/// audits denies against — resolve it upstream alongside `scopeId`
-/// (both are per-caller). Deployments composing the fact tier wire
+/// audits denies against — resolve it upstream alongside `scope`, the
+/// caller's resolved scope (both are per-caller). Deployments composing the fact tier wire
 /// this variant; the gate arrives from DI wherever the fact store is
 /// composed (`FactsCompose` registers `IFactDisclosureGate`
 /// inseparably from the store).
@@ -349,9 +351,9 @@ let createWithDisclosureGate
     (storeBlob: StoreBlob)
     (auditOnRender: AuditOnRender)
     (config: ReportApiConfig)
-    (scopeId: string)
+    (scope: ToolUp.Platform.ResolvedScope)
     : IReportApi =
-    createCore principal (Some gate) templateStore registry storeBlob auditOnRender config scopeId
+    createCore principal (Some(gate, scope)) templateStore registry storeBlob auditOnRender config scope.ScopeId
 
 // ─── In-handler management gate (Phase 619) ──────────────────────────
 //

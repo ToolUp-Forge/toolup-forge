@@ -9,8 +9,9 @@ message carries.
 
 ## What it gives you
 
-- **`PresentationCompose.withRenderTools`** composes both tools onto the AI composition. It is
-  idempotent, and it does nothing under `NoFactStore`.
+- **`PresentationCompose.withRenderTools`** composes both tools onto the AI options, taking and returning the pair
+  `ServerApp * AIOptions`: a tool rides `AIOptions.AIAnsweringTools`, while its gate reads the
+  deployment's config and its endpoint belongs to the deployment. It is idempotent, and it does nothing under `FeatureMode.Disabled`.
 - **`RenderTools.answerWith`** is the executor over explicit dependencies: the fact browse's
   dependencies, the caller's resolved scope and principal. **`RenderTools.answer`** is the
   `HttpContext` adapter the composition registers.
@@ -32,14 +33,17 @@ message carries.
   it. Without it the argument is absent and refused.
 
 ```fsharp skip=fragment
+open ToolUp.AI
 open ToolUp.AI.AICompose
 open ToolUp.Facts.Presentation
 
-AIServerApp.createFrom factory providerProfile app
-|> PresentationCompose.withRenderTools
-|> PresentationCompose.withPipelineTool
-|> PresentationCompose.withDerivedAssertions // optional
-|> composeAI
+let app, ai =
+    (app, AIOptions.create factory providerProfile)
+    |> PresentationCompose.withRenderTools
+    |> PresentationCompose.withPipelineTool
+    |> PresentationCompose.withDerivedAssertions // optional
+
+app |> AICompose.withAI ai |> ServerApp.run
 ```
 
 ## Dependencies

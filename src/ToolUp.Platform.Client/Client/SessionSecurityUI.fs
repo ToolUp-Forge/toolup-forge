@@ -39,7 +39,7 @@ open ToolUp.Platform
 // of them, rather than on a page about the caller's own devices.
 //
 // Opt-in and zero-cost (GP 13): a deployment on the default
-// `ServerConfig.SessionRegistry = NoSessionRegistry` never sets
+// `ServerConfig.Stores.SessionRegistry = NoSessionRegistry` never sets
 // `ClientConfig.SessionSecurity`, and the API's routes 404 anyway.
 
 // ─── Model ───────────────────────────────────────────────────────────

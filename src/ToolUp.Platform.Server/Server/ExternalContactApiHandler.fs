@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.ExternalContactApiHandler
+module ToolUp.Platform.Jobs.ExternalContactApiHandler
 
 open System
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
-open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Config.TeamManagement
 
 // ─── IExternalContactApi handler (Phase 6f.A) ────────────────────────
 //
@@ -18,7 +18,7 @@ open ToolUp.Platform.TeamManagement
 //
 // **Three gates, in this order.**
 //
-//   1. **Store composed.** `NoExternalContactStore` means the route is
+//   1. **Store composed.** `FeatureMode.Disabled` means the route is
 //      not mounted at all, so this arm only fires in a deployment that
 //      mounted the route and then failed to register the store —
 //      named rather than 500'd.

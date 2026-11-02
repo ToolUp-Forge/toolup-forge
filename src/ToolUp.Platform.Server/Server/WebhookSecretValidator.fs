@@ -1,9 +1,10 @@
-module ToolUp.Platform.WebhookSecretValidator
+module ToolUp.Platform.Jobs.WebhookSecretValidator
 
 open System
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Config
 
 // ─── Phase 6d.A — webhook plaintext-secret-at-rest preflight ─────────
 //
@@ -21,7 +22,7 @@ open ToolUp.Platform.ConfigValidation
 // exposure, so it runs even under `ServerConfig.SkipPreflight` — a
 // noisy-companion bypass lever must never silently re-expose every
 // tenant's webhook signing secret. Registered only when
-// `Webhooks = EnabledWebhooks`, so a deployment without webhooks never
+// `Webhooks = FeatureMode.Enabled`, so a deployment without webhooks never
 // scans.
 //
 // Remediation is the compose-time opt-in

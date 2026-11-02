@@ -10,9 +10,11 @@ open Microsoft.AspNetCore.Http
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.EntityTypes
-open ToolUp.Platform.IEntityStore
+open ToolUp.Platform.Infra.IEntityStore
 open ToolUp.Offline
 open ToolUp.Offline.OfflineSyncApi
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Phase 24 — the offline replay handler ───────────────────────────
 //

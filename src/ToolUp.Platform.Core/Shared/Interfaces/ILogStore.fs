@@ -19,7 +19,7 @@ open System
 // deployment that wants a distributed backend composes a companion against
 // the same contract; `ILogStoreContract` validates any implementation.
 //
-// **Opt-in (GP 13).** `ServerConfig.LogStore` defaults to `NoLogStore`:
+// **Opt-in (GP 13).** `ServerConfig.Observability.LogStore` defaults to `NoLogStore`:
 // nothing is registered, no logger is decorated, no file is opened, and
 // the boot path is byte-for-byte what it was (GP 11).
 //

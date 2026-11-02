@@ -9,6 +9,7 @@ open Microsoft.AspNetCore.Http
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.AI
+open ToolUp.Platform.Compose
 
 // ─── Phase 489 — the MCP interaction trail (GP 6) ────────────────────
 //
@@ -25,7 +26,7 @@ open ToolUp.AI
 //   * **`_platform.ai.tool_allowlist_denial`** — Phase 47's rollup
 //     stream, which `/dev/ai-allowlist` and the `HealthMonitorUI` admin
 //     panel read. A denial ALSO lands there, payload-compatible with
-//     what `AIAgentEngine.writeToolDenialAudit` writes, so an MCP-driven
+//     what the agent loop's denial audit (`AIAgentEngine.Loop.run`) writes, so an MCP-driven
 //     denial campaign shows up on the same 60-minute slice an in-app one
 //     does. The phase's requirement is precisely that MCP denials
 //     "surface through the Phase 47 allowlist view", and the way to
@@ -136,8 +137,8 @@ module McpAuditPayload =
         DurationMs = None
     }
 
-/// Mirror of the payload `AIAgentEngine.writeToolDenialAudit` serialises
-/// onto a Phase 47 denial row, field for field.
+/// Mirror of the payload the agent loop's denial audit (`AIAgentEngine.Loop.run`)
+/// serialises onto a Phase 47 denial row, field for field.
 ///
 /// Kept in step with that writer deliberately: `AIAllowlistDiagnosticsHandler`
 /// deserialises the stream into its own copy of this shape, and a row

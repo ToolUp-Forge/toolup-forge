@@ -27,6 +27,9 @@ open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.Grounding
 open ToolUp.Facts
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Fixtures ────────────────────────────────────────────────────────
 
@@ -158,13 +161,16 @@ let private capturingLogger (lines: ResizeArray<string * string>) : ILogger =
         member _.Error(m, _) = lines.Add(("error", m))
     }
 
-let private composedServices (knob: FactStoreMode) : ServiceCollection =
+let private composedServices (knob: FeatureMode) : ServiceCollection =
     let app =
         {
             ServerApp.empty with
                 Config = {
                     ServerConfig.defaults with
-                        FactStore = knob
+                        Stores = {
+                            ServerConfig.defaults.Stores with
+                                FactStore = knob
+                        }
                 }
         }
         |> FactsCompose.withFactStore
@@ -326,14 +332,17 @@ let tests =
 
         testList "the composition" [
             test "the fact tier registers the audit once, however often it is applied" {
-                let services = composedServices EnabledFactStore
+                let services = composedServices FeatureMode.Enabled
 
                 let app =
                     {
                         ServerApp.empty with
                             Config = {
                                 ServerConfig.defaults with
-                                    FactStore = EnabledFactStore
+                                    Stores = {
+                                        ServerConfig.defaults.Stores with
+                                            FactStore = FeatureMode.Enabled
+                                    }
                             }
                     }
                     |> FactsCompose.withFactStore
@@ -347,11 +356,11 @@ let tests =
             }
 
             test "a composition without the fact store registers nothing" {
-                Expect.isEmpty (auditsIn (composedServices NoFactStore)) "no audit"
+                Expect.isEmpty (auditsIn (composedServices FeatureMode.Disabled)) "no audit"
             }
 
             test "the registered audit reads the registries and logger it was composed beside" {
-                let services = composedServices EnabledFactStore
+                let services = composedServices FeatureMode.Enabled
                 let metrics, tables = deployment false
                 let lines = ResizeArray<string * string>()
 
@@ -370,7 +379,7 @@ let tests =
             }
 
             test "a fully described deployment logs nothing" {
-                let services = composedServices EnabledFactStore
+                let services = composedServices FeatureMode.Enabled
                 let metrics, tables = deployment true
                 let lines = ResizeArray<string * string>()
 

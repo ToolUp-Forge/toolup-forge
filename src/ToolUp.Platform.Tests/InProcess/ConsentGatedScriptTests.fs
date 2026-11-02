@@ -8,6 +8,7 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Consent
 open Components.ConsentGatedScript
+open ToolUp.Platform.Compose
 
 // ─── Phase 191 — the shared consent gate ─────────────────────────────
 //

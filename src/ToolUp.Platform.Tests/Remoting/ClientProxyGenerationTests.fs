@@ -36,6 +36,7 @@ open ToolUp.Platform
 open ToolUp.Remoting
 open ToolUp.Remoting.Json
 open ToolUp.Remoting.Generator
+open ToolUp.Platform.Compose
 
 let private repoRoot () =
     let rec up (dir: DirectoryInfo) =

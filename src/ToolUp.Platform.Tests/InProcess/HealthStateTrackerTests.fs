@@ -6,7 +6,8 @@ open Expecto
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.HealthChecks
-open ToolUp.Platform.HealthStateTracker
+open ToolUp.Platform.Infra.HealthStateTracker
+open ToolUp.Platform.Infra
 
 // ─── Phase 9p HealthStateTracker tests ───────────────────────────────
 //
@@ -199,7 +200,7 @@ let tests =
             // building a minimal service collection and verifying no
             // HealthStateTrackerService is resolved when the flag is
             // false. The actual `compose` registration is the
-            // `if config.HealthStateTracking then services.AddSingleton...`
+            // `if config.Observability.HealthStateTracking then services.AddSingleton...`
             // block in SDK.Server.fs — this test asserts that pattern
             // does the right thing by checking presence/absence
             // against an explicit toggle.

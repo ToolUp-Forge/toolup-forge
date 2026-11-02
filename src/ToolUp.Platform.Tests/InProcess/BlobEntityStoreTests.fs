@@ -6,13 +6,16 @@ open Expecto
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.DataObjectStore
-open ToolUp.Platform.EntityStore
+open ToolUp.Platform.Infra.DataObjectStore
+open ToolUp.Platform.Infra.EntityStore
 open ToolUp.Platform.EntityTypes
-open ToolUp.Platform.IEntityStore
-open ToolUp.Platform.SecondaryIndex
+open ToolUp.Platform.Infra.IEntityStore
+open ToolUp.Platform.Infra.SecondaryIndex
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 973 — the blob store's half: the vacuum, the snapshot, the refs ───
 //
@@ -235,7 +238,7 @@ let private storeTests =
             do! saveAs rig "e-5" "alice"
 
             match! (entities rig).DeleteIfVersion(rig.Scope, staleActor, EntityTypeName, "e-5", 7) with
-            | Result.Error(VersionConflict _) -> ()
+            | Result.Error(EntityError.VersionConflict _) -> ()
             | other -> failwithf "expected VersionConflict, got %A" other
 
             let! owner = refsOnDisk rig "Owner" "alice"
@@ -324,7 +327,10 @@ let private storeTests =
                 services
                 {
                     ServerConfig.defaults with
-                        EntityStore = EnabledEntityStore
+                        Stores = {
+                            ServerConfig.defaults.Stores with
+                                EntityStore = FeatureMode.Enabled
+                        }
                 }
                 [
                     fun registry ->

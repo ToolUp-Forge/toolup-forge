@@ -2,6 +2,7 @@ module ToolUp.Platform.Tests.Contracts.IDeclaresCredentialNeedContract
 
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Infra
 
 // ─── IDeclaresCredentialNeed contract pack (Phase 1017) ───────────
 //

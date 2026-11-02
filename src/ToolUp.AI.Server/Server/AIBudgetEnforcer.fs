@@ -6,6 +6,9 @@ open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.AI
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 9s — the per-user token-budget check ──────────────────
 //
@@ -145,7 +148,7 @@ let hourWindowStart (at: DateTime) : DateTime =
 /// Reads the Phase 6i.A latency stream — the always-on per-turn
 /// telemetry — rather than `IUsageLog`, which Phase 9d's team windows
 /// use. Two reasons, and the first is decisive: the usage log is
-/// written only when `UsageMetering = EnabledUsageMetering`, so a
+/// written only when `UsageMetering = FeatureMode.Enabled`, so a
 /// budget summing it would silently never refuse on a deployment that
 /// had not also enabled metering. The second is attribution: the usage
 /// record carries the user id in a metadata map, the latency record
@@ -484,7 +487,7 @@ let mergeAIBudgetSchema (appEntries: ModuleConfigEntry list) : ModuleConfigEntry
 //
 // **Why the same stream and not `IUsageLog`.** Phase 9s's reasoning
 // carries over unchanged and is decisive: the usage log is written
-// only when `UsageMetering = EnabledUsageMetering`, so a spend ceiling
+// only when `UsageMetering = FeatureMode.Enabled`, so a spend ceiling
 // summing it would silently never refuse on a deployment that set a
 // budget but had not also enabled metering — a cost control that is
 // off when you think it is on. The latency stream is always-on and,

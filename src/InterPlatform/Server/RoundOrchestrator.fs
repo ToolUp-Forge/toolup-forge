@@ -8,6 +8,7 @@ open System.Text
 open System.Threading
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.Compose
 
 // ─── Layer 5 — federation orchestration: multi-round runs ─────────────
 //
@@ -29,7 +30,7 @@ open ToolUp.Platform.BlobStorage
 // resume, and audit come from the substrate.
 //
 // Zero cost when unused (GP 13): nothing here is composed by
-// `PeerServerApp.run`. A deployment that never constructs an orchestrator
+// `PeerCompose.withPeer`. A deployment that never constructs an orchestrator
 // allocates nothing, registers no hosted service, and stores no blob. The
 // observer defaults to `RoundObserver.none`, so even a constructed
 // orchestrator emits no audit row and publishes no notification until a
@@ -336,7 +337,7 @@ type IRoundObserver =
 
 /// The default observer: audit rows through `IAuditLog`, progress
 /// notifications through `INotificationChannel`. Either half is optional,
-/// so a deployment with `AuditLog = NoAuditLog` still gets progress, and
+/// so a deployment with `AuditLog = FeatureMode.Disabled` still gets progress, and
 /// one that wants an audit trail without client chatter gets that.
 type PlatformRoundObserver(auditLog: IAuditLog option, channel: INotificationChannel option) =
 

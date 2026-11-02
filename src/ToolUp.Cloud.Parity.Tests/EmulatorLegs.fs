@@ -5,6 +5,8 @@ open System.Collections.Concurrent
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Secrets
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 193 — the emulator matrix's leg model ──────────────────────
 //

@@ -11,6 +11,10 @@ open ToolUp.Platform.Transport
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.Contracts.IHttpTransportContract
 open ToolUp.DataSources.Common
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Infra.Transport
+open ToolUp.Platform.Audit
 
 // ─── Phase 128 — IHttpTransport contract bindings ────────────────────
 //

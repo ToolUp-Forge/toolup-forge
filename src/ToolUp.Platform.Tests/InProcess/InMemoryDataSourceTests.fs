@@ -2,6 +2,7 @@ module ToolUp.Platform.Tests.InProcess.InMemoryDataSourceTests
 
 open ToolUp.Platform
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra
 
 // ─── InMemoryDataSource — IDataSource contract binding ───────────
 //

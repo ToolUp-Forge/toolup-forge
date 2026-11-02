@@ -1,0 +1,1 @@
+{"kind":"appRoot","base":"publicRenderingServerApp","layers":[],"id":"profile-layout-ref","children":[{"kind":"layoutRef","name":"page","id":"layout-page","children":[]},{"kind":"layoutRef","name":"hub","id":"layout-hub","children":[]}]}

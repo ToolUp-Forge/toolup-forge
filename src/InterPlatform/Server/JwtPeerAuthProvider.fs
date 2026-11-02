@@ -10,6 +10,10 @@ open System.Text.Json.Nodes
 open ToolUp.Platform
 open ToolUp.Platform.Auth
 open ToolUp.Platform.Secrets
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config.Auth
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Layer 4 — default peer auth provider ────────────────────────────
 //
@@ -293,7 +297,7 @@ module internal PeerJwt =
     /// host-only deployment's deliberate choice from a composition
     /// oversight. Deciding which it is needs the hosted-contract set, so
     /// the enforcement lives at the composition seam —
-    /// `PeerCompose.PeerServerApp.enforceAudienceBinding`, which warns at
+    /// `PeerCompose.enforceAudienceBinding`, which warns at
     /// startup and, under `withStrictAudienceBinding`, refuses to start.
     let checkAudience (expectedAudience: string) (doc: JsonDocument) =
         if String.IsNullOrEmpty expectedAudience then
@@ -563,7 +567,7 @@ module internal PeerJwt =
 /// cached key and no "auth disabled" path.
 ///
 /// `expectedAudience` is this receiver's own peer id (composed via
-/// `PeerServerApp.withLocalPeer`). When non-empty, `ValidatePeerToken`
+/// `PeerOptions.withLocalPeer`). When non-empty, `ValidatePeerToken`
 /// binds every inbound token's `aud` claim to it (Phase 130 — confused-
 /// deputy / cross-receiver-replay defence). An `expectedAudience` of ""
 /// keeps the pre-Phase-130 behaviour (audience binding off — GP 11); a
@@ -571,7 +575,7 @@ module internal PeerJwt =
 /// audience. **That empty case is a weaker posture, not a neutral one**
 /// (see `PeerJwt.checkAudience`) — Phase 309 makes a composition that
 /// lands in it say so at startup, and lets a deployment turn it into a
-/// compose-time failure with `PeerServerApp.withStrictAudienceBinding`.
+/// compose-time failure with `PeerOptions.withStrictAudienceBinding`.
 /// The provider itself is unchanged by that phase: it stays a stateless,
 /// policy-free validator (GP 12 rule 4).
 ///

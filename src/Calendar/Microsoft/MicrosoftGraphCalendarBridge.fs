@@ -22,6 +22,9 @@ open ToolUp.Scheduling.SchedulingTypes
 open ToolUp.Scheduling.ICalendarBridge
 open ToolUp.Calendar.MicrosoftGraphOAuth
 open ToolUp.Platform.ProviderExceptions
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 831 — the Microsoft Graph calendar bridge ────────────────
 //
@@ -841,7 +844,7 @@ type private GraphResponse = {
 }
 
 /// Microsoft Graph `ICalendarBridge`. Construct one per deployment and
-/// compose it with `SchedulingServerApp.withCalendarBridge` (or
+/// compose it with `SchedulingOptions.withCalendarBridge` (or
 /// `MicrosoftGraphSubscriptions.compose`, which also registers the
 /// subscription-renewal job).
 ///

@@ -8,6 +8,8 @@ open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.DependencyInjection.Extensions
 open ToolUp.Platform
 open ToolUp.InterPlatform.PeerCompose
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 595 — aggregate peer surface + gateway composition ────────
 //
@@ -68,7 +70,7 @@ open ToolUp.InterPlatform.PeerCompose
 //     long-running-capable only if every member behind its face is,
 //     because a call routed through the group lands on one of them.
 //   * A gateway fronts the poll leg only when a group job map was
-//     composed (`PeerServerApp.withGroupJobMap`). Without one it is
+//     composed (`PeerOptions.withGroupJobMap`). Without one it is
 //     byte-for-byte the Phase 595 shape, and `PeerGateway.surface`
 //     reports `LongRunningEnabled = false` regardless of the members'
 //     floor — a gateway must not advertise a leg it cannot serve
@@ -191,13 +193,17 @@ module AggregatePeerSurface =
     /// (`PeerSurface.describe`), so a change there flows here with no
     /// edit. Runs no contract builder: the composition has none.
     let private edgeSurface (group: PeerIdentity) : PeerSurface =
-        PeerServerApp.create ()
-        |> PeerServerApp.withConfig {
-            ServerConfig.defaults with
-                PeerSubstrate = EnabledPeerSubstrate
-        }
-        |> PeerServerApp.withLocalPeer group
-        |> PeerSurface.describe
+        PeerSurface.describe (
+            ServerApp.empty
+            |> ServerApp.withConfig {
+                ServerConfig.defaults with
+                    MultiInstance = {
+                        ServerConfig.defaults.MultiInstance with
+                            PeerSubstrate = FeatureMode.Enabled
+                    }
+            },
+            PeerOptions.create () |> PeerOptions.withLocalPeer group
+        )
 
     /// The posture floor over the gateway edge and every exposing member:
     /// boolean facets are conjunctions (a group binds audiences only if
@@ -598,28 +604,27 @@ module PeerGateway =
 
     /// Register the `PeerGroupJobFronting` the host's poll route resolves,
     /// through the base `ServerApp`'s `ServiceConfig` seam — the same route
-    /// `withCommutativeCipher` takes, so nothing in `PeerCompose.run` has
+    /// `withCommutativeCipher` takes, so nothing in the peer companion has
     /// to know a gateway exists. `TryAdd`, so a deployment that registered
     /// its own fronting earlier keeps it.
-    let private registerFronting (map: IPeerGroupJobMap) (client: IPeerClient) (app: PeerServerApp) : PeerServerApp =
+    let private registerFronting (map: IPeerGroupJobMap) (client: IPeerClient) (app: ServerApp) : ServerApp =
         let register (services: IServiceCollection) =
             services.TryAddSingleton<PeerGroupJobFronting>({ Map = map; Client = client })
             services
 
-        {
-            app with
-                Base = app.Base |> ServerApp.addServiceConfig register
-        }
+        app |> ServerApp.addServiceConfig register
 
-    /// Register the group's exposed contracts on a peer composition as
+    /// Register the group's exposed contracts on the peer options as
     /// forwarding hosts, adopt the group identity as the deployment's
-    /// local peer, and declare the group's external consumption. The
-    /// composition's own `withConfig` still decides everything else —
-    /// this helper contributes registrations, never configuration.
+    /// local peer, and declare the group's external consumption; the
+    /// long-running fronting singleton, when composed, joins the
+    /// deployment. The deployment's own `withConfig` still decides
+    /// everything else — this helper contributes registrations, never
+    /// configuration.
     ///
     /// `client` is the transport the gateway delegates over. A deployment
-    /// that wants the composed `IPeerClient` singleton (built inside
-    /// `PeerServerApp.run` from the resolved `ISecretStore`) passes a thin
+    /// that wants the composed `IPeerClient` singleton (built by the
+    /// peer companion from the resolved `ISecretStore`) passes a thin
     /// forwarder that resolves it per call; a deployment that owns its own
     /// `HttpPeerClient` passes it directly.
     ///
@@ -628,7 +633,7 @@ module PeerGateway =
     /// compose.
     ///
     /// **Phase 630 — long-running fronting is opt-in through
-    /// `PeerServerApp.withGroupJobMap`.** When the app carries a group job
+    /// `PeerOptions.withGroupJobMap`.** When the options carry a group job
     /// map, the forwarding dispatch mints group handles for the members'
     /// long-running methods and a `PeerGroupJobFronting` singleton is
     /// registered so the host's poll route can resolve them. When it does
@@ -639,8 +644,8 @@ module PeerGateway =
         (client: IPeerClient)
         (members: AggregateMember list)
         (exposure: AggregateExposure)
-        (app: PeerServerApp)
-        : Result<PeerServerApp, AggregateDerivationError list> =
+        (app: ServerApp, options: PeerOptions)
+        : Result<ServerApp * PeerOptions, AggregateDerivationError list> =
         match AggregatePeerSurface.routes (members, exposure), AggregatePeerSurface.derive (members, exposure) with
         | Ok resolvedRoutes, Ok aggregate ->
             let withContracts =
@@ -648,19 +653,21 @@ module PeerGateway =
                 |> List.fold
                     (fun acc route ->
                         acc
-                        |> PeerServerApp.withContract (fun _ ->
-                            forwardingContractWith client app.GroupJobMap exposure.Group route))
-                    app
+                        |> PeerOptions.withContract (fun _ ->
+                            forwardingContractWith client options.GroupJobMap exposure.Group route))
+                    options
 
             let withFronting =
-                match app.GroupJobMap with
-                | None -> withContracts
-                | Some map -> registerFronting map client withContracts
+                match options.GroupJobMap with
+                | None -> app
+                | Some map -> registerFronting map client app
 
-            aggregate.Consumes
-            |> List.fold (fun acc consumed -> PeerServerApp.withConsumedContract consumed acc) withFronting
-            |> PeerServerApp.withLocalPeer exposure.Group
-            |> Ok
+            let composed =
+                aggregate.Consumes
+                |> List.fold (fun acc consumed -> PeerOptions.withConsumedContract consumed acc) withContracts
+                |> PeerOptions.withLocalPeer exposure.Group
+
+            Ok(withFronting, composed)
         | Error errors, _
         | _, Error errors -> Error errors
 
@@ -681,7 +688,7 @@ module PeerGateway =
     /// **Phase 630 — `LongRunningEnabled` is narrowed by what THIS gateway
     /// composed.** `derive` reports the members' floor: what the group
     /// *could* front. Whether it does depends on a group job map being
-    /// composed, and only the app knows that. A gateway without one
+    /// composed, and only the options know that. A gateway without one
     /// therefore reports `false` however capable its members are — a
     /// deployment that advertised a poll leg it cannot resolve would hand
     /// counterparties a pinned face that lies, which is worse than the
@@ -691,11 +698,11 @@ module PeerGateway =
     let surface
         (members: AggregateMember list)
         (exposure: AggregateExposure)
-        (app: PeerServerApp)
+        (app: ServerApp, options: PeerOptions)
         : Result<PeerSurface, AggregateDerivationError list> =
         AggregatePeerSurface.derive (members, exposure)
         |> Result.map (fun aggregate ->
-            let live = PeerSurface.describe app
+            let live = PeerSurface.describe (app, options)
 
             {
                 live with
@@ -704,7 +711,7 @@ module PeerGateway =
                         aggregate.Budgets
                         |> Option.map (fun budgets -> {
                             budgets with
-                                LongRunningEnabled = budgets.LongRunningEnabled && app.GroupJobMap.IsSome
+                                LongRunningEnabled = budgets.LongRunningEnabled && options.GroupJobMap.IsSome
                         })
                     PinnedVocabulary = aggregate.PinnedVocabulary
             })

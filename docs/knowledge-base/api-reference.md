@@ -182,7 +182,7 @@ type IIngestionStatusObserver =
     abstract OnChunkFailed: IngestionJob * error: string -> Async<unit>
 ```
 
-Register it with `RAGServerApp.withIngestionObserver` (or `withIngestionObservers` for several).
+Register it with `RagOptions.withIngestionObserver` (or `withIngestionObservers` for several).
 
 ### `KnowledgeBase.Server.standingContextBuilder`
 
@@ -329,4 +329,4 @@ Server-side (in `KnowledgeBase.Server`):
 - `AllowedContentTypes` (default: `application/pdf`, `application/vnd.openxmlformats-officedocument.*`, `text/plain`, `text/csv`, `text/markdown`, `application/json`)
 - `ChunkingConfig` — passes through to RAG; overrides the RAG default for KB documents specifically.
 
-These aren't currently first-class fluent builders on `RAGServerApp`. Customise by replacing the shipped vectorisation handler with a custom one (see [extending.md](extending.md)).
+These aren't currently first-class setters on `RagOptions`. Customise by replacing the shipped vectorisation handler with a custom one (see [extending.md](extending.md)).

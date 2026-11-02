@@ -27,8 +27,12 @@ open ToolUp.Platform
 open ToolUp.Platform.ExternalCompute.Http
 open ToolUp.Platform.HealthChecks
 open ToolUp.Platform.Secrets
-open ToolUp.Platform.Server
+open ToolUp.Platform.Compose.Server
 open ToolUp.Platform.Tests.Contracts.IExternalComputeDispatcherContract
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 322 — the HTTP/REST external-compute companion ─────────────
 //
@@ -877,14 +881,14 @@ let private configTests =
 let private composeTests =
     testList "322.E — composition + GP 11 / GP 13" [
 
-        test "the default deployment is untouched: ExternalCompute stays NoExternalCompute" {
+        test "the default deployment is untouched: ExternalCompute stays FeatureMode.Disabled" {
             Expect.equal
                 ServerConfig.defaults.ExternalCompute
-                NoExternalCompute
+                FeatureMode.Disabled
                 "a deployment that never composes this companion keeps the Phase 318 default"
         }
 
-        test "withHttpCompute flips the mode to CustomExternalCompute" {
+        test "withHttpCompute flips the mode to FeatureMode.Enabled" {
             use stub = startStub ()
 
             let app =
@@ -897,8 +901,8 @@ let private composeTests =
 
             Expect.equal
                 app.Config.ExternalCompute
-                CustomExternalCompute
-                "under the NoExternalCompute default, compose registers the no-op dispatcher — and a later registration of the same service type is what GetService resolves, so leaving the mode alone would make whether real work is submitted depend on registration ORDER"
+                FeatureMode.Enabled
+                "under the FeatureMode.Disabled default, compose registers the no-op dispatcher — and a later registration of the same service type is what GetService resolves, so leaving the mode alone would make whether real work is submitted depend on registration ORDER"
         }
 
         test "withHttpCompute registers the dispatcher singleton, and it is the HTTP one" {

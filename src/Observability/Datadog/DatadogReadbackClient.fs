@@ -368,12 +368,12 @@ type DatadogReadbackClient(settings: DatadogReadbackConfig, secretStore: ISecret
 
 /// Construct the readback client. `settings` is the same
 /// `DatadogReadbackConfig` the deployment puts in
-/// `ServerConfig.DatadogReadback`, so region and default narrowing
+/// `ServerConfig.Observability.DatadogReadback`, so region and default narrowing
 /// cannot drift between the client and the endpoints that call it.
 ///
 /// Register the result as a DI singleton —
 /// `services.AddSingleton<IDatadogReadbackApi>(client)` — and set
-/// `ServerConfig.DatadogReadback = EnabledDatadogReadback settings`.
+/// `ServerConfig.Observability.DatadogReadback = EnabledDatadogReadback settings`.
 /// The SDK resolves it from there; nothing else needs composing.
 let create
     (settings: DatadogReadbackConfig)

@@ -10,6 +10,7 @@ open System.Reflection
 open Expecto
 open ToolUp.Elmish
 open ToolUp.Platform.Tests.Client.ElmishProofDifferential
+open ToolUp.Platform.Jobs
 
 // ─── Phase 788 — the proved Elmish runtime as oracle ─────────────────
 //

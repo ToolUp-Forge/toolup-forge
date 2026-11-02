@@ -10,6 +10,8 @@ open ToolUp.Platform
 open ToolUp.Platform.AuditSinks.S3Archive
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Audit
 
 /// Phase 9g — bind `IAuditSinkContract` to the S3Archive companion
 /// running against per-test `LocalFileStorage` directories. Production

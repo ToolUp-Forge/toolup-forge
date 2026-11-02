@@ -17,7 +17,7 @@ open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Primitives
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.EntityStore
+open ToolUp.Platform.Infra.EntityStore
 open ToolUp.Platform.Secrets
 open ToolUp.Platform.NotificationChannels.WhatsApp
 open ToolUp.Platform.NotificationChannels.WhatsApp.MetaCloud
@@ -26,6 +26,10 @@ open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Tests.InProcess.TransactionalDispatcherTests
 open ToolUp.Webhooks
 open ToolUp.Webhooks.Server
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 6f.C — the Meta WhatsApp Business Cloud companion ─────────
 //

@@ -9,6 +9,8 @@ open ToolUp.Platform.ConfigValidation
 // fixture resolves unambiguously against DataType rather than a same-named
 // field on another record in scope.
 open ToolUp.Platform.FileProcessor
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 281 — composition well-formedness preflight ────────────────
 //

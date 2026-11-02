@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.CompositionInspectorHandler
+module ToolUp.Platform.Compose.CompositionInspectorHandler
 
 open System
 open System.Text.Json
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
-open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Config.TeamManagement
 open ToolUp.Remoting.Json.SystemTextJson
+open ToolUp.Platform.Infra
 
 // ─── Phase 593 — composition inspector handler ───────────────────────
 //

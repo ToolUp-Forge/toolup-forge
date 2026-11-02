@@ -5,6 +5,7 @@ module ToolUp.Platform.Tests.Contracts.ISeamAuthorityEvidenceContract
 
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Compose
 
 // ─── ISeamAuthorityEvidence contract pack (Phase 944) ─────────────────
 //

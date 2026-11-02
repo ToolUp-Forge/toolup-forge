@@ -7,6 +7,9 @@ open System.Text.Json
 open Expecto
 open ToolUp.Platform
 open ToolUp.Remoting.Json.SystemTextJson
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
 
 // ─── Helpers ──────────────────────────────────────────────────────────
 
@@ -284,19 +287,25 @@ let tests =
             // Verifying the gate logic via an in-memory ConsoleLogger
             // alternative would require redirecting stdout; instead
             // we verify the configuration shape via the
-            // ServerConfig.TraceCategories field round-trip.
+            // ServerConfig.Observability.TraceCategories field round-trip.
             let cfgEmpty = {
                 ServerConfig.defaults with
-                    TraceCategories = Set.empty
+                    Observability = {
+                        ServerConfig.defaults.Observability with
+                            TraceCategories = Set.empty
+                    }
             }
 
             let cfgAllow = {
                 ServerConfig.defaults with
-                    TraceCategories = Set.ofList [ "ai.sse"; "platform.sse" ]
+                    Observability = {
+                        ServerConfig.defaults.Observability with
+                            TraceCategories = Set.ofList [ "ai.sse"; "platform.sse" ]
+                    }
             }
 
-            Expect.isFalse (cfgEmpty.TraceCategories.Contains "ai.sse") "empty → no emit"
-            Expect.isTrue (cfgAllow.TraceCategories.Contains "ai.sse") "allow-list → emit"
-            Expect.isFalse (cfgAllow.TraceCategories.Contains "auth") "non-listed → drop"
+            Expect.isFalse (cfgEmpty.Observability.TraceCategories.Contains "ai.sse") "empty → no emit"
+            Expect.isTrue (cfgAllow.Observability.TraceCategories.Contains "ai.sse") "allow-list → emit"
+            Expect.isFalse (cfgAllow.Observability.TraceCategories.Contains "auth") "non-listed → drop"
         }
     ]

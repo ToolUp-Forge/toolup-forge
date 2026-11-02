@@ -45,9 +45,12 @@ let reranker =
         "/models/mxbai-rerank-xsmall-v1/vocab.txt"
     |> LocalReranker.create
 
-RAGServerApp.create factory configStore
-|> RAGServerApp.withReranker reranker
-|> RAGServerApp.run
+ServerApp.empty
+|> RAGCompose.withRAG (
+    RagOptions.create factory providerProfile embedder
+    |> RagOptions.withReranker reranker
+)
+|> ServerApp.run
 ```
 
 Optionally register the readiness probe so `/dev/inspect` shows the

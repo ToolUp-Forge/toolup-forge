@@ -9,6 +9,10 @@ open ToolUp.Forms.PublishableFormConfigValidator
 open ToolUp.Forms.InMemoryShareTokenRateLimiter
 open ToolUp.Forms.ShareTokenRateLimiterDistributionValidator
 open ToolUp.Forms.Tests.Contracts
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
 // ─── Phase 21e — publishable-forms hardening tests ──────────────────
 //
@@ -40,9 +44,15 @@ let private mkPublishableSchema (id: string) : FormSchema = {
 let private mkConfig (surfaces: SurfaceProfile list) (acceptUnsigned: bool) : ServerConfig = {
     ServerConfig.defaults with
         Surfaces = surfaces
-        ShareTokenStore = NoShareTokenStore
+        Stores = {
+            ServerConfig.defaults.Stores with
+                ShareTokenStore = FeatureMode.Disabled
+        }
         PublicBaseUrl = Some "https://example.test"
-        AcceptUnsignedPublishable = acceptUnsigned
+        RiskAcknowledgements = {
+            ServerConfig.defaults.RiskAcknowledgements with
+                AcceptUnsignedPublishable = acceptUnsigned
+        }
 }
 
 let private runValidator (config: ServerConfig) (schemas: Map<FormSchemaId, FormSchema>) = async {
@@ -242,7 +252,10 @@ let private runDistValidator (config: ServerConfig) (limiter: IShareTokenRateLim
 let private shareTokenSurface (extra: ServerConfig -> ServerConfig) : ServerConfig =
     {
         ServerConfig.defaults with
-            ShareTokenStore = EnabledShareTokenStore
+            Stores = {
+                ServerConfig.defaults.Stores with
+                    ShareTokenStore = FeatureMode.Enabled
+            }
     }
     |> extra
 
@@ -261,7 +274,15 @@ let private distributionValidatorTests =
 
         testCaseAsync "ReplicaCount > 1 + in-memory limiter + share-token surface → Error naming the bypass + fix"
         <| async {
-            let config = shareTokenSurface (fun c -> { c with ReplicaCount = 3 })
+            let config =
+                shareTokenSurface (fun c -> {
+                    c with
+                        MultiInstance = {
+                            c.MultiInstance with
+                                ReplicaCount = 3
+                        }
+                })
+
             let! result = runDistValidator config (create ())
 
             match result with
@@ -281,8 +302,14 @@ let private distributionValidatorTests =
             let config =
                 shareTokenSurface (fun c -> {
                     c with
-                        ReplicaCount = 3
-                        AcceptInMemoryShareTokenRateLimiterInMultiInstance = true
+                        MultiInstance = {
+                            c.MultiInstance with
+                                ReplicaCount = 3
+                        }
+                        RiskAcknowledgements = {
+                            c.RiskAcknowledgements with
+                                AcceptInMemoryShareTokenRateLimiterInMultiInstance = true
+                        }
                 })
 
             let! result = runDistValidator config (create ())
@@ -294,7 +321,15 @@ let private distributionValidatorTests =
 
         testCaseAsync "ReplicaCount > 1 + distributed limiter → Ok"
         <| async {
-            let config = shareTokenSurface (fun c -> { c with ReplicaCount = 3 })
+            let config =
+                shareTokenSurface (fun c -> {
+                    c with
+                        MultiInstance = {
+                            c.MultiInstance with
+                                ReplicaCount = 3
+                        }
+                })
+
             let! result = runDistValidator config distributedLimiter
 
             match result with
@@ -319,11 +354,14 @@ let private distributionValidatorTests =
 
         testCaseAsync "No share-token surface + multi-instance in-memory → Ok"
         <| async {
-            // Default config: NoShareTokenStore, no claim-bearer surface
+            // Default config: FeatureMode.Disabled, no claim-bearer surface
             // — no tokens are issued, so the limiter is never consulted.
             let config = {
                 ServerConfig.defaults with
-                    ReplicaCount = 3
+                    MultiInstance = {
+                        ServerConfig.defaults.MultiInstance with
+                            ReplicaCount = 3
+                    }
             }
 
             let! result = runDistValidator config (create ())

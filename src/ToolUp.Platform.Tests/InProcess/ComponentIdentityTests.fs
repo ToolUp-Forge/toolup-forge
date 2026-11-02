@@ -2,6 +2,8 @@ module ToolUp.Platform.Tests.InProcess.ComponentIdentityTests
 
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 279 — stable component identity (ComponentId) ──────────────
 //

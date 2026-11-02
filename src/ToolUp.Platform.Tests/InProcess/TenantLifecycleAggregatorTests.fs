@@ -4,6 +4,8 @@ open System
 open System.Collections.Concurrent
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 54 — TenantLifecycleAggregator tests ──────────────────────
 //

@@ -6,6 +6,7 @@ module ToolUp.Platform.Tests.InProcess.NarrativeDataExportTests
 open Expecto
 open ToolUp.Platform.Narrative
 open ToolUp.PublicRendering
+open ToolUp.Platform.Infra
 
 // ─── Phase 101 — tabular data export (CSV / JSON) ───────────────────
 //

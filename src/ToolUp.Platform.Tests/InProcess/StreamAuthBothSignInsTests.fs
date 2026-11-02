@@ -17,8 +17,12 @@ open Microsoft.Extensions.Hosting
 open Giraffe
 open ToolUp.Platform
 open ToolUp.Platform.Auth
-open ToolUp.Platform.NotificationChannel
+open ToolUp.Platform.Config.NotificationChannel
 open ToolUp.AuthProviders
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 1047 — the event streams authenticate whichever sign-in the user took ───
 //

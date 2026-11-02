@@ -6,6 +6,7 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Jobs
 
 // ─── Phase 441 — INotificationPreferenceStore contract pack ───────────
 //

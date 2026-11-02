@@ -9,6 +9,7 @@ open ToolUp.DataSources.Snowflake
 open ToolUp.DataSources.Tests.Support
 open ToolUp.DataSources.Tests.Support.TestFakes
 open DataManagementTypes
+open ToolUp.Platform.Infra
 
 // ─── ToolUp.DataSources.Snowflake ─────────────────────────────────
 

@@ -6,6 +6,7 @@ module ToolUp.OpenXml.Tests.InProcess.RoundTripTests
 open Expecto
 open ToolUp.OpenXml
 open ToolUp.OpenXml.Tests
+open ToolUp.Platform.Audit
 
 let private reimport (model: DocModel) : ImportedDocument = Import.fromBytes (Emit.toBytes model)
 

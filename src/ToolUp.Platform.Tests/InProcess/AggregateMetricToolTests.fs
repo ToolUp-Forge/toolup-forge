@@ -32,13 +32,18 @@ open ToolUp.Platform
 open ToolUp.Platform.AI
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Grounding
-open ToolUp.Platform.StorageScopeResolver
+open ToolUp.Platform.Scope.StorageScopeResolver
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.AI
 open ToolUp.AI.AIAssistantHandler
 open ToolUp.AI.AnswerVerifier
 open ToolUp.Facts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Fixtures ────────────────────────────────────────────────────────
 
@@ -115,9 +120,9 @@ let private draft
     }
 
 let private assertFact (store: IFactStore) (scope: string) (d: FactDraft) : Fact =
-    match store.Assert(scope, d) |> Async.RunSynchronously with
+    match store.Assert(TestScope.resolved scope, d) |> Async.RunSynchronously with
     | Ok fact -> fact
-    | Error e -> failtestf "assert failed: %s" e
+    | Error e -> failtestf "assert failed: %s" (FactStoreError.describe e)
 
 /// One July revenue figure, disclosable.
 let private revenue (store: IFactStore) (scope: string) (path: string list) (value: decimal) : Fact =
@@ -132,7 +137,10 @@ let private factsApp () : ServerApp =
         ServerApp.empty with
             Config = {
                 ServerConfig.defaults with
-                    FactStore = EnabledFactStore
+                    Stores = {
+                        ServerConfig.defaults.Stores with
+                            FactStore = FeatureMode.Enabled
+                    }
             }
     }
     |> FactsCompose.withFactStore
@@ -154,20 +162,13 @@ let private composed () : ServerApp * ServiceProvider =
 
     app, services.BuildServiceProvider()
 
-let private resolved (scopeId: string) : ResolvedScope =
-    ScopeResolution.ofStorageScope {
-        ScopeId = scopeId
-        Container = "container-" + scopeId
-        Persist = true
-    }
-
 /// Run `aggregate_metric` over the composed store, gate and registry.
 let private aggregate (sp: IServiceProvider) (scope: string) (argsJson: string) : string =
     AggregateMetricTool.executeWith
         (sp.GetRequiredService<IFactStore>())
         (sp.GetRequiredService<IFactDisclosureGate>())
         (Some registry)
-        (resolved scope)
+        (TestScope.resolved scope)
         "user-1"
         argsJson
     |> Async.RunSynchronously
@@ -441,7 +442,7 @@ let private scopeTests =
                     (sp.GetRequiredService<IFactDisclosureGate>())
                     (Some registry)
                     (fun () -> DateTime.UtcNow)
-                    (resolved scope)
+                    (TestScope.resolved scope)
                     "user-1"
                     """{"metric":"revenue","subject_hierarchy":"store","level":2,"ordering":"descending"}"""
                 |> Async.RunSynchronously
@@ -469,7 +470,7 @@ let private scopeTests =
                     (sp.GetRequiredService<IFactDisclosureGate>())
                     (Some registry)
                     (fun () -> DateTime.UtcNow)
-                    (resolved scope)
+                    (TestScope.resolved scope)
                     "user-1"
                     """{"metric":"revenue","subject_hierarchy":"store","ordering":"descending"}"""
                 |> Async.RunSynchronously

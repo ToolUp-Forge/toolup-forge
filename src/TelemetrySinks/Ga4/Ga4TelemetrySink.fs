@@ -60,7 +60,7 @@ type Ga4TelemetrySink(httpClient: HttpClient, measurementId: string, apiSecret: 
 
 module Ga4TelemetrySink =
     /// Construct a GA4-backed `ITelemetrySink`. Compose with
-    /// `ServerConfig.TelemetrySink = CustomTelemetrySink` +
+    /// `ServerConfig.Observability.TelemetrySink = FeatureMode.Enabled` +
     /// `services.AddSingleton<ITelemetrySink>(Ga4TelemetrySink.create …)`.
     let create (httpClient: HttpClient) (measurementId: string) (apiSecret: string) : ITelemetrySink =
         Ga4TelemetrySink(httpClient, measurementId, apiSecret) :> ITelemetrySink

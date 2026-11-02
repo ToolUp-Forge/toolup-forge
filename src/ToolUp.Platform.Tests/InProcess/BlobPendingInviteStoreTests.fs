@@ -6,10 +6,13 @@ open System.Threading
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.Teams
-open ToolUp.Platform.Teams.PendingInviteStoreInstanceValidator
+open ToolUp.Platform.Scope.Teams
+open ToolUp.Platform.Scope.Teams.PendingInviteStoreInstanceValidator
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 5h — BlobPendingInviteStore contract binding + concurrency ─
 //
@@ -462,7 +465,10 @@ let private substrateTests =
 let private validatorTests =
     let baseConfig = {
         ServerConfig.defaults with
-            ReplicaCount = 3
+            MultiInstance = {
+                ServerConfig.defaults.MultiInstance with
+                    ReplicaCount = 3
+            }
     }
 
     let validate (cfg: ServerConfig) (store: IPendingInviteStore option) =
@@ -507,7 +513,13 @@ let private validatorTests =
         }
 
         test "InMemory store on a single replica is clean" {
-            let single = { baseConfig with ReplicaCount = 1 }
+            let single = {
+                baseConfig with
+                    MultiInstance = {
+                        baseConfig.MultiInstance with
+                            ReplicaCount = 1
+                    }
+            }
 
             Expect.equal
                 (validate single (Some(inMemory ())))
@@ -518,7 +530,10 @@ let private validatorTests =
         test "the escape hatch still silences the in-memory warning" {
             let accepted = {
                 baseConfig with
-                    AcceptPendingInviteStoreInMultiInstance = true
+                    RiskAcknowledgements = {
+                        baseConfig.RiskAcknowledgements with
+                            AcceptPendingInviteStoreInMultiInstance = true
+                    }
             }
 
             Expect.equal (validate accepted (Some(inMemory ()))) ConfigValidation.Ok "explicit opt-in wins"

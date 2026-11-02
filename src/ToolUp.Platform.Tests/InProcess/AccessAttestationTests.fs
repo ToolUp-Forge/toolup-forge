@@ -39,10 +39,14 @@ open System.Text
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Secrets
-open ToolUp.Platform.PermissionStore
-open ToolUp.Platform.GrantConsentStore
-open ToolUp.Platform.AccessAttestation
+open ToolUp.Platform.Scope.PermissionStore
+open ToolUp.Platform.Scope.GrantConsentStore
+open ToolUp.Platform.Compose.AccessAttestation
 open ToolUp.ArtefactSigning
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Fixtures: the deployment key ────────────────────────────────────
 

@@ -3,6 +3,7 @@ module ToolUp.Platform.Tests.InProcess.PresenceChannelTests
 open System
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Jobs
 
 // ─── Phase 241 — presence substrate ──────────────────────────────────
 //

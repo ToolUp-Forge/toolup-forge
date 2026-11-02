@@ -4,7 +4,7 @@ This document explains how ToolUp.Platform extends the standard F# full-stack ar
 
 > **Origins.** ToolUp.Platform was bootstrapped from the [SAFE Stack](https://safe-stack.github.io/) template. The Saturn DSL (a thin wrapper over Giraffe) and the SAFE.Client / SAFE.Server metapackages (which bundled Fable + Elmish + Feliz + Fable.Remoting at pinned minor versions) were retired in favour of direct library references — and as the platform matured, the MVU runtime and the RPC transport were themselves vendored in-tree under `ToolUp.Platform.{Core,Client,Server}` and renamed to `ToolUp.Elmish` / `ToolUp.Remoting.*` (consumer `open` statements move by search-and-replace — see [`docs/migrations/73-namespace-rename-to-toolup-remoting-and-toolup-elmish.md`](../../docs/migrations/73-namespace-rename-to-toolup-remoting-and-toolup-elmish.md)). The SAFE `Api.make` / `Api.makeProxy<T>` / `ApiCall<_,_>` / `RemoteData<_>` call-site surface is preserved inside `ToolUp.Platform` itself (`Shared/Api.fs` + `Server/Api.fs` + `Client/Api.fs`), so the experience for a developer familiar with SAFE is unchanged.
 >
-> **Post-SAFE composition pipeline.** With Saturn gone, `compose` builds the server directly via `WebApplication.CreateBuilder` and adds middleware / services with the raw ASP.NET Core APIs. The fluent record-based surface (`ServerApp` → `AIServerApp` → `RAGServerApp`) is unchanged — apps still write the same pipeline — but several extension points Saturn used to provide implicitly are now explicit `ServerConfig` fields: `RequireHttps`, `TrustForwardedHeaders`, `StaticPathBehaviour`. See [Post-SAFE composition pipeline](technical-guide/01-architecture-and-composition.md#post-safe-composition-pipeline).
+> **Post-SAFE composition pipeline.** With Saturn gone, `compose` builds the server directly via `WebApplication.CreateBuilder` and adds middleware / services with the raw ASP.NET Core APIs. The fluent record-based surface (`ServerApp`, with the AI / RAG tiers joining through `AICompose.withAI` / `RAGCompose.withRAG`) is unchanged by that move — but several extension points Saturn used to provide implicitly are now explicit `ServerConfig` fields: `RequireHttps`, `TrustForwardedHeaders`, `StaticPathBehaviour`. See [Post-SAFE composition pipeline](technical-guide/01-architecture-and-composition.md#post-safe-composition-pipeline).
 
 ---
 
@@ -131,7 +131,7 @@ Picking a host runtime (Kestrel default vs the three host-adapter companions for
 
 ### [13. Deployment Shapes](technical-guide/13-deployment-shapes.md)
 
-How a pure-Kestrel deployment partitions across silos via `ServerConfig.ProcessProfile` — the three shipped shapes (single-process / web+worker / web+worker+dispatcher), the substrate every shape must share, the cross-silo coordination contract, and the `/dev/inspect` panel that surfaces the resolved matrix to operators.
+How a pure-Kestrel deployment partitions across silos via `ServerConfig.MultiInstance.ProcessProfile` — the three shipped shapes (single-process / web+worker / web+worker+dispatcher), the substrate every shape must share, the cross-silo coordination contract, and the `/dev/inspect` panel that surfaces the resolved matrix to operators.
 
 - Three pure-Kestrel deployment shapes (`AllInOne` / `WebOnly` + `WorkerOnly` / `WebOnly` + `WorkerOnly` + `DispatcherOnly`)
 - Substrate contract — what every shape must share

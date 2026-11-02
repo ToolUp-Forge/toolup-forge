@@ -3,6 +3,7 @@ module ToolUp.AI.AIModelEnvValidator
 open System
 open ToolUp.AI
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Infra
 
 // ─── Phase 9m.A AI model env-var preflight ───────────────────────────
 //

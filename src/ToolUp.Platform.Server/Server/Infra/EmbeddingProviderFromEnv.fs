@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.EmbeddingProviderEnv
+module ToolUp.Platform.Config.EmbeddingProviderEnv
 
 open System
 open ToolUp.Platform
-open ToolUp.Platform.IEmbeddingProvider
+open ToolUp.Platform.Infra.IEmbeddingProvider
+open ToolUp.Platform.Infra
 
 /// Resolver for one `IEmbeddingProvider` companion. The consumer threads
 /// in one entry per companion the deployment has wired (e.g. `{ Name =

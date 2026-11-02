@@ -7,7 +7,7 @@
 
 ## Persistent Event Store
 
-`IEventStore` has two shipped implementations. Apps choose via `ServerConfig.EventStore`:
+`IEventStore` has two shipped implementations. Apps choose via `ServerConfig.Stores.EventStore`:
 
 ```fsharp
 type EventStoreMode =
@@ -225,14 +225,20 @@ type ResultStoreMode =
     | InMemoryResultStore     // dev/test — in-process dictionary
     | PersistentResultStore   // production — wraps IDataObjectStore
 
-type LineageStoreMode =
-    | NoLineageStore          // default — interface unregistered
-    | EnabledLineageStore     // queries over IEventStore + auto-emit on SaveResult
+// Lineage is a plain on/off toggle, so it shares the one `FeatureMode`
+// (Phase 877): `FeatureMode.Disabled` (the default) leaves the interface
+// unregistered; `FeatureMode.Enabled` queries over IEventStore and
+// auto-emits on SaveResult.
+
+type Stores = {
+    // ...
+    ResultStore: ResultStoreMode    // default NoResultStore
+}
 
 type ServerConfig = {
     // ...
-    ResultStore: ResultStoreMode    // default NoResultStore
-    Lineage: LineageStoreMode       // default NoLineageStore
+    Stores: Stores                  // the persistence substrates, by concern
+    Lineage: FeatureMode            // default FeatureMode.Disabled
 }
 ```
 
@@ -303,8 +309,8 @@ Paths are JSON-pointer-like dotted: `summary.revenue`, `rows[2].region`. Non-JSO
 
 Both `IResultStore` backends accept an `inputs: string list` parameter. The `Events.recordLineage` helper checks whether `ILineageStore` is registered:
 
-- **`EnabledLineageStore`**: emit one `LineageLink` per input via `ILineageStore.Record` after the save succeeds. The link's `ModuleName` is the saver; `LinkType` defaults to `Derived`.
-- **`NoLineageStore`**: silently no-op.
+- **`FeatureMode.Enabled`**: emit one `LineageLink` per input via `ILineageStore.Record` after the save succeeds. The link's `ModuleName` is the saver; `LinkType` defaults to `Derived`.
+- **`FeatureMode.Disabled`**: silently no-op.
 
 Modules call `SaveResult(... inputs)` the same way regardless of deployment config. The `inputs` parameter is ergonomic at the module's call site even when nothing consumes it.
 
@@ -348,7 +354,7 @@ In-tree support: `LocalFileStorage` (content-hash etags; CAS under per-path lock
 
 ## Entity-write outbox (Phase 599)
 
-An entity save and the `IEventStore` events it implies are two writes with no transaction between them — a crash in the gap leaves state and event log divergent (and, for `OnEvent`-triggered jobs, a lost trigger). `ServerConfig.EntityOutbox = EnabledEntityOutbox` (fluent: `ServerApp.withEntityOutbox true`; env: `TOOLUP_ENTITY_OUTBOX`; requires `EntityStore = EnabledEntityStore`) registers `EntityOutbox.OutboxEntityStore` in DI for mutations whose events must not be lost:
+An entity save and the `IEventStore` events it implies are two writes with no transaction between them — a crash in the gap leaves state and event log divergent (and, for `OnEvent`-triggered jobs, a lost trigger). `ServerConfig.Stores.EntityOutbox = FeatureMode.Enabled` (fluent: `ServerApp.withEntityOutbox true`; env: `TOOLUP_ENTITY_OUTBOX`; requires `EntityStore = FeatureMode.Enabled`) registers `EntityOutbox.OutboxEntityStore` in DI for mutations whose events must not be lost:
 
 ```fsharp skip=fragment
 let outbox = ctx.RequestServices.GetRequiredService<EntityOutbox.OutboxEntityStore>()

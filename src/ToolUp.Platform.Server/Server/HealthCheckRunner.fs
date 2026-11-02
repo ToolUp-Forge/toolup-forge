@@ -1,4 +1,6 @@
-module ToolUp.Platform.HealthCheckRunner
+module ToolUp.Platform.Infra.HealthCheckRunner
+
+open ToolUp.Platform
 
 open System
 open System.Threading

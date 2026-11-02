@@ -1,0 +1,1 @@
+{"kind":"appRoot","base":"serverApp","layers":[],"id":"reject-knob-value-unregistered-boolean","children":[{"kind":"serverConfig","id":"serverConfig","children":[{"kind":"configKnob","key":"IncludePlatformDefaults","value":"yes","id":"knob-platformDefaults","children":[]}]}]}

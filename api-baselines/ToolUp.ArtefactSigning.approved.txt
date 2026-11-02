@@ -8,9 +8,9 @@ ToolUp.ArtefactSigning.ApplicationKeyedSigning.SchemeFamily : System.String (lit
 ToolUp.ArtefactSigning.ApplicationKeyedSigning.decodeEnvelope(System.Byte[]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.ArtefactSigning.SignedPayloadEnvelope, System.String]
 ToolUp.ArtefactSigning.ApplicationKeyedSigning.encodeEnvelope(ToolUp.ArtefactSigning.SignedPayloadEnvelope) : System.Byte[]
 ToolUp.ArtefactSigning.ApplicationKeyedSigning.scheme(ToolUp.ArtefactSigning.AttestationLevel) : System.String
-ToolUp.ArtefactSigning.ApplicationKeyedSigning.signer(System.String, ToolUp.ArtefactSigning.IApplicationSigner) : ToolUp.Platform.IKeyedByteSigner
+ToolUp.ArtefactSigning.ApplicationKeyedSigning.signer(System.String, ToolUp.ArtefactSigning.IApplicationSigner) : ToolUp.Platform.Audit.IKeyedByteSigner
 ToolUp.ArtefactSigning.ApplicationKeyedSigning.tryParseScheme(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.ArtefactSigning.AttestationLevel]
-ToolUp.ArtefactSigning.ApplicationKeyedSigning.verifier(System.String, ToolUp.ArtefactSigning.IApplicationSigner) : ToolUp.Platform.IKeyedByteVerifier
+ToolUp.ArtefactSigning.ApplicationKeyedSigning.verifier(System.String, ToolUp.ArtefactSigning.IApplicationSigner) : ToolUp.Platform.Audit.IKeyedByteVerifier
 ToolUp.ArtefactSigning.ApplicationKeyedSigning.verifyRecorded(System.String, ToolUp.ArtefactSigning.IApplicationSigner, System.String, System.String, System.Byte[], System.Byte[]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.ArtefactSigning.KeyedVerificationFailure]]
 ToolUp.ArtefactSigning.ApplicationPayload (class)
 ToolUp.ArtefactSigning.ApplicationPayload.FramingVersion : System.String (literal)
@@ -78,10 +78,10 @@ ToolUp.ArtefactSigning.DefaultArtefactVerifierModule.create(ToolUp.Platform.Secr
 ToolUp.ArtefactSigning.DefaultModuleBindingVerifier (class)
 ToolUp.ArtefactSigning.DefaultModuleBindingVerifier..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.ArtefactSigning.ModuleBindingAnchor], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IBindingRevocationList], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IBindingTransparencyLog])
 ToolUp.ArtefactSigning.DefaultModuleBindingVerifierModule (class)
-ToolUp.ArtefactSigning.DefaultModuleBindingVerifierModule.certificationVerifier(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.ArtefactSigning.ModuleBindingAnchor]) : ToolUp.Platform.IModuleCertificationVerifier
+ToolUp.ArtefactSigning.DefaultModuleBindingVerifierModule.certificationVerifier(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.ArtefactSigning.ModuleBindingAnchor]) : ToolUp.Platform.Compose.IModuleCertificationVerifier
 ToolUp.ArtefactSigning.DefaultModuleBindingVerifierModule.create(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.ArtefactSigning.ModuleBindingAnchor]) : ToolUp.Platform.IModuleBindingVerifier
 ToolUp.ArtefactSigning.DefaultModuleBindingVerifierModule.createWith(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.ArtefactSigning.ModuleBindingAnchor], ToolUp.Platform.IBindingRevocationList, ToolUp.Platform.IBindingTransparencyLog) : ToolUp.Platform.IModuleBindingVerifier
-ToolUp.ArtefactSigning.DefaultModuleBindingVerifierModule.verifyCertification(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.ArtefactSigning.ModuleBindingAnchor], System.String, ToolUp.Platform.ModuleSurface, ToolUp.Platform.ModuleCertificationStamp) : ToolUp.Platform.BindingOutcome
+ToolUp.ArtefactSigning.DefaultModuleBindingVerifierModule.verifyCertification(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.ArtefactSigning.ModuleBindingAnchor], System.String, ToolUp.Platform.Compose.ModuleSurface, ToolUp.Platform.ModuleCertificationStamp) : ToolUp.Platform.BindingOutcome
 ToolUp.ArtefactSigning.DefaultModuleBindingVerifierModule.verifySbom(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.ArtefactSigning.ModuleBindingAnchor], System.String, ToolUp.Platform.ModuleSbomStamp) : ToolUp.Platform.BindingOutcome
 ToolUp.ArtefactSigning.DeployRecordSealer (class)
 ToolUp.ArtefactSigning.DeployRecordSealer.ofProvider(ToolUp.ArtefactSigning.SigningProvider) : ToolUp.Platform.IDeployRecordSealer
@@ -92,11 +92,11 @@ ToolUp.ArtefactSigning.DeployRecordSealing.Scheme : System.String (literal)
 ToolUp.ArtefactSigning.DeployRecordSealing.decodeToken(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.ArtefactSigning.SignedPayloadEnvelope, System.String]
 ToolUp.ArtefactSigning.DeployRecordSealing.encodeToken(ToolUp.ArtefactSigning.SignedPayloadEnvelope) : System.String
 ToolUp.ArtefactSigning.DsseEnvelopeSigning (class)
-ToolUp.ArtefactSigning.DsseEnvelopeSigning.fromSecretStore(ToolUp.Platform.Secrets+ISecretStore, System.String, ToolUp.ArtefactSigning.SigningAlgorithm) : ToolUp.Platform.IStatementEnvelopeSigner
-ToolUp.ArtefactSigning.DsseEnvelopeSigning.readUnverifiedStatement(ToolUp.Platform.DsseEnvelope) : Microsoft.FSharp.Core.FSharpResult`2[System.String, System.String]
-ToolUp.ArtefactSigning.DsseEnvelopeSigning.verify(ToolUp.ArtefactSigning.PublicKeyMetadata, ToolUp.Platform.EnvelopeExpectation, ToolUp.Platform.DsseEnvelope) : Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Platform.EnvelopeVerdict]
-ToolUp.ArtefactSigning.DsseEnvelopeSigning.verifyJson(ToolUp.ArtefactSigning.PublicKeyMetadata, ToolUp.Platform.EnvelopeExpectation, System.String) : Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Platform.EnvelopeVerdict]
-ToolUp.ArtefactSigning.DsseEnvelopeSigning.verifySignature(ToolUp.ArtefactSigning.PublicKeyMetadata, ToolUp.Platform.DsseEnvelope) : ToolUp.Platform.EnvelopeVerdict
+ToolUp.ArtefactSigning.DsseEnvelopeSigning.fromSecretStore(ToolUp.Platform.Secrets+ISecretStore, System.String, ToolUp.ArtefactSigning.SigningAlgorithm) : ToolUp.Platform.Audit.IStatementEnvelopeSigner
+ToolUp.ArtefactSigning.DsseEnvelopeSigning.readUnverifiedStatement(ToolUp.Platform.Audit.DsseEnvelope) : Microsoft.FSharp.Core.FSharpResult`2[System.String, System.String]
+ToolUp.ArtefactSigning.DsseEnvelopeSigning.verify(ToolUp.ArtefactSigning.PublicKeyMetadata, ToolUp.Platform.Audit.EnvelopeExpectation, ToolUp.Platform.Audit.DsseEnvelope) : Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Platform.Audit.EnvelopeVerdict]
+ToolUp.ArtefactSigning.DsseEnvelopeSigning.verifyJson(ToolUp.ArtefactSigning.PublicKeyMetadata, ToolUp.Platform.Audit.EnvelopeExpectation, System.String) : Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Platform.Audit.EnvelopeVerdict]
+ToolUp.ArtefactSigning.DsseEnvelopeSigning.verifySignature(ToolUp.ArtefactSigning.PublicKeyMetadata, ToolUp.Platform.Audit.DsseEnvelope) : ToolUp.Platform.Audit.EnvelopeVerdict
 ToolUp.ArtefactSigning.EmptySigningKeyLedger (class)
 ToolUp.ArtefactSigning.EmptySigningKeyLedger..ctor()
 ToolUp.ArtefactSigning.EmptySigningKeyLedgerModule (class)
@@ -193,7 +193,7 @@ ToolUp.ArtefactSigning.PayloadVerificationError+Tags.SignatureRejected : System.
 ToolUp.ArtefactSigning.PayloadVerificationErrorModule (class)
 ToolUp.ArtefactSigning.PayloadVerificationErrorModule.describe(ToolUp.ArtefactSigning.PayloadVerificationError) : System.String
 ToolUp.ArtefactSigning.PromotedArtifactBundle (class)
-ToolUp.ArtefactSigning.PromotedArtifactBundle.adapter(ToolUp.ArtefactSigning.IArtefactSigner) : ToolUp.Platform.IPromotedArtifactSigner
+ToolUp.ArtefactSigning.PromotedArtifactBundle.adapter(ToolUp.ArtefactSigning.IArtefactSigner) : ToolUp.Platform.Infra.IPromotedArtifactSigner
 ToolUp.ArtefactSigning.PromotedArtifactBundle.register(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.ArtefactSigning.IArtefactSigner) : Microsoft.Extensions.DependencyInjection.IServiceCollection
 ToolUp.ArtefactSigning.PublicKeyMetadata (class)
 ToolUp.ArtefactSigning.PublicKeyMetadata..ctor(System.String, ToolUp.ArtefactSigning.SigningAlgorithm, System.String, System.String)
@@ -207,7 +207,7 @@ ToolUp.ArtefactSigning.SecretStoreSigningKeyLedger.LedgerKey : System.String { g
 ToolUp.ArtefactSigning.SecretStoreSigningKeyLedgerModule (class)
 ToolUp.ArtefactSigning.SecretStoreSigningKeyLedgerModule.create(ToolUp.Platform.Secrets+ISecretStore) : ToolUp.ArtefactSigning.ISigningKeyLedger
 ToolUp.ArtefactSigning.SignedExportBundle (class)
-ToolUp.ArtefactSigning.SignedExportBundle.adapter(ToolUp.ArtefactSigning.IArtefactSigner) : ToolUp.Platform.IExportEnvelopeSigner
+ToolUp.ArtefactSigning.SignedExportBundle.adapter(ToolUp.ArtefactSigning.IArtefactSigner) : ToolUp.Platform.Audit.IExportEnvelopeSigner
 ToolUp.ArtefactSigning.SignedExportBundle.register(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.ArtefactSigning.IArtefactSigner) : Microsoft.Extensions.DependencyInjection.IServiceCollection
 ToolUp.ArtefactSigning.SignedPayloadEnvelope (class)
 ToolUp.ArtefactSigning.SignedPayloadEnvelope..ctor(System.String, ToolUp.ArtefactSigning.AttestationLevel, ToolUp.ArtefactSigning.ArtefactSignature)

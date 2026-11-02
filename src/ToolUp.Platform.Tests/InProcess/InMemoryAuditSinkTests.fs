@@ -3,6 +3,7 @@ module ToolUp.Platform.Tests.InProcess.InMemoryAuditSinkTests
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Audit
 
 /// Phase 9g — bind `IAuditSinkContract` to the SDK's in-process test
 /// double. The contract pack proves the cross-cutting properties

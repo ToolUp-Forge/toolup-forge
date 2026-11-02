@@ -13,6 +13,7 @@ open Microsoft.Extensions.Primitives
 open Amazon.Lambda.APIGatewayEvents
 open Amazon.Lambda.ApplicationLoadBalancerEvents
 open ToolUp.Platform
+open ToolUp.Platform.Compose
 
 // ─── ToolUp.Hosts.AwsLambda — AWS Lambda adapter ─────────────────────
 //
@@ -51,10 +52,10 @@ open ToolUp.Platform
 //                 Mode = Anonymous
 //                 ServerlessHost = ServerlessHost
 //                 JobScheduler = NoJobScheduler
-//                 Webhooks = NoWebhooks
+//                 Webhooks = FeatureMode.Disabled
 //                 Notifications = NoNotificationsExplicit
-//                 AuditLog = NoAuditLog
-//                 UsageMetering = NoUsageMetering
+//                 AuditLog = FeatureMode.Disabled
+//                 UsageMetering = FeatureMode.Disabled
 //                 HealthStateTracking = false
 //         }
 //         |> ServerApp.addModule (myModule.register ())

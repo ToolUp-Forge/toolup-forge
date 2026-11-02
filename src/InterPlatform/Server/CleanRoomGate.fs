@@ -6,6 +6,7 @@ namespace ToolUp.InterPlatform
 open System
 open System.Runtime.ExceptionServices
 open ToolUp.Platform
+open ToolUp.Platform.Compose
 
 // ─── Phase 311 — the structurally-enforced clean-room gate ───────────
 //
@@ -24,7 +25,7 @@ open ToolUp.Platform
 // `PeerContractRegistration` — whose `Dispatch` closure is the ONLY
 // route from a handler's answer to the wire, because `IPlatformPeer`
 // holds nothing else — and returns a replacement whose dispatch runs the
-// gate over the result. `PeerServerApp.withCleanRoomTemplate` applies it
+// gate over the result. `PeerOptions.withCleanRoomTemplate` applies it
 // at compose time. The handler is not consulted and cannot opt out: the
 // gate is not a call it makes, it is the pipe its answer travels down.
 //
@@ -104,7 +105,7 @@ open ToolUp.Platform
 // ── Cost when unused (GP 13) ──
 //
 // A composition that never calls `withCleanRoomTemplate` never reaches
-// this file: `PeerCompose.run` wraps nothing, registers the same
+// this file: `PeerCompose.withPeer` wraps nothing, registers the same
 // `PeerContractRegistration` values it registered before, and an
 // ungated contract's dispatch is byte-for-byte the closure Phase 18
 // built. There is no middleware, no allocation, and no per-call branch
@@ -374,7 +375,7 @@ module CleanRoomGate =
                                             (decision
                                                 false
                                                 suppressedCells
-                                                $"the resolved ICleanRoomBroker returned an already-noised answer for template '{template.TemplateId}', which the substrate cannot check its floor against; compose an INoiseMechanism with PeerServerApp.withNoisedRelease instead")
+                                                $"the resolved ICleanRoomBroker returned an already-noised answer for template '{template.TemplateId}', which the substrate cannot check its floor against; compose an INoiseMechanism with PeerOptions.withNoisedRelease instead")
 
                                     return withheld template
                                 | Released(released, suppressedCells) ->

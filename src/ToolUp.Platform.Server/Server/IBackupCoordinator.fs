@@ -45,7 +45,10 @@
 /// and the default placement is `SideBySide` — every blob lands under a
 /// fresh `_restore/{restoreId}/` prefix in its own container, to be
 /// `Promote`d into place (or `DiscardStaged`) as a separate act.
-module ToolUp.Platform.Backup
+module ToolUp.Platform.Compose.Backup
+
+open ToolUp.Platform
+open ToolUp.Platform.Infra
 
 open System
 open ToolUp.Platform.BlobStorage

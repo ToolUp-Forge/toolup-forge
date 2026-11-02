@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-namespace ToolUp.Platform
+namespace ToolUp.Platform.Infra
+
+open ToolUp.Platform
 
 open System
 open System.Security.Cryptography
@@ -492,6 +494,23 @@ module ModelArtifact =
     /// The artifact's addressable id within its scope — the composite-key
     /// hash (plan D5). Every query + `Get` + `TransitionStatus` keys on this.
     let id (artifact: ModelArtifact) : string = artifact.CompositeKey.Hash
+
+    /// The fit that produced the artifact, as the plane's one run envelope, in
+    /// the scope the reader resolved — refused unless that scope is the shard
+    /// it is stored under. Its id is `RunRecord.id ModelFit [compositeKeyHash]`;
+    /// its result is the artifact's content hash.
+    let toRunRecord (scope: ResolvedScope) (artifact: ModelArtifact) : Result<RunRecord, string> =
+        RunRecord.inScope scope artifact.ScopeId
+        |> Result.map (fun scope -> {
+            Id = RunRecord.id RunKind.ModelFit [ artifact.CompositeKey.Hash ]
+            Kind = RunKind.ModelFit
+            Scope = scope
+            Subject = artifact.CompositeKey.SpecHash
+            StartedAt = artifact.RegisteredAt.UtcDateTime
+            Options = RunOptions.empty
+            Provenance = RunProvenance.Computed
+            Outcome = RunOutcome.Succeeded artifact.ArtifactRef.ContentHash
+        })
 
 /// Typed failures from `IModelRegistry`. A closed DU so callers pattern-match
 /// on cases rather than parse messages (mirrors `DataObjectError` /

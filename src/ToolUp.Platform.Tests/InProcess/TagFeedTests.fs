@@ -98,8 +98,8 @@ let tests =
 
         test "withTagFeed registers a feed with the tag set" {
             let app =
-                PublicRenderingServerApp.create ()
-                |> PublicRenderingServerApp.withTagFeed "news" {
+                PublicRenderingOptions.create ()
+                |> PublicRenderingOptions.withTagFeed "news" {
                     cfg with
                         SelfUrl = "/tag/news/feed.atom"
                 }
@@ -110,8 +110,8 @@ let tests =
 
         test "withTagFeeds fans out one feed per tag at /tag/{x}/feed.atom" {
             let app =
-                PublicRenderingServerApp.create ()
-                |> PublicRenderingServerApp.withTagFeeds "Topics" cfg [ "news"; "events" ]
+                PublicRenderingOptions.create ()
+                |> PublicRenderingOptions.withTagFeeds "Topics" cfg [ "news"; "events" ]
 
             let urls = app.Feeds |> List.map _.SelfUrl |> List.sort
             Expect.equal urls [ "/tag/events/feed.atom"; "/tag/news/feed.atom" ] "one feed per tag"

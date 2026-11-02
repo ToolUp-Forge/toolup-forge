@@ -4,11 +4,11 @@
 # removal is breaking and must be reviewed; an addition is non-breaking but must
 # still be folded into this file in the same PR.
 ToolUp.RAG.VectorStores.Hnsw.Health (class)
-ToolUp.RAG.VectorStores.Hnsw.Health.create(ToolUp.Platform.IVectorStore+IVectorStore) : ToolUp.Platform.HealthChecks+IHealthCheck
+ToolUp.RAG.VectorStores.Hnsw.Health.create(ToolUp.Platform.Infra.IVectorStore+IVectorStore) : ToolUp.Platform.HealthChecks+IHealthCheck
 ToolUp.RAG.VectorStores.Hnsw.Health+HnswVectorStoreHealthCheck (class)
-ToolUp.RAG.VectorStores.Hnsw.Health+HnswVectorStoreHealthCheck..ctor(ToolUp.Platform.IVectorStore+IVectorStore)
+ToolUp.RAG.VectorStores.Hnsw.Health+HnswVectorStoreHealthCheck..ctor(ToolUp.Platform.Infra.IVectorStore+IVectorStore)
 ToolUp.RAG.VectorStores.Hnsw.HnswVectorStore (class)
-ToolUp.RAG.VectorStores.Hnsw.HnswVectorStore.create(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger]) : ToolUp.Platform.IVectorStore+IVectorStore
+ToolUp.RAG.VectorStores.Hnsw.HnswVectorStore.create(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger]) : ToolUp.Platform.Infra.IVectorStore+IVectorStore
 ToolUp.RAG.VectorStores.Hnsw.HnswVectorStore+HnswParameters (class)
 ToolUp.RAG.VectorStores.Hnsw.HnswVectorStore+HnswParameters..ctor(System.Int32, System.Double, System.Int32, HNSW.Net.NeighbourSelectionHeuristic, System.Boolean, System.Boolean, System.Int32, System.Double)
 ToolUp.RAG.VectorStores.Hnsw.HnswVectorStore+HnswParameters.ConstructionPruning : System.Int32 { get }

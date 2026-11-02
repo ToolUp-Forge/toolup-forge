@@ -375,7 +375,7 @@ module ShellSlots =
 
     /// Phase 54e — registered unconditionally; the "Platform Management"
     /// group's role gate hides it from non-admins, and on
-    /// `NoTenantLifecycle` its API 404s and the panel shows its empty
+    /// `FeatureMode.Disabled` its API 404s and the panel shows its empty
     /// state (GP 13).
     let private tenantLifecycleAdmin (_: ShellSlotContext) = [ TenantLifecycleAdminUI.create () ]
 

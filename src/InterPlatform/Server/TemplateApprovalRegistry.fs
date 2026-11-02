@@ -10,6 +10,11 @@ open ToolUp.Platform
 open ToolUp.Platform.Auth
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Secrets
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Config.Auth
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 480 — bilateral clean-room template approval ──────────────
 //
@@ -90,7 +95,7 @@ open ToolUp.Platform.Secrets
 //
 // ── Cost when unused (GP 11 / GP 13) ──
 //
-// A composition that never calls `PeerServerApp.withTemplateApprovals`
+// A composition that never calls `PeerOptions.withTemplateApprovals`
 // passes `None` to `wrapApproved`, which is exactly the pre-480
 // `CleanRoomGate.wrap` path: no registry read, no blob access, no
 // contract registered, no allocation. A gated contract behaves
@@ -718,7 +723,7 @@ type BlobTemplateApprovalRegistry(blobs: IBlobStorage, signer: ITemplateApproval
 
 /// A composed approval posture: the registry plus the clock-skew
 /// tolerance its validity windows are read under. A record rather than
-/// two compose fields, so `PeerServerApp` gains exactly one registration
+/// two compose fields, so `PeerOptions` gains exactly one registration
 /// surface and the two values cannot be set apart from one another.
 type TemplateApprovalPolicy = {
     Registry: ITemplateApprovalRegistry

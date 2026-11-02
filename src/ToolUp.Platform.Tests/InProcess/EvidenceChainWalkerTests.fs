@@ -9,6 +9,9 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.DeploymentVerification
 open ToolUp.Platform.Tests.InProcess.BuildTranscriptTests
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 713 — the join, with every break reported as data ─────────
 //

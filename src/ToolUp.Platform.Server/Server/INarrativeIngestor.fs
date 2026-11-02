@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-namespace ToolUp.Platform
+namespace ToolUp.Platform.Infra
+
+open ToolUp.Platform
 
 open ToolUp.Platform.Narrative
 
@@ -79,11 +81,13 @@ type INarrativeIngestor =
     /// differently, and one that keyed identically and accumulated
     /// would grow the corpus without bound.
     ///
-    /// `scope` is the caller's ALREADY-RESOLVED storage scope. An
-    /// implementation never mints a container from a scope id (see the
-    /// scope-container contract on `IBlobStorage`) — it is handed one.
+    /// `scope` is the caller's ALREADY-RESOLVED scope — the value the
+    /// platform's scope resolution minted, whose `Storage` names the
+    /// container. An implementation never mints a container from a scope id
+    /// (see the scope-container contract on `IBlobStorage`) — it is handed
+    /// one, and the anonymous scope commits nothing.
     ///
     /// A document with no `Provenance` is refused, exactly as the
     /// interactive path refuses it.
     abstract Ingest:
-        scope: StorageScope * principal: string * document: NarrativeDocument -> Async<NarrativeIngestOutcome>
+        scope: ResolvedScope * principal: string * document: NarrativeDocument -> Async<NarrativeIngestOutcome>

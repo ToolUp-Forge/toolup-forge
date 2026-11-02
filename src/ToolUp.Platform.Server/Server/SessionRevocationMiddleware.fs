@@ -1,19 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.SessionRevocation
+module ToolUp.Platform.Scope.SessionRevocation
 
 open System
 open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.Caching.Memory
 open ToolUp.Platform
 open ToolUp.Platform.Auth
+open ToolUp.Platform.Config
 
 // ─── Phase 528 — SessionRevocationMiddleware ─────────────────────────
 //
 // Refuses a revoked session before dispatch, and records / touches a
 // live one on the way through. Registered ONLY when
-// `ServerConfig.SessionRegistry` selects a backend, so the default
+// `ServerConfig.Stores.SessionRegistry` selects a backend, so the default
 // deployment does not pay even a delegate hop (GP 13); the mode check in
 // `InvokeAsync` is a second, defensive line for a consumer that
 // registers the middleware by hand.
@@ -123,7 +124,7 @@ let private cacheKey (scopeId: string) (sessionId: string) =
 /// the page that tells them why.
 type SessionRevocationMiddleware(next: RequestDelegate, config: ServerConfig) =
 
-    let optionsOpt = SessionRegistryMode.options config.SessionRegistry
+    let optionsOpt = SessionRegistryMode.options config.Stores.SessionRegistry
 
     /// A revoked verdict is held far longer than an active one — see the
     /// module header. Bounded rather than infinite so a long-lived

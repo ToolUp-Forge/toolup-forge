@@ -28,6 +28,8 @@ open System.Text.RegularExpressions
 open Expecto
 open ToolUp.Facts
 open ToolUp.Platform.Grounding
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
 
 let private metric (unitCode: string) (dimensionality: string) (format: string) : MetricDefinition = {
     Id = "revenue"

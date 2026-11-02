@@ -25,10 +25,14 @@ open Microsoft.Extensions.Hosting
 open Microsoft.Extensions.Logging
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.DataObjectStore
+open ToolUp.Platform.Infra.DataObjectStore
 open ToolUp.Platform.ExternalCompute.Http
 open ToolUp.Platform.Secrets
-open ToolUp.Platform.Server
+open ToolUp.Platform.Compose.Server
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 450 — the external model-fit binding ──────────────────────────
 //
@@ -1293,7 +1297,7 @@ let private compositionTests =
 
             ComposeStores.registerExternalCompute services {
                 ServerConfig.defaults with
-                    ExternalCompute = NoExternalCompute
+                    ExternalCompute = FeatureMode.Disabled
             }
 
             use provider = services.BuildServiceProvider()

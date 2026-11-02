@@ -12,33 +12,29 @@ open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
 open Giraffe
 open ToolUp.Platform
-open ToolUp.Platform.TeamManagement
-open ToolUp.Platform.PermissionStore
+open ToolUp.Platform.Config.TeamManagement
+open ToolUp.Platform.Scope.PermissionStore
 open ToolUp.Platform.Secrets
 open ToolUp.AuthProviders.ScimTypes
 open ToolUp.AuthProviders.ScimHandler
+open ToolUp.Platform.Compose
 
 // ─── SCIM 2.0 endpoint host ──────────────────────────────────────────
 //
 // The Giraffe surface over `ScimHandler`, plus the companion
-// composition root. Nothing semantic lives here — this file resolves
+// entry point. Nothing semantic lives here — this file resolves
 // substrate from DI, gates the bearer token, parses the query surface,
 // and marshals `Result<_, ScimError>` onto HTTP.
 //
-// **Opt-in (GP 13).** `ScimServerApp.create` starts at `NoScim`, and
-// `run` on a `NoScim` app is `ServerApp.run app.Base` with an
-// untouched `ComposeExtensions` — no handler is appended, no DI
-// singleton is registered, no allocation is made. A deployment that
-// does not call `withScim` is byte-for-byte the deployment it was
-// before this companion existed.
+// **Opt-in (GP 13).** A deployment that never calls `withScim` mounts no
+// handler, registers no DI singleton and makes no allocation: it is
+// byte-for-byte the deployment it was before this companion existed.
 //
-// The mode lives on THIS record rather than on `ServerConfig`
+// The opt-in is the `withScim` call rather than a `ServerConfig` field
 // deliberately: `ServerConfig` is `ToolUp.Platform.Core` surface, and
 // widening it to name a companion would put SCIM into the dependency
 // graph of every consumer that has never heard of it — the inverse of
-// GP 1. `PeerCompose` reads its mode from `ServerConfig` because the
-// peer substrate is composed by the SDK's own strip-imports gate;
-// nothing in the SDK needs to know whether SCIM is mounted.
+// GP 1.
 
 [<Literal>]
 let ScimContentType = "application/scim+json; charset=utf-8"
@@ -511,44 +507,25 @@ let routes (config: ScimConfig) : HttpHandler =
             }))
     ]
 
-// ─── Composition root ────────────────────────────────────────────────
+// ─── The SCIM companion: `withScim` ──────────────────────────────────
 
-/// Whether this deployment mounts the SCIM endpoint. `NoScim` is the
-/// default and contributes nothing (GP 13).
-type ScimMode =
-    | NoScim
-    | EnabledScim of ScimConfig
+/// The SCIM companion's identity: the slot `withScim` composes under and
+/// the owner of its routes.
+let scimCompanion: ComponentId =
+    ComponentId.forCompanionSlot "ToolUp.AuthProviders.Scim"
 
-/// Companion composition root, in the shape `PeerServerApp` /
-/// `RAGServerApp` take: wrap a base `ServerApp`, mount when enabled,
-/// short-circuit to the base otherwise.
-type ScimServerApp = { Base: ServerApp; Mode: ScimMode }
-
-module ScimServerApp =
-
-    let create () : ScimServerApp = {
-        Base = ServerApp.empty
-        Mode = NoScim
-    }
-
-    /// Wrap an already-composed `ServerApp`.
-    let ofServerApp (app: ServerApp) : ScimServerApp = { Base = app; Mode = NoScim }
-
-    /// Mount the SCIM endpoint for one team.
-    let withScim (config: ScimConfig) (app: ScimServerApp) : ScimServerApp = { app with Mode = EnabledScim config }
-
-    /// Compose and run. On `NoScim` this is `ServerApp.run app.Base`
-    /// with an untouched `ComposeExtensions` — the whole point of the
-    /// mode (GP 13).
-    let run (app: ScimServerApp) : int =
-        match app.Mode with
-        | NoScim -> ServerApp.run app.Base
-        | EnabledScim config ->
-            let baseExt = app.Base.Extensions
-
-            let merged: ComposeExtensions = {
-                baseExt with
-                    Handlers = baseExt.Handlers @ [ routes config ]
-            }
-
-            ServerApp.run { app.Base with Extensions = merged }
+/// **Sets** the SCIM companion: the endpoint for the one team `config`
+/// binds is contributed once, when the deployment resolves, so every
+/// `ServerApp` builder works on either side of this call. A second call
+/// replaces the first. A deployment that never calls it mounts nothing
+/// (GP 13).
+///
+///     ServerApp.empty
+///     |> ServerApp.withConfig config
+///     |> ScimRoutes.withScim scimConfig
+///     |> ServerApp.run
+let withScim (config: ScimConfig) (app: ServerApp) : ServerApp =
+    app
+    |> ServerApp.withCompanion
+        scimCompanion
+        (ServerApp.addContribution (Contribution.routes scimCompanion [ routes config ]))

@@ -7,7 +7,9 @@
 // says so with a warning; no client ever holds an `IBlobStorage` to probe.
 // It compiles here now, in the tier that calls it. The seam's types stay in
 // Core; F# resolves a name under `BlobStorage` across both modules.
-module ToolUp.Platform.BlobStorage
+module ToolUp.Platform.Infra.BlobStorage
+
+open ToolUp.Platform
 
 open System
 

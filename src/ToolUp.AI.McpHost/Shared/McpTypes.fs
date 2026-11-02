@@ -5,6 +5,8 @@ namespace ToolUp.AI.McpHost
 
 open System
 open ToolUp.Platform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Phase 489 — agent principals + the MCP wire vocabulary ──────────
 //

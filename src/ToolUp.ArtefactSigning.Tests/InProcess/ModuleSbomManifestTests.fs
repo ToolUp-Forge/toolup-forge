@@ -8,6 +8,7 @@ open System.Security.Cryptography
 open Expecto
 open ToolUp.Platform
 open ToolUp.ArtefactSigning
+open ToolUp.Platform.Compose
 
 // ─── Phase 216 — module SBOM inside the stamp manifest ───────────────────
 //

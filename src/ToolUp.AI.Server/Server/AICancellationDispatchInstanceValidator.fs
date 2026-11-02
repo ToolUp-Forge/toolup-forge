@@ -3,6 +3,7 @@ module ToolUp.AI.AICancellationDispatchInstanceValidator
 open System
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Config
 
 // ─── Multi-instance + in-process cancel / client-tool dispatch ──────
 //
@@ -36,22 +37,22 @@ type AICancellationDispatchInstanceValidator(config: ServerConfig, ?timeout: Tim
         member _.Timeout = timeout
 
         member _.Validate() = async {
-            let multiInstance = config.ReplicaCount > 1
-            let attested = config.AcceptStickyRoutedAiInMultiInstance
+            let multiInstance = config.MultiInstance.ReplicaCount > 1
+            let attested = config.RiskAcknowledgements.AcceptStickyRoutedAiInMultiInstance
 
             if multiInstance && not attested then
                 return
                     Error(
                         sprintf
-                            "AI is composed with ReplicaCount = %d, but AICancellationRegistry and ClientToolDispatchRegistry are per-process singletons with no cross-instance routing. A cancel POST or a client-tool-result POST that lands on a replica other than the one running the agent loop 404s — the Cancel button silently does nothing (agent keeps spending) and client-tool round-trips hang until the agent-loop timeout. Run a single AI replica, or set ServerConfig.AcceptStickyRoutedAiInMultiInstance = true (TOOLUP_ACCEPT_STICKY_ROUTED_AI_MULTI_INSTANCE=1) to attest that a sticky-session load balancer pins cancel/result to the owning replica. A distributed registry is a roadmap item. Verify in the HealthMonitorUI admin tab or /dev/inspect Validators panel."
-                            config.ReplicaCount
+                            "AI is composed with ReplicaCount = %d, but AICancellationRegistry and ClientToolDispatchRegistry are per-process singletons with no cross-instance routing. A cancel POST or a client-tool-result POST that lands on a replica other than the one running the agent loop 404s — the Cancel button silently does nothing (agent keeps spending) and client-tool round-trips hang until the agent-loop timeout. Run a single AI replica, or set ServerConfig.RiskAcknowledgements.AcceptStickyRoutedAiInMultiInstance = true (TOOLUP_ACCEPT_STICKY_ROUTED_AI_MULTI_INSTANCE=1) to attest that a sticky-session load balancer pins cancel/result to the owning replica. A distributed registry is a roadmap item. Verify in the HealthMonitorUI admin tab or /dev/inspect Validators panel."
+                            config.MultiInstance.ReplicaCount
                     )
             elif multiInstance && attested then
                 return
                     Warning(
                         sprintf
                             "AI ReplicaCount = %d with in-process cancel/dispatch registries; sticky-routing attested (AcceptStickyRoutedAiInMultiInstance = true). Residual risk if the LB drops affinity mid-loop: a cancel/result reaching a non-owning replica 404s. A distributed registry is a roadmap item."
-                            config.ReplicaCount
+                            config.MultiInstance.ReplicaCount
                     )
             else
                 return Ok

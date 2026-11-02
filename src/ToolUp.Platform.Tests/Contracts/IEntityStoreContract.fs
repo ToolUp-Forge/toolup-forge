@@ -4,7 +4,8 @@ open System
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.EntityTypes
-open ToolUp.Platform.IEntityStore
+open ToolUp.Platform.Infra.IEntityStore
+open ToolUp.Platform.Infra
 
 // ─── Phase 19 IEntityStore contract tests ───────────────────────────
 //
@@ -326,7 +327,7 @@ let tests (name: string) (factory: unit -> IEntityStore * EntityStore.EntityRegi
             let! stale = store.SaveIfVersion<TestEntity>(scopeA, actor, { entity with Status = "stale-edit" }, 1)
 
             match stale with
-            | Result.Error(VersionConflict(t, id, expected, actual)) ->
+            | Result.Error(EntityError.VersionConflict(t, id, expected, actual)) ->
                 Expect.equal t TestEntityType "entity type named"
                 Expect.equal id "cas-2" "entity id named"
                 Expect.equal expected 1 "the expectation the caller stated"
@@ -364,7 +365,7 @@ let tests (name: string) (factory: unit -> IEntityStore * EntityStore.EntityRegi
             let! second = store.SaveIfVersion<TestEntity>(scopeA, actor, { entity with Owner = "bob" }, 0)
 
             match second with
-            | Result.Error(VersionConflict(_, _, 0, 1)) -> ()
+            | Result.Error(EntityError.VersionConflict(_, _, 0, 1)) -> ()
             | other -> failwithf "expected VersionConflict(0, 1), got %A" other
 
             let! head = store.Get<TestEntity>(scopeA, TestEntityType, "cas-3")
@@ -431,7 +432,7 @@ let tests (name: string) (factory: unit -> IEntityStore * EntityStore.EntityRegi
                 let conflicts =
                     outcomes
                     |> Array.choose (function
-                        | Result.Error(VersionConflict(_, _, e, a)) -> Some(e, a)
+                        | Result.Error(EntityError.VersionConflict(_, _, e, a)) -> Some(e, a)
                         | _ -> None)
 
                 Expect.equal wins.Length 1 (sprintf "round %d: exactly one racer wins" round)
@@ -473,7 +474,7 @@ let tests (name: string) (factory: unit -> IEntityStore * EntityStore.EntityRegi
             let! stale = store.DeleteIfVersion(scopeA, actor, TestEntityType, "cas-del", 1)
 
             match stale with
-            | Result.Error(VersionConflict(_, _, 1, 2)) -> ()
+            | Result.Error(EntityError.VersionConflict(_, _, 1, 2)) -> ()
             | other -> failwithf "expected VersionConflict(1, 2), got %A" other
 
             let! stillThere = store.Get<TestEntity>(scopeA, TestEntityType, "cas-del")
@@ -498,7 +499,7 @@ let tests (name: string) (factory: unit -> IEntityStore * EntityStore.EntityRegi
             let! wrong = store.DeleteIfVersion(scopeA, actor, TestEntityType, "never-existed-cas", 3)
 
             match wrong with
-            | Result.Error(VersionConflict(_, _, 3, 0)) -> ()
+            | Result.Error(EntityError.VersionConflict(_, _, 3, 0)) -> ()
             | other -> failwithf "expected VersionConflict(3, 0), got %A" other
         }
     ]

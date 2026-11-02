@@ -25,6 +25,9 @@ open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Transport
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 type LineageStoreDownException(message: string) =
     inherit Exception(message)
@@ -420,13 +423,21 @@ let private switchOff =
         }
 
         test "the default is off, and withDurableLineage is the switch" {
-            Expect.equal ServerConfig.defaults.LineageDurability NoDurableLineage "default off"
+            Expect.equal ServerConfig.defaults.LineageDurability FeatureMode.Disabled "default off"
 
-            let config = (ServerApp.empty |> ServerApp.withDurableLineage true).Config
-            Expect.equal config.LineageDurability EnabledDurableLineage "the builder enables it"
+            let config =
+                ServerApp.empty
+                |> ServerApp.withDurableLineage true
+                |> ServerApp.effectiveConfig
 
-            let config = (ServerApp.empty |> ServerApp.withDurableLineage false).Config
-            Expect.equal config.LineageDurability NoDurableLineage "and disables it"
+            Expect.equal config.LineageDurability FeatureMode.Enabled "the builder enables it"
+
+            let config =
+                ServerApp.empty
+                |> ServerApp.withDurableLineage false
+                |> ServerApp.effectiveConfig
+
+            Expect.equal config.LineageDurability FeatureMode.Disabled "and disables it"
         }
 
         test "compose builds a lineage outbox only when it is enabled with the lineage and result stores" {
@@ -443,8 +454,11 @@ let private switchOff =
 
             let full = {
                 ServerConfig.defaults with
-                    Lineage = EnabledLineageStore
-                    ResultStore = PersistentResultStore
+                    Lineage = FeatureMode.Enabled
+                    Stores = {
+                        ServerConfig.defaults.Stores with
+                            ResultStore = PersistentResultStore
+                    }
             }
 
             Expect.isNone (build full) "off by default: no outbox"
@@ -452,15 +466,15 @@ let private switchOff =
             Expect.isSome
                 (build {
                     full with
-                        LineageDurability = EnabledDurableLineage
+                        LineageDurability = FeatureMode.Enabled
                 })
                 "on: an outbox"
 
             Expect.isNone
                 (build {
                     full with
-                        LineageDurability = EnabledDurableLineage
-                        Lineage = NoLineageStore
+                        LineageDurability = FeatureMode.Enabled
+                        Lineage = FeatureMode.Disabled
                 })
                 "on without the lineage store: none"
 

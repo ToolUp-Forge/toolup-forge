@@ -10,7 +10,10 @@ open System.Text.Json
 open Npgsql
 open ToolUp.Platform
 open ToolUp.Platform.VectorKnowledgeTypes
-open ToolUp.Platform.IVectorStore
+open ToolUp.Platform.Infra.IVectorStore
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 507 — PostgreSQL + pgvector IVectorStore ──────────────────
 //
@@ -904,11 +907,8 @@ type PgvectorVectorStore
     // metadata. A compliance deployment would rather stop than answer
     // from a corpus it cannot fully read.
     let refuseOnCorruption =
-        match Environment.GetEnvironmentVariable ConfigKeys.Names.ragRefuseOnIndexCorruption with
-        | "1"
-        | "true"
-        | "TRUE" -> true
-        | _ -> false
+        let key = ConfigKeys.key ConfigKeys.Names.ragRefuseOnIndexCorruption
+        ConfigKeys.ConfigKey.readPermissiveBool key (Environment.GetEnvironmentVariable key.EnvVar |> Option.ofObj)
 
     let sqlUpsert = Sql.upsert options
     let sqlUpsertBatch = Sql.upsertBatch options
@@ -1290,7 +1290,7 @@ type PgvectorVectorStore
         }
 
         member this.Erase(scope, subjectUserId, policy, dryRun) =
-            ToolUp.Platform.IVectorStore.eraseSubject (this :> IVectorStore) scope subjectUserId policy dryRun
+            ToolUp.Platform.Infra.IVectorStore.eraseSubject (this :> IVectorStore) scope subjectUserId policy dryRun
 
     // Phase 892 — one `INSERT … SELECT … FROM unnest(…)` per batch, the
     // vectors bound as one binary `real[]`. The statement count is one for

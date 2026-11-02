@@ -8,7 +8,7 @@ module ToolUp.Platform.Tests.InProcess.SampleClientToolDispatchTests
 // Two responsibilities in one file:
 //
 //   1. Compose-shape checks — `Compose.register` appends the sample's
-//      `_sample.calc` tool to `AIServerApp.Base.AITools`;
+//      `_sample.calc` tool to the deployment's `AITools`;
 //      `Compose.registerWithPolicy` additionally wires the
 //      operator-supplied `IClientToolAuthorizer` into the composition
 //      root's `ServiceConfig`.
@@ -35,12 +35,15 @@ open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.AI
 open ToolUp.Platform.Providers
-open ToolUp.Platform.Server
+open ToolUp.Platform.Compose.Server
 open ToolUp.AI
 open ToolUp.AI.AICompose
 open ToolUp.AI.SampleClientTool
 open ToolUp.AI.SampleClientTool.Server
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Stub provider factory + profile (compose-only; never invoked) ───
 
@@ -63,10 +66,10 @@ type private StubProviderProfile() =
         member _.ResolveEntry(_, _, _) = async { return None }
         member _.SetEntryHealth(_, _, _) = async { return Ok() }
 
-let private buildBaseApp () : AIServerApp =
+let private buildBaseApp () : ServerApp =
     let factory = StubProviderFactory() :> IAIProviderFactory
     let profile = StubProviderProfile() :> IProviderProfile
-    AIServerApp.create factory profile
+    ServerApp.empty |> withAI (AIOptions.create factory profile)
 
 // ─── Authorizer for the contract-pack binding ────────────────────────
 
@@ -81,7 +84,7 @@ type private SampleTestAuthorizer(denyTool: string) =
             if toolName = denyTool then
                 Deny $"sample-test policy denied '{toolName}'"
             else
-                Allow
+                ClientToolAuthDecision.Allow
 
 // ─── Calculator simulator (mimics the Fable SampleHandler) ───────────
 
@@ -109,11 +112,11 @@ let private composeShapeTests =
     testList "Phase 46.B — sample compose shape" [
         test "register appends _sample.calc with Location = ClientResident" {
             let app = buildBaseApp () |> Compose.register
-            let toolNames = app.Base.AITools |> List.map (fun (def, _) -> def.Name)
+            let toolNames = app.AITools |> List.map (fun (def, _) -> def.Name)
             Expect.contains toolNames SampleCalcToolName "sample tool must land in AITools"
 
             let def =
-                app.Base.AITools
+                app.AITools
                 |> List.tryFind (fun (d, _) -> d.Name = SampleCalcToolName)
                 |> Option.map fst
 
@@ -138,7 +141,7 @@ let private composeShapeTests =
             // on our authorizer.
             let services = ServiceCollection() :> IServiceCollection
 
-            match ServerApp.serviceConfig app.Base with
+            match ServerApp.serviceConfig app with
             | None -> failtest "Compose.registerWithPolicy must install a ServiceConfig delegate"
             | Some configure -> configure services |> ignore
 
@@ -152,7 +155,7 @@ let private composeShapeTests =
             let decision = resolved.Authorize("denied.tool", "{}", Some "AnyModule", None)
 
             match decision with
-            | Allow -> failtest "resolved authorizer must enforce its policy"
+            | ClientToolAuthDecision.Allow -> failtest "resolved authorizer must enforce its policy"
             | Deny _ -> ()
         }
     ]

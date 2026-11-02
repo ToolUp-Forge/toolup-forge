@@ -56,11 +56,11 @@ open ToolUp.Scheduling.SchedulingCompose
 let settings = CalDAVSettings.fromEnv ()
 let bridge = CalDAVCalendarBridge(secretStore, settings)
 
-SchedulingServerApp.create ()
-|> SchedulingServerApp.withConfig config
-|> SchedulingServerApp.withCalendarBridge bridge
-|> SchedulingServerApp.withHealthCheck (CalDAVCalendarBridgeHealth(secretStore, settings, "_platform"))
-|> SchedulingServerApp.run
+ServerApp.empty
+|> ServerApp.withConfig config
+|> withScheduling (SchedulingOptions.create () |> SchedulingOptions.withCalendarBridge bridge)
+|> ServerApp.withHealthCheck (CalDAVCalendarBridgeHealth(secretStore, settings, "_platform"))
+|> ServerApp.run
 ```
 
 `withCalendarBridge` is what turns calendar sync on. A deployment that never calls it

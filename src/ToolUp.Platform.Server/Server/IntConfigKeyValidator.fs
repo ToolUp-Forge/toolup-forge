@@ -1,4 +1,4 @@
-module ToolUp.Platform.IntConfigKeyValidator
+module ToolUp.Platform.Config.IntConfigKeyValidator
 
 open System
 open ToolUp.Platform

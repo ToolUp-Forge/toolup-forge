@@ -25,6 +25,7 @@ open ToolUp.DataSources.Sql
 open ToolUp.DataSources.Synapse
 open ToolUp.DataSources.Tests.Support
 open DataManagementTypes
+open ToolUp.Platform.Infra
 
 module CsvWire = ToolUp.DataSources.Common.Csv
 

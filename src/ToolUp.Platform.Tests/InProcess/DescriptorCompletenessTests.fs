@@ -4,6 +4,9 @@ open Expecto
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
 open ToolUp.Platform.FileProcessor
+open ToolUp.Platform.Config
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 295 — descriptor completeness round-trip + partial/preset ──
 //

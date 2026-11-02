@@ -95,9 +95,9 @@
     {
       "Family": "scale-readiness",
       "Rule": "scale-readiness-intent-unsatisfiable",
-      "Version": "1.0.0",
+      "Version": "1.0.1",
       "Severity": "error",
-      "RuleDescription": "A deployment declaring more than one instance (ServerConfig.ReplicaCount > 1) or a serverless host profile (ServerConfig.ServerlessHost = ServerlessHost) must compose only components declaring Readiness = DistributedReady, with every declared distributed prerequisite composed."
+      "RuleDescription": "A deployment declaring more than one instance (ServerConfig.MultiInstance.ReplicaCount > 1) or a serverless host profile (ServerConfig.ServerlessHost = ServerlessHost) must compose only components declaring Readiness = DistributedReady, with every declared distributed prerequisite composed."
     },
     {
       "Family": "appliance-boot-posture",

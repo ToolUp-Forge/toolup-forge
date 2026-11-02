@@ -152,6 +152,25 @@ module AIFieldDescriptor =
             |> Option.map snd
             |> Option.defaultValue trimmed
 
+/// One module/page surface's declared fields, as a composition root
+/// states them. This is the FILL shape of a registry that is populated
+/// rather than hand-written: the root builds one per surface from
+/// whatever it exports about that surface's controls (an id, a
+/// description, a value type, instruction patterns, accepted value
+/// spellings — each an `AIFieldDescriptor` member), so nothing beyond
+/// the descriptor itself is needed from the producer of that export.
+/// Plain strings, lists and options: no live handles, no behaviour.
+type AIDeclaredSurface = {
+    /// The active module's `ModuleDefinition.Id`.
+    ModuleId: string
+    /// The sidebar page route within that module; `None` for a
+    /// single-page module. Not a wildcard — what is declared for one
+    /// page says nothing about another.
+    Page: string option
+    /// The settable fields of this surface, in declaration order.
+    Fields: AIFieldDescriptor list
+}
+
 /// The seam. Implemented by the companion that owns the client-resident
 /// UI surface; resolved from DI by the fast-path triage resolver. Absent
 /// ⇒ no triage (GP 13).

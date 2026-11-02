@@ -16,10 +16,12 @@ open ToolUp.Platform
 open ToolUp.Platform.NotificationChannels.WhatsApp
 open ToolUp.Platform.HealthChecks
 open ToolUp.Platform.Secrets
-open ToolUp.Platform.Tracing
+open ToolUp.Platform.Infra.Tracing
 open ToolUp.Platform.NotificationChannels.WhatsApp.Twilio
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.InProcess.TransactionalDispatcherTests
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
 
 // Phase 6f.B — the Twilio WhatsApp companion. Never live: the contract
 // pack runs against an unroutable endpoint (failures must classify, not

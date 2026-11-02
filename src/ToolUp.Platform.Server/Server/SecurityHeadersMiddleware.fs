@@ -1,7 +1,8 @@
-namespace ToolUp.Platform
+namespace ToolUp.Platform.Scope
 
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
+open ToolUp.Platform.Config
 
 // ─── Security headers middleware (Phase 1f / 129d) ───────────────────
 //
@@ -9,7 +10,7 @@ open ToolUp.Platform
 // Permissions-Policy, …) onto every response. The effective set is the
 // Phase 129d always-on `SecurityHeaders.baseline` floor (X-Frame-Options
 // DENY / nosniff / Referrer-Policy, plus HSTS when `RequireHttps`) with
-// the deployment's `ServerConfig.SecurityHeaders` map layered on top.
+// the deployment's `ServerConfig.SecurityPosture.SecurityHeaders` map layered on top.
 // Resolved once at construction via `SecurityHeaders.effective`.
 //
 // **Floor vs map vs handler.** Three priority tiers, lowest to highest:
@@ -35,7 +36,7 @@ type SecurityHeadersMiddleware(next: RequestDelegate, config: ServerConfig) =
     // consumer's map, resolved once. Never empty, so the OnStarting hook
     // always stamps the floor on a stock deployment.
     let effectiveHeaders =
-        SecurityHeaders.effective config.RequireHttps config.SecurityHeaders
+        SecurityHeaders.effective config.SecurityPosture.RequireHttps config.SecurityPosture.SecurityHeaders
 
     member _.InvokeAsync(ctx: HttpContext) = task {
         ctx.Response.OnStarting(fun () ->

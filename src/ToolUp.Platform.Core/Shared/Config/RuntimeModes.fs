@@ -44,47 +44,6 @@ module MetricsSinkConfig =
         PerMetricMaxSeries = Map.empty
     }
 
-/// Selects whether `compose` registers the outbound-webhook substrate.
-/// Default: `NoWebhooks` — keeps the SDK lightweight by
-/// skipping the `WebhookDispatcher` `BackgroundService`, the
-/// `HookedEventStore` decorator wrapping `IEventStore`, the
-/// `IWebhookRegistry` / `IWebhookDeliveryLog` / `IWebhookDispatcher`
-/// DI services, and the `webhookHandler` route. Apps that want to
-/// publish events to third-party systems opt in to `EnabledWebhooks`.
-type WebhookMode =
-    /// No webhook infrastructure registered. Default. The inner
-    /// `IEventStore` is registered directly without the
-    /// `HookedEventStore` decorator, so event writes carry zero
-    /// dispatch overhead.
-    | NoWebhooks
-    /// Full webhook substrate. `HookedEventStore` decorates
-    /// `IEventStore` so every event write fires registered
-    /// subscriptions; `WebhookDispatcher` runs as a `BackgroundService`
-    /// consuming a bounded `Channel<DispatchTask>` with HMAC-SHA256
-    /// signed delivery and exponential-backoff retry; the admin API
-    /// (`IWebhookApi`) is auto-injected.
-    | EnabledWebhooks
-
-/// Selects whether `compose` registers the audit-log emission path.
-/// Default: `NoAuditLog` — `IAuditLog` is still registered
-/// in DI (the interface is core), but the registration is a no-op
-/// `NoOpAuditLog` that swallows every `Record` call. Emission sites
-/// (`ScopeResolutionMiddleware`, `PlatformApi` handlers,
-/// `fileManagementApi`) keep their unconditional `IAuditLog.Record`
-/// calls — the no-op makes them free at runtime, and callsites stay
-/// clean across mode changes. Apps that need a compliance trail opt
-/// in to `EnabledAuditLog`.
-type AuditLogMode =
-    /// `IAuditLog` resolves to a no-op. Audit emission sites still
-    /// run but write nothing. Default — Anonymous-mode demos and
-    /// disposable-tenant deployments shouldn't pay for an audit
-    /// trail they don't read.
-    | NoAuditLog
-    /// `IAuditLog` resolves to `EventStoreAuditLog` over `IEventStore`
-    /// with reserved `SourceModule = "_platform.audit"`. Combine with
-    /// `EventStore = PersistentBlobBacked _` for a durable trail.
-    | EnabledAuditLog
-
 /// Phase 9t — what `EventStoreAuditLog.Record` does when the
 /// underlying `IEventStore.Write` (or the payload serialisation)
 /// fails. Today's behaviour — catch, count
@@ -413,59 +372,8 @@ type SseAuthMode =
     | QueryParamFallback
     | CookieRequired
 
-/// Phase 133 — whether the server mounts the BFF-style auth-cookie
-/// reflection endpoint (`POST` / `DELETE /api/auth/session`). When the
-/// client posts a freshly-acquired JWT, the server validates it through
-/// the registered `IAuthProvider` and reflects it into an
-/// `HttpOnly; Secure; SameSite=Strict; Path=/` cookie — so the bearer
-/// credential never lives in JS-readable `localStorage` or a JS-readable
-/// `document.cookie`. The browser then sends it automatically for SSE
-/// (`EventSource`) and same-origin XHR, and an XSS cannot dump a usable
-/// token from either store.
-///
-/// `NoAuthCookieIssuance` (default): the endpoint is not mounted; an
-/// existing deployment is byte-for-byte unchanged (GP 11). The legacy
-/// client `document.cookie` + `localStorage` writes remain the only
-/// cookie path (dev EventSource handshake).
-///
-/// `EnabledAuthCookieIssuance`: the endpoint is mounted. Pairs with
-/// `ClientConfig.AuthTokenStorage = ServerSetHttpOnlyCookie` on the
-/// client and an `IAuthProvider` whose `TokenLocation` admits the
-/// bearer header on the reflect call AND the cookie on every later
-/// request — i.e. `BearerOrCookie "toolup-auth-token"`. Override via
-/// `TOOLUP_AUTH_COOKIE_ISSUANCE=enabled|disabled`.
-type AuthCookieIssuanceMode =
-    | NoAuthCookieIssuance
-    | EnabledAuthCookieIssuance
-
-/// Controls whether `VectorScope.Platform` is exposed to RAG
-/// retrieval. The toggle gates READ access; the WRITE side is gated
-/// separately by `AccessContext.canModifyPlatformConfig` and
-/// structurally restricted to `IPlatformKnowledgeApi`'s upload path.
-/// Read and write are orthogonal — admins can pre-populate Platform
-/// KB content when
-/// the toggle is off, then flip to `EnabledPlatformKnowledgeBase` to
-/// make it visible.
-///
-/// `NoPlatformKnowledgeBase` (default): `RetrievalPipeline.authorisedScopes`
-/// filters `Platform` out of the returned scope list regardless of
-/// caller. Existing Platform-scoped chunks stay on disk but are
-/// invisible. `ListPlatformDocuments` still functions so admins can
-/// manage the content.
-///
-/// `EnabledPlatformKnowledgeBase`: `Platform` scope is universally
-/// readable for authenticated users; queries return Platform-scope
-/// matches alongside Team-scope matches. RAGPromptBuilder annotates
-/// citations with the scope origin so the model can qualify answers
-/// with the authority level. Pairs with the convention used by other
-/// mode toggles (`NoEntityStore` / `EnabledEntityStore`,
-/// `NoLineageStore` / `EnabledLineageStore`, etc.).
-type PlatformKnowledgeBaseMode =
-    | NoPlatformKnowledgeBase
-    | EnabledPlatformKnowledgeBase
-
 /// Phase 9j — opt-in HTTP-surface security hardening. Distinct from
-/// the static `ServerConfig.SecurityHeaders` map: this mode drives
+/// the static `ServerConfig.SecurityPosture.SecurityHeaders` map: this mode drives
 /// the *companion-aware* `CspMiddleware` (a `Content-Security-Policy`
 /// auto-generated from every registered `ICspContributor`, correct
 /// by construction) plus the `CsrfMiddleware` cross-origin POST
@@ -492,124 +400,6 @@ type SecurityHardeningMode =
     | NoSecurityHardening
     | DefaultSecurityHardening
     | StrictSecurityHardening
-
-/// Phase 9q — startup-time config-drift detection. At `compose` end,
-/// the SDK snapshots the resolved `ServerConfig` (secrets redacted)
-/// plus a hash of the active companion-assembly set, persists it to
-/// `_platform/_deploy/last-config.json`, and on the next startup
-/// diffs the persisted snapshot against the new one. Differences are
-/// emitted as a `Warn` log line plus a `ConfigDrift` audit event —
-/// pure observation, no abort, no rollback.
-///
-///   * `NoConfigDriftDetection` (default, GP 13) — no snapshot
-///     written, no comparison performed, no blob layout under
-///     `_platform/_deploy/` touched. Stock deployments behave
-///     exactly as before.
-///   * `EnabledConfigDriftDetection` — snapshot + compare on every
-///     `compose`. Requires `AuditLog = EnabledAuditLog` for the
-///     audit-event side of the emission to land durably (the log
-///     side fires regardless); a deployment running with
-///     `NoAuditLog` still gets the `Warn` log but the audit row
-///     resolves through the no-op sink and is lost. The detector
-///     does not enforce the pairing — `EnabledConfigDriftDetection`
-///     with `NoAuditLog` is a legitimate "log-only" stance.
-type ConfigDriftDetectionMode =
-    | NoConfigDriftDetection
-    | EnabledConfigDriftDetection
-
-/// Phase 9v — outbound rate-limiter selection. Distinct from
-/// `ServerConfig.RateLimit` (Phase 9 inbound limiter, gates platform-
-/// edge HTTP by team/user/IP); this mode controls the **outbound**
-/// `IRateLimiter` (gates calls to third-party services partitioned
-/// by `(scopeId, provider)` plus optional sub-key).
-///
-///   * `NoRateLimiter` (default, GP 13) — `IRateLimiter` resolves to
-///     `NoOpRateLimiter` so emission sites resolve unconditionally
-///     and the call elides at zero cost. Deployments without external
-///     API connectors pay nothing.
-///   * `EnabledRateLimiter` — `IRateLimiter` resolves to the SDK-
-///     shipped `InProcessRateLimiter` (sliding-window default with a
-///     soft 95% ceiling). Companion descriptors registered via
-///     `ServerApp.withRateLimitDescriptor` are applied per-`(scopeId,
-///     provider)` bucket. Multi-instance deployments should swap in
-///     the Phase 9c half-2 Redis-backed companion to avoid Nx burst
-///     past declared quotas; the contract is designed so the swap is
-///     contract-free.
-type RateLimiterMode =
-    | NoRateLimiter
-    | EnabledRateLimiter
-
-/// Phase 9o — post-deploy smoke-test endpoint
-/// (`GET /api/_internal/smoke`). Different from `/ready`
-/// (per-component readiness probe polled on every load-balancer
-/// interval): the smoke endpoint exercises every wired companion path
-/// end-to-end (write/read a sentinel blob, publish + observe a
-/// sentinel notification, schedule + dispatch a sentinel job, …)
-/// against the reserved `_smoke` sentinel scope. Intended to run once
-/// per deploy as a pre-traffic gate; token-gated via
-/// `TOOLUP_SMOKE_TOKEN` so the surface is closed to anyone without
-/// the deploy script's shared secret.
-///
-///   * `NoSmokeTest` (default, GP 13) — `/api/_internal/smoke` is not
-///     mounted, no first-party smoke tests register. Stock
-///     deployments pay zero runtime cost; the surface 404s.
-///   * `EnabledSmokeTest` — the route mounts behind the token gate
-///     and first-party smoke tests register against the SDK's wired
-///     substrate (blob storage, notification channel, job scheduler,
-///     event store, data-object store, audit log). Companion-
-///     contributed smoke tests register alongside via
-///     `services.AddSingleton<ISmokeTest>(...)` or
-///     `ServerApp.withSmokeTest`.
-type SmokeTestMode =
-    | NoSmokeTest
-    | EnabledSmokeTest
-
-/// Phase 177 — opt-in deployment-readiness scorecard. The read
-/// consolidates the four already-shipped operability signals
-/// (`IConfigValidator` preflight, `ISmokeTest` results, the
-/// `ConfigDrift` finding, the `IHealthCheck` aggregate) into one
-/// Platform-Admin go/no-go verdict.
-///
-///   * `NoReadinessReport` (default, GP 11/13) — the
-///     `IDeploymentReadinessApi` route is not mounted; the surface 404s
-///     and the deployment is byte-for-byte unchanged.
-///   * `EnabledReadinessReport` — mounts the Platform-Admin-gated read.
-///     Each source sub-summary is independently `NotComposed` when its
-///     substrate isn't wired, so enabling the report over a deployment
-///     that composes a subset of the signals yields an honest partial
-///     scorecard rather than a fabricated pass. Pure projection — no new
-///     gate, no new control-plane behaviour.
-type DeploymentReadinessMode =
-    | NoReadinessReport
-    | EnabledReadinessReport
-
-/// Phase 686 — opt-in deployment verification report. The read composes
-/// the evidence verifiers a deployment already wired — the boot
-/// verification verdict, the grounding-envelope continuity walk, the
-/// hash-chained audit ledger walk, the certificate issuance log, the
-/// answer-verification provenance join — into one artefact with a typed
-/// verdict per section and an explicit statement of what it does not
-/// prove.
-///
-///   * `NoDeploymentVerification` (default, GP 11/13) — the
-///     `IDeploymentVerificationApi` route is not mounted, the
-///     `--verify-deployment` startup mode is still available (it needs no
-///     route), and the deployment is byte-for-byte unchanged.
-///   * `EnabledDeploymentVerification` — mounts the Platform-Admin-gated
-///     read. Each section is independently `NotComposed` when its
-///     substrate is absent, so enabling this over a deployment that wired
-///     none of them yields an honest empty report rather than a
-///     fabricated pass or an error.
-///
-/// **Distinct from `DeploymentReadinessMode`, and not a superset of it.**
-/// Readiness asks whether the deployment can serve *right now* and runs
-/// live probes to find out. Verification asks whether the evidence the
-/// deployment has already produced still holds, and runs no probe against
-/// anything live. A deployment can be ready and unverifiable, or verified
-/// and unhealthy.
-type DeploymentVerificationMode =
-    | NoDeploymentVerification
-    | EnabledDeploymentVerification
 
 /// Phase 53 — `IConversationStore` substrate opt-in. Promotes AI
 /// assistant conversations from ephemeral `AIAssistantHandler` state
@@ -665,61 +455,6 @@ type PublicRenderingMode =
     | NoPublicRendering
     | EnabledPublicRendering of root: ContentRoot
 
-/// Phase 39 — `IAssetStore` substrate opt-in.
-///
-///   * `NoAssetStore` (default, GP 13) — no `/api/assets/*`
-///     handlers mount, no `IAssetStore` DI singleton, no audit
-///     emission. Strip-imports byte-for-byte to the
-///     pre-Phase-39 behaviour; deployments that don't opt in
-///     pay zero runtime cost.
-///   * `EnabledAssetStore` — the `ToolUp.AssetStore` companion
-///     registers `DefaultAssetStore` (wrapping the SDK's
-///     configured `IBlobStorage` for originals + derivative
-///     cache), mounts the ToolUp.Remoting `IAssetApi` handler at
-///     `/api/assets/`, the form-multipart upload endpoint at
-///     `/api/assets/upload`, and (when audit emission is
-///     enabled at compose time) emits `AssetUploaded` /
-///     `AssetDeleted` via `IAuditLog`.
-///
-/// The detailed shape (`AssetStoreOptions`, `DerivativeSpec`,
-/// `DerivativeProfileId`) lives in the companion namespace
-/// `ToolUp.AssetStore` rather than `Platform.Core` — the
-/// opt-in mode here is a bool-shaped gate; the substrate
-/// configuration is a companion-owned record. Same shape as
-/// the `PublicRendering` gate above.
-type AssetStoreMode =
-    | NoAssetStore
-    | EnabledAssetStore
-
-/// Phase 88 — `IMediaLibrary` substrate opt-in (time-based media:
-/// video / audio hosting).
-///
-///   * `NoMediaLibrary` (default, GP 13) — no `/api/media/*` or
-///     `/media/*` handlers mount, no `IMediaLibrary` DI singleton,
-///     no URL-signing key resolution, no range endpoint. Strip-
-///     imports byte-for-byte to the pre-Phase-88 behaviour;
-///     deployments that don't opt in pay zero runtime cost.
-///   * `EnabledMediaLibrary` — the `ToolUp.MediaLibrary` companion
-///     registers `DefaultMediaLibrary` (over the SDK's configured
-///     `IBlobStorage`), mounts the HTTP-range-serving endpoint
-///     (`206 Partial Content` for `<video>` seeking), the
-///     scope-signed expiring-URL minting + verification, and the
-///     ToolUp.Remoting `IMediaApi` handler. Transcode / HLS
-///     rendition production is delivered by opt-in sub-companions
-///     (`ToolUp.Media.FFmpeg`, `ToolUp.Media.CloudTranscode`);
-///     the default impl range-serves over blob storage with no
-///     transcode dependency (GP 1 / GP 2).
-///
-/// The detailed shape (`MediaLibraryOptions`, `MediaRecord`,
-/// `ByteRange`) lives in the companion namespace
-/// `ToolUp.MediaLibrary` rather than `Platform.Core` — the opt-in
-/// mode here is a bool-shaped gate; the substrate configuration is
-/// a companion-owned record. Same shape as the `AssetStore` gate
-/// above.
-type MediaLibraryMode =
-    | NoMediaLibrary
-    | EnabledMediaLibrary
-
 /// Phase 26 — deploy-plane substrate opt-in. Default `NoDeployPlane`
 /// (GP 13) registers nothing: no `IBuildOrchestrator`, no
 /// `IDeployPipeline`, no `ITenantFleet`, no `Tenant` entity
@@ -740,7 +475,7 @@ type MediaLibraryMode =
 ///
 /// **Dependencies.** `SingleNodeDeployPlane` requires
 /// `JobScheduler = InProcessJobScheduler` (for the build orchestrator's
-/// dispatch substrate) and `EntityStore = EnabledEntityStore` (for the
+/// dispatch substrate) and `EntityStore = FeatureMode.Enabled` (for the
 /// tenant catalog). A future config validator may enforce; for now the
 /// composition root raises at construction time if either is missing.
 ///

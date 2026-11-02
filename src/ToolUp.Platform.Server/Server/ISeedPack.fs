@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-namespace ToolUp.Platform
+namespace ToolUp.Platform.Infra
+
+open ToolUp.Platform
 
 open ToolUp.Platform.BlobStorage
 
@@ -39,7 +41,7 @@ type SeedContext = {
     /// Always present — an `IBlobStorage` is registered in every
     /// composition.
     BlobStorage: IBlobStorage
-    /// `Some` only when `ServerConfig.EntityStore = EnabledEntityStore`.
+    /// `Some` only when `ServerConfig.Stores.EntityStore = FeatureMode.Enabled`.
     /// `None` means the deployment did not compose the entity substrate.
     EntityStore: IEntityStore.IEntityStore option
     /// `Some` when a `IDataObjectStore` is composed (the default data

@@ -23,6 +23,10 @@ open ToolUp.Platform
 open ToolUp.Platform.Secrets
 open ToolUp.InterPlatform
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── IPlatformPeerContract — in-process binding + worked example ─────
 //

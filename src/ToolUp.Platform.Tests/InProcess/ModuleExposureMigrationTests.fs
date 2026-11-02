@@ -4,8 +4,9 @@ open System.Text
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.PermissionStore
+open ToolUp.Platform.Scope.PermissionStore
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Scope
 
 // ─── Phase 245 — tri-state ModuleExposure persistence migration ──────
 //

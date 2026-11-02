@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.AlertRuleEngine
+module ToolUp.Platform.Infra.AlertRuleEngine
 
 open System
 open System.Collections.Concurrent
@@ -12,6 +12,7 @@ open Microsoft.Extensions.Hosting
 open ToolUp.Platform
 open ToolUp.Platform.HealthChecks
 open ToolUp.Platform.Metrics
+open ToolUp.Platform.Infra.Metrics
 
 // ─── Phase 178 — alert-rule / threshold engine ──────────────────────
 //

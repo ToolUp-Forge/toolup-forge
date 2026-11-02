@@ -6,6 +6,7 @@ module ToolUp.AI.McpHost.McpGovernance
 open System
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
+open ToolUp.Platform.Infra
 
 // ─── Phase 489 — per-agent budgets + rate limits ─────────────────────
 //
@@ -52,7 +53,7 @@ open ToolUp.Platform
 ///
 /// Resolved from DI rather than constructed, so a deployment running
 /// compute budgets and agent budgets sees ONE ledger and one set of
-/// contention characteristics. `McpServerApp.run` registers a
+/// contention characteristics. `McpCompose.withMcp` registers a
 /// blob-backed default when a budget is declared and none is present —
 /// see `McpCompose`.
 let private budgetLedger (ctx: HttpContext) : IBudgetLedger option =

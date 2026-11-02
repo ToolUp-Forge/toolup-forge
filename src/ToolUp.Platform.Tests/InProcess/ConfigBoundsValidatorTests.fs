@@ -4,6 +4,8 @@ open System
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 465 — the format/range gate and the retention warning ─────
 //
@@ -153,8 +155,14 @@ let private validateRetention (config: ServerConfig) : ValidationResult =
 /// the default plus the store.
 let private devShaped: ServerConfig = {
     ServerConfig.defaults with
-        EventStore = PersistentBlobBacked EventRetentionPolicy.unlimited
-        ReplicaCount = 1
+        Stores = {
+            ServerConfig.defaults.Stores with
+                EventStore = PersistentBlobBacked EventRetentionPolicy.unlimited
+        }
+        MultiInstance = {
+            ServerConfig.defaults.MultiInstance with
+                ReplicaCount = 1
+        }
 }
 
 /// The same store in a production shape: an authenticated surface, so
@@ -183,7 +191,10 @@ let retentionTests =
             Expect.equal
                 (validateRetention {
                     productionShaped with
-                        EventStore = InMemoryOnly
+                        Stores = {
+                            productionShaped.Stores with
+                                EventStore = InMemoryOnly
+                        }
                 })
                 Ok
                 "the warning is about a durable trail"
@@ -193,7 +204,10 @@ let retentionTests =
             Expect.equal
                 (validateRetention {
                     productionShaped with
-                        EventStore = PersistentBlobBacked EventRetentionPolicy.ninetyDays
+                        Stores = {
+                            productionShaped.Stores with
+                                EventStore = PersistentBlobBacked EventRetentionPolicy.ninetyDays
+                        }
                 })
                 Ok
                 "an age limit is a policy"
@@ -203,7 +217,10 @@ let retentionTests =
             Expect.equal
                 (validateRetention {
                     productionShaped with
-                        EventStore = PersistentBlobBacked(EventRetentionPolicy.byCount 100_000)
+                        Stores = {
+                            productionShaped.Stores with
+                                EventStore = PersistentBlobBacked(EventRetentionPolicy.byCount 100_000)
+                        }
                 })
                 Ok
                 "either dimension is enough to bound the trail"
@@ -214,7 +231,15 @@ let retentionTests =
         }
 
         test "Multi-instance is production-shaped even when anonymous" {
-            match validateRetention { devShaped with ReplicaCount = 3 } with
+            match
+                validateRetention {
+                    devShaped with
+                        MultiInstance = {
+                            devShaped.MultiInstance with
+                                ReplicaCount = 3
+                        }
+                }
+            with
             | Warning msg -> Expect.stringContains msg "ReplicaCount = 3" "names why the shape qualifies"
             | other -> failtestf "expected Warning, got %A" other
         }

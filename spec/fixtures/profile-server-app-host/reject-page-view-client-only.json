@@ -1,0 +1,1 @@
+{"kind":"appRoot","base":"serverApp","layers":["publicRendering"],"id":"reject-page-view-client-only","children":[{"kind":"pageRef","route":"about","audience":"public","view":"bareFeliz","id":"about","children":[]}]}

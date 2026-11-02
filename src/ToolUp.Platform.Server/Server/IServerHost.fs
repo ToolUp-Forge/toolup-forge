@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-namespace ToolUp.Platform
+namespace ToolUp.Platform.Compose
+
+open ToolUp.Platform
 
 open System.Threading.Tasks
 open Microsoft.AspNetCore.Builder
@@ -15,8 +17,7 @@ open Microsoft.Extensions.Hosting
 // future Lambda / GCF) drive the same configured pipeline through this
 // seam:
 //
-//   - `ServerApp.run` (and `AIServerApp.run`, `RAGServerApp.run`,
-//     companion `run` helpers) call `RunBlocking()` — today's Kestrel
+//   - `ServerApp.run` (and the companion `run` helpers that remain) call `RunBlocking()` — today's Kestrel
 //     `app.Run()` behaviour, returns the process exit code.
 //
 //   - Serverless host adapters resolve the `IServerHost` from the
@@ -55,8 +56,8 @@ type IServerHost =
     /// `IHostApplicationLifetime.StopApplication`). Returns the
     /// process exit code — today always `0` because process-fatal
     /// exceptions escape earlier and the runtime sets a non-zero
-    /// code on its own. Called by `ServerApp.run` / `AIServerApp.run`
-    /// / `RAGServerApp.run` and every per-companion wrapper. The
+    /// code on its own. Called by `ServerApp.run` and every per-companion
+    /// `run` that remains. The
     /// Kestrel default; serverless host adapters do NOT call this.
     abstract RunBlocking: unit -> int
 
@@ -140,8 +141,8 @@ module ServerHost =
                 )
         }
 
-// `BackgroundSubsystem` + `ProcessProfileGate` live in
-// `Server/Compose/ProcessProfileGate.fs` (earlier in the compile chain)
-// so every Compose helper can use them. This file's contribution is the
+// `Hosting` (background-work placement) and `ProcessProfileGate` (the
+// HTTP-pipeline question) live in `Server/Compose/Hosting.fs` (earlier in
+// the compile chain) so every Compose helper can use them. This file's contribution is the
 // IServerHost interface + `createWebHost` / `createWorkerHost` builders
 // — only consumed by `SDK.Server.compose`'s tail.

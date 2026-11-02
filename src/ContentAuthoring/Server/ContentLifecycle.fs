@@ -6,9 +6,11 @@ module ToolUp.ContentAuthoring.ContentLifecycle
 open System
 open ToolUp.Platform
 open ToolUp.Platform.EntityTypes
-open ToolUp.Platform.IEntityStore
+open ToolUp.Platform.Infra.IEntityStore
 open ToolUp.Forms.Workflow
 open ToolUp.PublicRendering
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
 
 // ─── Phase 89 — editorial lifecycle = WorkflowDefinition ──────────────
 //
@@ -20,7 +22,7 @@ open ToolUp.PublicRendering
 // (wired by a deployment as a recurring `IJobScheduler` job).
 
 /// Name of the registered approval guard. A deployment registers the
-/// predicate via `FormsServerApp.withGuard ContentLifecycle.approveGuard
+/// predicate via `FormsOptions.withGuard ContentLifecycle.approveGuard
 /// (fun ctx -> ...)`, gating who may approve / unpublish / archive
 /// (GP 4 — role-gated transitions).
 ///
@@ -37,7 +39,7 @@ let approveGuard = "content:can-approve"
 
 /// The canonical editorial workflow: `draft → in-review → published`,
 /// with unpublish / archive / restore. Register with
-/// `FormsServerApp.withWorkflow ContentLifecycle.editorialWorkflow`.
+/// `FormsOptions.withWorkflow ContentLifecycle.editorialWorkflow`.
 let editorialWorkflow: WorkflowDefinition = {
     Id = "content-editorial"
     InitialState = "draft"
@@ -108,7 +110,10 @@ let publishAt (now: DateTimeOffset) (page: PublicPage) : PublicPage = {
 }
 
 /// Schedule a page to go live at `at`.
-let schedule (at: DateTimeOffset) (page: PublicPage) : PublicPage = { page with Status = Scheduled at }
+let schedule (at: DateTimeOffset) (page: PublicPage) : PublicPage = {
+    page with
+        Status = PublishStatus.Scheduled at
+}
 
 /// Archive a page (removed from public serving, retained for history).
 let archive (page: PublicPage) : PublicPage = { page with Status = Archived }
@@ -119,7 +124,7 @@ let toDraft (page: PublicPage) : PublicPage = { page with Status = Draft }
 /// Whether a `Scheduled` page is now due to go live.
 let isDueForPublish (now: DateTimeOffset) (page: PublicPage) : bool =
     match page.Status with
-    | Scheduled at -> now >= at
+    | PublishStatus.Scheduled at -> now >= at
     | _ -> false
 
 /// Promote a `Scheduled`-and-due page to `Published` (stamping

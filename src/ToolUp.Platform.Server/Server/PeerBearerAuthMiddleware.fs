@@ -1,4 +1,4 @@
-module ToolUp.Platform.PeerBearerAuthMiddleware
+module ToolUp.Platform.Scope.PeerBearerAuthMiddleware
 
 open System
 open System.Security.Cryptography
@@ -9,13 +9,16 @@ open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.Secrets
 open ToolUp.Platform.Auth
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Config.Auth
 
 // ─── Phase 37 — peer-bearer-auth middleware ──────────────────────────
 //
 // Substrate that lets one ToolUp instance accept authenticated HTTP
 // calls from another using a shared per-peer bearer token. Sits ahead
 // of `AuthEnforcementMiddleware` in the pipeline; for paths matching
-// `ServerConfig.PeerRoutePrefixes` the middleware:
+// `ServerConfig.MultiInstance.PeerRoutePrefixes` the middleware:
 //
 //   1. Reads `X-Peer-Name` to identify the calling instance.
 //   2. Resolves `ISecretStore.GetSecret("_platform", $"peers/{peerName}/bearer")`.
@@ -341,13 +344,14 @@ let authenticate (secretStore: ISecretStore) (ctx: HttpContext) : Async<AuthOutc
 
 /// Phase 37 — Giraffe-compatible ASP.NET Core middleware that enforces
 /// peer-bearer auth on paths registered in
-/// `ServerConfig.PeerRoutePrefixes`. Non-peer paths pass through
+/// `ServerConfig.MultiInstance.PeerRoutePrefixes`. Non-peer paths pass through
 /// untouched.
 type PeerBearerAuthMiddleware(next: RequestDelegate, config: ServerConfig) =
 
     member _.InvokeAsync(ctx: HttpContext) =
         task {
-            let isPeer = PeerRouteRegistry.isPeerRoute config.PeerRoutePrefixes ctx.Request.Path
+            let isPeer =
+                PeerRouteRegistry.isPeerRoute config.MultiInstance.PeerRoutePrefixes ctx.Request.Path
 
             if not isPeer then
                 do! next.Invoke(ctx)
@@ -471,7 +475,7 @@ type PeerAuthPosture =
     /// cross-deployment surface, so there is no posture to compare.
     | NoPeerAuthSurface
     /// Only the signed-JWT substrate (`PeerSubstrate =
-    /// EnabledPeerSubstrate`, no static-bearer prefixes). The strongest
+    /// FeatureMode.Enabled`, no static-bearer prefixes). The strongest
     /// rung: per-call minting, `exp` / `aud`, host-verified delegation,
     /// https-by-default transport, and an asymmetric-key option.
     | SignedPeerAuthOnly
@@ -518,11 +522,11 @@ let shadowsSignedPeerNamespace (prefix: string) : bool =
 /// the classification it was derived from.
 let auditPeerAuthPosture (config: ServerConfig) : PeerAuthPosture =
     let signedHostServing =
-        match config.PeerSubstrate with
-        | EnabledPeerSubstrate -> true
-        | NoPeerSubstrate -> false
+        match config.MultiInstance.PeerSubstrate with
+        | FeatureMode.Enabled -> true
+        | FeatureMode.Disabled -> false
 
-    match config.PeerRoutePrefixes with
+    match config.MultiInstance.PeerRoutePrefixes with
     | [] ->
         if signedHostServing then
             SignedPeerAuthOnly
@@ -568,7 +572,7 @@ let peerAuthPostureAdvisory (posture: PeerAuthPosture) : string option =
         let named = String.concat ", " prefixes
 
         Some
-            $"peer-auth-posture: ServerConfig.PeerRoutePrefixes entr(ies) [{named}] cover the '{SignedPeerRouteNamespace}' namespace this deployment's signed-JWT peer host serves, so PeerBearerAuthMiddleware gates every federation call FIRST and the weaker of the two peer-auth substrates decides who reaches the host. A typed peer client presents a signed peer JWT and no '{PeerNameHeader}' header, so those calls are answered 401 ({RejectionReason.MissingPeerNameHeader}) before dispatch and the federation surface answers nothing. {peerAuthSubstrateDelta} If the federation surface is what you meant to expose, move the static-bearer prefix off '{SignedPeerRouteNamespace}' (the two substrates are documented as coexisting on DIFFERENT prefixes — e.g. '/api/peer/echo'); if the static-bearer flavour is what you meant to guard these routes with, say so deliberately and treat this as an accepted posture."
+            $"peer-auth-posture: ServerConfig.MultiInstance.PeerRoutePrefixes entr(ies) [{named}] cover the '{SignedPeerRouteNamespace}' namespace this deployment's signed-JWT peer host serves, so PeerBearerAuthMiddleware gates every federation call FIRST and the weaker of the two peer-auth substrates decides who reaches the host. A typed peer client presents a signed peer JWT and no '{PeerNameHeader}' header, so those calls are answered 401 ({RejectionReason.MissingPeerNameHeader}) before dispatch and the federation surface answers nothing. {peerAuthSubstrateDelta} If the federation surface is what you meant to expose, move the static-bearer prefix off '{SignedPeerRouteNamespace}' (the two substrates are documented as coexisting on DIFFERENT prefixes — e.g. '/api/peer/echo'); if the static-bearer flavour is what you meant to guard these routes with, say so deliberately and treat this as an accepted posture."
 
 /// Emit the advisory once at startup, best-effort. Called by
 /// `configurePipeline` at the point the middleware is registered — so a

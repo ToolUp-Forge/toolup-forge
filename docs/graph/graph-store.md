@@ -72,18 +72,24 @@ to compose an engine-backed companion for full Cypher.
 | **Colocated engine** | (companion) | A graph engine colocated with an existing relational store. |
 
 Each engine companion registers its own `IGraphStore` singleton in DI and
-the deployment selects `ServerConfig.GraphStore = CustomGraphStore`.
+the deployment selects `ServerConfig.Stores.GraphStore = CustomGraphStore`.
 
 ## Composition
 
 ```fsharp skip=fragment
 // Default composition already registers the in-memory IGraphStore
 // lazily — a consumer that never resolves IGraphStore pays nothing.
-// ServerConfig.GraphStore defaults to InMemoryGraphStore.
+// ServerConfig.Stores.GraphStore defaults to InMemoryGraphStore.
 
 // To use an engine companion instead: register its singleton and select
 // CustomGraphStore.
-{ config with GraphStore = CustomGraphStore }
+{
+    config with
+        Stores = {
+            config.Stores with
+                GraphStore = CustomGraphStore
+        }
+}
 ```
 
 `IGraphStore` is resolved from DI like any other substrate interface:

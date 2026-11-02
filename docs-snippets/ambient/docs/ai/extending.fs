@@ -24,6 +24,7 @@ open Microsoft.AspNetCore.Http
 open ToolUp.Platform.Providers
 open ToolUp.Platform.Secrets
 open ToolUp.AI.SystemPromptBuilder
+open ToolUp.Platform.Infra
 
 [<AutoOpen>]
 module PageAmbient =

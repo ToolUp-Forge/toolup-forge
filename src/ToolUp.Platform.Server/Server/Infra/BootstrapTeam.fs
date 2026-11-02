@@ -1,8 +1,10 @@
-module ToolUp.Platform.BootstrapTeam
+module ToolUp.Platform.Scope.BootstrapTeam
 
 open System
 open ToolUp.Platform
-open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Config.TeamManagement
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
 
 // ─── Phase 5f — bootstrap team for closed-roster deployments ──────────
 //

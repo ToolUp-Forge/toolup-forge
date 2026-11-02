@@ -9,7 +9,7 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.VectorKnowledgeTypes
-open ToolUp.Platform.ISparseIndex
+open ToolUp.Platform.Infra.ISparseIndex
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.RAG.SparseAnalysis
 open ToolUp.RAG.InMemoryBM25Index
@@ -17,6 +17,7 @@ open ToolUp.SparseIndices.Snowball
 open ToolUp.SparseIndices.Snowball.SnowballAnalyzer
 open ToolUp.SparseIndices.Cjk
 open ToolUp.SparseIndices.Cjk.CjkAnalyzer
+open ToolUp.Platform.Infra
 
 // ─── Phase 501 — sparse-analyzer contract ─────────────────────────
 //

@@ -52,9 +52,12 @@ open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.AI
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.PermissionStore
+open ToolUp.Platform.Scope.PermissionStore
 open ToolUp.AI
 open ToolUp.AI.AIToolRegistry
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
 // ─── Fixtures ────────────────────────────────────────────────────────
 

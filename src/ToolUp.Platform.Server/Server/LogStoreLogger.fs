@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.LogStoreLogger
+module ToolUp.Platform.Infra.LogStoreLogger
+
+open ToolUp.Platform
 
 open System
 open System.Threading

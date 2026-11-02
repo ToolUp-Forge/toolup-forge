@@ -18,7 +18,7 @@ open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.EntityTypes
-open ToolUp.Platform.IEntityStore
+open ToolUp.Platform.Infra.IEntityStore
 open ToolUp.Platform.HealthChecks
 open ToolUp.Platform.Metrics
 open ToolUp.Platform.Secrets
@@ -36,6 +36,10 @@ open ToolUp.Calendar.MicrosoftGraphHealth
 open ToolUp.Scheduling.Tests.Contracts
 open ToolUp.Scheduling.Tests.InProcess.InMemoryEntityStore
 open ToolUp.Scheduling.Tests.InProcess.InMemoryEventStore
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 831 — binding 3 of the ICalendarBridge contract pack ─────
 //
@@ -1512,22 +1516,22 @@ let private subscriptionTests =
         test "compose registers the bridge and, with notifications on, the renewal job" {
             let f = fixtureWith webhookSettings
 
-            let composed =
+            let composedApp, composed =
                 ToolUp.Calendar.MicrosoftGraphSubscriptions.compose
                     f.Bridge
                     [ "team-a" ]
-                    (SchedulingServerApp.create ())
+                    (ServerApp.empty, SchedulingOptions.create ())
 
             Expect.equal (composed.CalendarBridges |> List.map _.Kind) [ KindName ] "the bridge is composed"
-            Expect.isSome (ServerApp.serviceConfig composed.Base) "the renewal hosted service is registered"
+            Expect.isSome (ServerApp.serviceConfig composedApp) "the renewal hosted service is registered"
 
-            let polling =
+            let pollingApp, _ =
                 ToolUp.Calendar.MicrosoftGraphSubscriptions.compose
                     (fixtureWith settings).Bridge
                     [ "team-a" ]
-                    (SchedulingServerApp.create ())
+                    (ServerApp.empty, SchedulingOptions.create ())
 
-            Expect.isNone (ServerApp.serviceConfig polling.Base) "a polling-only bridge adds nothing (GP 13)"
+            Expect.isNone (ServerApp.serviceConfig pollingApp) "a polling-only bridge adds nothing (GP 13)"
         }
     ]
 

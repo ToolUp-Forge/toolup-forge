@@ -10,6 +10,9 @@ open ToolUp.Platform.BlobStorage
 open ToolUp.AI.AICompose
 open SharedTypes
 open KnowledgeBase.ServerIndexStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // Built-in AI tools that surface the KnowledgeBase to the assistant
 // directly — separate from the `list_narratives` / `get_narrative`
@@ -200,30 +203,12 @@ let private builtInTools: (AIToolDefinition * (HttpContext -> string -> Async<st
     (getDefinition, executeGet)
 ]
 
-/// Register KnowledgeBase's built-in AI tools (`list_kb_documents`,
-/// `get_kb_document`) with an `AIServerApp`. Same `AICompose.register`
-/// shape as `ToolUp.AI` itself — call once during composition root
-/// assembly, before `AIServerApp.run` (or `RAGServerApp.run` via the
-/// `rag.AI` lift).
-///
-///     AIServerApp.create factory configStore
-///     |> AIServerApp.withConfig config
-///     |> AIServerApp.addModules modules
-///     |> ToolUp.KnowledgeBase.Server.AICompose.register
-///     |> AIServerApp.run
-///
-/// Or for `RAGServerApp`:
-///
-///     |> (fun rag -> {
-///         rag with AI = ToolUp.KnowledgeBase.Server.AICompose.register rag.AI
-///     })
 /// Warn when the Knowledge Base is composed on a declared multi-instance
 /// deployment (`ReplicaCount > 1`) over blob storage that does NOT support
 /// conditional writes — and only then.
 ///
 /// Every `index.json` write goes through `IndexStorage.updateIndexEntries`,
-/// the guarded read-modify-write over `BlobMapStore` (Phase 959 finished
-/// moving the writers onto it). On a backend with conditional writes that
+/// the guarded read-modify-write over `BlobMapStore`. On a backend with conditional writes that
 /// helper replays a lost precondition, so replicas writing the index
 /// concurrently lose nothing and there is nothing to warn about. On a
 /// backend without them it falls back to unconditional writes: the
@@ -261,7 +246,7 @@ type internal KnowledgeBaseIndexInstanceValidator(serverConfig: ServerConfig, se
         member _.Timeout = ConfigValidation.IConfigValidator.defaultTimeout
 
         member _.Validate() = async {
-            if serverConfig.ReplicaCount <= 1 then
+            if serverConfig.MultiInstance.ReplicaCount <= 1 then
                 return ConfigValidation.ValidationResult.Ok
             else
                 match composedStorage () with
@@ -269,8 +254,8 @@ type internal KnowledgeBaseIndexInstanceValidator(serverConfig: ServerConfig, se
                     return
                         ConfigValidation.ValidationResult.Warning(
                             sprintf
-                                "Knowledge Base is composed with ServerConfig.ReplicaCount = %d, and the composed blob storage is not registered as an instance, so whether it supports conditional writes cannot be checked. Knowledge-base index writes go through the guarded read-modify-write helper (BlobMapStore); on a backend without conditional writes two replicas can lose each other's index entries. Use a backend implementing IConditionalBlobStorage for multi-instance deployments."
-                                serverConfig.ReplicaCount
+                                "Knowledge Base is composed with ServerConfig.MultiInstance.ReplicaCount = %d, and the composed blob storage is not registered as an instance, so whether it supports conditional writes cannot be checked. Knowledge-base index writes go through the guarded read-modify-write helper (BlobMapStore); on a backend without conditional writes two replicas can lose each other's index entries. Use a backend implementing IConditionalBlobStorage for multi-instance deployments."
+                                serverConfig.MultiInstance.ReplicaCount
                         )
                 | Some storage ->
                     let backend = storage.GetType().Name
@@ -289,51 +274,62 @@ type internal KnowledgeBaseIndexInstanceValidator(serverConfig: ServerConfig, se
                         return
                             ConfigValidation.ValidationResult.Warning(
                                 sprintf
-                                    "Knowledge Base is composed with ServerConfig.ReplicaCount = %d over blob storage %s, which does not support conditional writes. Knowledge-base index writes go through the guarded read-modify-write helper (BlobMapStore), which on this backend falls back to unconditional writes, so two replicas writing the index concurrently can lose an entry or a status update (the document's blob and chunks persist; its index.json entry is clobbered). Use a backend implementing IConditionalBlobStorage, or funnel knowledge-base writes through a single replica."
-                                    serverConfig.ReplicaCount
+                                    "Knowledge Base is composed with ServerConfig.MultiInstance.ReplicaCount = %d over blob storage %s, which does not support conditional writes. Knowledge-base index writes go through the guarded read-modify-write helper (BlobMapStore), which on this backend falls back to unconditional writes, so two replicas writing the index concurrently can lose an entry or a status update (the document's blob and chunks persist; its index.json entry is clobbered). Use a backend implementing IConditionalBlobStorage, or funnel knowledge-base writes through a single replica."
+                                    serverConfig.MultiInstance.ReplicaCount
                                     backend
                             )
                     | Error reason ->
                         return
                             ConfigValidation.ValidationResult.Warning(
                                 sprintf
-                                    "Knowledge Base is composed with ServerConfig.ReplicaCount = %d over blob storage %s, and the conditional-write probe failed (%s), so index writes may fall back to unconditional writes that two replicas can clobber. Use a backend implementing IConditionalBlobStorage for multi-instance deployments."
-                                    serverConfig.ReplicaCount
+                                    "Knowledge Base is composed with ServerConfig.MultiInstance.ReplicaCount = %d over blob storage %s, and the conditional-write probe failed (%s), so index writes may fall back to unconditional writes that two replicas can clobber. Use a backend implementing IConditionalBlobStorage for multi-instance deployments."
+                                    serverConfig.MultiInstance.ReplicaCount
                                     backend
                                     reason
                             )
         }
 
-let register (app: AIServerApp) : AIServerApp =
+/// **Adds** the knowledge base's built-in AI tools (`list_kb_documents`,
+/// `get_kb_document`) to the deployment's AI tools — which the AI tier
+/// registers when it is composed — and its registrations as a contribution
+/// under its own id. Call it on the composition root, on either side of
+/// `AICompose.withAI` / `RAGCompose.withRAG`:
+///
+///     ServerApp.empty
+///     |> ServerApp.withConfig config
+///     |> ServerApp.addModules modules
+///     |> ToolUp.KnowledgeBase.Server.AICompose.register
+///     |> RAGCompose.withRAG ragOptions
+///     |> ServerApp.run
+let register (app: ServerApp) : ServerApp =
     let baseWithTools = {
-        app.Base with
-            AITools = app.Base.AITools @ builtInTools
+        app with
+            AITools = app.AITools @ builtInTools
     }
 
-    // Investigate-gaps #4, narrowed by Phase 959 — warn at startup on a
-    // declared multi-instance deployment whose blob storage cannot do
-    // conditional writes. Registered from `ServiceConfig` (not through
-    // `withConfigValidator`) because it reads the composed `IBlobStorage`
-    // out of the service collection, which only exists there.
+    // Warn at startup on a declared multi-instance deployment whose blob
+    // storage cannot do conditional writes. Registered from `ServiceConfig`
+    // (not through `withConfigValidator`) because it reads the composed
+    // `IBlobStorage` out of the service collection, which only exists there.
     let registerIndexInstanceValidator (s: IServiceCollection) : IServiceCollection =
         s.AddSingleton<ConfigValidation.IConfigValidator>(
             KnowledgeBaseIndexInstanceValidator(baseWithTools.Config, s) :> ConfigValidation.IConfigValidator
         )
 
-    // Phase 54d — register the KB offboard-purge hook when the deployment
+    // Register the KB offboard-purge hook when the deployment
     // opted into the tenant-lifecycle substrate. Contributed as a
     // `Contribution.service` (the seam `ServerApp.withCspContributor`
     // also feeds), gated on the same
-    // `TenantLifecycle = EnabledTenantLifecycle` switch the core
+    // `TenantLifecycle = FeatureMode.Enabled` switch the core
     // `ComposeTenantLifecycle` gates on. The hook self-`Skipped`s when no
     // `IBlobStorage` is composed, so the gate is the only condition.
     let registerLifecycleHook (s: IServiceCollection) : IServiceCollection =
         match baseWithTools.Config.TenantLifecycle with
-        | EnabledTenantLifecycle ->
+        | FeatureMode.Enabled ->
             s.AddSingleton<ITenantLifecycle>(fun (sp: IServiceProvider) -> KnowledgeBaseLifecycle.create sp)
-        | NoTenantLifecycle -> s
+        | FeatureMode.Disabled -> s
 
-    // Phase 707 — the request-free narrative-commit door. Registered
+    // The request-free narrative-commit door. Registered
     // unconditionally with the knowledge base, on the same argument the
     // fact companion registers its disclosure gate by: a deployment
     // cannot compose the knowledge base and then find the programmatic
@@ -350,12 +346,7 @@ let register (app: AIServerApp) : AIServerApp =
     let register (s: IServiceCollection) =
         registerIndexInstanceValidator (registerNarrativeIngestor (registerLifecycleHook s))
 
-    // Phase 1052 — the knowledge base's registrations are a contribution
-    // under its own id.
-    let baseWithLifecycle =
-        baseWithTools
-        |> ServerApp.addContribution (
-            Contribution.service (ComponentId.forCompanionSlot "ToolUp.KnowledgeBase") register
-        )
-
-    { app with Base = baseWithLifecycle }
+    // The knowledge base's registrations are a contribution under its own
+    // id.
+    baseWithTools
+    |> ServerApp.addContribution (Contribution.service (ComponentId.forCompanionSlot "ToolUp.KnowledgeBase") register)

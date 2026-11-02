@@ -45,12 +45,11 @@
 /// (the waiter is handed it as ABANDONED and told so), so a crashed run
 /// cannot wedge the gate the way a lock directory could. What remains is
 /// a holder that is alive and stuck — a test host wedged at 0% CPU — and
-/// for that the wait is bounded (`TOOLUP_VERIFY_GATE_WAIT_MINUTES`,
-/// default 60: derived as one full lane — every pack plus the legs, the
-/// `Samples` leg's build-and-transpile of every sample (Phase 904)
-/// included, which the original sizing predated — plus two of the advisory
-/// lanes that might be queued ahead of it, and short of the queue's own
-/// 90-minute claim bound). Past the bound the run PROCEEDS
+/// for that the wait is bounded (`TOOLUP_VERIFY_GATE_WAIT_MINUTES`; the
+/// default is DERIVED, twice the full lane's summed row `Budget` from the
+/// gate manifest — never a literal, which went stale the moment a leg was
+/// added — and `dotnet run -- GateTimings` is where the budgets are
+/// re-derived from). Past the bound the run PROCEEDS
 /// unserialised with a loud line, because the pre-phase behaviour is the
 /// floor: a gate that fails BECAUSE it is guarding against slowness has
 /// traded a slow run for no run.
@@ -62,13 +61,19 @@
 ///
 /// **Which targets take the gate.** `VerifyAll` — in every lane, because
 /// every lane runs the Platform pack (the `fast` lane drops its slow set,
-/// not the pack) and a lane that runs seconds waits seconds. Nothing else
-/// does: `verify.ps1`'s other steps are a format check and a build, the
-/// CI-only verify targets (`VerifyFable`, `VerifyTemplates`,
-/// `VerifyPublishedPackages`, …) are not part of the gate script and did
-/// not feature in the measured contention, and a single pack run directly
-/// (`dotnet <pack>.dll --filter …`) never passes through this driver at
-/// all. Widening the set is one edit to `gatedTargets` below.
+/// not the pack) and a lane that runs seconds waits seconds — and every
+/// `Body` row of the gate manifest that reads the tree for longer than a
+/// minute, run through its own `Verify<Name>` target: the set is DERIVED
+/// (`GateManifest.gatedTargets`), so a row's measured budget is what
+/// admits it, never an edit here. A single pack run directly
+/// (`dotnet <pack>.dll --filter …`) never passes through this driver.
+///
+/// **The admission record.** Every gated run appends one line to
+/// `<common git dir>/fuaran-gate/verify-runs.jsonl` — when, which target
+/// and lane, how it was admitted and how long it waited, how long it ran,
+/// how it exited, and each row's verdict and seconds — and
+/// `dotnet run -- GateTimings [--since <days>]` folds those lines into
+/// the per-lane and per-row medians a `Budget` is re-derived from.
 ///
 /// **Why this file is at the repository root and FAKE-free.** The
 /// `VerifyAll` target's body is published SDK surface
@@ -77,12 +82,15 @@
 /// `SemVerBump.fs` and `TestLane.fs` — compiled into `Build.fsproj`,
 /// source-linked into `ToolUp.Platform.Build.Tests` so the driver and its
 /// go-red proofs run one implementation, and taking nothing beyond
-/// `System` so that pack can compile it without FAKE.
+/// `System` and the SDK's own `Git` and `Flags` (`ToolUp.Platform.Build`,
+/// which that pack already references).
 module ToolUp.Forge.VerifyGate
 
 open System
 open System.Diagnostics
 open System.IO
+open ToolUp.Platform
+open ToolUp.Platform.Build
 open System.Security.Cryptography
 open System.Text
 open System.Threading
@@ -95,25 +103,68 @@ let OptOutVariable = "TOOLUP_VERIFY_NO_GATE_MUTEX"
 [<Literal>]
 let WaitBoundVariable = "TOOLUP_VERIFY_GATE_WAIT_MINUTES"
 
-/// See the header for the derivation.
-let DefaultWaitBound = TimeSpan.FromMinutes 60.
+/// The manifest's rows, bodies unbound: the data this module derives from.
+let private manifest = GateManifest.rows GateManifest.unbound
+
+/// Twice the full lane's summed budget: one lane for the holder to finish
+/// and one for an advisory lane queued ahead. See the header.
+let DefaultWaitBound =
+    let full = GateManifest.fullBudget manifest
+
+    if full > TimeSpan.Zero then
+        full + full
+    else
+        TimeSpan.FromMinutes 60.
 
 /// How often a waiting run reports that it is still waiting.
 let DefaultSlice = TimeSpan.FromSeconds 30.
 
-/// The targets that take the gate. See the header for why this is
-/// `VerifyAll` alone.
-let gatedTargets = set [ "VerifyAll" ]
+/// The targets that take the gate: `VerifyAll` and the manifest's
+/// tree-reading rows over a minute. See the header.
+let gatedTargets = GateManifest.gatedTargets manifest
 
-/// The target `argv` requests, read the way `ToolUp.Platform.Build.execute`
-/// reads it: the first argument that is not an option, else `Run`. One
-/// parser would be better than two, but that one is inside the frozen SDK
-/// and a gate that consulted a different rule from the runner it wraps
-/// would gate the wrong target.
-let requestedTarget (argv: string[]) =
-    match List.ofArray argv with
-    | t :: _ when not (t.StartsWith("--", StringComparison.Ordinal)) -> t
-    | _ -> "Run"
+/// The target `argv` requests, read by the same rule `execute` applies
+/// (`Flags.targetOf`), so the gate can never gate a different target from
+/// the runner it wraps.
+let requestedTarget (argv: string[]) = Flags.targetOf argv
+
+/// Every option a target in the forge driver reads. `Build.fs` parses its
+/// command line once against this, and an option no target declares is
+/// refused by name. Here rather than in `Build.fs` so the Build test pack
+/// can pin each one (`FlagsTests`).
+let driverFlags: FlagSpec =
+    Flags.union Flags.sdk {
+        Switches = [
+            "--propose"
+            "--update-baseline"
+            "--require-ready"
+            "--draft"
+            "--fail-on-dead"
+            "--verbose"
+            "--json"
+            "--render"
+            "--write-table"
+            "--apply-declarations"
+        ]
+        Valued = [
+            "--root"
+            "--assemblies"
+            "--base"
+            "--head"
+            "--paths"
+            "--declared"
+            "--out"
+            "--release"
+            "--ui-version"
+            "--toolup-version"
+            "--props"
+            "--snapshot"
+            "--boundary"
+            "--run"
+            "--since"
+            "--map"
+        ]
+    }
 
 /// Is the opt-out set? Absent, empty and `0` all mean "gate as normal" —
 /// the shape the estate's other opt-outs take, so an unset variable can
@@ -143,28 +194,18 @@ let waitBoundFromEnvironment () =
 /// repository, a hung child — and the caller degrades rather than fails.
 let commonGitDir (workingDir: string) : Result<string, string> =
     try
-        let psi = ProcessStartInfo("git", "rev-parse --git-common-dir")
-        psi.WorkingDirectory <- workingDir
-        psi.RedirectStandardOutput <- true
-        psi.RedirectStandardError <- true
-        psi.UseShellExecute <- false
-        psi.CreateNoWindow <- true
+        let r =
+            Git.within (TimeSpan.FromSeconds 15.) workingDir [ "rev-parse"; "--git-common-dir" ]
 
-        use proc = Process.Start psi
-        let output = proc.StandardOutput.ReadToEnd()
-
-        if not (proc.WaitForExit 15000) then
-            proc.Kill true
-            Error "git rev-parse --git-common-dir did not return within 15 s"
-        elif proc.ExitCode <> 0 then
-            Error(sprintf "git rev-parse --git-common-dir exited %d (not a git repository?)" proc.ExitCode)
+        if r.ExitCode <> 0 then
+            Error(sprintf "git rev-parse --git-common-dir exited %d (not a git repository?)" r.ExitCode)
         else
-            match output.Trim() with
+            match r.StdOut.Trim() with
             | "" -> Error "git rev-parse --git-common-dir printed nothing"
             | raw when Path.IsPathRooted raw -> Ok(Path.GetFullPath raw)
             | raw -> Ok(Path.GetFullPath(Path.Combine(workingDir, raw)))
     with e ->
-        Error(sprintf "git could not be started: %s" e.Message)
+        Error(sprintf "git could not be started, or did not return within 15 s: %s" e.Message)
 
 /// A short, filesystem- and kernel-safe token for a path: the first 16
 /// hex digits of its SHA-256, over the path normalised the way the host
@@ -409,6 +450,230 @@ let clearHolderNote (path: string) =
     with _ ->
         ()
 
+// ─── The admission record ────────────────────────────────────────────
+
+/// One gated run as `verify-runs.jsonl` records it, and the fold
+/// `GateTimings` runs over the records.
+module Runs =
+
+    /// The file, under the repository's common git directory.
+    let path (commonDir: string) =
+        Path.Combine(commonDir, "fuaran-gate", "verify-runs.jsonl")
+
+    type Leg = {
+        Name: string
+        /// `pass` | `fail` | `pending`.
+        Verdict: string
+        Cases: int option
+        Seconds: float
+    }
+
+    type Run = {
+        At: DateTimeOffset
+        Target: string
+        Lane: string
+        /// `acquired` | `recovered` | `disabled` | `past-stale-holder` | `unavailable`.
+        Admission: string
+        WaitedSeconds: float
+        ElapsedSeconds: float
+        Exit: int
+        Legs: Leg list
+    }
+
+    let admissionName (admission: Admission) =
+        match admission with
+        | Admission.Acquired _ -> "acquired"
+        | Admission.Recovered _ -> "recovered"
+        | Admission.Disabled -> "disabled"
+        | Admission.PastStaleHolder _ -> "past-stale-holder"
+        | Admission.Unavailable _ -> "unavailable"
+
+    let waited (admission: Admission) =
+        match admission with
+        | Admission.Acquired w
+        | Admission.Recovered w
+        | Admission.PastStaleHolder w -> w
+        | Admission.Disabled
+        | Admission.Unavailable _ -> TimeSpan.Zero
+
+    let private verdictName (verdict: Verdict) =
+        match verdict with
+        | Verdict.Pass _ -> "pass"
+        | Verdict.Fail _ -> "fail"
+        | Verdict.Pending _ -> "pending"
+
+    /// The legs of an aggregate's results, as recorded.
+    let legsOf (results: (string * Verdict * TimeSpan) list) : Leg list = [
+        for name, verdict, elapsed in results do
+            {
+                Name = name
+                Verdict = verdictName verdict
+                Cases =
+                    match verdict with
+                    | Verdict.Pass cases -> cases
+                    | Verdict.Fail _
+                    | Verdict.Pending _ -> None
+                Seconds = elapsed.TotalSeconds
+            }
+    ]
+
+    /// One record as one JSON line.
+    let render (run: Run) : string =
+        use stream = new MemoryStream()
+
+        do
+            use w = new Text.Json.Utf8JsonWriter(stream)
+            w.WriteStartObject()
+            w.WriteString("at", run.At.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ"))
+            w.WriteString("target", run.Target)
+            w.WriteString("lane", run.Lane)
+            w.WriteString("admission", run.Admission)
+            w.WriteNumber("waitedSeconds", Math.Round(run.WaitedSeconds, 1))
+            w.WriteNumber("elapsedSeconds", Math.Round(run.ElapsedSeconds, 1))
+            w.WriteNumber("exit", run.Exit)
+            w.WriteStartArray "legs"
+
+            for leg in run.Legs do
+                w.WriteStartObject()
+                w.WriteString("name", leg.Name)
+                w.WriteString("verdict", leg.Verdict)
+                leg.Cases |> Option.iter (fun c -> w.WriteNumber("cases", c))
+                w.WriteNumber("seconds", Math.Round(leg.Seconds, 1))
+                w.WriteEndObject()
+
+            w.WriteEndArray()
+            w.WriteEndObject()
+
+        Encoding.UTF8.GetString(stream.ToArray())
+
+    /// Parse the file's text: one record per non-blank line; a line that is
+    /// not a record is skipped and counted, never fatal — the file is a log.
+    let parse (text: string) : Run list * int =
+        let lines =
+            text.Replace("\r\n", "\n").Split('\n') |> Array.filter (fun l -> l.Trim() <> "")
+
+        let parsed =
+            lines
+            |> Array.map (fun line ->
+                try
+                    use doc = Text.Json.JsonDocument.Parse line
+                    let r = doc.RootElement
+
+                    let str (name: string) =
+                        match r.TryGetProperty name with
+                        | true, v -> v.GetString()
+                        | _ -> ""
+
+                    let num (name: string) =
+                        match r.TryGetProperty name with
+                        | true, v -> v.GetDouble()
+                        | _ -> 0.
+
+                    let legs =
+                        match r.TryGetProperty "legs" with
+                        | true, arr -> [
+                            for l in arr.EnumerateArray() do
+                                {
+                                    Name = l.GetProperty("name").GetString()
+                                    Verdict = l.GetProperty("verdict").GetString()
+                                    Cases =
+                                        match l.TryGetProperty "cases" with
+                                        | true, c -> Some(c.GetInt32())
+                                        | _ -> None
+                                    Seconds = l.GetProperty("seconds").GetDouble()
+                                }
+                          ]
+                        | _ -> []
+
+                    Some {
+                        At = DateTimeOffset.Parse(str "at", Globalization.CultureInfo.InvariantCulture)
+                        Target = str "target"
+                        Lane = str "lane"
+                        Admission = str "admission"
+                        WaitedSeconds = num "waitedSeconds"
+                        ElapsedSeconds = num "elapsedSeconds"
+                        Exit = int (num "exit")
+                        Legs = legs
+                    }
+                with _ ->
+                    None)
+
+        List.ofArray (Array.choose id parsed), (parsed |> Array.filter Option.isNone |> Array.length)
+
+    /// Append one record. Best-effort, as the holder note is: a read-only
+    /// `.git` costs the record, not the gate.
+    let append (commonDir: string) (run: Run) =
+        try
+            let file = path commonDir
+            Directory.CreateDirectory(Path.GetDirectoryName file) |> ignore
+            File.AppendAllText(file, render run + "\n")
+        with _ ->
+            ()
+
+    let private median (xs: float list) =
+        match List.sort xs with
+        | [] -> 0.
+        | sorted ->
+            let n = sorted.Length
+
+            if n % 2 = 1 then
+                sorted[n / 2]
+            else
+                (sorted[n / 2 - 1] + sorted[n / 2]) / 2.
+
+    let private clock (seconds: float) =
+        let t = TimeSpan.FromSeconds seconds
+        sprintf "%d:%02d" (int t.TotalMinutes) t.Seconds
+
+    /// The admission line a run would have printed, reproduced from its record.
+    let admissionLine (run: Run) =
+        sprintf
+            "%s %s gate: %s after waiting %s — %s lane, %s, exit %d"
+            (run.At.ToUniversalTime().ToString "yyyy-MM-dd HH:mm")
+            run.Target
+            run.Admission
+            (clock run.WaitedSeconds)
+            run.Lane
+            (clock run.ElapsedSeconds)
+            run.Exit
+
+    /// The fold `GateTimings` prints: the runs since `since` (all when
+    /// `None`), each run's admission line, then per lane the count and
+    /// median wall clock, then per row the median seconds over the runs
+    /// that ran it — the figure a row's `Budget` is re-derived from.
+    let report (now: DateTimeOffset) (since: TimeSpan option) (runs: Run list) : string list =
+        let runs =
+            match since with
+            | Some window -> runs |> List.filter (fun r -> now - r.At <= window)
+            | None -> runs
+
+        match runs with
+        | [] -> [ "GateTimings: no recorded runs in the window." ]
+        | runs -> [
+            sprintf "GateTimings: %d recorded run(s)." runs.Length
+
+            for run in runs do
+                "  " + admissionLine run
+
+            "Per lane (median wall clock over the runs that completed, exit 0):"
+
+            for lane, group in runs |> List.groupBy _.Lane do
+                let green = group |> List.filter (fun r -> r.Exit = 0) |> List.map _.ElapsedSeconds
+
+                sprintf
+                    "  %-9s %d run(s), %d green, median %s, median wait %s"
+                    lane
+                    group.Length
+                    green.Length
+                    (clock (median green))
+                    (clock (median (group |> List.map _.WaitedSeconds)))
+
+            "Per row (median seconds over the runs that ran it):"
+
+            for name, legs in runs |> List.collect _.Legs |> List.groupBy _.Name do
+                sprintf "  %-24s %d run(s), median %s" name legs.Length (clock (median (legs |> List.map _.Seconds)))
+          ]
+
 // ─── The driver's entry point ────────────────────────────────────────
 
 /// Run `body` under the gate `name` with `options`, writing the holder
@@ -421,6 +686,7 @@ let aroundWith
     (notePath: string option)
     (options: Options)
     (workingDir: string)
+    (record: Admission * TimeSpan * int -> unit)
     (body: unit -> 'a)
     : 'a =
     let held = acquire name options
@@ -436,13 +702,20 @@ let aroundWith
     if owns then
         notePath |> Option.iter (fun p -> writeHolderNote p workingDir)
 
+    let clock = Stopwatch.StartNew()
+    let mutable exit = 1
+
     try
-        body ()
+        let result = body ()
+        exit <- 0
+        result
     finally
         if owns then
             notePath |> Option.iter clearHolderNote
 
         held.Release()
+
+        record (held.Admission, clock.Elapsed, exit)
 
 /// Run `body` under the gate when `argv` requests a gated target, else
 /// run it plainly. The key is resolved from `workingDir` — the directory
@@ -478,4 +751,18 @@ let around (workingDir: string) (argv: string[]) (body: unit -> 'a) : 'a =
                     | None -> "holder unknown — not a git repository"
         }
 
-        aroundWith (mutexName key) notePath options workingDir body
+        let record (admission, elapsed: TimeSpan, exit) =
+            commonDir
+            |> Option.iter (fun dir ->
+                Runs.append dir {
+                    At = DateTimeOffset.UtcNow
+                    Target = target
+                    Lane = TestLane.name TestLane.current
+                    Admission = Runs.admissionName admission
+                    WaitedSeconds = (Runs.waited admission).TotalSeconds
+                    ElapsedSeconds = elapsed.TotalSeconds
+                    Exit = exit
+                    Legs = Runs.legsOf (Gate.lastRun ())
+                })
+
+        aroundWith (mutexName key) notePath options workingDir record body

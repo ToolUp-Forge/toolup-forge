@@ -31,7 +31,7 @@ the sample's own documentation is the knowledge base a docs-aware assistant
 answers from. [`staticcorpus.json`](staticcorpus.json) configures the pack, and
 [`docs/wiring.md`](docs/wiring.md) walks through packing the index
 (`toolup-rag pack-docs`) and composing it via
-`RAGServerApp.withRetrievalPipeline (StaticCorpusRetrievalPipeline.loadFromFile …)`.
+`RagOptions.withRetrievalPipeline (StaticCorpusRetrievalPipeline.loadFromFile …)`.
 Because the pipeline is overridden and no module contributes a
 `VectorisationHandler`, the deployment carries no live-ingestion machinery — only
 the per-query embedding runs at runtime. See

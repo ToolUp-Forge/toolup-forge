@@ -3,6 +3,8 @@ module ToolUp.Platform.Tests.InProcess.RateLimitConfigHelpersTests
 open System
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 let private policy: RateLimitPolicy = {
     PermitLimit = 100

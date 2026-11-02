@@ -9,9 +9,10 @@ open Expecto
 open Parquet
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.DataObjectStore
+open ToolUp.Platform.Infra.DataObjectStore
 open ToolUp.DataSources.Parquet
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra
 
 // ─── Phase 598 — ParquetDatasetCodec conformance ────────────────────────
 //

@@ -67,7 +67,7 @@ and DerivativeRenderError =
 /// (document → preview image, video → poster frame, model →
 /// compressed variant). Implementations carrying vendor
 /// dependencies ship as companions (GP 1); the deployment
-/// registers them by key via `AssetCompose.withMimeRenderer` and
+/// registers them by key via `AssetStoreCompanionOptions.withMimeRenderer` and
 /// profile entries name the key in `GeneralDerivativeSpec.RendererKey`.
 ///
 /// Six portability rules: inputs / outputs are `byte[]` + value

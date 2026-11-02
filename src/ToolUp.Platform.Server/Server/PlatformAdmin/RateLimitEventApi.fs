@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.RateLimitEventApi
+module ToolUp.Platform.Infra.RateLimitEventApi
 
 open System
 open Giraffe

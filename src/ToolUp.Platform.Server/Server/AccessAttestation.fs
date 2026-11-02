@@ -1,16 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.AccessAttestation
+module ToolUp.Platform.Compose.AccessAttestation
 
 open System
 open System.Globalization
 open System.Text
 open System.Text.Json.Nodes
 open ToolUp.Platform
-open ToolUp.Platform.PermissionStore
-open ToolUp.Platform.GrantPolicyGuard
-open ToolUp.Platform.GrantConsentStore
+open ToolUp.Platform.Scope.PermissionStore
+open ToolUp.Platform.Scope.GrantPolicyGuard
+open ToolUp.Platform.Scope.GrantConsentStore
+open ToolUp.Platform.Audit
 
 // ─── Module-access attestation certificate (Phase 557) ───────────────
 //

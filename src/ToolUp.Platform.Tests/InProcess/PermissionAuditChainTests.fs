@@ -5,6 +5,10 @@ open System.Collections.Concurrent
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Metrics
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Audit
 
 // ─── Phase 553.A/D — the in-store permission-event hash chain ────────
 //

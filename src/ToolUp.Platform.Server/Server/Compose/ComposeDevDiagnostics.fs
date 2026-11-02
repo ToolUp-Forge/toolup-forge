@@ -1,9 +1,13 @@
-module ToolUp.Platform.ComposeDevDiagnostics
+module ToolUp.Platform.Compose.ComposeDevDiagnostics
 
 open Giraffe
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.FileProcessor
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
 
 // ─── compose phase: dev-diagnostics capture ──────────────────────────
 //
@@ -27,8 +31,8 @@ let buildDevDiagnosticsCapture
     (handlers: HttpHandler list)
     (extensions: ComposeExtensions)
     (effectiveNotifications: NotificationMode)
-    (persistentEventStoreInstance: PersistentEventStore.PersistentEventStore option ref)
-    (blobJobStoreInstance: JobStore.BlobJobStore option ref)
+    (persistentEventStore: PersistentEventStore.PersistentEventStore option)
+    (blobJobStore: JobStore.BlobJobStore option)
     (services: IServiceCollection)
     : DevDiagnosticsHandler.DevDiagnosticsCapture =
 
@@ -54,11 +58,11 @@ let buildDevDiagnosticsCapture
     // a `DevDiagnosticsHandler.IIndexConsistencyInspector`, which the
     // handler runs beside these (Phase 946).
     let inspectors = [
-        match persistentEventStoreInstance.Value with
+        match persistentEventStore with
         | Some s -> yield (fun (scopeId: string) -> s.IndexConsistencyCheck(scopeId, 20))
         | None -> ()
 
-        match blobJobStoreInstance.Value with
+        match blobJobStore with
         | Some s -> yield (fun (scopeId: string) -> s.IndexConsistencyCheck(scopeId, 20))
         | None -> ()
     ]
@@ -82,15 +86,9 @@ let buildDevDiagnosticsCapture
                 ConfigPath = configPath
             }
 
-        let webhookMode =
-            match config.Webhooks with
-            | NoWebhooks -> "NoWebhooks"
-            | EnabledWebhooks -> "EnabledWebhooks"
+        let webhookMode = FeatureModeKnob.render "Webhooks" config.Webhooks
 
-        let auditMode =
-            match config.AuditLog with
-            | NoAuditLog -> "NoAuditLog"
-            | EnabledAuditLog -> "EnabledAuditLog"
+        let auditMode = FeatureModeKnob.render "AuditLog" config.AuditLog
 
         let notificationsMode, notificationsActive =
             match config.Notifications, effectiveNotifications with
@@ -103,7 +101,7 @@ let buildDevDiagnosticsCapture
             | RedisNotifications _, _ -> "RedisNotifications", true
 
         let eventStoreMode =
-            match config.EventStore with
+            match config.Stores.EventStore with
             | InMemoryOnly -> "InMemoryOnly"
             | PersistentBlobBacked _ -> "PersistentBlobBacked"
 
@@ -117,20 +115,14 @@ let buildDevDiagnosticsCapture
             | QuartzJobScheduler quartz -> $"QuartzJobScheduler({quartz.SchedulerName})"
 
         let resultMode =
-            match config.ResultStore with
+            match config.Stores.ResultStore with
             | NoResultStore -> "NoResultStore"
             | InMemoryResultStore -> "InMemoryResultStore"
             | PersistentResultStore -> "PersistentResultStore"
 
-        let lineageMode =
-            match config.Lineage with
-            | NoLineageStore -> "NoLineageStore"
-            | EnabledLineageStore -> "EnabledLineageStore"
+        let lineageMode = FeatureModeKnob.render "Lineage" config.Lineage
 
-        let ingestionMode =
-            match config.DataIngestion with
-            | NoDataIngestion -> "NoDataIngestion"
-            | EnabledDataIngestion -> "EnabledDataIngestion"
+        let ingestionMode = FeatureModeKnob.render "DataIngestion" config.DataIngestion
 
         let backupMode =
             match config.Backup with
@@ -140,14 +132,26 @@ let buildDevDiagnosticsCapture
         let rateLimitActive = RateLimitConfig.isEnabled config.RateLimit
 
         [
-            entry "Webhooks" webhookMode (config.Webhooks = EnabledWebhooks) "ServerConfig.Webhooks"
-            entry "AuditLog" auditMode (config.AuditLog = EnabledAuditLog) "ServerConfig.AuditLog"
+            entry "Webhooks" webhookMode (config.Webhooks = FeatureMode.Enabled) "ServerConfig.Webhooks"
+            entry "AuditLog" auditMode (config.AuditLog = FeatureMode.Enabled) "ServerConfig.AuditLog"
             entry "Notifications" notificationsMode notificationsActive "ServerConfig.Notifications"
-            entry "EventStore" eventStoreMode (config.EventStore <> InMemoryOnly) "ServerConfig.EventStore"
+            entry
+                "EventStore"
+                eventStoreMode
+                (config.Stores.EventStore <> InMemoryOnly)
+                "ServerConfig.Stores.EventStore"
             entry "JobScheduler" jobMode (config.JobScheduler <> NoJobScheduler) "ServerConfig.JobScheduler"
-            entry "ResultStore" resultMode (config.ResultStore <> NoResultStore) "ServerConfig.ResultStore"
-            entry "Lineage" lineageMode (config.Lineage <> NoLineageStore) "ServerConfig.Lineage"
-            entry "DataIngestion" ingestionMode (config.DataIngestion <> NoDataIngestion) "ServerConfig.DataIngestion"
+            entry
+                "ResultStore"
+                resultMode
+                (config.Stores.ResultStore <> NoResultStore)
+                "ServerConfig.Stores.ResultStore"
+            entry "Lineage" lineageMode (config.Lineage <> FeatureMode.Disabled) "ServerConfig.Lineage"
+            entry
+                "DataIngestion"
+                ingestionMode
+                (config.DataIngestion <> FeatureMode.Disabled)
+                "ServerConfig.DataIngestion"
             entry "Backup" backupMode (BackupMode.isComposed config.Backup) "ServerConfig.Backup"
             entry
                 "RateLimit"
@@ -163,14 +167,14 @@ let buildDevDiagnosticsCapture
 
     // Phase 1f composition-seam summary. Counts are read from the
     // `extensions` record we received; security-header keys are copied
-    // verbatim, values stay in `config.SecurityHeaders` and are not
+    // verbatim, values stay in `config.SecurityPosture.SecurityHeaders` and are not
     // surfaced through the dev report (CSP / Permissions-Policy values
     // may carry deployment-private data).
     let compositionSeam: DevDiagnosticsHandler.CompositionSeamSummary = {
         PreMiddlewareCount = extensions.PreMiddleware.Length
         PostMiddlewareCount = extensions.PostMiddleware.Length
-        SecurityHeaderKeys = config.SecurityHeaders |> Map.toList |> List.map fst
-        CorsConfigured = config.Cors.IsSome
+        SecurityHeaderKeys = config.SecurityPosture.SecurityHeaders |> Map.toList |> List.map fst
+        CorsConfigured = config.SecurityPosture.Cors.IsSome
         NotificationConsumers = extensions.NotificationConsumers
     }
 

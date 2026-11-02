@@ -10,6 +10,8 @@ open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Providers
 open ToolUp.Platform.Secrets
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Phase 44 — IProviderProfileApi + the reusable BYOK component ────
 //

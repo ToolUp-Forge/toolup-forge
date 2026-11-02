@@ -4,6 +4,9 @@ open System
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
 // `OidcAudienceBindingValidator` reads TOOLUP_AUTH_MODE +
 // TOOLUP_OIDC_AUDIENCE from the environment (mirrors
@@ -13,7 +16,10 @@ open ToolUp.Platform.ConfigValidation
 let private cfg (surfaces: SurfaceProfile list) (escapeHatch: bool) : ServerConfig = {
     ServerConfig.defaults with
         Surfaces = surfaces
-        AcceptUnboundAudienceWhenAuthRequired = escapeHatch
+        RiskAcknowledgements = {
+            ServerConfig.defaults.RiskAcknowledgements with
+                AcceptUnboundAudienceWhenAuthRequired = escapeHatch
+        }
 }
 
 /// Set TOOLUP_AUTH_MODE / TOOLUP_OIDC_AUDIENCE (None = unset), run the

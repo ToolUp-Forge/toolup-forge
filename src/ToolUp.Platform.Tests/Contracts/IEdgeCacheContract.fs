@@ -8,6 +8,7 @@ open System.Collections.Concurrent
 open System.Diagnostics
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Infra
 
 // ─── Phase 472 — the IEdgeCache conformance bar ───────────────────────
 //

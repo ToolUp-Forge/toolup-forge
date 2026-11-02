@@ -7,6 +7,7 @@ open System
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
 open ToolUp.Platform.Metrics
+open ToolUp.Platform.Infra.Metrics
 
 // ─── Phase 93 — SSR render observability ─────────────────────────────
 //

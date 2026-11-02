@@ -4,6 +4,7 @@ open System
 open System.Text
 open System.Text.Json
 open ToolUp.Platform
+open ToolUp.Platform.Jobs
 
 // ─── Base64url ───────────────────────────────────────────────────────
 //

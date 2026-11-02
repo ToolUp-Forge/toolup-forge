@@ -4,6 +4,9 @@ open System
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Helpers ──────────────────────────────────────────────────────────
 
@@ -43,7 +46,10 @@ let private validKey () =
 let private cfg (surfaces: SurfaceProfile list) (escapeHatch: bool) = {
     ServerConfig.defaults with
         Surfaces = surfaces
-        AcceptPlaintextSecretsWhenAuthRequired = escapeHatch
+        RiskAcknowledgements = {
+            ServerConfig.defaults.RiskAcknowledgements with
+                AcceptPlaintextSecretsWhenAuthRequired = escapeHatch
+        }
 }
 
 let private dummyStore () : Secrets.ISecretStore =

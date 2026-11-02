@@ -67,7 +67,7 @@
         "src/ToolUp.Platform.Server/Server/DatadogReadbackHandlers.fs": 4,
         "src/ToolUp.Platform.Server/Server/DeploymentReadinessReport.fs": 5,
         "src/ToolUp.Platform.Server/Server/DeploymentVerificationReport.fs": 7,
-        "src/ToolUp.Platform.Server/Server/DevDiagnosticsHandler.fs": 8,
+        "src/ToolUp.Platform.Server/Server/DevDiagnosticsHandler.fs": 9,
         "src/ToolUp.Platform.Server/Server/DiagnosticBundleHandler.fs": 5,
         "src/ToolUp.Platform.Server/Server/EncryptionAdminHandler.fs": 3,
         "src/ToolUp.Platform.Server/Server/EvidenceChainWalker.fs": 1,
@@ -84,15 +84,15 @@
         "src/ToolUp.Platform.Server/Server/IEdgeCache.fs": 1,
         "src/ToolUp.Platform.Server/Server/INarrativeStore.fs": 2,
         "src/ToolUp.Platform.Server/Server/JobApiHandler.fs": 3,
-        "src/ToolUp.Platform.Server/Server/Lifecycle/ConfigSeedLifecycle.fs": 2,
+        "src/ToolUp.Platform.Server/Server/Lifecycle/ConfigSeedLifecycle.fs": 1,
         "src/ToolUp.Platform.Server/Server/Lifecycle/ConversationStoreLifecycle.fs": 1,
-        "src/ToolUp.Platform.Server/Server/Lifecycle/DataSubjectRequestLifecycle.fs": 5,
-        "src/ToolUp.Platform.Server/Server/Lifecycle/EncryptionKeyLifecycle.fs": 2,
+        "src/ToolUp.Platform.Server/Server/Lifecycle/DataSubjectRequestLifecycle.fs": 4,
+        "src/ToolUp.Platform.Server/Server/Lifecycle/EncryptionKeyLifecycle.fs": 1,
         "src/ToolUp.Platform.Server/Server/Lifecycle/EncryptionKeyProvisionLifecycle.fs": 1,
-        "src/ToolUp.Platform.Server/Server/Lifecycle/JobSchedulerLifecycle.fs": 2,
-        "src/ToolUp.Platform.Server/Server/Lifecycle/MembershipCacheLifecycle.fs": 4,
-        "src/ToolUp.Platform.Server/Server/Lifecycle/OwnerTeamBootstrapLifecycle.fs": 3,
-        "src/ToolUp.Platform.Server/Server/Lifecycle/UserMembershipTeardownLifecycle.fs": 3,
+        "src/ToolUp.Platform.Server/Server/Lifecycle/JobSchedulerLifecycle.fs": 1,
+        "src/ToolUp.Platform.Server/Server/Lifecycle/MembershipCacheLifecycle.fs": 2,
+        "src/ToolUp.Platform.Server/Server/Lifecycle/OwnerTeamBootstrapLifecycle.fs": 1,
+        "src/ToolUp.Platform.Server/Server/Lifecycle/UserMembershipTeardownLifecycle.fs": 1,
         "src/ToolUp.Platform.Server/Server/LifecycleJobHandler.fs": 6,
         "src/ToolUp.Platform.Server/Server/MaintenanceApiHandler.fs": 2,
         "src/ToolUp.Platform.Server/Server/MetricsEndpoint.fs": 1,
@@ -217,7 +217,7 @@
         "src/ToolUp.PublicRendering/Server/PublicationReads.fs": 3,
         "src/ToolUp.PublicRendering/Server/SemanticSearchHandler.fs": 1,
         "src/ToolUp.RAG.Server/Server/RAGCitationDevEndpoint.fs": 1,
-        "src/ToolUp.RAG.Server/Server/RAGCompose.fs": 14,
+        "src/ToolUp.RAG.Server/Server/RAGCompose.fs": 2,
         "src/ToolUp.RAG.Server/Server/RagHealthHandler.fs": 1,
         "src/ToolUp.RAG.Server/Server/RagVectorStoreLifecycle.fs": 1,
         "src/ToolUp.Reporting.Server/ReportingAITools.fs": 3,
@@ -229,6 +229,13 @@
       "reason": "The fact-store migration operator task (`toolup facts migrate`, run through the --operator-task startup mode): OperatorTask.Run is handed the composed provider by contract and resolves the source and target stores from it once, with no host serving and no request in flight.",
       "sites": {
         "src/FactStores/Postgres/FactStoreMigration.fs": 3
+      }
+    },
+    {
+      "rule": "TUA001",
+      "reason": "The layout tools' answering executor: an answering tool is composed before any container exists and receives only the request's HttpContext, so it reads ONE value, the LayoutToolsRuntime record its own registration factory built (the page store and the page request resolvers are resolved there, never here). Every other dependency is read from the request's items, as the render tools read theirs.",
+      "sites": {
+        "src/ToolUp.Facts.Presentation.Server/Server/LayoutTools.fs": 1
       }
     },
     {

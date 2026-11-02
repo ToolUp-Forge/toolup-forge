@@ -6,7 +6,8 @@
 // compile as written; a block that declares its own `Order` shadows this
 // one, which is why the declarations sit in an auto-opened module.
 open ToolUp.Platform.EntityTypes
-open ToolUp.Platform.IEntityStore
+open ToolUp.Platform.Infra.IEntityStore
+open ToolUp.Platform.Infra
 
 [<AutoOpen>]
 module PageAmbient =

@@ -33,8 +33,8 @@ open System
 // field and the compose-time uniqueness check. There is deliberately no
 // second channel DU to keep in sync.
 //
-// **Everything here is inert until `ServerConfig.ExternalContactStore` is
-// `EnabledExternalContactStore` (GP 13).** The default composition registers
+// **Everything here is inert until `ServerConfig.Stores.ExternalContactStore` is
+// `FeatureMode.Enabled` (GP 13).** The default composition registers
 // no store, mounts no route, injects no admin module and adds no consent
 // filter; the user-keyed `_platform/contacts/` address-book layout is
 // byte-for-byte unchanged (GP 11).
@@ -470,7 +470,7 @@ module ExternalContactError =
         | ExternalContactError.StorageFailed message -> $"The contact store could not complete the operation: {message}"
 
 /// Admin-facing API for the external address book. Mounted only when
-/// `ServerConfig.ExternalContactStore` opts in.
+/// `ServerConfig.Stores.ExternalContactStore` opts in.
 ///
 /// **Scope isolation (GP 4).** Every method resolves the caller's scope
 /// from `AccessContext` server-side and passes it to

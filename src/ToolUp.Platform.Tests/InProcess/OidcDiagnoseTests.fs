@@ -6,6 +6,8 @@ module ToolUp.Platform.Tests.InProcess.OidcDiagnoseTests
 open Expecto
 open ToolUp.AuthProviders.Oidc.OidcTypes
 open ToolUp.AuthProviders.Oidc.OidcTokenStore
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
 
 // ─── diagnose : AuthError -> AuthDiagnostic ──────────────────────────
 //
@@ -75,7 +77,7 @@ let tests: Test =
 
         testCase "NetworkError carries the underlying message"
         <| fun () ->
-            let d = diagnose (NetworkError "Failed to fetch")
+            let d = diagnose (AuthError.NetworkError "Failed to fetch")
             Expect.equal d.Kind "NETWORK_ERROR" ""
             Expect.equal d.SubCause (Some "Failed to fetch") ""
 
@@ -143,7 +145,7 @@ let tests: Test =
                 (diagnose MissingCode).Kind
                 (diagnose (IssuerError("", None))).Kind
                 (diagnose (TokenExchangeFailed "")).Kind
-                (diagnose (NetworkError "")).Kind
+                (diagnose (AuthError.NetworkError "")).Kind
                 (diagnose NonceMismatch).Kind
                 (diagnose MalformedIdToken).Kind
                 (diagnose IdTokenSignatureInvalid).Kind

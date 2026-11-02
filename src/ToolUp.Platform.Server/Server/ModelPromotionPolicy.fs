@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-namespace ToolUp.Platform
+namespace ToolUp.Platform.Jobs
+
+open ToolUp.Platform
+open ToolUp.Platform.Infra
 
 open System
 open System.Text
@@ -417,6 +420,23 @@ module PromotionDecision =
     /// Deterministic decision id — lowercase SHA-256 hex of `canonical`.
     let id (scopeId: string) (artifactKeyHash: string) : string =
         Sha256.hexOfUtf8 (canonical scopeId artifactKeyHash)
+
+    /// The decision as the plane's one run envelope, in the scope the reader
+    /// resolved — refused unless that scope is the shard it is stored under.
+    /// Its id is `RunRecord.id PromotionDecision [decisionId]`; its result is
+    /// the verdict.
+    let toRunRecord (scope: ResolvedScope) (decision: PromotionDecision) : Result<RunRecord, string> =
+        RunRecord.inScope scope decision.ScopeId
+        |> Result.map (fun scope -> {
+            Id = RunRecord.id RunKind.PromotionDecision [ decision.DecisionId ]
+            Kind = RunKind.PromotionDecision
+            Scope = scope
+            Subject = decision.ArtifactKeyHash
+            StartedAt = decision.DecidedAt.UtcDateTime
+            Options = RunOptions.empty
+            Provenance = RunProvenance.Computed
+            Outcome = RunOutcome.Succeeded decision.Verdict
+        })
 
     /// The per-metric deltas that justified a supersession: every check that
     /// had both an observed and an incumbent value, as

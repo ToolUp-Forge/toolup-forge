@@ -32,6 +32,13 @@ open ToolUp.Platform.Auth
 open ToolUp.Platform.Secrets
 open ToolUp.AuthProviders
 open ToolUp.Remoting.Server
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Config.Auth
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // NB: `ToolUp.Platform.ConfigValidation` is deliberately NOT opened — its
 // `ValidationResult` DU has `Ok` / `Error` cases that would shadow FSharp.Core's
@@ -49,7 +56,7 @@ let private withHeader (name: string) (value: string) (ctx: HttpContext) =
     ctx
 
 let private toReq (ctx: HttpContext) =
-    ToolUp.Platform.RequestContextBuilder.ofHttpContext ctx
+    ToolUp.Platform.Scope.RequestContextBuilder.ofHttpContext ctx
 
 let private bearerCtx (token: string) =
     mkContext () |> withHeader "Authorization" ("Bearer " + token) |> toReq
@@ -282,7 +289,10 @@ let private lens2ModeGating =
             let config = {
                 ServerConfig.defaults with
                     Surfaces = Surfaces.individual
-                    AcceptHeaderAuthWhenAuthRequired = false
+                    RiskAcknowledgements = {
+                        ServerConfig.defaults.RiskAcknowledgements with
+                            AcceptHeaderAuthWhenAuthRequired = false
+                    }
             }
 
             Expect.isTrue
@@ -294,7 +304,10 @@ let private lens2ModeGating =
             let config = {
                 ServerConfig.defaults with
                     Surfaces = Surfaces.anonymous
-                    AcceptHeaderAuthWhenAuthRequired = false
+                    RiskAcknowledgements = {
+                        ServerConfig.defaults.RiskAcknowledgements with
+                            AcceptHeaderAuthWhenAuthRequired = false
+                    }
             }
 
             Expect.isFalse
@@ -423,8 +436,14 @@ let private lens5EdgeAuth =
             let config = {
                 ServerConfig.defaults with
                     Surfaces = Surfaces.individual
-                    SseAuthMode = CookieRequired
-                    AcceptQueryParamSseAuthWhenAuthRequired = false
+                    SecurityPosture = {
+                        ServerConfig.defaults.SecurityPosture with
+                            SseAuthMode = CookieRequired
+                    }
+                    RiskAcknowledgements = {
+                        ServerConfig.defaults.RiskAcknowledgements with
+                            AcceptQueryParamSseAuthWhenAuthRequired = false
+                    }
             }
 
             Expect.isFalse (isValidationError (sseValidator config)) "cookie auth is the production SSE path"
@@ -434,8 +453,14 @@ let private lens5EdgeAuth =
             let config = {
                 ServerConfig.defaults with
                     Surfaces = Surfaces.individual
-                    SseAuthMode = QueryParamFallback
-                    AcceptQueryParamSseAuthWhenAuthRequired = false
+                    SecurityPosture = {
+                        ServerConfig.defaults.SecurityPosture with
+                            SseAuthMode = QueryParamFallback
+                    }
+                    RiskAcknowledgements = {
+                        ServerConfig.defaults.RiskAcknowledgements with
+                            AcceptQueryParamSseAuthWhenAuthRequired = false
+                    }
             }
 
             Expect.isTrue
@@ -696,7 +721,7 @@ let private runBackstop (httpMethod: string) (path: string) (stampAdmin: bool) :
             Task.CompletedTask)
 
     let mw =
-        ToolUp.Platform.PlatformAdminAuthorization.PlatformAdminAuthorizationMiddleware(next)
+        ToolUp.Platform.Scope.PlatformAdminAuthorization.PlatformAdminAuthorizationMiddleware(next)
 
     mw.InvokeAsync(ctx).GetAwaiter().GetResult()
     ctx.Response.StatusCode, reached
@@ -709,7 +734,7 @@ let private lens4Authz =
 
             match decision with
             | Deny _ -> ()
-            | Allow -> failtest "an unclassified method must fail closed, not default to allow"
+            | AuthDecision.Allow -> failtest "an unclassified method must fail closed, not default to allow"
         }
 
         test "backstop secure: a stamped PlatformAdmin reaches the guarded handler" {

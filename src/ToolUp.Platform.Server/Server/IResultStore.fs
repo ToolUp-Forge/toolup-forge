@@ -1,4 +1,6 @@
-namespace ToolUp.Platform
+namespace ToolUp.Platform.Infra
+
+open ToolUp.Platform
 
 open System
 
@@ -11,7 +13,7 @@ open System
 // `AnalysisCompleted` events automatically.
 //
 // **Optional registration.** `compose` only registers `IResultStore`
-// when `ServerConfig.ResultStore` is `InMemoryResultStore` or
+// when `ServerConfig.Stores.ResultStore` is `InMemoryResultStore` or
 // `PersistentResultStore`. The default `NoResultStore` leaves DI
 // unaware — modules that resolve `IResultStore` via
 // `ctx.RequestServices.GetService` receive `null` and must handle
@@ -48,7 +50,7 @@ module ResultObjectId =
     let modulePrefix (moduleName: string) = moduleName + Separator
 
 /// Server-side interface for saving and querying analytical results.
-/// Registered in DI only when `ServerConfig.ResultStore` is
+/// Registered in DI only when `ServerConfig.Stores.ResultStore` is
 /// non-`NoResultStore`.
 type IResultStore =
     /// Save a new version of the result identified by

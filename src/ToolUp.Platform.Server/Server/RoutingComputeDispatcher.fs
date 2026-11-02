@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-namespace ToolUp.Platform
+namespace ToolUp.Platform.Infra
+
+open ToolUp.Platform
+open ToolUp.Platform.Infra.Metrics
 
 open System
 open System.Collections.Concurrent
@@ -517,7 +520,7 @@ type ComputeFleetDiagnosticsContributor(registry: ComputeBackendRegistry, teleme
 ///
 /// **Entirely opt-in, and nothing about a single-dispatcher deployment
 /// changes (GP 13).** `ComposeStores.registerExternalCompute` is
-/// untouched: `NoExternalCompute` still registers
+/// untouched: `FeatureMode.Disabled` still registers
 /// `NoExternalComputeDispatcher` and still costs nothing, and a
 /// deployment composing one companion dispatcher still gets exactly that
 /// dispatcher with no registry, no telemetry, no health probes and no
@@ -531,7 +534,7 @@ module ComputeFleetCompose =
     /// the `/dev/inspect` row.
     ///
     /// Call this **with** `ServerConfig.ExternalCompute =
-    /// CustomExternalCompute` — that mode is precisely "the deployment
+    /// FeatureMode.Enabled` — that mode is precisely "the deployment
     /// composed its own dispatcher", which is what this does — and before
     /// `ServerApp.run`, so the router is in the collection when the job
     /// scheduler looks for it.

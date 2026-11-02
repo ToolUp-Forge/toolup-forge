@@ -4,6 +4,10 @@ open Expecto
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 434 — composition scale-readiness planner ──────────────────
 //
@@ -385,7 +389,10 @@ let tests =
             Expect.equal
                 (ScaleReadiness.intentOf {
                     ServerConfig.defaults with
-                        ReplicaCount = 4
+                        MultiInstance = {
+                            ServerConfig.defaults.MultiInstance with
+                                ReplicaCount = 4
+                        }
                 })
                 (multiInstance 4)
                 "ReplicaCount is the declared instance count"
@@ -402,7 +409,10 @@ let tests =
                 (ScaleReadiness.intentOf {
                     ServerConfig.defaults with
                         ServerlessHost = ServerlessHost
-                        ReplicaCount = 3
+                        MultiInstance = {
+                            ServerConfig.defaults.MultiInstance with
+                                ReplicaCount = 3
+                        }
                 })
                 ScaleIntent.Serverless
                 "and over an explicit count — there is no stable instance at all"
@@ -508,7 +518,10 @@ let tests =
             ScaleReadinessPreflight.serviceRegistrationForConfig
                 {
                     ServerConfig.defaults with
-                        ReplicaCount = 2
+                        MultiInstance = {
+                            ServerConfig.defaults.MultiInstance with
+                                ReplicaCount = 2
+                        }
                 }
                 allInMemory
                 manifest
@@ -527,7 +540,10 @@ let tests =
             ScaleReadinessPreflight.serviceRegistrationForConfig
                 {
                     ServerConfig.defaults with
-                        ReplicaCount = 2
+                        MultiInstance = {
+                            ServerConfig.defaults.MultiInstance with
+                                ReplicaCount = 2
+                        }
                 }
                 allInMemory
                 manifest
@@ -556,7 +572,10 @@ let tests =
             ScaleReadinessPreflight.serviceRegistrationForConfig
                 {
                     ServerConfig.defaults with
-                        ReplicaCount = 2
+                        MultiInstance = {
+                            ServerConfig.defaults.MultiInstance with
+                                ReplicaCount = 2
+                        }
                 }
                 allDistributed
                 manifest

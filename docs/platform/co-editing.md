@@ -7,7 +7,7 @@ The SDK ships **two answers**, and picking the wrong one is the mistake this pag
 | | **Soft-lock mode** (Phase 442) | **Co-edit mode** (Phase 535) |
 |---|---|---|
 | Substrate | `IEntityLockStore` (+ `IPresenceTracker`) | `ICrdtDocumentStore` (+ `IPresenceTracker`) |
-| Opt-in | `ServerConfig.Presence = EnabledPresence` | `ServerConfig.CrdtDocuments = EnabledCrdtDocuments` |
+| Opt-in | `ServerConfig.Presence = FeatureMode.Enabled` | `ServerConfig.CrdtDocuments = EnabledCrdtDocuments` |
 | Concurrency | One editor at a time; others read-only | Everyone edits at once |
 | Conflict | Prevented — the second editor is told who holds it | Merged — the CRDT resolves it, always |
 | Needs | Nothing beyond the SDK | A CRDT library in the client bundle |
@@ -186,7 +186,7 @@ On reconnect the coordinator runs `CatchUp` first (the state-vector diff of the 
 ```fsharp skip=fragment
 { ServerConfig.defaults with
     CrdtDocuments = EnabledCrdtDocuments
-    Presence = EnabledPresence }          // awareness, optional but wanted
+    Presence = FeatureMode.Enabled }          // awareness, optional but wanted
 ```
 
 `EnabledCrdtDocuments` registers the single-instance in-memory log wrapped in the notification relay. The default is `NoCrdtDocuments`: no store in DI, no allocation, no `_platform.crdt` fan-out — an existing deployment that upgrades is byte-for-byte unchanged until it opts in (GP 11 + GP 13).

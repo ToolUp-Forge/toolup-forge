@@ -53,6 +53,7 @@ let private registeredTests =
         // the corpus-anchor memoisation's constant-spawn property. Named
         // OS mutexes and a handful of `git` subprocesses; no network.
         VerifyGateTests.tests
+        FlagsTests.tests
         CorpusAnchorTests.tests
         // Phase 183 — the consumer codemod for the 0.x breaking renames:
         // golden-file tests over the fixture consumer tree (every deterministic
@@ -85,11 +86,17 @@ let private registeredTests =
         // project's own node_modules; a decoy elsewhere survives. Real processes.
         StaleEsbuildTests.tests
         FuaranCoResolutionTests.tests
+        GateManifestTests.tests
         // Phase 1096 - every test project in the solution or on disk is a
         // VerifyAll pack or a named exclusion (the GateReconcile leg's go-red proof).
         GateReconcileTests.tests
         // Phase 1096 - the pure lane's grep audit re-run over every member.
         PureLaneTests.tests
+        AffectedLaneTests.tests
+        CompilerLeversTests.tests
+        BuildCensusTests.tests
+        ServerPartsBaselineTests.tests
+        SubsystemNamespacesTests.tests
     ]
 
 /// Phase 722 — the registered list plus the guard that makes an

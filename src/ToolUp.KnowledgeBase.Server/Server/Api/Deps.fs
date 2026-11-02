@@ -4,18 +4,22 @@ open System
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.IVectorStore
-open ToolUp.Platform.IEmbeddingProvider
-open ToolUp.Platform.IOcrProvider
-open ToolUp.Platform.ITableExtractor
+open ToolUp.Platform.Infra.IVectorStore
+open ToolUp.Platform.Infra.IEmbeddingProvider
+open ToolUp.Platform.Infra.IOcrProvider
+open ToolUp.Platform.Infra.ITableExtractor
 open ToolUp.Platform.VectorKnowledgeTypes
-open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Config.TeamManagement
 open ToolUp.RAG.IngestionTypes
 open SharedTypes
 open KnowledgeBase.ServerJsonHelpers
 open KnowledgeBase.ServerIndexStorage
 open KnowledgeBase.ServerInventory
 open KnowledgeBase.ServerIngestionObserver
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Per-request dependency record ───────────────────────────────
 //
@@ -46,7 +50,7 @@ type KnowledgeApiDeps = {
     /// keep surfacing through the hybrid sparse leg. `None` only when
     /// no vector store is wired at all (test harnesses bypassing
     /// `composeWithRAG`).
-    IndexLifecycle: ToolUp.Platform.IIndexLifecycle.IIndexLifecycle option
+    IndexLifecycle: ToolUp.Platform.Infra.IIndexLifecycle.IIndexLifecycle option
     EventStore: IEventStore option
     /// Phase 14z — the composed `IEmbeddingProvider`, carried solely so
     /// `resetIndex` can drop the scope's embedder state alongside its
@@ -77,7 +81,7 @@ type KnowledgeApiDeps = {
     /// Optional `IAuditLog` for the Phase 107 original-document access
     /// audit (`KnowledgeOriginalRetrieved` + denial events). `None`
     /// when the audit-log substrate isn't registered (test bypass,
-    /// `NoAuditLog` deployment) — emission is best-effort and silent
+    /// `FeatureMode.Disabled` deployment) — emission is best-effort and silent
     /// when the substrate is absent, same posture as the Platform KB
     /// admin surface.
     AuditLog: IAuditLog option
@@ -170,8 +174,10 @@ type KnowledgeApiDeps = {
     /// `ingestNarrative` refuses to commit a narrative whose Metric spans
     /// reference facts the gate denies at the `FactNarrativePublication`
     /// surface. `None` (no fact store composed) ⇒ the commit path is
-    /// byte-identical (GP 13).
-    DisclosureGate: IFactDisclosureGate option
+    /// byte-identical (GP 13). The gate judges in the resolved scope
+    /// paired with it — the request's, or the one a server-side producer
+    /// committed under — never one derived from a string.
+    DisclosureGate: (IFactDisclosureGate * ResolvedScope) option
     /// Phase 511 — archive-expansion resource guards for `importBatch`,
     /// registered by `withArchiveImportPolicy`. `ArchiveImportPolicy.defaults`
     /// when absent — the one KB policy whose uncomposed default is NOT
@@ -215,6 +221,7 @@ module KnowledgeApiDeps =
     /// its loud logging are unchanged.
     let resolveFrom
         (services: IServiceProvider)
+        (factScope: ResolvedScope)
         (resolvedScope: StorageScope option)
         (userId: string)
         : KnowledgeApiDeps =
@@ -227,8 +234,8 @@ module KnowledgeApiDeps =
         // Falls back to a no-op when `composeWithRAG` hasn't registered one
         // (deployments using KB without RAG, or test harnesses).
         let ragTelemetry =
-            match services.GetService(typeof<ToolUp.Platform.IRagTelemetry.IRagTelemetry>) with
-            | :? ToolUp.Platform.IRagTelemetry.IRagTelemetry as t -> t
+            match services.GetService(typeof<ToolUp.Platform.Infra.IRagTelemetry.IRagTelemetry>) with
+            | :? ToolUp.Platform.Infra.IRagTelemetry.IRagTelemetry as t -> t
             | _ -> ToolUp.RAG.RagTelemetry.createNoOp ()
 
         let recordEnqueue (accepted: bool) =
@@ -331,13 +338,13 @@ module KnowledgeApiDeps =
         // vector-only wrapper so the handlers have exactly one deletion
         // path — never the raw `vs.DeleteChunk` loop.
         let indexLifecycle =
-            match services.GetService(typeof<ToolUp.Platform.IIndexLifecycle.IIndexLifecycle>) with
-            | :? ToolUp.Platform.IIndexLifecycle.IIndexLifecycle as il -> Some il
+            match services.GetService(typeof<ToolUp.Platform.Infra.IIndexLifecycle.IIndexLifecycle>) with
+            | :? ToolUp.Platform.Infra.IIndexLifecycle.IIndexLifecycle as il -> Some il
             | _ ->
                 vectorStore
                 |> Option.map (fun vs ->
-                    ToolUp.Platform.IIndexLifecycle.DefaultIndexLifecycle(vs, None, None, logger)
-                    :> ToolUp.Platform.IIndexLifecycle.IIndexLifecycle)
+                    ToolUp.Platform.Infra.IIndexLifecycle.DefaultIndexLifecycle(vs, None, None, logger)
+                    :> ToolUp.Platform.Infra.IIndexLifecycle.IIndexLifecycle)
 
         let eventStore =
             match services.GetService(typeof<IEventStore>) with
@@ -447,7 +454,7 @@ module KnowledgeApiDeps =
         // when the fact companion's compose registered the fact store.
         let disclosureGate =
             match services.GetService(typeof<IFactDisclosureGate>) with
-            | :? IFactDisclosureGate as g -> Some g
+            | :? IFactDisclosureGate as g -> Some(g, factScope)
             | _ -> None
 
         // Phase 511 — bulk-import policies. The archive guards default to
@@ -560,7 +567,7 @@ module KnowledgeApiDeps =
             | true, (:? string as id) -> id
             | _ -> "anonymous"
 
-        resolveFrom ctx.RequestServices resolvedScope userId
+        resolveFrom ctx.RequestServices (StorageScopeResolver.ScopeResolution.forRequest ctx) resolvedScope userId
 
     /// Fail-closed guard for destructive KB operations. Returns `Error`
     /// when scope resolution collapsed onto the shared `user-anonymous`

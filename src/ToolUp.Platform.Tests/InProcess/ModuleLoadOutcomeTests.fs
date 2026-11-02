@@ -5,6 +5,7 @@ module ToolUp.Platform.Tests.InProcess.ModuleLoadOutcomeTests
 
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Compose
 
 // ─── Phase 169 — module-load startup observability ──────────────────────
 //

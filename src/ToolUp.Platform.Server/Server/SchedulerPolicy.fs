@@ -9,7 +9,7 @@
 /// details and triggers for the Quartz companion. This module is the policy
 /// half, written once over `IJobStore`, so two schedulers cannot disagree
 /// about it; each implementation keeps only its projection.
-module ToolUp.Platform.SchedulerPolicy
+module ToolUp.Platform.Jobs.SchedulerPolicy
 
 open System
 open ToolUp.Platform
@@ -84,6 +84,7 @@ let definitionFor (jobId: JobId) (registration: JobRegistration) (now: DateTime)
     LastRunError = None
     ConsecutiveFailures = 0
     Tags = registration.Tags
+    LastRunWarning = None
 }
 
 /// Persist a new job under `jobId`, then `announce` it (the in-process

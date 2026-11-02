@@ -43,6 +43,44 @@ by cell, lists, captions, alt text, code. A `Component` block's props are prose,
 title, subtitle and section headings are structure the deployment authors, and are not inspected;
 the grounded run never lets the model write them.
 
+### What counts as a number, and the two that pass without a Fact
+
+Two kinds of number are grounded without a Fact, because a reader never mistakes them for a
+figure: the number the deployment asked for, and a count of what the report itself lists. The gate
+admits each only as a **whole number** — digits alone, or an English cardinal up to ninety-nine.
+A percentage, a currency amount, a fraction, a decimal, a grouped or signed figure, an ordinal, a
+scale word (`million`) and a multiplicative (`doubled`) are never whole numbers, so they stay
+refused in every stage unless they are a `Metric` span. Every number in a prose run must be
+admitted: "the top three categories made 40% of sales" is still refused for the `40%`.
+
+1. **The instruction echo — admitted on the first draft.** A whole number passes when the wording
+   in force states the same number counting the same noun. The wording in force is the narrative's
+   prompt plus the guidance of the section the number sits in, as the run resolved them (an
+   administrator's saved version, or the declaration). Each side pairs the number with the words
+   that follow it, up to punctuation, a function word or the fourth word, lower-cased and read in
+   the singular. The noun the instruction counts is the last of its words, and it must be among the
+   words that follow the prose number. So, when the prompt says "report on the top three
+   categories", "the three largest categories" and "3 categories" pass, and "three markets" and
+   "four categories" do not. The echo is cited `instruction:<wording version>#<section id>`, so once
+   an administrator rewords "top three" to "top five", "three" is refused on the next run.
+2. **The structural count — admitted only at the repair loop's late stage.** A whole number passes
+   when it equals the distinct subjects the `Metric` spans of the same element cite, or the items
+   of the list or rows of the table that immediately follows that element. On a first draft it is
+   refused as before, so the model is first asked to cite or rephrase. Only when the
+   [repair loop](#the-repair-loop-and-the-publication-rule) has run at least one round and stopped
+   with offences standing does the run check the best document again at the late stage. A run that
+   repairs nothing (`MaxRepairRounds = 0`) has no late stage. "Four brands" beside three cited
+   brands is refused at every stage. The count is cited `structural-count:<location>`.
+
+The gate takes the wording and the stage through `IInstructedNarrativeGroundingGate.CheckWith` and
+`GroundingCheckOptions`. The fact tier's gate offers it, and resolves each current Fact's subject for
+the count. `Check` is `CheckWith` under `GroundingCheckOptions.none` and admits neither number;
+`GroundingCheck.run` falls back to it for a gate that does not offer `CheckWith`. The pure form is
+`NarrativeGrounding.checkWith`, beside the matcher it uses (`NarrativeGrounding.mentions`,
+`NarrativeGrounding.echoes`). Both admissions are recorded beside the Fact citations on the
+verdict and the audit row, and the published certificate seals each one inside its signed body
+([the certificate](#the-grounding-certificate)).
+
 A refusal is `Ungrounded` with **every** offending claim, in document order:
 
 | Reason | When |
@@ -55,12 +93,106 @@ A refusal is `Ungrounded` with **every** offending claim, in document order:
 | `MisstatedValue` | the stated value is not the reference's value |
 | `UnregisteredReferenceKind` | `<kind>:` names a kind nobody registered |
 
-**A percentage computed from two Facts is refused.** As prose it is an unreferenced number; as a
-span citing one of its inputs it misstates that input. To publish a derived figure, assert it as a
-Fact first (a `Computed` method naming its inputs): it then has an id, a lineage, a disclosure stance
-and a supersession edge — everything the gate checks. Admitting "a declared derivation of named
-Facts" instead would put a second arithmetic engine inside the gate, whose formula and rounding a
-reader would have to trust with no Fact to trace it to.
+**A percentage the model computed from two Facts is refused.** As prose it is an unreferenced
+number; as a span citing one of its inputs it misstates that input. A derived figure is admitted
+only as an [authorised calculation](#authorised-calculations): a `calc:` reference the server
+computed by a formula the deployment declared, which the gate derives again before it admits it. A
+deployment that declares none can still assert a derived figure as a Fact first (a `Computed` method
+naming its inputs).
+
+## Authorised calculations
+
+A reader of a report wants a change on last week, a share of the total, an average for a group: a
+figure derived from Facts, not a Fact itself. A grounded report may state one when the SERVER
+computed it, deterministically, by a formula the deployment declared, and the gate can derive it
+again on its own. The model asks; it never calculates.
+
+**Why the model never computes.** A model can state a figure that is plausible, well formatted and
+wrong, and arithmetic is where it does so most fluently. A figure it typed has no Fact behind it and
+no formula a reader can trace. So the model is given a tool that computes, and the gate admits only
+the figures that tool could have produced: the same inputs, the same declared formula and rounding,
+the same result, derived again at publication.
+
+**Declaring.** A deployment declares its calculations, each from a CLOSED set of operators:
+
+| Operator | Inputs, in order | Result | Formats |
+|---|---|---|---|
+| `percentChange` | from, to | (to − from) ÷ the magnitude of from | percent, number |
+| `difference` | from, to | to − from | currency, scaled, number |
+| `ratio` | numerator, denominator | numerator ÷ denominator | percent, number |
+| `share` | part, whole | part ÷ whole | percent, number |
+| `sum` | two to fifty | the sum | currency, scaled, number |
+| `mean` | two to fifty | the arithmetic mean | currency, scaled, number |
+
+```fsharp skip=fragment
+let calculations =
+    NarrativeCalculations.declare [
+        {
+            Name = "revenue-change"
+            Version = 1
+            Operator = CalculationOperator.PercentChange
+            Metrics = [ "revenue" ]
+            Rounding = { Places = 1; Mode = CalculationRoundingMode.HalfEven }
+            Format = CalculationFormat.Percent
+        }
+    ]
+    |> Result.defaultWith (fun refusals -> failwith (String.concat "; " refusals))
+
+app |> FactsCompose.withNarrativeCalculations calculations
+
+let options =
+    GroundedNarrativeRunOptions.create (NarrativeGrounding.factTools @ NarrativeCalculations.tools calculations)
+```
+
+`NarrativeCalculations.declare` refuses, by name, a malformed name, a version below 1, no metric,
+places outside 0 to 10, a currency that is not ISO 4217, a format the operator cannot be shown in and
+a name declared twice. `CalculationOperator.tryParse` refuses anything outside the closed set (there is
+no rank operator, so an ordinal stays refused). Declaring nothing changes nothing: no tool, no kind,
+and a `calc:` reference is an unregistered kind exactly as before (GP 13).
+
+**Requesting.** A run given `NarrativeCalculations.tools` has the `calculate` tool, and its
+instruction gains one line telling the model to request a derived figure rather than compute it. The
+tool takes a declaration name and its input Fact ids, nothing else. It checks every input through the
+disclosure gate at the tool-result and the narrative-publication surfaces, and requires each to be
+current, a single number, of a declared metric and, with a metric registry composed, in one unit (the
+declared currency, for a currency calculation; a currency calculation with no registry is refused).
+It then evaluates the formula over the inputs' exact decimal values through `Fuaran.Compute`'s column
+operations, rounding once at the declared places under the declared mode, and answers with the
+rendering and the reference:
+
+    calc:<declaration>@<version>/<input fact id>/…/<content address>
+
+The content address is the SHA-256 of the canonical (declaration, version, inputs in order, result)
+tuple. The model cites it as `[[Revenue change|2.7%|calc:revenue-change@1/…]]`.
+
+**Re-deriving.** The fact tier's gate resolves a `calc:` reference itself; a deployment never
+registers an `ICitableReferenceKind` named `calc`. It reads the inputs again at the publishing
+surface, derives the result through the declaration's own evaluation (exact rational arithmetic, not
+the tool's code path), and recomputes the address. The refusals, in the gate's own wording, so the
+repair loop feeds them back:
+
+| Case | Offence |
+|---|---|
+| the stated value differs at its stated precision | `MisstatedValue`, naming the rendering the gate derived |
+| an input was superseded, or the declaration's version moved | `SupersededReference`, naming the reference the calculation has now |
+| an input may not be disclosed here | `UndisclosableReference`, naming the policy |
+| an undeclared calculation, a missing input, a wrong metric or unit, a zero denominator, or an address that does not match | `UnresolvedReference` |
+
+A declaration changed without a version bump no longer matches the addresses issued under it, so
+its old references are refused rather than re-read under new rules.
+
+**Two evaluations, held equal.** The tool's path and the gate's path are independent
+implementations. A differential test runs every operator over a generated corpus (zero
+denominators, negatives, rounding ties, the largest magnitudes a `decimal` holds) through both and
+requires identical answers. Neither path uses floating point. A zero denominator, and a result no
+`decimal` holds exactly, is a declared refusal on both, never infinity or NaN.
+
+**Signing.** Each `calc:` reference a published narrative cites is sealed into its certificate's
+signed body as an admission of kind `calc`, at its location, with its declaration, version,
+operator, inputs, rounding, format, result and address as attributes; its inputs join the Facts the
+certificate's chain cites. Editing any of it fails verification.
+
+Recipe: [`docs/migrations/1180-authorised-narrative-calculations.md`](../migrations/1180-authorised-narrative-calculations.md).
 
 ## Declared citable references
 
@@ -105,9 +237,11 @@ let tradingSummary =
         let! grid = brandRevenueGrid scopeId
         return Ok [ "summary", [ grid ] ] })
 
-RAGServerApp.create factory providerProfile embedder
-|> RAGServerApp.withFacts FactsCompose.withFactTier
-|> composeRAG
+app
+|> RAGCompose.withRAG (
+    RagOptions.create factory providerProfile embedder
+    |> RagOptions.withFacts FactsCompose.withFactTier
+)
 |> GroundedNarratives.compose
     (GroundedNarrativeRunOptions.create NarrativeGrounding.factTools)
     [ tradingSummary ]
@@ -128,16 +262,100 @@ Then:
 - **Grounded** — published through `NarrativePublisher.publishForScope` (tagged `grounded`), indexed
   into the knowledge base through `INarrativeIngestor` when one is composed, and certified: the
   gate issues a grounding certificate rooted at the narrative (a `NarrativeDocument` node) with a
-  `CitesFact` edge to every cited Fact, verifiable offline. Because the narrative's spans carry
-  their Fact ids, superseding a cited Fact flags it stale through
+  `CitesFact` edge to every cited Fact, and every number admitted without a Fact sealed beside the
+  chain, verifiable offline ([the certificate](#the-grounding-certificate)). Because the narrative's
+  spans carry their Fact ids, superseding a cited Fact flags it stale through
   `NarrativeSupersession.findStaleNarratives` (the Phase 521 join).
-- **Ungrounded** — `GroundedNarrativeRefused` with every offence; nothing is published or indexed.
+- **Ungrounded** — the run repairs the draft (below). What it cannot repair is withheld, and the
+  grounded remainder is published as above, with a note naming what was withheld. Only when the
+  definition's repair policy does not publish a remainder, or nothing of the report survives, is the
+  run `GroundedNarrativeRefused` with every offence, publishing and indexing nothing.
 - **Anything else** (no gate composed, no provider, the anonymous scope, output not in the format)
   — `GroundedNarrativeFailed`; nothing is published.
 
-Every outcome writes one audit row, source `_narratives`: `GroundedNarrativePublished`,
+Every outcome writes one audit row, source `_narratives` (a repaired run also writes a row per round,
+below): `GroundedNarrativePublished`,
 `GroundedNarrativeRefused` (naming each offence) or `GroundedNarrativeFailed` (whose outcome field
 also tells `unfunded` and `over-budget` apart).
+
+### The grounding certificate
+
+A published narrative's certificate is a `grounding-certificate/v2`: a canonical JSON body sealed by
+a detached JWS over its exact bytes, checkable with the deployment's public key alone
+(`GroundingCertificate.verify`). The body is the v1 body — the chain rooted at the narrative, a
+`CitesFact` edge to each cited Fact, withheld Facts reduced to id and policy — plus an `Admissions`
+array: every number the narrative states without a Fact, in document order. Each entry carries:
+
+| Field | Holds |
+|---|---|
+| `Kind` | `instruction` or `structural-count` |
+| `Reference` | the reference as the gate cited it (`instruction:2#summary`, `structural-count:<location>`) |
+| `Location` | where the number sits (`section 'summary' › element 1 › span 1`) |
+| `Attributes` | the kind's own details, ordered by name: an instruction echo's `section` and `wordingVersion` |
+
+The admissions are under the signature, so editing, adding, removing or reordering one fails
+verification exactly as editing the chain does. The run hands the verdict's citations to the gate
+through `GroundingCertification.run`; the gate (`IInstructedNarrativeGroundingGate.CertifyWith`)
+checks the document again under the same options, derives the admissions with their locations
+(`NarrativeGrounding.admissionsWith`), refuses when they are not the ones the verdict recorded, and
+issues. A gate that offers only `Certify` certifies the Facts alone, and refuses a narrative that
+cites an admission it could not have made.
+
+**Both versions verify.** The canonical rules are v1's. A body with no admissions signs v1's shape,
+so an empty array is omitted and a v2 body that admitted nothing differs from v1's only in its format
+string; a v1 certificate verifies under v1's rules, unchanged, and is never re-issued. Admissions
+added to a v1 certificate change the signed bytes and fail. `GroundingCertificate.Formats` lists the
+formats a verifier reads; the envelope reader (`CertificateEnvelope`) accepts both. The attested
+path's signing purpose stays `grounding-certificate/v1`: it names the kind of payload, and the version
+is inside the body. Migration: [`docs/migrations/1179-grounding-certificate-v2-signs-admissions.md`](../migrations/1179-grounding-certificate-v2-signs-admissions.md).
+
+**A new kind of admission is a new entry, not a new field.** Every kind uses the four fields above,
+and anything kind-specific goes in `Attributes`. A field added to the entry would change the signed
+bytes of every certificate already issued.
+
+### The repair loop and the publication rule
+
+A refused draft is repaired, not dropped: one unreferenced word in a nine-section report must not
+cost the day's report. Each definition carries a `GroundedRepairPolicy` (`RepairPolicy`, set with
+`GroundedNarrativeDefinition.withRepairPolicy`; `GroundedRepairPolicy.defaults` unless set):
+
+| Field | Default | Meaning |
+|---|---|---|
+| `MaxRepairRounds` | 12 | The most repair rounds a run takes — a ceiling, not the expected case. |
+| `MaxRoundsWithoutProgress` | 3 | Consecutive rounds without progress after which the loop stops. |
+| `MaxRunTokens` | 500,000 | The tokens (prompt plus output, as the provider reports them) the run's model calls may spend. A provider that reports no usage never reaches it. |
+| `PublishGroundedRemainder` | `true` | Whether a run that ends with refused claims publishes what is grounded. |
+
+1. **A repair round.** The run continues the SAME conversation with the gate's offences: for each
+   prose element holding a refused claim, its place, the element as the model wrote it, and every
+   claim refused in it with its reason — a misstated value's reason names the recorded value. The
+   model answers `{"repairs":[{"section":"<id>","element":<n>,"text":"<rewrite>"}]}`. Each rewrite
+   replaces its own element and nothing else (a projection is never rewritten), and the gate
+   re-checks the WHOLE document, because a rewrite can break a neighbour.
+2. **Progress.** A round is progress when the offence set is smaller, or the same size with
+   different members. A round that is not progress is not kept: the next round starts from the best
+   document, in the conversation as it now stands. The loop stops when no offence is left, or at the
+   first limit above, or when no refused claim sits in the model's prose, or when a repair call fails.
+3. **Publication.** What is still refused is cut away at the smallest unit that holds it — a span,
+   else a list item, table row or key-value entry, else the element; an empty paragraph, list or
+   table goes with its last part. A `withheld-claims` section is appended naming each withheld
+   claim's place (the section by its heading, the kind of unit cut) and its reason — never its value,
+   so the note states no number and passes the gate on its own. The result goes through the gate
+   again and is published only if it passes; every number in a published report is still a Fact.
+4. **Record.** Every round writes a `GroundedNarrativeRepairRound` row beside the outcome row:
+   offences in, offences out, whether it made progress, and the tokens spent so far. The publication
+   row's outcome is `published` or `published-with-withheld`, with the rounds taken and each
+   withheld claim; the outcome itself carries a `GroundedRepairSummary` (`Rounds`, `Withheld`).
+
+**On the job.** `GroundedNarrativeOutcome.toJobResult` maps a publication with withheld claims to
+`JobResult.SuccessWithWarning`: the run row is `Succeeded` with `JobRun.Warning`, the definition's
+`LastRunWarning` is set, and the jobs view (`JobsAdminUI`) shows the warning — the count of withheld
+claims, the rounds taken and each claim with its reason — beside the status, listing failed jobs
+first and warned jobs next. A report published whole is a plain `Success`, which clears the warning.
+
+**The old behaviour.** `GroundedRepairPolicy.refuseOnOffence` (`MaxRepairRounds = 0`,
+`PublishGroundedRemainder = false`) refuses on the first offence and writes the single refusal row a
+run wrote before the loop existed.
 
 **The run's call budget (Phase 1109).** No client waits on a run, so it is not held to the
 interactive assistant's 50-second call cap. Every model call the run makes runs under
@@ -281,7 +499,11 @@ also recorded `data-arrival`).
 
 **Scheduled report.** Register a producer over the run; the narrative fills a template placeholder
 as a `NarrativeValue`, so the render goes through the ordinary pipeline and its export door. A
-refused narrative is the producer's `Error`, recorded on the subscription's last-run outcome.
+refused narrative is the producer's `Error`, recorded on the subscription's last-run outcome. A narrative
+published with claims withheld is a success with a warning: the producer reports it through
+`ReportProducerWarning`, and the subscription's job row reads `Succeeded` with the warning beside it,
+exactly as the narrative's own job does (Phase 1181). Any producer may report one the same way; one
+that reports none is unchanged.
 
 ```fsharp skip=fragment
 GroundedNarrativeProducer.create
@@ -413,6 +635,108 @@ change made under a resolved scope enqueues a run (the job is scheduled under it
 A metric whose recompute policy is `Eager` recomputes in its own job; the narrative job waits for
 it (a transient failure, backed off by its retry policy), and on its last attempt runs regardless.
 
+## The learning loop: refusals that recur, and a wording an admin approves
+
+The repair loop makes a refused claim cost a round instead of a report, but a model that makes the
+same mistake every morning pays that round every morning. The fix for a recurring mistake is the
+wording. `NarrativeOffenceLearning.compose` (in `ToolUp.AI.Server`, module
+`NarrativeOffenceHistory`) gives a narrative the evidence that a class of refusal recurs, and a
+proposed sentence an Owner or Admin can approve.
+
+**The history.** After every run that reaches the gate, each claim the gate refused, in the first
+draft or in any repair round, is kept with:
+
+- its class (below);
+- its section and element kind (`prose`, `list`, `table`, `entry` or `element`), read from the gate's
+  location;
+- the claim text;
+- whether a repair round fixed it, or it was withheld or refused the run;
+- the run's date and the wording version in force.
+
+A run whose first draft passed is kept too, with no claims: it counts toward the window. The source
+is the run's audit trail, read after the run. The outcome row names the wording version, and the
+repair-round rows name every claim refused along the way. A run that failed before the gate (no
+provider, unreadable output) is not counted. The history is one blob per narrative in the scope's own
+container, `narrative-learning/<run key>`, beside the wording history. It keeps the newest
+`MaxRunsKept` runs.
+
+**The classes.** Each `GroundingOffenceReason` maps to one class:
+
+| Gate reason | Class |
+|---|---|
+| a number in prose, written in digits (or a metric with no reference) | unreferenced number |
+| a number in prose, written in words | number word |
+| a number in prose that is part of a name ("Q3", "B2B") | name read as a figure |
+| an unresolved reference, or an unregistered reference kind | misattributed reference |
+| a stated value that is not the fact's | misstated value |
+| a superseded reference | superseded |
+| a reference the surface may not disclose | withheld |
+
+**Recurrence.** A class recurs when it was refused on `Threshold` of the last `Window` runs of the
+narrative under ONE wording version: 3 of 5 by default. A new wording version starts the count
+afresh, because the evidence was gathered under the old one.
+
+**Proposal.** When a class recurs, the run's own provider is asked for one sentence to add to the
+instruction, aimed at that class. The provider is resolved exactly as the run resolves it, under the
+team's funding. The model is given the class, up to `MaxEvidence` of the refused claims, the wording
+in force, and any sentence approved before for the same class that did not stop it, so it does not
+repeat one. The grounding gate then checks the sentence as prose. A sentence the gate would refuse,
+one that states a figure, is discarded and not saved. A kept sentence is saved as an OPEN proposal
+with its evidence. At most one proposal per class is open per narrative.
+
+**A proposal is never in force.** Proposals live in the learning blob, never in the wording history
+the run reads (`narrative-prompts/<run key>`), so no run can use one. Only an approval puts a sentence
+in force:
+
+- **Approve** (`NarrativePromptApi.ApproveProposal`) appends the sentence to the instruction in force,
+  keeping its section guidance, and saves the result as a new wording version. The next run uses that
+  version. The approval is refused when the wording in force has changed since the proposal was
+  drafted, or when the result would exceed `MaxPromptLength`.
+- **Dismiss** (`DismissProposal`) records the decision and who made it. The same class is not proposed
+  again until it recurs under a later wording version.
+- An open proposal whose wording changed before it was decided **lapses**. Once a proposal is
+  approved or dismissed, its class is not proposed again under that version.
+
+Each approval and dismissal is audited under the team (`Custom:NarrativeProposalApproved`,
+`Custom:NarrativeProposalDismissed`).
+
+**Follow-through.** `ListProposals` returns, for each approved proposal, how its class has fared
+under the version it made, and so whether the sentence stopped the class recurring. If the class
+recurs under the new version, it is proposed again, with the earlier sentence named. The page also
+lists each class refused under the wording in force, with its count over the window.
+
+**The report admin.** The narrative's page in the report admin (`NarrativePromptAdminUI`) shows a
+"Proposed wording" panel when the server composes the loop: each proposal's sentence, its evidence,
+the wording it would produce, its state, and Approve and Dismiss for an Owner or Admin. A deployment
+that does not compose the loop shows no panel.
+
+**The knobs** are `NarrativeLearningPolicy`, passed to `compose`:
+
+| Field | Default |
+|---|---|
+| `Window` | 5 |
+| `Threshold` | 3 |
+| `MaxEvidence` | 5 |
+| `MaxRunsKept` | 50 |
+| `MaxSentenceLength` | 400 |
+
+```fsharp skip=fragment
+app
+|> GroundedNarratives.compose options definitions
+|> NarrativePromptHandler.withPromptAdmin
+|> NarrativeOffenceLearning.compose NarrativeLearningPolicy.defaults
+```
+
+`compose` wraps the run that `GroundedNarratives.compose` registered, so it must come after that
+call; composed before it, the start fails naming the order. The loop needs the audit trail (an
+`IEventStore`) and blob storage. Without either, a run records nothing and proposes nothing.
+Recording or drafting never changes a run's outcome: a failure to learn is logged. Runs of one
+narrative are read off the trail between one outcome row and the previous one for the same trigger,
+so two runs of the same narrative overlapping under the same trigger could share their repair-round
+rows.
+
+Recipe: [`docs/migrations/1177-narrative-offence-learning.md`](../migrations/1177-narrative-offence-learning.md).
+
 ## In conversation
 
 The same fact tools answer the assistant in a chat turn, under the scope the platform resolved for
@@ -424,7 +748,7 @@ scope for reads the anonymous shard, exactly as the request itself would.
 
 [`GroundedNarrativeTests.fs`](../../src/ToolUp.Platform.Tests/InProcess/GroundedNarrativeTests.fs)
 tries to defeat the gate claim by claim, runs the fact-tier gate and certificate over a real store,
-drives the run end to end on a RAG app composed with `RAGServerApp.withFacts FactsCompose.withFactTier`
+drives the run end to end on a RAG app composed with `RagOptions.withFacts FactsCompose.withFactTier`
 (a scripted model that reads a fact, then writes each defeat case — every one refused, unpublished
 and logged), and exercises both triggers.
 [`ReportSubscriptionScopeTests.fs`](../../src/ToolUp.Platform.Tests/InProcess/ReportSubscriptionScopeTests.fs)
@@ -443,3 +767,12 @@ fails the start naming the subscription and what it lacks; and neither the princ
 reporting tier can build a resolved scope from a string.
 [`AssistantFactScopeTests.fs`](../../src/ToolUp.Platform.Tests/InProcess/AssistantFactScopeTests.fs)
 drives a chat turn whose `query_facts` call reads the requesting team's Fact and no other.
+[`NarrativeCalculationTests.fs`](../../src/ToolUp.Platform.Tests/InProcess/NarrativeCalculationTests.fs)
+covers authorised calculations: the declaration refusals, the two evaluations held equal over a
+generated corpus, the tool and the gate over a real store with each refusal, the run's instruction,
+and the sealed calculation admission and its tamper check.
+[`NarrativeOffenceHistoryTests.fs`](../../src/ToolUp.Platform.Tests/InProcess/NarrativeOffenceHistoryTests.fs)
+covers the learning loop. It table-tests the classifier against every gate reason and its audit-trail
+line, and the recurrence rule. It also runs the composed loop: a proposal appears on the third
+refused run, and a run made after a proposal is saved sends the wording in force until an Owner
+approves it.

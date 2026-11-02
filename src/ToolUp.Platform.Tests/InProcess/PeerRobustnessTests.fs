@@ -19,6 +19,8 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Secrets
 open ToolUp.InterPlatform
+open ToolUp.InterPlatform.PeerCompose
+open ToolUp.Platform.Infra
 
 // ─── Phase 343 — peer robustness roundup ─────────────────────────────
 //
@@ -756,11 +758,11 @@ let asymmetricProviderTests =
 let defaultCompositionUnchangedTests =
     testList "Phase 343 — the HS256 default composition is unchanged" [
 
-        testCase "a fresh PeerServerApp does not opt into the legacy profile fallback"
+        testCase "fresh PeerOptions does not opt into the legacy profile fallback"
         <| fun _ ->
-            let fresh = PeerCompose.PeerServerApp.create ()
+            let fresh = PeerOptions.create ()
 
-            let optedIn = fresh |> PeerCompose.PeerServerApp.withLegacyProfileFallback
+            let optedIn = fresh |> PeerOptions.withLegacyProfileFallback
 
             Expect.isFalse
                 fresh.LegacyProfileFallback

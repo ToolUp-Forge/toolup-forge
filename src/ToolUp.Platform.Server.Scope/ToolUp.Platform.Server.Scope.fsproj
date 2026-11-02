@@ -1,0 +1,229 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Description>ToolUp.Platform server tier, Scope part: scope resolution, teams and invitations, the auth providers, sessions, permissions and grants, share tokens and service accounts, and the security middleware (headers, CSP, CSRF, peer bearer auth). Referenced by ToolUp.Platform.Server, which most applications reference instead.</Description>
+        <PackageTags>fsharp;sdk;server;auth;security</PackageTags>
+    </PropertyGroup>
+    <!-- One part of the server tier, cut along a contiguous run of its compile
+         order (docs/migrations/1193-platform-server-subsystem-assemblies.md). It references only
+         the parts before it; ToolUp.Platform.Server references every part, so a consumer of that
+         package id resolves this one transitively. The sources stay under
+         ../ToolUp.Platform.Server/ with their namespaces unchanged. -->
+    <ItemGroup>
+        <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\ToolUp.Platform.Server.Remoting\ToolUp.Platform.Server.Remoting.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Server.Infra\ToolUp.Platform.Server.Infra.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Server.Config\ToolUp.Platform.Server.Config.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- The parts after this one, the umbrella and the test packs that already read the
+             server tier's internals before the cut. -->
+        <InternalsVisibleTo Include="ToolUp.Platform.Server.Jobs" />
+        <InternalsVisibleTo Include="ToolUp.Platform.Server.Audit" />
+        <InternalsVisibleTo Include="ToolUp.Platform.Server" />
+        <InternalsVisibleTo Include="ToolUp.Platform.Tests" />
+        <InternalsVisibleTo Include="ToolUp.DataSources.Tests" />
+        <InternalsVisibleTo Include="ToolUp.Cli.Tests" />
+        <InternalsVisibleTo Include="ToolUp.Reporting.Tests" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- Server-tier `RequestContext.ofHttpContext`
+             constructor for the Core-tier `RequestContext` newtype. Must
+             precede every `IAuthProvider` impl so they can compile against
+             the shared boxing path. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\Auth\RequestContext.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Auth\StaticJwtAuthProvider.fs" />
+        <!-- `AuthProvider.fromEnv` (env-var-driven dispatch). -->
+        <Compile Include="..\ToolUp.Platform.Server\Auth\AuthProviderFromEnv.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\IShareTokenStore.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\ShareTokenStore.fs" />
+        <!-- Service accounts. Interface then blob-backed default,
+             adjacent, mirroring the share-token pair above. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\IServiceAccountStore.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\ServiceAccountStore.fs" />
+        <!-- The per-source-IP failed-token throttle, lifted out
+             of EncryptionAdminHandler so the window transition is one
+             atomic step against a single clock snapshot (and testable
+             without a wall clock). Must precede its consumers. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\TokenAttemptThrottle.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\EncryptionAdminHandler.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\AdminTokenValidator.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\OidcConfigCompletenessValidator.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\OidcAudienceBindingValidator.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\OidcClaimMappingAdvisoryValidator.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\HeaderAuthProviderModeValidator.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\InviteEmailCapabilityValidator.fs" />
+        <!-- Direct-add existence-proof preflight. Anywhere
+             before Compose/ComposeConfigValidators.fs, which registers it. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\DirectAddIdentityProofValidator.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\CsrfDefaultModeValidator.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Premium\PremiumGate.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Premium\GrantPremiumApiHandler.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\PlatformAdmin\PremiumUserApi.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\ShareTokenSigningKeyProvenanceValidator.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\MultiInstanceAdminCoherenceValidator.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\SecurityHeaders.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\ICspContributor.fs" />
+        <!-- GIS CSP preflight — probes the live IServiceCollection for a
+             contributor covering accounts.google.com, so must follow
+             ICspContributor.fs. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\GoogleIdentityCspValidator.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\SecurityHardening.fs" />
+        <!-- SecurityHeadersValidator moved after SecurityHardening:
+             its CspNonceCacheValidator references SecurityHardening.CspSourceMode. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\SecurityHeadersValidator.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\ForwardedHeadersTrustValidator.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\CsrfHardeningValidator.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\PeerRouteRegistry.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\PeerBearerAuthMiddleware.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\ShareTokenAuthMiddleware.fs" />
+        <!-- Service-account bearer-token middleware. AFTER
+             ShareTokenAuthMiddleware.fs (it writes that module's
+             ShareTokenClaimItemsKey) and after IUsageLog.fs (
+             per-account attribution). -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\ServiceAccountTokenHandler.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\SurfaceEnforcementMiddleware.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\PeerBearerConfigValidator.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\SecurityHeadersMiddleware.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\CspMiddleware.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\CsrfMiddleware.fs" />
+        <!-- BFF-style server-set auth-cookie reflection
+             endpoint (POST / DELETE /api/auth/session). Validates the
+             presented bearer via IAuthProvider, then reflects it into an
+             HttpOnly; Secure; SameSite=Strict cookie so the JWT leaves
+             JS-readable storage. Mounted by BuildRouteHandlers when
+             ServerConfig.AuthCookieIssuance = EnabledAuthCookieIssuance. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\AuthSessionHandler.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Teams\MembershipDoctor.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Teams\InMemoryPendingInviteStore.fs" />
+        <!-- The ETag-based multi-instance default over the
+             IConditionalBlobStorage seam. After the InMemory store (shares its
+             blob layout + codec + expiry hook), before the validator (which
+             type-tests the resolved store). -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\Teams\BlobPendingInviteStore.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Teams\PendingInviteStoreInstanceValidator.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Teams\TeamInvitationHandler.fs" />
+        <!-- The per-team visibility policy record (both axes), its
+             guarded store, the output-visibility source, startup check and API.
+             After TeamManagement (ITeamStore); before BuildRouteHandlers, which
+             mounts TeamOutputVisibilityApi. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\Teams\TeamPolicyStore.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Infra\BootstrapTeam.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\TeamCreationPolicyValidator.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\BootstrapTeamValidator.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Scope\PermissionStore.fs" />
+        <!-- In-platform publication reader grants. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\Scope\PublicationReaderGrantStore.fs" />
+        <!-- Module-declared grant policy: the compose-time
+             registry, the IPermissionStore write-guard decorator, and the
+             dispatch predicate. After PermissionStore.fs (it decorates
+             IPermissionStore) and before Middleware.fs (which stamps the
+             per-request grant records), RemotingHelpers.fs (the dispatch
+             gate), and ServerApp.fs (which builds the registry). -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\GrantPolicyGuard.fs" />
+        <!-- The consented-grant registry: IGrantConsentStore and
+             its in-memory / blob-backed implementations, the signature
+             verifier over a party's registered key material, the lifecycle
+             (propose / approve / revoke — revocation is a record, never a
+             delete), and the dispatch guard that resolves
+             RequiresCounterpartyApproval arm through it ON USE. After
+             GrantPolicyGuard.fs (it implements that file's
+             CounterpartyConsentOracle seam and extends its dispatch guard)
+             and before Middleware.fs (which stamps the per-request consent
+             verdicts) and RemotingHelpers.fs (the dispatch gate). Carries
+             crypto, so it is server-side: the wire types + the canonical
+             payload live in Platform.Core, on the IModuleBindingVerifier
+             precedent. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\GrantConsentStore.fs" />
+        <!-- Dual control (two-person rule) for sensitive admin
+             mutations: the pending-approval store, the propose / approve /
+             reject / expire ceremony, and the IPermissionStore decorator that
+             parks a gated write instead of applying it. After
+             PermissionStore.fs (it decorates IPermissionStore) and after
+             GrantPolicyGuard.fs, which is the decorator it composes INSIDE —
+             module grant policy is evaluated first so a write the module
+             would never admit is refused rather than queued. Takes no type
+             dependency on GrantPolicyGuard: the policy-bearing question
+             arrives as a predicate from the composition root. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\Scope\AdminMutationApproval.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Scope\StoreIdSanitising.fs" />
+        <!-- IPermissionStore/tier-backed default for the
+             host-neutral IActionAuthorizer seam (default-deny; policy as
+             data). After PermissionStore (the backing) + IUserClaims
+             (the tier provider). -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\Scope\PermissionStoreActionAuthorizer.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\UsageQueryApi.fs" />
+        <!-- The Owner/Admin-gated service-account management
+             API behind ServiceAccountUI. Must follow Teams\TeamManagement.fs
+             (ITeamStore + TeamRoles are the role gate), which is why it sits
+             here rather than beside ServiceAccountTokenHandler.fs. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\ServiceAccountApiHandler.fs" />
+        <!-- The Owner/Admin-gated publication-reader API
+             (same gate idiom as ServiceAccountApiHandler). -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\PublicationReaderApiHandler.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\ModuleVisibilityStore.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\ModuleVisibilityResolver.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\ModuleVisibilityApiHandler.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\ModuleVisibilityRouteMiddleware.fs" />
+        <!-- Anonymous-session ownership binding (the sealed
+             HttpOnly cookie). MOVED it ahead of the scope
+             resolvers and Middleware.fs: the binding is no longer only
+             the migration gate, it is the source of the anonymous session
+             id itself, so SubjectRequestExtractor / ScopeResolutionMiddleware
+             both consume it. Depends on DataProtection + HttpContext only,
+             so it sits safely this early. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\AnonymousSessionBinding.fs" />
+        <!-- Session registry. The interface + its blob-backed
+             default sit here, after AnonymousSessionBinding.fs (whose
+             sealed anonymous session id the derivation consumes) and
+             before Middleware.fs / SessionRevocationMiddleware.fs, which
+             are its callers. Depends on IBlobStorage + the Core session
+             types only. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\ISessionRegistry.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\SessionRegistry.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Scope\StorageScopeResolver.fs" />
+        <!-- The ambient request viewer (who is asking, as scope
+             resolution resolved it) the disclosure gate decides for. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\Scope\RequestViewer.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Scope\DefaultSubjectResolver.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\NoOpAnonymousSessionMigrator.fs" />
+        <!-- Revoked-session refusal + session recording.
+             After Middleware.fs, whose ScopeResolutionMiddleware stamps
+             the Subject / StorageScope it reads; before
+             BuildRouteHandlers (which mounts ISessionApi) and
+             ConfigurePipeline (which registers the middleware). -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\SessionRevocationMiddleware.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\SessionApiHandler.fs" />
+        <!-- Admin structural backstop. Path-prefix
+             authorisation middleware over the raw `_platform` admin
+             handlers; registered after ScopeResolutionMiddleware (which
+             stamps `ToolUp.PlatformRole`). Depends only on PlatformRole
+             (Core) + HttpContext. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\PlatformAdminAuthorizationMiddleware.fs" />
+        <!-- Anonymous→authenticated
+             session-migration trigger middleware. Registered in the
+             pipeline after SurfaceEnforcementMiddleware; depends on
+             NoOpAnonymousSessionMigrator (compiled earlier) and on
+             AnonymousSessionBinding (moved ahead of Middleware.fs by
+). -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\AnonymousSessionMigrationMiddleware.fs" />
+        <!-- The team-scoped ISecretStore layer (scope pinned,
+             keys team-prefixed) and the default ITeamProviderResolver over
+             the scope chain. After Providers/BlobProviderProfile.fs
+             and Teams/TeamManagement.fs (the store and the role lookup the
+             resolver composes); nothing in the compose path depends on
+             either, so both are opt-in (GP 13). -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\TeamScopedSecretStore.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\TeamProviderResolver.fs" />
+        <!-- 0.5.7 — IUserDirectoryApi handler. Proxies typeahead queries
+             to the registered IUserDirectory companion; short-circuits
+             to Ok [] when no companion is wired. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\UserDirectoryApiHandler.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="FSharp.Core" />
+    </ItemGroup>
+</Project>

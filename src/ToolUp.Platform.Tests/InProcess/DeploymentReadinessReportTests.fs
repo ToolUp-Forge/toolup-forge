@@ -6,6 +6,9 @@ open Microsoft.Extensions.DependencyInjection
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.HealthChecks
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 177 — Deployment-readiness scorecard tests ────────────────
 //
@@ -284,8 +287,12 @@ let tests =
                     SourceStatus.NotComposed
                     "preflight NotComposed (no snapshot in DI)"
 
-                Expect.equal report.SmokeTests.Status SourceStatus.NotComposed "smoke NotComposed (NoSmokeTest)"
-                Expect.equal report.Drift.Status SourceStatus.NotComposed "drift NotComposed (NoConfigDriftDetection)"
+                Expect.equal
+                    report.SmokeTests.Status
+                    SourceStatus.NotComposed
+                    "smoke NotComposed (FeatureMode.Disabled)"
+
+                Expect.equal report.Drift.Status SourceStatus.NotComposed "drift NotComposed (FeatureMode.Disabled)"
                 Expect.equal report.Health.Status SourceStatus.NotComposed "health NotComposed (no probes)"
                 Expect.equal report.Verdict ReadinessVerdict.DegradedReady "no signal ⇒ DegradedReady, never Ready"
                 Expect.notEqual report.Verdict ReadinessVerdict.Ready "NotComposed never fabricates Ready"

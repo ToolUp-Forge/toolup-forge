@@ -5,6 +5,7 @@ module ToolUp.Platform.Tests.Contracts.IHostCapabilityRegistryContract
 
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Compose
 
 // Phase 266 / 773 — contract for the host-capability registry seam. Any
 // `IHostCapabilityRegistry` — the shipped authorizer-gated registry, the

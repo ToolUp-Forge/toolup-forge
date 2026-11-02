@@ -57,14 +57,15 @@ let aiProviderFactory =
         platformProviders    // DefaultAIProviderFactory.AIPlatformProvider list
         None                 // IPlatformAIKeyStore option — auto-promoted when None
 
-AIServerApp.create aiProviderFactory providerProfile
-|> AIServerApp.withConfig serverConfig
-|> AIServerApp.withAuth authProvider
-|> AIServerApp.addModules modules
-|> AIServerApp.run
+ServerApp.empty
+|> ServerApp.withConfig serverConfig
+|> ServerApp.withAuth authProvider
+|> ServerApp.addModules modules
+|> AICompose.withAI (AIOptions.create aiProviderFactory providerProfile)
+|> ServerApp.run
 ```
 
-AI tools are not passed at this level — each module contributes its own through `ServerModule.withAITools`, and they aggregate on the inner `ServerApp`.
+`AICompose.withAI` sets the AI companion on the deployment; the tier is composed once, when the deployment resolves, so `ServerApp` builders work on either side of it. AI tools are not passed at this level — each module contributes its own through `ServerModule.withAITools`, and they aggregate on the deployment's `ServerApp.AITools`.
 
 Wire the client composition root:
 
@@ -90,7 +91,7 @@ See [concepts.md](concepts.md) for the agent loop, SSE flow, system-prompt compo
 
 ## API reference
 
-See [api-reference.md](api-reference.md) for the full public surface: `AIServerApp`, `AIAssistantApi`, `AIToolDefinition`, `ModuleAIContext`, `PromptContext`, `IAIProvider`, etc.
+See [api-reference.md](api-reference.md) for the full public surface: `AIOptions` / `AICompose.withAI`, `AIAssistantApi`, `AIToolDefinition`, `ModuleAIContext`, `PromptContext`, `IAIProvider`, etc.
 
 ## Extending
 

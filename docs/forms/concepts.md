@@ -86,7 +86,7 @@ let leadCaptureSchema =
 
 ### Why name-keyed `Custom`?
 
-Custom validation logic can't cross the Fable serialisation boundary as closures. The `Custom of name: string` form references a named validator registered server-side via `FormsServerApp.withCustomValidator`. The schema crosses the wire as data; the function lookup happens at validation time.
+Custom validation logic can't cross the Fable serialisation boundary as closures. The `Custom of name: string` form references a named validator registered server-side via `FormsOptions.withCustomValidator`. The schema crosses the wire as data; the function lookup happens at validation time.
 
 The same pattern applies to workflow guards and actions — name-keyed, not closure-valued. The `Transition.Guard` and `Transition.Action` fields are `string option`.
 
@@ -94,7 +94,7 @@ The same pattern applies to workflow guards and actions — name-keyed, not clos
 
 Each `FormSchema` is persisted as a typed entity via `IEntityStore`. Per-scope overrides are allowed: a deployment can register a global `customer-onboarding` schema at compose time and tenants can call `SaveSchema` at their own team scope to override it.
 
-`DefaultedFormStore` is a decorator (wired automatically by `FormsServerApp.run`) that overlays compose-time-registered schemas as scope-wide fallbacks. When the server looks up a schema by `FormSchemaId`, it first checks the active scope's storage, then falls back to the registered default. Tenants without overrides see the default.
+`DefaultedFormStore` is a decorator (wired automatically by `FormsCompose.withForms`) that overlays compose-time-registered schemas as scope-wide fallbacks. When the server looks up a schema by `FormSchemaId`, it first checks the active scope's storage, then falls back to the registered default. Tenants without overrides see the default.
 
 ## Submission model
 
@@ -242,7 +242,7 @@ Two production defects motivated the action-ledger substrate:
 1. **Silent loss.** A pre-ledger action that threw was warn-logged and swallowed. The submission committed; the side effect (email send, webhook fan-out, downstream API) was lost with no metric, no audit, no dead-letter row. Operators only heard about the failure when the customer followed up.
 2. **Replay duplication.** A process restart between state-persist and action-completion re-fired the action on next `ApplyTransition`. Customers received two acknowledgement emails; payment captures double-debited; webhook subscribers got duplicate events.
 
-The ledger turns action invocation into an exactly-once primitive per `(SubmissionId, transitionId, actionName)`. Combined with the per-action `ActionFailurePolicy` registered via `FormsServerApp.withActionPolicy`, the engine surfaces every failure on three independent observability surfaces — metric, audit row, dead-letter ledger entry — so silent loss is structurally impossible.
+The ledger turns action invocation into an exactly-once primitive per `(SubmissionId, transitionId, actionName)`. Combined with the per-action `ActionFailurePolicy` registered via `FormsOptions.withActionPolicy`, the engine surfaces every failure on three independent observability surfaces — metric, audit row, dead-letter ledger entry — so silent loss is structurally impossible.
 
 ```fsharp
 type ActionFailurePolicy =
@@ -261,7 +261,7 @@ type ActionFailurePolicy =
 | `FailSubmission`  | Roll back the state write. Surface `FormError.ActionFailed (actionName, reason)`.                                                              | Load-bearing side effects: payment capture, regulatory webhook, legal notice. Committing the transition without the side effect would leave the system in a worse state. |
 | `LogOnly`         | Warn-log the exception. Commit submission. Same metric + audit row as `DeadLetter` minus the dead-letter retry intent.                         | Genuinely best-effort sinks where a retry orchestrator adds no value — fire-and-forget observability beacons. Also the explicit opt-in for pre-21d behaviour. |
 
-The `IActionLedger` contract is six-rule portable. The default `InMemoryActionLedger` is correct for dev / single-process deployments; distributed deployments wire a durable ledger via `FormsServerApp.withActionLedger`. The `IActionLedgerContract` portability pack (`ToolUp.Forms.Tests/Contracts/IActionLedgerContract.fs`) validates any impl against the same conformance bar.
+The `IActionLedger` contract is six-rule portable. The default `InMemoryActionLedger` is correct for dev / single-process deployments; distributed deployments wire a durable ledger via `FormsOptions.withActionLedger`. The `IActionLedgerContract` portability pack (`ToolUp.Forms.Tests/Contracts/IActionLedgerContract.fs`) validates any impl against the same conformance bar.
 
 ### Why guards and actions are name-keyed
 
@@ -283,7 +283,7 @@ When `IFormApi.Submit` is called, validation runs:
 
 Client-side validation in `FormRenderer` mirrors the same rules for UX feedback; server-side is authoritative.
 
-`Custom` validators are looked up by name in the registry populated via `FormsServerApp.withCustomValidator`. Missing-by-name custom validators are a soft pass (no error) so renaming a validator doesn't break in-flight forms.
+`Custom` validators are looked up by name in the registry populated via `FormsOptions.withCustomValidator`. Missing-by-name custom validators are a soft pass (no error) so renaming a validator doesn't break in-flight forms.
 
 ## Publishable surveys
 
@@ -333,7 +333,7 @@ The `ResourceKind` string for the forms surface is `"forms.publishable"` (expose
 
 ### Anonymous-route registration
 
-The `/api/public/forms/*` prefix is registered as an anonymous route via `ServerApp.withAnonymousRoute PublicFormApi.AnonymousRoutePrefix`. `FormsServerApp.run` calls this automatically; `AuthEnforcementMiddleware` skips its 401 gate for `/api/public/forms/*`. The `/r/{token}` browser-facing route is owned by the consumer app (typically a static HTML host loading the `PublicEmbed` Feliz bundle).
+The `/api/public/forms/*` prefix is registered as an anonymous route via `ServerApp.withAnonymousRoute PublicFormApi.AnonymousRoutePrefix`. `FormsCompose.withForms` calls this automatically; `AuthEnforcementMiddleware` skips its 401 gate for `/api/public/forms/*`. The `/r/{token}` browser-facing route is owned by the consumer app (typically a static HTML host loading the `PublicEmbed` Feliz bundle).
 
 ### Cross-cutting validation chain
 
@@ -341,13 +341,13 @@ The `/api/public/forms/*` prefix is registered as an anonymous route via `Server
 
 | Condition | `Anonymous` / `AuthenticatedEphemeral` | `Individual` / `Team` / `MultiTeam` |
 |---|---|---|
-| `Publishable` schema + `ShareTokenStore = NoShareTokenStore` | `Warning` | **`Error`** (boot fails) |
+| `Publishable` schema + `ShareTokenStore = FeatureMode.Disabled` | `Warning` | **`Error`** (boot fails) |
 | `Publishable` schema + `PublicBaseUrl = None` or whitespace | `Warning` | **`Error`** (boot fails) |
 | No Publishable schemas | `Ok` | `Ok` |
 
-The escape hatch `ServerConfig.AcceptUnsignedPublishable = true` (env `TOOLUP_ACCEPT_UNSIGNED_PUBLISHABLE=1`) downgrades the persistent-mode `Error` back to `Warning` for the staging-shape-in-production-mode edge case — explicit operator opt-in for the dry-run scenario where Publishable schemas are registered but the share-link surface is not yet wired.
+The escape hatch `ServerConfig.RiskAcknowledgements.AcceptUnsignedPublishable = true` (env `TOOLUP_ACCEPT_UNSIGNED_PUBLISHABLE=1`) downgrades the persistent-mode `Error` back to `Warning` for the staging-shape-in-production-mode edge case — explicit operator opt-in for the dry-run scenario where Publishable schemas are registered but the share-link surface is not yet wired.
 
-The `Error` exists because a misconfigured production deployment that boots cleanly with only a `Warning` ships a public surface with no signed-token gate, no use-limit enforcement, and no revocation. Persistent-data deployments must wire `EnabledShareTokenStore` + a valid `PublicBaseUrl` or explicitly opt out via the escape hatch.
+The `Error` exists because a misconfigured production deployment that boots cleanly with only a `Warning` ships a public surface with no signed-token gate, no use-limit enforcement, and no revocation. Persistent-data deployments must wire `FeatureMode.Enabled` + a valid `PublicBaseUrl` or explicitly opt out via the escape hatch.
 
 The `INotificationSink` checks emit `Warning` regardless of mode (deployments dispatching via the creator's own MTA legitimately skip the sink).
 
@@ -364,7 +364,7 @@ type ShareTokenRateLimit = {
 
 `None` (the default) means no per-window rate limit — only the static `UseLimit` cap applies. Set `Some { MaxUses = 5; Window = TimeSpan.FromMinutes 1.0 }` to cap a leaked token's blast radius at 5 submissions/minute. `MaxUses < 1` or `Window < 1s` is rejected at issue-time (`ShareTokenError.StorageFailed`).
 
-`IPublicFormApi.SubmitWithToken` consults the registered `IShareTokenRateLimiter` before any validation or persistence side-effect; rejection returns `FormError.RateLimited`. The SDK default is `InMemoryShareTokenRateLimiter` (single-instance only); distributed deployments wire a Redis / `IRateLimitStore`-backed companion via `FormsServerApp.withShareTokenRateLimiter` so per-token windows are shared across replicas.
+`IPublicFormApi.SubmitWithToken` consults the registered `IShareTokenRateLimiter` before any validation or persistence side-effect; rejection returns `FormError.RateLimited`. The SDK default is `InMemoryShareTokenRateLimiter` (single-instance only); distributed deployments wire a Redis / `IRateLimitStore`-backed companion via `FormsOptions.withShareTokenRateLimiter` so per-token windows are shared across replicas.
 
 ### Public-embed message collapsing
 

@@ -4,7 +4,7 @@ open System
 open System.Text.Json
 open Expecto
 open ToolUp.Platform.EntityTypes
-open ToolUp.Platform.IEntityStore
+open ToolUp.Platform.Infra.IEntityStore
 open ToolUp.Forms.FormSchema
 open ToolUp.Forms.FormSubmission
 open ToolUp.Forms.IFormStore
@@ -12,6 +12,7 @@ open ToolUp.Forms.FormStore
 open ToolUp.Forms.FormValidator
 open ToolUp.Forms.Tests.InProcess.InMemoryEntityStore
 open ToolUp.Remoting.Json.SystemTextJson
+open ToolUp.Platform.Infra
 
 // ─── Phase 21a acceptance — matrix / 2D-grid field ─────────────────
 //

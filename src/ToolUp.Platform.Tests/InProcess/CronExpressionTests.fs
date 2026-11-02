@@ -3,6 +3,7 @@ module ToolUp.Platform.Tests.InProcess.CronExpressionTests
 open System
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Jobs
 
 // ─── CronExpression — parser + evaluator tests ───────────────────
 //

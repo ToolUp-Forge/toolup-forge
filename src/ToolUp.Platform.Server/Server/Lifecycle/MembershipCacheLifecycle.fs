@@ -1,9 +1,9 @@
-module ToolUp.Platform.MembershipCacheLifecycle
+module ToolUp.Platform.Compose.MembershipCacheLifecycle
 
 open System
 open ToolUp.Platform
-open ToolUp.Platform.StorageScopeResolver
-open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Scope.StorageScopeResolver
+open ToolUp.Platform.Config.TeamManagement
 
 // ─── Phase 54 — first-party membership-cache lifecycle hook ──────────
 //
@@ -23,73 +23,48 @@ open ToolUp.Platform.TeamManagement
 // populated lazily on a member's first request, so provisioning has
 // nothing to evict.
 
-/// Strip the `team-` container prefix if present so the hook accepts
-/// either the bare team id or the `team-{id}` container form as the
-/// scope identifier.
+/// The team the offboarded scope names: a `team-{id}` scope's id, or the
+/// scope id itself (the hook accepts a bare team id too).
 let private teamIdOf (scopeId: string) =
-    match ScopeKey.tryParseContainer scopeId with
-    | Some(ScopeKey.Team teamId) -> teamId
+    match ScopeId.parse scopeId with
+    | ScopeKind.Team teamId -> teamId
     | _ -> scopeId
 
-type MembershipCacheLifecycle(services: IServiceProvider) =
-    interface ITenantLifecycle with
-        member _.Name = "membership-cache"
+/// The first-party membership-cache offboard hook, as a value. Its
+/// substrate is the team scope resolver (the only resolver with a team
+/// membership cache) and the team store that enumerates the members.
+let hook: TenantHook<TeamScopeResolver * ITeamStore> = {
+    Name = "membership-cache"
+    Requires = "a TeamScopeResolver with an ITeamStore (team membership cache)"
+    Resolve =
+        fun services ->
+            match services.GetService(typeof<IStorageScopeResolver>), services.GetService(typeof<ITeamStore>) with
+            | (:? TeamScopeResolver as resolver), (:? ITeamStore as store) -> Some(resolver, store)
+            | _ -> None
+    // The active-team cache is populated lazily on a member's first
+    // request, so provisioning has nothing to evict.
+    OnProvisioned = None
+    OnDeprovisioned =
+        Some(fun (resolver, store) scopeId _ -> async {
+            let! members = store.GetTeamMembers(teamIdOf scopeId)
 
-        member _.OnProvisioned(_scopeId, _actorUserId) = async {
-            return
-                LifecycleHookResult.Skipped
-                    "no provisioning action — the active-team cache is populated lazily on first resolve"
-        }
+            // InvalidateUser publishes a MembershipChanged event per
+            // member; the resolver (and any cross-instance companion)
+            // evicts the affected user's active-team cache entry.
+            for m in members do
+                resolver.InvalidateUser m.UserId
 
-        member _.OnDeprovisioned(scopeId, _actorUserId) = async {
-            let resolver = services.GetService(typeof<IStorageScopeResolver>)
-            let teamStore = services.GetService(typeof<ITeamStore>)
-
-            match resolver, teamStore with
-            | (:? TeamScopeResolver as teamResolver), (:? ITeamStore as store) ->
-                let teamId = teamIdOf scopeId
-                let! members = store.GetTeamMembers teamId
-
-                // InvalidateUser publishes a MembershipChanged event per
-                // member; the resolver (and any cross-instance companion)
-                // evicts the affected user's active-team cache entry.
-                for m in members do
-                    teamResolver.InvalidateUser m.UserId
-
-                return LifecycleHookResult.Completed
-            | _ ->
-                return
-                    LifecycleHookResult.Skipped
-                        "scope resolver is not TeamScopeResolver — no team membership cache to invalidate"
-        }
-
-    // Phase 54c — mutation-free preview: count the team's members (the
-    // cache entries that WOULD be invalidated) via the read-only
-    // GetTeamMembers, without calling InvalidateUser.
-    interface ITenantLifecyclePreview with
-        member _.OnDeprovisionPreview(scopeId, _actorUserId) = async {
-            let resolver = services.GetService(typeof<IStorageScopeResolver>)
-            let teamStore = services.GetService(typeof<ITeamStore>)
-
-            match resolver, teamStore with
-            | (:? TeamScopeResolver), (:? ITeamStore as store) ->
-                let teamId = teamIdOf scopeId
-                let! members = store.GetTeamMembers teamId
-
-                return
-                    LifecyclePreviewItem.affecting
-                        "membership-cache"
-                        members.Length
-                        (sprintf "%d member cache entr(y/ies) would be invalidated" members.Length)
-            | _ ->
-                return
-                    LifecyclePreviewItem.affecting
-                        "membership-cache"
-                        0
-                        "not a TeamScopeResolver — no membership cache to invalidate"
-        }
+            return LifecycleHookResult.Completed
+        })
+    // Mutation-free preview: the team's members (the cache entries that
+    // WOULD be invalidated), via the read-only GetTeamMembers.
+    Preview =
+        Some(fun (_, store) scopeId _ -> async {
+            let! members = store.GetTeamMembers(teamIdOf scopeId)
+            return members.Length, sprintf "%d member cache entr(y/ies) would be invalidated" members.Length
+        })
+}
 
 /// Construct the first-party membership-cache lifecycle hook. Resolves
 /// the active scope resolver + team store from `services` on every call.
-let create (services: IServiceProvider) : ITenantLifecycle =
-    MembershipCacheLifecycle(services) :> ITenantLifecycle
+let create (services: IServiceProvider) : ITenantLifecycle = TenantHook.asLifecycle hook services

@@ -4,7 +4,7 @@ open System
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Config.TeamManagement
 open ToolUp.Platform.EntityTypes
 open ToolUp.Platform.EntityQueryTypes
 open ToolUp.Platform.EntityQuery
@@ -19,6 +19,11 @@ open ToolUp.Forms.PublicFormApi
 open ToolUp.Forms.AggregationTypes
 open ToolUp.Forms.AnalyserCache
 open ToolUp.Forms.IFormSubmissionAnalyser
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 21 — ToolUp.Remoting handler ──────────────────────────
 //
@@ -82,8 +87,8 @@ let formApi
     (validatorRegistry: CustomValidatorRegistry)
     (auditLog: IAuditLog)
     (workflows: Map<WorkflowId, WorkflowDefinition>)
-    /// Phase 21b — `Some` when `ServerConfig.ShareTokenStore =
-    /// EnabledShareTokenStore`. `None` causes `IssueTokens` to fail
+    /// Phase 21b — `Some` when `ServerConfig.Stores.ShareTokenStore =
+    /// FeatureMode.Enabled`. `None` causes `IssueTokens` to fail
     /// with a clear error rather than crashing on a null DI lookup.
     (shareTokenStore: IShareTokenStore option)
     /// Phase 21b — `Some` when `ServerConfig.PublicBaseUrl` is set.
@@ -97,7 +102,7 @@ let formApi
     (notificationChannel: INotificationChannel option)
     /// Phase 21b (slice 6) — passed through for synthesised-respondent
     /// address-book writes. Always `Some` for any deployment that
-    /// uses `FormsServerApp` (the base SDK requires `IBlobStorage`),
+    /// composes the Forms companion (the base SDK requires `IBlobStorage`),
     /// but typed `option` here lets the handler refuse cleanly if
     /// somehow absent rather than null-ref'ing.
     (blobStorage: IBlobStorage option)
@@ -445,7 +450,7 @@ let formApi
                         return
                             Error(
                                 FormError.StorageFailed
-                                    "Share-token substrate is not enabled. Set ServerConfig.ShareTokenStore = EnabledShareTokenStore."
+                                    "Share-token substrate is not enabled. Set ServerConfig.Stores.ShareTokenStore = FeatureMode.Enabled."
                             )
                     | _, None ->
                         return
@@ -649,7 +654,7 @@ let formApi
                         return
                             Error(
                                 FormError.StorageFailed
-                                    "Share-token substrate is not enabled. Set ServerConfig.ShareTokenStore = EnabledShareTokenStore."
+                                    "Share-token substrate is not enabled. Set ServerConfig.Stores.ShareTokenStore = FeatureMode.Enabled."
                             )
                     | _, None, _, _ ->
                         return

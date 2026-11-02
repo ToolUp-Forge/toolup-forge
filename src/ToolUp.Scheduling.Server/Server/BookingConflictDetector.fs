@@ -2,6 +2,7 @@ module ToolUp.Scheduling.BookingConflictDetector
 
 open System
 open ToolUp.Scheduling.SchedulingTypes
+open ToolUp.Platform.Jobs
 
 // ─── Phase 20 — Booking conflict detection ───────────────────────
 //

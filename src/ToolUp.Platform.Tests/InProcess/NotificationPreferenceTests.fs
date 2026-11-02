@@ -6,6 +6,10 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 441 — send-path filter + digest job ────────────────────────
 //
@@ -630,7 +634,7 @@ let tests =
                     |> ServerApp.addModule m
 
                 Expect.equal
-                    (app.Config.NotificationCategories |> List.map _.Id)
+                    ((ServerApp.effectiveConfig app).NotificationCategories |> List.map _.Id)
                     [ "security.reset"; "reports.summary" ]
                     "app-level first, then the module's"
             }

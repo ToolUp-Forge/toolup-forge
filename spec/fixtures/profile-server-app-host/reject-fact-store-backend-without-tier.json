@@ -1,0 +1,1 @@
+{"kind":"appRoot","base":"serverApp","layers":[],"id":"reject-fact-store-backend-without-tier","children":[{"kind":"serverConfig","id":"serverConfig","children":[{"kind":"configKnob","key":"FactStoreBackend","value":"Postgres","id":"knob-factStoreBackend","children":[]}]},{"kind":"moduleRef","view":"bareFeliz","id":"Unit","children":[]}]}

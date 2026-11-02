@@ -9,6 +9,10 @@ open System.Threading
 open System.Threading.Tasks
 open Quartz
 open ToolUp.Platform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── the Quartz side of a forge job ──────────────────────────────────
 //
@@ -338,6 +342,7 @@ type internal QuartzDispatchJob(context: QuartzDispatchContext) =
                         Error = None
                         DurationMs = None
                         ExternalHandle = None
+                        Warning = None
                     }
 
                     do! effects.RecordRun runningRow

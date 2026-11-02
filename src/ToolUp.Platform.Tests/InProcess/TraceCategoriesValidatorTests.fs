@@ -4,8 +4,10 @@ open System.Text.Json
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
-open ToolUp.Platform.TraceCategoriesValidator
+open ToolUp.Platform.Config.TraceCategoriesValidator
 open ToolUp.Remoting.Json.SystemTextJson
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
 
 // ─── Phase 9m.C (Gap 11) — the value-level trace-category guard ───────
 //
@@ -199,7 +201,10 @@ let tests =
 
                     let config = {
                         ServerConfig.defaults with
-                            TraceCategories = Set.ofList [ "ai.agnet" ]
+                            Observability = {
+                                ServerConfig.defaults.Observability with
+                                    TraceCategories = Set.ofList [ "ai.agnet" ]
+                            }
                     }
 
                     let result = validator config |> _.Validate() |> Async.RunSynchronously

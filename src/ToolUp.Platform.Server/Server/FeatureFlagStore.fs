@@ -1,4 +1,4 @@
-module ToolUp.Platform.FeatureFlagStore
+module ToolUp.Platform.Config.FeatureFlagStore
 
 open System.Text
 open System.Text.Json

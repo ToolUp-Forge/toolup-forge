@@ -164,7 +164,7 @@ Accepted tokens: `anonymous` / `anonymous_persistent` / `trial` / `individual` /
 Declaring a profile in `Surfaces` wires the substrate that profile needs at composition time:
 
 - `Team _` present → `ITeamStore` is registered (default `BlobTeamStore` persisting team metadata and memberships to the `_platform` blob container).
-- `ClaimBearer _` present and no explicit `ShareTokenStore = NoShareTokenStore` → `IShareTokenStore` auto-promotes to `BlobShareTokenStore`. Explicitly setting `NoShareTokenStore` while declaring a `ClaimBearer` surface is refused at startup by `SurfaceCoherenceValidator`.
+- `ClaimBearer _` present and no explicit `ShareTokenStore = FeatureMode.Disabled` → `IShareTokenStore` auto-promotes to `BlobShareTokenStore`. Explicitly setting `FeatureMode.Disabled` while declaring a `ClaimBearer` surface is refused at startup by `SurfaceCoherenceValidator`.
 - `Anonymous _` present → no extra substrate; the SDK's session-keyed in-memory file store already supports it.
 
 Deployments composing only `Anonymous` in `Surfaces` don't need an auth provider — `ServerApp.withAuth` becomes optional. Deployments with any other shape require it; the composition-root validator catches the omission at startup.
@@ -344,19 +344,25 @@ Two cooperating deployments addressing each other via peer-bearer routes. Surfac
 let config = {
     ServerConfig.defaults with
         Surfaces = Surfaces.individual
-        AcceptHeaderAuthWhenAuthRequired = true       // localhost-testing waivers
-        AcceptPlaintextSecretsWhenAuthRequired = true
-        AcceptQueryParamSseAuthWhenAuthRequired = true
-        PeerRoutePrefixes = [ "/api/peer/" ]
+        RiskAcknowledgements = {
+            ServerConfig.defaults.RiskAcknowledgements with
+                AcceptHeaderAuthWhenAuthRequired = true       // localhost-testing waivers
+                AcceptPlaintextSecretsWhenAuthRequired = true
+                AcceptQueryParamSseAuthWhenAuthRequired = true
+        }
+        MultiInstance = {
+            ServerConfig.defaults.MultiInstance with
+                PeerRoutePrefixes = [ "/api/peer/" ]
+        }
 }
 
 ServerApp.empty
 |> ServerApp.withConfig config
 |> ServerApp.withAuth authProvider
 |> ServerApp.addModules modules
-// Peers themselves are registered one tier up, on the `PeerServerApp`
-// wrapper (`PeerServerApp.withLocalPeer`); `ServerApp` only carries the
-// route prefixes the surface validator skips.
+// Peers themselves are registered by the peer companion
+// (`PeerCompose.withPeer` with `PeerOptions.withLocalPeer`); the config
+// only carries the route prefixes the surface validator skips.
 |> ServerApp.run
 ```
 
@@ -509,7 +515,7 @@ For readers familiar with the retired `PlatformMode` enum, the migration is mech
 |---|---|
 | `IPublicFormApi` "exception to the auth pipeline" | regular routes carrying `SurfaceRequirement.claimBearerOnly` |
 | Shell sidebar's `Mode = Anonymous`-conditional filter | per-module `Visibility: SubjectKind -> bool` predicate |
-| `ServerConfig.ShareTokenStore = EnabledShareTokenStore` opt-in | declaring `ClaimBearer _` in `Surfaces` auto-promotes `BlobShareTokenStore` |
+| `ServerConfig.Stores.ShareTokenStore = FeatureMode.Enabled` opt-in | declaring `ClaimBearer _` in `Surfaces` auto-promotes `BlobShareTokenStore` |
 
 ## Choosing a Surfaces shape for a new deployment
 

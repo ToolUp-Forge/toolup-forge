@@ -6,7 +6,9 @@ module ToolUp.Platform.Tests.InProcess.AnonymousModeContractTests
 
 open Expecto
 open ToolUp.Platform
-open ToolUp.Platform.PlatformApiHandler
+open ToolUp.Platform.Compose.PlatformApiHandler
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 55 — AnonymousMode contract pack ──────────────────────────
 //

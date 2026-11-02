@@ -16,6 +16,9 @@ open ToolUp.Platform
 open ToolUp.Platform.Consent
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.TelemetrySinks.Ga4
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 163 — ITelemetrySink conformance + behaviour ─────────────────
 //
@@ -23,7 +26,7 @@ open ToolUp.TelemetrySinks.Ga4
 // (always-on) and the GA4 companion (env-gated). Plus the behavioural
 // acceptance assertions: the no-op default is a true no-op, a composed sink
 // receives `Track` calls tagged with the per-tenant scope, the server
-// fan-out endpoint reaches the composed sink, `NoTelemetrySink` mounts no
+// fan-out endpoint reaches the composed sink, `FeatureMode.Disabled` mounts no
 // endpoint at all, and the client-side consent gate suppresses an
 // un-consented event before it can leave the browser.
 
@@ -40,7 +43,7 @@ type private RecordingTelemetrySink() =
 
 /// Drive the mounted telemetry route once against a composed sink and an
 /// optional `AccessContext`, returning the status code. Goes through
-/// `routesFor CustomTelemetrySink` + Giraffe's `choose` rather than the
+/// `routesFor FeatureMode.Enabled` + Giraffe's `choose` rather than the
 /// handler directly, so the mount and the routing are part of what is
 /// under test.
 let private postTelemetry (sink: ITelemetrySink option) (accessContext: AccessContext option) (body: string) : int =
@@ -61,7 +64,7 @@ let private postTelemetry (sink: ITelemetrySink option) (accessContext: AccessCo
     ctx.Request.Body <- new MemoryStream(Encoding.UTF8.GetBytes body)
     ctx.Response.Body <- new MemoryStream()
 
-    let router = choose (TelemetryApiHandler.routesFor CustomTelemetrySink)
+    let router = choose (TelemetryApiHandler.routesFor FeatureMode.Enabled)
     let next: HttpFunc = fun c -> System.Threading.Tasks.Task.FromResult(Some c)
 
     router next ctx |> _.GetAwaiter().GetResult() |> ignore
@@ -199,19 +202,19 @@ let tests =
         // GP 13, and the acceptance criterion the whole seam rests on: the
         // default composes no route at all, so there is nothing to allocate,
         // nothing to authorise and nothing to 404 through a handler.
-        test "NoTelemetrySink (the default) mounts no endpoint" {
+        test "FeatureMode.Disabled (the default) mounts no endpoint" {
             Expect.isEmpty
-                (TelemetryApiHandler.routesFor NoTelemetrySink)
+                (TelemetryApiHandler.routesFor FeatureMode.Disabled)
                 "the default mode contributes no routes to the router"
 
             Expect.equal
-                (List.length (TelemetryApiHandler.routesFor CustomTelemetrySink))
+                (List.length (TelemetryApiHandler.routesFor FeatureMode.Enabled))
                 1
                 "opting in mounts exactly the one fan-out route"
 
             Expect.equal
-                ServerConfig.defaults.TelemetrySink
-                NoTelemetrySink
+                ServerConfig.defaults.Observability.TelemetrySink
+                FeatureMode.Disabled
                 "and the unmounted mode is what a stock deployment gets"
         }
 

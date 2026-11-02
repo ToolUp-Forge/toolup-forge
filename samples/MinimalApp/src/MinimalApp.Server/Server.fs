@@ -4,7 +4,9 @@
 module MinimalApp.Server
 
 open ToolUp.Platform
-open ToolUp.Platform.Server
+open ToolUp.Platform.Compose.Server
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // Phase 11.G canonical reference composition root.
 // Anonymous mode, no AI, no domain modules — the absolute minimum a

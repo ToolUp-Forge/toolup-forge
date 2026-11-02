@@ -11,16 +11,21 @@ open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.NotificationChannel
-open ToolUp.Platform.StorageScopeResolver
-open ToolUp.Platform.TeamManagement
-open ToolUp.Platform.TeamPolicyStore
+open ToolUp.Platform.Config.NotificationChannel
+open ToolUp.Platform.Scope.StorageScopeResolver
+open ToolUp.Platform.Config.TeamManagement
+open ToolUp.Platform.Scope.TeamPolicyStore
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Facts
 open ToolUp.AI
 open ToolUp.AI.TeamConversationPolicyStore
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
 // ─── Phase 896 — team output visibility ──────────────────────────────
 //
@@ -100,9 +105,9 @@ let private draftWith (metric: string) (disclosure: Disclosure) (value: decimal)
 }
 
 let private assertFact (store: IFactStore) (scope: string) (draft: FactDraft) =
-    match store.Assert(scope, draft) |> Async.RunSynchronously with
+    match store.Assert(TestScope.resolved scope, draft) |> Async.RunSynchronously with
     | Ok fact -> fact
-    | Error e -> failtestf "assert failed: %s" e
+    | Error e -> failtestf "assert failed: %s" (FactStoreError.describe e)
 
 /// Stub team facts, counting role lookups so a test can prove the default
 /// path never makes one.
@@ -156,17 +161,17 @@ let private asViewer (viewer: RequestViewer option) (body: Async<'T>) : Async<'T
     return! body
 }
 
-let private verdictOf (gate: IFactDisclosureGate) (viewer: RequestViewer option) surface (factId: string) =
-    asViewer viewer (gate.Check(team, "principal-ignored", surface, [ factId ]))
-    |> Async.RunSynchronously
-    |> Map.tryFind factId
-
 let private teamScope (teamId: string) : ResolvedScope =
     ScopeResolution.ofStorageScope {
         ScopeId = teamId
         Container = $"team-{teamId}"
         Persist = true
     }
+
+let private verdictOf (gate: IFactDisclosureGate) (viewer: RequestViewer option) surface (factId: string) =
+    asViewer viewer (gate.Check(teamScope team, "principal-ignored", surface, [ factId ]))
+    |> Async.RunSynchronously
+    |> Map.tryFind factId
 
 // ─── The rule ────────────────────────────────────────────────────────
 
@@ -395,10 +400,12 @@ let private gateTests =
             for surface in allSurfaces do
                 for viewer in [ None; Some member'; Some admin ] do
                     let armed =
-                        asViewer viewer (h.Armed.Check(team, "p", surface, ids))
+                        asViewer viewer (h.Armed.Check(teamScope team, "p", surface, ids))
                         |> Async.RunSynchronously
 
-                    let plain = h.Plain.Check(team, "p", surface, ids) |> Async.RunSynchronously
+                    let plain =
+                        h.Plain.Check(teamScope team, "p", surface, ids) |> Async.RunSynchronously
+
                     Expect.equal armed plain $"identical at {FactEgressSurface.toString surface}"
 
             Expect.equal h.Sources.RoleLookups 0 "whole team needs no role")
@@ -449,7 +456,7 @@ let private gateTests =
                 assertFact h.Store team (draftWith "margin" (Restricted "sales") 4242m)
 
             let verdicts =
-                asViewer (Some member') (h.Armed.Check(team, "ada", FactRetrieval, [ restricted.FactId ]))
+                asViewer (Some member') (h.Armed.Check(teamScope team, "ada", FactRetrieval, [ restricted.FactId ]))
                 |> Async.RunSynchronously
 
             Expect.equal
@@ -479,7 +486,7 @@ let private gateTests =
             let verdicts =
                 asViewer
                     (Some admin)
-                    (h.Armed.Check(team, "p", FactRetrieval, [ restricted.FactId; surfaceable.FactId ]))
+                    (h.Armed.Check(teamScope team, "p", FactRetrieval, [ restricted.FactId; surfaceable.FactId ]))
                 |> Async.RunSynchronously
 
             Expect.equal
@@ -617,7 +624,7 @@ let private viewerTests =
                 let next =
                     Func<Task>(fun () -> task {
                         let! v =
-                            h.Armed.Check(team, "mia", FactRetrieval, [ restricted.FactId ])
+                            h.Armed.Check(teamScope team, "mia", FactRetrieval, [ restricted.FactId ])
                             |> Async.StartAsTask
 
                         verdicts <- v
@@ -913,7 +920,7 @@ let private recordTests =
             let! world = newWorld ()
 
             // The assistant's conversation declaration (the unrestricted
-            // default), as `AIServerApp` registers it.
+            // default), as the AI tier registers it.
             let validate (output: TeamOutputVisibilitySettings) =
                 let services = ServiceCollection()
 
@@ -952,13 +959,16 @@ let private composeTests =
                 (FactsCompose.withTeamOutputVisibility TeamAdmins [ TeamAdmins ] noFacts)
                     .Extensions.PreMiddleware.Length
                 noFacts.Extensions.PreMiddleware.Length
-                "NoFactStore: nothing composed"
+                "FeatureMode.Disabled: nothing composed"
 
             let withFacts = {
                 ServerApp.empty with
                     Config = {
                         ServerConfig.defaults with
-                            FactStore = EnabledFactStore
+                            Stores = {
+                                ServerConfig.defaults.Stores with
+                                    FactStore = FeatureMode.Enabled
+                            }
                     }
             }
 
@@ -990,7 +1000,10 @@ let private composeTests =
                 ServerApp.empty with
                     Config = {
                         ServerConfig.defaults with
-                            FactStore = EnabledFactStore
+                            Stores = {
+                                ServerConfig.defaults.Stores with
+                                    FactStore = FeatureMode.Enabled
+                            }
                     }
                     Extensions = {
                         ServerApp.empty.Extensions with
@@ -1023,7 +1036,7 @@ let private composeTests =
             // No source composed: every team sits at the declared default,
             // so a member (whose role no team store can confirm) is refused.
             let verdicts =
-                asViewer (Some member') (gate.Check(team, "p", FactRetrieval, [ restricted.FactId ]))
+                asViewer (Some member') (gate.Check(teamScope team, "p", FactRetrieval, [ restricted.FactId ]))
                 |> Async.RunSynchronously
 
             Expect.equal verdicts[restricted.FactId] (FactNotDisclosable "sales") "armed"
@@ -1052,7 +1065,7 @@ let private legacyBlobName = "team-policies/ai-conversation-visibility.json"
 /// A composition with the fact store's gate and team output visibility
 /// declared at `defaultLevel`. `conversation` stands in for the AI
 /// assistant: `Some` registers its conversation declaration the way
-/// `AIServerApp` does, `None` is a facts-only deployment. `conversationFirst`
+/// the AI tier does, `None` is a facts-only deployment. `conversationFirst`
 /// picks which of the two is registered first.
 let private composeWith
     (world: World)
@@ -1068,7 +1081,10 @@ let private composeWith
         ServerApp.empty with
             Config = {
                 ServerConfig.defaults with
-                    FactStore = EnabledFactStore
+                    Stores = {
+                        ServerConfig.defaults.Stores with
+                            FactStore = FeatureMode.Enabled
+                    }
             }
             Extensions = {
                 ServerApp.empty.Extensions with
@@ -1337,7 +1353,10 @@ let private platformTierTests =
                 ServerApp.empty with
                     Config = {
                         ServerConfig.defaults with
-                            FactStore = EnabledFactStore
+                            Stores = {
+                                ServerConfig.defaults.Stores with
+                                    FactStore = FeatureMode.Enabled
+                            }
                     }
             }
 

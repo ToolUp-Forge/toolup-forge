@@ -7,6 +7,8 @@ open System
 open System.Collections.Concurrent
 open ToolUp.Platform
 open ToolUp.Platform.Secrets
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Fakes for the always-on unit tests ───────────────────────────
 //

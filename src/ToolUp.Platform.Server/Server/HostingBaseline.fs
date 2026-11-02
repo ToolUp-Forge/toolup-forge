@@ -1,7 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-namespace ToolUp.Platform
+namespace ToolUp.Platform.Compose
+
+open ToolUp.Platform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Audit
 
 open System
 open System.IO
@@ -668,7 +674,7 @@ module HostingBaseline =
     /// trusted-proxy network when there is one (forwarded-headers trust is
     /// scoped to those networks), else loopback.
     let proxyPeerFor (config: ServerConfig) : IPAddress =
-        match ForwardedHeadersTrustValidator.Cidr.parseAll config.TrustedProxyCidrs with
+        match ForwardedHeadersTrustValidator.Cidr.parseAll config.SecurityPosture.TrustedProxyCidrs with
         | Ok(network :: _) -> network.BaseAddress
         | _ -> IPAddress.Loopback
 

@@ -11,6 +11,9 @@ open Microsoft.Extensions.DependencyInjection
 open Giraffe
 open ToolUp.Platform
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 112 — live-session host + endpoint tests ──────────────────
 //

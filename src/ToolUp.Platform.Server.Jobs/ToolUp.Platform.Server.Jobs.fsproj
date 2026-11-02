@@ -1,0 +1,279 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Description>ToolUp.Platform server tier, Jobs part: the job store and scheduler, notifications and their preferences, presence and co-editing, webhooks, and the job handlers that run on them. Referenced by ToolUp.Platform.Server, which most applications reference instead.</Description>
+        <PackageTags>fsharp;sdk;server;jobs;notifications</PackageTags>
+    </PropertyGroup>
+    <!-- One part of the server tier, cut along a contiguous run of its compile
+         order (docs/migrations/1193-platform-server-subsystem-assemblies.md). It references only
+         the parts before it; ToolUp.Platform.Server references every part, so a consumer of that
+         package id resolves this one transitively. The sources stay under
+         ../ToolUp.Platform.Server/ with their namespaces unchanged. -->
+    <ItemGroup>
+        <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\ToolUp.Platform.Server.Remoting\ToolUp.Platform.Server.Remoting.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Server.Infra\ToolUp.Platform.Server.Infra.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Server.Config\ToolUp.Platform.Server.Config.fsproj" />
+        <ProjectReference Include="..\ToolUp.Platform.Server.Scope\ToolUp.Platform.Server.Scope.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- The parts after this one, the umbrella and the test packs that already read the
+             server tier's internals before the cut. -->
+        <InternalsVisibleTo Include="ToolUp.Platform.Server.Audit" />
+        <InternalsVisibleTo Include="ToolUp.Platform.Server" />
+        <InternalsVisibleTo Include="ToolUp.Platform.Tests" />
+        <InternalsVisibleTo Include="ToolUp.DataSources.Tests" />
+        <InternalsVisibleTo Include="ToolUp.Cli.Tests" />
+        <InternalsVisibleTo Include="ToolUp.Reporting.Tests" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="..\ToolUp.Platform.Server\Server\Notifications\SSEConnectionManager.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\SseTraceContributor.fs" />
+        <!-- In-memory presence channel (single-instance default). -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\Notifications\PresenceChannel.fs" />
+        <!-- Presence tracker + advisory soft-lock store
+             (interfaces + single-instance in-memory defaults). Publish
+             join/move/leave + lock taken/released/expired events on the
+             reserved `_platform.*` keys via INotificationChannel;
+             no new transport. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\IPresenceTracker.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\IEntityLockStore.fs" />
+        <!-- CRDT co-editing substrate: the append-only opaque
+             update log (seam) plus the single-instance in-memory default
+             and the INotificationChannel fan-out decorator. After
+             IEntityLockStore.fs (the awareness floor it sits above) and
+             after NotificationChannel.fs (the relay's transport). No CRDT
+             library server-side — payloads are opaque bytes. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\ICrdtDocumentStore.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\InMemoryCrdtDocumentStore.fs" />
+        <!-- The durable arm of the same seam: an IBlobStorage-backed
+             append log + snapshot fold, so a co-edited document survives a
+             restart. After InMemoryCrdtDocumentStore.fs because it reuses the
+             NotifyingCrdtDocumentStore relay declared there rather than
+             re-implementing fan-out. Still no CRDT library server-side. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\BlobCrdtDocumentStore.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\INotificationSink.fs" />
+        <!-- The external address book seam. Only the
+             INTERFACE sits here: it needs nothing but the Core types, and
+             NotificationAddressBook.fs below takes it as an optional
+             constructor argument to resolve the External recipient arm.
+             The entity-backed default lives with the entity substrate,
+             far below. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\IExternalContactStore.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\INotificationAddressBook.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\NotificationAddressBook.fs" />
+        <!-- The WhatsApp template registry seam + its blob-backed
+             and no-op defaults. Needs only Core types and IBlobStorage;
+             before WhatsAppSendPolicyFilter.fs, which consults it. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\IWhatsAppTemplateRegistry.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\WhatsAppTemplateRegistry.fs" />
+        <!-- Shared SSE scope resolution. One resolution path
+             (principal-wins + SseAuthMode-gated fallback + mismatch audit)
+             consumed by both NotificationHandler below and
+             ToolUp.AI.Server's SSEHandler so the two cannot drift. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\Notifications\SseScopeResolution.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Notifications\NotificationHandler.fs" />
+        <!-- Scope-isolated server-driven live-session host:
+             ILiveChannel / ILiveSessionHost (six-rule, GP 4 structural
+             scope partition) + the in-process default. After the SSE
+             substrate it rides; the compose hook + endpoint live in
+             Server\Compose\LiveSessionsCompose.fs (after ServerApp). -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\Notifications\LiveSessionHost.fs" />
+        <!-- Neutral tree-patch transport envelope: TreePatchEnvelope
+             (monotonic seq / diff-base) + ITreePatchChannel (push / ack /
+             resync-on-gap) layered over the ILiveChannel. Opaque
+             payload (GP 1), scope isolation inherited from the wrapped channel
+             (GP 4), six-rule (GP 12). After LiveSessionHost.fs it wraps. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\Notifications\TreePatchChannel.fs" />
+        <!-- The SDK-default IExternalContactStore, over
+             IEntityStore for the versioning, the dedupe indexes and the
+             per-scope container. After EntityStore.fs; before
+             ComposeStores.fs registers it. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\ExternalContactStore.fs" />
+        <!-- SDK-wide cross-instance lease primitive
+             (IDistributedLock + Lease + the in-process default). Sits
+             before every consumer: the job scheduler's per-JobId dispatch
+             mutex, the blob-backed Platform-Admin store's read-modify-write
+             serialisation, and SDK.Server's DI registration. Depends only
+             on ILogger, so it can sit this early. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\IDistributedLock.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\InProcessDistributedLock.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\IJobStore.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\IJobHandler.fs" />
+        <!-- RunJob: a platform job as a name, a parse and a run; the one
+             handler shape and the one job-payload codec. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\RunJob.fs" />
+        <!-- The platform-owned scope carrier. Before
+             IJobScheduler.fs, whose carried job scope redeems through it. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\CarriedScopeToken.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\IJobScheduler.fs" />
+        <!-- The job-progress-checkpoint seam + its fan-out
+             default, plus the ctx.Progress JobContext extension. Before
+             JobScheduler.fs (which constructs the sink and pushes the
+             ambient reporter around each handler dispatch) and after
+             IJobHandler.fs, so a handler file can see ctx.Progress. Needs
+             only INotificationChannel / IEventStore / ILogger from Core. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\IJobProgressSink.fs" />
+        <!-- Resource-envelope seam adapters: the concurrency
+             gate that decorates a budgeted component's IJobHandler, the
+             RouteLimit projection that folds a component's declared
+             requests-per-minute into the middleware's own policy
+             list, and the typed queue-depth admission. Reads the Core
+             EnvelopeSignature; adds no hosted service and no dependency.
+             After IJobHandler/IJobScheduler (decorates the handler) and
+             IMetricsSink (emits the refusal counter); before ServerApp,
+             which applies the gate where a module's ComponentId is in
+             scope. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\ResourceEnvelopeEnforcement.fs" />
+        <!-- Schema-migration IJobHandler binding: long-running
+             MigrationPlan executions run through IJobScheduler and survive
+             restarts. After IJobHandler/IJobScheduler + IUserSchemaStore. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\SchemaMigrationJobHandler.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\ModelFitJobHandler.fs" />
+        <!-- The EXTERNAL execution binding of the fit
+             envelope: the versioned `modelfit/v1` work-spec convention, the
+             completion rendezvous a callback resolves, and the
+             IModelFitProvider that submits through IExternalComputeDispatcher.
+             Compiles after IModelFitProvider.fs (the seam it implements) and
+             needs IDatasetStore + IExternalComputeDispatcher +
+             IExternalHandleStore + IJobProgressSink, all above. Nothing
+             composes it — a deployment wires the worker itself (GP 13). -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\ExternalModelFitProvider.fs" />
+        <!-- Batch item execution: the `_platform.modelfit.batchitem`
+             IJobHandler (fit envelope + batch-annotated registry registration).
+             Consumer-wired like the scoring handler. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\ModelFitBatchItemJobHandler.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\ModelScoringJobHandler.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\DatasetAssemblyExecutor.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\ModelEvaluationRunner.fs" />
+        <!-- Declared promotion policies: tolerance predicates
+             over score / comparison output decide auto-promote vs queue for
+             curation vs reject, and every verdict that moves an artifact is
+             executed through the transition seam as
+             `PolicyVerdict` (no second state machine). Compiles AFTER
+             ModelEvaluationRunner.fs (it reads the track record as
+             one of its two metric sources) and after ModelTransitionSeam.fs
+             (it drives that seam). Nothing composes it: a deployment that
+             never constructs the evaluator keeps the pre-645 path exactly
+             (GP 11) and pays nothing (GP 13). -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\ModelPromotionPolicy.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\JobStore.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\CronExpression.fs" />
+        <!-- Persisted per-scope OnEvent trigger cursor; before the
+             scheduler (startup scan / sweep / flush) and the notify decorator
+             (live advance), both of which consume it. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\JobTriggerWatermark.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\SchedulerPolicy.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\JobLifecycle.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\JobScheduler.fs" />
+        <!-- Opt-in TTL sweep for BlobIdempotencyStore. After the
+             job substrate (IJobHandler / ScheduledJobDeclaration) it builds on;
+             the shared layout stays in Remoting/Idempotency.fs. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\IdempotencySweepJob.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\JobSchedulerDiagnosticsContributor.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\JobNotifyEventStore.fs" />
+        <!-- Single-node default IBuildOrchestrator over IJobScheduler.
+             Registers handler "_platform.build" + dispatches builds via
+             Schedule(Manual) + TriggerOnce; per-AppSlug SemaphoreSlim
+             enforces no-cross-shard ordering at single-node scale. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\JobSchedulerBuildOrchestrator.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\DataIngestionJobHandler.fs" />
+        <!-- The delivery-completed hook: after IDataIngestor and
+             IJobHandler (it decorates the one and wraps the other), before
+             ComposeJobs (which applies both) and ServerApp (the compose surface). -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\DeliveryCompleted.fs" />
+        <!-- `IOAuthTokenRefresher` substrate (InProcessOAuthTokenRefresher
+             uses ISecretStore + IRateLimiter; placed after the secret-store
+             infra files so all transitive dependencies have already loaded). -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\InProcessOAuthTokenRefresher.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\OAuthRefreshJobHandler.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Infra\PlatformAdminStore.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Providers\ProviderOAuthRefreshJobHandler.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Providers\ProviderStatusProbeJobHandler.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\AutoBootstrapDevAdminModeValidator.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\SmokeTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\JobSchedulerInstanceValidator.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\DeployPlaneDepsValidator.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\NotificationChannelInstanceValidator.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\SseAuthModeValidator.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\JobApiHandler.fs" />
+        <!-- The out-of-process model-execution submitter API
+             handler (fit submission via the 599 batch envelope, bulk
+             outcome retrieval, dataset resolution, scoring; typed refusals
+             throughout). Mounted by BuildRouteHandlers on the opt-in
+             ServerConfig.ModelExecution mode. Placed with the API handlers
+             (needs TeamManagement's role gate). -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\ModelExecutionApi.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\OAuthFlowHandler.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\DataIngestionApiHandler.fs" />
+        <!-- Grant-event notification to affected principals: the
+             pure write-delta classifier, the per-audience message shapes, and
+             the IPermissionStore observer that bridges a landed grant to
+             INotificationChannel. After GrantPolicyGuard.fs (it reads the
+             ModuleGrantPolicyRegistry and the declared PartyRef) and outside
+             every decorator that can refuse or park a write, because it must
+             observe what was actually WRITTEN. Composed only when a policy is
+             declared AND a channel is resolvable. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\GrantNotificationObserver.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\TeamQuotaPolicy.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\TransactionalDispatcher.fs" />
+        <!-- Notification preference + digest substrate: the
+             INotificationPreferenceStore seam + blob-backed default, the
+             NotificationPreferenceFilter INotificationChannel decorator (+ the
+             ambient NotificationCategoryScope), and the DigestJobHandler.
+             After TransactionalDispatcher (the filter wraps its channel) and
+             IJobHandler / IJobScheduler (the digest declaration); before
+             ComposeNotifications, which composes all three. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\INotificationPreferenceStore.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\BlobNotificationPreferenceStore.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\NotificationPreferenceFilter.fs" />
+        <!-- The OUTER consent gate. Composed AROUND the
+             preference filter, so consent is answered before
+             preference is. After NotificationPreferenceFilter.fs, whose
+             recipientsOf / narrowTo / hashRecipient it reuses rather
+             than duplicating; before ComposeNotifications.fs wraps it
+             onto the channel. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\ExternalContactConsentFilter.fs" />
+        <!-- The WhatsApp send policy (24-hour window + template
+             checks), composed directly INSIDE the consent gate and outside
+             the preference filter. After ExternalContactConsentFilter.fs and
+             NotificationPreferenceFilter.fs (reuses narrowTo /
+             hashRecipient); before the Compose/ family that wires it. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\WhatsAppSendPolicyFilter.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\DigestJobHandler.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\IWebhookRegistry.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\WebhookRegistry.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\WebhookSecretMigration.fs" />
+        <!-- Hard-Error gate on a
+             webhook secret rotation that cannot reach a sibling instance.
+             After WebhookRegistry.fs (reads BlobWebhookRegistry.IsWiredToChannel)
+             and after PerScopeKeyResolverDistributedValidator.fs (shares its
+             replica-count and channel-classification helpers, so the two gates
+             cannot disagree about the topology); before
+             Compose/ComposeConfigValidators.fs, which registers it. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\WebhookSecretRotationFanoutValidator.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\WebhookSecretValidator.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\WebhookUrlValidator.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\WebhookDispatcher.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\HookedEventStore.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\WebhookApiHandler.fs" />
+        <!-- INotificationPreferenceApi handler (same AccessContext
+             gate idiom as ServiceAccountApiHandler); before BuildRouteHandlers
+             mounts it on the NotificationPreferences opt-in. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\NotificationPreferenceApiHandler.fs" />
+        <!-- The admin surface over IExternalContactStore.
+             Mounted by Compose/BuildRouteHandlers.fs only when the
+             ExternalContactStore mode opts in. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\ExternalContactApiHandler.fs" />
+        <!-- IPresenceApi Remoting handler over the
+             substrate. After IPresenceTracker.fs / IEntityLockStore.fs (the
+             services it resolves); before BuildRouteHandlers mounts it. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\PresenceApiHandler.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="FSharp.Core" />
+    </ItemGroup>
+</Project>

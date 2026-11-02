@@ -9,6 +9,9 @@ open System.Text
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open PeerReflection
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
 
 // ─── Layer 4 — job-substrate fusion ──────────────────────────────────
 //
@@ -333,8 +336,8 @@ type BlobPeerJobResultStore(blobs: IBlobStorage, retention: PeerJobRetentionPoli
         }
 
 /// The scheduler + result-store pair the host fuses long-running calls
-/// onto. Present only when `ServerConfig.PeerSubstrate =
-/// EnabledPeerSubstrate` *and* the job substrate is enabled; absent (the
+/// onto. Present only when `ServerConfig.MultiInstance.PeerSubstrate =
+/// FeatureMode.Enabled` *and* the job substrate is enabled; absent (the
 /// `option` is `None`) leaves long-running methods reporting a clear
 /// "not enabled" error (GP 13 — zero cost when unused).
 type PeerJobFusion = {
@@ -839,7 +842,7 @@ type BlobPeerGroupJobMap(blobs: IBlobStorage, retention: PeerJobRetentionPolicy,
 /// gateway polls the owning member over.
 ///
 /// A single DI singleton rather than two, and registered **only** by a
-/// gateway composition that was given a map (`PeerServerApp.withGroupJobMap`
+/// gateway composition that was given a map (`PeerOptions.withGroupJobMap`
 /// + `PeerGateway.withAggregate`). An ordinary receiver registers nothing,
 /// the poll route resolves `None`, and its path through the handler is
 /// byte-for-byte the pre-630 one (GP 11 / GP 13).

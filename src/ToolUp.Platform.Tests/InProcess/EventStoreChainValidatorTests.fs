@@ -22,6 +22,9 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
 
 // ── A minimal terminal store and a configurable decorator ────────────
 

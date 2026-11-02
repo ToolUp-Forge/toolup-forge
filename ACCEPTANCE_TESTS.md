@@ -35,7 +35,7 @@ the negative controls are the part a later reader will want.
 
 **Covers:** Phase 6k.A (provider-agnostic JWT auth scaffolding:
 `IAuthBridge`, `ClientConfig.AuthBridge`, the JWT-as-cookie write, and
-`ServerConfig.SseAuthMode`), against the generic OIDC shell of
+`ServerConfig.SecurityPosture.SseAuthMode`), against the generic OIDC shell of
 [Phases 744–748](docs/companions/auth-providers.md#oidc-presets).
 
 **What it proves, in one sentence:** that a deployment's server-side

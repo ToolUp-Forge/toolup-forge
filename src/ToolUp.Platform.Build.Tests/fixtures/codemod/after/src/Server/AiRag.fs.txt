@@ -1,0 +1,50 @@
+module MyApp.Server.AiRag
+
+open ToolUp.Platform
+open ToolUp.AI.AICompose
+open ToolUp.RAG.RAGCompose
+
+/// An AI root on the wrapper record.
+let ai factory profile (config: ServerConfig) =
+    AIServerApp.create factory profile
+    |> AIServerApp.withConfig config
+    |> AIServerApp.run
+
+/// A RAG root on the wrapper record.
+let rag factory profile embedder (config: ServerConfig) =
+    RAGServerApp.create factory profile embedder
+    |> RAGServerApp.withConfig config
+    |> RAGServerApp.run
+
+/// The additive extensions, in their configurator shape.
+let stacked factory profile embedder (app: ServerApp) =
+    app
+    |> withAI factory profile id
+    |> withRAG factory profile embedder id
+
+/// The other companion roots on their wrapper records.
+let forms (config: ServerConfig) =
+    FormsServerApp.create ()
+    |> FormsServerApp.withConfig config
+    |> FormsServerApp.run
+
+let stackedForms (app: ServerApp) = app |> withForms (fun f -> f)
+
+let scheduling () = SchedulingServerApp.create () |> SchedulingServerApp.run
+
+let peer () = PeerServerApp.create () |> PeerServerApp.run
+
+let site () = PublicRenderingServerApp.create () |> PublicRenderingServerApp.run
+
+let stackedSite (app: ServerApp) = app |> withPublicRendering (fun pr -> pr)
+
+let assets () = AssetStoreServerApp.create () |> AssetStoreServerApp.run
+
+let media () = MediaLibraryServerApp.create () |> MediaLibraryServerApp.run
+
+let algorithms (app: ServerApp) = app |> withAlgorithms (fun a -> a)
+
+let passkey config (app: ServerApp) = app |> PasskeyCompose.create config |> PasskeyCompose.run
+
+let scim config (app: ServerApp) =
+    ScimServerApp.ofServerApp app |> ScimServerApp.withScim config |> ScimServerApp.run

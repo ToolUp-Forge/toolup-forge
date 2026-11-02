@@ -1,7 +1,8 @@
-module ToolUp.Platform.ForwardedHeadersTrustValidator
+module ToolUp.Platform.Scope.ForwardedHeadersTrustValidator
 
 open System
 open ToolUp.Platform
+open ToolUp.Platform.Config
 
 // ─── Phase 6l.K / Phase 325 — forwarded-headers trust posture ───────
 //
@@ -17,7 +18,7 @@ open ToolUp.Platform
 // — cookie-secure flags, OIDC `RedirectUri` generation, any TLS branch.
 //
 // Phase 325 adds the scoping Phase 6l.K's warning anticipated:
-// `ServerConfig.TrustedProxyCidrs` populates
+// `ServerConfig.SecurityPosture.TrustedProxyCidrs` populates
 // `ForwardedHeadersOptions.KnownIPNetworks` so forwarded headers are
 // honoured only from declared proxy networks, and this validator
 // escalates the unscoped trust-any-peer posture from `Warning` to
@@ -74,7 +75,7 @@ module Cidr =
     /// preflight `Error`; the pipeline's options builder throws it.
     let malformedMessage (bad: string list) : string =
         sprintf
-            "ServerConfig.TrustedProxyCidrs (TOOLUP_TRUSTED_PROXY_CIDRS) contains malformed CIDR entr%s: %s. Each entry must be an IPv4/IPv6 network in CIDR form with host bits zero (e.g. 10.0.0.0/8, 192.168.1.0/24, 2001:db8::/32)."
+            "ServerConfig.SecurityPosture.TrustedProxyCidrs (TOOLUP_TRUSTED_PROXY_CIDRS) contains malformed CIDR entr%s: %s. Each entry must be an IPv4/IPv6 network in CIDR form with host bits zero (e.g. 10.0.0.0/8, 192.168.1.0/24, 2001:db8::/32)."
             (if List.length bad = 1 then "y" else "ies")
             (bad |> List.map (sprintf "'%s'") |> String.concat ", ")
 
@@ -102,11 +103,11 @@ type ForwardedHeadersTrustValidator(config: ServerConfig, ?timeout: TimeSpan) =
         member _.Timeout = timeout
 
         member _.Validate() = async {
-            if not config.TrustForwardedHeaders then
+            if not config.SecurityPosture.TrustForwardedHeaders then
                 // No forwarded-headers middleware registered — no spoof surface.
                 return Ok
             else
-                match Cidr.parseAll config.TrustedProxyCidrs with
+                match Cidr.parseAll config.SecurityPosture.TrustedProxyCidrs with
                 | Result.Error bad ->
                     // Malformed allowlist entries can never be intended —
                     // fail preflight before the pipeline throws the same
@@ -118,7 +119,7 @@ type ForwardedHeadersTrustValidator(config: ServerConfig, ?timeout: TimeSpan) =
                     // allowlist, so X-Forwarded-* from an out-of-range peer
                     // is ignored. Nothing to warn about.
                     return Ok
-                | Result.Ok [] when config.AcceptForwardedHeadersFromAnyProxy ->
+                | Result.Ok [] when config.RiskAcknowledgements.AcceptForwardedHeadersFromAnyProxy ->
                     // Operator attestation: a single trusted proxy that
                     // strips client-supplied X-Forwarded-* headers fronts
                     // every request path. Same silencing contract as the
@@ -133,19 +134,19 @@ type ForwardedHeadersTrustValidator(config: ServerConfig, ?timeout: TimeSpan) =
                     // spoof is the additional consequence specific to
                     // RequireHttps = false.
                     let httpsClause =
-                        if config.RequireHttps then
+                        if config.SecurityPosture.RequireHttps then
                             ""
                         else
                             " With RequireHttps = false, a plain-HTTP request carrying X-Forwarded-Proto: https also makes Request.IsHttps return true, fooling cookie-secure flags / OIDC RedirectUri / any TLS branch — set TOOLUP_REQUIRE_HTTPS=1 if a TLS terminator runs upstream."
 
                     let remedy =
-                        " Declare your TLS terminator's network(s) in TOOLUP_TRUSTED_PROXY_CIDRS (comma-separated CIDRs, e.g. 10.0.0.0/8) so forwarded headers are trusted only from those peers, or set ServerConfig.AcceptForwardedHeadersFromAnyProxy = true (TOOLUP_ACCEPT_FORWARDED_HEADERS_FROM_ANY_PROXY=1) if a single trusted proxy that strips client-supplied X-Forwarded-* headers fronts every request path."
+                        " Declare your TLS terminator's network(s) in TOOLUP_TRUSTED_PROXY_CIDRS (comma-separated CIDRs, e.g. 10.0.0.0/8) so forwarded headers are trusted only from those peers, or set ServerConfig.RiskAcknowledgements.AcceptForwardedHeadersFromAnyProxy = true (TOOLUP_ACCEPT_FORWARDED_HEADERS_FROM_ANY_PROXY=1) if a single trusted proxy that strips client-supplied X-Forwarded-* headers fronts every request path."
 
                     let message =
                         sprintf
                             "ServerConfig.Surfaces = %s + TrustForwardedHeaders = true, but TrustedProxyCidrs is empty and RequireHttps = %b — KnownIPNetworks / KnownProxies are cleared, so the SDK trusts X-Forwarded-For / X-Forwarded-Proto from ANY peer, not only your proxy. A caller rotating X-Forwarded-For bypasses IP rate limiting and poisons audit / access logs (rate limiting keys on the post-rewrite RemoteIpAddress); this applies in every mode, including anonymous internet-facing deployments.%s%s"
                             (DeploymentConfig.surfacesLabel config)
-                            config.RequireHttps
+                            config.SecurityPosture.RequireHttps
                             httpsClause
                             remedy
 

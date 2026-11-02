@@ -10,6 +10,7 @@ open DocumentFormat.OpenXml
 open DocumentFormat.OpenXml.Packaging
 open ToolUp.OpenXml
 open ToolUp.OpenXml.Tests
+open ToolUp.Platform.Audit
 
 let private reviewer = {
     Name = "Reviewer"

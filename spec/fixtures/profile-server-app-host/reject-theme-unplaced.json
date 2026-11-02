@@ -1,0 +1,1 @@
+{"kind":"appRoot","base":"serverApp","layers":[],"id":"reject-theme-unplaced","children":[{"kind":"serverConfig","id":"serverConfig","children":[{"kind":"theme","source":"design/house.theme.json","contentHash":"sha256:7d3f0c2b9a1e48d6c5b4a39281706f5e4d3c2b1a09f8e7d6c5b4a3928170f6e5","id":"house","children":[]}]}]}

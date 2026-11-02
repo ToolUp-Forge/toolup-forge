@@ -16,14 +16,18 @@ open ToolUp.Platform
 open ToolUp.Platform.EntityTypes
 open ToolUp.Platform.Metrics
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.IEntityStore
-open ToolUp.Platform.DataObjectStore
-open ToolUp.Platform.EntityStore
+open ToolUp.Platform.Infra.IEntityStore
+open ToolUp.Platform.Infra.DataObjectStore
+open ToolUp.Platform.Infra.EntityStore
 open ToolUp.Platform.Narrative
-open ToolUp.Platform.Server
+open ToolUp.Platform.Compose.Server
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.PublicRendering
 open ToolUp.PublicRendering.PublicRenderingCompose
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 109 — IndexNow push-indexing tests ───────────────────────
 //
@@ -605,11 +609,11 @@ let private composeGateTests =
 
         test "withIndexNow flips the option; default is disabled" {
             let app =
-                PublicRenderingServerApp.create ()
-                |> PublicRenderingServerApp.withIndexNow IndexNowOptions.enabled
+                PublicRenderingOptions.create ()
+                |> PublicRenderingOptions.withIndexNow IndexNowOptions.enabled
 
             Expect.isTrue app.IndexNow.Enabled "enabled after withIndexNow"
-            Expect.isFalse (PublicRenderingServerApp.create ()).IndexNow.Enabled "off by default (GP 11)"
+            Expect.isFalse (PublicRenderingOptions.create ()).IndexNow.Enabled "off by default (GP 11)"
         }
 
         test "enabled IndexNow adds exactly one handler (the /{key}.txt route) vs not composed" {
@@ -625,20 +629,22 @@ let private composeGateTests =
                 ServerApp.empty
                 |> ServerApp.withConfig baseConfig
                 |> PublicRenderingCompose.withPublicRendering (
-                    PublicRenderingServerApp.withLayout (LayoutName "page") dummyLayout
+                    PublicRenderingOptions.create ()
+                    |> PublicRenderingOptions.withLayout (LayoutName "page") dummyLayout
                 )
 
             let withIndexNow =
                 ServerApp.empty
                 |> ServerApp.withConfig baseConfig
-                |> PublicRenderingCompose.withPublicRendering (fun pr ->
-                    pr
-                    |> PublicRenderingServerApp.withLayout (LayoutName "page") dummyLayout
-                    |> PublicRenderingServerApp.withIndexNow IndexNowOptions.enabled)
+                |> PublicRenderingCompose.withPublicRendering (
+                    PublicRenderingOptions.create ()
+                    |> PublicRenderingOptions.withLayout (LayoutName "page") dummyLayout
+                    |> PublicRenderingOptions.withIndexNow IndexNowOptions.enabled
+                )
 
             Expect.equal
-                (List.length withIndexNow.Extensions.Handlers)
-                (List.length withoutIndexNow.Extensions.Handlers + 1)
+                (List.length (ServerApp.composedExtensions withIndexNow).Handlers)
+                (List.length (ServerApp.composedExtensions withoutIndexNow).Handlers + 1)
                 "IndexNow adds exactly one route handler; a pipeline without it has none (GP 11/13)"
         }
 
@@ -656,20 +662,22 @@ let private composeGateTests =
                 ServerApp.empty
                 |> ServerApp.withConfig baseConfig
                 |> PublicRenderingCompose.withPublicRendering (
-                    PublicRenderingServerApp.withLayout (LayoutName "page") dummyLayout
+                    PublicRenderingOptions.create ()
+                    |> PublicRenderingOptions.withLayout (LayoutName "page") dummyLayout
                 )
 
             let withHostlessIndexNow =
                 ServerApp.empty
                 |> ServerApp.withConfig baseConfig
-                |> PublicRenderingCompose.withPublicRendering (fun pr ->
-                    pr
-                    |> PublicRenderingServerApp.withLayout (LayoutName "page") dummyLayout
-                    |> PublicRenderingServerApp.withIndexNow IndexNowOptions.enabled)
+                |> PublicRenderingCompose.withPublicRendering (
+                    PublicRenderingOptions.create ()
+                    |> PublicRenderingOptions.withLayout (LayoutName "page") dummyLayout
+                    |> PublicRenderingOptions.withIndexNow IndexNowOptions.enabled
+                )
 
             Expect.equal
-                (List.length withHostlessIndexNow.Extensions.Handlers)
-                (List.length withoutIndexNow.Extensions.Handlers)
+                (List.length (ServerApp.composedExtensions withHostlessIndexNow).Handlers)
+                (List.length (ServerApp.composedExtensions withoutIndexNow).Handlers)
                 "no host → inactive → no extra route"
         }
     ]

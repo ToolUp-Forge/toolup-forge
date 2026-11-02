@@ -9,6 +9,9 @@ open Expecto
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
 // Phase 247 — `InviteEmailCapabilityValidator` warns when a team-scoped,
 // auth-required deployment mounts the invite-by-email surface with no
@@ -19,7 +22,10 @@ open ToolUp.Platform.ConfigValidation
 let private cfg (surfaces: SurfaceProfile list) (ack: bool) : ServerConfig = {
     ServerConfig.defaults with
         Surfaces = surfaces
-        AcceptInviteByEmailWithoutDirectory = ack
+        RiskAcknowledgements = {
+            ServerConfig.defaults.RiskAcknowledgements with
+                AcceptInviteByEmailWithoutDirectory = ack
+        }
 }
 
 /// Minimal stand-in directory — the validator only checks for the

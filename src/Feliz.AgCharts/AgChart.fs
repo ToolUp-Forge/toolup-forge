@@ -32,7 +32,32 @@ let ensureChartsModulesRegistered () =
         agChartsCommunityModule?setup ()
         chartsModulesRegistered <- true
 
-let agChart: obj = import "AgCharts" "ag-charts-react"
+// Phase 1168 — `[<Import>]` rather than a value bound to `import`: Fable then
+// emits the import where the binding is USED, not at the top of this file.
+// `ag-charts-react` declares no `sideEffects`, so one unused import of it here
+// would keep all of AG Charts in the first load of every program that opens
+// this module.
+[<Import("AgCharts", "ag-charts-react")>]
+let agChart: obj = jsNative
+
+let private reactLazy: (unit -> JS.Promise<obj>) -> obj = import "lazy" "react"
+
+[<Emit("$0.then(c => ({ default: c }), e => { $1(); throw e; })")>]
+let private asLazyModule (load: JS.Promise<'c>) (onFailed: unit -> unit) : JS.Promise<obj> = jsNative
+
+// Sanctioned module-level mutable: the one lazy component, replaced on failure.
+let mutable private loadedChart: obj option = None
+
+let private lazyChart () : obj =
+    match loadedChart with
+    | Some chart -> chart
+    | None ->
+        let chart =
+            reactLazy (fun () ->
+                asLazyModule (importValueDynamic Feliz.AgChartRuntime.Chart) (fun () -> loadedChart <- None))
+
+        loadedChart <- Some chart
+        chart
 
 /// Chart theme/branding palette (GP 5 mutable exception). These are
 /// deployment-branding overrides: the sole writer is the consumer's
@@ -492,6 +517,12 @@ type BubbleSeries =
 /// We pass it straight to createElement; wrapping it again would produce
 /// { options: { options: {...} } }, and AG Charts would warn
 /// "Unknown option `options`, ignoring" when iterating the outer object.
+///
+/// Phase 1168 — the chart itself loads on demand, out of `AgChartRuntime`, a
+/// separate file reached only by dynamic import. The `Suspense` here shows a
+/// placeholder while the chunk loads. A chunk that fails rejects into the
+/// nearest error boundary, which in the SDK shell is `ModuleBoundary`, and the
+/// rejected lazy is dropped so the remount its button causes fetches again.
 [<ReactComponent>]
 let MemoizedChart (reactProps: obj) =
     let prevJsonRef = React.useRef ""
@@ -502,7 +533,21 @@ let MemoizedChart (reactProps: obj) =
         prevJsonRef.current <- json
         stableRef.current <- reactProps
 
-    ReactLegacy.createElement (unbox<ReactElement> agChart, stableRef.current)
+    let host =
+        createObj [
+            "externallyRegistered" ==> chartsModulesRegistered
+            "chartProps" ==> stableRef.current
+        ]
+
+    React.Suspense(
+        [ ReactLegacy.createElement (unbox<ReactElement> (lazyChart ()), host) ],
+        Html.div [
+            prop.role "status"
+            prop.ariaBusy true
+            prop.className "animate-pulse rounded bg-gray-100"
+            prop.style [ style.minHeight 160 ]
+        ]
+    )
 
 // ─── Legend / theme option records (Phase 12e) ───────────────────
 
@@ -783,6 +828,4 @@ type AgChart =
 
         prop.custom ("options", createObj value)
 
-    static member inline chart props =
-        ensureChartsModulesRegistered ()
-        MemoizedChart(createObj !!props)
+    static member inline chart props = MemoizedChart(createObj !!props)

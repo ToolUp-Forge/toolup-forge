@@ -1,4 +1,7 @@
-module ToolUp.Platform.LocalStorageEncryptionValidator
+module ToolUp.Platform.Config.LocalStorageEncryptionValidator
+
+open ToolUp.Platform
+open ToolUp.Platform.Infra
 
 open System
 open ToolUp.Platform.BlobStorage

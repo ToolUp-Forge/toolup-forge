@@ -476,7 +476,7 @@ module ServiceAccountTokenView =
     }
 
 /// Admin-facing API for managing service accounts and their tokens.
-/// Mounted only when `ServerConfig.ServiceAccounts` opts in.
+/// Mounted only when `ServerConfig.Stores.ServiceAccounts` opts in.
 ///
 /// **Scope isolation (GP 4).** Every method resolves the caller's scope
 /// from `AccessContext` server-side and passes it to

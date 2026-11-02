@@ -5,8 +5,8 @@
 # still be folded into this file in the same PR.
 ToolUp.DataSources.Redshift.RedshiftDataSource (class)
 ToolUp.DataSources.Redshift.RedshiftDataSource.Kind : System.String (literal)
-ToolUp.DataSources.Redshift.RedshiftDataSource.create(ToolUp.Platform.Secrets+ISecretStore) : ToolUp.Platform.IDataSource
-ToolUp.DataSources.Redshift.RedshiftDataSource.createWithDefaultCredentials() : ToolUp.Platform.IDataSource
+ToolUp.DataSources.Redshift.RedshiftDataSource.create(ToolUp.Platform.Secrets+ISecretStore) : ToolUp.Platform.Infra.IDataSource
+ToolUp.DataSources.Redshift.RedshiftDataSource.createWithDefaultCredentials() : ToolUp.Platform.Infra.IDataSource
 ToolUp.DataSources.Redshift.RedshiftDataSource.parseAwsCredentials(System.String, System.String) : Microsoft.FSharp.Core.FSharpResult`2[Amazon.Runtime.AWSCredentials, ToolUp.Platform.IngestionError]
 ToolUp.DataSources.Redshift.RedshiftDataSource.readSettings(Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.DataSources.Redshift.RedshiftDataSource+RedshiftSourceSettings, ToolUp.Platform.IngestionError]
 ToolUp.DataSources.Redshift.RedshiftDataSource.renderField(Amazon.RedshiftDataAPIService.Model.Field) : System.String

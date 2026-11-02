@@ -10,6 +10,9 @@ open Microsoft.AspNetCore.Http
 open ToolUp.Platform
 open ToolUp.Platform.Narrative
 open ToolUp.Platform.VectorKnowledgeTypes
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Compose
 
 // ─── The narrative grounding gate (Phase 985) ────────────────────────
 //
@@ -36,7 +39,10 @@ open ToolUp.Platform.VectorKnowledgeTypes
 // (`twelve`, `million`, `doubled`). Both are refused outside a `Metric`
 // span, and a span's LABEL is prose too — only its value may carry the
 // figure. The word list is a policy value (`GroundingPolicy.NumberWords`)
-// a deployment can extend for another language.
+// a deployment can extend for another language. Two whole numbers pass
+// without a Fact (`NarrativeGrounding.checkWith`): one the wording in force
+// asked for, and, at the repair loop's late stage only, a count of what
+// the document itself lists.
 //
 // **What is checked.** The document's CONTENT: every element of every
 // section, recursively (cards, accordions, tabs), tables and lists cell by
@@ -48,16 +54,18 @@ open ToolUp.Platform.VectorKnowledgeTypes
 // from, which are checked as citations (resolve, disclosable, current) with
 // no stated value to compare.
 //
-// **The computed-percentage decision (985.F).** A figure computed from two
-// Facts — "margin was 12.5%" from revenue and cost — is REFUSED. It is not
-// a reference to anything: stated as prose it is an unreferenced number,
-// and stated as a span citing one of its inputs it misstates that input.
-// A deployment that wants to publish a derived figure asserts it as a Fact
-// first (a `Computed` method naming its inputs), which gives it an id, a
-// lineage, a disclosure stance and a supersession edge — everything the
-// gate checks. Admitting "a declared derivation of named Facts" instead
-// would put a second arithmetic engine inside the gate, whose rounding and
-// formula a reader would have to trust without a Fact to trace it to.
+// **Derived figures.** A figure computed from two Facts — "margin was
+// 12.5%" from revenue and cost — is refused when the model writes it: it is
+// not a reference to anything, and stated as a span citing one of its
+// inputs it misstates that input. It is admitted only as an AUTHORISED
+// CALCULATION: a `calc:` reference the server computed by a formula the
+// deployment declared (`NarrativeCalculations`), which this gate resolves
+// itself by deriving the figure again from the cited Facts as they are now,
+// through the declaration's own evaluation, and checking the reference's
+// content address. A reader traces it to its Facts and its formula through
+// the certificate, which seals each calculation it admits. A deployment
+// that declares none can still assert a derived figure as a Fact first (a
+// `Computed` method naming its inputs).
 
 /// What one reference resolved to, as the pure check reads it.
 type GroundingResolution =
@@ -157,6 +165,288 @@ module NarrativeGrounding =
             wordPattern.Matches(text)
             |> Seq.exists (fun m -> policy.NumberWords.Contains(m.Value.ToLowerInvariant()))
 
+    // ── Numbers a reader never mistakes for a figure ────────────────
+
+    /// One number stated in a run of text, as the two admissions read it.
+    type NumberMention = {
+        /// Its value when it is a WHOLE number (digits alone, or an English
+        /// cardinal from zero to ninety-nine) and nothing marks it as a
+        /// figure. `None` for a percentage, a currency amount, a fraction, a
+        /// decimal, a signed or grouped figure, an ordinal, a scale word
+        /// ("million") or a multiplicative ("doubled"): no admission reaches
+        /// those.
+        Whole: int option
+        /// The words that follow it up to the end of its noun phrase,
+        /// stopped by punctuation, another number, a function word or the
+        /// fourth word, lower-cased and singularised. "three largest
+        /// categories all fell" reads `["largest"; "category"]`.
+        Following: string list
+    }
+
+    let private cardinals: Map<string, int> =
+        [
+            "zero"
+            "one"
+            "two"
+            "three"
+            "four"
+            "five"
+            "six"
+            "seven"
+            "eight"
+            "nine"
+            "ten"
+            "eleven"
+            "twelve"
+            "thirteen"
+            "fourteen"
+            "fifteen"
+            "sixteen"
+            "seventeen"
+            "eighteen"
+            "nineteen"
+        ]
+        |> List.mapi (fun i w -> w, i)
+        |> Map.ofList
+
+    let private tens: Map<string, int> =
+        [ "twenty"; "thirty"; "forty"; "fifty"; "sixty"; "seventy"; "eighty"; "ninety" ]
+        |> List.mapi (fun i w -> w, (i + 2) * 10)
+        |> Map.ofList
+
+    /// A cardinal written in words: "seven", "forty", "twenty-one".
+    let private cardinalValue (word: string) : int option =
+        match word.Split '-' with
+        | [| w |] ->
+            match cardinals.TryFind w with
+            | Some v -> Some v
+            | None -> tens.TryFind w
+        | [| t; u |] ->
+            match tens.TryFind t, cardinals.TryFind u with
+            | Some t, Some u when u >= 1 && u <= 9 -> Some(t + u)
+            | _ -> None
+        | _ -> None
+
+    /// Words that end a noun phrase.
+    let private phraseStops: Set<string> =
+        set [
+            "a"
+            "all"
+            "an"
+            "and"
+            "are"
+            "as"
+            "at"
+            "be"
+            "been"
+            "both"
+            "but"
+            "by"
+            "each"
+            "for"
+            "from"
+            "had"
+            "has"
+            "have"
+            "in"
+            "into"
+            "is"
+            "its"
+            "of"
+            "on"
+            "or"
+            "over"
+            "per"
+            "than"
+            "that"
+            "the"
+            "their"
+            "these"
+            "this"
+            "those"
+            "to"
+            "was"
+            "were"
+            "which"
+            "while"
+            "who"
+            "with"
+        ]
+
+    /// Nouns that make the number before them a currency amount.
+    let private currencyNouns: Set<string> =
+        set [
+            "cent"
+            "dollar"
+            "euro"
+            "franc"
+            "penny"
+            "pence"
+            "pound"
+            "rupee"
+            "yen"
+            "yuan"
+        ]
+
+    /// `word` lower-cased and read in the singular: "categories" is
+    /// "category", "boxes" is "box", "markets" is "market"; "business" stays.
+    let singular (word: string) : string =
+        let w = word.ToLowerInvariant()
+
+        if w.Length > 4 && w.EndsWith "ies" then
+            w.Substring(0, w.Length - 3) + "y"
+        elif
+            w.Length > 4
+            && (w.EndsWith "sses"
+                || w.EndsWith "shes"
+                || w.EndsWith "ches"
+                || w.EndsWith "xes"
+                || w.EndsWith "zes")
+        then
+            w.Substring(0, w.Length - 2)
+        elif
+            w.Length > 2
+            && w.EndsWith "s"
+            && not (w.EndsWith "ss")
+            && not (w.EndsWith "us")
+            && not (w.EndsWith "is")
+        then
+            w.Substring(0, w.Length - 1)
+        else
+            w
+
+    let private tokenPattern =
+        Regex(@"(?<num>\p{N}+)|(?<word>\p{L}+(?:[-'’]\p{L}+)*)|(?<other>\S)", RegexOptions.CultureInvariant)
+
+    type private Token =
+        | NumToken of text: string * start: int * finish: int
+        | WordToken of text: string
+        | OtherToken
+
+    /// Every number `text` states, in order: each numeral run and each number
+    /// word `policy` names, which are exactly the numbers `statesNumber` sees.
+    let mentions (policy: GroundingPolicy) (text: string) : NumberMention list =
+        if String.IsNullOrEmpty text then
+            []
+        else
+            let tokens =
+                tokenPattern.Matches(text)
+                |> Seq.map (fun m ->
+                    if m.Groups["num"].Success then
+                        NumToken(m.Value, m.Index, m.Index + m.Length)
+                    elif m.Groups["word"].Success then
+                        WordToken m.Value
+                    else
+                        OtherToken)
+                |> Array.ofSeq
+
+            let isNumberWord (word: string) =
+                word.ToLowerInvariant().Split([| '-'; '\''; '’' |], StringSplitOptions.RemoveEmptyEntries)
+                |> Array.exists policy.NumberWords.Contains
+
+            let wordAt (k: int) =
+                if k >= 0 && k < tokens.Length then
+                    match tokens[k] with
+                    | WordToken w -> Some w
+                    | _ -> None
+                else
+                    None
+
+            let following (i: int) : string list =
+                let rec go j acc =
+                    match wordAt j with
+                    | Some w when
+                        List.length acc < 4
+                        && not (isNumberWord w)
+                        && not (phraseStops.Contains(w.ToLowerInvariant()))
+                        ->
+                        go (j + 1) (singular w :: acc)
+                    | _ -> List.rev acc
+
+                go (i + 1) []
+
+            // "3 percent", "three per cent", "40 pounds": a percentage or a
+            // currency amount written with a word after it.
+            let unitAfter (i: int) =
+                match wordAt (i + 1) |> Option.map singular with
+                | Some "percent" -> true
+                | Some "per" -> wordAt (i + 2) |> Option.map singular = Some "cent"
+                | Some noun -> currencyNouns.Contains noun
+                | None -> false
+
+            let charAt (k: int) =
+                if k >= 0 && k < text.Length then Some text[k] else None
+
+            // Digits joined to anything but space or ordinary punctuation are
+            // a figure: "£40", "-3", "1,200", "3.5", "3%", "1/3", "3m", "3rd",
+            // "Q3"; so are digits after a currency code ("GBP 40").
+            let markedAsFigure (i: int) (start: int) (finish: int) =
+                let joinedBefore =
+                    match charAt (start - 1) with
+                    | Some c -> Char.IsLetterOrDigit c || Char.IsSymbol c || "-−+.,/".Contains c
+                    | None -> false
+
+                let joinedAfter =
+                    match charAt finish with
+                    | Some c when Char.IsLetterOrDigit c || Char.IsSymbol c || "%‰/".Contains c -> true
+                    | Some c when ".,".Contains c -> charAt (finish + 1) |> Option.exists Char.IsDigit
+                    | _ -> false
+
+                let currencyCode =
+                    match wordAt (i - 1) with
+                    | Some w -> w.Length = 3 && w |> Seq.forall Char.IsUpper
+                    | None -> false
+
+                joinedBefore || joinedAfter || currencyCode || unitAfter i
+
+            tokens
+            |> Array.mapi (fun i token ->
+                match token with
+                | NumToken(digits, start, finish) ->
+                    let whole =
+                        if
+                            digits |> Seq.forall (fun c -> c >= '0' && c <= '9')
+                            && not (markedAsFigure i start finish)
+                        then
+                            match Int32.TryParse(digits, NumberStyles.None, CultureInfo.InvariantCulture) with
+                            | true, v -> Some v
+                            | _ -> None
+                        else
+                            None
+
+                    Some {
+                        Whole = whole
+                        Following = following i
+                    }
+                | WordToken word when isNumberWord word ->
+                    Some {
+                        Whole =
+                            if unitAfter i then
+                                None
+                            else
+                                cardinalValue (word.ToLowerInvariant())
+                        Following = following i
+                    }
+                | _ -> None)
+            |> Array.choose id
+            |> List.ofArray
+
+    /// Does the instruction state `mention`'s number counting the same thing?
+    /// Some number in `instruction` has the same whole value, and the last
+    /// word of ITS noun phrase (the noun it counts) is among the words that
+    /// follow `mention`: "the three largest categories" echoes "report on the
+    /// top 3 categories"; "three markets" and "four categories" do not.
+    let echoes (instruction: NumberMention list) (mention: NumberMention) : bool =
+        match mention.Whole with
+        | None -> false
+        | Some value ->
+            instruction
+            |> List.exists (fun asked ->
+                asked.Whole = Some value
+                && (match List.tryLast asked.Following with
+                    | Some noun -> List.contains noun mention.Following
+                    | None -> false))
+
     /// The kind a reference names: `"fact"` for a bare Fact id, the prefix
     /// for `<kind>:<id>`. A Fact id is content-addressed hex and never
     /// carries a `:`.
@@ -204,21 +494,45 @@ module NarrativeGrounding =
         value.Split([| ','; ' '; ';'; '\n'; '\r'; '\t' |], StringSplitOptions.RemoveEmptyEntries)
         |> List.ofArray
 
-    let rec private elementClaims (at: string) (element: NarrativeElement) : Claim list =
+    /// Where a claim sits: its section, the element that holds it (by that
+    /// element's location) and the element that follows it there.
+    type private ClaimContext = {
+        Section: string
+        At: string
+        Next: NarrativeElement option
+    }
+
+    let rec private elementClaims
+        (section: string)
+        (at: string)
+        (next: NarrativeElement option)
+        (element: NarrativeElement)
+        : (Claim * ClaimContext) list =
+        let own (claims: Claim list) =
+            let context = {
+                Section = section
+                At = at
+                Next = next
+            }
+
+            claims |> List.map (fun c -> c, context)
+
         match element with
-        | Paragraph spans -> spanClaims at spans
-        | Heading(_, spans) -> spanClaims at spans
+        | Paragraph spans -> own (spanClaims at spans)
+        | Heading(_, spans) -> own (spanClaims at spans)
         | BulletList items
         | OrderedList items ->
             items
             |> List.mapi (fun k item -> spanClaims (sprintf "%s › item %d" at (k + 1)) item)
             |> List.concat
+            |> own
         | KeyValueGrid pairs ->
             pairs
             |> List.mapi (fun k (key, spans) ->
                 let loc = sprintf "%s › entry %d" at (k + 1)
                 ProseClaim(loc, key) :: spanClaims loc spans)
             |> List.concat
+            |> own
         | Table(columns, rows) ->
             let headers =
                 columns
@@ -232,36 +546,43 @@ module NarrativeGrounding =
                     |> List.concat)
                 |> List.concat
 
-            headers @ cells
-        | Callout(_, spans) -> spanClaims at spans
-        | CodeBlock(_, content) -> [ ProseClaim(at, content) ]
-        | Blockquote(citation, spans) -> optProse at citation @ spanClaims at spans
+            own (headers @ cells)
+        | Callout(_, spans) -> own (spanClaims at spans)
+        | CodeBlock(_, content) -> own [ ProseClaim(at, content) ]
+        | Blockquote(citation, spans) -> own (optProse at citation @ spanClaims at spans)
         | Divider -> []
         | Video spec ->
-            optProse at spec.Caption
-            @ (spec.Tracks |> List.map (fun t -> ProseClaim(at, t.Label)))
+            own (
+                optProse at spec.Caption
+                @ (spec.Tracks |> List.map (fun t -> ProseClaim(at, t.Label)))
+            )
         | Audio spec ->
-            optProse at spec.Caption
-            @ (spec.Tracks |> List.map (fun t -> ProseClaim(at, t.Label)))
+            own (
+                optProse at spec.Caption
+                @ (spec.Tracks |> List.map (fun t -> ProseClaim(at, t.Label)))
+            )
         | ImageGallery images ->
             images
             |> List.mapi (fun k img ->
                 let loc = sprintf "%s › image %d" at (k + 1)
                 ProseClaim(loc, img.Alt) :: optProse loc img.Caption)
             |> List.concat
-        | Embed spec -> [ ProseClaim(at, spec.Title) ]
+            |> own
+        | Embed spec -> own [ ProseClaim(at, spec.Title) ]
         | Card spec ->
-            optProse at spec.Heading
-            @ (spec.Image
-               |> Option.map (fun img -> ProseClaim(at, img.Alt) :: optProse at img.Caption)
-               |> Option.defaultValue [])
-            @ bodyClaims at spec.Body
+            own (
+                optProse at spec.Heading
+                @ (spec.Image
+                   |> Option.map (fun img -> ProseClaim(at, img.Alt) :: optProse at img.Caption)
+                   |> Option.defaultValue [])
+            )
+            @ bodyClaims section at spec.Body
         | Accordion panels
         | Tabs panels ->
             panels
             |> List.mapi (fun k (label, body) ->
                 let loc = sprintf "%s › panel %d" at (k + 1)
-                ProseClaim(loc, label) :: bodyClaims loc body)
+                own [ ProseClaim(loc, label) ] @ bodyClaims section loc body)
             |> List.concat
         | Component(name, props) ->
             let loc = sprintf "%s › component '%s'" at name
@@ -273,16 +594,26 @@ module NarrativeGrounding =
                     splitRefs value |> List.map (fun r -> CitationClaim(loc, r))
                 else
                     [ ProseClaim(sprintf "%s › prop '%s'" loc key, value) ])
+            |> own
 
-    and private bodyClaims (at: string) (elements: NarrativeElement list) : Claim list =
+    and private bodyClaims
+        (section: string)
+        (at: string)
+        (elements: NarrativeElement list)
+        : (Claim * ClaimContext) list =
         elements
-        |> List.mapi (fun i e -> elementClaims (sprintf "%s › element %d" at (i + 1)) e)
+        |> List.mapi (fun i e ->
+            elementClaims section (sprintf "%s › element %d" at (i + 1)) (List.tryItem (i + 1) elements) e)
         |> List.concat
 
-    /// Every claim in the document's content, in document order.
-    let claims (document: NarrativeDocument) : Claim list =
+    /// Every claim in the document's content with where it sits, in
+    /// document order.
+    let private locatedClaims (document: NarrativeDocument) : (Claim * ClaimContext) list =
         document.Sections
-        |> List.collect (fun section -> bodyClaims (sprintf "section '%s'" section.Id) section.Elements)
+        |> List.collect (fun section -> bodyClaims section.Id (sprintf "section '%s'" section.Id) section.Elements)
+
+    /// Every claim in the document's content, in document order.
+    let claims (document: NarrativeDocument) : Claim list = locatedClaims document |> List.map fst
 
     /// The distinct references the document cites, first-seen order.
     let references (document: NarrativeDocument) : string list =
@@ -385,19 +716,110 @@ module NarrativeGrounding =
 
     // ── The check ───────────────────────────────────────────────────
 
-    /// The pure check: given how every reference resolved, the verdict
-    /// over `document`. Every offending claim is reported, in document
-    /// order.
-    let check
+    /// The pure check under `options`: given how every reference resolved
+    /// and the subject each current Fact reference is about (`subjectOf`;
+    /// `None` for a reference with no subject), the verdict over `document`.
+    /// Every offending claim is reported, in document order.
+    ///
+    /// A number in prose is refused unless EVERY number in that run is
+    /// admitted, by one of two admissions, each recorded as a citation:
+    ///
+    ///  - **the instruction echo**, always applied: a whole number the
+    ///    wording in force (the prompt, or the guidance of the section the
+    ///    number sits in) states counting the same noun (`echoes`), cited
+    ///    `instruction:<wording version>#<section id>`;
+    ///  - **the structural count**, applied only at the repair loop's late
+    ///    stage (`options.LateStage`): a whole number equal to the distinct
+    ///    subjects the `Metric` spans of the same element cite, or to the
+    ///    items or rows of the list or table that immediately follows that
+    ///    element, cited `structural-count:<location>`.
+    ///
+    /// No other number becomes admissible: a percentage, a currency amount,
+    /// a fraction or a decimal is never a whole number (`mentions`).
+    ///
+    /// A figure in prose is never admitted by a calculation: a derived
+    /// figure is stated as a `Metric` span citing a `calc:` reference, and
+    /// judged like any other reference.
+    ///
+    /// Beside the verdict: each number admitted without a Fact (the two
+    /// admissions above, and every cited `calc:` reference), as the location
+    /// of the claim stating it and the citation admitting it, in document
+    /// order (empty when the verdict is `Ungrounded`).
+    let private judgeWith
         (policy: GroundingPolicy)
         (resolve: string -> GroundingResolution)
+        (subjectOf: string -> string option)
+        (options: GroundingCheckOptions)
         (document: NarrativeDocument)
-        : NarrativeGroundingVerdict =
+        : NarrativeGroundingVerdict * (string * NarrativeCitation) list =
         let offence loc claim reason = {
             Location = loc
             Claim = claim
             Reason = reason
         }
+
+        let located = locatedClaims document
+
+        let asked =
+            match options.Instruction with
+            | None -> fun (_: string) -> []
+            | Some instruction ->
+                let promptMentions = mentions policy instruction.Prompt
+
+                let bySection =
+                    instruction.Guidance |> Map.map (fun _ guidance -> mentions policy guidance)
+
+                fun (section: string) -> promptMentions @ (bySection.TryFind section |> Option.defaultValue [])
+
+        // The distinct subjects each element's Metric spans cite.
+        let subjectsByElement =
+            located
+            |> List.choose (function
+                | MetricClaim(_, _, _, Some reference), context ->
+                    subjectOf reference |> Option.map (fun subject -> context.At, subject)
+                | _ -> None)
+            |> List.distinct
+            |> List.countBy fst
+            |> Map.ofList
+
+        let counts (context: ClaimContext) : int list =
+            let subjects = subjectsByElement.TryFind context.At |> Option.toList
+
+            let following =
+                match context.Next with
+                | Some(BulletList items)
+                | Some(OrderedList items) -> [ List.length items ]
+                | Some(Table(_, rows)) -> [ List.length rows ]
+                | _ -> []
+
+            subjects @ following |> List.filter (fun n -> n > 0)
+
+        // `Some admissions` when every number in `text` is admitted (none at
+        // all when it states no number), each located at `loc`; `None` when
+        // one is not.
+        let admit (context: ClaimContext) (loc: string) (text: string) : (string * NarrativeCitation) list option =
+            if not (statesNumber policy text) then
+                Some []
+            else
+                match mentions policy text with
+                | [] -> None
+                | stated ->
+                    let instruction = asked context.Section
+
+                    let admitted =
+                        stated
+                        |> List.map (fun mention ->
+                            match options.Instruction, mention.Whole with
+                            | Some wording, _ when echoes instruction mention ->
+                                Some(NarrativeCitation.instruction wording.Version context.Section)
+                            | _, Some n when options.LateStage && List.contains n (counts context) ->
+                                Some(NarrativeCitation.structuralCount loc)
+                            | _ -> None)
+
+                    if admitted |> List.forall Option.isSome then
+                        Some(admitted |> List.choose (Option.map (fun citation -> loc, citation)))
+                    else
+                        None
 
         let judgeReference (loc: string) (claim: string) (reference: string) (stated: string option) =
             match resolve reference with
@@ -412,43 +834,109 @@ module NarrativeGrounding =
                     [ offence loc claim (MisstatedValue(reference, s, current)) ]
                 | _ -> []
 
-        let offences =
-            claims document
-            |> List.collect (function
-                | ProseClaim(loc, text) ->
-                    if statesNumber policy text then
-                        [ offence loc text UnreferencedNumber ]
-                    else
-                        []
+        // An authorised calculation the document cites is an admission too:
+        // the certificate seals it where it is cited.
+        let calculation (loc: string) (reference: string) : (string * NarrativeCitation) list =
+            match referenceKind reference with
+            | kind, _ when kind = AuthorisedCalculation.ReferenceKind -> [
+                loc,
+                {
+                    ReferenceKind = kind
+                    Reference = reference
+                }
+              ]
+            | _ -> []
+
+        let prose (context: ClaimContext) (loc: string) (text: string) =
+            match admit context loc text with
+            | Some admissions -> [], admissions
+            | None -> [ offence loc text UnreferencedNumber ], []
+
+        let judged =
+            located
+            |> List.map (fun (claim, context) ->
+                match claim with
+                | ProseClaim(loc, text) -> prose context loc text
                 | MetricClaim(loc, label, value, reference) ->
                     let claim = sprintf "%s = %s" label value
-
-                    let labelOffence =
-                        if statesNumber policy label then
-                            [ offence loc label UnreferencedNumber ]
-                        else
-                            []
+                    let labelOffence, admissions = prose context loc label
 
                     let valueOffence =
                         match reference with
                         | None -> [ offence loc claim MetricWithoutReference ]
                         | Some reference -> judgeReference loc claim reference (Some value)
 
-                    labelOffence @ valueOffence
-                | CitationClaim(loc, reference) -> judgeReference loc reference reference None)
+                    let calculated =
+                        match reference, valueOffence with
+                        | Some reference, [] -> calculation loc reference
+                        | _ -> []
 
-        match offences with
+                    labelOffence @ valueOffence, admissions @ calculated
+                | CitationClaim(loc, reference) ->
+                    match judgeReference loc reference reference None with
+                    | [] -> [], calculation loc reference
+                    | offences -> offences, [])
+
+        match judged |> List.collect fst with
         | [] ->
-            references document
-            |> List.map (fun reference ->
-                let kind, _ = referenceKind reference
+            let references =
+                references document
+                |> List.map (fun reference ->
+                    let kind, _ = referenceKind reference
 
-                {
-                    ReferenceKind = kind
-                    Reference = reference
-                })
-            |> Grounded
-        | offences -> Ungrounded offences
+                    {
+                        ReferenceKind = kind
+                        Reference = reference
+                    })
+
+            let admitted = judged |> List.collect snd |> List.distinct
+
+            (references @ (admitted |> List.map snd) |> List.distinct |> Grounded), admitted
+        | offences -> Ungrounded offences, []
+
+    /// The pure check under `options`: given how every reference resolved
+    /// and the subject each current Fact reference is about (`subjectOf`;
+    /// `None` for a reference with no subject), the verdict over `document`.
+    /// Every offending claim is reported, in document order. The admissions
+    /// are `judgeWith`'s, described there.
+    let checkWith
+        (policy: GroundingPolicy)
+        (resolve: string -> GroundingResolution)
+        (subjectOf: string -> string option)
+        (options: GroundingCheckOptions)
+        (document: NarrativeDocument)
+        : NarrativeGroundingVerdict =
+        judgeWith policy resolve subjectOf options document |> fst
+
+    /// What a certificate seals beside the Fact chain: every number
+    /// `checkWith` admits in `document` without a Fact, with where it sits,
+    /// in document order — one entry per citation and location. `Error`
+    /// carries the offences when the document does not pass.
+    let admissionsWith
+        (policy: GroundingPolicy)
+        (resolve: string -> GroundingResolution)
+        (subjectOf: string -> string option)
+        (options: GroundingCheckOptions)
+        (document: NarrativeDocument)
+        : Result<CertificateAdmission list, GroundingOffence list> =
+        match judgeWith policy resolve subjectOf options document with
+        | Ungrounded offences, _ -> Error offences
+        | Grounded _, admitted ->
+            Ok(
+                admitted
+                |> List.map (fun (location, citation) -> CertificateAdmission.ofCitation location citation)
+            )
+
+    /// The pure check: given how every reference resolved, the verdict
+    /// over `document`, with no instruction and not at the late stage: a
+    /// number in prose is admitted only as a `Metric` span. Every offending
+    /// claim is reported, in document order.
+    let check
+        (policy: GroundingPolicy)
+        (resolve: string -> GroundingResolution)
+        (document: NarrativeDocument)
+        : NarrativeGroundingVerdict =
+        checkWith policy resolve (fun _ -> None) GroundingCheckOptions.none document
 
     /// The Fact ids a verdict cites — what a certificate is issued over.
     let citedFactIds (citations: NarrativeCitation list) : string list = NarrativeCitation.factIds citations
@@ -479,10 +967,16 @@ type FactNarrativeGroundingGate
         registry: Grounding.IMetricRegistry option,
         kinds: ICitableReferenceKind list,
         issuer: IGroundingCertificateIssuer,
-        policy: GroundingPolicy
+        policy: GroundingPolicy,
+        calculations: NarrativeCalculations
     ) =
 
     let kindsByName = kinds |> List.map (fun k -> k.Kind, k) |> Map.ofList
+
+    /// Is `reference` an authorised calculation this gate derives itself?
+    let isCalculation (reference: string) =
+        not (NarrativeCalculations.isEmpty calculations)
+        && fst (NarrativeGrounding.referenceKind reference) = AuthorisedCalculation.ReferenceKind
 
     let currentOf (fact: Fact) : GroundingResolution =
         let metric = registry |> Option.bind (fun r -> r.TryGetMetric fact.Metric.Value)
@@ -500,34 +994,43 @@ type FactNarrativeGroundingGate
 
         GroundingCurrent([ rendering ], value, asFraction)
 
-    let resolveFacts (scopeId: string) (principal: string) (surface: FactEgressSurface) (factIds: string list) = async {
+    /// Each Fact id's resolution, and the subject of each current one.
+    let resolveFacts (scope: ResolvedScope) (principal: string) (surface: FactEgressSurface) (factIds: string list) = async {
         match factIds with
-        | [] -> return Map.empty
+        | [] -> return Map.empty, Map.empty
         | ids ->
-            let! verdicts = disclosure.Check(scopeId, principal, surface, ids)
+            let! verdicts = disclosure.Check(scope, principal, surface, ids)
 
             let! resolved =
                 ids
                 |> List.map (fun id -> async {
-                    let! chain = store.QuerySupersessionChain(scopeId, id)
+                    let! chain = store.QuerySupersessionChain(scope, id) |> FactStoreResult.orRaiseAsync
 
                     match List.tryFind (fun (f: Fact) -> f.FactId = id) chain with
-                    | None -> return id, GroundingUnresolved
+                    | None -> return id, GroundingUnresolved, None
                     | Some fact ->
                         match verdicts.TryFind id with
                         | Some FactDisclosable ->
                             let head = List.last chain
 
                             if head.FactId <> id then
-                                return id, GroundingSuperseded(Some head.FactId)
+                                return id, GroundingSuperseded(Some head.FactId), None
                             else
-                                return id, currentOf fact
-                        | Some(FactNotDisclosable policyRef) -> return id, GroundingWithheld policyRef
-                        | None -> return id, GroundingWithheld "unknown-fact"
+                                return id, currentOf fact, Some(SubjectRef.toString fact.Subject)
+                        | Some(FactNotDisclosable policyRef) -> return id, GroundingWithheld policyRef, None
+                        | None -> return id, GroundingWithheld "unknown-fact", None
                 })
                 |> Async.Sequential
 
-            return Map.ofArray resolved
+            let resolutions =
+                resolved |> Array.map (fun (id, resolution, _) -> id, resolution) |> Map.ofArray
+
+            let subjects =
+                resolved
+                |> Array.choose (fun (id, _, subject) -> subject |> Option.map (fun s -> id, s))
+                |> Map.ofArray
+
+            return resolutions, subjects
     }
 
     let resolveDeclared (scopeId: string) (principal: string) (reference: string) = async {
@@ -547,52 +1050,181 @@ type FactNarrativeGroundingGate
                 | CitableReferenceWithheld policyRef -> GroundingWithheld policyRef
     }
 
-    /// The certificate chain depth — deep enough to reach a Fact's input
-    /// data from the narrative at the root.
-    static member CertificateDepth = 8
+    /// A `calc:` reference, derived again from its inputs at `surface`, and
+    /// its record when it holds.
+    let resolveCalculation (scope: ResolvedScope) (principal: string) (surface: FactEgressSurface) (reference: string) = async {
+        let _, id = NarrativeGrounding.referenceKind reference
 
-    interface INarrativeGroundingGate with
-        member _.Check(scopeId, principal, surface, document) = async {
+        let! check = NarrativeCalculations.rederive calculations store disclosure registry scope principal surface id
+
+        match check with
+        | CalculationHolds record ->
+            return reference, GroundingCurrent([ record.Rendering ], Some record.Stated, false), Some record
+        | CalculationMoved successor -> return reference, GroundingSuperseded successor, None
+        | CalculationWithheld policyRef -> return reference, GroundingWithheld policyRef, None
+        | CalculationRefused _ -> return reference, GroundingUnresolved, None
+    }
+
+    /// How every reference `document` cites resolves in `scope` for
+    /// `principal` at `surface`, the subject of each current Fact, and the
+    /// record of each authorised calculation that holds.
+    let resolving
+        (scope: ResolvedScope)
+        (principal: string)
+        (surface: FactEgressSurface)
+        (document: NarrativeDocument)
+        =
+        async {
             let references = NarrativeGrounding.references document
 
             let factIds, declared =
                 references
                 |> List.partition (fun r -> fst (NarrativeGrounding.referenceKind r) = NarrativeGrounding.FactKind)
 
-            let! facts = resolveFacts scopeId principal surface factIds
-            let! others = declared |> List.map (resolveDeclared scopeId principal) |> Async.Sequential
+            let calculated, declared = declared |> List.partition isCalculation
+
+            let! facts, subjects = resolveFacts scope principal surface factIds
+
+            let! others =
+                declared
+                |> List.map (resolveDeclared scope.ScopeId principal)
+                |> Async.Sequential
+
+            let! derived =
+                calculated
+                |> List.map (resolveCalculation scope principal surface)
+                |> Async.Sequential
 
             let resolutions =
-                Map.fold (fun acc k v -> Map.add k v acc) (Map.ofArray others) facts
+                Map.fold
+                    (fun acc k v -> Map.add k v acc)
+                    (Map.ofArray (Array.append others (derived |> Array.map (fun (r, g, _) -> r, g))))
+                    facts
+
+            let records =
+                derived
+                |> Array.choose (fun (r, _, record) -> record |> Option.map (fun record -> r, record))
+                |> Map.ofArray
 
             let resolve reference =
                 resolutions.TryFind reference |> Option.defaultValue GroundingUnresolved
 
-            return NarrativeGrounding.check policy resolve document
+            return resolve, subjects.TryFind, records
         }
 
-        member _.Certify(scopeId, principal, narrativeId, citedFactIds) = async {
-            let! issued =
-                issuer.Issue(
-                    scopeId,
-                    principal,
-                    NarrativeCertificate(narrativeId, citedFactIds),
-                    FactNarrativeGroundingGate.CertificateDepth
-                )
+    let checkWith
+        (scope: ResolvedScope)
+        (principal: string)
+        (surface: FactEgressSurface)
+        (document: NarrativeDocument)
+        (options: GroundingCheckOptions)
+        =
+        async {
+            let! resolve, subjectOf, _ = resolving scope principal surface document
+            return NarrativeGrounding.checkWith policy resolve subjectOf options document
+        }
 
-            match issued with
-            | Ok certificate ->
+    let certificateOf (citedFactIds: string list) (certificate: GroundingCertificate) : NarrativeGroundingCertificate = {
+        Root = certificate.Body.Root
+        Digest = GroundingCertificate.certificateDigest certificate.Body
+        KeyId = certificate.Body.DeploymentKeyId
+        IssuedAt = certificate.Body.IssuedAt
+        CitedFactIds = citedFactIds
+        CertificateJson = CertificateEnvelope.predicateJson certificate
+    }
+
+    let issue (scope: ResolvedScope) (principal: string) (citedFactIds: string list) (subject: CertificateSubject) = async {
+        let! issued = issuer.Issue(scope, principal, subject, FactNarrativeGroundingGate.CertificateDepth)
+
+        return
+            issued
+            |> Result.map (certificateOf citedFactIds)
+            |> Result.mapError CertificateError.describe
+    }
+
+    /// The certificate chain depth — deep enough to reach a Fact's input
+    /// data from the narrative at the root.
+    static member CertificateDepth = 8
+
+    /// The gate with no authorised calculation.
+    new(store, disclosure, registry, kinds, issuer, policy) =
+        FactNarrativeGroundingGate(store, disclosure, registry, kinds, issuer, policy, NarrativeCalculations.empty)
+
+    interface IInstructedNarrativeGroundingGate with
+        member _.CheckWith(scope, principal, surface, document, options) =
+            checkWith scope principal surface document options
+
+        // The admissions are derived here, from the document being sealed,
+        // rather than taken from the caller: the gate is what admitted them,
+        // and a certificate signs what the gate admits. `citations` is the
+        // caller's record of the verdict, and a disagreement is refused
+        // rather than sealed either way.
+        member _.CertifyWith(scope, principal, surface, narrativeId, document, options, citations) = async {
+            let! resolve, subjectOf, records = resolving scope principal surface document
+
+            match NarrativeGrounding.admissionsWith policy resolve subjectOf options document with
+            | Error offences ->
                 return
-                    Ok {
-                        Root = certificate.Body.Root
-                        Digest = GroundingCertificate.certificateDigest certificate.Body
-                        KeyId = certificate.Body.DeploymentKeyId
-                        IssuedAt = certificate.Body.IssuedAt
-                        CitedFactIds = citedFactIds
-                        CertificateJson = CertificateEnvelope.predicateJson certificate
-                    }
-            | Error error -> return Error(CertificateError.describe error)
+                    Error(
+                        sprintf
+                            "the narrative no longer passes the grounding gate (%d offence(s): %s)"
+                            (List.length offences)
+                            (offences |> List.map GroundingOffence.describe |> String.concat "; ")
+                    )
+            | Ok admissions ->
+                // A calculation the gate derived is sealed with its operator,
+                // inputs, rounding, format and result.
+                let admissions =
+                    admissions
+                    |> List.map (fun admission ->
+                        match records.TryFind admission.Reference with
+                        | Some record when admission.Kind = AuthorisedCalculation.ReferenceKind ->
+                            NarrativeCalculations.admission admission.Location record
+                        | _ -> admission)
+
+                let found = admissions |> List.map _.Reference |> set
+
+                let recorded =
+                    NarrativeCitation.admissions citations
+                    @ (citations
+                       |> List.filter (fun c -> c.ReferenceKind = AuthorisedCalculation.ReferenceKind))
+                    |> List.map _.Reference
+                    |> set
+
+                if found <> recorded then
+                    return
+                        Error(
+                            sprintf
+                                "the admissions the gate finds (%s) are not the ones the verdict records (%s)"
+                                (found |> String.concat ", ")
+                                (recorded |> String.concat ", ")
+                        )
+                else
+                    // A calculation's inputs are cited Facts too: the chain
+                    // reaches each one's lineage.
+                    let citedFactIds =
+                        NarrativeCitation.factIds citations
+                        @ (admissions
+                           |> List.filter (fun a -> a.Kind = AuthorisedCalculation.ReferenceKind)
+                           |> List.collect (fun a ->
+                               CertificateAdmission.attribute CertificateAdmission.InputsAttribute a
+                               |> Option.defaultValue []))
+                        |> List.distinct
+
+                    return!
+                        issue
+                            scope
+                            principal
+                            citedFactIds
+                            (AdmittedNarrativeCertificate(narrativeId, citedFactIds, admissions))
         }
+
+    interface INarrativeGroundingGate with
+        member _.Check(scope, principal, surface, document) =
+            checkWith scope principal surface document GroundingCheckOptions.none
+
+        member _.Certify(scope, principal, narrativeId, citedFactIds) =
+            issue scope principal citedFactIds (NarrativeCertificate(narrativeId, citedFactIds))
 
 module FactNarrativeGroundingGate =
     /// The gate over the composed fact tier, under the default policy.
@@ -616,3 +1248,24 @@ module FactNarrativeGroundingGate =
         (issuer: IGroundingCertificateIssuer)
         : INarrativeGroundingGate =
         FactNarrativeGroundingGate(store, disclosure, registry, kinds, issuer, policy) :> INarrativeGroundingGate
+
+    /// The gate under the default policy, deriving every `calc:` reference
+    /// again against `calculations` (empty, it is `create`'s gate).
+    let createWithCalculations
+        (calculations: NarrativeCalculations)
+        (store: IFactStore)
+        (disclosure: IFactDisclosureGate)
+        (registry: Grounding.IMetricRegistry option)
+        (kinds: ICitableReferenceKind list)
+        (issuer: IGroundingCertificateIssuer)
+        : INarrativeGroundingGate =
+        FactNarrativeGroundingGate(
+            store,
+            disclosure,
+            registry,
+            kinds,
+            issuer,
+            NarrativeGrounding.defaultPolicy,
+            calculations
+        )
+        :> INarrativeGroundingGate

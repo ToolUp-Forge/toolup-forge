@@ -17,6 +17,11 @@ open ToolUp.MediaLibrary
 open ToolUp.PublicRendering
 open ToolUp.Hosts.EdgeCache
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit.Metrics
+open ToolUp.Platform.Compose
 
 // ─── Phase 472 — the edge-cache seam ──────────────────────────────────
 //

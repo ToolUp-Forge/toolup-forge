@@ -67,12 +67,12 @@ module ExternalComputeError =
     let terminal (message: string) : ExternalComputeError = { Message = message; Retriable = false }
 
     /// The refusal a deployment with no external-compute backend composed
-    /// returns from every `Submit` (GP 13 — the `NoExternalCompute`
+    /// returns from every `Submit` (GP 13 — the `FeatureMode.Disabled`
     /// default). Terminal by construction: no amount of retrying composes
     /// a backend.
     let notConfigured: ExternalComputeError =
         terminal
-            "No external-compute backend is configured. ServerConfig.ExternalCompute = NoExternalCompute (the default); set CustomExternalCompute and register an IExternalComputeDispatcher companion singleton to submit external work."
+            "No external-compute backend is configured. ServerConfig.ExternalCompute = FeatureMode.Disabled (the default); set FeatureMode.Enabled and register an IExternalComputeDispatcher companion singleton to submit external work."
 
     /// One-line description for logs / audit payloads.
     let describe (error: ExternalComputeError) : string =
@@ -440,27 +440,6 @@ module ExternalOutcome =
         | ExternalOutcome.Succeeded _ -> "succeeded"
         | ExternalOutcome.Failed _ -> "failed"
         | ExternalOutcome.Cancelled -> "cancelled"
-
-/// Phase 318 — selects the external-compute substrate
-/// (`IExternalComputeDispatcher`). Default: `NoExternalCompute` — the
-/// `NoExternalComputeDispatcher` is registered, so the seam always resolves
-/// and every `Submit` returns `ExternalComputeError.notConfigured`; no
-/// background service runs and no dependency is pulled (GP 13). Mirrors
-/// `TelemetrySinkMode` / `DatasetStoreMode` (no-op default + custom
-/// companion), not `ModelFittingMode` (binary enable) — the seam has a
-/// meaningful, resolvable default and the "enabled" form is always a
-/// companion.
-type ExternalComputeMode =
-    /// No backend composed (default). `IExternalComputeDispatcher` resolves
-    /// to `NoExternalComputeDispatcher`, whose `Submit` returns a clean
-    /// not-configured `Error`. A bare `ServerApp.empty |> ServerApp.run`
-    /// builds + runs unchanged (GP 11 + GP 13).
-    | NoExternalCompute
-    /// A companion under `src/ExternalCompute/` (an HTTP worker pool, a
-    /// container/batch backend, a future managed service) is registered in
-    /// DI by the deployment; `compose` registers no default and leaves the
-    /// consumer's `IExternalComputeDispatcher` singleton in place.
-    | CustomExternalCompute
 
 // ─── Phase 320 — the completion-callback wire contract ───────────────
 //

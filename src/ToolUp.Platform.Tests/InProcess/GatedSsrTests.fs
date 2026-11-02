@@ -20,11 +20,17 @@ open Giraffe.ViewEngine
 open ToolUp.Platform
 open ToolUp.Platform.Auth
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.DataObjectStore
-open ToolUp.Platform.EntityStore
-open ToolUp.Platform.IEntityStore
-open ToolUp.Platform.NotificationChannel
+open ToolUp.Platform.Infra.DataObjectStore
+open ToolUp.Platform.Infra.EntityStore
+open ToolUp.Platform.Infra.IEntityStore
+open ToolUp.Platform.Config.NotificationChannel
 open ToolUp.PublicRendering
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 86 — gated / tenant-scoped / audience-targeted SSR ────────
 //
@@ -1301,10 +1307,6 @@ let private disclosureDenying
         |> Map.ofList
 
     { new VectorKnowledgeTypes.IFactDisclosureGate with
-        member _.Check(scopeId: string, _principal: string, surface, ids) = async {
-            return verdicts scopeId surface ids
-        }
-
         member _.Check(scope: ResolvedScope, _principal: string, surface, ids) = async {
             return verdicts scope.ScopeId surface ids
         }
@@ -1590,7 +1592,9 @@ let private publicationUnitTests =
                     "run:board"
                     access
 
-            match! read (Some(disclosureDenying Set.empty checks)) publicationReader with
+            match!
+                read (Some(disclosureDenying Set.empty checks, Some(TestScope.resolved "team-a"))) publicationReader
+            with
             | PublicationNarrative.Served(_, doc) ->
                 Expect.equal doc.Title "Board report team-a" "the publishing scope's"
             | other -> failtestf "expected Served, got %A" other
@@ -1600,7 +1604,11 @@ let private publicationUnitTests =
                 [ "team-a", VectorKnowledgeTypes.FactNarrativePublication ]
                 "disclosure re-checked at the publication surface, in the publishing scope"
 
-            match! read (Some(disclosureDenying (Set [ "fact-rev" ]) checks)) publicationReader with
+            match!
+                read
+                    (Some(disclosureDenying (Set [ "fact-rev" ]) checks, Some(TestScope.resolved "team-a")))
+                    publicationReader
+            with
             | PublicationNarrative.Withheld denied ->
                 Expect.equal denied [ "fact-rev", "Restricted:board-only" ] "names the fact and the policy"
             | other -> failtestf "expected Withheld, got %A" other
@@ -2370,7 +2378,7 @@ let private readerRefusalAuditTests =
             let now = ref (DateTimeOffset(2026, 10, 17, 9, 0, 0, TimeSpan.Zero))
 
             let hook =
-                ToolUp.Platform.AuthAuditHook.AuthAuditHook(
+                ToolUp.Platform.Audit.AuthAuditHook.AuthAuditHook(
                     auditLog,
                     silentLogger,
                     TimeSpan.FromSeconds 60.0,

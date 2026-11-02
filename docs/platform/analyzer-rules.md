@@ -35,7 +35,7 @@ The `ToolUp.Remoting.Analyzers` package is the SDK's static analyser rule set: [
 - **Severity:** Warning
 - **Since:** 0.28.0
 - **Rationale:** A module that resolves services from the container by hand (`GetService`, `GetRequiredService`, `GetServices`, the keyed forms, or `HttpContext.RequestServices`) reaches substrate its declared seam grant never names, so the grant describes what the module declares rather than what it does.
-- **Sanctioned alternative:** Resolve inside a registration factory (the lambda handed to `AddSingleton` / `AddScoped` / `AddTransient` / `AddKeyed*` / `TryAdd*` / `AddHostedService`) and pass the dependency to the handler as a value. An `IServiceProvider` implementation delegating from its own `GetService` member is not flagged.
+- **Sanctioned alternative:** Resolve inside a registration factory (the lambda handed to `AddSingleton` / `AddScoped` / `AddTransient` / `AddKeyed*` / `TryAdd*` / `AddHostedService` / `BackgroundUnit.create` / `Hosting.deferredJobs`) and pass the dependency to the handler as a value. An `IServiceProvider` implementation delegating from its own `GetService` member is not flagged.
 - **Runtime half:** The seam-aware service provider, which refuses a resolution outside the module's grant at runtime.
 
 ### TUA002 — `HttpClient` constructed without the platform egress handler

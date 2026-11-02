@@ -28,6 +28,9 @@ open System.Text.Json
 open Expecto
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 let private shellMarker = "SPA-SHELL-1137"
 
@@ -101,9 +104,15 @@ let private withHost (enableDev: bool) (configure: ServerApp -> ServerApp) (body
             Port = port
             PublicPath = publicDir
             EnableDevEndpoints = enableDev
-            TrustForwardedHeaders = false
-            AcceptPlaintextSecretsWhenAuthRequired = true
-            AcceptSameSiteOnlyCsrfWhenAuthRequired = true
+            SecurityPosture = {
+                ServerConfig.defaults.SecurityPosture with
+                    TrustForwardedHeaders = false
+            }
+            RiskAcknowledgements = {
+                ServerConfig.defaults.RiskAcknowledgements with
+                    AcceptPlaintextSecretsWhenAuthRequired = true
+                    AcceptSameSiteOnlyCsrfWhenAuthRequired = true
+            }
     }
 
     let app =

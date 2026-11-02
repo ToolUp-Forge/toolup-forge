@@ -9,6 +9,9 @@ open ToolUp.Platform.AI
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Facts
 open ToolUp.AI
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
 
 // ─── evaluate_pipeline in the answering form ────────────────────────
 //
@@ -121,14 +124,14 @@ module PipelineAnsweringTool =
         }
 
     /// A persisted request evaluated again for `principal` under `scope`, with
-    /// the gate asked at `FactBrowse`: the result a reader's panel draws.
-    /// Refused in the executor's own words.
-    let rerunWith
+    /// the gate asked at `FactBrowse`: the result a reader draws, or the
+    /// executor's refusal by cause.
+    let rerun
         (deps: FactBrowseHandler.FactBrowseDeps)
         (scope: ResolvedScope)
         (principal: string)
         (requestJson: string)
-        : Async<Result<PipelineBlockResult, string>> =
+        : Async<Result<PipelineBlockResult, PipelineRefusal>> =
         async {
             // The executor asks its gate at the tool-result door; a gate fixed
             // at `FactBrowse` is asked there whichever door the read names.
@@ -137,9 +140,21 @@ module PipelineAnsweringTool =
                     Gate = FactBrowseHandler.atSurface FactBrowse deps.Gate
             }
 
-            match! PipelineTool.answerWith atBrowse scope principal requestJson with
-            | Ok result -> return Ok(resultOf result)
-            | Error refused -> return Error(PipelineRefusal.describe refused)
+            let! result = PipelineTool.answerWith atBrowse scope principal requestJson
+            return result |> Result.map resultOf
+        }
+
+    /// `rerun`, refused in the executor's own words: the result a reader's
+    /// panel draws.
+    let rerunWith
+        (deps: FactBrowseHandler.FactBrowseDeps)
+        (scope: ResolvedScope)
+        (principal: string)
+        (requestJson: string)
+        : Async<Result<PipelineBlockResult, string>> =
+        async {
+            let! result = rerun deps scope principal requestJson
+            return result |> Result.mapError PipelineRefusal.describe
         }
 
     let private userIdOf (ctx: HttpContext) : string =
@@ -162,7 +177,7 @@ module PipelineAnsweringTool =
                 Parts = []
             }
 
-    /// The tool, as `AIServerApp.withAIAnsweringTools` takes it.
+    /// The tool, as `AIOptions.withAIAnsweringTools` takes it.
     let tool: AIToolDefinition * (HttpContext -> string -> Async<ToolHelpers.ToolAnswer>) =
         PipelineTool.definition, answer
 

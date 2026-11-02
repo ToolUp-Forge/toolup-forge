@@ -15,6 +15,7 @@ namespace ToolUp.PublicRendering
 
 open System.Text
 open ToolUp.Platform.Narrative
+open ToolUp.Platform.Infra
 
 /// A flattened table: column headers + rows of plaintext cell values.
 type TabularData = {

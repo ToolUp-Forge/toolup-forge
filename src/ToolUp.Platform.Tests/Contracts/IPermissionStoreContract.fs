@@ -3,7 +3,9 @@ module ToolUp.Platform.Tests.Contracts.IPermissionStoreContract
 open System
 open Expecto
 open ToolUp.Platform
-open ToolUp.Platform.PermissionStore
+open ToolUp.Platform.Scope.PermissionStore
+open ToolUp.Platform.Jobs.SmokeTests
+open ToolUp.Platform.Compose
 
 // ModulePermission carries `[<RequireQualifiedAccess>]` because its
 // `Admin` case collides with TeamRole.Admin (different concepts).
@@ -126,6 +128,7 @@ let tests (name: string) (factory: unit -> IPermissionStore) =
                 // contract's fixture, so the grant map is empty and the
                 // document round-trips exactly as it did pre-551.
                 Grants = Map.empty
+                Pages = Map.empty
             }
 
             let! _ = store.SetTeamPermissions(team, replacement)
@@ -181,6 +184,13 @@ let tests (name: string) (factory: unit -> IPermissionStore) =
                                 ConsentedBy = Some "bob"
                             }
                         ]
+                    ]
+                // Page-save grants round-trip too: a store that drops them
+                // silently revokes every explicit page grant.
+                Pages =
+                    Map.ofList [
+                        "alice", [ PageGrant.SaveTeam ]
+                        "bob", [ PageGrant.SaveOwn; PageGrant.SavePlatform ]
                     ]
             }
 

@@ -53,6 +53,9 @@ open ToolUp.Platform
 open ToolUp.Platform.Secrets
 open ToolUp.InterPlatform
 open ToolUp.Platform.Tests.InProcess.FederationWireCorpus
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── The canonical contract ──────────────────────────────────────────
 //

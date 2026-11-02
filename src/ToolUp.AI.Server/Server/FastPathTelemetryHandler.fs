@@ -6,8 +6,9 @@ open ToolUp.Remoting.Json.SystemTextJson
 open Giraffe
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
-open ToolUp.Platform.StorageScopeResolver
+open ToolUp.Platform.Scope.StorageScopeResolver
 open ToolUp.AI.FastPathBeaconHandler
+open ToolUp.Platform.Compose
 
 // ─── Phase 6j.A — `/dev/ai-fastpath` telemetry endpoint ─────────
 //

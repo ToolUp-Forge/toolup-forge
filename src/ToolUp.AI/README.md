@@ -38,7 +38,7 @@ There are three exits, and the refusal message names all of them:
 
 - **Rate-limit the anonymous surface** — `ServerConfig.RateLimit = RateLimitConfig.uniform { PermitLimit = 100; WindowSeconds = 60; QueueLimit = 20 }`, or a `PerShape` policy covering `AnonymousKind` (`TOOLUP_RATE_LIMIT_PERMITS=N`). Anonymous traffic partitions on client IP.
 - **Use a BYOK-only `IAIProviderFactory`** — wire no platform providers, so every call is funded by a key the user supplied. This is the documented legitimate Anonymous + AI shape, and it is exempt *by construction* rather than by exception: with no platform-paid provider, resolution for an anonymous caller (who has no secret scope to hold a key) can only ever return `NoProviderConfigured`.
-- **Attest that the cost is bounded upstream** — `ServerConfig.AcceptAnonymousModeWithAI = true` (`TOOLUP_ACCEPT_ANONYMOUS_MODE_WITH_AI=1`) for a deployment whose per-IP gating or request budgets live at the proxy / CDN / WAF. Like `AcceptStickyRoutedAiInMultiInstance`, this **degrades the refusal to a `Warning` rather than clearing it**: upstream rate limiting is an assertion about infrastructure the SDK cannot verify, so the residual exposure stays visible in the HealthMonitorUI Preflight tab and the `/dev/inspect` Validators panel. The deployment boots — only `Error` refuses.
+- **Attest that the cost is bounded upstream** — `ServerConfig.RiskAcknowledgements.AcceptAnonymousModeWithAI = true` (`TOOLUP_ACCEPT_ANONYMOUS_MODE_WITH_AI=1`) for a deployment whose per-IP gating or request budgets live at the proxy / CDN / WAF. Like `AcceptStickyRoutedAiInMultiInstance`, this **degrades the refusal to a `Warning` rather than clearing it**: upstream rate limiting is an assertion about infrastructure the SDK cannot verify, so the residual exposure stays visible in the HealthMonitorUI Preflight tab and the `/dev/inspect` Validators panel. The deployment boots — only `Error` refuses.
 
 Single-user local development is unaffected in practice: a local shell that has wired no platform provider never reaches the rule, and one that has can set the env var.
 
@@ -72,7 +72,7 @@ Injected into the consuming server project via `ToolUp.AI.Server.props`. Compile
 | `SSEHandler.fs` | `SSEConnection`, `SSEConnectionManager` (zombie-aware), `sseHandler` Giraffe endpoint |
 | `AIAgentEngine.fs` | `runAgentLoop` (multi-turn with tool dispatch), `ToolInvocationError` |
 | `AIAssistantHandler.fs` | `AIAssistantApi` implementation — `SubmitMessage`, conversation persistence, background agent execution |
-| `AICompose.fs` | `composeWithAI` + `AIServerApp` record — drop-in replacement for `Server.compose` / `ServerApp`. `AIServerApp` wraps a `ServerApp.Base` and adds an `AIProviderFactory`, `AIConfigStore`, `AITools`, `AIConfig`, and `ModuleAIContexts`; `AIServerApp.run` calls `composeWithAI` internally via `ComposeExtensions` |
+| `AICompose.fs` | The `AIOptions` record (`AIProviderFactory`, `ProviderProfile`, `AIConfig`, `ModuleAIContexts`, and the AI tier's other settings) and `AICompose.withAI`, which sets the AI companion on a `ServerApp`; the tier is composed once, when the deployment resolves, and the pipeline ends in `ServerApp.run` |
 
 ### Client-side UI — [Client/](Client/)
 
@@ -109,12 +109,12 @@ Client project (`ToolupApp-Client.fsproj`) — add the companion's client props 
 <Import Project="..\ToolUp.AI\ToolUp.AI.Client.props" />
 ```
 
-### 2. Wire a provider factory and run via `AIServerApp`
+### 2. Wire a provider factory and compose with `AICompose.withAI`
 
 In the server entry point:
 
 ```fsharp skip=fragment
-open ToolUp.Platform.Server
+open ToolUp.Platform.Compose.Server
 open ToolUp.AI
 open ToolUp.AI.AICompose
 
@@ -134,19 +134,19 @@ let aiProviderFactory =
         platformProviders
         None                     // IPlatformAIKeyStore option
 
-AIServerApp.createFrom aiProviderFactory providerProfile (
-    ServerApp.empty
-    |> ServerApp.withConfig config
-    |> ServerApp.withAuth authProvider
-    |> ServerApp.withLogger logger
-    |> ServerApp.withStorage blobStorage
-    |> ServerApp.addModules modules)        // each module as a ServerModule
-|> AIServerApp.run
+ServerApp.empty
+|> ServerApp.withConfig config
+|> ServerApp.withAuth authProvider
+|> ServerApp.withLogger logger
+|> ServerApp.withStorage blobStorage
+|> ServerApp.addModules modules             // each module as a ServerModule
+|> AICompose.withAI (AIOptions.create aiProviderFactory providerProfile)
+|> ServerApp.run
 ```
 
-Deployments that don't want AI use `ServerApp.run` directly (no `AIServerApp` wrapper). The factory indirection is what lets users configure per-user BYOK providers via the AI Settings UI without changing server wiring.
+`withAI` sets the AI companion; the tier is composed once, when the deployment resolves, so every `ServerApp` builder works on either side of it. Deployments that don't want AI leave the `withAI` line out. The factory indirection is what lets users configure per-user BYOK providers via the AI Settings UI without changing server wiring.
 
-`AIProviderFactory` and `ProviderProfile` are constructor parameters of `AIServerApp.create` / `createFrom` rather than optional fields — the wrapper exists precisely because AI needs both and the core `ServerApp` cannot reasonably default them.
+`AIProviderFactory` and `ProviderProfile` are parameters of `AIOptions.create` rather than optional fields — AI needs both and the core `ServerApp` cannot reasonably default them.
 
 ### 3. Wire the client wrapper
 
@@ -218,9 +218,12 @@ let moduleAIContexts = [
     // PriceElasticity, SOVSM skip — no domain prompt needed
 ]
 
-AIServerApp.createFrom aiProviderFactory providerProfile serverApp
-|> AIServerApp.withModuleAIContexts moduleAIContexts
-|> AIServerApp.run
+serverApp
+|> AICompose.withAI (
+    AIOptions.create aiProviderFactory providerProfile
+    |> AIOptions.withModuleAIContexts moduleAIContexts
+)
+|> ServerApp.run
 ```
 
 When the user chats from the NBDDirichlet view, the client attaches `ActiveModule = Some "NBDDirichlet"` to the request. The `activeModuleContext` builder looks up the module's contribution and injects it. The user never sees this in their chat history — it's metadata to the model.
@@ -248,10 +251,13 @@ let aiConfig = Some {
     SystemPrompt = Some teamAwarePrompt
 }
 
-AIServerApp.createFrom aiProviderFactory providerProfile serverApp
-|> AIServerApp.withAIConfig aiConfig
-|> AIServerApp.withModuleAIContexts moduleAIContexts
-|> AIServerApp.run
+serverApp
+|> AICompose.withAI (
+    AIOptions.create aiProviderFactory providerProfile
+    |> AIOptions.withAIConfig aiConfig
+    |> AIOptions.withModuleAIContexts moduleAIContexts
+)
+|> ServerApp.run
 ```
 
 The builder runs per request. `AccessContext.TeamId` is scope-validated upstream by `ScopeResolutionMiddleware` — Team A's context can never leak to Team B's conversation.
@@ -283,13 +289,13 @@ A new provider only needs to translate the `AIProviderMessage` / `AIProviderResp
 
 ## Observability and metrics (Phase 9 / 9e delegations)
 
-`AIServerApp` mirrors the `ServerApp` observability surface so AI deployments can wire health probes, config validators, and metrics sinks fluently:
+An AI deployment wires health probes, config validators, and metrics sinks with the ordinary `ServerApp` builders, on either side of `AICompose.withAI`:
 
-- `AIServerApp.withHealthCheck` (Phase 9k) — register a companion-contributed `IHealthCheck` (e.g. `ClaudeAIProviderHealth.create secretStore`).
-- `AIServerApp.withConfigValidator` (Phase 9m) — register a companion-contributed `IConfigValidator` for startup preflight.
-- `AIServerApp.withMetricsSink` (Phase 9e) — register a companion-contributed `IMetricsSink` (e.g. `OtelMetricsSink.create regs logger`) alongside the in-process Prometheus default. The fan-out wrapper makes a single `Increment` call dispatch to every registered sink. Wire `MetricsEndpoint = EnabledMetricsEndpoint` on `ServerConfig` to mount `/metrics` and activate emission.
+- `ServerApp.withHealthCheck` (Phase 9k) — register a companion-contributed `IHealthCheck` (e.g. `ClaudeAIProviderHealth.create secretStore`).
+- `ServerApp.withConfigValidator` (Phase 9m) — register a companion-contributed `IConfigValidator` for startup preflight.
+- `ServerApp.withMetricsSink` (Phase 9e) — register a companion-contributed `IMetricsSink` (e.g. `OtelMetricsSink.create regs logger`) alongside the in-process Prometheus default. The fan-out wrapper makes a single `Increment` call dispatch to every registered sink. Wire `MetricsEndpoint = FeatureMode.Enabled` on `ServerConfig` to mount `/metrics` and activate emission.
 
-Each helper delegates to its `ServerApp` counterpart — see [`src/ToolUp.Platform/README.md`](../ToolUp.Platform/README.md) and `TECHNICAL_GUIDE.md` for the full contract.
+See [`src/ToolUp.Platform/README.md`](../ToolUp.Platform/README.md) and `TECHNICAL_GUIDE.md` for the full contract.
 
 ### Auto-registered AI config validators (Phase 9m.A)
 

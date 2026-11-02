@@ -4,6 +4,7 @@ open System
 open Expecto
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Audit
 
 // ─── Env-gated ───────────────────────────────────────────────────────
 //

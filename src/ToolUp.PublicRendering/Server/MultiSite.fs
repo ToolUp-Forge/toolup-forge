@@ -6,6 +6,7 @@ open Giraffe.ViewEngine
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Config
 
 // ─── Phase 114 — multi-host public rendering (site registry) ────────
 //
@@ -29,7 +30,7 @@ open ToolUp.Platform.ConfigValidation
 // need it.
 
 /// A satellite website served by this instance, keyed by host name.
-/// Register via `PublicRenderingServerApp.withSite`. The default site
+/// Register via `PublicRenderingOptions.withSite`. The default site
 /// (the `ServerConfig`-level `EnabledPublicRendering` content root +
 /// compose-registered layouts + `PublicBaseUrl`) is NOT a
 /// `PublicSiteDef` — it is the fallback every unmatched host serves.

@@ -19,13 +19,16 @@ open ToolUp.Elmish
 open ToolUp.AI
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.FileProcessor
-open ToolUp.Platform.IEmbeddingProvider
-open ToolUp.Platform.ITableExtractor
+open ToolUp.Platform.Infra.IEmbeddingProvider
+open ToolUp.Platform.Infra.ITableExtractor
 open ToolUp.Platform.Providers
 open ToolUp.Platform.VectorisationTypes
+open ToolUp.RAG
 open ToolUp.RAG.IngestionTypes
 open ToolUp.RAG.RAGCompose
 open ProcessedDataTypes
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 [<AutoOpen>]
 module PageAmbient =
@@ -39,7 +42,7 @@ module PageAmbient =
     let embedder: IEmbeddingProvider = failwith "ambient"
 
     /// The DI collection the OCR / table-extractor companions register
-    /// into, before `composeWithRAG` probes for them.
+    /// into, before the RAG composition probes for them.
     let services: IServiceCollection = failwith "ambient"
 
     /// Substrate the built-in KB observer is constructed over.

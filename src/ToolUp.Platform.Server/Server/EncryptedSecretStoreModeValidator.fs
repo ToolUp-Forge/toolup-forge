@@ -1,4 +1,4 @@
-module ToolUp.Platform.EncryptedSecretStoreModeValidator
+module ToolUp.Platform.Config.EncryptedSecretStoreModeValidator
 
 open System
 open ToolUp.Platform
@@ -22,7 +22,7 @@ open ToolUp.Platform.ConfigValidation
 // hatch below) before the deployment proceeds. Dev / Anonymous mode
 // is unaffected because requiresAuth = false.
 //
-// Escape hatch: `ServerConfig.AcceptPlaintextSecretsWhenAuthRequired`
+// Escape hatch: `ServerConfig.RiskAcknowledgements.AcceptPlaintextSecretsWhenAuthRequired`
 // (default `false`). For deployments where the underlying storage
 // already provides at-rest encryption (cloud KMS-managed bucket,
 // disk-level FDE) and operators have made an informed decision to
@@ -96,7 +96,7 @@ type EncryptedSecretStoreModeValidator(config: ServerConfig, secretStore: Secret
                 config
                 (fun () ->
                     not keyAvailable
-                    && not config.AcceptPlaintextSecretsWhenAuthRequired
+                    && not config.RiskAcknowledgements.AcceptPlaintextSecretsWhenAuthRequired
                     && not (isCloudKmsBacked ())
                     // Phase 1001 — a composed store that DECLARES it
                     // encrypts at rest (a KMS companion supplied through
@@ -115,7 +115,7 @@ type EncryptedSecretStoreModeValidator(config: ServerConfig, secretStore: Secret
 
                     Error(
                         sprintf
-                            "ServerConfig.Surfaces = %s but %s. EncryptedSecretStore falls back to plaintext writes — every API key, OAuth token, and per-tenant credential will sit unencrypted in blob storage. Resolutions: (1) set TOOLUP_SECRETS_MASTER_KEY to a base64-encoded 32-byte key (call EncryptedSecretStore.generateMasterKey () once during deployment setup); (2) switch to a cloud-KMS-backed store via TOOLUP_SECRET_STORE=azure-key-vault (or aws-secrets-manager / vault / gcp-secret-manager) — Phase 2a/2b companions provide their own at-rest encryption; (3) set ServerConfig.AcceptPlaintextSecretsWhenAuthRequired = true if your storage backend provides at-rest encryption (disk FDE) and you've made an informed decision to rely on that. After fixing, verify in the HealthMonitorUI admin tab (production-safe) or /dev/inspect Validators panel (debug builds only)."
+                            "ServerConfig.Surfaces = %s but %s. EncryptedSecretStore falls back to plaintext writes — every API key, OAuth token, and per-tenant credential will sit unencrypted in blob storage. Resolutions: (1) set TOOLUP_SECRETS_MASTER_KEY to a base64-encoded 32-byte key (call EncryptedSecretStore.generateMasterKey () once during deployment setup); (2) switch to a cloud-KMS-backed store via TOOLUP_SECRET_STORE=azure-key-vault (or aws-secrets-manager / vault / gcp-secret-manager) — Phase 2a/2b companions provide their own at-rest encryption; (3) set ServerConfig.RiskAcknowledgements.AcceptPlaintextSecretsWhenAuthRequired = true if your storage backend provides at-rest encryption (disk FDE) and you've made an informed decision to rely on that. After fixing, verify in the HealthMonitorUI admin tab (production-safe) or /dev/inspect Validators panel (debug builds only)."
                             (DeploymentConfig.surfacesLabel config)
                             stateDescription
                     ))

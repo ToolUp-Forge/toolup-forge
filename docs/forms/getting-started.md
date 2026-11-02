@@ -4,7 +4,7 @@ End-to-end walkthrough: define a schema, render the form, persist a submission, 
 
 ## Prerequisites
 
-- A working ToolUp Platform app with `IEntityStore` enabled (`ServerConfig.EntityStore = EnabledEntityStore`).
+- A working ToolUp Platform app with `IEntityStore` enabled (`ServerConfig.Stores.EntityStore = FeatureMode.Enabled`).
 - `IAuditLog` enabled for event emission.
 
 ## 1. Add the packages
@@ -154,28 +154,21 @@ let leadWorkflow : WorkflowDefinition = {
 
 `WorkflowState`, `WorkflowId`, and `TransitionEvent` are type aliases for `string` — workflow authors pick natural names. `Guard` and `Action` are `string option` and resolve server-side at apply time against the registries populated by `withGuard` / `withAction`. Closures don't cross Fable serialisation; name-keyed dispatch is the workaround.
 
-## 4. Wire `FormsServerApp`
+## 4. Wire the Forms companion
 
 In the server composition root:
 
 ```fsharp
-open ToolUp.Platform.Server
+open ToolUp.Platform.Compose.Server
 open ToolUp.Forms.FormSubmission
 open ToolUp.Forms.Workflow
 open ToolUp.Forms.FormsCompose
 
-let serverApp =
-    FormsServerApp.create ()
-    |> FormsServerApp.withConfig {
-        ServerConfig.defaults with
-            EntityStore = EnabledEntityStore
-            AuditLog = EnabledAuditLog
-    }
-    |> FormsServerApp.withAuth authProvider
-    |> FormsServerApp.addModules modules
-    |> FormsServerApp.withFormSchema MyModule.SharedTypes.leadCaptureSchema
-    |> FormsServerApp.withWorkflow leadWorkflow
-    |> FormsServerApp.withGuard
+let formsOptions =
+    FormsOptions.create ()
+    |> FormsOptions.withFormSchema MyModule.SharedTypes.leadCaptureSchema
+    |> FormsOptions.withWorkflow leadWorkflow
+    |> FormsOptions.withGuard
         "has-proposal-attached"
         (fun ctx -> async {
             if ctx.Submission.Values.ContainsKey "proposal_file_id" then
@@ -183,7 +176,7 @@ let serverApp =
             else
                 return Error "no proposal file attached"
         })
-    |> FormsServerApp.withAction
+    |> FormsOptions.withAction
         "send-proposal-email"
         (fun ctx -> async {
             let email =
@@ -193,9 +186,22 @@ let serverApp =
             // ... ship the email via your notification sink ...
             return ()
         })
-    |> FormsServerApp.withActionPolicy "send-proposal-email" DeadLetter
+    |> FormsOptions.withActionPolicy "send-proposal-email" DeadLetter
 
-let exitCode = FormsServerApp.run serverApp
+let exitCode =
+    ServerApp.empty
+    |> ServerApp.withConfig {
+        ServerConfig.defaults with
+            Stores = {
+                ServerConfig.defaults.Stores with
+                    EntityStore = FeatureMode.Enabled
+            }
+            AuditLog = FeatureMode.Enabled
+    }
+    |> ServerApp.withAuth authProvider
+    |> ServerApp.addModules modules
+    |> withForms formsOptions
+    |> ServerApp.run
 ```
 
 - **Guards** have signature `WorkflowContext -> Async<Result<unit, string>>`, where the context bundles `Submission`, `AccessContext` and a per-invocation `IServiceProvider` — so a guard resolves what it needs from DI rather than capturing it at compose time. `Ok ()` allows the transition; `Error reason` short-circuits it as `FormError.TransitionDenied reason`. A guard that throws surfaces as `GuardEvaluationFailed (guardName, reason)` so callers can retry transient faults.
@@ -328,20 +334,22 @@ let npsSchema =
 Wire `IShareTokenStore`:
 
 ```fsharp
-open ToolUp.Platform.Server
+open ToolUp.Platform.Compose.Server
 open ToolUp.Forms.FormsCompose
 
-let serverApp =
-    FormsServerApp.create ()
-    |> FormsServerApp.withConfig {
+let exitCode =
+    ServerApp.empty
+    |> ServerApp.withConfig {
         ServerConfig.defaults with
-            EntityStore = EnabledEntityStore
-            ShareTokenStore = EnabledShareTokenStore
+            Stores = {
+                ServerConfig.defaults.Stores with
+                    EntityStore = FeatureMode.Enabled
+                    ShareTokenStore = FeatureMode.Enabled
+            }
             PublicBaseUrl = Some "https://my-app.example.com"
     }
-    |> FormsServerApp.withFormSchema npsSchema
-
-let exitCode = FormsServerApp.run serverApp
+    |> withForms (FormsOptions.create () |> FormsOptions.withFormSchema npsSchema)
+    |> ServerApp.run
 ```
 
 Issue tokens:

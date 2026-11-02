@@ -16,6 +16,8 @@
 // `ToolUp.Platform.NotificationChannels.*`.
 open System.Net.Http
 open ToolUp.Platform.Secrets
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
 
 [<AutoOpen>]
 module PageAmbient =

@@ -5,6 +5,7 @@ namespace ToolUp.PublicRendering
 
 open ToolUp.Platform
 open ToolUp.Platform.Narrative
+open ToolUp.Platform.Infra
 
 // ─── Phase 80 — Narrative ↔ Phase-57 prerender bridge ────────────
 //
@@ -28,7 +29,7 @@ module NarrativePrerender =
     /// (first-paragraph excerpt, frontmatter override) should
     /// post-process the returned record.
     ///
-    /// `Provenance.GeneratedAt` contributes
+    /// `NarrativeProvenance.GeneratedAt` contributes
     /// `og:article:published_time` and the corresponding
     /// schema.org Article JSON-LD via
     /// `StructuredDataHelpers.articleFromNarrative` with a

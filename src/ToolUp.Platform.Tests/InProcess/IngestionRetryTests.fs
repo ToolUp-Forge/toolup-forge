@@ -16,6 +16,10 @@ open ToolUp.Platform
 open ToolUp.Platform.VectorKnowledgeTypes
 open DataManagementTypes
 open ToolUp.RAG.IngestionTypes
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 let private run = Async.RunSynchronously
 let private logger = ConsoleLogger.ConsoleLogger() :> ILogger

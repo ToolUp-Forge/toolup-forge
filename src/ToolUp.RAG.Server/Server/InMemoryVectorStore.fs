@@ -8,8 +8,12 @@ open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.VectorKnowledgeTypes
-open ToolUp.Platform.IVectorStore
-open ToolUp.Platform.IRagTelemetry
+open ToolUp.Platform.Infra.IVectorStore
+open ToolUp.Platform.Infra.IRagTelemetry
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Vector math ──────────────────────────────────────────────────
 
@@ -147,7 +151,7 @@ type InMemoryVectorStore
         // `auditLog` records a `KnowledgeIndexLoadFailed` event; `notifications`
         // publishes a `SystemMessage` (Error) to platform admins on first
         // observed corruption per scope. Both optional — a deployment with
-        // `NoAuditLog` / no channel still gets the telemetry counter + Warn
+        // `FeatureMode.Disabled` / no channel still gets the telemetry counter + Warn
         // log line (GP 13: no collaborator, no cost).
         ?auditLog: IAuditLog,
         ?notifications: INotificationChannel
@@ -301,11 +305,8 @@ type InMemoryVectorStore
     // aborted with an actionable error instead of starting the scope empty;
     // for the eager Platform/Deployment loads this fails process startup.
     let refuseOnCorruption =
-        match Environment.GetEnvironmentVariable ConfigKeys.Names.ragRefuseOnIndexCorruption with
-        | "1"
-        | "true"
-        | "TRUE" -> true
-        | _ -> false
+        let key = ConfigKeys.key ConfigKeys.Names.ragRefuseOnIndexCorruption
+        ConfigKeys.ConfigKey.readPermissiveBool key (Environment.GetEnvironmentVariable key.EnvVar |> Option.ofObj)
 
     /// Handle a scope-load deserialisation failure. Refusal (when enabled)
     /// is raised on every attempt, independent of the dedup — a corrupt
@@ -736,7 +737,7 @@ type InMemoryVectorStore
             // own typed failure rather than an exception out of the erasure
             // fan-out; the orchestrator retries `StoreUnreachable`.
             match!
-                ToolUp.Platform.IVectorStore.eraseSubject (this :> IVectorStore) scope subjectUserId policy dryRun
+                ToolUp.Platform.Infra.IVectorStore.eraseSubject (this :> IVectorStore) scope subjectUserId policy dryRun
                 |> Async.Catch
             with
             | Choice1Of2 result -> return result

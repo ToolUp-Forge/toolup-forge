@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Description>ToolUp.Platform server tier, Remoting part: the remoting transport (the MessagePack and JSON codecs, the decoder gates, the dispatcher, rate limiting, idempotency, streaming and long-running calls) and its Giraffe and ASP.NET Core adapters. Referenced by ToolUp.Platform.Server, which most applications reference instead.</Description>
+        <PackageTags>fsharp;sdk;server;remoting;giraffe;asp-net-core</PackageTags>
+    </PropertyGroup>
+    <!-- One part of the server tier, cut along a contiguous run of its compile
+         order (docs/migrations/1193-platform-server-subsystem-assemblies.md). It references only
+         the parts before it; ToolUp.Platform.Server references every part, so a consumer of that
+         package id resolves this one transitively. The sources stay under
+         ../ToolUp.Platform.Server/ with their namespaces unchanged. -->
+    <ItemGroup>
+        <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- The parts after this one, the umbrella and the test packs that already read the
+             server tier's internals before the cut. -->
+        <InternalsVisibleTo Include="ToolUp.Platform.Server.Infra" />
+        <InternalsVisibleTo Include="ToolUp.Platform.Server.Config" />
+        <InternalsVisibleTo Include="ToolUp.Platform.Server.Scope" />
+        <InternalsVisibleTo Include="ToolUp.Platform.Server.Jobs" />
+        <InternalsVisibleTo Include="ToolUp.Platform.Server.Audit" />
+        <InternalsVisibleTo Include="ToolUp.Platform.Server" />
+        <InternalsVisibleTo Include="ToolUp.Platform.Tests" />
+        <InternalsVisibleTo Include="ToolUp.DataSources.Tests" />
+        <InternalsVisibleTo Include="ToolUp.Cli.Tests" />
+        <InternalsVisibleTo Include="ToolUp.Reporting.Tests" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- The MessagePack reflection engine and the decoder
+             gates, moved out of ToolUp.Platform.Core with the same rule as
+             Fable never compiled them. TypeShape.fs and
+             TypeShapeUtils.fs moved whole (`module internal`, as before);
+             `ToolUp.Remoting.MsgPack.Write` is split, the Fable writer
+             staying in Core and the .NET writer declared here in a module
+             of the same name; `RemotingDecoders` and `JsonDecoders` are
+             split the same way, the registration tables in Core and the
+             gates (the verify arms, the shape generator, the JSON oracle
+             and the browser-writer mirror) here. Ahead of the remoting
+             block, whose converter set and dispatcher consume them. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\Remoting\MsgPack\TypeShape.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Remoting\MsgPack\TypeShapeUtils.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Remoting\MsgPack\Write.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Remoting\DecoderVerification.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Remoting\Json\JsonDecoderVerification.fs" />
+        <!-- 0.4.4 — ToolUp.Remoting.{Json,Server,Giraffe,AspNetCore}
+             folded in from a formerly-separate repository. The
+             transport is a forge implementation detail; one package
+             instead of four. Namespace `ToolUp.Remoting.*` is preserved
+             across every moved file so every existing
+             `open ToolUp.Remoting.Server` / `.Giraffe` / `.AspNetCore`
+             site keeps compiling unchanged.
+
+             Compile order matches the original cross-package dependency
+             order: Json (server-side JSON converters) -> Server core
+             dispatcher + auth + rate-limit + audit + etc. -> Giraffe
+             adapter -> AspNetCore middleware. MsgPack types (used by
+             Server/Proxy.fs) come in via ProjectReference to
+             ToolUp.Platform.Core which carries the folded MsgPack
+             source. -->
+        <!-- The JsonElement-to-JsonValue pass, ahead of the
+             converter set whose decode seam consults the JSON algebra. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\Remoting\Json\JsonRead.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Remoting\Json\SystemTextJsonConverter.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Remoting\Types.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Remoting\CallContext.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Remoting\Auth.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Remoting\BoundedFifo.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Remoting\RateLimit.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Remoting\Audit.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Remoting\Idempotency.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Remoting\Validation.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Remoting\Jobs.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Remoting\Streaming.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Remoting\LongRunning.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Remoting\SourceGenDispatch.fs" />
+        <!-- The `X-Remoting-Schema` negotiation half: the
+             [<SupportsSchema>] / [<DeprecatedSchema>] attributes, the
+             per-method version table and the pure routing decision both
+             adapters read. After Types.fs (its only dependency) and before
+             Documentation.fs, which publishes the version vector, and before
+             the two adapters. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\Remoting\SchemaVersion.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Remoting\Errors.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Remoting\Diagnostics.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Remoting\Patterns.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Remoting\Documentation.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Remoting\Proxy.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Remoting\DocsApp.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Remoting\Remoting.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Remoting\Giraffe\GiraffeAdapter.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Remoting\AspNetCore\Middleware.fs" />
+        <!-- The shared request-body binding seam. Depends on
+             nothing but HttpContext + System.Text.Json (it takes the
+             caller's JsonSerializerOptions rather than owning one), and
+             must precede every handler swept onto it: ConsentApiHandler,
+             PlatformAdmin/AdUnitConfigApi and AdAnalyticsApiHandler below,
+             plus AuthProviders/Passkey in its own project. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\HttpBodyBinding.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="FSharp.Core" />
+        <PackageReference Include="Giraffe" />
+        <PackageReference Include="Microsoft.IO.RecyclableMemoryStream" />
+    </ItemGroup>
+</Project>

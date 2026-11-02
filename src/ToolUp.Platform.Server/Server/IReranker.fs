@@ -1,4 +1,6 @@
-module ToolUp.Platform.IReranker
+module ToolUp.Platform.Infra.IReranker
+
+open ToolUp.Platform
 
 open ToolUp.Platform.VectorKnowledgeTypes
 

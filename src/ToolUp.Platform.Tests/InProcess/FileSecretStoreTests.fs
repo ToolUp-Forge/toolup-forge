@@ -4,6 +4,7 @@ open System
 open System.IO
 open ToolUp.Platform.Secrets
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Config
 
 /// Bind the `ISecretStore` contract test pack to `FileSecretStore`.
 /// Each factory call creates a unique temp directory and constructs a

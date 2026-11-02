@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-namespace ToolUp.Platform
+namespace ToolUp.Platform.Jobs
+
+open ToolUp.Platform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
 
 open System
 open System.Collections.Concurrent
@@ -21,7 +25,7 @@ open ToolUp.Platform.ProviderExceptions
 // ─── Phase 10h — in-process IOAuthTokenRefresher ──────────────────
 //
 // SDK-default `IOAuthTokenRefresher` registered when
-// `ServerConfig.OAuthRefresher = EnabledOAuthRefresher`. Performs
+// `ServerConfig.OAuthRefresher = FeatureMode.Enabled`. Performs
 // vanilla OAuth 2.0 refresh-token grants (RFC 6749 §6) against the
 // upstream `TokenEndpoint`, persists rotated tokens through
 // `ISecretStore`, emits the `_platform.oauth.refresh` audit family +

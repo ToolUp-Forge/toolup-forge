@@ -4,7 +4,7 @@ Community AG Chart + AG Grid prompt-builder companion for `ToolUp.AI` (Phase 12e
 
 ## What it does
 
-Exposes a `SystemPromptBuilder` a deployment composes into `composeWithAI`'s prompt list, so the in-app AI assistant authors charts and grids in F# against the typed `AgChart` / `AgGrid` bindings rather than guessing at the JS API.
+Exposes a `SystemPromptBuilder` a deployment composes into the assistant's `SystemPrompt`, so the in-app AI assistant authors charts and grids in F# against the typed `AgChart` / `AgGrid` bindings rather than guessing at the JS API.
 
 At construction it reads the Community `COOKBOOK.md`, extracts its `## Critical constraints` and `## The shortest possible chart` sections via a header-keyed parse, and prepends them under an authoring heading. The extraction is bounded to ~600 tokens (truncated on a line boundary) so the per-conversation cost is predictable.
 
@@ -21,14 +21,17 @@ open ToolUp.AI
 
 let chartGuidance = AgChartAICookbook.systemPromptBuilder (Some logger)
 
-AIServerApp.create aiProviderFactory providerProfile
-|> AIServerApp.withAIConfig {
-    Branding = branding
-    SystemPrompt = Some chartGuidance
-    MaxHistoryMessages = None
-    AISurfaceDerivation = TrustClient
-}
-|> AIServerApp.run
+serverApp
+|> AICompose.withAI (
+    AIOptions.create aiProviderFactory providerProfile
+    |> AIOptions.withAIConfig {
+        Branding = branding
+        SystemPrompt = Some chartGuidance
+        MaxHistoryMessages = None
+        AISurfaceDerivation = TrustClient
+    }
+)
+|> ServerApp.run
 ```
 
 ## Cookbook resolution

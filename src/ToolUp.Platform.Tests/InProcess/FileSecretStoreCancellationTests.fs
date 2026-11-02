@@ -5,6 +5,7 @@ open System.IO
 open System.Threading
 open Expecto
 open ToolUp.Platform.Secrets
+open ToolUp.Platform.Config
 
 // ─── FileSecretStore - cancellable, non-blocking reads (Phase 6k) ────
 //

@@ -3,6 +3,8 @@
 
 namespace ToolUp.InterPlatform
 
+open ToolUp.Platform.Compose
+
 // ─── Layer 4 — peer authentication ───────────────────────────────────
 //
 // `IPeerAuthProvider` is the trust boundary between two deployments. The
@@ -21,7 +23,7 @@ namespace ToolUp.InterPlatform
 // disabled" mode that lets an unauthenticated peer through.
 //
 // **Audience binding (Phase 130).** When the receiver has declared its
-// own identity (`PeerServerApp.withLocalPeer`), `ValidatePeerToken`
+// own identity (`PeerOptions.withLocalPeer`), `ValidatePeerToken`
 // additionally binds the token's `aud` claim to that identity: a token
 // minted *for a different peer* that happens to share the issuer's
 // signing key is rejected, and a token with no `aud` is rejected fail-

@@ -1,7 +1,8 @@
-module ToolUp.Platform.LineageStoreErasureHandler
+module ToolUp.Platform.Audit.LineageStoreErasureHandler
 
 open ToolUp.Platform
-open ToolUp.Platform.IDataExporter
+open ToolUp.Platform.Audit.IDataExporter
+open ToolUp.Platform.Infra
 
 // ─── Phase 9h — lineage-store DSR adapter ────────────────────────────
 //

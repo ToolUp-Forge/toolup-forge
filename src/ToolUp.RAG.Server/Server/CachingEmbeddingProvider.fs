@@ -2,9 +2,10 @@ module ToolUp.RAG.CachingEmbeddingProvider
 
 open System.Security.Cryptography
 open System.Text
-open ToolUp.Platform.IEmbeddingProvider
-open ToolUp.Platform.IEmbeddingCache
+open ToolUp.Platform.Infra.IEmbeddingProvider
+open ToolUp.Platform.Infra.IEmbeddingCache
 open ToolUp.Platform.VectorKnowledgeTypes
+open ToolUp.Platform.Infra
 
 /// SHA256 the input text and return a lowercase hex digest. Used as the
 /// `TextHash` portion of `EmbeddingCacheKey` so the cache never retains

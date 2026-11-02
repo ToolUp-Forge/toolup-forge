@@ -5,7 +5,7 @@
      sources of truth are the `AuditEvent` union in src/ToolUp.Platform.Core/Shared/AuditTypes.fs and
      the codec registry `auditEventCodecs` in src/ToolUp.Platform.Server/Server/AuditLog.fs. -->
 
-Every audit event the SDK emits (202 cases). All of them are recorded under the reserved `_platform.audit` source module, and every one is decodable for external replication — that is a build gate, not a convention (see [PLATFORM-SECURITY-RULES.md](../security/PLATFORM-SECURITY-RULES.md) AU-2).
+Every audit event the SDK emits (206 cases). All of them are recorded under the reserved `_platform.audit` source module, and every one is decodable for external replication — that is a build gate, not a convention (see [PLATFORM-SECURITY-RULES.md](../security/PLATFORM-SECURITY-RULES.md) AU-2).
 
 **Read the first column when you are writing a SIEM rule or querying an archive.** The wire `EventType` is what is persisted and replicated; the F# case identifier is what you pattern-match on in SDK code. They are equal for almost every event, and the exceptions are listed below — they are pinned deliberately, because a wire string that has already left for a third-party sink cannot be migrated.
 
@@ -221,5 +221,9 @@ Cases whose wire discriminator differs from the F# identifier (3):
 | `PublicationReaderSignedIn` | — | `PublicationReaderSignedInPayload` |
 | `PublicationReaderGranted` | — | `PublicationReaderGrantChangedPayload` |
 | `PublicationReaderRevoked` | — | `PublicationReaderGrantChangedPayload` |
+| `PageSaved` | — | `PageSavedPayload` |
+| `PageReseeded` | — | `PageReseededPayload` |
+| `PageDetached` | — | `PageDetachedPayload` |
+| `PageWriteRefused` | — | `PageWriteRefusedPayload` |
 
 Payload record definitions live in the `src/ToolUp.Platform.Core/Shared/Audit/*AuditPayloads.fs` lane files compiled before the union; each case carries a doc comment explaining when it is emitted.

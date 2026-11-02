@@ -4,6 +4,7 @@ open System.Collections.Concurrent
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Config
 
 // ─── Phase 62 — IUserClaims in-process contract binding ───────────
 //

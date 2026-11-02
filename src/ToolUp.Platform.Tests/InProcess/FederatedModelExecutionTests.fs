@@ -9,7 +9,14 @@ open ToolUp.Platform
 // cases stub, and the compose record the descriptor cases build.
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.InterPlatform
+open ToolUp.Platform.Tests.InProcess.PeerTestComposition
 open ToolUp.InterPlatform.PeerCompose
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 638 — the federated model-execution profile ───────────────
 //
@@ -1077,8 +1084,8 @@ type private RecordingGate(verdicts: Map<string, FactDisclosureVerdict>, claimed
     member val Calls = ResizeArray<string * FactEgressSurface * string list * string>() with get
 
     interface IFactDisclosureGate with
-        member this.Check(scopeId: string, principal: string, surface: FactEgressSurface, factIds: string list) = async {
-            this.Calls.Add(scopeId, surface, factIds, claimed.Value)
+        member this.Check(scope: ResolvedScope, principal: string, surface: FactEgressSurface, factIds: string list) = async {
+            this.Calls.Add(scope.ScopeId, surface, factIds, claimed.Value)
             ignore principal
 
             return
@@ -1087,10 +1094,6 @@ type private RecordingGate(verdicts: Map<string, FactDisclosureVerdict>, claimed
                     id, verdicts.TryFind id |> Option.defaultValue (FactNotDisclosable "unknown-fact"))
                 |> Map.ofList
         }
-
-        // Phase 797 — the typed form delegates to the string form above.
-        member this.Check(scope: ResolvedScope, principal: string, surface: FactEgressSurface, factIds: string list) =
-            (this :> IFactDisclosureGate).Check(scope.ScopeId, principal, surface, factIds)
 
 let private authorityLevelTests =
     testList "the levels are ordered and read fail-closed" [
@@ -1363,6 +1366,7 @@ let private federatedEgressTests =
 
             let route: PeerEgressRoute = {
                 Gate = gate
+                Scope = TestScope.resolved hostScope
                 Purpose = {
                     PurposeId = "federated-modelling"
                     Claim = fun purpose -> claimed.Value <- purpose
@@ -1415,6 +1419,7 @@ let private federatedEgressTests =
 
             let route: PeerEgressRoute = {
                 Gate = gate
+                Scope = TestScope.resolved hostScope
                 Purpose = {
                     PurposeId = "federated-modelling"
                     Claim = fun purpose -> claimed.Value <- purpose
@@ -1467,6 +1472,7 @@ let private federatedEgressTests =
 
             let route: PeerEgressRoute = {
                 Gate = gate
+                Scope = TestScope.resolved hostScope
                 Purpose = {
                     PurposeId = "federated-modelling"
                     Claim = fun purpose -> claimed.Value <- purpose
@@ -1497,6 +1503,7 @@ let private federatedEgressTests =
 
             let route: PeerEgressRoute = {
                 Gate = gate
+                Scope = TestScope.resolved hostScope
                 Purpose = {
                     PurposeId = "federated-modelling"
                     Claim = fun purpose -> claimed.Value <- purpose
@@ -1599,16 +1606,23 @@ let private declaredSurfaceTests =
     testList "the grant is declared once and published in the descriptor" [
         test "a composed declaration is what the surface publishes" {
             let surface =
-                PeerServerApp.create ()
-                |> PeerServerApp.withConfig {
-                    ServerConfig.defaults with
-                        PeerSubstrate = EnabledPeerSubstrate
-                }
-                |> PeerServerApp.withLocalPeer {
-                    PeerId = "data-host"
-                    DisplayName = "Data host"
-                }
-                |> PeerServerApp.withDataVisibility PeerDataVisibilityLevel.ViewOnly
+                PeerComposition.create ()
+                |> PeerComposition.app (
+                    ServerApp.withConfig {
+                        ServerConfig.defaults with
+                            MultiInstance = {
+                                ServerConfig.defaults.MultiInstance with
+                                    PeerSubstrate = FeatureMode.Enabled
+                            }
+                    }
+                )
+                |> PeerComposition.options (
+                    PeerOptions.withLocalPeer {
+                        PeerId = "data-host"
+                        DisplayName = "Data host"
+                    }
+                )
+                |> PeerComposition.options (PeerOptions.withDataVisibility PeerDataVisibilityLevel.ViewOnly)
                 |> PeerSurface.describe
 
             Expect.equal surface.DataVisibility "ViewOnly" "the label a counterparty pins"
@@ -1621,11 +1635,16 @@ let private declaredSurfaceTests =
 
         test "a composition that declares nothing publishes the narrowest level, present rather than omitted" {
             let surface =
-                PeerServerApp.create ()
-                |> PeerServerApp.withConfig {
-                    ServerConfig.defaults with
-                        PeerSubstrate = EnabledPeerSubstrate
-                }
+                PeerComposition.create ()
+                |> PeerComposition.app (
+                    ServerApp.withConfig {
+                        ServerConfig.defaults with
+                            MultiInstance = {
+                                ServerConfig.defaults.MultiInstance with
+                                    PeerSubstrate = FeatureMode.Enabled
+                            }
+                    }
+                )
                 |> PeerSurface.describe
 
             Expect.equal surface.DataVisibility "AggregatesOnly" "the shipped posture, named rather than changed"
@@ -2256,6 +2275,7 @@ let private viewAuditTests =
 
             let route: PeerEgressRoute = {
                 Gate = gate
+                Scope = TestScope.resolved hostScope
                 Purpose = {
                     PurposeId = "federated-modelling"
                     Claim = fun purpose -> claimed.Value <- purpose
@@ -2312,6 +2332,7 @@ let private viewAuditTests =
 
             let route: PeerEgressRoute = {
                 Gate = gate
+                Scope = TestScope.resolved hostScope
                 Purpose = {
                     PurposeId = "federated-modelling"
                     Claim = fun purpose -> claimed.Value <- purpose
@@ -2825,17 +2846,24 @@ let private transitionDeclarationTests =
     testList "the grant is declared, published and pinnable" [
         test "a deployment's composed grant is what its descriptor publishes" {
             let surface =
-                PeerServerApp.create ()
+                PeerComposition.create ()
                 // The descriptor is the empty label unless the peer
                 // substrate is on — a deployment with no wire face
                 // publishes no grant, which is itself the fail-closed
                 // shape and would make this assertion vacuously pass.
-                |> PeerServerApp.withConfig {
-                    ServerConfig.defaults with
-                        PeerSubstrate = EnabledPeerSubstrate
-                }
-                |> PeerServerApp.withPeerTransitionAuthority (
-                    ModelTransitionAuthority.ofTargets [ "Retired"; "Approved" ]
+                |> PeerComposition.app (
+                    ServerApp.withConfig {
+                        ServerConfig.defaults with
+                            MultiInstance = {
+                                ServerConfig.defaults.MultiInstance with
+                                    PeerSubstrate = FeatureMode.Enabled
+                            }
+                    }
+                )
+                |> PeerComposition.options (
+                    PeerOptions.withPeerTransitionAuthority (
+                        ModelTransitionAuthority.ofTargets [ "Retired"; "Approved" ]
+                    )
                 )
                 |> PeerSurface.describe
 
@@ -2872,16 +2900,21 @@ let private transitionDeclarationTests =
             // row. If the grant were a rung on the visibility ladder,
             // this composition could not be written.
             let surface =
-                PeerServerApp.create ()
+                PeerComposition.create ()
                 // The descriptor is the empty label unless the peer
                 // substrate is on — a deployment with no wire face
                 // publishes no grant, which is itself the fail-closed
                 // shape and would make this assertion vacuously pass.
-                |> PeerServerApp.withConfig {
-                    ServerConfig.defaults with
-                        PeerSubstrate = EnabledPeerSubstrate
-                }
-                |> PeerServerApp.withPeerTransitionAuthority approveGrant
+                |> PeerComposition.app (
+                    ServerApp.withConfig {
+                        ServerConfig.defaults with
+                            MultiInstance = {
+                                ServerConfig.defaults.MultiInstance with
+                                    PeerSubstrate = FeatureMode.Enabled
+                            }
+                    }
+                )
+                |> PeerComposition.options (PeerOptions.withPeerTransitionAuthority approveGrant)
                 |> PeerSurface.describe
 
             Expect.equal

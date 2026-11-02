@@ -1,0 +1,491 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Description>ToolUp.Platform server tier, Infra part: the substrate the subsystems stand on (the logging, metrics and RAG seams, the event, log, data-object, dataset, entity, result and lineage stores, compute dispatch and budgets, the model registry types, data sources, secret stores and blob encryption, health checks). Referenced by ToolUp.Platform.Server, which most applications reference instead.</Description>
+        <PackageTags>fsharp;sdk;server;storage;metrics</PackageTags>
+    </PropertyGroup>
+    <!-- One part of the server tier, cut along a contiguous run of its compile
+         order (docs/migrations/1193-platform-server-subsystem-assemblies.md). It references only
+         the parts before it; ToolUp.Platform.Server references every part, so a consumer of that
+         package id resolves this one transitively. The sources stay under
+         ../ToolUp.Platform.Server/ with their namespaces unchanged. -->
+    <ItemGroup>
+        <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\ToolUp.Platform.Server.Remoting\ToolUp.Platform.Server.Remoting.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- The parts after this one, the umbrella and the test packs that already read the
+             server tier's internals before the cut. -->
+        <InternalsVisibleTo Include="ToolUp.Platform.Server.Config" />
+        <InternalsVisibleTo Include="ToolUp.Platform.Server.Scope" />
+        <InternalsVisibleTo Include="ToolUp.Platform.Server.Jobs" />
+        <InternalsVisibleTo Include="ToolUp.Platform.Server.Audit" />
+        <InternalsVisibleTo Include="ToolUp.Platform.Server" />
+        <InternalsVisibleTo Include="ToolUp.Platform.Tests" />
+        <InternalsVisibleTo Include="ToolUp.DataSources.Tests" />
+        <InternalsVisibleTo Include="ToolUp.Cli.Tests" />
+        <InternalsVisibleTo Include="ToolUp.Reporting.Tests" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- What only a server can run, moved out of
+             ToolUp.Platform.Core, where each file shipped to every Fable
+             consumer behind a `#if !FABLE_COMPILER` guard. Namespaces and
+             module paths are preserved: JwtCrypto and ConfigResolution moved
+             whole; ServerConfig, DataVocabulary and BlobStorage are split, the
+             Fable-safe half staying in Core and this tier declaring a module
+             of the same name beside it, which F# resolves as one. First in
+             the compile order, so every server file sees them. -->
+        <!-- The one BCL HttpClient adapter for the portable
+             ToolUp.Platform.Transport seam (moved here from ToolUp.AI.Server):
+             this is the lowest .NET-only assembly that both the AI providers
+             and the data-source connectors reference. No deps on other
+             Server files. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\HttpClientTransport.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\JwtCrypto.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\DataVocabularyPins.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\BlobStorageSignedUrl.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Rag\IEmbeddingProvider.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\IEmbeddingCache.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Rag\IVectorStore.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\ISparseIndex.fs" />
+        <!-- Unified index-lifecycle seam: delete/erase fan-out
+             across IVectorStore + ISparseIndex + IEmbeddingCache with
+             per-target failure isolation, so producers (KB) cannot reach
+             one index and miss another. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\IIndexLifecycle.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\IReranker.fs" />
+        <!-- Conversation-aware query-rewrite seam. Beside the
+             other retrieval-stage seams; no dependency on them, so its
+             position here is by family, not by ordering constraint. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\IQueryRewriter.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\ITextSummariser.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\IOcrProvider.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\ITableExtractor.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\IImageEmbedder.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Rag\IRetrievalPipeline.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\IRetrievalTracer.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\IRagTelemetry.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\IMetricsSink.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\PrometheusMetricsSink.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\IActivitySink.fs" />
+        <!-- The CDN / edge-cache invalidation seam
+             (purge-only; the CDN caches, the SDK invalidates) + the
+             declared no-op + the `Cache-Control` declaration helper.
+             Depends only on Core (`ILogger`), so it sits with the other
+             interface-only seams ahead of any implementation. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\IEdgeCache.fs" />
+        <!-- Datadog readback metric declarations. Ahead of
+             MetricsMiddleware.fs so StandardMetrics.registrations can splice them. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\DatadogReadbackMetrics.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Logger.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\LoggerScope.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Infra\JsonConsoleLogger.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Infra\InMemoryEventStore.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Infra\LocalFileStorage.fs" />
+        <!-- Dev/test in-memory ITimeSeriesStore default. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\Infra\InMemoryTimeSeriesStore.fs" />
+        <!-- The self-hosted log store: the SQLite default (and
+             its retention sweep), the inert null object, and the ILogger
+             decorator that feeds the store. After Server/LoggerScope.fs (the
+             correlation context the decorator reads) and before
+             Compose/ComposeObservability.fs, which registers them. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\Infra\SqliteLogStore.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Infra\NoOpLogStore.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\LogStoreLogger.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\SecondaryIndex.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Infra\PersistentEventStore.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\IDataObjectStore.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\DataObjectStore.fs" />
+        <!-- SidecarStore: records over IDataObjectStore with declared,
+             indexed sidecar keys. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\SidecarStore.fs" />
+        <!-- Privacy-provenance label persistence (JSON sidecar +
+             metadata carriage). Compiled before BlobDatasetStore, which reads
+             and preserves the label sidecar. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\DataProvenanceLabels.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\IDatasetStore.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\BlobDatasetStore.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\IColumnMappingStore.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\ColumnMappingStore.fs" />
+        <!-- Per-file RAG ingestion-status store (seam +
+             IDataObjectStore-backed + in-memory default). Platform-tier so
+             FileManagement can join status onto the file-list read; RAG owns
+             the writes. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\IngestionStatusStore.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\IEntityStore.fs" />
+        <!-- Write-ahead-intent outbox coupling entity saves to
+             event publication; after the store surface it wraps, before the
+             relay service that drains it. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\EntityOutbox.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\EntityOutboxRelayService.fs" />
+
+        <Compile Include="..\ToolUp.Platform.Server\Server\EntityQueryExecutor.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\EntityStore.fs" />
+        <!-- User-authored schema store (substrate slice): the
+             IUserSchemaStore seam + blob-backed default over IDataObjectStore
+             (versioned schema definitions + typed migration execution).
+             After EntityStore.fs (rides the same versioned object
+             store); before ComposeStores.fs registers it. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\IUserSchemaStore.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\BlobUserSchemaStore.fs" />
+        <!-- Tenant entity registration. Sits behind IEntityStore;
+             consumed by EntityStoreTenantFleet (the ITenantFleet single-node
+             default) and by the Compose pipeline (registers via
+             ServerApp.withEntity<Tenant>). -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\TenantEntity.fs" />
+        <!-- Four deploy-plane substrate interfaces. Server-only
+             (IContainerScheduler.StreamLogs returns IAsyncEnumerable which
+             Fable cannot transpile). Supporting types are in Core's
+             Shared/Types/DeployPlaneTypes.fs so a Fable admin UI can
+             render tenant/deploy state without a DTO round-trip. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\IBuildOrchestrator.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\ITenantFleet.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\IDeployPipeline.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\IContainerScheduler.fs" />
+        <!-- The deploy-plane dry-run: the default read-only
+             plan/diff helper plus the `PlanDeploy` extension member every
+             IDeployPipeline gets for free. Must follow IContainerScheduler
+             (it reads observed state through it) and IDeployPipeline (it
+             extends it). -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\DeployPlanner.fs" />
+        <!-- External-compute broker seam + its no-op default.
+             Distinct from IContainerScheduler (which launches and owns a
+             container's lifecycle): this hands work to a backend that owns
+             its own execution and returns an opaque handle to poll. Value
+             types live in Core's Shared/ExternalCompute.fs. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\IExternalComputeDispatcher.fs" />
+        <!-- Multi-backend compute fleet. The registry declares
+             what each backend serves (profiles DERIVED from the
+             posture, never separately claimed) and the routing decision is
+             a pure function over it; the dispatcher applies it and feeds
+             per-backend health / metrics / a /dev/inspect row. Entirely
+             opt-in via ComputeFleetCompose.register — registerExternalCompute
+             is untouched, so a single-dispatcher deployment is unchanged
+             (GP 13). -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\IComputeBackendRegistry.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\RoutingComputeDispatcher.fs" />
+        <!-- Compute-result memoization decorator. Wraps ANY
+             dispatcher (including the router above and budget
+             decorator) and returns the cached terminal outcome of an
+             identical idempotent spec instead of re-dispatching it;
+             concurrent duplicates coalesce onto one submit. Opt-in by
+             construction — only a spec carrying an Idempotency key is
+             memoizable, and a deployment that never constructs the
+             decorator is unchanged (GP 13). -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\MemoizedComputeDispatcher.fs" />
+        <!-- Compute-budget governance. The store seam + its
+             blob-backed default, then the shared admit/settle guard and the
+             IExternalComputeDispatcher decorator built on it. Before
+             ModelFitJobHandler.fs, because the fit-enqueue path is the
+             SECOND enforcement point and calls the same guard — a federated
+             peer's fit submission reaches only that one, never Submit. -->
+        <!-- The platform budget seam's storage half: the
+             IBudgetLedger seam + its blob layout, then the blob-backed and
+             in-process ledgers and the once-per-period warning latch.
+             BEFORE the files, whose store is re-expressed as a
+             budget blob plus a ledger and whose guard warns through the
+             latch. Server-tier because a ledger needs a backend and the
+             JSON codec is System.Text.Json. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\IBudgetLedger.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\BudgetLedger.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\IComputeBudgetStore.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\ComputeBudgetStore.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\BudgetedComputeDispatcher.fs" />
+        <!-- External-handle store: routing (handle to job
+             run), authentication (the callback secret's hash) and the
+             atomic MarkTerminal gate that makes callback-vs-poll
+             exactly-once. Also the IExternalCompletionSink seam the
+             callback ingress drives a run through, so it compiles before
+             JobScheduler.fs (which implements it). -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\IExternalHandleStore.fs" />
+        <!-- Per-worker signing keys behind the completion
+             callback: worker identity to public key, with an approval flow
+             and sticky revocation. Before SignedOutcomeVerifier.fs (which
+             resolves keys through it) and before ExternalComputeCallback.fs
+             (which verifies with it). -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\WorkerKeyRegistry.fs" />
+        <!-- The signed-outcome gates: policy, envelope
+             verification (BCL es256; ed25519 behind the
+             WorkerSignatureVerifier seam), and the typed rejection the
+             callback ingress audits. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\SignedOutcomeVerifier.fs" />
+        <!-- Single-node default impl of ITenantFleet over
+             IEntityStore + IContainerScheduler + IDeployPipeline.
+             Per-tenant SemaphoreSlim for serialised state mutations;
+             (Region, Slug) compound index for O(1) slug uniqueness. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\EntityStoreTenantFleet.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\IDataCatalog.fs" />
+        <!-- Deterministic seeded generator for synthetic
+             samples; powers IDataCatalog.GetSyntheticSample under the
+             ModulePermission.SchemaOnly partner-sandbox role. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\SyntheticSampleGenerator.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\DataCatalog.fs" />
+        <!-- Canonical real-data-read guard for handlers.
+             Refuses SchemaOnly-only callers + emits
+             SchemaOnlyAccessAttempted audit. Compiled after AuditLog
+             so it can reference IAuditLog as the audit sink. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\SchemaOnlyGuard.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\IResultStore.fs" />
+        <!-- Declarative seed / fixture-data pack contract
+             (ISeedPack + SeedContext + SeedReport). Sits after the store
+             interfaces it hands to a pack (IEntityStore / IDataObjectStore /
+             IBlobStorage) and before ServerApp.fs (which accumulates packs). -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\ISeedPack.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\ILineageStore.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\LineageStore.fs" />
+        <!-- Read-only provenance chain traversal (grounding ledger v0). -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\IProvenanceGraph.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\ProvenanceGraph.fs" />
+        <!-- The walk's read-only remoting handler: projects a
+             chain onto the Core-tier wire mirrors, routes fact nodes through
+             the shipped IFactDisclosureGate at the FactExport surface, and
+             refuses an over-cap request rather than truncating it. Directly
+             after ProvenanceGraph.fs (its only server-tier dependency);
+             consumer-wired, so nothing below composes it. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\ProvenanceApiHandler.fs" />
+        <!-- Model-fit envelope: core types, provider seam +
+             registry, then the fit-run job handler (needs IJobHandler above +
+             IAuditLog from Core). Composed by ComposeJobs.registerModelFitting. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\ModelFitTypes.fs" />
+        <!-- Dataset declassification (needs DatasetVersionRef from
+             ModelFitTypes + IDatasetStore + IAuditLog). The only label-removal
+             path: an explicit, audited admin act producing a new unlabelled
+             version. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\DatasetProvenanceOps.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\IModelFitProvider.fs" />
+        <!-- Model registry: governed-artifact types, the seam,
+             then the blob-backed default (rides IDataObjectStore + ILineageStore
+             above; carries the fit envelope's composite key). -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\ModelRegistryTypes.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\IModelRegistry.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\BlobModelRegistry.fs" />
+        <!-- The registration observer seam: an IModelRegistry
+             decorator that invokes declared observers on each successful,
+             NON-REPLAY registration, so "a new artifact exists" is a seam
+             rather than a moment each consumer has to remember. Compiles
+             after BlobModelRegistry.fs because it type-tests the novelty
+             capability the default registry declares (a registry that does
+             not falls back to a documented pre-read probe). Nothing
+             composes it: `decorate` with no observers returns the registry
+             it was given, so an un-composed deployment is unchanged
+             (GP 11) and allocates nothing (GP 13). -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\ModelRegistrationObservers.fs" />
+        <!-- The author-agnostic model-transition seam: one
+             entry point serving local UI actions, peer invocations and
+              policy verdicts, so the lifecycle graph, the
+             declared-authority check and the attributed record are written
+             once. Compiles AFTER IModelRegistry.fs (it wraps that seam) and
+             is deliberately independent of the blob default beneath it — it
+             judges over the interface, so any registry implementation gets
+             the same judgment. Nothing composes it: a deployment that never
+             calls `ModelTransition.invoke` keeps the pre-644 path exactly
+             (GP 11) and constructs none of this (GP 13). -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\ModelTransitionSeam.fs" />
+        <!-- Promotion-time provenance transfer. The transfer
+             seam lands a final artifact, its opaque spec payload and its
+             provenance attachments as ONE recorded act, signs it on
+             acceptance through the neutral IPromotedArtifactSigner seam
+             (ToolUp.ArtefactSigning fills it — the dependency cannot run
+             the other way, GP 1), and reaches the lifecycle graph through
+             ModelTransitionSeam.fs rather than restating it. The adapter
+             beside it fills IArtifactProvenanceSource over the
+             registry, so the provenance walk enumerates attachments as
+             chain nodes without ProvenanceGraph.fs (which compiles far
+             above) depending on the registry. Nothing composes either: a
+             deployment that never accepts a transfer keeps the pre-646
+             path exactly (GP 11) and constructs none of it (GP 13). -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\ModelArtifactProvenance.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\ModelPromotionTransfer.fs" />
+        <!-- Model scoring: the IModelScorer seam + default
+             envelope (rides IDatasetStore for the output vintage, the
+             ArtifactRef / DatasetVersionRef, and the ModelArtifact),
+             then the batch IJobHandler over IModelRegistry + IJobScheduler. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\IModelScorer.fs" />
+        <!-- Dataset assembly (transforms-as-data): the spec +
+             closed transform DU, then the executor (rides IDatasetStore for
+             output + ITimeSeriesStore for range sources; propagates
+             labels). Algorithm-free plumbing; forge never computes a derived
+             value outside the closed aggregate list. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\DatasetAssemblyTypes.fs" />
+        <!-- Model evaluation & champion-challenger harness: the
+             evaluation types + provider-seam Evaluate extension member, then
+             the runner (rides + IDataObjectStore), the
+             opt-in promotion gate, and the evaluation / re-vintage job
+             handlers. Nothing composed by default (GP 13). -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\ModelEvaluationTypes.fs" />
+        <!-- Single-node default IDeployPipeline. Composes
+             IBuildOrchestrator + IContainerScheduler + IEventStore.
+             State persisted as DeployStateChanged events under the
+             _platform scope; reconstruction is scan + take latest. -->
+        <!-- Deploy-record digests + the verification walk an
+             external checker runs. Server-tier because hashing needs
+             System.Security.Cryptography; the canonical forms it hashes
+             live in Platform.Core. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\DeployRecords.fs" />
+        <!-- Dependency-closure capture from the restore's own
+             assets output: observed, never re-derived. Entries start
+             honestly unattested; DependencyClosure.attest (Core) resolves
+             the upstream references through IUpstreamReleaseProvider. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\RestoreClosures.fs" />
+        <!-- The upstream work provenance seam: the read-only
+             IWorkProvenanceSource, the NoWorkProvenanceSource default that
+             composes nothing, the decorator that makes a source's declared
+             caps binding, and the deploy-record reading that records an
+             unattested deploy WITH its reason. Wire types live in
+             Platform.Core; nothing below composes it. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\WorkProvenanceSource.fs" />
+        <!-- The dependency SBOM as a PROJECTION of the recorded
+             closure rather than a scan: SPDX 2.3 + CycloneDX 1.6 emitted
+             from the build's own record, unattested entries present and
+             marked, byte-identical for identical inputs, plus the opt-in
+             platform-admin route a deployment mounts over its own source. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\SbomProjection.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\DefaultDeployPipeline.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\IDataSource.fs" />
+        <!-- Virtual (zero-copy) dataset bindings: read a dataset
+             version through an IDataSource with no durable copy; ephemeral
+             TTL-bounded audited spill for compute handoff. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\VirtualDatasetBinding.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\IOAuthCredentialFlow.fs" />
+        <!-- OAuth 1.0a substrate core: RFC 5849 signer, flow
+             interface, request-token state store + in-memory default. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\OAuth1aSigner.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\IOAuth1aFlow.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\IOAuth1aStateStore.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\InMemoryOAuth1aStateStore.fs" />
+        <!-- Generic OAuth 2.0 refresh-token lifecycle substrate. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\IOAuthTokenRefresher.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\IOAuthStateStore.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\OAuthStateStore.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\IDataSourceConfigStore.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\IDataIngestor.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\InMemoryDataSource.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\DataSourceConfigStore.fs" />
+        <!-- Native payload formats: the IPayloadReader /
+             IEmitsNativePayload seams (vendor readers live in companions). -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\IPayloadReader.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\DataIngestor.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Infra\EnvironmentSecretStore.fs" />
+        <!-- Transient-fault decorator substrate: the
+             TransientFaultPolicy record + shared runner (retry / breaker /
+             per-call timeout), then the IBlobStorage / ISecretStore
+             decorators that route every method through it. Before
+             SDK.Server (compose applies them) + ServerApp (the builder
+             carries the ResilienceMode opt-in). Identity policy = byte-for-
+             byte pass-through (GP 11/13). -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\Infra\TransientFaultPolicy.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Infra\ResilientBlobStorage.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Infra\ResilientSecretStore.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\IBlobEncryptionKeyResolver.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\EncryptedBlobStorage.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\SingleKeyResolver.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\NoOpRateLimiter.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\InProcessRateLimiter.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\IConversationStore.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\IPlatformAdminStore.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\IPlatformRuntimeConfigStore.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Infra\PlatformRuntimeConfigStore.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\PlatformAdminDevDiagnostics.fs" />
+        <!-- The guarded read-modify-write helper over IBlobStorage /
+             IConditionalBlobStorage (BlobMapStore). Before its adopters:
+             ShareTokenStore.fs below, Teams/TeamManagement.fs, and the KB index. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\BlobMapStore.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\IRateLimitStore.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\InMemoryRateLimitStore.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Providers\BlobProviderProfile.fs" />
+        <!-- Provider-profile OAuth connect + auto-refresh
+             and the live-status probe seam. After IProviderProfile (Core)
+             + IOAuthCredentialFlow + IJobHandler/IJobScheduler, and before
+             OAuthFlowHandler (whose callback binds an entry through
+             ProviderOAuthConnect) and SDK.Server / ServerApp (which wire
+             the job handlers). -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\Providers\IProviderOAuthFlow.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Providers\IProviderEntryProbe.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Providers\ProviderOAuthFlowBuilder.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\IUsageLog.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\UsageLog.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\ITeamQuotaPolicy.fs" />
+        <!-- The external-compute completion-callback ingress.
+             After JobScheduler.fs (which implements the
+             IExternalCompletionSink it resolves) and before
+             BuildRouteHandlers (which mounts it, only when the deployment
+             composed an external-compute backend — GP 13). -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\ExternalComputeCallback.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\HealthCheck.fs" />
+        <!-- Degraded-capability registry + /dev/inspect
+             contributor. Before HealthCheckResponseWriter (consumes the
+             registry for the /health degraded section) and the compose
+             files that register + adopt it. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\DegradedCapabilities.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\HealthCheckResponseWriter.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\HealthCheckAggregator.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\HealthCheckRunner.fs" />
+        <!-- End-user product-telemetry fan-out endpoint. Beside
+             the other analytics sinks; needs only ITelemetrySink +
+             AccessContext from Core, and must precede
+             Compose/BuildRouteHandlers.fs, which mounts it via routesFor. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\TelemetryApiHandler.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\PlatformAdmin\RateLimitEventApi.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\DatadogReadbackHandlers.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\RequestTimingMiddleware.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\MetricsEndpoint.fs" />
+        <!-- Prerendered-routes middleware. Maps GET /route to
+             PublicPath/route.html when the FAKE Prerender target wrote
+             one; no-op when the file is absent. Composed ahead of
+             UseStaticFiles so the rewrite short-circuits before the
+             SPA index.html fallback. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\Static\PrerenderedRoutesHandler.fs" />
+        <!-- SPA shell fallback. Runs after UseStaticFiles
+             and serves PublicPath/index.html for any GET that didn't
+             match a static file or prerendered route, so OIDC callback
+             URLs and SPA deep links don't 404 server-side before the
+             SPA's client-side router can take over. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\Static\SpaFallbackMiddleware.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\RateLimiting.fs" />
+        <!-- Server-authoritative module-visibility profiles.
+             Store + blob impl + the scope walk + the admin handler + the
+             opt-in route-hardening middleware, in dependency order.
+             Beside the feature-flag family because the two share the
+             FlagScope vocabulary and the same scope set (the walk
+             direction differs — see ModuleVisibilityResolver). Before
+             PlatformApiHandler.fs, which attaches the resolution to the
+             accessible-modules response. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\IModuleVisibilityStore.fs" />
+        <!-- The request-free door onto the narrative-ingestion
+             path, for a server-side producer that has a resolved scope and
+             a document but no request. Declared here because the producing
+             companion and the ingesting companion do not reference each
+             other; both reference this assembly. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\INarrativeIngestor.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\HealthStateTracker.fs" />
+        <!-- Alert-rule / threshold engine (pure evaluator +
+             BackgroundService). After HealthStateTracker (shares the tick
+             shape) + PrometheusMetricsSink (the metric-read tap) +
+             INotificationSink; before Compose/ (ComposeRuntimeServices
+             hosts it). -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\AlertRuleEngine.fs" />
+        <!-- Metrics history: the BackgroundService that samples the
+             live metric registry into ITimeSeriesStore on a cadence. After
+             PrometheusMetricsSink (the Snapshot read tap it reads through) and
+             AlertRuleEngine (whose resolve-per-tick shape it mirrors); before
+             Compose/ComposeObservability.fs, which registers it. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\MetricsHistoryFlusher.fs" />
+        <!-- The self-hosted observability endpoints (sources / logs
+             / metrics / alerts). After AlertRuleEngine (the status board it
+             reads) and MetricsHistoryFlusher (the series scope); before
+             Compose/BuildRouteHandlers.fs, which mounts it. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\ObservabilityHandlers.fs" />
+        <!-- Inbound HTTP rate-limit middleware. Composes
+             against `IRateLimitStore` (registered earlier in the build
+             order) and `ServerConfig.RateLimits`. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\RateLimitMiddleware.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\BlobXmlRepository.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="FSharp.Core" />
+        <PackageReference Include="Microsoft.Data.Sqlite" />
+    </ItemGroup>
+</Project>

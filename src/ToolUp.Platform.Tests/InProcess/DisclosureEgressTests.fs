@@ -9,12 +9,12 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Narrative
-open ToolUp.Platform.IVectorStore
-open ToolUp.Platform.IEmbeddingProvider
-open ToolUp.Platform.IRetrievalPipeline
-open ToolUp.Platform.IRetrievalTracer
+open ToolUp.Platform.Infra.IVectorStore
+open ToolUp.Platform.Infra.IEmbeddingProvider
+open ToolUp.Platform.Infra.IRetrievalPipeline
+open ToolUp.Platform.Infra.IRetrievalTracer
 open ToolUp.Platform.VectorKnowledgeTypes
-open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Config.TeamManagement
 open ToolUp.RAG.IngestionTypes
 open ToolUp.Facts
 open ToolUp.Facts.Presentation
@@ -23,6 +23,12 @@ open KnowledgeBase.ServerApiDeps
 open KnowledgeBase.ServerApiNarrative
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 525 — disclosure egress filtering, first choke points ─────
 //
@@ -70,8 +76,8 @@ type private PresetGate(verdicts: Map<string, FactDisclosureVerdict>) =
     member _.Calls = calls
 
     interface IFactDisclosureGate with
-        member _.Check(scopeId: string, principal: string, surface: FactEgressSurface, factIds: string list) = async {
-            lastCall <- Some(scopeId, principal, surface, factIds)
+        member _.Check(scope: ResolvedScope, principal: string, surface: FactEgressSurface, factIds: string list) = async {
+            lastCall <- Some(scope.ScopeId, principal, surface, factIds)
             calls <- calls + 1
 
             return
@@ -81,10 +87,6 @@ type private PresetGate(verdicts: Map<string, FactDisclosureVerdict>) =
                     id, (verdicts.TryFind id |> Option.defaultValue (FactNotDisclosable "unknown-fact")))
                 |> Map.ofList
         }
-
-        // Phase 797 — the typed form delegates to the string form above.
-        member this.Check(scope: ResolvedScope, principal: string, surface: FactEgressSurface, factIds: string list) =
-            (this :> IFactDisclosureGate).Check(scope.ScopeId, principal, surface, factIds)
 
 // ── Predicate (525.A) ─────────────────────────────────────────────
 
@@ -172,9 +174,9 @@ let private newGateHarness () =
     store, events, gate
 
 let private assertFact (store: IFactStore) (scope: string) (draft: FactDraft) =
-    match store.Assert(scope, draft) |> Async.RunSynchronously with
+    match store.Assert(TestScope.resolved scope, draft) |> Async.RunSynchronously with
     | Ok fact -> fact
-    | Error e -> failtestf "assert failed: %s" e
+    | Error e -> failtestf "assert failed: %s" (FactStoreError.describe e)
 
 let gateTests =
     testList "Phase 525 FactDisclosureGate" [
@@ -191,7 +193,12 @@ let gateTests =
                 assertFact store scope (draftWith "syndicated" (Restricted "vendor-terms"))
 
             let! verdicts =
-                gate.Check(scope, "user-1", FactRetrieval, [ surfaceable.FactId; internal'.FactId; restricted.FactId ])
+                gate.Check(
+                    TestScope.resolved scope,
+                    "user-1",
+                    FactRetrieval,
+                    [ surfaceable.FactId; internal'.FactId; restricted.FactId ]
+                )
 
             Expect.equal (verdicts.TryFind surfaceable.FactId) (Some FactDisclosable) "surfaceable passes"
             Expect.equal (verdicts.TryFind internal'.FactId) (Some(FactNotDisclosable "Internal")) "internal denied"
@@ -221,7 +228,7 @@ let gateTests =
         testCaseAsync "an unknown fact id denies conservatively as unknown-fact"
         <| async {
             let _, _, gate = newGateHarness ()
-            let! verdicts = gate.Check("team-x", "user-1", FactToolResult, [ "no-such-fact" ])
+            let! verdicts = gate.Check(TestScope.resolved "team-x", "user-1", FactToolResult, [ "no-such-fact" ])
 
             Expect.equal
                 (verdicts.TryFind "no-such-fact")
@@ -238,10 +245,10 @@ let gateTests =
 
             let fact = assertFact store scopeA (draftWith "revenue" Surfaceable)
 
-            let! ownScope = gate.Check(scopeA, "alice", FactRetrieval, [ fact.FactId ])
+            let! ownScope = gate.Check(TestScope.resolved scopeA, "alice", FactRetrieval, [ fact.FactId ])
             Expect.equal (ownScope.TryFind fact.FactId) (Some FactDisclosable) "disclosable in its own scope"
 
-            let! otherScope = gate.Check(scopeB, "bob", FactRetrieval, [ fact.FactId ])
+            let! otherScope = gate.Check(TestScope.resolved scopeB, "bob", FactRetrieval, [ fact.FactId ])
 
             Expect.equal
                 (otherScope.TryFind fact.FactId)
@@ -255,7 +262,8 @@ let gateTests =
             let scope = "team-" + Guid.NewGuid().ToString("N")
             let fact = assertFact store scope (draftWith "margin" Internal)
 
-            let! verdicts = gate.Check(scope, "owner-of-the-scope", FactNarrativePublication, [ fact.FactId ])
+            let! verdicts =
+                gate.Check(TestScope.resolved scope, "owner-of-the-scope", FactNarrativePublication, [ fact.FactId ])
 
             Expect.equal
                 (verdicts.TryFind fact.FactId)
@@ -563,7 +571,7 @@ let private mkKbDeps (storage: IBlobStorage) (gate: IFactDisclosureGate option) 
     // Phase 515 — no scanner composed: the pre-515 upload path.
     ContentScanner = None
     ScanPolicy = ContentScanPolicy.defaults
-    DisclosureGate = gate
+    DisclosureGate = gate |> Option.map (fun g -> g, TestScope.resolved container)
     // Phase 511 — bulk import is not exercised here: archive guards at
     // their shipped defaults, URL ingestion inert, no transport.
     ArchiveImportPolicy = ArchiveImportPolicy.defaults
@@ -713,7 +721,7 @@ let purposeTests =
                 withClaim
                     None
                     (async {
-                        let! verdicts = gate.Check(scope, "user-1", FactRetrieval, [ fact.FactId ])
+                        let! verdicts = gate.Check(TestScope.resolved scope, "user-1", FactRetrieval, [ fact.FactId ])
                         Expect.equal (verdicts.TryFind fact.FactId) (Some FactDisclosable) "inert without a taxonomy"
                     })
         }
@@ -730,7 +738,12 @@ let purposeTests =
                     (Some "analytics")
                     (async {
                         let! verdicts =
-                            gate.Check(scope, "user-1", FactRetrieval, [ surfaceable.FactId; internal'.FactId ])
+                            gate.Check(
+                                TestScope.resolved scope,
+                                "user-1",
+                                FactRetrieval,
+                                [ surfaceable.FactId; internal'.FactId ]
+                            )
 
                         Expect.equal
                             (verdicts.TryFind surfaceable.FactId)
@@ -765,7 +778,7 @@ let purposeTests =
                 withClaim
                     (Some "billing")
                     (async {
-                        let! verdicts = gate.Check(scope, "user-1", FactRetrieval, [ fact.FactId ])
+                        let! verdicts = gate.Check(TestScope.resolved scope, "user-1", FactRetrieval, [ fact.FactId ])
 
                         match verdicts.TryFind fact.FactId with
                         | Some(FactNotDisclosable policyRef) ->
@@ -774,7 +787,8 @@ let purposeTests =
                         | other -> failtestf "expected a purpose refusal, got %A" other
 
                         // The same claim IS in ToolResult's allowed set — per-route.
-                        let! atToolResult = gate.Check(scope, "user-1", FactToolResult, [ fact.FactId ])
+                        let! atToolResult =
+                            gate.Check(TestScope.resolved scope, "user-1", FactToolResult, [ fact.FactId ])
 
                         Expect.equal
                             (atToolResult.TryFind fact.FactId)
@@ -801,7 +815,7 @@ let purposeTests =
                 withClaim
                     None
                     (async {
-                        let! unclaimed = gate.Check(scope, "user-1", FactRetrieval, [ fact.FactId ])
+                        let! unclaimed = gate.Check(TestScope.resolved scope, "user-1", FactRetrieval, [ fact.FactId ])
 
                         match unclaimed.TryFind fact.FactId with
                         | Some(FactNotDisclosable policyRef) ->
@@ -815,7 +829,8 @@ let purposeTests =
                 withClaim
                     (Some "analytics")
                     (async {
-                        let! sealed' = gate.Check(scope, "user-1", FactNarrativePublication, [ fact.FactId ])
+                        let! sealed' =
+                            gate.Check(TestScope.resolved scope, "user-1", FactNarrativePublication, [ fact.FactId ])
 
                         match sealed'.TryFind fact.FactId with
                         | Some(FactNotDisclosable policyRef) ->
@@ -853,7 +868,6 @@ type private BrokenGate(fault: bool) =
     }
 
     interface IFactDisclosureGate with
-        member _.Check(_: string, _: string, _: FactEgressSurface, _: string list) = check ()
         member _.Check(_: ResolvedScope, _: string, _: FactEgressSurface, _: string list) = check ()
 
 let private derivedScope () =
@@ -1177,7 +1191,11 @@ let private bothForms
         let! byId = gate.Check(scope, "user-1", surface, ids)
         let! afterId = events.ReadBySource(scope.ScopeId, FactEvents.SourceModule)
 
-        let! read = ids |> List.map (fun factId -> store.Get(scope, factId)) |> Async.Sequential
+        let! read =
+            ids
+            |> List.map (fun factId -> store.Get(scope, factId) |> TestScope.ok)
+            |> Async.Sequential
+
         let heldFacts = read |> Array.choose id |> List.ofArray
 
         let! byHeld = (FactDisclosureGate.held gate).CheckHeld(scope, "user-1", surface, ids, heldFacts)
@@ -1252,9 +1270,6 @@ let private heldHarness
 /// A decorator the platform cannot see through: its held form is its id form.
 let private decorated (inner: IFactDisclosureGate) : IFactDisclosureGate =
     { new IFactDisclosureGate with
-        member _.Check(scopeId: string, principal, surface, factIds) =
-            inner.Check(scopeId, principal, surface, factIds)
-
         member _.Check(scope: ResolvedScope, principal, surface, factIds) =
             inner.Check(scope, principal, surface, factIds)
     }
@@ -1388,7 +1403,11 @@ let heldFormTests =
 
             // The taint read is the id form's: a held check downloads exactly
             // what reading the scope's taint index costs, and nothing per id.
-            let! read = ids |> List.map (fun factId -> store.Get(scope, factId)) |> Async.Sequential
+            let! read =
+                ids
+                |> List.map (fun factId -> store.Get(scope, factId) |> TestScope.ok)
+                |> Async.Sequential
+
             let heldFacts = read |> Array.choose id |> List.ofArray
 
             counting.Reset()
@@ -1816,30 +1835,16 @@ type RecordingFactStore(inner: IFactStore) =
     member _.PopulationReads = populationReads
 
     interface IFactStore with
-        member _.Assert(scopeId: string, draft: FactDraft) = inner.Assert(scopeId, draft)
         member _.Assert(scope: ResolvedScope, draft: FactDraft) = inner.Assert(scope, draft)
-        member _.AssertBatch(scopeId: string, drafts: FactDraft list) = inner.AssertBatch(scopeId, drafts)
         member _.AssertBatch(scope: ResolvedScope, drafts: FactDraft list) = inner.AssertBatch(scope, drafts)
-        member _.Get(scopeId: string, factId: string) = inner.Get(scopeId, factId)
         member _.Get(scope: ResolvedScope, factId: string) = inner.Get(scope, factId)
-        member _.Query(scopeId: string, query: FactQuery) = inner.Query(scopeId, recorded query)
         member _.Query(scope: ResolvedScope, query: FactQuery) = inner.Query(scope, recorded query)
-
-        member _.QueryWithCompetition(scopeId: string, query: FactQuery) =
-            inner.QueryWithCompetition(scopeId, query)
 
         member _.QueryWithCompetition(scope: ResolvedScope, query: FactQuery) =
             inner.QueryWithCompetition(scope, query)
 
-        member _.QuerySupersessionChain(scopeId: string, factId: string) =
-            inner.QuerySupersessionChain(scopeId, factId)
-
         member _.QuerySupersessionChain(scope: ResolvedScope, factId: string) =
             inner.QuerySupersessionChain(scope, factId)
-
-        member _.QueryPopulation(scopeId: string, query: PopulationQuery) =
-            populationReads <- populationReads + 1
-            inner.QueryPopulation(scopeId, query)
 
         member _.QueryPopulation(scope: ResolvedScope, query: PopulationQuery) =
             populationReads <- populationReads + 1
@@ -1859,9 +1864,6 @@ type private PrincipalGate(inner: IFactDisclosureGate, outsider: string) =
     }
 
     interface IFactDisclosureGate with
-        member _.Check(scopeId: string, principal, surface, factIds) =
-            judged principal (inner.Check(scopeId, principal, surface, factIds))
-
         member _.Check(scope: ResolvedScope, principal, surface, factIds) =
             judged principal (inner.Check(scope, principal, surface, factIds))
 
@@ -1941,7 +1943,7 @@ module private CompanionWorld =
 
         match (w.Store :> IFactStore).Assert(w.Scope, draft) |> Async.RunSynchronously with
         | Ok fact -> fact
-        | Error e -> failtestf "assert failed: %s" e
+        | Error e -> failtestf "assert failed: %s" (FactStoreError.describe e)
 
     let args =
         """{"metric":"revenue","subject_hierarchy":"brand","ordering":"descending","with_metrics":["shoppers"]}"""

@@ -11,6 +11,8 @@ open Microsoft.AspNetCore.Http
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.AI
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 /// Phase 503 — the human-in-the-loop approval gate.
 ///
@@ -226,8 +228,8 @@ let private noPromptChannelMessage (toolName: string) =
 /// Best-effort by the same rule the loop's denial audit follows: the
 /// control is the DECISION, which has already been applied by the time
 /// this runs, and a wedged event store must never turn a held action into
-/// a failed turn. Mirrors `AIAgentEngine.writeToolDenialAudit`'s shape
-/// rather than inventing a second one.
+/// a failed turn. Mirrors the shape of the agent loop's denial audit
+/// (`AIAgentEngine.Loop.run`) rather than inventing a second one.
 let writeApprovalAudit
     (store: IEventStore option)
     (logger: ILogger)

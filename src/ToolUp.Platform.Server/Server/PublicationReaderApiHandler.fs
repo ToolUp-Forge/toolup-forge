@@ -14,12 +14,13 @@
 /// A grant must name a role the scope's publications declare
 /// (`IPublicationReaderRoleSource`). Each grant and revocation is audited
 /// under the publishing scope, awaited before the response.
-module ToolUp.Platform.PublicationReaderApiHandler
+module ToolUp.Platform.Scope.PublicationReaderApiHandler
 
 open System
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
-open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Config.TeamManagement
+open ToolUp.Platform.Infra
 
 /// The handler's one read of the request's container: the per-request
 /// `AccessContext` and the substrate below are request-scoped, and

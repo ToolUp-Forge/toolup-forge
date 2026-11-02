@@ -11,6 +11,12 @@ open ToolUp.Platform.Metrics
 open ToolUp.Platform.Narrative
 open ToolUp.PublicRendering
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Test-fixture wiring ────────────────────────────────────────────
 //
@@ -369,12 +375,11 @@ let private implTests =
 
 // ─── Phase 80c — hybrid SDK + PublicRendering composition tests ────
 //
-// `withPublicRendering` ports `ToolUp.PublicRendering` into the
-// Phase 1h additive-composition shape Forms + AI already use. These
-// tests pin the four behaviours the migration doc promises:
+// `withPublicRendering` composes `ToolUp.PublicRendering` onto a
+// `ServerApp` as a companion. These tests pin four behaviours:
 //
-//   1. `createFrom` lifts a base `ServerApp` into a fresh
-//      `PublicRenderingServerApp` whose `Base` is the input.
+//   1. Builders applied after `withPublicRendering` reach the resolved
+//      app, and the companion reads the final configuration.
 //   2. `composePublicRendering` with `NoPublicRendering` is a true
 //      strip-imports pass-through — no marker appended, so a later
 //      compose on the same pipeline composes freely.
@@ -393,20 +398,54 @@ let private dummyLayout (_p: PublicPage) : XmlNode = html [] [ body [] [] ]
 let private composeTests =
     testList "PublicRendering — Phase 80c composition (hybrid SDK + PublicRendering)" [
 
-        testCase "createFrom lifts the base ServerApp into a PublicRenderingServerApp"
+        testCase "builders applied after withPublicRendering reach the resolved app and the companion"
         <| fun _ ->
-            let baseApp = ServerApp.empty |> ServerApp.withConfig ServerConfig.defaults
-            let lifted = PublicRenderingCompose.PublicRenderingServerApp.createFrom baseApp
+            let root = mkContentRoot ()
+            let logger = ConsoleLogger.ConsoleLogger() :> ILogger
+
+            let app =
+                ServerApp.empty
+                |> PublicRenderingCompose.withPublicRendering (
+                    PublicRenderingOptions.create ()
+                    |> PublicRenderingOptions.withLayout (LayoutName "page") dummyLayout
+                )
+                |> ServerApp.withConfig {
+                    ServerConfig.defaults with
+                        PublicRendering = EnabledPublicRendering root
+                        MultiInstance = {
+                            ServerConfig.defaults.MultiInstance with
+                                ReplicaCount = 2
+                        }
+                }
+                |> ServerApp.withLogger logger
+
+            let resolved = ServerApp.resolve app
 
             Expect.equal
-                lifted.Base.Config.PublicRendering
-                ServerConfig.defaults.PublicRendering
-                "lifted.Base preserves the input ServerApp's config"
+                (ServerApp.effectiveConfig app).MultiInstance.ReplicaCount
+                2
+                "the later withConfig reaches the app"
 
-            Expect.isEmpty lifted.Layouts "fresh createFrom has empty layouts"
-            Expect.isEmpty lifted.Redirects "fresh createFrom has empty redirects"
-            Expect.isEmpty lifted.Feeds "fresh createFrom has empty feeds"
-            Expect.isFalse lifted.AIPublishEnabled "fresh createFrom has AIPublishEnabled=false"
+            Expect.isTrue (obj.ReferenceEquals(resolved.Logger.Value, logger)) "and the later withLogger"
+
+            Expect.contains
+                resolved.ComposedCompanions
+                "ToolUp.PublicRendering"
+                "the companion read the final, enabled configuration and composed"
+
+            Expect.isGreaterThan
+                (ServerApp.composedExtensions app).Handlers.Length
+                ServerApp.empty.Extensions.Handlers.Length
+                "and contributed its handlers"
+
+        testCase "fresh PublicRenderingOptions carry nothing"
+        <| fun _ ->
+            let fresh = PublicRenderingOptions.create ()
+
+            Expect.isEmpty fresh.Layouts "no layouts"
+            Expect.isEmpty fresh.Redirects "no redirects"
+            Expect.isEmpty fresh.Feeds "no feeds"
+            Expect.isFalse fresh.AIPublishEnabled "AIPublishEnabled=false"
 
         testCase
             "composePublicRendering with NoPublicRendering is a strip-imports pass-through (no marker, double-compose safe)"
@@ -420,11 +459,12 @@ let private composeTests =
 
             let composed =
                 baseApp
-                |> PublicRenderingCompose.withPublicRendering id
-                |> PublicRenderingCompose.withPublicRendering id
+                |> PublicRenderingCompose.withPublicRendering (PublicRenderingOptions.create ())
+                |> PublicRenderingCompose.withPublicRendering (PublicRenderingOptions.create ())
 
             Expect.isFalse
-                (composed.ComposedCompanions |> List.contains "ToolUp.PublicRendering")
+                ((ServerApp.resolve composed).ComposedCompanions
+                 |> List.contains "ToolUp.PublicRendering")
                 "NoPublicRendering branch must NOT append the companion marker — a later compose must remain free to fire"
 
         testCase
@@ -442,54 +482,61 @@ let private composeTests =
             let composed =
                 baseApp
                 |> PublicRenderingCompose.withPublicRendering (
-                    PublicRenderingCompose.PublicRenderingServerApp.withLayout (LayoutName "page") dummyLayout
+                    PublicRenderingOptions.create ()
+                    |> PublicRenderingOptions.withLayout (LayoutName "page") dummyLayout
                 )
 
             Expect.isTrue
-                (composed.ComposedCompanions |> List.contains "ToolUp.PublicRendering")
-                "EnabledPublicRendering branch must append the 'ToolUp.PublicRendering' companion marker so a second compose trips the guard"
+                ((ServerApp.resolve composed).ComposedCompanions
+                 |> List.contains "ToolUp.PublicRendering")
+                "EnabledPublicRendering branch must append the 'ToolUp.PublicRendering' companion marker"
 
-        testCase
-            "second withPublicRendering on the same pipeline trips ensureCompanionNotAlreadyComposed with a clear diagnostic"
+        testCase "a second withPublicRendering replaces the first, so the companion composes once"
         <| fun _ ->
             let root = mkContentRoot ()
 
-            let baseApp =
+            let resolved =
                 ServerApp.empty
                 |> ServerApp.withConfig {
                     ServerConfig.defaults with
                         PublicRendering = EnabledPublicRendering root
                 }
-
-            let firstComposed =
-                baseApp
                 |> PublicRenderingCompose.withPublicRendering (
-                    PublicRenderingCompose.PublicRenderingServerApp.withLayout (LayoutName "page") dummyLayout
+                    PublicRenderingOptions.create ()
+                    |> PublicRenderingOptions.withLayout (LayoutName "page") dummyLayout
                 )
+                |> PublicRenderingCompose.withPublicRendering (
+                    PublicRenderingOptions.create ()
+                    |> PublicRenderingOptions.withLayout (LayoutName "page") dummyLayout
+                )
+                |> ServerApp.resolve
 
-            let raised =
-                try
-                    firstComposed
-                    |> PublicRenderingCompose.withPublicRendering (
-                        PublicRenderingCompose.PublicRenderingServerApp.withLayout (LayoutName "page") dummyLayout
-                    )
-                    |> ignore
+            Expect.equal
+                (resolved.ComposedCompanions |> List.filter ((=) "ToolUp.PublicRendering"))
+                [ "ToolUp.PublicRendering" ]
+                "the companion slot holds one composition"
 
-                    None
-                with ex ->
-                    Some ex
+        testCase "composing the companion onto a deployment it was already composed onto is refused, naming it"
+        <| fun _ ->
+            let root = mkContentRoot ()
 
-            Expect.isSome
-                raised
-                "second withPublicRendering on the same pipeline must raise (entry-guard fires before the second compose runs)"
+            let options =
+                PublicRenderingOptions.create ()
+                |> PublicRenderingOptions.withLayout (LayoutName "page") dummyLayout
 
-            match raised with
-            | Some ex ->
-                Expect.stringContains
-                    ex.Message
-                    "PublicRendering"
-                    "the diagnostic must name the companion ('PublicRendering' or 'ToolUp.PublicRendering') so the operator can locate the duplicate withPublicRendering call"
-            | None -> ()
+            let composedOnce =
+                ServerApp.empty
+                |> ServerApp.withConfig {
+                    ServerConfig.defaults with
+                        PublicRendering = EnabledPublicRendering root
+                }
+                |> PublicRenderingCompose.withPublicRendering options
+                |> ServerApp.resolve
+
+            Expect.throwsC
+                (fun () -> PublicRenderingCompose.composePublicRendering options composedOnce |> ignore)
+                (fun ex ->
+                    Expect.stringContains ex.Message "ToolUp.PublicRendering" "the diagnostic names the companion")
     ]
 
 // ─── Phase 83 — content-source chain (GetPageInContext) tests ───────
@@ -1918,7 +1965,7 @@ let private ragStubProfile =
     }
 
 let private ragStubEmbedder =
-    { new ToolUp.Platform.IEmbeddingProvider.IEmbeddingProvider with
+    { new ToolUp.Platform.Infra.IEmbeddingProvider.IEmbeddingProvider with
         member _.GenerateEmbedding _ = async { return Array.zeroCreate 8 }
 
         member _.GenerateEmbeddings texts = async {
@@ -1973,14 +2020,20 @@ let private coHostApp (port: int) (contentRoot: string) (publicDir: string) (ext
             PublicPath = publicDir
             Surfaces = [ SurfaceProfile.individual; SurfaceProfile.team ]
             PublicRendering = EnabledPublicRendering(ContentRoot contentRoot)
-            // The team-mode boot preflight, answered the way a test
-            // deployment honestly can: no proxy in front, secrets in
-            // in-memory storage, SSE on the cookie, SameSite-only CSRF
-            // (the cases send no browser cookie), open team creation.
-            TrustForwardedHeaders = false
-            SseAuthMode = CookieRequired
-            AcceptPlaintextSecretsWhenAuthRequired = true
-            AcceptSameSiteOnlyCsrfWhenAuthRequired = true
+            SecurityPosture = {
+                ServerConfig.defaults.SecurityPosture with
+                    // The team-mode boot preflight, answered the way a test
+                    // deployment honestly can: no proxy in front, secrets in
+                    // in-memory storage, SSE on the cookie, SameSite-only CSRF
+                    // (the cases send no browser cookie), open team creation.
+                    TrustForwardedHeaders = false
+                    SseAuthMode = CookieRequired
+            }
+            RiskAcknowledgements = {
+                ServerConfig.defaults.RiskAcknowledgements with
+                    AcceptPlaintextSecretsWhenAuthRequired = true
+                    AcceptSameSiteOnlyCsrfWhenAuthRequired = true
+            }
             TeamCreationPolicy = AnyAuthenticatedUser
     }
 
@@ -2009,10 +2062,13 @@ let private coHostApp (port: int) (contentRoot: string) (publicDir: string) (ext
     |> ServerApp.withStorage (ToolUp.Platform.Testing.Fakes.standardBlobStorage ())
     |> ServerApp.withLogger coHostLogger
     |> ServerApp.withAuth auth
-    |> ToolUp.RAG.RAGCompose.withRAG ragStubFactory ragStubProfile ragStubEmbedder id
+    |> ToolUp.RAG.RAGCompose.withRAG (
+        ToolUp.RAG.RAGCompose.RagOptions.create ragStubFactory ragStubProfile ragStubEmbedder
+    )
     |> ToolUp.AuthProviders.OidcSsrSignIn.withInteractiveSignIn (new Net.Http.HttpClient()) signIn
     |> PublicRenderingCompose.withPublicRendering (
-        PublicRenderingCompose.PublicRenderingServerApp.withLayout (LayoutName "page") coHostLayout
+        PublicRenderingOptions.create ()
+        |> PublicRenderingOptions.withLayout (LayoutName "page") coHostLayout
     )
 
 /// Host the composition through `ServerApp.run` and hand `body` a client
@@ -2125,26 +2181,13 @@ let private ragCoHostTests =
             let contentRoot = mkFixtureDir ()
             seedCoHostContent contentRoot
 
-            let composed = coHostApp 5000 contentRoot (mkFixtureDir ()) ComposeExtensions.empty
+            let composed =
+                coHostApp 5000 contentRoot (mkFixtureDir ()) ComposeExtensions.empty
+                |> ServerApp.resolve
 
             Expect.isTrue
                 (composed.ComposedCompanions |> List.contains "ToolUp.PublicRendering")
                 "the PublicRendering marker survives the RAG composition beneath it"
-
-            let raised =
-                try
-                    composed
-                    |> PublicRenderingCompose.withPublicRendering (
-                        PublicRenderingCompose.PublicRenderingServerApp.withLayout (LayoutName "page") coHostLayout
-                    )
-                    |> ignore
-
-                    None
-                with ex ->
-                    Some ex.Message
-
-            Expect.isSome raised "a second withPublicRendering over RAG + PublicRendering is refused at compose time"
-            Expect.stringContains raised.Value "ToolUp.PublicRendering" "and the refusal names the companion"
 
             // RAG composed AFTER PublicRendering must not drop the marker either.
             let reversed =
@@ -2154,12 +2197,16 @@ let private ragCoHostTests =
                         PublicRendering = EnabledPublicRendering(ContentRoot contentRoot)
                 }
                 |> PublicRenderingCompose.withPublicRendering (
-                    PublicRenderingCompose.PublicRenderingServerApp.withLayout (LayoutName "page") coHostLayout
+                    PublicRenderingOptions.create ()
+                    |> PublicRenderingOptions.withLayout (LayoutName "page") coHostLayout
                 )
-                |> ToolUp.RAG.RAGCompose.withRAG ragStubFactory ragStubProfile ragStubEmbedder id
+                |> ToolUp.RAG.RAGCompose.withRAG (
+                    ToolUp.RAG.RAGCompose.RagOptions.create ragStubFactory ragStubProfile ragStubEmbedder
+                )
 
             Expect.isTrue
-                (reversed.ComposedCompanions |> List.contains "ToolUp.PublicRendering")
+                ((ServerApp.resolve reversed).ComposedCompanions
+                 |> List.contains "ToolUp.PublicRendering")
                 "withRAG after withPublicRendering keeps the marker"
 
         testCaseAsync "every route resolves to its own handler on the shared pipeline, with a client bundle shipped"
@@ -2372,15 +2419,14 @@ let private spaFallbackPrecedenceTests =
 // so an unnamed or misnamed page rendered in the ALPHABETICALLY first
 // frame ("alpha"), whatever the deployment registered first or meant.
 
-let private zetaThenAlpha (app: PublicRenderingCompose.PublicRenderingServerApp) =
+let private zetaThenAlpha (app: PublicRenderingOptions) =
     app
-    |> PublicRenderingCompose.PublicRenderingServerApp.withLayout (LayoutName "zeta") (fun p ->
-        html [] [ body [] [ str ("ZETA:" + p.Title) ] ])
-    |> PublicRenderingCompose.PublicRenderingServerApp.withLayout (LayoutName "alpha") (fun p ->
+    |> PublicRenderingOptions.withLayout (LayoutName "zeta") (fun p -> html [] [ body [] [ str ("ZETA:" + p.Title) ] ])
+    |> PublicRenderingOptions.withLayout (LayoutName "alpha") (fun p ->
         html [] [ body [] [ str ("ALPHA:" + p.Title) ] ])
 
 let private twoLayouts: Map<LayoutName, PublicPage -> XmlNode> =
-    (PublicRenderingCompose.PublicRenderingServerApp.create () |> zetaThenAlpha).Layouts
+    (PublicRenderingOptions.create () |> zetaThenAlpha).Layouts
 
 /// A content tree with one page per case: an unnamed page (no `layout:`
 /// frontmatter), a page naming a registered layout, and a page naming a
@@ -2506,9 +2552,9 @@ let private layoutResolution1039Tests =
             seedLayoutCases dir
 
             let app =
-                PublicRenderingCompose.PublicRenderingServerApp.create ()
+                PublicRenderingOptions.create ()
                 |> zetaThenAlpha
-                |> PublicRenderingCompose.PublicRenderingServerApp.withDefaultLayout (LayoutName "zeta")
+                |> PublicRenderingOptions.withDefaultLayout (LayoutName "zeta")
 
             let layouts =
                 match PublicLayouts.withDefault app.DefaultLayout app.Layouts with
@@ -2575,7 +2621,11 @@ let private layoutResolution1039Tests =
 
             let raised =
                 try
-                    baseApp |> PublicRenderingCompose.withPublicRendering zetaThenAlpha |> ignore
+                    baseApp
+                    |> PublicRenderingCompose.withPublicRendering (PublicRenderingOptions.create () |> zetaThenAlpha)
+                    |> ServerApp.resolve
+                    |> ignore
+
                     None
                 with :? LayoutRefusedException as ex ->
                     Some ex.Message
@@ -2587,12 +2637,14 @@ let private layoutResolution1039Tests =
             let composed =
                 baseApp
                 |> PublicRenderingCompose.withPublicRendering (
-                    zetaThenAlpha
-                    >> PublicRenderingCompose.PublicRenderingServerApp.withDefaultLayout (LayoutName "zeta")
+                    PublicRenderingOptions.create ()
+                    |> zetaThenAlpha
+                    |> PublicRenderingOptions.withDefaultLayout (LayoutName "zeta")
                 )
 
             Expect.isTrue
-                (composed.ComposedCompanions |> List.contains "ToolUp.PublicRendering")
+                ((ServerApp.resolve composed).ComposedCompanions
+                 |> List.contains "ToolUp.PublicRendering")
                 "a declared default composes"
 
         testCase "compose refuses a declared default or a search layout nobody registered"
@@ -2606,16 +2658,17 @@ let private layoutResolution1039Tests =
 
             let refuses configure =
                 try
-                    baseApp |> PublicRenderingCompose.withPublicRendering configure |> ignore
+                    baseApp
+                    |> PublicRenderingCompose.withPublicRendering (configure (PublicRenderingOptions.create ()))
+                    |> ServerApp.resolve
+                    |> ignore
+
                     None
                 with :? LayoutRefusedException as ex ->
                     Some ex.Message
 
             let badDefault =
-                refuses (
-                    zetaThenAlpha
-                    >> PublicRenderingCompose.PublicRenderingServerApp.withDefaultLayout (LayoutName "ghost")
-                )
+                refuses (zetaThenAlpha >> PublicRenderingOptions.withDefaultLayout (LayoutName "ghost"))
 
             Expect.isSome badDefault "an unregistered default is refused"
             Expect.stringContains badDefault.Value "ghost" "naming it"
@@ -2623,8 +2676,8 @@ let private layoutResolution1039Tests =
             let badSearch =
                 refuses (
                     zetaThenAlpha
-                    >> PublicRenderingCompose.PublicRenderingServerApp.withDefaultLayout (LayoutName "zeta")
-                    >> PublicRenderingCompose.PublicRenderingServerApp.withSemanticSearch (
+                    >> PublicRenderingOptions.withDefaultLayout (LayoutName "zeta")
+                    >> PublicRenderingOptions.withSemanticSearch (
                         SemanticSearchConfig.create []
                         |> SemanticSearchConfig.withLayout (LayoutName "ghost")
                     )
@@ -2645,12 +2698,13 @@ let private layoutResolution1039Tests =
                         PublicRendering = EnabledPublicRendering(ContentRoot dir)
                 }
                 |> PublicRenderingCompose.withPublicRendering (
-                    zetaThenAlpha
-                    >> PublicRenderingCompose.PublicRenderingServerApp.withDefaultLayout (LayoutName "zeta")
+                    PublicRenderingOptions.create ()
+                    |> zetaThenAlpha
+                    |> PublicRenderingOptions.withDefaultLayout (LayoutName "zeta")
                 )
 
             let validator =
-                composed.ConfigValidators
+                (ServerApp.resolve composed).ConfigValidators
                 |> List.find (fun v -> v.Name = "public-rendering-layout-name-resolved")
 
             match validator.Validate() |> Async.RunSynchronously with
@@ -2666,18 +2720,19 @@ let private layoutResolution1039Tests =
             writeFile (Path.Combine(dir, "pages/plain.md")) "---\ntitle: Plain\n---\n\nBody."
 
             let app =
-                PublicRenderingCompose.PublicRenderingServerApp.create ()
-                |> PublicRenderingCompose.PublicRenderingServerApp.withConfig {
+                ServerApp.empty
+                |> ServerApp.withConfig {
                     ServerConfig.defaults with
                         PublicRendering = EnabledPublicRendering(ContentRoot dir)
-                }
+                },
+                PublicRenderingOptions.create ()
                 |> zetaThenAlpha
-                |> PublicRenderingCompose.PublicRenderingServerApp.withDefaultLayout (LayoutName "zeta")
+                |> PublicRenderingOptions.withDefaultLayout (LayoutName "zeta")
 
             let outDir = mkFixtureDir ()
 
             let count =
-                PublicRenderingCompose.PublicRenderingServerApp.exportStatic outDir app
+                PublicRenderingCompose.PublicRenderingExport.exportStatic outDir app
                 |> Async.RunSynchronously
 
             Expect.equal count 1 "the page is written"
@@ -2694,14 +2749,14 @@ let private layoutResolution1039Tests =
                 :> ToolUp.Platform.BlobStorage.IBlobStorage
 
             let dos =
-                ToolUp.Platform.DataObjectStore.DataObjectStore(blob) :> ToolUp.Platform.IDataObjectStore
+                ToolUp.Platform.Infra.DataObjectStore.DataObjectStore(blob) :> ToolUp.Platform.Infra.IDataObjectStore
 
-            let registry = ToolUp.Platform.EntityStore.EntityRegistry()
+            let registry = ToolUp.Platform.Infra.EntityStore.EntityRegistry()
             registry.Register<PublicPageEntity>(PublicPageEntity.registration)
 
             let store =
-                ToolUp.Platform.EntityStore.BlobEntityStore(dos, blob, registry, None)
-                :> ToolUp.Platform.IEntityStore.IEntityStore
+                ToolUp.Platform.Infra.EntityStore.BlobEntityStore(dos, blob, registry, None)
+                :> ToolUp.Platform.Infra.IEntityStore.IEntityStore
 
             let publisher =
                 PublicRenderingNarrativePagePublisher.create

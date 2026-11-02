@@ -5,6 +5,7 @@ open System.Collections.Concurrent
 open System.Collections.Generic
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Infra
 
 // ─── Phase 26 IDeployPipeline contract tests ────────────────────────
 //

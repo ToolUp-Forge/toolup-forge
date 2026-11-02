@@ -5,7 +5,7 @@
 # still be folded into this file in the same PR.
 ToolUp.DataSources.Csv.CsvDataSource (class)
 ToolUp.DataSources.Csv.CsvDataSource.Kind : System.String (literal)
-ToolUp.DataSources.Csv.CsvDataSource.create(ToolUp.Platform.BlobStorage+IBlobStorage) : ToolUp.Platform.IDataSource
+ToolUp.DataSources.Csv.CsvDataSource.create(ToolUp.Platform.BlobStorage+IBlobStorage) : ToolUp.Platform.Infra.IDataSource
 ToolUp.DataSources.Csv.CsvDataSource.parseRecords(System.Char, System.Char, System.IO.TextReader) : System.Collections.Generic.IEnumerable`1[Microsoft.FSharp.Core.FSharpResult`2[System.String[], System.String]]
 ToolUp.DataSources.Csv.CsvDataSource.readSettings(Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.DataSources.Csv.CsvDataSource+CsvSourceSettings, ToolUp.Platform.IngestionError]
 ToolUp.DataSources.Csv.CsvDataSource+CsvSourceSettings (class)

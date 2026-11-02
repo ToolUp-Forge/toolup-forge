@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.ConversationEraseHandler
+module ToolUp.Platform.Audit.ConversationEraseHandler
 
 open ToolUp.Platform
-open ToolUp.Platform.IDataExporter
+open ToolUp.Platform.Audit.IDataExporter
+open ToolUp.Platform.Infra
 
 // ─── Phase 53 — `IErasureHandler` adapter for IConversationStore ─
 //
@@ -22,7 +23,7 @@ open ToolUp.Platform.IDataExporter
 let private HandlerName = "conversations"
 
 /// Registered via `ServerApp.withErasureHandler` when
-/// `ServerConfig.ConversationStore = EnabledConversationStore _`
+/// `ServerConfig.Stores.ConversationStore = EnabledConversationStore _`
 /// AND `ServerConfig.DataSubjectRequests = Enabled _`. The
 /// adapter is a no-op when either gate is off (DSR pipeline
 /// never resolves it). The conversation-substrate-specific audit

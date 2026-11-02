@@ -1,4 +1,7 @@
-namespace ToolUp.Platform
+namespace ToolUp.Platform.Infra
+
+open ToolUp.Platform
+open ToolUp.Platform.Infra.Metrics
 
 open System
 open System.Collections.Concurrent

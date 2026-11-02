@@ -20,6 +20,7 @@ open ToolUp.DataSources.Csv
 open ToolUp.DataSources.Excel
 open ToolUp.DataSources.Parquet
 open ToolUp.DataSources.Tests.Support
+open ToolUp.Platform.Infra
 
 // ─── Phase 834 / 1017 — every shipped connector declares what it is ───
 //

@@ -16,6 +16,10 @@ open ToolUp.Platform.AuditSinks.ChainedLedger
 open ToolUp.ArtefactSigning
 open ToolUp.Facts
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Audit
 
 // ─── Grounding-tier signing convergence ──────────────────────────────────
 //
@@ -116,9 +120,9 @@ let private factSubstrate () = async {
 }
 
 let private seed (store: IFactStore) metric inputHash value = async {
-    match! store.Assert(scope, draft metric inputHash value) with
+    match! store.Assert(TestScope.resolved scope, draft metric inputHash value) with
     | Ok(f: Fact) -> return f.FactId
-    | Error e -> return failtestf "seeding the fact store failed: %s" e
+    | Error e -> return failtestf "seeding the fact store failed: %s" (FactStoreError.describe e)
 }
 
 let private ledgerSettings: ChainedLedgerSettings = {
@@ -183,7 +187,7 @@ let tests =
 
             let! factId = seed store "revenue" "h1" 100m
 
-            match! issuer.Issue(scope, "auditor", FactCertificate factId, 5) with
+            match! issuer.Issue(TestScope.resolved scope, "auditor", FactCertificate factId, 5) with
             | Error e -> failtestf "certificate issue must succeed: %s" (CertificateError.describe e)
             | Ok certificate ->
                 Expect.equal
@@ -235,7 +239,7 @@ let tests =
 
             let! factId = seed store "revenue" "h1" 100m
 
-            match! issuer.Issue(scope, "auditor", FactCertificate factId, 5) with
+            match! issuer.Issue(TestScope.resolved scope, "auditor", FactCertificate factId, 5) with
             | Error e -> failtestf "issue must succeed: %s" (CertificateError.describe e)
             | Ok certificate ->
                 // The key id lives in the signed body.
@@ -283,7 +287,7 @@ let tests =
             let! wanted = seed store "revenue" "h1" 100m
             let! other = seed store "cost" "h2" 55m
 
-            match! issuer.Issue(scope, "auditor", FactCertificate other, 5) with
+            match! issuer.Issue(TestScope.resolved scope, "auditor", FactCertificate other, 5) with
             | Error e -> failtestf "issue must succeed: %s" (CertificateError.describe e)
             | Ok certificate ->
                 // Perfectly signed, and about the wrong thing. A holder
@@ -317,7 +321,7 @@ let tests =
             let oldIssuer =
                 GroundingCertificate.createAttestedIssuer graph store gate events (Some oldSigner)
 
-            let! issued = oldIssuer.Issue(scope, "auditor", FactCertificate factId, 5)
+            let! issued = oldIssuer.Issue(TestScope.resolved scope, "auditor", FactCertificate factId, 5)
 
             let certificate =
                 match issued with
@@ -390,7 +394,7 @@ let tests =
 
             let! factId = seed store "revenue" "h1" 100m
 
-            match! issuer.Issue(scope, "auditor", FactCertificate factId, 5) with
+            match! issuer.Issue(TestScope.resolved scope, "auditor", FactCertificate factId, 5) with
             | Error e -> failtestf "issue must succeed: %s" (CertificateError.describe e)
             | Ok certificate ->
                 // One key signs certificates and ledger heads alike. What
@@ -440,7 +444,7 @@ let tests =
 
             let! factId = seed store "revenue" "h1" 100m
 
-            match! issuer.Issue(scope, "auditor", FactCertificate factId, 5) with
+            match! issuer.Issue(TestScope.resolved scope, "auditor", FactCertificate factId, 5) with
             | Error e -> failtestf "the direct path must still issue: %s" (CertificateError.describe e)
             | Ok certificate ->
                 Expect.equal certificate.Body.Root factId "rooted at the certified fact, as before"
@@ -475,8 +479,8 @@ let tests =
             let attested =
                 GroundingCertificate.createAttestedIssuerWithClock graph store gate events (Some appSigner) clock
 
-            let! a = direct.Issue(scope, "auditor", FactCertificate factId, 5)
-            let! b = attested.Issue(scope, "auditor", FactCertificate factId, 5)
+            let! a = direct.Issue(TestScope.resolved scope, "auditor", FactCertificate factId, 5)
+            let! b = attested.Issue(TestScope.resolved scope, "auditor", FactCertificate factId, 5)
 
             match a, b with
             | Ok directCert, Ok attestedCert ->
@@ -507,7 +511,7 @@ let tests =
             let issuer = GroundingCertificate.createAttestedIssuer graph store gate events None
             let! factId = seed store "revenue" "h1" 100m
 
-            match! issuer.Issue(scope, "auditor", FactCertificate factId, 5) with
+            match! issuer.Issue(TestScope.resolved scope, "auditor", FactCertificate factId, 5) with
             | Error SigningUnavailable -> ()
             | Error other -> failtestf "expected SigningUnavailable; got %s" (CertificateError.describe other)
             | Ok _ -> failtest "issuance without a signer must refuse, never fabricate a seal"

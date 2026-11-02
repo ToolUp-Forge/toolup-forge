@@ -3,6 +3,8 @@ module ToolUp.Platform.Tests.Contracts.IEventStoreContract
 open System
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 /// Contract test list for any `IEventStore` implementation. Factory
 /// must produce a fresh, empty store per test. Tests GUID-suffix their

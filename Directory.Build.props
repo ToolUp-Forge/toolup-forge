@@ -21,10 +21,11 @@
     test packs, commercial-internal) opt out with <IsPackable>false</IsPackable>
     in their own fsproj.
 
-    Initial version 0.1.0 across the board. SemVer-on-0.x policy: minor
-    bumps may include breaking changes during 0.x; patch bumps remain
-    non-breaking. Per-package <Version> overrides where a package needs
-    to advance independently.
+    SemVer-on-0.x policy: minor bumps may include breaking changes during
+    0.x; patch bumps remain non-breaking. The <Version> below is the CORE
+    line's; each companion family packs at its own version group's line,
+    assigned in the region generated from version-groups.json further
+    down (docs/platform/release-process.md).
   -->
   <!--
     Phase 624 (2026-07-31) — FS0025 (incomplete pattern match) is an
@@ -153,6 +154,28 @@
   -->
   <PropertyGroup>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <!--
+    Compiler levers, measured on this tree and then declared. The tables are in docs/migrations/1195-compiler-levers.md;
+    src/ToolUp.Platform.Build.Tests/CompilerLeversTests.fs holds both verdicts.
+
+    ProduceReferenceAssembly is ON. The SDK already turns it on for an .fsproj
+    targeting net7.0+, so this line changes no build; it holds the setting
+    against a project, an import or a future SDK turning it off. It is what
+    lets an implementation-only edit stop at the edited project: an internal
+    edit to ToolUp.Platform.Server recompiles 2 projects, not 129. KNOWN GAP:
+    F#'s reference assembly does not move when a [<Literal>] is added or its
+    value changes, so dependants keep the old value on an INCREMENTAL build.
+    After touching a literal, build its dependants clean (see the doc).
+
+    ParallelCompilation is deliberately NOT declared. Measured on this
+    machine it made the two serial-bottleneck projects slower, and F# 10.0
+    flags the switch "for test purposes only" (FS0075) on every project, in
+    both directions. Re-measure on an idle machine before declaring it.
+  -->
+  <PropertyGroup>
+    <ProduceReferenceAssembly>true</ProduceReferenceAssembly>
   </PropertyGroup>
 
   <PropertyGroup>
@@ -989,7 +1012,7 @@
       `ServerModule.describeSubjects`, `ServerApp.metricRegistry`, `MetricRegistry.buildDescribed`,
       `MetricRegistry.trySubjectDescription`. Recipe: `docs/migrations/1150-fact-table-descriptions.md`.
     -->
-    <Version>0.38.0</Version>
+    <Version>0.39.0</Version>
     <!--
       The draft note is APPEND-ONLY. A change that rides or advances the
       <Version> above appends ONE line at the END of the list below the
@@ -1025,6 +1048,32 @@
       - 1092 (0.38.0): breaking — `FactTableRunRecord` (ToolUp.Platform.Core) gains `Options : RunOptions` and `RecordVersion`, so a full record literal adds both (build one with `FactTableRun.opened`); a run's options ride its record, so `OpenRun`, `Runs` and `Status` return them, and a record written before reads `RunOptions.empty`; `FactTableRun` gains the pure lifecycle (`opened`, `tryOpen`, `stage`, `commit`, `reject`, `abandon`, `hasEnded`, `statusName`) over the new `OpenFactTableRun` that both writers execute; additive `RunOptions` / `RunSlice` / `RunMethod`, `FactTableRunOptions.toRun` / `ofRun`, `FactTableWriteError.ofTransition`; the delegated writer takes run inputs (a slice is still refused) and `DelegatedFactStore` reads the disclosure-taint index through its inner store (docs/migrations/1092-redesign-h-runrecord-facttablerun-and-the-recompute-path.md).
       - 1143 (0.38.0): additive — `query_metric_population` takes `with_metrics` (up to `PopulationQueryTool.MaxCompanionMetrics` registered ids, each refused by name if unregistered; with them `top_k` is at most `PopulationQueryTool.MaxCompanionTopK`): each ranked member that crossed the gate carries `companions`, point reads for its subject and period gated at FactToolResult one by one (a withheld one is a marker, a missing one `absent`), and an answer without companions is byte-identical to before (docs/platform/facts.md).
       - 1053 (0.38.0): breaking — caller-less members go from ToolUp.Platform.Server (ThreadSafeCell, Reader, ReaderBuilder, the Extensions module, Write.stackalloc, ParsingArgumentsError) and ToolUp.Platform.Core (Read.interpretIntegerAs, Write.Fable, moved to the Fable test tier); a [&lt;Custom&gt;] validator that cannot be built refuses at compose time; the in-memory stores share one bounded FIFO that never wipes; ToolUp.Platform.Build gains CodemodMigration.RemotingLeftovers (codemod rules 1053-*; docs/migrations/1053-redesign-b-defects-remoting.md)
+      - 1157 (0.38.0): breaking — every IFactStore member takes a ResolvedScope and answers Result&lt;_, FactStoreError&gt; (the seven string overloads go, a storage fault on a read is StorageFault, never absence), and the string scope forms of the disclosure gate, clause planner, answer planner, fact resolver, evidence source, provenance graph, table writer, narrative ingestor and grounding seams are removed or retyped; carried jobs refuse a scope nobody re-minted, coherence sweeps resolve declared principals (codemod rules 1157-*; docs/migrations/1157-one-scope-form.md).
+      - 1161 (0.38.0): breaking — the delegated writer takes a period slice (every stored delegated row names the run that wrote it, a carried row mints under its own run, and a slice over rows stored before attribution is refused until the facts-attribute-delegate-rows operator task records them), a delegated table, quote or lineage read that fails answers StorageFault rather than a refusal fact or a shorter answer, `FactsMigrateCommand.Options` gains `Task` (a full record literal adds it) and `IFactTableWriterContract.runOptionsRefusedTests` is removed; additive `RunRecord` / `RunProvenance` / `RunOutcome` over `ResolvedScope` with a `toRunRecord` projection of every stored run kind, `FactsOperatorTaskCompose.withFactsOperatorTasks` (facts-attribute-delegate-rows, facts-reissue-jobs, run by `toolup facts migrate` with its attribute-delegate-rows or reissue-jobs flag) and `IFactStoreContract.readFaultTests` (docs/migrations/1161-delegate-executor-completes.md).
+      - 1165 (0.38.0): breaking — `TeamPermissions` (ToolUp.Platform.Core) gains `Pages` (a full record literal adds it, FS0764; a stored document without it reads as empty and writes back byte-identically) and `AuditEvent` gains `PageSaved`, `PageReseeded`, `PageDetached` and `PageWriteRefused` (an exhaustive match adds them); additive otherwise: ToolUp.Platform.Server gains the page store (`IPageDocumentStore`, `BlobPageDocumentStore`, `PageDocumentStoreCompose.withPageDocumentStore`) and the layer fold (`PageLayers`), and takes the published Fuaran op packages (docs/migrations/1165-page-store.md).
+      - 1166 (0.38.0): additive — the requests a stored page names (`PageRequest`, presentation or pipeline, with its canonical JSON, and the `PageResolution` data it resolves to) and `Presentation.data`, the builders' series-to-table step, in ToolUp.Facts.Presentation; `PageRequestResolver` / `PageRequestResolvers` / `PageResolutionCache` and `PresentationCompose.withPageRequests` (registered only under a composed fact store) and the typed `PipelineAnsweringTool.rerun` in ToolUp.Facts.Presentation.Server; `IFactTableChangeSignal` in ToolUp.Facts.Server, composed dormant with the fact store (docs/migrations/1166-page-request-resolvers.md).
+      - 1167 (0.38.0): additive — the eight `layout_*` tools and `layout_save` (`LayoutTools`, `LayoutTool`, `LayoutCaller`, `LayoutToolsRuntime`, `LayoutProposalStore`, `LayoutRefusal`), the interim request sidecar (`PageRequestSidecar`) and read-set (`PageReadSet`), and `PresentationCompose.withLayoutTools` (registered only under a composed fact store and page store) in ToolUp.Facts.Presentation.Server; `PageDocumentStoreCompose.componentId` in ToolUp.Platform.Server (docs/migrations/1167-layout-tools.md).
+      - 1178 (0.38.0): additive — `Fact.instant` (ToolUp.Facts.Core) is the one rule for a period endpoint's instant (Utc as is, Unspecified read as UTC, Local converted), and the content address, lineage key, blob store and coverage narrative read periods through it, so a key computed on a non-UTC machine now equals the server's (a UTC host's keys are unchanged); the Postgres `lineage_hash` hashes the stored payload, the migration's verify recomputes it from the row, and the ids mode of `toolup facts migrate` also moves stored lineage hashes that disagree (docs/migrations/1178-fact-identity-timezone-independent.md).
+      - 1168 (0.38.0): breaking — the SDK shell loads AG Grid and AG Charts on demand, and PerfMetric gains ClientShellFirstLoadKiB (docs/migrations/1168-shell-first-load.md)
+      - 1177 (0.38.0): breaking — `NarrativePromptApi` (ToolUp.AI.Core) gains `ListProposals`, `ApproveProposal` and `DismissProposal`, and the report admin's `Model` gains `Learning` and its `Msg` four cases (a full literal or an exhaustive match adds them); additive `NarrativeOffenceLearning.compose` (ToolUp.AI.Server) records each refused claim per narrative and proposes a wording sentence for a class that recurs, which runs never read until an Owner or Admin approves it (docs/migrations/1177-narrative-offence-learning.md).
+      - 1173 (0.38.0): additive — `layout_set_section` (ToolUp.Facts.Presentation.Server) gains the `tabs` and `untab` actions, a tabbed section being a `Tabs` node over card-headed tabs built only from structural ops and one heading edit per renamed tab, so a lower layer's edits survive the fold; `TabRefusal` and the `LayoutRefusal.Tabs` case are new in this draft (`LayoutRefusal` itself is unreleased, so no released match breaks) (docs/migrations/1173-tabbed-sections.md).
+      - 1176 (0.38.0): breaking — `NarrativeGroundingCertificate` (ToolUp.Platform.Server) gains `Admissions` (a full record literal adds it, FS0764; an implementation of `Certify` sets it to `[]`); additive otherwise: `GroundingCheckOptions`, `GroundingInstruction`, the optional `IInstructedNarrativeGroundingGate.CheckWith` and `GroundingCheck.run`, `NarrativeGrounding.checkWith` / `mentions` / `echoes` (ToolUp.Facts.Server) and `NarrativeCitation.instruction` / `structuralCount` / `admissions` (ToolUp.Platform.Core): a whole number the wording in force asks for passes the grounding gate on the first draft, cited `instruction:<version>#<section>`, and one counting the document's own cited subjects or the list or table that follows passes only at the repair loop's late stage, cited `structural-count:<location>`; `Check` and `NarrativeGrounding.check` are unchanged (docs/platform/grounded-narratives.md).
+      - 1179 (0.38.0): breaking — grounding certificates are issued as `grounding-certificate/v2`, whose signed body carries every number the narrative admitted without a Fact (`GroundingCertificateBody.Admissions`, `CertificateAdmission`, ToolUp.Facts.Server; a full record literal adds `Admissions = None`, FS0764), and `NarrativeGroundingCertificate.Admissions` is removed (read `Body.Admissions` from `CertificateJson`); additive otherwise: `GroundingCertificate.FormatV1` / `FormatV2` / `Formats` / `isKnownFormat` / `bodyJson` / `certificateJson` / `attestedCertificateJson` (the interchange JSON of a certificate with no admissions is unchanged), the `AdmittedNarrativeCertificate` subject, `NarrativeGrounding.admissionsWith`, `IInstructedNarrativeGroundingGate.CertifyWith` and `GroundingCertification.run`; a v1 certificate verifies unchanged, and a verifier accepts both formats (docs/migrations/1179-grounding-certificate-v2-signs-admissions.md).
+      - 1180 (0.38.0): additive — authorised narrative calculations: `CalculationDeclaration`, `CalculationOperator`, `NarrativeCalculations` (declare, tools, compute, rederive, admission), `CalculationRefusal`, `CalculationRecord`, `CalculationCheck`, `FactsCompose.withNarrativeCalculations`, `FactNarrativeGroundingGate.createWithCalculations` and the calculation attributes and `CertificateAdmission.ofCalculation` (ToolUp.Facts.Server), `AuthorisedCalculation` (ToolUp.Platform.Server) and `GroundedNarrativeRun.calculationRule` (ToolUp.AI.Server); a grounded report cites a `calc:` reference the server computed by a declared formula, the gate derives it again and the certificate seals it; a deployment that declares none is unchanged (docs/migrations/1180-authorised-narrative-calculations.md).
+      - 1181 (0.38.0): additive — `ReportProducerWarning` (ToolUp.Reporting.Server: `report`, `collect`) lets a report producer report a warning beside its render request without changing `ReportProducer` or `ReportRenderRequest`; the subscription job collects it around `Resolve` and returns `JobResult.SuccessWithWarning`, and the grounded narrative producer reports its withheld claims there, so a scheduled grounded report that withheld claims reads `Succeeded` with the warning on its job; a producer that reports none is unchanged.
+      - 1067 (0.39.0 — v0.38.0 is tagged, so this rides the next draft slot): breaking — every hosted service registers through `Hosting.register` with a declared `Placement` (`BackgroundSubsystem`, `shouldRegisterBackgroundService`, `HostedServiceExemption` and the `addExempt` family removed; RAG re-embedding and, over a shared queue, ingestion become SharedWork, the AI chat worker ProcessLocal), `InProcessJobScheduler` and `WebhookDispatcherService` each have one factory over an options record (`SchedulerOptions` / `WebhookOptions`; the three extra scheduler factories, the webhook secondary constructor and `createWithLock` removed), `ServerApp.withDistributedLock` composes the lock first, the tenant-lifecycle hooks are `TenantHook` values and `withDeclaredDataSources` takes the config (codemod rules 1067-*, docs/migrations/1067-redesign-d-hosting-register-placement-and-options-records.md).
+      - 876 (0.39.0): breaking — `ServerApp` gains `Overrides` (the config-writing builders and `addModule` record `ConfigOverride`s that `run` folds onto `Config` once, so `withConfig` on either side keeps them; read them back with `ServerApp.effectiveConfig`), `Contribution` gains `Requires` / `Provides` (`SeamId`s) and the `Routes`, `Validator` and `Middleware` kinds, `ContributionPlan.order` runs providers before requirers and refuses an unmet requirement or a cycle naming both ends, `withPreMiddleware` / `withPostMiddleware` / `withDeliveryCompleted` contribute (read the pipeline's record with `ServerApp.composedExtensions`), and the AI chat worker and conversation-retention units are `Hosted` contributions (docs/migrations/876-composition-contributions.md).
+      - 1097 (0.39.0): additive — ToolUp.Platform.Build gains one process runner, one git reader and one flag parser: `ProcResult` / `ProcOptions` and `Proc.exec` / `redirected` / `execWith` / `create` / `ensure` / `onPath` / `options`, `Git.run` / `read` / `within`, `Lines.ofOutput`, `Paths.toSlash`, `Flags.parse` / `lenient` / `targetOf` / `has` / `value` / `union` / `sdk` over `FlagSpec` / `Flags`, `Scratch.root`, the publication-boundary rule `Neutrality.*`, and the template gate as data (`TemplateGate.TemplateGateSpec`, `Check`, `Step`, `Scaffold`, `Instantiation`, `NeutralScope`, `run`, `version`, `inPlaceBuildArgs`, `instantiateArgs`, `vendoredFinding`, `strayPins`, `layoutFindings`, `neutralHits`, `privatePackagesFolder`, `evict`, `EvictionReport`); `execute` and the SDK targets read the same parse, and no existing member changes.
+      - 1200 (0.39.0): none — released first as the 0.38.1 patch off v0.38.0; ToolUp.Feliz.AgGrid and ToolUp.Feliz.AgCharts pack a `<Runtime>.js` beside each on-demand runtime source (`AgGridRuntime.js`, `AgChartRuntime.js`) re-exporting its compiled `.fs.js`, so a feed consumer's bundle resolves the `import("./<Runtime>.js")` Fable spells under fable_modules; no package surface moves.
+      - 876 (0.39.0): breaking, continued — `Hosting.register` takes no configuration (compose decides admission once with `Hosting.admit` against the final config); `compose` takes a `CompositionPlan` record and its five ref cells become values or `LateBound` slots; `Substrate` and `Contribution.staged` hand companions the composed event store, audit log and notification channel (RAG and Facts no longer build a probe container); `ServerApp.withCompanion` / `resolve`; the companion wrappers (`AIServerApp`, `RAGServerApp`, `McpServerApp`, Forms, Scheduling, Peer, PublicRendering, AssetStore, MediaLibrary, Algorithms, Passkey, Scim) become options records composed by one `withX` each, delegators deleted (codemod rules 876-*); the composition manifest records the plan at schema 4 and the boot seal frames it (docs/migrations/876-composition-contributions.md).
+      - 1195 (0.39.0): none — `ProduceReferenceAssembly` is declared `true` (the SDK default for net7.0+ .fsproj, now held by CompilerLeversTests) and `ParallelCompilation` is measured and left off (docs/migrations/1195-compiler-levers.md); no package surface moves.
+      - 875 (0.39.0): breaking (rides the draft 876 made breaking; no version move) — the config-key registry is typed: `ConfigKeys.keys` holds one `ConfigKey` per key with a closed `ConfigKeyKind` (`BoolKey` / `IntKey` / `EnumKey` / `StringKey`, each with a typed default), a `Direction` on every boolean and union key, `IntBounds` on every integer key and a `SealPosture` on every key; `ConfigKeys.all` and `intKeyRules` keep their types and are derived from it; `ConfigKeys.key`, `trueTokens` / `falseTokens`, `ConfigKeySeal` and `DeploymentDoc` are new; `SERVER_PORT` and `SERVER_BIND_ADDRESS` join the registry and the manifest-bindable set; `ServerConfig.fromEnv` reads every key through its entry (parser, default, bounds) and binds the same record and values (pinned by a snapshot taken before the change); a positive-only integer key now refuses `0` or a negative value at preflight, and an out-of-range value binds the default with a warning; the composition manifest records the seal-relevant keys at schema 5 (`SealedConfigKeys`, `withConfigKeys`, `recordsConfigKeys`, `sealedConfigKeys`) and the boot seal frames them, schema-4 seals byte-pinned; `CompositionDrift.ConfigKeyChanged` and `CompositionUnrecorded.ConfigKeysUnrecorded` are new cases; the reference's documented defaults are corrected for TOOLUP_TRUST_FORWARDED_HEADERS, TOOLUP_MODULE_BINDING_ALLOW_UNBOUND and TOOLUP_LDAP_NESTED_GROUPS (true) and TOOLUP_ENABLE_CITATION_DEV_ENDPOINT (unset); `GenerateConfigReference` regenerates every projection, DEPLOYMENT.md's directions and seal-coverage region included.
+      - 877 (0.39.0): breaking (rides the same draft; no version move) — `ServerConfig` is nested by concern: `SecurityPosture` (the HTTP edge: `RequireHttps`, `TrustForwardedHeaders`, `TrustedProxyCidrs`, `SecurityHeaders`, `SecurityHardening`, `Cors`, `SseAuthMode`, `AuthCookieIssuance`, `MaxRequestBodyBytes`, `WebhookUrlAllowedHosts`), `RiskAcknowledgements` (the twenty `Accept*` escape hatches — the registry's escape-hatch category), `MultiInstance` (`ReplicaCount`, `ProcessProfile`, `PeerRoutePrefixes`, `PeerSubstrate`), `Observability` (`LogLevel`, `TraceCategories`, `HealthStateTracking`, `MetricsEndpoint`, `MetricsSink`, `MetricsHistory`, `TelemetrySink`, `SlowRequestThreshold`, `SlowRequestThresholdOverrides`, `AlertRules`, `LogStore`, `DatadogReadback`) and `Stores` (`EventStore`, `ResultStore`, `ShareTokenStore`, `ServiceAccounts`, `EntityStore`, `EntityOutbox`, `GraphStore`, `TimeSeriesStore`, `Datasets`, `SessionRegistry`, `ConversationStore`, `AssetStore`, `RateLimitStore`, `ConsentStateStore`, `ExternalContactStore`, `FactStore`), each with its own `defaults`; the thirty-seven payload-free two-case `*Mode` unions (`AuditLogMode`, `EntityStoreMode`, `WebhookMode`, `PresenceMode`, `ExternalComputeMode`, `TelemetrySinkMode`, …) are deleted for the one `FeatureMode = Disabled | Enabled` (`FeatureMode.isEnabled` / `ofBool`), and `ServerConfigOverrides` takes it where it took them; every environment key and accepted token is unchanged (`ServerConfig.fromEnv` binds the same effective configuration, pinned field by field against the pre-877 snapshot through the flat-to-nested projection); `ConfigKey.readBool` / `readPermissiveBool` are new and the seven boolean readers outside the binder resolve through them; `ToolUp.Platform.Build` gains `Codemod.featureModes`, `concernFields`, `planFor`, `rewriteTextFor`, `reviewTextFor`, `analyseFileFor`, `migrationOfPhase` and the Codemod target's per-phase option (codemod rules 877-*, docs/migrations/877-nested-server-config.md).
+      - 1196 (0.39.0): none — version groups: version-groups.json puts every packable project on one line (the core lockstep at this <Version>, each companion family on its own), VerifySemVerBump rolls up per group, and the ToolUp.Sdk manifest resolves each package through its group property, defaulted so a consumer pinning only ToolUpSdkVersion restores everything; the Stripe, Workflow, Experiments, Webhooks and OpenFeature entries now resolve at the versions they publish (docs/migrations/1196-version-groups.md)
+      - 1199 (0.39.0): additive — ToolUp.Platform.Build gains the build census: `ProjectCost`, `CensusEntry` and `BuildCensus`, and `Census.readSummary` (the `-clp:PerformanceSummary` text of a graph build), `buildArgs`, `references`, `compileItems`, `projectGraph`, `assemble`, `machine`, `render`, `projectSet`, `check` and `fileName`; the root driver gains the `Census` target, which writes build-census.json, and its check form, and no existing member changes (docs/migrations/1199-build-census.md).
+      - 1098 (0.39.0): additive — ToolUp.Platform.Build gains the gate manifest types `Site`, `Input`, `Floor`, `Verdict`, `LegKind` and `GateLeg<'Lane>`, and `Gate.register` / `registered` / `Registered` / `packs` / `ciFloor` / `pureRows` / `envInputs` / `scrubbedFor` / `siteName` / `inputName` / `verdictOfExit` / `verdictOf` / `judge` / `statusToken` / `lastRun`; `VerifyAll` folds the registered rows (a `TestPacks` entry no row names is a pack row with the default reads), prints a `PENDING` line for a pending verdict, a trailer naming the rows that run elsewhere and the run's wall clock once, and launches each pack writing its JUnit summary (the case count a floor is held to) under the manifest's scrubbed environment; `TestPack` and `BuildConfig.TestPacks` keep their shape as the derived view, `VerifyLeg.register` forwards to `Gate.register`, and no existing member changes.
+      - 1193 (0.39.0): breaking for binaries, source-compatible (rides the draft 876 made breaking; no version move) — `ToolUp.Platform.Server` is an umbrella over six new packages, `ToolUp.Platform.Server.Remoting`, `.Infra`, `.Config`, `.Scope`, `.Jobs` and `.Audit`, cut along its compile order; it references all six, so a `PackageReference` or `ProjectReference` to it resolves the whole tier and no namespace moves. The members the parts hold left the `ToolUp.Platform.Server` assembly: a library compiled against 0.38 `ToolUp.Platform.Server` recompiles, and `ComponentProvenance` reports the part a component ships in. One compiler-generated name changes: the anonymous record `EncryptedSecretStore.summariseRotation` returns, whose CLR name hashes its defining assembly (docs/migrations/1193-platform-server-subsystem-assemblies.md).
+      - 1198 (0.39.0): breaking — namespaces per part: every server-tier file declares the namespace of the part that compiles it (`ToolUp.Platform.Infra` / `.Config` / `.Scope` / `.Jobs` / `.Audit`, the umbrella's `.Compose` and `.Files`, the Remoting part's `ToolUp.Remoting.Server.Http` for its one platform-named module; `ToolUp.Platform` keeps Core), so a consumer's `open ToolUp.Platform` no longer reaches the server tier and `open ToolUp.Platform.<Module>` paths move with their module; ToolUp.Platform.Build gains `SubsystemNamespaces` (the scan, the shipped name table, the derived-opens pass) and the Codemod target's phase-1198 migration (`dev-scripts/codemod-1198-namespaces.ps1`, docs/migrations/1198-subsystem-namespaces.md).
     -->
     <!--
       IsPackable defaults to true for SDK-style projects that produce a
@@ -1052,6 +1101,231 @@
     <PackageIcon>icon.png</PackageIcon>
   </PropertyGroup>
 
+  <!-- BEGIN GENERATED VERSION GROUPS - do not hand-edit below this line.
+       Rendered from version-groups.json by the GenerateSdkManifest target of
+       Build.fsproj; SdkManifestTests fails when the two disagree. Each
+       companion family packs at its own group's version; the core packs at
+       the <Version> above. On a release-candidate run (Directory.Build.targets)
+       every companion group is made non-packable: a candidate is the core's,
+       and the companions ride the core's stable release instead.
+  -->
+  <PropertyGroup>
+    <ToolUpProjectRelativePath>$([MSBuild]::MakeRelative('$(MSBuildThisFileDirectory)', '$(MSBuildProjectFullPath)').Replace('\', '/'))</ToolUpProjectRelativePath>
+    <ToolUpAIProvidersVersion>0.39.0</ToolUpAIProvidersVersion>
+    <ToolUpAlgorithmProvidersVersion>0.39.0</ToolUpAlgorithmProvidersVersion>
+    <ToolUpArtefactSigningVersion>0.39.0</ToolUpArtefactSigningVersion>
+    <ToolUpAuditSinksVersion>0.39.0</ToolUpAuditSinksVersion>
+    <ToolUpAuthProvidersVersion>0.39.0</ToolUpAuthProvidersVersion>
+    <ToolUpCalendarVersion>0.39.0</ToolUpCalendarVersion>
+    <ToolUpCloudVersion>0.39.0</ToolUpCloudVersion>
+    <ToolUpContainerSchedulersVersion>0.39.0</ToolUpContainerSchedulersVersion>
+    <ToolUpContentScannersVersion>0.39.0</ToolUpContentScannersVersion>
+    <ToolUpDataSourcesVersion>0.39.0</ToolUpDataSourcesVersion>
+    <ToolUpEmbeddingCachesVersion>0.39.0</ToolUpEmbeddingCachesVersion>
+    <ToolUpEmbeddingProvidersVersion>0.39.0</ToolUpEmbeddingProvidersVersion>
+    <ToolUpEncryptionVersion>0.39.0</ToolUpEncryptionVersion>
+    <ToolUpEntityStoresVersion>0.39.0</ToolUpEntityStoresVersion>
+    <ToolUpFactStoresVersion>0.39.0</ToolUpFactStoresVersion>
+    <ToolUpFeatureFlagProvidersVersion>0.1.1-alpha</ToolUpFeatureFlagProvidersVersion>
+    <ToolUpHostsVersion>0.39.0</ToolUpHostsVersion>
+    <ToolUpIngestionQueuesVersion>0.39.0</ToolUpIngestionQueuesVersion>
+    <ToolUpJobSchedulersVersion>0.39.0</ToolUpJobSchedulersVersion>
+    <ToolUpMediaVersion>0.39.0</ToolUpMediaVersion>
+    <ToolUpMetricsVersion>0.39.0</ToolUpMetricsVersion>
+    <ToolUpModelProvidersVersion>0.39.0</ToolUpModelProvidersVersion>
+    <ToolUpNotificationChannelsVersion>0.39.0</ToolUpNotificationChannelsVersion>
+    <ToolUpObservabilityVersion>0.39.0</ToolUpObservabilityVersion>
+    <ToolUpOcrProvidersVersion>0.39.0</ToolUpOcrProvidersVersion>
+    <ToolUpRateLimitVersion>0.39.0</ToolUpRateLimitVersion>
+    <ToolUpReportRenderersVersion>0.39.0</ToolUpReportRenderersVersion>
+    <ToolUpRerankersVersion>0.39.0</ToolUpRerankersVersion>
+    <ToolUpSecretsVersion>0.39.0</ToolUpSecretsVersion>
+    <ToolUpShareTokenStoreDecoratorsVersion>0.39.0</ToolUpShareTokenStoreDecoratorsVersion>
+    <ToolUpSparseIndicesVersion>0.39.0</ToolUpSparseIndicesVersion>
+    <ToolUpStorageVersion>0.39.0</ToolUpStorageVersion>
+    <ToolUpSvgRasterizersVersion>0.39.0</ToolUpSvgRasterizersVersion>
+    <ToolUpTelemetrySinksVersion>0.39.0</ToolUpTelemetrySinksVersion>
+    <ToolUpTimeSeriesStoresVersion>0.39.0</ToolUpTimeSeriesStoresVersion>
+    <ToolUpVectorStoresVersion>0.39.0</ToolUpVectorStoresVersion>
+    <ToolUpVoiceProvidersVersion>0.39.0</ToolUpVoiceProvidersVersion>
+    <ToolUpExperimentsVersion>0.1.0-alpha</ToolUpExperimentsVersion>
+    <ToolUpStripeVersion>0.2.1</ToolUpStripeVersion>
+    <ToolUpWorkflowVersion>0.1.0-alpha</ToolUpWorkflowVersion>
+    <ToolUpWebhooksVersion>0.1.0-alpha</ToolUpWebhooksVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/ToolUp\.Platform\.[^/]*/.*\z|^src/ToolUp\.AI\.[^/]*/.*\z|^src/ToolUp\.Algorithms\.[^/]*/.*\z|^src/ToolUp\.ArtefactSigning/.*\z|^src/ToolUp\.AssetStore/.*\z|^src/ToolUp\.BrandKit/.*\z|^src/ToolUp\.Cli/.*\z|^src/ToolUp\.Client\.ModelViewer/.*\z|^src/ToolUp\.Companions\.Isolation/.*\z|^src/ToolUp\.Facts\.[^/]*/.*\z|^src/ToolUp\.Forms\.[^/]*/.*\z|^src/ToolUp\.Graph\.[^/]*/.*\z|^src/ToolUp\.KnowledgeBase\.[^/]*/.*\z|^src/ToolUp\.Offline\.[^/]*/.*\z|^src/ToolUp\.OpenXml/.*\z|^src/ToolUp\.OpenXml\.[^/]*/.*\z|^src/ToolUp\.PublicRendering/.*\z|^src/ToolUp\.RAG\.[^/]*/.*\z|^src/ToolUp\.Remoting\.[^/]*/.*\z|^src/ToolUp\.Reporting\.[^/]*/.*\z|^src/ToolUp\.Scheduling\.[^/]*/.*\z|^src/ToolUp\.Sdk/.*\z|^src/ToolUp\.Tabular/.*\z|^src/ToolUp\.Voice\.[^/]*/.*\z|^src/Feliz\.[^/]*/.*\z|^src/AI\.Samples/.*\z|^src/AIExtensions/.*\z|^src/AICookbooks/.*\z|^src/ContentAuthoring/.*\z|^src/ExternalCompute/.*\z|^src/InterPlatform/.*\z'))">
+    <ToolUpVersionGroup>core</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/AIProviders/.*\z'))">
+    <ToolUpVersionGroup>ai-providers</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/AlgorithmProviders/.*\z'))">
+    <ToolUpVersionGroup>algorithm-providers</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/ArtefactSigning/.*\z'))">
+    <ToolUpVersionGroup>artefact-signing</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/AuditSinks/.*\z'))">
+    <ToolUpVersionGroup>audit-sinks</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/AuthProviders/.*\z|^src/ToolUp\.AuthProviders\.[^/]*/.*\z'))">
+    <ToolUpVersionGroup>auth-providers</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/Calendar/.*\z'))">
+    <ToolUpVersionGroup>calendar</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/Cloud/.*\z'))">
+    <ToolUpVersionGroup>cloud</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/ContainerSchedulers/.*\z'))">
+    <ToolUpVersionGroup>container-schedulers</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/ContentScanners/.*\z'))">
+    <ToolUpVersionGroup>content-scanners</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/DataSources/.*\z'))">
+    <ToolUpVersionGroup>data-sources</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/EmbeddingCaches/.*\z'))">
+    <ToolUpVersionGroup>embedding-caches</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/EmbeddingProviders/.*\z'))">
+    <ToolUpVersionGroup>embedding-providers</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/Encryption/.*\z'))">
+    <ToolUpVersionGroup>encryption</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/EntityStores/.*\z'))">
+    <ToolUpVersionGroup>entity-stores</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/FactStores/.*\z'))">
+    <ToolUpVersionGroup>fact-stores</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/FeatureFlagProviders/.*\z'))">
+    <ToolUpVersionGroup>feature-flag-providers</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/Hosts/.*\z'))">
+    <ToolUpVersionGroup>hosts</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/IngestionQueues/.*\z'))">
+    <ToolUpVersionGroup>ingestion-queues</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/JobSchedulers/.*\z'))">
+    <ToolUpVersionGroup>job-schedulers</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/Media/.*\z'))">
+    <ToolUpVersionGroup>media</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/Metrics/.*\z'))">
+    <ToolUpVersionGroup>metrics</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/ModelProviders/.*\z'))">
+    <ToolUpVersionGroup>model-providers</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/NotificationChannels/.*\z'))">
+    <ToolUpVersionGroup>notification-channels</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/Observability/.*\z'))">
+    <ToolUpVersionGroup>observability</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/OcrProviders/.*\z'))">
+    <ToolUpVersionGroup>ocr-providers</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/RateLimit/.*\z'))">
+    <ToolUpVersionGroup>rate-limit</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/Reporting/.*\z'))">
+    <ToolUpVersionGroup>report-renderers</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/Rerankers/.*\z'))">
+    <ToolUpVersionGroup>rerankers</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/Secrets/.*\z'))">
+    <ToolUpVersionGroup>secrets</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/ShareTokenStoreDecorators/.*\z'))">
+    <ToolUpVersionGroup>share-token-store-decorators</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/SparseIndices/.*\z'))">
+    <ToolUpVersionGroup>sparse-indices</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/Storage/.*\z'))">
+    <ToolUpVersionGroup>storage</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/SvgRasterizers/.*\z'))">
+    <ToolUpVersionGroup>svg-rasterizers</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/TelemetrySinks/.*\z'))">
+    <ToolUpVersionGroup>telemetry-sinks</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/TimeSeriesStores/.*\z'))">
+    <ToolUpVersionGroup>time-series-stores</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/VectorStores/.*\z'))">
+    <ToolUpVersionGroup>vector-stores</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/VoiceProviders/.*\z'))">
+    <ToolUpVersionGroup>voice-providers</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/ToolUp\.Experiments\.[^/]*/.*\z'))">
+    <ToolUpVersionGroup>experiments</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/ToolUp\.Stripe\.[^/]*/.*\z'))">
+    <ToolUpVersionGroup>stripe</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/ToolUp\.Workflow\.[^/]*/.*\z'))">
+    <ToolUpVersionGroup>workflow</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ToolUpProjectRelativePath)', '^src/Webhooks/.*\z'))">
+    <ToolUpVersionGroup>webhooks</ToolUpVersionGroup>
+  </PropertyGroup>
+  <PropertyGroup>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'ai-providers'">$(ToolUpAIProvidersVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'algorithm-providers'">$(ToolUpAlgorithmProvidersVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'artefact-signing'">$(ToolUpArtefactSigningVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'audit-sinks'">$(ToolUpAuditSinksVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'auth-providers'">$(ToolUpAuthProvidersVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'calendar'">$(ToolUpCalendarVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'cloud'">$(ToolUpCloudVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'container-schedulers'">$(ToolUpContainerSchedulersVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'content-scanners'">$(ToolUpContentScannersVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'data-sources'">$(ToolUpDataSourcesVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'embedding-caches'">$(ToolUpEmbeddingCachesVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'embedding-providers'">$(ToolUpEmbeddingProvidersVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'encryption'">$(ToolUpEncryptionVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'entity-stores'">$(ToolUpEntityStoresVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'fact-stores'">$(ToolUpFactStoresVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'feature-flag-providers'">$(ToolUpFeatureFlagProvidersVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'hosts'">$(ToolUpHostsVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'ingestion-queues'">$(ToolUpIngestionQueuesVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'job-schedulers'">$(ToolUpJobSchedulersVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'media'">$(ToolUpMediaVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'metrics'">$(ToolUpMetricsVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'model-providers'">$(ToolUpModelProvidersVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'notification-channels'">$(ToolUpNotificationChannelsVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'observability'">$(ToolUpObservabilityVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'ocr-providers'">$(ToolUpOcrProvidersVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'rate-limit'">$(ToolUpRateLimitVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'report-renderers'">$(ToolUpReportRenderersVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'rerankers'">$(ToolUpRerankersVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'secrets'">$(ToolUpSecretsVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'share-token-store-decorators'">$(ToolUpShareTokenStoreDecoratorsVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'sparse-indices'">$(ToolUpSparseIndicesVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'storage'">$(ToolUpStorageVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'svg-rasterizers'">$(ToolUpSvgRasterizersVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'telemetry-sinks'">$(ToolUpTelemetrySinksVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'time-series-stores'">$(ToolUpTimeSeriesStoresVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'vector-stores'">$(ToolUpVectorStoresVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'voice-providers'">$(ToolUpVoiceProvidersVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'experiments'">$(ToolUpExperimentsVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'stripe'">$(ToolUpStripeVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'workflow'">$(ToolUpWorkflowVersion)</Version>
+    <Version Condition="'$(ToolUpVersionGroup)' == 'webhooks'">$(ToolUpWebhooksVersion)</Version>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(TOOLUP_RELEASE_PRERELEASE)' != '' And '$(ToolUpVersionGroup)' != '' And '$(ToolUpVersionGroup)' != 'core'">
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <!-- END GENERATED VERSION GROUPS - do not hand-edit above this line. -->
   <!--
     Auto-include a sibling README.md for packable projects that have
     one. Cross-tier companions (where README.md lives in the parent

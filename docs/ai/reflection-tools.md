@@ -30,16 +30,16 @@ as for every platform tool.
 The tools are an AI composition's opt-in:
 
 ```fsharp skip=fragment
-AIServerApp.create factory providerProfile
-|> AIServerApp.withConfig config
-|> AIServerApp.withReflectionTools
-|> AIServerApp.run
+ServerApp.empty
+|> ServerApp.withConfig config
+|> AICompose.withAI (AIOptions.create factory providerProfile |> AIOptions.withReflectionTools)
+|> ServerApp.run
 ```
 
-They ride the composition's ordinary tool accumulator, so `composeAI` registers them beside every
+They join the deployment's module tools when the AI tier is composed, so they are registered beside every
 module tool, the tool-name collision check sees them, and a `ToolPolicy` reads their declared effects
-(`read-content`) like any other tool's. A composition with no AI provider has no `AIServerApp` to call
-this on and registers nothing; an AI composition that does not call it offers the model exactly the
+(`read-content`) like any other tool's. A composition with no AI tier has no `AIOptions` to set this on
+and registers nothing; an AI composition that does not call it offers the model exactly the
 tools it offered before.
 
 ### The gates, and why two of them are doubled

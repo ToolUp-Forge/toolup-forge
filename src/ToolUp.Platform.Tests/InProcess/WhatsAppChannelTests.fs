@@ -13,12 +13,16 @@ open Expecto
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.EntityStore
-open ToolUp.Platform.Tracing
+open ToolUp.Platform.Infra.EntityStore
+open ToolUp.Platform.Infra.Tracing
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Tests.InProcess.TransactionalDispatcherTests
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 827 — WhatsApp as a channel ───────────────────────────────
 //

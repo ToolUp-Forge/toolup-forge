@@ -28,8 +28,12 @@ module ToolUp.Platform.Tests.InProcess.RagConfigValidatorExtensionTests
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
-open ToolUp.Platform.IEmbeddingProvider
+open ToolUp.Platform.Infra.IEmbeddingProvider
 open ToolUp.RAG.RagConfigValidator
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Fixtures ───────────────────────────────────────────────────────
 
@@ -100,9 +104,14 @@ let private persistenceTests =
         }
 
         test "escape hatch degrades the refusal to a Warning — it does NOT silence it" {
+            let baseConfig = configWith Surfaces.individual
+
             let cfg = {
-                configWith Surfaces.individual with
-                    AcceptEphemeralRagIndex = true
+                baseConfig with
+                    RiskAcknowledgements = {
+                        baseConfig.RiskAcknowledgements with
+                            AcceptEphemeralRagIndex = true
+                    }
             }
 
             // The whole point of the GP 13 escape-hatch shape: an
@@ -141,7 +150,7 @@ let private localEmbedderTests =
             |> expectWarningNaming [
                 "Individual"
                 "process-stateful"
-                "RAGServerApp.create"
+                "RagOptions.create"
                 "TOOLUP_ACCEPT_LOCAL_EMBEDDER_AT_SCALE=1"
             ]
         }
@@ -160,9 +169,14 @@ let private localEmbedderTests =
         }
 
         test "GREEN — the escape hatch silences it" {
+            let baseConfig = configWith Surfaces.individual
+
             let cfg = {
-                configWith Surfaces.individual with
-                    AcceptLocalEmbedderAtScale = true
+                baseConfig with
+                    RiskAcknowledgements = {
+                        baseConfig.RiskAcknowledgements with
+                            AcceptLocalEmbedderAtScale = true
+                    }
             }
 
             Expect.equal
@@ -201,9 +215,14 @@ let private localEmbedderTests =
             // Two flags for one remedy would be a trap: an operator
             // silences the warning they saw, scales to a team surface,
             // and the family starts talking again.
+            let baseConfig = configWith Surfaces.team
+
             let cfg = {
-                configWith Surfaces.team with
-                    AcceptLocalEmbedderAtScale = true
+                baseConfig with
+                    RiskAcknowledgements = {
+                        baseConfig.RiskAcknowledgements with
+                            AcceptLocalEmbedderAtScale = true
+                    }
             }
 
             Expect.equal (run (TeamModeLocalEmbedderValidator(cfg, localEmbedder, false))) Ok "same flag, team half"
@@ -228,7 +247,10 @@ let private localEmbedderTests =
             // by every team in the process — no longer holds, so this is a
             // lift, not a suppression: no escape hatch was set.
             let cfg = configWith Surfaces.team
-            Expect.isFalse cfg.AcceptLocalEmbedderAtScale "the lift must not lean on the escape hatch"
+
+            Expect.isFalse
+                cfg.RiskAcknowledgements.AcceptLocalEmbedderAtScale
+                "the lift must not lean on the escape hatch"
 
             Expect.equal
                 (run (TeamModeLocalEmbedderValidator(cfg, localEmbedder, true)))
@@ -318,7 +340,7 @@ let private boundsTests =
         test "RED — withTopK 200 refuses boot with a bounds message (the acceptance criterion)" {
             RAGConfigBoundsValidator { inBounds with TopK = 200 }
             |> run
-            |> expectErrorNaming [ "TopK = 200"; "outside [1, 100]"; "RAGServerApp.withTopK" ]
+            |> expectErrorNaming [ "TopK = 200"; "outside [1, 100]"; "RagOptions.withTopK" ]
         }
 
         test "WARN — TopK above 50 is legal but flagged, not refused" {
@@ -433,9 +455,9 @@ let private stubProfile =
     }
 
 let private newApp () =
-    ToolUp.RAG.RAGCompose.RAGServerApp.create stubFactory stubProfile hostedEmbedder
+    ToolUp.RAG.RAGCompose.RagOptions.create stubFactory stubProfile hostedEmbedder
 
-let private boundsOf (app: ToolUp.RAG.RAGCompose.RAGServerApp) : RagConfigBounds = {
+let private boundsOf (app: ToolUp.RAG.RAGCompose.RagOptions) : RagConfigBounds = {
     TopK = app.RetrievalDefaults.TopK
     MinScore = app.RetrievalDefaults.MinScore
     MmrLambda = app.MmrLambda
@@ -450,10 +472,10 @@ let private clampTests =
         test "a lower-bound value through a setter is clamped and warned, never errored" {
             let app =
                 newApp ()
-                |> ToolUp.RAG.RAGCompose.RAGServerApp.withTopK 0
-                |> ToolUp.RAG.RAGCompose.RAGServerApp.withMinScore (Some -0.5)
-                |> ToolUp.RAG.RAGCompose.RAGServerApp.withMmrLambda -2.0
-                |> ToolUp.RAG.RAGCompose.RAGServerApp.withIngestionConcurrency 0
+                |> ToolUp.RAG.RAGCompose.RagOptions.withTopK 0
+                |> ToolUp.RAG.RAGCompose.RagOptions.withMinScore (Some -0.5)
+                |> ToolUp.RAG.RAGCompose.RagOptions.withMmrLambda -2.0
+                |> ToolUp.RAG.RAGCompose.RagOptions.withIngestionConcurrency 0
 
             Expect.equal (run (RAGConfigBoundsValidator(boundsOf app))) Ok "the clamped values are in bounds"
 
@@ -465,7 +487,7 @@ let private clampTests =
         }
 
         test "a value set by record update reaches the arm the setter would have clamped" {
-            // `RAGServerApp` is a public record, so `{ app with ... }` sets a
+            // `RagOptions` is a public record, so `{ app with ... }` sets a
             // knob without its setter. These arms are what refuses it.
             let app = {
                 newApp () with
@@ -482,9 +504,9 @@ let private clampTests =
         test "the live upper bounds still refuse through the setters" {
             let app =
                 newApp ()
-                |> ToolUp.RAG.RAGCompose.RAGServerApp.withTopK 200
-                |> ToolUp.RAG.RAGCompose.RAGServerApp.withSnippetCharLimit 99999
-                |> ToolUp.RAG.RAGCompose.RAGServerApp.withIngestionQueueCapacity 10
+                |> ToolUp.RAG.RAGCompose.RagOptions.withTopK 200
+                |> ToolUp.RAG.RAGCompose.RagOptions.withSnippetCharLimit 99999
+                |> ToolUp.RAG.RAGCompose.RagOptions.withIngestionQueueCapacity 10
 
             RAGConfigBoundsValidator(boundsOf app)
             |> run
@@ -495,11 +517,11 @@ let private clampTests =
 // ─── The embedding cache's locality is declared ─────────────────────
 
 /// A decorator over a cache that forwards its inner cache's locality.
-type private ForwardingCache(inner: ToolUp.Platform.IEmbeddingCache.IEmbeddingCache) =
+type private ForwardingCache(inner: ToolUp.Platform.Infra.IEmbeddingCache.IEmbeddingCache) =
     interface IEmbeddingCacheLocality with
         member _.CacheLocality = EmbeddingCacheLocality.declared (box inner)
 
-    interface ToolUp.Platform.IEmbeddingCache.IEmbeddingCache with
+    interface ToolUp.Platform.Infra.IEmbeddingCache.IEmbeddingCache with
         member _.TryGet key = inner.TryGet key
         member _.Set key value = inner.Set key value
         member _.HitRate() = inner.HitRate()
@@ -510,11 +532,11 @@ let private localityTests =
         test "a decorator over the in-memory cache keeps the cross-replica warning" {
             let inner =
                 ToolUp.RAG.InMemoryEmbeddingCache.InMemoryEmbeddingCache()
-                :> ToolUp.Platform.IEmbeddingCache.IEmbeddingCache
+                :> ToolUp.Platform.Infra.IEmbeddingCache.IEmbeddingCache
 
             let app =
                 newApp ()
-                |> ToolUp.RAG.RAGCompose.RAGServerApp.withEmbeddingCache (ForwardingCache inner)
+                |> ToolUp.RAG.RAGCompose.RagOptions.withEmbeddingCache (ForwardingCache inner)
 
             Expect.isFalse
                 (ToolUp.RAG.RAGCompose.hasCrossReplicaEmbeddingCache app)

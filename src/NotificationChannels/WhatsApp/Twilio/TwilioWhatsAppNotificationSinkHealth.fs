@@ -12,6 +12,7 @@ open ToolUp.Platform
 open ToolUp.Platform.HealthChecks
 open ToolUp.Platform.Secrets
 open ToolUp.Platform.NotificationChannels.WhatsApp.Twilio
+open ToolUp.Platform.Compose
 
 // ─── Phase 6f.B Twilio WhatsApp sink health probe ────────────────────
 //

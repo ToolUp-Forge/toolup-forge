@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.AnonymousSessionBinding
+module ToolUp.Platform.Scope.AnonymousSessionBinding
+
+open ToolUp.Platform
 
 open System
 open Microsoft.AspNetCore.DataProtection

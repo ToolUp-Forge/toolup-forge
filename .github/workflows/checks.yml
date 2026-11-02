@@ -206,26 +206,15 @@ jobs:
       - name: Create empty local-feed dir (CI workaround)
         run: mkdir -p ../../local-nuget-feed
 
-      - name: Build ToolUp.Platform.Transport (.NET host)
-        run: dotnet build src/ToolUp.Platform.Transport/ToolUp.Platform.Transport.fsproj
+      # The two rows of the gate manifest this job runs (`Where = Ci
+      # "fable-wire-smoke"`): the .NET pack, then its Fable twin under
+      # node:test with its TAP count read. `Gate --run` builds what the
+      # row names and applies the row's floor.
+      - name: Run the WireTests row (.NET host)
+        run: dotnet run --project Build.fsproj -- Gate --run WireTests
 
-      - name: Build ToolUp.AI.Wire (.NET host)
-        run: dotnet build src/ToolUp.AI.Wire/ToolUp.AI.Wire.fsproj
-
-      - name: Run .NET (Expecto) host pack
-        run: dotnet run --project src/ToolUp.AI.Wire.Tests/ToolUp.AI.Wire.Tests.fsproj
-
-      - name: Restore Fable tool
-        working-directory: src/ToolUp.AI.Wire.Fable.Tests
-        run: dotnet tool restore
-
-      - name: Compile to Fable (browser host)
-        working-directory: src/ToolUp.AI.Wire.Fable.Tests
-        run: dotnet fable -o output --noCache
-
-      - name: Run Fable smoke under node:test
-        working-directory: src/ToolUp.AI.Wire.Fable.Tests
-        run: node --test output/Program.js
+      - name: Run the WireFable row (browser host under node:test)
+        run: dotnet run --project Build.fsproj -- Gate --run WireFable
 
   # Wave 32 close-out (Phase 255) — the portability CONFORMANCE gate. Where
   # fable-wire-smoke proves the wire layer compiles + round-trips on each
@@ -257,20 +246,13 @@ jobs:
       - name: Create empty local-feed dir (CI workaround)
         run: mkdir -p ../../local-nuget-feed
 
-      - name: Run conformance corpus on the .NET host (Expecto)
-        run: dotnet run --project src/ToolUp.AI.Wire.Conformance/ToolUp.AI.Wire.Conformance.fsproj
+      # The two rows of the gate manifest this job runs (`Where = Ci
+      # "ai-wire-conformance"`): the same corpus on each host.
+      - name: Run the WireConformance row (.NET host)
+        run: dotnet run --project Build.fsproj -- Gate --run WireConformance
 
-      - name: Restore Fable tool
-        working-directory: src/ToolUp.AI.Wire.Conformance/Fable
-        run: dotnet tool restore
-
-      - name: Compile the same corpus to Fable (browser host)
-        working-directory: src/ToolUp.AI.Wire.Conformance/Fable
-        run: dotnet fable -o output --noCache
-
-      - name: Run the same corpus on the Fable host under node:test
-        working-directory: src/ToolUp.AI.Wire.Conformance/Fable
-        run: node --test output/ProgramFable.js
+      - name: Run the WireConformanceFable row (browser host under node:test)
+        run: dotnet run --project Build.fsproj -- Gate --run WireConformanceFable
 
   # ─── Phase 614 / 617: the repo's two real test gates ───────────────
   #
@@ -334,8 +316,9 @@ jobs:
   #
   # Cost: one solution build, then the packs (the Platform pack is most
   # of it) and the legs, the `Samples` leg (Phase 904) included. No
-  # figure is restated here — `VerifyAll` prints the measured one once
-  # Phase 1098 lands. `timeout-minutes` stays generous but finite: a hang
+  # figure is restated here — `VerifyAll` prints the measured one at the
+  # end of every run, and `dotnet run -- GateTimings` folds the recorded
+  # runs. `timeout-minutes` stays generous but finite: a hang
   # must fail loudly rather than burn the 6-hour default, which is
   # exactly how (1) was caught.
   #
@@ -563,6 +546,30 @@ jobs:
           path: .model-execution-corpus
           persist-credentials: false
 
+      # ─── The App-composition wire specification, at forge's pin ─────
+      #
+      # `spec/fixtures/core/` carries copies of the specification's vectors
+      # that certify forge's composition profile, pinned at the commit
+      # `spec/fixtures/manifest.json` records (`core.commit`). The
+      # `AppCompositionConformanceTests` list holds every copy, byte for
+      # byte, to the specification read at that commit, and holds the
+      # pinned set to every vector the specification scopes to the
+      # profile. The specification is public
+      # (https://github.com/Fuaran-Build/fuaran-app-composition-specification,
+      # Apache-2.0), so the checkout needs no token and fork PRs run it.
+      #
+      # The `ref` is the same value as `core.commit`; bump the two
+      # together, in one reviewed commit, after reading the corpus diff.
+      # The harness finds the checkout by its DIRECTORY name at the
+      # repository root, and FAILS when it is absent — it never skips.
+      - name: Check out the App-composition wire specification at the pin
+        uses: actions/checkout@v6
+        with:
+          repository: Fuaran-Build/fuaran-app-composition-specification
+          ref: 110bd1cb757f5334eb508e986898d6b4e976d046
+          path: fuaran-app-composition-specification
+          persist-credentials: false
+
       - name: Build the solution
         run: dotnet build ToolUp.Forge.sln --nologo
 
@@ -611,42 +618,13 @@ jobs:
       # must list at least every pack we expect, and none may be FAIL.
       - name: Run every Expecto pack (VerifyAll)
         env:
-          # Raised 12 → 14 by Phase 731. Fourteen packs ship, and a floor
-          # of twelve let the two newest vanish silently — precisely the
-          # protection the floor exists to give. It is a LOWER bound, so
-          # ADDING a pack never needs an edit here; only removing one
-          # deliberately does — but leaving it unraised is how the lag
-          # that prompted the 12 → 14 raise opened, so a new pack bumps
-          # it in the same commit. Raised 19 → 20 by Phase 574
-          # (OpenXmlSpreadsheet). Raised 20 → 21 by Phase 576
-          # (SvgRasterizerSkia). Raised 21 → 22 by Phase 534 (Reporting).
-          # Raised 22 → 23 by Phase 24 (Offline). Raised 23 → 24 by
-          # Phase 687 (CompanionsIsolation). Raised 24 → 25 by Phase 803:
-          # not a pack but a LEG — the Fable-tier harness `VerifyFable`
-          # runs, now composed into `VerifyAll` through the SDK's
-          # `VerifyLeg` seam so `verify.ps1` cannot go green on a tree
-          # whose client tier does not transpile. It reports as one more
-          # `PASS`/`FAIL` line in the same summary block, so it counts
-          # here. `fable-tier` below still runs the same recipe on a
-          # Node-provisioned runner; this job relies on the runner image's
-          # preinstalled Node, which is what `VerifyFable`'s PATH probe
-          # names when it is missing. Raised 27 → 28 by Phase 904: the
-          # `Samples` leg (`VerifySamples`) builds every project under
-          # `samples/` — and, in the full lane this job runs, transpiles
-          # the Fable ones — then asserts its count against the directory.
-          # One more `PASS` line in the same summary block. Raised 28 → 29
-          # by Phase 776: the `Analyzers` leg runs the TUA analyser rules
-          # over every tracked `src/` file and reconciles the sites with
-          # the committed inventory. One more `PASS` line. Raised 29 → 34 by
-          # Phase 1096: four packs that were in the solution and run by
-          # nothing (Tabular, Classification, DataSubject, ReportingHtmlPdf)
-          # are rows now, and the `GateReconcile` leg holds every
-          # `*.Tests.fsproj` to a row or a named exclusion — one more `PASS`
-          # line. (Five legs registered since Phase 776 — ScopeLiterals,
-          # ServiceConfigFold, FuaranCoResolution, FuaranCoBuild,
-          # MergeDrivers — never raised this floor; Phase 1098 renders it
-          # from the gate manifest instead of hand-counting it.)
-          EXPECTED_PACKS: 34
+          # RENDERED from the gate manifest (`GateManifest.rows` in
+          # GateManifest.fs): the count of rows whose `Where` carries
+          # `Ci "verify-all"`, i.e. every pack and leg `VerifyAll` runs here
+          # in the full lane. `dotnet run -- Gate --check` refuses a drift
+          # between this number and the manifest, and `Gate --render`
+          # rewrites it; a new row moves it without a hand count.
+          EXPECTED_PACKS: 39
           # Part of the memory-headroom block above. Since Phase 731
           # VerifyAll builds ONCE and then launches each pack's built dll
           # directly, so the per-pack inner builds this originally guarded
@@ -689,7 +667,7 @@ jobs:
             exit 1
           fi
           if [ "${passed}" -lt "${EXPECTED_PACKS}" ]; then
-            echo "::error::Only ${passed} pack(s) ran; expected at least ${EXPECTED_PACKS}. A short run means the pack list shrank or VerifyAll no-opped, not that the suite got faster. Check BuildConfig.TestPacks in Build.fs before lowering EXPECTED_PACKS."
+            echo "::error::Only ${passed} pack(s) ran; expected at least ${EXPECTED_PACKS}. A short run means the pack list shrank or VerifyAll no-opped, not that the suite got faster. Check GateManifest.rows in GateManifest.fs before lowering EXPECTED_PACKS; `dotnet run -- Gate --render` writes the manifest's count."
             exit 1
           fi
 

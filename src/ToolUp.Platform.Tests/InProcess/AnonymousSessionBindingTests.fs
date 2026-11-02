@@ -8,7 +8,9 @@ open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Primitives
 open ToolUp.Platform
 open ToolUp.Platform.Auth
-open ToolUp.Platform.NotificationChannel
+open ToolUp.Platform.Config.NotificationChannel
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
 // ─── Phase 337 — signed anonymous-session binding ────────────────────
 //

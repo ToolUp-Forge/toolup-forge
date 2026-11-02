@@ -8,6 +8,7 @@ open System.IO
 open Expecto
 open ToolUp.Cli
 open ToolUp.Cli.Dispatch
+open ToolUp.Platform.Compose
 
 // ─── Phase 168 — transactional module add/remove ────────────────────────
 //

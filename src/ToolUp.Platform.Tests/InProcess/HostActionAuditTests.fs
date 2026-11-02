@@ -4,7 +4,9 @@ open System
 open System.Collections.Concurrent
 open Expecto
 open ToolUp.Platform
-open ToolUp.Platform.HostActionAuditHook
+open ToolUp.Platform.Audit.HostActionAuditHook
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 272 — hosted-tree action audit emission tests (GP 6) ───────
 //

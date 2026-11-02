@@ -11,14 +11,8 @@ ToolUp.AuthProviders.Passkey.PasskeyCeremony.completeAssertion(Fido2NetLib.IFido
 ToolUp.AuthProviders.Passkey.PasskeyCeremony.completeRegistration(Fido2NetLib.IFido2, ToolUp.AuthProviders.Passkey.PasskeyStores+PasskeyCredentialStore, ToolUp.AuthProviders.Passkey.PasskeyStores+PendingChallenge, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.AuthProviders.Passkey.PasskeyTypes+PasskeyCredentialRecord, System.String]]
 ToolUp.AuthProviders.Passkey.PasskeyCeremony.isCounterRegression(System.UInt32, System.UInt32) : System.Boolean
 ToolUp.AuthProviders.Passkey.PasskeyCompose (class)
-ToolUp.AuthProviders.Passkey.PasskeyCompose.create(ToolUp.AuthProviders.Passkey.PasskeyTypes+PasskeyConfig, ToolUp.Platform.ServerApp) : ToolUp.AuthProviders.Passkey.PasskeyCompose+PasskeyServerApp
-ToolUp.AuthProviders.Passkey.PasskeyCompose.run(ToolUp.AuthProviders.Passkey.PasskeyCompose+PasskeyServerApp) : System.Int32
-ToolUp.AuthProviders.Passkey.PasskeyCompose.withBase(ToolUp.Platform.ServerApp, ToolUp.AuthProviders.Passkey.PasskeyCompose+PasskeyServerApp) : ToolUp.AuthProviders.Passkey.PasskeyCompose+PasskeyServerApp
-ToolUp.AuthProviders.Passkey.PasskeyCompose.withConfig(ToolUp.AuthProviders.Passkey.PasskeyTypes+PasskeyConfig, ToolUp.AuthProviders.Passkey.PasskeyCompose+PasskeyServerApp) : ToolUp.AuthProviders.Passkey.PasskeyCompose+PasskeyServerApp
-ToolUp.AuthProviders.Passkey.PasskeyCompose+PasskeyServerApp (class)
-ToolUp.AuthProviders.Passkey.PasskeyCompose+PasskeyServerApp..ctor(ToolUp.Platform.ServerApp, ToolUp.AuthProviders.Passkey.PasskeyTypes+PasskeyConfig)
-ToolUp.AuthProviders.Passkey.PasskeyCompose+PasskeyServerApp.Base : ToolUp.Platform.ServerApp { get }
-ToolUp.AuthProviders.Passkey.PasskeyCompose+PasskeyServerApp.Config : ToolUp.AuthProviders.Passkey.PasskeyTypes+PasskeyConfig { get }
+ToolUp.AuthProviders.Passkey.PasskeyCompose.passkeyCompanion : ToolUp.Platform.ComponentId { get }
+ToolUp.AuthProviders.Passkey.PasskeyCompose.withPasskey(ToolUp.AuthProviders.Passkey.PasskeyTypes+PasskeyConfig, ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.AuthProviders.Passkey.PasskeyConfigValidator (class)
 ToolUp.AuthProviders.Passkey.PasskeyConfigValidator.isRegistrableSuffix(System.String, System.String) : System.Boolean
 ToolUp.AuthProviders.Passkey.PasskeyConfigValidator.validateConfig(ToolUp.AuthProviders.Passkey.PasskeyTypes+PasskeyConfig) : ToolUp.Platform.ConfigValidation+ValidationResult

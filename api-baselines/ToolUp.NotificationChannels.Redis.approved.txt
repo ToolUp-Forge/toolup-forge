@@ -14,9 +14,9 @@ ToolUp.Platform.NotificationChannels.RedisDistributedLock (class)
 ToolUp.Platform.NotificationChannels.RedisDistributedLock+RedisDistributedLock (class)
 ToolUp.Platform.NotificationChannels.RedisDistributedLock+RedisDistributedLock..ctor(StackExchange.Redis.IConnectionMultiplexer, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger])
 ToolUp.Platform.NotificationChannels.RedisDistributedLock+RedisDistributedLockModule (class)
-ToolUp.Platform.NotificationChannels.RedisDistributedLock+RedisDistributedLockModule.fromConnectionString(System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger]) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IDistributedLock]
-ToolUp.Platform.NotificationChannels.RedisDistributedLock+RedisDistributedLockModule.fromMultiplexer(StackExchange.Redis.IConnectionMultiplexer, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger]) : ToolUp.Platform.IDistributedLock
-ToolUp.Platform.NotificationChannels.RedisDistributedLock+RedisDistributedLockModule.resolver : ToolUp.Platform.DistributedLockResolver { get }
+ToolUp.Platform.NotificationChannels.RedisDistributedLock+RedisDistributedLockModule.fromConnectionString(System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger]) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Jobs.IDistributedLock]
+ToolUp.Platform.NotificationChannels.RedisDistributedLock+RedisDistributedLockModule.fromMultiplexer(StackExchange.Redis.IConnectionMultiplexer, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger]) : ToolUp.Platform.Jobs.IDistributedLock
+ToolUp.Platform.NotificationChannels.RedisDistributedLock+RedisDistributedLockModule.resolver : ToolUp.Platform.Jobs.DistributedLockResolver { get }
 ToolUp.Platform.NotificationChannels.RedisHealth (class)
 ToolUp.Platform.NotificationChannels.RedisHealth+RedisNotificationChannelHealth (class)
 ToolUp.Platform.NotificationChannels.RedisHealth+RedisNotificationChannelHealth..ctor(StackExchange.Redis.IConnectionMultiplexer)
@@ -27,7 +27,7 @@ ToolUp.Platform.NotificationChannels.RedisLifecycleLock+RedisLifecycleLock (clas
 ToolUp.Platform.NotificationChannels.RedisLifecycleLock+RedisLifecycleLock..ctor(StackExchange.Redis.IConnectionMultiplexer, System.TimeSpan, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger])
 ToolUp.Platform.NotificationChannels.RedisLifecycleLock+RedisLifecycleLockModule (class)
 ToolUp.Platform.NotificationChannels.RedisLifecycleLock+RedisLifecycleLockModule.DefaultLeaseTtlMinutes : System.Double (literal)
-ToolUp.Platform.NotificationChannels.RedisLifecycleLock+RedisLifecycleLockModule.create(StackExchange.Redis.IConnectionMultiplexer, System.TimeSpan, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger]) : ToolUp.Platform.ILifecycleLock
-ToolUp.Platform.NotificationChannels.RedisLifecycleLock+RedisLifecycleLockModule.fromMultiplexer(StackExchange.Redis.IConnectionMultiplexer, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger]) : ToolUp.Platform.ILifecycleLock
+ToolUp.Platform.NotificationChannels.RedisLifecycleLock+RedisLifecycleLockModule.create(StackExchange.Redis.IConnectionMultiplexer, System.TimeSpan, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger]) : ToolUp.Platform.Compose.ILifecycleLock
+ToolUp.Platform.NotificationChannels.RedisLifecycleLock+RedisLifecycleLockModule.fromMultiplexer(StackExchange.Redis.IConnectionMultiplexer, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger]) : ToolUp.Platform.Compose.ILifecycleLock
 ToolUp.Platform.NotificationChannels.RedisValidator (class)
 ToolUp.Platform.NotificationChannels.RedisValidator.create(StackExchange.Redis.IConnectionMultiplexer) : ToolUp.Platform.ConfigValidation+IConfigValidator

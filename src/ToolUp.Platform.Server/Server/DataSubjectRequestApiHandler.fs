@@ -1,4 +1,4 @@
-module ToolUp.Platform.DataSubjectRequestApiHandler
+module ToolUp.Platform.Audit.DataSubjectRequestApiHandler
 
 open System
 open System.Collections.Concurrent
@@ -6,9 +6,10 @@ open System.Text
 open System.Text.Json
 open System.Text.Json.Nodes
 open ToolUp.Platform
-open ToolUp.Platform.IDataExporter
-open ToolUp.Platform.ErasurePipeline
+open ToolUp.Platform.Audit.IDataExporter
+open ToolUp.Platform.Audit.ErasurePipeline
 open ToolUp.Platform.DataSubjectRequestApi
+open ToolUp.Platform.Jobs
 
 // ─── Phase 9h — IDataSubjectRequestApi handler factory ──────────────
 //

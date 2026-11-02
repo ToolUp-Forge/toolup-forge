@@ -1,0 +1,27 @@
+module MyApp.Server.Hosting
+
+open Microsoft.Extensions.DependencyInjection
+open Microsoft.Extensions.Hosting
+open ToolUp.Platform
+
+/// A sweep the deployment gated on the old profile matrix.
+let registerSweep (services: IServiceCollection) (config: ServerConfig) (sweep: IHostedService) =
+    if ProcessProfileGate.shouldRegisterBackgroundService config AuditReplicatorSubsystem then
+        services.AddSingleton<IHostedService>(sweep) |> ignore
+
+/// A handler registration, exempt from the matrix with a reason.
+let registerHandler (services: IServiceCollection) (scheduler: IJobScheduler) (handler: IJobHandler) =
+    services
+    |> ProcessProfileGate.addExempt "My handler registration" ProcessProfileGate.SchedulerRegistrationReason (fun _ ->
+        Hosting.atStart (fun () -> scheduler.RegisterHandler("my-handler", handler)))
+
+/// A scheduler and a webhook dispatcher built by the old factories.
+let buildScheduler store events channel config logger sink watermark =
+    JobScheduler.createWithCatchUp store events channel config logger sink watermark
+
+let buildDispatcher registry log events http retry logger sink secrets limiter policy lck =
+    WebhookDispatcher.createWithLock registry log events http retry logger sink secrets limiter policy lck
+
+/// Declared data sources, registered without the deployment's config.
+let registerDeclared (services: IServiceCollection) declared =
+    services |> DeclaredDelivery.withDeclaredDataSources declared DeclaredDelivery.DefaultWatchPoll

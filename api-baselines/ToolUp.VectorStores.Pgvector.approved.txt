@@ -5,20 +5,20 @@
 # still be folded into this file in the same PR.
 ToolUp.RAG.VectorStores.Pgvector.Health (class)
 ToolUp.RAG.VectorStores.Pgvector.Health.assess(ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore+PgvectorDiagnostics) : ToolUp.Platform.HealthChecks+HealthResult
-ToolUp.RAG.VectorStores.Pgvector.Health.create(ToolUp.Platform.IVectorStore+IVectorStore) : ToolUp.Platform.HealthChecks+IHealthCheck
+ToolUp.RAG.VectorStores.Pgvector.Health.create(ToolUp.Platform.Infra.IVectorStore+IVectorStore) : ToolUp.Platform.HealthChecks+IHealthCheck
 ToolUp.RAG.VectorStores.Pgvector.Health.describe(ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore+PgvectorDiagnostics) : System.String
 ToolUp.RAG.VectorStores.Pgvector.Health.exactScanVerdict(ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore+PgvectorDiagnostics) : ToolUp.Platform.ConfigValidation+ValidationResult
-ToolUp.RAG.VectorStores.Pgvector.Health.report(ToolUp.Platform.IVectorStore+IVectorStore) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
-ToolUp.RAG.VectorStores.Pgvector.Health.validator(ToolUp.Platform.IVectorStore+IVectorStore) : ToolUp.Platform.ConfigValidation+IConfigValidator
+ToolUp.RAG.VectorStores.Pgvector.Health.report(ToolUp.Platform.Infra.IVectorStore+IVectorStore) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
+ToolUp.RAG.VectorStores.Pgvector.Health.validator(ToolUp.Platform.Infra.IVectorStore+IVectorStore) : ToolUp.Platform.ConfigValidation+IConfigValidator
 ToolUp.RAG.VectorStores.Pgvector.Health+PgvectorVectorStoreHealthCheck (class)
-ToolUp.RAG.VectorStores.Pgvector.Health+PgvectorVectorStoreHealthCheck..ctor(ToolUp.Platform.IVectorStore+IVectorStore)
+ToolUp.RAG.VectorStores.Pgvector.Health+PgvectorVectorStoreHealthCheck..ctor(ToolUp.Platform.Infra.IVectorStore+IVectorStore)
 ToolUp.RAG.VectorStores.Pgvector.Health+PgvectorVectorStoreValidator (class)
-ToolUp.RAG.VectorStores.Pgvector.Health+PgvectorVectorStoreValidator..ctor(ToolUp.Platform.IVectorStore+IVectorStore)
+ToolUp.RAG.VectorStores.Pgvector.Health+PgvectorVectorStoreValidator..ctor(ToolUp.Platform.Infra.IVectorStore+IVectorStore)
 ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore (class)
-ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore.create(System.String, ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore+PgvectorOptions, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger]) : ToolUp.Platform.IVectorStore+IVectorStore
-ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore.createTuned(System.String, ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore+PgvectorOptions, ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore+PgvectorTuning, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger]) : ToolUp.Platform.IVectorStore+IVectorStore
-ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore.createTunedWithDataSource(Npgsql.NpgsqlDataSource, ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore+PgvectorOptions, ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore+PgvectorTuning, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger]) : ToolUp.Platform.IVectorStore+IVectorStore
-ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore.createWithDataSource(Npgsql.NpgsqlDataSource, ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore+PgvectorOptions, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger]) : ToolUp.Platform.IVectorStore+IVectorStore
+ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore.create(System.String, ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore+PgvectorOptions, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger]) : ToolUp.Platform.Infra.IVectorStore+IVectorStore
+ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore.createTuned(System.String, ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore+PgvectorOptions, ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore+PgvectorTuning, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger]) : ToolUp.Platform.Infra.IVectorStore+IVectorStore
+ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore.createTunedWithDataSource(Npgsql.NpgsqlDataSource, ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore+PgvectorOptions, ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore+PgvectorTuning, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger]) : ToolUp.Platform.Infra.IVectorStore+IVectorStore
+ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore.createWithDataSource(Npgsql.NpgsqlDataSource, ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore+PgvectorOptions, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger]) : ToolUp.Platform.Infra.IVectorStore+IVectorStore
 ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore+BatchUpsert (class)
 ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore+BatchUpsert.prepare(ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore+PgvectorOptions, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`3[System.String, System.Single[], ToolUp.Platform.VectorKnowledgeTypes+TextChunk]]) : ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore+PreparedBatch
 ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore+ExtensionVersion (class)

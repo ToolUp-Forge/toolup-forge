@@ -58,8 +58,8 @@ let edge =
 Then compose it — on the media library, on public rendering, or both:
 
 ```fsharp skip=fragment
-MediaLibraryServerApp.create ()
-|> MediaLibraryServerApp.withEdgeCache edge
+MediaLibraryCompanionOptions.create ()
+|> MediaLibraryCompanionOptions.withEdgeCache edge
 |> ...
 ```
 
@@ -86,8 +86,8 @@ let signer =
     })
     |> CallbackUrlSigner.create
 
-MediaLibraryServerApp.create ()
-|> MediaLibraryServerApp.withDelegatedUrlSigner signer
+MediaLibraryCompanionOptions.create ()
+|> MediaLibraryCompanionOptions.withDelegatedUrlSigner signer
 |> ...
 ```
 

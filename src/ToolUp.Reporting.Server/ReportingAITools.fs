@@ -16,6 +16,10 @@ open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Reporting
 open ToolUp.Reporting.IReportTemplateStore
 open ToolUp.Reporting.RendererRegistry
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 577 — the `_platform.reporting` AI tool family ────────────
 //
@@ -225,6 +229,9 @@ let private errorPayload (code: string) (message: string) : string =
 type private Caller = {
     UserId: string
     ScopeId: string
+    /// The scope the platform resolved for the request — the one the fact
+    /// tier's disclosure door judges in.
+    Scope: ResolvedScope
     Anonymous: bool
     Permissions: Map<string, ModulePermission list>
     ConversationId: Guid option
@@ -264,6 +271,7 @@ let private callerOf (ctx: HttpContext) : Caller =
     {
         UserId = resolvedUser
         ScopeId = scopeId |> Option.defaultValue resolvedUser
+        Scope = StorageScopeResolver.ScopeResolution.forRequest ctx
         Anonymous = anonymousSubject || resolvedUser = "anonymous"
         Permissions = permissions
         ConversationId = conversationId
@@ -892,7 +900,7 @@ let private apiFor
     (principal: string)
     (config: ReportApiConfig)
     (audit: ReportApiHandler.AuditOnRender)
-    (scopeId: string)
+    (scope: ResolvedScope)
     : IReportApi =
     match gate with
     | Some g ->
@@ -904,8 +912,8 @@ let private apiFor
             deps.StoreBlob
             audit
             config
-            scopeId
-    | None -> ReportApiHandler.create principal deps.Templates deps.Renderers deps.StoreBlob audit config scopeId
+            scope
+    | None -> ReportApiHandler.create principal deps.Templates deps.Renderers deps.StoreBlob audit config scope.ScopeId
 
 /// The in-turn render config: text formats inline up to the budget,
 /// binary formats always to blob.
@@ -937,7 +945,7 @@ let private renderInTurn
         let audit = auditChain deps events caller.UserId caller.ConversationId None
 
         let api =
-            apiFor deps gate caller.UserId (inTurnConfig deps template.Format) audit caller.ScopeId
+            apiFor deps gate caller.UserId (inTurnConfig deps template.Format) audit caller.Scope
 
         let! outcome = api.Render(template.Id, values)
 
@@ -987,7 +995,7 @@ let private renderInTurn
 let private discloseForJob
     (gate: IFactDisclosureGate option)
     (principal: string)
-    (scopeId: string)
+    (scope: ResolvedScope)
     (values: Map<string, PlaceholderValue>)
     : Async<Map<string, PlaceholderValue>> =
     async {
@@ -1000,7 +1008,7 @@ let private discloseForJob
                 |> List.map (fun (key, value) -> async {
                     match value with
                     | NarrativeValue document ->
-                        let! disclosed = ReportApiHandler.applyExportDisclosure g principal scopeId document
+                        let! disclosed = ReportApiHandler.applyExportDisclosure g principal scope document
                         return key, NarrativeValue disclosed
                     | other -> return key, other
                 })
@@ -1018,7 +1026,7 @@ let private enqueue
     : Async<string> =
     async {
         let gate = serviceOf<IFactDisclosureGate> ctx.RequestServices
-        let! disclosed = discloseForJob gate caller.UserId caller.ScopeId values
+        let! disclosed = discloseForJob gate caller.UserId caller.Scope values
 
         let registration: JobRegistration = {
             ScopeId = caller.ScopeId
@@ -1197,14 +1205,15 @@ let withReportingAITools (deps: ReportingAIToolDeps) (app: ServerApp) : ServerAp
     let toolModule =
         ServerModule.create SourceModule |> ServerModule.withAITools (tools deps)
 
-    let register (s: IServiceCollection) =
-        // Phase 1051 — exempt from the profile matrix: a handler
-        // registration, placed by the scheduler's own gate.
-        s
-        |> ProcessProfileGate.addDeferredJobs "Report rendering (AI tools)" [
+    // Once at start: a handler registration, placed by the scheduler's own
+    // unit.
+    let rendering =
+        Hosting.deferredJobs "report-rendering-ai-tools" [
             DeferredScheduledJobDeclaration.ofHandler RenderJobHandlerName Manual (renderJobHandler deps)
         ]
 
-    let withJobs = app |> ServerApp.addServiceConfig register
+    let withJobs =
+        app
+        |> ServerApp.addContribution (Contribution.hosted (ComponentId.ofModule SourceModule) rendering)
 
     ServerApp.addModule toolModule withJobs

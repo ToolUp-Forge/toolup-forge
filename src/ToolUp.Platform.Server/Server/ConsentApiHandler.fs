@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.ConsentApiHandler
+module ToolUp.Platform.Audit.ConsentApiHandler
 
 open System
 open Giraffe
@@ -9,10 +9,12 @@ open Microsoft.AspNetCore.Http
 open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
+open ToolUp.Remoting.Server.Http
+open ToolUp.Platform.Config
 
 // ─── Phase 59 — server-side consent-audit endpoint ────────────────
 //
-// Mounted only when `ServerConfig.ConsentAudit = EnabledConsentAudit`.
+// Mounted only when `ServerConfig.ConsentAudit = FeatureMode.Enabled`.
 // Receives client-side `ConsentEvent` posts from the configured
 // `IConsentProvider` and records them via `IAuditLog` under
 // `_platform` scope. The audit emission is fire-and-forget — failures
@@ -63,5 +65,5 @@ let private consentHandler: HttpHandler =
     }
 
 /// Routes table. Mounted by `compose` only when
-/// `ServerConfig.ConsentAudit = EnabledConsentAudit`.
+/// `ServerConfig.ConsentAudit = FeatureMode.Enabled`.
 let routes: HttpHandler list = [ POST >=> route "/api/_platform/consent" >=> consentHandler ]

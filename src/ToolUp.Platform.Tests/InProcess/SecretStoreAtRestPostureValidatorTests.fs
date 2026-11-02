@@ -6,6 +6,9 @@ open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
 open ToolUp.Platform.Secrets
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 457 — secret-store at-rest posture ───────────────────────
 //
@@ -76,7 +79,10 @@ let private declaredEncryptingStore () : ISecretStore =
 let private cfg (surfaces: SurfaceProfile list) (acknowledged: bool) = {
     ServerConfig.defaults with
         Surfaces = surfaces
-        AcceptPlaintextSecretsWhenAuthRequired = acknowledged
+        RiskAcknowledgements = {
+            ServerConfig.defaults.RiskAcknowledgements with
+                AcceptPlaintextSecretsWhenAuthRequired = acknowledged
+        }
 }
 
 let private validator (config: ServerConfig) (store: ISecretStore) =

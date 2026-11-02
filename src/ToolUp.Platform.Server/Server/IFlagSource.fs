@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-namespace ToolUp.Platform
+namespace ToolUp.Platform.Config
+
+open ToolUp.Platform
 
 /// Read-only external flag-resolution layer (Phase 239). The Phase 5c
 /// `IFeatureFlagStore` is the in-process read/write/GDPR-erase store and

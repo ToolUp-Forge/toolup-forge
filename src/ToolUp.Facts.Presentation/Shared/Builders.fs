@@ -42,6 +42,23 @@ type PresentationBlock<'Msg> = {
     Notes: string list
 }
 
+/// What a block is drawn from, before it is drawn: the columnar
+/// table and each point it leaves out. A stored page binds this table to a
+/// node it already holds, so the page and a built block draw the same rows.
+type PresentationData = {
+    /// The table the block is drawn from. For a chart, the chart's own
+    /// source: the x column, then one number column per series. For a table,
+    /// a `subject` column, then one number column per metric, in the order
+    /// the request names them; a cell that is not shown is empty (null),
+    /// never zero. `None` when nothing is drawn.
+    Table: Table option
+    /// Each point not drawn, each refusal, and each author annotation that
+    /// is not a mark on an axis, as a built block's notes show them.
+    Notes: string list
+    /// The request and the read the table was drawn from.
+    Provenance: BlockProvenance
+}
+
 /// Why a builder produced no block.
 [<RequireQualifiedAccess>]
 type PresentationDefect =
@@ -81,6 +98,7 @@ type private FactCell = {
     Id: string
     Label: string
     Value: string
+    Number: float
     FactId: string
 }
 
@@ -438,6 +456,7 @@ module Presentation =
                         Id = sprintf "%s-%s-%s" id (idSegment s) (idSegment series.Metric)
                         Label = series.Metric
                         Value = p.Rendering |> Option.defaultValue (string v)
+                        Number = float v
                         FactId = p.FactId
                     }
                 | None -> Error(sprintf "%s, %s is not shown: %s." names.[s] series.Metric (reason p))
@@ -663,16 +682,13 @@ module Presentation =
                     else
                         Ok()
 
-    /// The block `request` draws from `answers` — one answer per metric the
-    /// request names: the gated series, or the read's refusal. Pure. The
-    /// node is validated before it is returned; a refusal is a builder defect.
-    ///
-    /// The node is `Node<'Msg>` for any message type: a block carries no
-    /// action, so a caller composes it into its own tree.
-    let build<'Msg>
+    /// The panel `request` draws from `answers`, with each refused read as a
+    /// refusal: the one step `data` and `build` share, so a stored page and a
+    /// built block are drawn from the same rows.
+    let private panelOf
         (request: PresentationRequest)
         (answers: SeriesAnswer list)
-        : Result<PresentationBlock<'Msg>, PresentationDefect> =
+        : Result<Panel, PresentationDefect> =
         match PresentationRequest.validate request with
         | Error e -> Error(PresentationDefect.Request e)
         | Ok request ->
@@ -709,14 +725,101 @@ module Presentation =
                     | PresentationKind.Comparison, [ s ] -> comparison request s
                     | _ -> emptyPanel request
 
-                match render<'Msg> { panel with Refusals = refusals } with
-                | Error defects -> Error(PresentationDefect.NodeRefused defects)
-                | Ok(node, notes) ->
-                    match findings node with
-                    | [] ->
-                        Ok {
-                            Node = node
-                            Provenance = Provenance.ofAnswers request answers
-                            Notes = notes
-                        }
-                    | found -> Error(PresentationDefect.NodeRefused found)
+                Ok { panel with Refusals = refusals }
+
+    /// A table panel's groups as a columnar table: a `subject` column, then
+    /// one number column per metric in the request's order. A cell the panel
+    /// does not show is null, never zero.
+    let private groupsTable (request: PresentationRequest) (groups: Group list) : Result<Table, string> =
+        let xField = "subject"
+
+        let subjects =
+            Column.ofCells xField StringType (groups |> List.map (fun g -> Cell.Str g.Heading))
+            |> Result.map (fun c -> Field.create xField StringType, c)
+            |> Result.mapError (fun e -> sprintf "column '%s': %A" xField e)
+
+        let metric (m: string) =
+            let name = valueField xField m
+
+            groups
+            |> List.map (fun g ->
+                match g.Cells |> List.tryFind (fun c -> c.Label = m) with
+                | Some c -> Cell.Float c.Number
+                | None -> Cell.Null)
+            |> Column.ofCells name FloatType
+            |> Result.map (fun c -> Field.create name FloatType, c)
+            |> Result.mapError (fun e -> sprintf "column '%s': %A" name e)
+
+        let columns = subjects :: (request.Metrics |> List.map metric)
+
+        match
+            columns
+            |> List.tryPick (function
+                | Error e -> Some e
+                | Ok _ -> None)
+        with
+        | Some e -> Error e
+        | None ->
+            let pairs =
+                columns
+                |> List.choose (function
+                    | Ok p -> Some p
+                    | Error _ -> None)
+
+            Ok {
+                Schema = pairs |> List.map fst
+                Columns = pairs |> List.map snd
+            }
+
+    /// The data `request` draws from `answers`, before any node is built: the
+    /// table and every point left out, named. Pure, and the same rows `build`
+    /// draws. A withheld or absent point is never a number in the table: a
+    /// chart's row leaves it out, and a table's cell is null.
+    let data
+        (request: PresentationRequest)
+        (answers: SeriesAnswer list)
+        : Result<PresentationData, PresentationDefect> =
+        match panelOf request answers with
+        | Error defect -> Error defect
+        | Ok panel ->
+            let table =
+                match panel.Plot, panel.Table with
+                | Some plot, _ -> tableOf plot |> Result.map Some
+                | None, Some groups -> groupsTable request groups |> Result.map Some
+                | None, None -> Ok None
+
+            match table with
+            | Error e -> Error(PresentationDefect.NodeRefused [ sprintf "the block's table could not be built: %s" e ])
+            | Ok table ->
+                Ok {
+                    Table = table
+                    Notes =
+                        (panel.Refusals |> List.map (fun (heading, why) -> sprintf "%s: %s" heading why))
+                        @ panel.Notes
+                    Provenance = Provenance.ofAnswers request answers
+                }
+
+    /// The block `request` draws from `answers` — one answer per metric the
+    /// request names: the gated series, or the read's refusal. Pure. The
+    /// node is validated before it is returned; a refusal is a builder defect.
+    ///
+    /// The node is `Node<'Msg>` for any message type: a block carries no
+    /// action, so a caller composes it into its own tree.
+    let build<'Msg>
+        (request: PresentationRequest)
+        (answers: SeriesAnswer list)
+        : Result<PresentationBlock<'Msg>, PresentationDefect> =
+        match panelOf request answers with
+        | Error defect -> Error defect
+        | Ok panel ->
+            match render<'Msg> panel with
+            | Error defects -> Error(PresentationDefect.NodeRefused defects)
+            | Ok(node, notes) ->
+                match findings node with
+                | [] ->
+                    Ok {
+                        Node = node
+                        Provenance = Provenance.ofAnswers request answers
+                        Notes = notes
+                    }
+                | found -> Error(PresentationDefect.NodeRefused found)

@@ -23,6 +23,8 @@ open ToolUp.Scheduling.SchedulingTypes
 open ToolUp.Scheduling.ICalendarBridge
 open ToolUp.Calendar.GoogleCalendarOAuth
 open ToolUp.Platform.ProviderExceptions
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 830 — the Google Calendar bridge ─────────────────────────
 //
@@ -122,7 +124,7 @@ module GoogleCalendarSettings =
         EndpointOverride = None
         ConnectionId = None
         WebhookAddress = None
-        ChannelSecretScope = "_platform"
+        ChannelSecretScope = ScopeKey.PlatformContainer
         ChannelTtl = TimeSpan.FromDays 7.0
         ChannelRenewalLead = TimeSpan.FromDays 1.0
         PullWindowDays = 90
@@ -691,7 +693,7 @@ type private Reply = {
 }
 
 /// The Google Calendar `ICalendarBridge`. Construct one per deployment
-/// and compose it with `SchedulingServerApp.withCalendarBridge`.
+/// and compose it with `SchedulingOptions.withCalendarBridge`.
 ///
 /// `tokens` resolves the bearer token per call (see
 /// `GoogleCalendarTokenSource`); `secretStore` holds the per-link sync

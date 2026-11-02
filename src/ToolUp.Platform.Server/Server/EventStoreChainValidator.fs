@@ -3,10 +3,11 @@
 
 /// Preflight guard + `/dev/inspect` panel over the composed
 /// `IEventStore` decorator chain.
-module ToolUp.Platform.EventStoreChainValidator
+module ToolUp.Platform.Config.EventStoreChainValidator
 
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Infra
 
 // ─── Phase 9u — the event-store decorator chain guard ────────────────
 //

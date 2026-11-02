@@ -91,7 +91,7 @@ link builder.
   404 when no `IRetrievalPipeline` is registered.
 
 ```fsharp skip=fragment
-|> PublicRenderingServerApp.withSemanticSearch (
+|> PublicRenderingOptions.withSemanticSearch (
     SemanticSearchConfig.create [ VectorScope.Team teamId ]
     |> SemanticSearchConfig.withResultLink (SemanticSearch.docsLinkByChunkId "docs"))
 ```
@@ -131,8 +131,8 @@ Defaults reproduce the prior immediate-publish behaviour (GP 11);
 multi-tenant / untrusted-AI deployments.
 
 ```fsharp skip=fragment
-|> PublicRenderingServerApp.withAIPublishEnabled true
-|> PublicRenderingServerApp.withAIPublishGuardrails (
+|> PublicRenderingOptions.withAIPublishEnabled true
+|> PublicRenderingOptions.withAIPublishGuardrails (
     NarrativePublishGuardrails.aiHardened
     |> NarrativePublishGuardrails.withAllowedLayouts [ "article" ])
 ```
@@ -142,16 +142,16 @@ multi-tenant / untrusted-AI deployments.
 ```fsharp
 ServerApp.empty
 |> ServerApp.withConfig config
-|> PublicRenderingCompose.withPublicRendering (fun pr ->
-    pr
-    |> PublicRenderingServerApp.withLayout (LayoutName "page") pageLayout
-    |> PublicRenderingServerApp.withContentSource answers
-    |> PublicRenderingServerApp.withContentSource docs
-    |> PublicRenderingServerApp.withContentSource faq
-    |> PublicRenderingServerApp.withSemanticSearch searchConfig
+|> PublicRenderingCompose.withPublicRendering (
+    PublicRenderingOptions.create ()
+    |> PublicRenderingOptions.withLayout (LayoutName "page") pageLayout
+    |> PublicRenderingOptions.withContentSource answers
+    |> PublicRenderingOptions.withContentSource docs
+    |> PublicRenderingOptions.withContentSource faq
+    |> PublicRenderingOptions.withSemanticSearch searchConfig
     // answer / search pages are expensive — cache them (Phase 84):
-    |> PublicRenderingServerApp.withRenderCache (InMemoryRenderCache.create ())
-    |> PublicRenderingServerApp.withRenderCacheDefaultPolicy (Cache(300, true)))
+    |> PublicRenderingOptions.withRenderCache (InMemoryRenderCache.create ())
+    |> PublicRenderingOptions.withRenderCacheDefaultPolicy (Cache(300, true)))
 |> ServerApp.run
 ```
 

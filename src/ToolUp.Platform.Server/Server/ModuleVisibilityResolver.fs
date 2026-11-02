@@ -1,6 +1,7 @@
-module ToolUp.Platform.ModuleVisibilityResolver
+module ToolUp.Platform.Scope.ModuleVisibilityResolver
 
 open ToolUp.Platform
+open ToolUp.Platform.Infra
 
 // ─── Phase 637 — the server-side scope walk ──────────────────────────
 //

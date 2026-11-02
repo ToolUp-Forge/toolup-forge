@@ -4,6 +4,9 @@ open System
 open System.IO
 open ToolUp.Platform
 open ToolUp.AuthProviders
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
 let private env (name: string) : string option =
     match Environment.GetEnvironmentVariable name with

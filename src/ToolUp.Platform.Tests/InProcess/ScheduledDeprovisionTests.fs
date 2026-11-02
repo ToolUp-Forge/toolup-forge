@@ -6,6 +6,9 @@ open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 54f — scheduled / grace-period offboard tests ─────────────
 //
@@ -55,6 +58,7 @@ type private InMemoryJobScheduler() =
                 LastRunError = None
                 ConsecutiveFailures = 0
                 Tags = reg.Tags
+                LastRunWarning = None
             }
 
             jobs[id] <- def
@@ -110,7 +114,7 @@ let private handlerFor (userId: string) (scheduler: IJobScheduler option) : IPla
     services.AddSingleton<ServerConfig>(
         {
             ServerConfig.defaults with
-                TenantLifecycle = EnabledTenantLifecycle
+                TenantLifecycle = FeatureMode.Enabled
         }
     )
     |> ignore
@@ -238,7 +242,7 @@ let tests =
                 services.AddSingleton<ServerConfig>(
                     {
                         ServerConfig.defaults with
-                            TenantLifecycle = EnabledTenantLifecycle
+                            TenantLifecycle = FeatureMode.Enabled
                     }
                 )
                 |> ignore

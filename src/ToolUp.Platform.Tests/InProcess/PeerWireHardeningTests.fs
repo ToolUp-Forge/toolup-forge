@@ -24,7 +24,12 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Secrets
 open ToolUp.InterPlatform
+open ToolUp.InterPlatform.PeerCompose
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 315 — peer host wire hardening ────────────────────────────
 //
@@ -404,12 +409,12 @@ let requestBodyCapTests =
 
         testCase "the limits are a value a composition sets, and default when it does not"
         <| fun _ ->
-            let fresh = PeerCompose.PeerServerApp.create ()
+            let fresh = PeerOptions.create ()
 
             Expect.equal
                 fresh.WireLimits
                 PeerWireLimits.defaults
-                "a fresh PeerServerApp carries the defaults — no opt-in required for the ceiling to exist"
+                "fresh PeerOptions carries the defaults — no opt-in required for the ceiling to exist"
 
             Expect.equal
                 PeerWireLimits.defaults.MaxRequestBytes
@@ -418,10 +423,10 @@ let requestBodyCapTests =
 
             let raised =
                 fresh
-                |> PeerCompose.PeerServerApp.withWireLimits (
+                |> (PeerOptions.withWireLimits (
                     PeerWireLimits.defaults
                     |> PeerWireLimits.withMaxRequestBytes (32L * 1024L * 1024L)
-                )
+                ))
 
             Expect.equal
                 raised.WireLimits.MaxRequestBytes

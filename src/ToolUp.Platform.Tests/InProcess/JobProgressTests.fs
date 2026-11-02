@@ -4,6 +4,9 @@ open System
 open System.Collections.Concurrent
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
 
 // ─── Phase 321 — job progress checkpoints ─────────────────────────────
 //
@@ -616,10 +619,10 @@ let tests =
         // ─── 321.D — the reconciliation poll ─────────────────────────
 
         testList "reconciliation-loop integration" [
-            test "ServerConfig defaults to NoJobProgress (GP 11)" {
+            test "ServerConfig defaults to FeatureMode.Disabled (GP 11)" {
                 Expect.equal
                     ServerConfig.defaults.JobProgress
-                    NoJobProgress
+                    FeatureMode.Disabled
                     "an existing deployment gains no progress traffic on upgrade"
             }
 

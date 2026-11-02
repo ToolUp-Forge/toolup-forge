@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.PremiumUserApi
+module ToolUp.Platform.Scope.PremiumUserApi
 
 open Giraffe
 open Microsoft.AspNetCore.Http
 open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
+open ToolUp.Platform.Config
 
 // ─── Phase 61 — Premium-user list admin endpoint ──────────────────
 //

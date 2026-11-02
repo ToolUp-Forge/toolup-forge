@@ -1,4 +1,4 @@
-module ToolUp.Platform.LineageStore
+module ToolUp.Platform.Infra.LineageStore
 
 open System
 open System.Collections.Generic

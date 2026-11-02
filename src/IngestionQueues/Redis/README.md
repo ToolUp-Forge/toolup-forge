@@ -29,7 +29,7 @@ let store =
         RedisIngestionQueueOptions.defaults
         (Some logger)
 
-app |> RAGServerApp.withDurableIngestionQueue store
+ragOptions |> RagOptions.withDurableIngestionQueue store   // then RAGCompose.withRAG on the deployment
 ```
 
 The connection string comes from the deployment (`ISecretStore` / configuration) — the companion never reads environment variables itself. Deployments wiring Redis for several substrates conventionally source all of them from `TOOLUP_REDIS_CONNECTION`.

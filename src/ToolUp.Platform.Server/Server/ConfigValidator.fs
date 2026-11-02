@@ -1,4 +1,6 @@
-module ToolUp.Platform.ConfigValidator
+module ToolUp.Platform.Config.ConfigValidator
+
+open ToolUp.Platform
 
 open System
 open ToolUp.Platform.BlobStorage

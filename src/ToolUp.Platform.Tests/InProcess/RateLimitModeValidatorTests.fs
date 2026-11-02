@@ -3,6 +3,9 @@ module ToolUp.Platform.Tests.InProcess.RateLimitModeValidatorTests
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 let private cfg
     (surfaces: SurfaceProfile list)
@@ -13,16 +16,22 @@ let private cfg
     {
         ServerConfig.defaults with
             Surfaces = surfaces
-            RequireHttps = requireHttps
-            // Phase 16d — `TrustForwardedHeaders` flipped default-on. The
-            // `cfg` helper pins it false so the `requireHttps` parameter
-            // is the sole knob controlling the internet-facing heuristic
-            // for these tests; the two cases that exercise the
-            // proxied-topology branch inline-build their own
-            // `ServerConfig` and don't use this helper.
-            TrustForwardedHeaders = false
+            SecurityPosture = {
+                ServerConfig.defaults.SecurityPosture with
+                    RequireHttps = requireHttps
+                    // Phase 16d — `TrustForwardedHeaders` flipped default-on. The
+                    // `cfg` helper pins it false so the `requireHttps` parameter
+                    // is the sole knob controlling the internet-facing heuristic
+                    // for these tests; the two cases that exercise the
+                    // proxied-topology branch inline-build their own
+                    // `ServerConfig` and don't use this helper.
+                    TrustForwardedHeaders = false
+            }
             RateLimit = rateLimit
-            AcceptNoRateLimitWhenAuthRequired = escapeHatch
+            RiskAcknowledgements = {
+                ServerConfig.defaults.RiskAcknowledgements with
+                    AcceptNoRateLimitWhenAuthRequired = escapeHatch
+            }
     }
 
 let private validate (config: ServerConfig) : ValidationResult =
@@ -56,10 +65,16 @@ let tests =
             let proxied = {
                 ServerConfig.defaults with
                     Surfaces = Surfaces.individual
-                    RequireHttps = false
-                    TrustForwardedHeaders = true
+                    SecurityPosture = {
+                        ServerConfig.defaults.SecurityPosture with
+                            RequireHttps = false
+                            TrustForwardedHeaders = true
+                    }
                     RateLimit = RateLimitConfig.none
-                    AcceptNoRateLimitWhenAuthRequired = false
+                    RiskAcknowledgements = {
+                        ServerConfig.defaults.RiskAcknowledgements with
+                            AcceptNoRateLimitWhenAuthRequired = false
+                    }
             }
 
             match validate proxied with
@@ -126,9 +141,15 @@ let tests =
             let config = {
                 ServerConfig.defaults with
                     Surfaces = Surfaces.individual
-                    RequireHttps = true
+                    SecurityPosture = {
+                        ServerConfig.defaults.SecurityPosture with
+                            RequireHttps = true
+                    }
                     RateLimit = RateLimitConfig.perShape (Map.ofList [ TeamMemberKind, policy ])
-                    AcceptNoRateLimitWhenAuthRequired = false
+                    RiskAcknowledgements = {
+                        ServerConfig.defaults.RiskAcknowledgements with
+                            AcceptNoRateLimitWhenAuthRequired = false
+                    }
             }
 
             match validate config with
@@ -143,9 +164,15 @@ let tests =
             let config = {
                 ServerConfig.defaults with
                     Surfaces = Surfaces.individual
-                    RequireHttps = true
+                    SecurityPosture = {
+                        ServerConfig.defaults.SecurityPosture with
+                            RequireHttps = true
+                    }
                     RateLimit = RateLimitConfig.perShape (Map.ofList [ UserKind, policy ])
-                    AcceptNoRateLimitWhenAuthRequired = false
+                    RiskAcknowledgements = {
+                        ServerConfig.defaults.RiskAcknowledgements with
+                            AcceptNoRateLimitWhenAuthRequired = false
+                    }
             }
 
             Expect.equal (validate config) Ok "UserKind is admitted by the Individual surface"
@@ -174,8 +201,11 @@ let tests =
             test "AdAnalytics enabled + NoRateLimitStore → Warning naming the exposed endpoints" {
                 let config = {
                     ServerConfig.defaults with
-                        AdAnalytics = EnabledAdAnalytics
-                        RateLimitStore = NoRateLimitStore
+                        AdAnalytics = FeatureMode.Enabled
+                        Stores = {
+                            ServerConfig.defaults.Stores with
+                                RateLimitStore = NoRateLimitStore
+                        }
                 }
 
                 match validateAds config with
@@ -188,8 +218,11 @@ let tests =
             test "AdAnalytics enabled + InMemoryRateLimitStore → Ok" {
                 let config = {
                     ServerConfig.defaults with
-                        AdAnalytics = EnabledAdAnalytics
-                        RateLimitStore = RateLimitStoreMode.InMemoryRateLimitStore
+                        AdAnalytics = FeatureMode.Enabled
+                        Stores = {
+                            ServerConfig.defaults.Stores with
+                                RateLimitStore = RateLimitStoreMode.InMemoryRateLimitStore
+                        }
                 }
 
                 Expect.equal (validateAds config) Ok "per-IP gate is active"

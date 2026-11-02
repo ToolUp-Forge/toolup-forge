@@ -687,11 +687,11 @@ module PlatformClientProxies =
         | ModuleExposure.Hidden -> JsonEncode.case0 "Hidden"
         | ModuleExposure.Unavailable -> JsonEncode.case0 "Unavailable"
 
-    /// Generated JSON encoder for `PlatformKnowledgeBaseMode` — members by name, cases by case name, as the writer emits them.
-    let encodePlatformKnowledgeBaseMode: JsonEncoder<PlatformKnowledgeBaseMode> =
+    /// Generated JSON encoder for `FeatureMode` — members by name, cases by case name, as the writer emits them.
+    let encodeFeatureMode: JsonEncoder<FeatureMode> =
         function
-        | PlatformKnowledgeBaseMode.NoPlatformKnowledgeBase -> JsonEncode.case0 "NoPlatformKnowledgeBase"
-        | PlatformKnowledgeBaseMode.EnabledPlatformKnowledgeBase -> JsonEncode.case0 "EnabledPlatformKnowledgeBase"
+        | FeatureMode.Disabled -> JsonEncode.case0 "Disabled"
+        | FeatureMode.Enabled -> JsonEncode.case0 "Enabled"
 
     /// Generated JSON encoder for `CreateTeamRequest` — members by name, cases by case name, as the writer emits them.
     let encodeCreateTeamRequest: JsonEncoder<CreateTeamRequest> =
@@ -3148,7 +3148,7 @@ module PlatformClientProxies =
 
     /// Generated JSON decoder for `JobDefinition` — members by name, cases by case name, read off the type's own shape.
     let decodeJobDefinition: JsonDecoder<JobDefinition> =
-        JsonDecode.succeed (fun jobId scopeId handler payload trigger idempotency retryPolicy shardKey precision status createdAt createdBy nextRunAt lastRunAt lastRunStatus lastRunError consecutiveFailures tags -> ({
+        JsonDecode.succeed (fun jobId scopeId handler payload trigger idempotency retryPolicy shardKey precision status createdAt createdBy nextRunAt lastRunAt lastRunStatus lastRunError consecutiveFailures tags lastRunWarning -> ({
             JobId = jobId
             ScopeId = scopeId
             Handler = handler
@@ -3167,6 +3167,7 @@ module PlatformClientProxies =
             LastRunError = lastRunError
             ConsecutiveFailures = consecutiveFailures
             Tags = tags
+            LastRunWarning = lastRunWarning
         }: JobDefinition))
         |> JsonDecode.apply (JsonDecode.field "JobId" JsonDecode.asGuid)
         |> JsonDecode.apply (JsonDecode.field "ScopeId" JsonDecode.asString)
@@ -3186,6 +3187,7 @@ module PlatformClientProxies =
         |> JsonDecode.apply (JsonDecode.optionalField "LastRunError" JsonDecode.asString)
         |> JsonDecode.apply (JsonDecode.field "ConsecutiveFailures" JsonDecode.asInt32)
         |> JsonDecode.apply (JsonDecode.field "Tags" (JsonDecode.asMap JsonDecode.Key.string JsonDecode.asString))
+        |> JsonDecode.apply (JsonDecode.optionalField "LastRunWarning" JsonDecode.asString)
 
     /// Generated JSON decoder for `ExternalHandle` — members by name, cases by case name, read off the type's own shape.
     let decodeExternalHandle: JsonDecoder<ExternalHandle> =
@@ -3204,7 +3206,7 @@ module PlatformClientProxies =
 
     /// Generated JSON decoder for `JobRun` — members by name, cases by case name, read off the type's own shape.
     let decodeJobRun: JsonDecoder<JobRun> =
-        JsonDecode.succeed (fun runId jobId scopeId attempt startedAt completedAt status error durationMs externalHandle -> ({
+        JsonDecode.succeed (fun runId jobId scopeId attempt startedAt completedAt status error durationMs externalHandle warning -> ({
             RunId = runId
             JobId = jobId
             ScopeId = scopeId
@@ -3215,6 +3217,7 @@ module PlatformClientProxies =
             Error = error
             DurationMs = durationMs
             ExternalHandle = externalHandle
+            Warning = warning
         }: JobRun))
         |> JsonDecode.apply (JsonDecode.field "RunId" JsonDecode.asGuid)
         |> JsonDecode.apply (JsonDecode.field "JobId" JsonDecode.asGuid)
@@ -3226,6 +3229,7 @@ module PlatformClientProxies =
         |> JsonDecode.apply (JsonDecode.optionalField "Error" JsonDecode.asString)
         |> JsonDecode.apply (JsonDecode.optionalField "DurationMs" JsonDecode.asInt64)
         |> JsonDecode.apply (JsonDecode.optionalField "ExternalHandle" decodeExternalHandle)
+        |> JsonDecode.apply (JsonDecode.optionalField "Warning" JsonDecode.asString)
 
     /// Generated JSON decoder for `ScheduleError` — members by name, cases by case name, read off the type's own shape.
     let decodeScheduleError: JsonDecoder<ScheduleError> =
@@ -3506,24 +3510,34 @@ module PlatformClientProxies =
         |> JsonDecode.apply (JsonDecode.field "Justification" JsonDecode.asString)
         |> JsonDecode.apply (JsonDecode.optionalField "ConsentedBy" JsonDecode.asString)
 
+    /// Generated JSON decoder for `PageGrant` — members by name, cases by case name, read off the type's own shape.
+    let decodePageGrant: JsonDecoder<PageGrant> =
+        JsonDecode.union "PageGrant" (function
+            | "SavePlatform" -> Some(JsonDecode.case0 PageGrant.SavePlatform)
+            | "SaveTeam" -> Some(JsonDecode.case0 PageGrant.SaveTeam)
+            | "SaveOwn" -> Some(JsonDecode.case0 PageGrant.SaveOwn)
+            | _ -> None)
+
     /// Generated JSON decoder for `TeamPermissions` — members by name, cases by case name, read off the type's own shape.
     let decodeTeamPermissions: JsonDecoder<TeamPermissions> =
-        JsonDecode.succeed (fun defaults members exposure grants -> ({
+        JsonDecode.succeed (fun defaults members exposure grants pages -> ({
             Defaults = defaults
             Members = members
             Exposure = exposure
             Grants = grants
+            Pages = pages
         }: TeamPermissions))
         |> JsonDecode.apply (JsonDecode.field "Defaults" (JsonDecode.asMap JsonDecode.Key.string (JsonDecode.list decodeModulePermission)))
         |> JsonDecode.apply (JsonDecode.field "Members" (JsonDecode.asMap JsonDecode.Key.string (JsonDecode.asMap JsonDecode.Key.string (JsonDecode.list decodeModulePermission))))
         |> JsonDecode.apply (JsonDecode.field "Exposure" (JsonDecode.asMap JsonDecode.Key.string decodeModuleExposure))
         |> JsonDecode.apply (JsonDecode.field "Grants" (JsonDecode.asMap JsonDecode.Key.string (JsonDecode.asMap JsonDecode.Key.string decodeModuleGrantRecord)))
+        |> JsonDecode.apply (JsonDecode.field "Pages" (JsonDecode.asMap JsonDecode.Key.string (JsonDecode.list decodePageGrant)))
 
-    /// Generated JSON decoder for `PlatformKnowledgeBaseMode` — members by name, cases by case name, read off the type's own shape.
-    let decodePlatformKnowledgeBaseMode: JsonDecoder<PlatformKnowledgeBaseMode> =
-        JsonDecode.union "PlatformKnowledgeBaseMode" (function
-            | "NoPlatformKnowledgeBase" -> Some(JsonDecode.case0 PlatformKnowledgeBaseMode.NoPlatformKnowledgeBase)
-            | "EnabledPlatformKnowledgeBase" -> Some(JsonDecode.case0 PlatformKnowledgeBaseMode.EnabledPlatformKnowledgeBase)
+    /// Generated JSON decoder for `FeatureMode` — members by name, cases by case name, read off the type's own shape.
+    let decodeFeatureMode: JsonDecoder<FeatureMode> =
+        JsonDecode.union "FeatureMode" (function
+            | "Disabled" -> Some(JsonDecode.case0 FeatureMode.Disabled)
+            | "Enabled" -> Some(JsonDecode.case0 FeatureMode.Enabled)
             | _ -> None)
 
     /// Generated JSON decoder for `PlatformInfo` — members by name, cases by case name, read off the type's own shape.
@@ -4267,7 +4281,7 @@ module PlatformClientProxies =
         let callListPlatformAdmins = Proxy.generatedMethod<string list> api "ListPlatformAdmins" false (JsonDecode.list JsonDecode.asString)
         let callAssignPlatformAdmin = Proxy.generatedMethod<Result<unit, string>> api "AssignPlatformAdmin" true (JsonDecode.result JsonDecode.asUnit JsonDecode.asString)
         let callRevokePlatformAdmin = Proxy.generatedMethod<Result<unit, string>> api "RevokePlatformAdmin" true (JsonDecode.result JsonDecode.asUnit JsonDecode.asString)
-        let callGetPlatformKnowledgeBase = Proxy.generatedMethod<PlatformKnowledgeBaseMode> api "GetPlatformKnowledgeBase" false decodePlatformKnowledgeBaseMode
+        let callGetPlatformKnowledgeBase = Proxy.generatedMethod<FeatureMode> api "GetPlatformKnowledgeBase" false decodeFeatureMode
         let callSetPlatformKnowledgeBase = Proxy.generatedMethod<Result<unit, string>> api "SetPlatformKnowledgeBase" true (JsonDecode.result JsonDecode.asUnit JsonDecode.asString)
 
         {
@@ -4276,7 +4290,7 @@ module PlatformClientProxies =
             AssignPlatformAdmin = fun a0 -> callAssignPlatformAdmin (JsonEncode.arguments [ JsonEncode.string a0 ])
             RevokePlatformAdmin = fun a0 -> callRevokePlatformAdmin (JsonEncode.arguments [ JsonEncode.string a0 ])
             GetPlatformKnowledgeBase = fun () -> callGetPlatformKnowledgeBase "{}"
-            SetPlatformKnowledgeBase = fun a0 -> callSetPlatformKnowledgeBase (JsonEncode.arguments [ encodePlatformKnowledgeBaseMode a0 ])
+            SetPlatformKnowledgeBase = fun a0 -> callSetPlatformKnowledgeBase (JsonEncode.arguments [ encodeFeatureMode a0 ])
         }
 
     /// Generated client proxy for `PlatformInfoApi` — 1 method(s), each a closure over its

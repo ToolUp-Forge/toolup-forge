@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-namespace ToolUp.Platform
+namespace ToolUp.Platform.Jobs
+
+open ToolUp.Platform
 
 open System
 open System.Collections.Concurrent
@@ -80,7 +82,7 @@ module private ProgressJson =
         JsonSerializer.Serialize(value, options)
 
 /// The sink a deployment gets when `ServerConfig.JobProgress =
-/// NoJobProgress` — and the one every `Report` call reaches in a
+/// FeatureMode.Disabled` — and the one every `Report` call reaches in a
 /// deployment that never opted in. Publishes nothing, persists nothing,
 /// remembers nothing (GP 13).
 ///
@@ -319,7 +321,7 @@ module JobContextProgressExtensions =
         /// scope automatically.
         ///
         /// A no-op when the deployment has not set
-        /// `ServerConfig.JobProgress = EnabledJobProgress`, so a handler
+        /// `ServerConfig.JobProgress = FeatureMode.Enabled`, so a handler
         /// can report unconditionally and a deployment that does not want
         /// the traffic pays one interface dispatch per call (GP 13).
         member _.Progress: IJobProgressReporter = JobProgressScope.current ()

@@ -1,4 +1,4 @@
-module ToolUp.Platform.PersistentEventStore
+module ToolUp.Platform.Infra.PersistentEventStore
 
 open System
 open System.Text
@@ -6,7 +6,7 @@ open System.Text.Json
 open System.Text.Json.Serialization
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.SecondaryIndex
+open ToolUp.Platform.Infra.SecondaryIndex
 
 // ─── Storage layout ──────────────────────────────────────────────
 //

@@ -3,6 +3,9 @@ module ToolUp.Platform.Tests.InProcess.NotificationsExplicitOffTests
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 58 — NoNotificationsExplicit server-side wiring ─────────────
 //
@@ -30,7 +33,10 @@ open ToolUp.Platform.ConfigValidation
 let private cfg (surfaces: SurfaceProfile list) (replicas: int) (notifications: NotificationMode) : ServerConfig = {
     ServerConfig.defaults with
         Surfaces = surfaces
-        ReplicaCount = replicas
+        MultiInstance = {
+            ServerConfig.defaults.MultiInstance with
+                ReplicaCount = replicas
+        }
         Notifications = notifications
 }
 

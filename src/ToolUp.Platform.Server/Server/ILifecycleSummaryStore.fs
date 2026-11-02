@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-namespace ToolUp.Platform
+namespace ToolUp.Platform.Compose
+
+open ToolUp.Platform
+open ToolUp.Platform.Jobs
 
 open System
 open System.Text
@@ -42,7 +45,7 @@ open ToolUp.Platform.BlobStorage
 
 /// Durable backing for the most-recent `LifecycleSummary` per tenant
 /// scope. Registered as a DI singleton when
-/// `ServerConfig.TenantLifecycle = EnabledTenantLifecycle`; written after
+/// `ServerConfig.TenantLifecycle = FeatureMode.Enabled`; written after
 /// each provision/deprovision run and read by `GetLifecycleSummary` on a
 /// process-local cache miss. A deployment that swaps in a distributed
 /// implementation (DB-backed, Redis-backed) satisfies the same six-rule

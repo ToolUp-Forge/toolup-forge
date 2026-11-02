@@ -6,6 +6,8 @@ open ToolUp.Platform
 open ToolUp.Platform.Secrets
 open ToolUp.Platform.ConfigValidation
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 6d.A — secret-at-rest migration + preflight validator ─────
 //

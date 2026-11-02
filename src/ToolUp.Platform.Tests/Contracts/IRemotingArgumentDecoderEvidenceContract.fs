@@ -5,6 +5,7 @@ module ToolUp.Platform.Tests.Contracts.IRemotingArgumentDecoderEvidenceContract
 
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Compose
 
 // ─── IRemotingArgumentDecoderEvidence contract pack (Phase 912) ───────
 //

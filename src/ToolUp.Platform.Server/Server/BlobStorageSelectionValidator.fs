@@ -1,4 +1,7 @@
-module ToolUp.Platform.BlobStorageSelectionValidator
+module ToolUp.Platform.Config.BlobStorageSelectionValidator
+
+open ToolUp.Platform
+open ToolUp.Platform.Infra
 
 open System
 open ToolUp.Platform.BlobStorage

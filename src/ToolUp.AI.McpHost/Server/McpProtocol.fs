@@ -8,6 +8,7 @@ open System.Buffers
 open System.Text
 open System.Text.Json
 open ToolUp.Platform
+open ToolUp.Platform.Compose
 
 // ─── Phase 489 — the MCP wire, implemented directly ──────────────────
 //

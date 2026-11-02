@@ -41,7 +41,7 @@ EventSource ←──────── /api/ai/events
 
 ## Anonymous mode and AI cost control
 
-`AIServerApp.run` does not refuse to start when `ServerConfig.Mode = Anonymous`, but as a deployment design principle **AI is intended for authenticated modes** (`AuthenticatedEphemeral`, `Individual`, `Team`, `MultiTeam`). The README's "Authentication requirement" section is the canonical write-up; this section covers the technical rationale and what changes if a deployment runs AI in Anonymous mode anyway.
+The AI tier does not refuse to start when `ServerConfig.Mode = Anonymous`, but as a deployment design principle **AI is intended for authenticated modes** (`AuthenticatedEphemeral`, `Individual`, `Team`, `MultiTeam`). The README's "Authentication requirement" section is the canonical write-up; this section covers the technical rationale and what changes if a deployment runs AI in Anonymous mode anyway.
 
 **Why authenticated modes are the design target.**
 
@@ -358,7 +358,7 @@ let promptBuilders logger = [
 
 ## Built-in AI tools
 
-The SDK registers two families of platform-owned tools automatically inside `composeAI` (`AICompose.fs`) — apps do **not** declare them. Both reserve platform-prefixed names so a module tool can never collide; `composeAI` fails loudly at compose time on any duplicate `Name` across built-ins + module tools.
+The SDK registers two families of platform-owned tools automatically when the AI tier is composed (`AICompose.withAI`, `AICompose.fs`) — apps do **not** declare them. Both reserve platform-prefixed names so a module tool can never collide; the tier fails loudly at compose time on any duplicate `Name` across built-ins + module tools.
 
 ### Narrative tools — [`../ToolUp.AI.Server/Server/NarrativeTools.fs`](../ToolUp.AI.Server/Server/NarrativeTools.fs)
 
@@ -421,7 +421,7 @@ The mechanism is the Phase 6g.A client-resident tool round trip, **reused rather
 
 `AllowOnce` is still *recorded* — the audit trail and the conversation's own record show it — it simply never satisfies a later lookup. `Denied` is remembered so a user who has said no is not asked once per turn while the model re-plans.
 
-### Modes — `AIServerApp.withAIConsentMode`
+### Modes — `AIOptions.withAIConsentMode`
 
 | Mode | Behaviour |
 |---|---|
@@ -549,7 +549,7 @@ Every invocation of a `_platform.ai.*` tool writes exactly one `CrossModuleRead`
 
 ### Reading the data — `/dev/ai-cross-module`
 
-Gated on `ServerConfig.EnableDevEndpoints` (no `#if DEBUG` half — this tier carries no compile-time gates), mounted by `composeAI` beside `/dev/ai-fastpath`, `/dev/ai-latency` and `/dev/ai-allowlist`, and reported over the same 60-minute window so the four are comparable.
+Gated on `ServerConfig.EnableDevEndpoints` (no `#if DEBUG` half — this tier carries no compile-time gates), mounted by the AI tier beside `/dev/ai-fastpath`, `/dev/ai-latency` and `/dev/ai-allowlist`, and reported over the same 60-minute window so the four are comparable.
 
 The payload groups by `(targetModule, toolName)` — *"the agent read Payroll"* and *"the agent read Payroll through `get_latest_result`"* are different operator facts — and each group carries `Count`, `AllowedCount`, `DeniedCount`, `DenialRate`, `P50/P95/P99LatencyMs`, `AllowedResultBytes`, and the refusal vocabulary broken out, so a module whose opt-in was never declared looks different from one whose users keep saying no. Top level adds window totals, a whole-window denial rate, `DistinctTargetModules`, `ByOutcome`, and a capped `RecentReads` tail.
 
@@ -909,25 +909,31 @@ type ComposeExtensions = {
 
 Core `compose` knows nothing about AI. It sees `ComposeExtensions` as an opaque hook. The same mechanism will be used by future companions (Phase 9c distributed task frameworks, for instance).
 
-### `AIServerApp` record — fluent composition surface
+### `AIOptions` + `AICompose.withAI` — the composition surface
 
-`AIServerApp` is the record-based counterpart to `composeWithAI`. It wraps a core `ServerApp` record in a `Base` field and carries the AI-specific fields alongside:
+`AIOptions` carries the AI tier's inputs and settings; it does not wrap a `ServerApp`. `AICompose.withAI options` sets the AI companion on the deployment (`ServerApp.withCompanion`), and the tier is composed once, when the deployment resolves, onto the deployment as every builder left it — so any `ServerApp` builder works on either side of `withAI`, and the pipeline ends in `ServerApp.run`:
 
 ```fsharp
-type AIServerApp = {
-    Base: ServerApp
+open Microsoft.AspNetCore.Http
+
+type AIOptions = {
     AIProviderFactory: IAIProviderFactory
     ProviderProfile: IProviderProfile
     PlatformKeyStore: IPlatformAIKeyStore option
     PlatformProviders: DefaultAIProviderFactory.AIPlatformProvider list
     AIConfig: AIAssistantServerConfig option
     ModuleAIContexts: ModuleAIContext list
+    DenialRateAlert: AIDenialRateMonitor.AIDenialRateAlertPolicy option
+    ConsentMode: AIConsentMode
+    ToolEffects: ToolEffectEnvelope.ToolEffectComposition option
+    AIAnsweringTools: (AIToolDefinition * (HttpContext -> string -> Async<ToolHelpers.ToolAnswer>)) list
+    ReflectionTools: bool
 }
 ```
 
-`AIServerApp.run` flattens the inner `ServerApp` (modules → handlers / dataTypes / configSchemas) and calls `composeWithAI` with the collected state. `AIProviderFactory` and `ProviderProfile` are required rather than optional — AI needs both, and the core `ServerApp` can't reasonably default them.
+`AIProviderFactory` and `ProviderProfile` are the parameters of `AIOptions.create` rather than optional fields — AI needs both, and the core `ServerApp` can't reasonably default them. The tier reads the module tools off the deployment's `AITools` when it is composed, and refuses a deployment it was already composed onto.
 
-Apps that want RAG layer `RAGServerApp` on top of `AIServerApp`; see `src/ToolUp.RAG/README.md`. Apps without AI use `ServerApp.run` directly and never touch this companion.
+Apps that want RAG compose `RAGCompose.withRAG` instead, which composes the AI tier itself from `RagOptions.AI`; see `src/ToolUp.RAG/README.md`. Apps without AI use `ServerApp.run` without `withAI` and never touch this companion.
 
 ## Client side — Elmish outer-program wrapper
 

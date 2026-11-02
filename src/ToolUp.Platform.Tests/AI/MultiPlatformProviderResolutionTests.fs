@@ -9,6 +9,8 @@ open ToolUp.Platform.Providers
 open ToolUp.Platform.Secrets
 open ToolUp.AI
 open ToolUp.AI.DefaultAIProviderFactory
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Compose
 
 // ─── Phase 70 — DefaultAIProviderFactory resolution-chain tests ──
 //

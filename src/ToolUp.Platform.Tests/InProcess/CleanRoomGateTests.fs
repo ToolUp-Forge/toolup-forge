@@ -5,7 +5,12 @@ open System.Reflection
 open Expecto
 open ToolUp.Platform
 open ToolUp.InterPlatform
+open ToolUp.Platform.Tests.InProcess.PeerTestComposition
 open ToolUp.InterPlatform.PeerCompose
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 311 — the structurally-enforced clean-room gate ───────────
 //
@@ -539,58 +544,71 @@ let substitutionTests =
 
 let private enabledConfig = {
     ServerConfig.defaults with
-        PeerSubstrate = EnabledPeerSubstrate
+        MultiInstance = {
+            ServerConfig.defaults.MultiInstance with
+                PeerSubstrate = FeatureMode.Enabled
+        }
 }
 
 let private appHosting () =
-    PeerServerApp.create ()
-    |> PeerServerApp.withConfig enabledConfig
-    |> PeerServerApp.withContract (fun fusion ->
-        JsonRpcPeerHost.contract<ReachContract>
-            contractId
-            [ v1 ]
-            fusion
-            (implWith (HandlerProbe()) (countOf 50) (countOf 50)))
+    PeerComposition.create ()
+    |> PeerComposition.app (ServerApp.withConfig enabledConfig)
+    |> PeerComposition.options (
+        PeerOptions.withContract (fun fusion ->
+            JsonRpcPeerHost.contract<ReachContract>
+                contractId
+                [ v1 ]
+                fusion
+                (implWith (HandlerProbe()) (countOf 50) (countOf 50)))
+    )
 
 let compositionTests =
     testList "Phase 311 — composition posture" [
 
         test "a template naming a contract this deployment does not host is reported" {
             let app =
-                appHosting () |> PeerServerApp.withCleanRoomTemplate "example.typo" template
+                appHosting ()
+                |> PeerComposition.options (PeerOptions.withCleanRoomTemplate "example.typo" template)
 
             Expect.equal
-                (PeerServerApp.auditCleanRoomTemplates app)
+                (PeerCompose.auditCleanRoomTemplates app)
                 [ "example.typo" ]
                 "an unbound template is a gate that looks composed and never runs — exactly Phase 330's inert-VerifyDelegation shape"
         }
 
         test "CONTROL — a template bound to a hosted contract reports nothing" {
-            let app = appHosting () |> PeerServerApp.withCleanRoomTemplate contractId template
-            Expect.isEmpty (PeerServerApp.auditCleanRoomTemplates app) "a correctly-bound template is not a defect"
+            let app =
+                appHosting ()
+                |> PeerComposition.options (PeerOptions.withCleanRoomTemplate contractId template)
+
+            Expect.isEmpty (PeerCompose.auditCleanRoomTemplates app) "a correctly-bound template is not a defect"
         }
 
         test "enforceCleanRoomTemplates refuses an unbound template and is silent on a bound one" {
             let bad =
-                appHosting () |> PeerServerApp.withCleanRoomTemplate "example.typo" template
+                appHosting ()
+                |> PeerComposition.options (PeerOptions.withCleanRoomTemplate "example.typo" template)
 
             Expect.throws
-                (fun () -> PeerServerApp.enforceCleanRoomTemplates bad)
+                (fun () -> PeerCompose.enforceCleanRoomTemplates bad)
                 "a composition whose privacy gate would never run must not start"
 
-            let good = appHosting () |> PeerServerApp.withCleanRoomTemplate contractId template
-            PeerServerApp.enforceCleanRoomTemplates good
+            let good =
+                appHosting ()
+                |> PeerComposition.options (PeerOptions.withCleanRoomTemplate contractId template)
+
+            PeerCompose.enforceCleanRoomTemplates good
         }
 
         test "the audit-transparency contract counts as hosted" {
             let app =
-                PeerServerApp.create ()
-                |> PeerServerApp.withConfig enabledConfig
-                |> PeerServerApp.withPeerAuditTransparency
-                |> PeerServerApp.withCleanRoomTemplate PeerAudit.contractId template
+                PeerComposition.create ()
+                |> PeerComposition.app (ServerApp.withConfig enabledConfig)
+                |> PeerComposition.options (PeerOptions.withPeerAuditTransparency)
+                |> PeerComposition.options (PeerOptions.withCleanRoomTemplate PeerAudit.contractId template)
 
             Expect.isEmpty
-                (PeerServerApp.auditCleanRoomTemplates app)
+                (PeerCompose.auditCleanRoomTemplates app)
                 "the reserved audit contract is registered, so a template on it binds"
         }
 
@@ -602,10 +620,10 @@ let compositionTests =
 
             let app =
                 appHosting ()
-                |> PeerServerApp.withCleanRoomTemplate contractId template
-                |> PeerServerApp.withCleanRoomTemplate contractId stricter
+                |> PeerComposition.options (PeerOptions.withCleanRoomTemplate contractId template)
+                |> PeerComposition.options (PeerOptions.withCleanRoomTemplate contractId stricter)
 
-            let resolved = PeerServerApp.cleanRoomTemplateMap app
+            let resolved = PeerCompose.cleanRoomTemplateMap (snd app)
 
             Expect.equal
                 (Map.find contractId resolved).TemplateId
@@ -617,20 +635,22 @@ let compositionTests =
             let mutable builderRuns = 0
 
             let app =
-                PeerServerApp.create ()
-                |> PeerServerApp.withConfig enabledConfig
-                |> PeerServerApp.withContract (fun fusion ->
-                    builderRuns <- builderRuns + 1
+                PeerComposition.create ()
+                |> PeerComposition.app (ServerApp.withConfig enabledConfig)
+                |> PeerComposition.options (
+                    PeerOptions.withContract (fun fusion ->
+                        builderRuns <- builderRuns + 1
 
-                    JsonRpcPeerHost.contract<ReachContract>
-                        contractId
-                        [ v1 ]
-                        fusion
-                        (implWith (HandlerProbe()) (countOf 50) (countOf 50)))
+                        JsonRpcPeerHost.contract<ReachContract>
+                            contractId
+                            [ v1 ]
+                            fusion
+                            (implWith (HandlerProbe()) (countOf 50) (countOf 50)))
+                )
 
-            let fresh = PeerServerApp.create ()
-            Expect.isEmpty fresh.CleanRoomTemplates "a fresh compose record gates nothing"
-            Expect.isEmpty (PeerServerApp.auditCleanRoomTemplates app) "…and reports nothing"
+            let fresh = PeerComposition.create ()
+            Expect.isEmpty (snd fresh).CleanRoomTemplates "a fresh compose record gates nothing"
+            Expect.isEmpty (PeerCompose.auditCleanRoomTemplates app) "…and reports nothing"
 
             Expect.equal
                 builderRuns
@@ -640,12 +660,12 @@ let compositionTests =
 
         test "GP 13 — the strip-imports path reports nothing even with a template composed" {
             let app =
-                PeerServerApp.create ()
-                |> PeerServerApp.withCleanRoomTemplate "example.typo" template
+                PeerComposition.create ()
+                |> PeerComposition.options (PeerOptions.withCleanRoomTemplate "example.typo" template)
 
             Expect.isEmpty
-                (PeerServerApp.auditCleanRoomTemplates app)
-                "NoPeerSubstrate registers no contracts at all, so the short-circuit stays byte-for-byte a bare ServerApp.run"
+                (PeerCompose.auditCleanRoomTemplates app)
+                "FeatureMode.Disabled registers no contracts at all, so the short-circuit stays byte-for-byte a bare ServerApp.run"
         }
     ]
 

@@ -1,4 +1,4 @@
-module ToolUp.Platform.ComposeBootstrap
+module ToolUp.Platform.Compose.ComposeBootstrap
 
 open Giraffe
 open Microsoft.AspNetCore.Builder
@@ -8,7 +8,10 @@ open Microsoft.Extensions.DependencyInjection.Extensions
 open Microsoft.Extensions.Hosting
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.ConfigurePipeline
+open ToolUp.Platform.Compose.ConfigurePipeline
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
 
 // ─── compose phase: finalisation + Build ─────────────────────────────
 //
@@ -64,13 +67,13 @@ let buildHostBuilder
         let plan = listenPlanFor b bindAddress serverPort
         applyListenPlan b plan
 
-        // Gap audit pass-2 #3 — apply ServerConfig.MaxRequestBodyBytes
+        // Gap audit pass-2 #3 — apply ServerConfig.SecurityPosture.MaxRequestBodyBytes
         // to Kestrel so the SDK has a deliberate per-request cap rather
         // than relying on the framework's 30 MB default. `None` (the SDK
         // default) leaves Kestrel's 30 MB in place; `Some bytes` stamps
         // the explicit limit. The MaxRequestBodyBytesValidator warns at
         // preflight if the chosen cap is unwise for the deployment shape.
-        match config.MaxRequestBodyBytes with
+        match config.SecurityPosture.MaxRequestBodyBytes with
         | Some bytes ->
             b.WebHost.ConfigureKestrel(fun opts -> opts.Limits.MaxRequestBodySize <- System.Nullable bytes)
             |> ignore
@@ -210,20 +213,20 @@ let buildAndRunHost
         app.Services.GetRequiredService<ILogger>() |> ignore
 
         // Phase 9q — opt-in startup-time config drift detector. When
-        // `ConfigDriftDetection = EnabledConfigDriftDetection`, snapshots
+        // `ConfigDriftDetection = FeatureMode.Enabled`, snapshots
         // the resolved `ServerConfig` (secrets redacted) + a hash of the
         // active companion-assembly set to
         // `_platform/_deploy/last-config.json`, compares against the
         // previous startup's snapshot, and emits a `Warn` log + a
         // `ConfigDrift` audit event when the shape differs. Default
-        // `NoConfigDriftDetection` (GP 13) skips the read / compare /
+        // `FeatureMode.Disabled` (GP 13) skips the read / compare /
         // write entirely. Runs after `builder.Build()` so the companion-
         // assembly enumeration sees the fully-loaded `AppDomain` and
         // before the middleware pipeline runs so the audit event lands
         // before any request traffic.
         match config.ConfigDriftDetection with
-        | NoConfigDriftDetection -> ()
-        | EnabledConfigDriftDetection ->
+        | FeatureMode.Disabled -> ()
+        | FeatureMode.Enabled ->
             ConfigDriftDetector.run resolvedBlobStorage auditLog resolvedLogger config (groundingDriftIds app.Services)
             |> Async.RunSynchronously
 
@@ -268,8 +271,8 @@ let buildAndRunHost
         host.Services.GetRequiredService<ILogger>() |> ignore
 
         match config.ConfigDriftDetection with
-        | NoConfigDriftDetection -> ()
-        | EnabledConfigDriftDetection ->
+        | FeatureMode.Disabled -> ()
+        | FeatureMode.Enabled ->
             ConfigDriftDetector.run resolvedBlobStorage auditLog resolvedLogger config (groundingDriftIds host.Services)
             |> Async.RunSynchronously
 

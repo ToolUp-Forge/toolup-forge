@@ -13,6 +13,10 @@ open ToolUp.Platform.Grounding
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Facts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 560 — the grounded answer planner ─────────────────────────
 //
@@ -56,9 +60,9 @@ let private draft (metric: string) (inputHashes: string list) (value: FactValue)
 }
 
 let private assertFact (store: IFactStore) (scope: string) (d: FactDraft) : Fact =
-    match store.Assert(scope, d) |> Async.RunSynchronously with
+    match store.Assert(TestScope.resolved scope, d) |> Async.RunSynchronously with
     | Ok fact -> fact
-    | Error e -> failtestf "assert failed: %s" e
+    | Error e -> failtestf "assert failed: %s" (FactStoreError.describe e)
 
 /// A real (Phase 519) registry: the `revenue` metric plus the two-level
 /// `brand` subject hierarchy — the vocabulary the compiler-table tests
@@ -175,7 +179,8 @@ let private plannerCompiling
     AnswerPlanner.createCompilingWithClock store gate registry events compiler clock, store, events
 
 let private plan (planner: IAnswerPlanner) (scope: string) (question: string) : AnswerPlan =
-    planner.Plan(scope, "user-1", question) |> Async.RunSynchronously
+    planner.Plan(TestScope.resolved scope, "user-1", question)
+    |> Async.RunSynchronously
 
 let private stepsOf (p: AnswerPlan) : PlanStep list = p.Steps |> List.map _.Step
 
@@ -427,7 +432,7 @@ let disclosureTests =
                         Disclosure = Internal
                 }
 
-            let! result = planner.Plan(scope, "user-1", "acme revenue?")
+            let! result = planner.Plan(TestScope.resolved scope, "user-1", "acme revenue?")
 
             Expect.equal
                 (stepsOf result)
@@ -900,7 +905,7 @@ let populationDisclosureTests =
 
             let gamma = assertFact store scope (brandDraft "gamma" (Scalar 100m))
 
-            let! result = planner.Plan(scope, "user-1", "which brand has the highest revenue?")
+            let! result = planner.Plan(TestScope.resolved scope, "user-1", "which brand has the highest revenue?")
             let aggregate = aggregateOf result
 
             Expect.equal
@@ -1118,10 +1123,10 @@ let chainTests =
                 ProvenanceGraph.createWithFacts lineage (FactStoreEvidenceSource.create store)
 
             // Compile → record → walk.
-            let! compiled = planner.Plan(scope, "user-1", "acme revenue in Q2?")
+            let! compiled = planner.Plan(TestScope.resolved scope, "user-1", "acme revenue in Q2?")
             Expect.equal (stepsOf compiled) [ UseFact fact.FactId ] "harness sanity: the plan cites the fact"
 
-            do! planner.Record(scope, "msg-1", compiled)
+            do! planner.Record(TestScope.resolved scope, "msg-1", compiled)
 
             // The durable record rides the _facts audit trail.
             let! rows = events.ReadBySource(scope, FactEvents.SourceModule)
@@ -1139,7 +1144,7 @@ let chainTests =
                 "the recorded plan deserialises back to the same typed steps"
 
             // The chain walk surfaces the plan node + edges + upstream.
-            let! chain = AnswerPlanProvenance.chainForMessage graph events scope "msg-1" 5
+            let! chain = AnswerPlanProvenance.chainForMessage graph events (TestScope.resolved scope) "msg-1" 5
 
             let planNode = chain.Nodes |> List.tryFind (fun n -> n.Id = compiled.PlanId)
 
@@ -1169,8 +1174,8 @@ let chainTests =
             let graph = ProvenanceGraph.create lineage
             let scope = newScope ()
 
-            let! composed = AnswerPlanProvenance.chainForMessage graph events scope "msg-1" 5
-            let! plain = graph.GetChainForMessage(scope, "msg-1", [], 5)
+            let! composed = AnswerPlanProvenance.chainForMessage graph events (TestScope.resolved scope) "msg-1" 5
+            let! plain = graph.GetChainForMessage(TestScope.resolved scope, "msg-1", [], 5)
 
             Expect.equal composed plain "no plan node, no extra edge — byte-identical chain"
         }
@@ -1197,8 +1202,8 @@ let chainTests =
             let acme = assertFact store scope (brandDraft "acme" (Scalar 300m))
             let gamma = assertFact store scope (brandDraft "gamma" (Scalar 100m))
 
-            let! compiled = planner.Plan(scope, "user-1", "which brand has the highest revenue?")
-            do! planner.Record(scope, "msg-agg", compiled)
+            let! compiled = planner.Plan(TestScope.resolved scope, "user-1", "which brand has the highest revenue?")
+            do! planner.Record(TestScope.resolved scope, "msg-agg", compiled)
 
             let! recorded = AnswerPlanProvenance.recordedFor events scope "msg-agg"
 
@@ -1228,7 +1233,7 @@ let chainTests =
             let graph =
                 ProvenanceGraph.createWithFacts lineage (FactStoreEvidenceSource.create store)
 
-            let! chain = AnswerPlanProvenance.chainForMessage graph events scope "msg-agg" 5
+            let! chain = AnswerPlanProvenance.chainForMessage graph events (TestScope.resolved scope) "msg-agg" 5
 
             let hasEdge f t k =
                 chain.Edges |> List.exists (fun e -> e.From = f && e.To = t && e.Kind = k)
@@ -1258,10 +1263,10 @@ let chainTests =
             let scopeA = newScope ()
             let scopeB = newScope ()
 
-            let! compiled = planner.Plan(scopeA, "user-1", "acme revenue?")
-            do! planner.Record(scopeA, "msg-1", compiled)
+            let! compiled = planner.Plan(TestScope.resolved scopeA, "user-1", "acme revenue?")
+            do! planner.Record(TestScope.resolved scopeA, "msg-1", compiled)
 
-            let! foreign = AnswerPlanProvenance.chainForMessage graph events scopeB "msg-1" 5
+            let! foreign = AnswerPlanProvenance.chainForMessage graph events (TestScope.resolved scopeB) "msg-1" 5
 
             Expect.isFalse (foreign.Nodes |> List.exists (fun n -> n.Kind = AnswerPlanNode)) "no cross-scope plan node"
         }
@@ -1294,7 +1299,7 @@ type private StubStructuredProvider(content: string) =
 /// The composed fact tier the way a deployment builds it — the
 /// `FactsCompose.withFactStore` knob over a substrate-seeded collection.
 let private composedUnder
-    (knob: FactStoreMode)
+    (knob: FeatureMode)
     (registry: IMetricRegistry option)
     (provider: IAIProvider option)
     : ServerApp * ServiceProvider =
@@ -1303,7 +1308,10 @@ let private composedUnder
             ServerApp.empty with
                 Config = {
                     ServerConfig.defaults with
-                        FactStore = knob
+                        Stores = {
+                            ServerConfig.defaults.Stores with
+                                FactStore = knob
+                        }
                 }
         }
         |> FactsCompose.withFactStore
@@ -1330,22 +1338,22 @@ let private composedUnder
 let composeTests =
     testList "Phase 560 compose registration" [
 
-        test "EnabledFactStore registers IAnswerPlanner on the same knob as the store" {
-            let _, sp = composedUnder EnabledFactStore None None
+        test "FeatureMode.Enabled registers IAnswerPlanner on the same knob as the store" {
+            let _, sp = composedUnder FeatureMode.Enabled None None
 
             Expect.isFalse (isNull (box (sp.GetService<IAnswerPlanner>()))) "the planner rides the one knob"
         }
 
-        test "EnabledFactStore registers IProvenanceGraph, so 'show the working' is one resolve" {
-            let _, sp = composedUnder EnabledFactStore None None
+        test "FeatureMode.Enabled registers IProvenanceGraph, so 'show the working' is one resolve" {
+            let _, sp = composedUnder FeatureMode.Enabled None None
 
             Expect.isFalse
                 (isNull (box (sp.GetService<IProvenanceGraph>())))
                 "the graph rides the same knob — no consumer has to rebuild lineage + evidence by hand"
         }
 
-        test "NoFactStore registers no IProvenanceGraph (GP 13)" {
-            let _, sp = composedUnder NoFactStore None None
+        test "FeatureMode.Disabled registers no IProvenanceGraph (GP 13)" {
+            let _, sp = composedUnder FeatureMode.Disabled None None
 
             Expect.isTrue
                 (isNull (sp.GetService(typeof<IProvenanceGraph>)))
@@ -1364,14 +1372,14 @@ let composeTests =
             // are what actually distinguishes a correctly-wired
             // registration. (Confirmed by probe: the root-node form
             // passed with the source cut out; these two do not.)
-            let _, sp = composedUnder EnabledFactStore None None
+            let _, sp = composedUnder FeatureMode.Enabled None None
             let scope = newScope ()
             let store = sp.GetRequiredService<IFactStore>()
             let graph = sp.GetRequiredService<IProvenanceGraph>()
 
             let stored = assertFact store scope (draft "revenue" [ "hash-a" ] (Scalar 100m))
 
-            let! chain = graph.GetChain(scope, FactRef stored.FactId, Upstream, 3)
+            let! chain = graph.GetChain(TestScope.resolved scope, FactRef stored.FactId, Upstream, 3)
 
             let factNode =
                 chain.Nodes |> List.tryFind (fun n -> n.Id = stored.FactId && n.Kind = FactNode)
@@ -1390,12 +1398,15 @@ let composeTests =
                 "the walk reaches the fact's input hash — the evidence source is wired to the composed store"
         }
 
-        test "NoFactStore composes byte-identically: no planner registered, the app untouched (GP 11 / GP 13)" {
+        test "FeatureMode.Disabled composes byte-identically: no planner registered, the app untouched (GP 11 / GP 13)" {
             let before = {
                 ServerApp.empty with
                     Config = {
                         ServerConfig.defaults with
-                            FactStore = NoFactStore
+                            Stores = {
+                                ServerConfig.defaults.Stores with
+                                    FactStore = FeatureMode.Disabled
+                            }
                     }
             }
 
@@ -1417,10 +1428,10 @@ let composeTests =
             "with no IAIProvider composed the DI planner refuses questions with the typed missing-compiler reason"
         <| async {
             let _, sp =
-                composedUnder EnabledFactStore (Some(registryWith UntilSuperseded None)) None
+                composedUnder FeatureMode.Enabled (Some(registryWith UntilSuperseded None)) None
 
             let planner = sp.GetRequiredService<IAnswerPlanner>()
-            let! result = planner.Plan(newScope (), "user-1", "acme revenue?")
+            let! result = planner.Plan(TestScope.resolved (newScope ()), "user-1", "acme revenue?")
 
             match result.Refusal with
             | Some(QuestionNotCompiled detail) ->
@@ -1437,14 +1448,14 @@ let composeTests =
                 )
 
             let _, sp =
-                composedUnder EnabledFactStore (Some(registryWith UntilSuperseded None)) (Some(stub :> IAIProvider))
+                composedUnder FeatureMode.Enabled (Some(registryWith UntilSuperseded None)) (Some(stub :> IAIProvider))
 
             let scope = newScope ()
             let store = sp.GetRequiredService<IFactStore>()
             let fact = assertFact store scope (draft "revenue" [ "h1" ] (Scalar 21800m))
 
             let planner = sp.GetRequiredService<IAnswerPlanner>()
-            let! result = planner.Plan(scope, "user-1", "what was acme revenue in Q2?")
+            let! result = planner.Plan(TestScope.resolved scope, "user-1", "what was acme revenue in Q2?")
 
             Expect.equal (stepsOf result) [ UseFact fact.FactId ] "compiled through 67b, resolved to the fact"
 
@@ -1463,10 +1474,10 @@ let composeTests =
             let stub = StubStructuredProvider "the revenue was probably fine"
 
             let _, sp =
-                composedUnder EnabledFactStore (Some(registryWith UntilSuperseded None)) (Some(stub :> IAIProvider))
+                composedUnder FeatureMode.Enabled (Some(registryWith UntilSuperseded None)) (Some(stub :> IAIProvider))
 
             let planner = sp.GetRequiredService<IAnswerPlanner>()
-            let! result = planner.Plan(newScope (), "user-1", "acme revenue?")
+            let! result = planner.Plan(TestScope.resolved (newScope ()), "user-1", "acme revenue?")
 
             match result.Refusal with
             | Some(QuestionNotCompiled detail) -> Expect.stringContains detail "non-JSON" "the parse failure is named"
@@ -1488,7 +1499,7 @@ let populationComposeTests =
 
             let _, sp =
                 composedUnder
-                    EnabledFactStore
+                    FeatureMode.Enabled
                     (Some(registryDirected HigherIsBetter UntilSuperseded None))
                     (Some(stub :> IAIProvider))
 
@@ -1498,7 +1509,7 @@ let populationComposeTests =
             assertFact store scope (brandDraft "gamma" (Scalar 100m)) |> ignore
 
             let planner = sp.GetRequiredService<IAnswerPlanner>()
-            let! result = planner.Plan(scope, "user-1", "which brand has the highest revenue?")
+            let! result = planner.Plan(TestScope.resolved scope, "user-1", "which brand has the highest revenue?")
 
             match result.Steps |> List.map _.Step with
             | [ UseAggregate aggregate ] ->
@@ -1529,14 +1540,14 @@ let populationComposeTests =
                 )
 
             let _, sp =
-                composedUnder EnabledFactStore (Some(registryWith UntilSuperseded None)) (Some(stub :> IAIProvider))
+                composedUnder FeatureMode.Enabled (Some(registryWith UntilSuperseded None)) (Some(stub :> IAIProvider))
 
             let scope = newScope ()
             let store = sp.GetRequiredService<IFactStore>()
             let fact = assertFact store scope (draft "revenue" [ "h1" ] (Scalar 21800m))
 
             let planner = sp.GetRequiredService<IAnswerPlanner>()
-            let! result = planner.Plan(scope, "user-1", "what was acme revenue?")
+            let! result = planner.Plan(TestScope.resolved scope, "user-1", "what was acme revenue?")
 
             Expect.equal (result.Steps |> List.map _.Step) [ UseFact fact.FactId ] "the pre-706 document still compiles"
         }
@@ -1547,10 +1558,10 @@ let populationComposeTests =
                 StubStructuredProvider """{"triples":[],"populations":"the top ten brands"}"""
 
             let _, sp =
-                composedUnder EnabledFactStore (Some(registryWith UntilSuperseded None)) (Some(stub :> IAIProvider))
+                composedUnder FeatureMode.Enabled (Some(registryWith UntilSuperseded None)) (Some(stub :> IAIProvider))
 
             let planner = sp.GetRequiredService<IAnswerPlanner>()
-            let! result = planner.Plan(newScope (), "user-1", "top brands?")
+            let! result = planner.Plan(TestScope.resolved (newScope ()), "user-1", "top brands?")
 
             match result.Refusal with
             | Some(QuestionNotCompiled detail) ->
@@ -1563,10 +1574,10 @@ let populationComposeTests =
             let stub = StubStructuredProvider """{"triples":[],"populations":[]}"""
 
             let _, sp =
-                composedUnder EnabledFactStore (Some(registryWith UntilSuperseded None)) (Some(stub :> IAIProvider))
+                composedUnder FeatureMode.Enabled (Some(registryWith UntilSuperseded None)) (Some(stub :> IAIProvider))
 
             let planner = sp.GetRequiredService<IAnswerPlanner>()
-            let! result = planner.Plan(newScope (), "user-1", "what is the meaning of life?")
+            let! result = planner.Plan(TestScope.resolved (newScope ()), "user-1", "what is the meaning of life?")
 
             match result.Refusal with
             | Some(QuestionNotCompiled detail) ->
@@ -1581,23 +1592,13 @@ let populationComposeTests =
 // fact door onto it. The answer planner — the assembly point the 792
 // ladder's residual described — still took a string. These cases pin the
 // typed form end to end: the planner's store reads and gate checks go
-// through the `ResolvedScope` members (and the string form, kept one
-// release, through the string ones — the probe distinguishes the two), a
-// minted scope reads its own shard and the anonymous scope reads nothing
-// else, and a source scan pins that no shipped code constructs a
-// `DisclosedFact` whose `Scope` is anything but a `ResolvedScope`'s.
+// through the `ResolvedScope` members, a minted scope reads its own shard
+// and the anonymous scope reads nothing else, and a source scan pins that
+// no shipped code constructs a `DisclosedFact` whose `Scope` is anything
+// but a `ResolvedScope`'s.
 
-/// A `ResolvedScope` for a test scope id, through the same internal mint
-/// the scope-resolution middleware uses.
-let private resolved (scopeId: string) : ResolvedScope =
-    StorageScopeResolver.ScopeResolution.ofStorageScope {
-        ScopeId = scopeId
-        Container = "container-" + scopeId
-        Persist = true
-    }
-
-/// A store and gate over `inner` that record which overload each read
-/// arrived through — "typed" or "string" — and forward unchanged.
+/// A store and gate over `inner` that record each read and check they
+/// forward, unchanged.
 let private recordingTier
     (inner: IFactStore)
     (innerGate: IFactDisclosureGate)
@@ -1607,46 +1608,24 @@ let private recordingTier
 
     let store =
         { new IFactStore with
-            member _.Assert(scopeId: string, d) = inner.Assert(scopeId, d)
             member _.Assert(scope: ResolvedScope, d) = inner.Assert(scope, d)
-            member _.AssertBatch(scopeId: string, ds) = inner.AssertBatch(scopeId, ds)
             member _.AssertBatch(scope: ResolvedScope, ds) = inner.AssertBatch(scope, ds)
-
-            member _.Get(scopeId: string, factId: string) =
-                note "string" "Get"
-                inner.Get(scopeId, factId)
 
             member _.Get(scope: ResolvedScope, factId: string) =
                 note "typed" "Get"
                 inner.Get(scope, factId)
 
-            member _.Query(scopeId: string, query) =
-                note "string" "Query"
-                inner.Query(scopeId, query)
-
             member _.Query(scope: ResolvedScope, query) =
                 note "typed" "Query"
                 inner.Query(scope, query)
-
-            member _.QueryWithCompetition(scopeId: string, query) =
-                note "string" "QueryWithCompetition"
-                inner.QueryWithCompetition(scopeId, query)
 
             member _.QueryWithCompetition(scope: ResolvedScope, query) =
                 note "typed" "QueryWithCompetition"
                 inner.QueryWithCompetition(scope, query)
 
-            member _.QuerySupersessionChain(scopeId: string, factId: string) =
-                note "string" "QuerySupersessionChain"
-                inner.QuerySupersessionChain(scopeId, factId)
-
             member _.QuerySupersessionChain(scope: ResolvedScope, factId: string) =
                 note "typed" "QuerySupersessionChain"
                 inner.QuerySupersessionChain(scope, factId)
-
-            member _.QueryPopulation(scopeId: string, query) =
-                note "string" "QueryPopulation"
-                inner.QueryPopulation(scopeId, query)
 
             member _.QueryPopulation(scope: ResolvedScope, query) =
                 note "typed" "QueryPopulation"
@@ -1655,10 +1634,6 @@ let private recordingTier
 
     let gate =
         { new IFactDisclosureGate with
-            member _.Check(scopeId: string, principal, surface, factIds) =
-                note "string" "Check"
-                innerGate.Check(scopeId, principal, surface, factIds)
-
             member _.Check(scope: ResolvedScope, principal, surface, factIds) =
                 note "typed" "Check"
                 innerGate.Check(scope, principal, surface, factIds)
@@ -1767,7 +1742,7 @@ let typedScopeTests =
             let scopeId = newScope ()
             assertFact inner scopeId (brandDraft "acme" (Scalar 300m)) |> ignore
 
-            let! result = planner.Plan(resolved scopeId, "user-1", "acme revenue, and who leads?")
+            let! result = planner.Plan(TestScope.resolved scopeId, "user-1", "acme revenue, and who leads?")
 
             Expect.equal (List.length result.Steps) 2 "both the point and the population step resolved"
 
@@ -1782,24 +1757,10 @@ let typedScopeTests =
                 Expect.contains seen (name + "(typed)") (sprintf "%s went through the typed member" name)
         }
 
-        testCaseAsync "the string Plan (kept one release) goes through the string members — the probe distinguishes"
-        <| async {
-            let planner, inner, calls = recordedPlanner ()
-            let scopeId = newScope ()
-            assertFact inner scopeId (brandDraft "acme" (Scalar 300m)) |> ignore
+        // Phase 1157 retired the string scope form; the string Plan (PlanScope.Legacy) is gone.
 
-            let! _ = planner.Plan(scopeId, "user-1", "acme revenue, and who leads?")
-
-            let seen = List.ofSeq calls
-
-            Expect.isEmpty
-                (seen |> List.filter (fun c -> c.EndsWith "(typed)"))
-                "the compatibility form is the string form, unchanged"
-
-            Expect.contains seen "Query(string)" "and the probe records it"
-        }
-
-        testCaseAsync "a minted scope plans exactly what its shard's string plans"
+        // Phase 1157 retired the string scope form; the minted/string Plan equivalence is gone.
+        testCaseAsync "a minted scope plans from its own shard"
         <| async {
             let registry = Some(registryWith UntilSuperseded None)
 
@@ -1809,11 +1770,9 @@ let typedScopeTests =
             let scopeId = newScope ()
             let fact = assertFact store scopeId (draft "revenue" [ "h1" ] (Scalar 21800m))
 
-            let! typed = planner.Plan(resolved scopeId, "user-1", "acme revenue?")
-            let! legacy = planner.Plan(scopeId, "user-1", "acme revenue?")
+            let! typed = planner.Plan(TestScope.resolved scopeId, "user-1", "acme revenue?")
 
             Expect.equal (stepsOf typed) [ UseFact fact.FactId ] "the minted scope reads its own shard"
-            Expect.equal (stepsOf typed) (stepsOf legacy) "the typed form is the string form over scope.ScopeId"
         }
 
         testCaseAsync "the anonymous scope reads its own shard and never another"
@@ -1841,7 +1800,7 @@ let typedScopeTests =
             assertFact inner scopeId (brandDraft "acme" (Scalar 300m)) |> ignore
 
             let feeder = AnswerPlanClausePlanner.create planner :> IFactClausePlanner
-            let! planned = feeder.PlanClauses(resolved scopeId, "user-1", "acme revenue?")
+            let! planned = feeder.PlanClauses(TestScope.resolved scopeId, "user-1", "acme revenue?")
 
             Expect.isFalse (PlannedFactClauses.isEmpty planned) "the point fact is pushable"
 
@@ -1930,7 +1889,7 @@ let typedScopeTests =
 
         test "ModelInput.disclose writes the minted scope's shard key" {
             let fact =
-                ToolUp.AI.ModelInput.disclose (resolved "team-q") "f1" "£1" FactDisclosable
+                ToolUp.AI.ModelInput.disclose (TestScope.resolved "team-q") "f1" "£1" FactDisclosable
 
             Expect.equal fact.Scope "team-q" "the scope is the resolver's"
 
@@ -1958,7 +1917,6 @@ let private freshPlans (template: AnswerPlan) (recorded: System.Collections.Conc
     }
 
     { new IAnswerPlanner with
-        member _.Plan(_: string, _: string, _: string) = async { return fresh () }
         member _.Plan(_: ResolvedScope, _: string, _: string) = async { return fresh () }
 
         member _.Record(_, _, plan) = async { recorded.Add plan.PlanId }
@@ -1972,7 +1930,7 @@ let retentionTests =
             let planner, inner, _ = recordedPlanner ()
             let scopeId = newScope ()
             assertFact inner scopeId (brandDraft "acme" (Scalar 300m)) |> ignore
-            let! template = planner.Plan(scopeId, "user-1", "acme revenue?")
+            let! template = planner.Plan(TestScope.resolved scopeId, "user-1", "acme revenue?")
             let recorded = System.Collections.Concurrent.ConcurrentBag<string>()
             let bound = 4
 
@@ -1983,7 +1941,9 @@ let retentionTests =
                 let clauses = feeder :> IFactClausePlanner
 
                 let! planned =
-                    [ for _ in 1..32 -> clauses.PlanClauses(scopeId, "user-1", "acme revenue?") ]
+                    [
+                        for _ in 1..32 -> clauses.PlanClauses(TestScope.resolved scopeId, "user-1", "acme revenue?")
+                    ]
                     |> Async.Parallel
 
                 let retained =
@@ -1997,7 +1957,10 @@ let retentionTests =
                     (sprintf "round %d: the bound holds exactly — no plan is wiped below it" round)
 
                 for planId in retained do
-                    let! ok = (feeder :> IPlannedAnswerRecorder).RecordPlanned(scopeId, "msg-" + planId, planId)
+                    let! ok =
+                        (feeder :> IPlannedAnswerRecorder)
+                            .RecordPlanned(TestScope.resolved scopeId, "msg-" + planId, planId)
+
                     Expect.isTrue ok (sprintf "round %d: a retained plan records" round)
         }
     ]

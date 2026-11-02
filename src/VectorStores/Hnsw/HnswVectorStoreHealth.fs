@@ -3,7 +3,8 @@ module ToolUp.RAG.VectorStores.Hnsw.Health
 open System
 open ToolUp.Platform.HealthChecks
 open ToolUp.Platform
-open ToolUp.Platform.IVectorStore
+open ToolUp.Platform.Infra.IVectorStore
+open ToolUp.Platform.Infra
 
 // ─── Phase 9k HNSW vector store health probe ─────────────────────────
 //
@@ -17,7 +18,7 @@ open ToolUp.Platform.IVectorStore
 // Usage from a deployment that wires HNSW:
 //   let vectorStore = HnswVectorStore.create blobStorage (Some logger)
 //   ...
-//   |> RAGServerApp.withHealthCheck (HnswVectorStoreHealth.create vectorStore)
+//   |> ServerApp.withHealthCheck (HnswVectorStoreHealth.create vectorStore)
 
 type HnswVectorStoreHealthCheck(store: IVectorStore) =
     interface IHealthCheck with

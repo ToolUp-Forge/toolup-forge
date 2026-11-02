@@ -3,7 +3,9 @@
 
 /// The per-key configuration resolution seam: one place that answers
 /// "what is this key's effective value, and where did it come from?".
-module ToolUp.Platform.ConfigResolution
+module ToolUp.Platform.Config.ConfigResolution
+
+open ToolUp.Platform
 
 // ─── Phase 696 — the declared layer beneath the environment ──────────
 //

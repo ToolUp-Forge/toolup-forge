@@ -11,7 +11,11 @@ open Microsoft.Extensions.DependencyInjection
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.DataObjectOrphanSweep
+open ToolUp.Platform.Audit.DataObjectOrphanSweep
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 7c — data-object orphan-blob sweep ────────────────────────
 //

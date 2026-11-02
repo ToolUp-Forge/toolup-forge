@@ -13,6 +13,7 @@ open ToolUp.Platform.HealthChecks
 open ToolUp.Platform.NotificationChannels.WhatsApp.MetaCloud
 open ToolUp.Platform.Secrets
 open ToolUp.Platform.ProviderExceptions
+open ToolUp.Platform.Compose
 
 // ─── Phase 6f.C — Meta WhatsApp Cloud sink readiness probe ───────────
 //

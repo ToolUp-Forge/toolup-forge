@@ -6,10 +6,12 @@ module ToolUp.Platform.DataSubject.Tests.InProcess.BackgroundExportStoreTests
 open System
 open Expecto
 open ToolUp.Platform
-open ToolUp.Platform.IDataExporter
-open ToolUp.Platform.DataSubjectRequestApiHandler
+open ToolUp.Platform.Audit.IDataExporter
+open ToolUp.Platform.Audit.DataSubjectRequestApiHandler
 open ToolUp.Platform.DataSubject.Tests.Support.Doubles
 open ToolUp.Platform.DataSubject.Tests.Contracts
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Audit
 
 let private factory () : IBackgroundExportStore =
     BlobBackedBackgroundExportStore.create (InMemoryBlobStorage())

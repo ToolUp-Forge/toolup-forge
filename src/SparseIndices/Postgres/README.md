@@ -20,8 +20,8 @@ open ToolUp.RAG.RAGCompose
 open ToolUp.SparseIndices.Postgres
 
 rag
-|> RAGServerApp.withSparseAnalyzer (SnowballAnalyzer.english ())        // optional
-|> RAGServerApp.withAnalyzedSparseIndex (
+|> RagOptions.withSparseAnalyzer (SnowballAnalyzer.english ())        // optional
+|> RagOptions.withAnalyzedSparseIndex (
     PostgresFullTextIndex.factory connectionString PostgresFullTextOptions.defaults (Some logger))
 ```
 
@@ -33,9 +33,9 @@ none), at composition time. If you build the index yourself, pass it the analyze
 let index =
     PostgresFullTextIndex.create connectionString PostgresFullTextOptions.defaults SparseAnalysis.identity (Some logger)
 
-rag
-|> RAGServerApp.withSparseIndex index
-|> RAGServerApp.withHealthCheck (PostgresFullTextIndex.health index)
+app
+|> ServerApp.withHealthCheck (PostgresFullTextIndex.health index)
+|> RAGCompose.withRAG (rag |> RagOptions.withSparseIndex index)
 ```
 
 `withSparseIndex` together with `withSparseAnalyzer` is refused at composition. A supplied index tokenises

@@ -36,7 +36,7 @@ Three packages:
 Optional:
 - **`INotificationChannel` / `INotificationSink`** (`ToolUp.Platform.Server`) — for transactional notifications from workflow actions (e.g. "email customer on Invoiced state").
 - **`IShareTokenStore`** (`ToolUp.Platform.Server`) — required for publishable surveys. HMAC-SHA256-signed tokens, blob-backed claim store.
-- **`IActionLedger`** (`ToolUp.Forms.Core`) — for distributed deployments. The compose step auto-defaults to `InMemoryActionLedger`; wire a durable ledger via `FormsServerApp.withActionLedger` when the deployment must survive a process restart between state-persist and action-completion.
+- **`IActionLedger`** (`ToolUp.Forms.Core`) — for distributed deployments. The compose step auto-defaults to `InMemoryActionLedger`; wire a durable ledger via `FormsOptions.withActionLedger` when the deployment must survive a process restart between state-persist and action-completion.
 
 ## Quick start
 
@@ -50,7 +50,7 @@ Add the packages:
 Wire the server composition root:
 
 ```fsharp skip=fragment
-open ToolUp.Platform.Server
+open ToolUp.Platform.Compose.Server
 open ToolUp.Forms.FormSchema
 open ToolUp.Forms.Workflow
 open ToolUp.Forms.FormsCompose
@@ -81,13 +81,16 @@ let onboardingWorkflow: WorkflowDefinition = {
     ]
 }
 
-FormsServerApp.create ()
-|> FormsServerApp.withConfig serverConfig
-|> FormsServerApp.withAuth authProvider
-|> FormsServerApp.addModules modules
-|> FormsServerApp.withFormSchema onboardingSchema
-|> FormsServerApp.withWorkflow onboardingWorkflow
-|> FormsServerApp.run
+ServerApp.empty
+|> ServerApp.withConfig serverConfig
+|> ServerApp.withAuth authProvider
+|> ServerApp.addModules modules
+|> withForms (
+    FormsOptions.create ()
+    |> FormsOptions.withFormSchema onboardingSchema
+    |> FormsOptions.withWorkflow onboardingWorkflow
+)
+|> ServerApp.run
 ```
 
 Wire a client view (consumer-side):

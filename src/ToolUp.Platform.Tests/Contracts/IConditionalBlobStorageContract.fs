@@ -8,10 +8,14 @@ open Expecto
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.NotificationChannel
+open ToolUp.Platform.Config.NotificationChannel
 open ToolUp.Platform.Secrets
-open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.Config.TeamManagement
 open ToolUp.Platform.Testing
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
 // ─── Phase 864 — IConditionalBlobStorage contract ────────────────────
 //
@@ -253,7 +257,11 @@ let private kbDeps (storage: IBlobStorage) (container: string) =
         Persist = true
     }
 
-    KnowledgeBase.ServerApiDeps.KnowledgeApiDeps.resolveFrom services (Some scope) "user-1"
+    KnowledgeBase.ServerApiDeps.KnowledgeApiDeps.resolveFrom
+        services
+        (TestScope.resolved container)
+        (Some scope)
+        "user-1"
 
 /// A forwarding decorator that exposes ONLY `IBlobStorage` — the same
 /// backend with its conditional seam hidden, as a store without conditional
@@ -289,7 +297,10 @@ let private validateIndexInstance (replicaCount: int) (storage: IBlobStorage) =
 
     let config = {
         ServerConfig.defaults with
-            ReplicaCount = replicaCount
+            MultiInstance = {
+                ServerConfig.defaults.MultiInstance with
+                    ReplicaCount = replicaCount
+            }
     }
 
     let validator =

@@ -40,7 +40,7 @@ open ToolUp.Platform.AI
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Grounding
 open ToolUp.Platform.Narrative
-open ToolUp.Platform.StorageScopeResolver
+open ToolUp.Platform.Scope.StorageScopeResolver
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.AI
 open ToolUp.AI.AIAssistantHandler
@@ -50,6 +50,11 @@ open ToolUp.Facts.Presentation
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Tests.InProcess.FactRenderToolTests.RenderFixtures
 open ToolUp.Platform.Tests.InProcess.PipelineToolTests.PipelineFixtures
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Fixtures ────────────────────────────────────────────────────────
 
@@ -383,9 +388,9 @@ let private correctFirstDay (w: World) =
         | Ok v -> v
         | Error e -> failtestf "the correcting run failed: %A" e
 
-    let opened = run (writer.OpenRun(w.Scope.ScopeId, trade.Id))
-    run (writer.WriteRows(w.Scope.ScopeId, opened.RunId, rows)) |> ignore
-    run (writer.Commit(w.Scope.ScopeId, opened.RunId)) |> ignore
+    let opened = run (writer.OpenRun(w.Scope, trade.Id))
+    run (writer.WriteRows(w.Scope, opened.RunId, rows)) |> ignore
+    run (writer.Commit(w.Scope, opened.RunId)) |> ignore
 
 let private writeTests =
     testList "the write" [
@@ -412,7 +417,9 @@ let private writeTests =
                 "rendered with the derived metric's display format"
 
             let stored =
-                w.Deps.Store.Get(w.Scope, assertion.Facts.Head.FactId) |> Async.RunSynchronously
+                w.Deps.Store.Get(w.Scope, assertion.Facts.Head.FactId)
+                |> TestScope.ok
+                |> Async.RunSynchronously
 
             match stored with
             | Some fact -> Expect.equal fact.Metric (MetricRef "site_total") "stored as the derived metric"
@@ -442,7 +449,7 @@ let private writeTests =
 
             let s1 = corrected.Facts.Head
 
-            match w.Deps.Store.Get(w.Scope, s1.FactId) |> Async.RunSynchronously with
+            match w.Deps.Store.Get(w.Scope, s1.FactId) |> TestScope.ok |> Async.RunSynchronously with
             | Some fact ->
                 Expect.equal
                     fact.Supersedes
@@ -500,7 +507,7 @@ let private groundingTests =
             }
 
             match
-                gate.Check(w.Scope.ScopeId, "reader", FactNarrativePublication, document)
+                gate.Check(w.Scope, "reader", FactNarrativePublication, document)
                 |> Async.RunSynchronously
             with
             | Grounded _ -> ()
@@ -586,7 +593,10 @@ let private chatServices (model: IAIProvider) : ServiceProvider =
             ServerApp.empty with
                 Config = {
                     ServerConfig.defaults with
-                        FactStore = EnabledFactStore
+                        Stores = {
+                            ServerConfig.defaults.Stores with
+                                FactStore = FeatureMode.Enabled
+                        }
                 }
         }
         |> FactsCompose.withFactStore
@@ -733,12 +743,13 @@ let private endToEndTests =
 
                 let asserted =
                     store.Query(
-                        scopeId,
+                        TestScope.resolved scopeId,
                         {
                             FactQuery.all with
                                 Metric = Some(MetricRef "site_total")
                         }
                     )
+                    |> TestScope.ok
                     |> Async.RunSynchronously
                     |> List.map _.FactId
 

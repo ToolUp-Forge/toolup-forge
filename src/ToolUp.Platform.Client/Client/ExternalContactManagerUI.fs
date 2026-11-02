@@ -620,7 +620,7 @@ let private contactListView (msgs: ExternalContactMessages) (model: Model) (disp
                     Html.p [ prop.className "text-sm text-muted py-4"; prop.text msgs.NoContactsYet ]
                 else
                     AgGrid.grid [
-                        AgGrid.theme Theme.themeBalham
+                        AgGrid.baseTheme BaseTheme.themeBalham
                         AgGrid.domLayout AutoHeight
                         AgGrid.columnDefs [
                             ColumnDef.create [

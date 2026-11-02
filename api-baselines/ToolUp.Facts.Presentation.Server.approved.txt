@@ -3,6 +3,285 @@
 # Do not edit by hand. Drift in EITHER direction fails the gate (Phase 618): a
 # removal is breaking and must be reviewed; an addition is non-breaking but must
 # still be folded into this file in the same PR.
+ToolUp.Facts.Presentation.LayoutCaller (class)
+ToolUp.Facts.Presentation.LayoutCaller..ctor(ToolUp.Platform.ResolvedScope, ToolUp.Platform.AccessContext, ToolUp.Facts.FactBrowseHandler+FactBrowseDeps, ToolUp.Facts.Presentation.PageRequestResolver, ToolUp.Platform.Compose.IPageDocumentStore, ToolUp.Facts.Presentation.LayoutProposalStore)
+ToolUp.Facts.Presentation.LayoutCaller.Access : ToolUp.Platform.AccessContext { get }
+ToolUp.Facts.Presentation.LayoutCaller.Deps : ToolUp.Facts.FactBrowseHandler+FactBrowseDeps { get }
+ToolUp.Facts.Presentation.LayoutCaller.Proposals : ToolUp.Facts.Presentation.LayoutProposalStore { get }
+ToolUp.Facts.Presentation.LayoutCaller.Resolver : ToolUp.Facts.Presentation.PageRequestResolver { get }
+ToolUp.Facts.Presentation.LayoutCaller.Scope : ToolUp.Platform.ResolvedScope { get }
+ToolUp.Facts.Presentation.LayoutCaller.Store : ToolUp.Platform.Compose.IPageDocumentStore { get }
+ToolUp.Facts.Presentation.LayoutChange (class)
+ToolUp.Facts.Presentation.LayoutChange.IsAppend : System.Boolean { get }
+ToolUp.Facts.Presentation.LayoutChange.IsReset : System.Boolean { get }
+ToolUp.Facts.Presentation.LayoutChange.Tag : System.Int32 { get }
+ToolUp.Facts.Presentation.LayoutChange+Append (class)
+ToolUp.Facts.Presentation.LayoutChange+Append.ops : Microsoft.FSharp.Collections.FSharpList`1[Fuaran.UI.Ops.Types+TreeOp`1[Microsoft.FSharp.Core.Unit]] { get }
+ToolUp.Facts.Presentation.LayoutChange+Append.sidecar : System.Byte[] { get }
+ToolUp.Facts.Presentation.LayoutChange+Reset (class)
+ToolUp.Facts.Presentation.LayoutChange+Reset.layer : ToolUp.Platform.Compose.PageLayer { get }
+ToolUp.Facts.Presentation.LayoutChange+Tags (class)
+ToolUp.Facts.Presentation.LayoutChange+Tags.Append : System.Int32 (literal)
+ToolUp.Facts.Presentation.LayoutChange+Tags.Reset : System.Int32 (literal)
+ToolUp.Facts.Presentation.LayoutProposal (class)
+ToolUp.Facts.Presentation.LayoutProposal..ctor(System.String, ToolUp.Platform.Compose.PageRef, System.String, ToolUp.Facts.Presentation.LayoutChange, System.String, System.DateTime)
+ToolUp.Facts.Presentation.LayoutProposal.At : System.DateTime { get }
+ToolUp.Facts.Presentation.LayoutProposal.BaseHash : System.String { get }
+ToolUp.Facts.Presentation.LayoutProposal.Change : ToolUp.Facts.Presentation.LayoutChange { get }
+ToolUp.Facts.Presentation.LayoutProposal.Id : System.String { get }
+ToolUp.Facts.Presentation.LayoutProposal.Page : ToolUp.Platform.Compose.PageRef { get }
+ToolUp.Facts.Presentation.LayoutProposal.Tool : System.String { get }
+ToolUp.Facts.Presentation.LayoutProposalStore (class)
+ToolUp.Facts.Presentation.LayoutProposalStore..ctor()
+ToolUp.Facts.Presentation.LayoutProposalStore..ctor(System.Int32, System.Int32, System.TimeSpan, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime])
+ToolUp.Facts.Presentation.LayoutProposalStore.Now() : System.DateTime
+ToolUp.Facts.Presentation.LayoutProposalStore.Put(System.String, ToolUp.Facts.Presentation.LayoutProposal) : System.Void
+ToolUp.Facts.Presentation.LayoutProposalStore.Remove(System.String, System.String) : System.Void
+ToolUp.Facts.Presentation.LayoutProposalStore.TryGet(System.String, System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.Presentation.LayoutProposal]
+ToolUp.Facts.Presentation.LayoutRefusal (class)
+ToolUp.Facts.Presentation.LayoutRefusal.IsArguments : System.Boolean { get }
+ToolUp.Facts.Presentation.LayoutRefusal.IsBinding : System.Boolean { get }
+ToolUp.Facts.Presentation.LayoutRefusal.IsGrammar : System.Boolean { get }
+ToolUp.Facts.Presentation.LayoutRefusal.IsInlineRows : System.Boolean { get }
+ToolUp.Facts.Presentation.LayoutRefusal.IsLayerMismatch : System.Boolean { get }
+ToolUp.Facts.Presentation.LayoutRefusal.IsNoChange : System.Boolean { get }
+ToolUp.Facts.Presentation.LayoutRefusal.IsNotEditable : System.Boolean { get }
+ToolUp.Facts.Presentation.LayoutRefusal.IsOpsDoNotApply : System.Boolean { get }
+ToolUp.Facts.Presentation.LayoutRefusal.IsSidecar : System.Boolean { get }
+ToolUp.Facts.Presentation.LayoutRefusal.IsStaleProposal : System.Boolean { get }
+ToolUp.Facts.Presentation.LayoutRefusal.IsStore : System.Boolean { get }
+ToolUp.Facts.Presentation.LayoutRefusal.IsTabs : System.Boolean { get }
+ToolUp.Facts.Presentation.LayoutRefusal.IsUnavailable : System.Boolean { get }
+ToolUp.Facts.Presentation.LayoutRefusal.IsUndeclared : System.Boolean { get }
+ToolUp.Facts.Presentation.LayoutRefusal.IsUnknownNode : System.Boolean { get }
+ToolUp.Facts.Presentation.LayoutRefusal.IsUnknownProposal : System.Boolean { get }
+ToolUp.Facts.Presentation.LayoutRefusal.IsUnknownRequest : System.Boolean { get }
+ToolUp.Facts.Presentation.LayoutRefusal.IsUnresolved : System.Boolean { get }
+ToolUp.Facts.Presentation.LayoutRefusal.Tag : System.Int32 { get }
+ToolUp.Facts.Presentation.LayoutRefusal+Arguments (class)
+ToolUp.Facts.Presentation.LayoutRefusal+Arguments.reason : System.String { get }
+ToolUp.Facts.Presentation.LayoutRefusal+Binding (class)
+ToolUp.Facts.Presentation.LayoutRefusal+Binding.defects : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.Presentation.LayoutRefusal+Grammar (class)
+ToolUp.Facts.Presentation.LayoutRefusal+Grammar.findings : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.Presentation.LayoutRefusal+InlineRows (class)
+ToolUp.Facts.Presentation.LayoutRefusal+InlineRows.where : System.String { get }
+ToolUp.Facts.Presentation.LayoutRefusal+LayerMismatch (class)
+ToolUp.Facts.Presentation.LayoutRefusal+LayerMismatch.named : ToolUp.Platform.Compose.PageLayer { get }
+ToolUp.Facts.Presentation.LayoutRefusal+LayerMismatch.proposed : ToolUp.Platform.Compose.PageLayer { get }
+ToolUp.Facts.Presentation.LayoutRefusal+NoChange (class)
+ToolUp.Facts.Presentation.LayoutRefusal+NoChange.reason : System.String { get }
+ToolUp.Facts.Presentation.LayoutRefusal+NotEditable (class)
+ToolUp.Facts.Presentation.LayoutRefusal+NotEditable.nodeId : System.String { get }
+ToolUp.Facts.Presentation.LayoutRefusal+NotEditable.reason : System.String { get }
+ToolUp.Facts.Presentation.LayoutRefusal+OpsDoNotApply (class)
+ToolUp.Facts.Presentation.LayoutRefusal+OpsDoNotApply.reason : System.String { get }
+ToolUp.Facts.Presentation.LayoutRefusal+Sidecar (class)
+ToolUp.Facts.Presentation.LayoutRefusal+Sidecar.reason : System.String { get }
+ToolUp.Facts.Presentation.LayoutRefusal+StaleProposal (class)
+ToolUp.Facts.Presentation.LayoutRefusal+StaleProposal.proposalId : System.String { get }
+ToolUp.Facts.Presentation.LayoutRefusal+Store (class)
+ToolUp.Facts.Presentation.LayoutRefusal+Store.Item : ToolUp.Platform.Compose.PageStoreError { get }
+ToolUp.Facts.Presentation.LayoutRefusal+Tabs (class)
+ToolUp.Facts.Presentation.LayoutRefusal+Tabs.problem : ToolUp.Facts.Presentation.TabRefusal { get }
+ToolUp.Facts.Presentation.LayoutRefusal+Tabs.sectionId : System.String { get }
+ToolUp.Facts.Presentation.LayoutRefusal+Tags (class)
+ToolUp.Facts.Presentation.LayoutRefusal+Tags.Arguments : System.Int32 (literal)
+ToolUp.Facts.Presentation.LayoutRefusal+Tags.Binding : System.Int32 (literal)
+ToolUp.Facts.Presentation.LayoutRefusal+Tags.Grammar : System.Int32 (literal)
+ToolUp.Facts.Presentation.LayoutRefusal+Tags.InlineRows : System.Int32 (literal)
+ToolUp.Facts.Presentation.LayoutRefusal+Tags.LayerMismatch : System.Int32 (literal)
+ToolUp.Facts.Presentation.LayoutRefusal+Tags.NoChange : System.Int32 (literal)
+ToolUp.Facts.Presentation.LayoutRefusal+Tags.NotEditable : System.Int32 (literal)
+ToolUp.Facts.Presentation.LayoutRefusal+Tags.OpsDoNotApply : System.Int32 (literal)
+ToolUp.Facts.Presentation.LayoutRefusal+Tags.Sidecar : System.Int32 (literal)
+ToolUp.Facts.Presentation.LayoutRefusal+Tags.StaleProposal : System.Int32 (literal)
+ToolUp.Facts.Presentation.LayoutRefusal+Tags.Store : System.Int32 (literal)
+ToolUp.Facts.Presentation.LayoutRefusal+Tags.Tabs : System.Int32 (literal)
+ToolUp.Facts.Presentation.LayoutRefusal+Tags.Unavailable : System.Int32 (literal)
+ToolUp.Facts.Presentation.LayoutRefusal+Tags.Undeclared : System.Int32 (literal)
+ToolUp.Facts.Presentation.LayoutRefusal+Tags.UnknownNode : System.Int32 (literal)
+ToolUp.Facts.Presentation.LayoutRefusal+Tags.UnknownProposal : System.Int32 (literal)
+ToolUp.Facts.Presentation.LayoutRefusal+Tags.UnknownRequest : System.Int32 (literal)
+ToolUp.Facts.Presentation.LayoutRefusal+Tags.Unresolved : System.Int32 (literal)
+ToolUp.Facts.Presentation.LayoutRefusal+Unavailable (class)
+ToolUp.Facts.Presentation.LayoutRefusal+Unavailable.reason : System.String { get }
+ToolUp.Facts.Presentation.LayoutRefusal+Undeclared (class)
+ToolUp.Facts.Presentation.LayoutRefusal+Undeclared.reasons : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.Presentation.LayoutRefusal+UnknownNode (class)
+ToolUp.Facts.Presentation.LayoutRefusal+UnknownNode.nodeId : System.String { get }
+ToolUp.Facts.Presentation.LayoutRefusal+UnknownProposal (class)
+ToolUp.Facts.Presentation.LayoutRefusal+UnknownProposal.proposalId : System.String { get }
+ToolUp.Facts.Presentation.LayoutRefusal+UnknownRequest (class)
+ToolUp.Facts.Presentation.LayoutRefusal+UnknownRequest.key : System.String { get }
+ToolUp.Facts.Presentation.LayoutRefusal+UnknownRequest.nodeId : System.String { get }
+ToolUp.Facts.Presentation.LayoutRefusal+Unresolved (class)
+ToolUp.Facts.Presentation.LayoutRefusal+Unresolved.key : System.String { get }
+ToolUp.Facts.Presentation.LayoutRefusal+Unresolved.refusal : ToolUp.Facts.Presentation.PageRefusal { get }
+ToolUp.Facts.Presentation.LayoutRefusalModule (class)
+ToolUp.Facts.Presentation.LayoutRefusalModule.cause(ToolUp.Facts.Presentation.LayoutRefusal) : System.String
+ToolUp.Facts.Presentation.LayoutRefusalModule.describe(ToolUp.Facts.Presentation.LayoutRefusal) : System.String
+ToolUp.Facts.Presentation.LayoutRefusalModule.describeStore(ToolUp.Platform.Compose.PageStoreError) : System.String
+ToolUp.Facts.Presentation.LayoutTool (class)
+ToolUp.Facts.Presentation.LayoutTool.AddBlock : ToolUp.Facts.Presentation.LayoutTool { get }
+ToolUp.Facts.Presentation.LayoutTool.IsAddBlock : System.Boolean { get }
+ToolUp.Facts.Presentation.LayoutTool.IsMoveBlock : System.Boolean { get }
+ToolUp.Facts.Presentation.LayoutTool.IsRemoveBlock : System.Boolean { get }
+ToolUp.Facts.Presentation.LayoutTool.IsReset : System.Boolean { get }
+ToolUp.Facts.Presentation.LayoutTool.IsRetitle : System.Boolean { get }
+ToolUp.Facts.Presentation.LayoutTool.IsSave : System.Boolean { get }
+ToolUp.Facts.Presentation.LayoutTool.IsSetDefault : System.Boolean { get }
+ToolUp.Facts.Presentation.LayoutTool.IsSetRequest : System.Boolean { get }
+ToolUp.Facts.Presentation.LayoutTool.IsSetSection : System.Boolean { get }
+ToolUp.Facts.Presentation.LayoutTool.MoveBlock : ToolUp.Facts.Presentation.LayoutTool { get }
+ToolUp.Facts.Presentation.LayoutTool.RemoveBlock : ToolUp.Facts.Presentation.LayoutTool { get }
+ToolUp.Facts.Presentation.LayoutTool.Reset : ToolUp.Facts.Presentation.LayoutTool { get }
+ToolUp.Facts.Presentation.LayoutTool.Retitle : ToolUp.Facts.Presentation.LayoutTool { get }
+ToolUp.Facts.Presentation.LayoutTool.Save : ToolUp.Facts.Presentation.LayoutTool { get }
+ToolUp.Facts.Presentation.LayoutTool.SetDefault : ToolUp.Facts.Presentation.LayoutTool { get }
+ToolUp.Facts.Presentation.LayoutTool.SetRequest : ToolUp.Facts.Presentation.LayoutTool { get }
+ToolUp.Facts.Presentation.LayoutTool.SetSection : ToolUp.Facts.Presentation.LayoutTool { get }
+ToolUp.Facts.Presentation.LayoutTool.Tag : System.Int32 { get }
+ToolUp.Facts.Presentation.LayoutTool+Tags (class)
+ToolUp.Facts.Presentation.LayoutTool+Tags.AddBlock : System.Int32 (literal)
+ToolUp.Facts.Presentation.LayoutTool+Tags.MoveBlock : System.Int32 (literal)
+ToolUp.Facts.Presentation.LayoutTool+Tags.RemoveBlock : System.Int32 (literal)
+ToolUp.Facts.Presentation.LayoutTool+Tags.Reset : System.Int32 (literal)
+ToolUp.Facts.Presentation.LayoutTool+Tags.Retitle : System.Int32 (literal)
+ToolUp.Facts.Presentation.LayoutTool+Tags.Save : System.Int32 (literal)
+ToolUp.Facts.Presentation.LayoutTool+Tags.SetDefault : System.Int32 (literal)
+ToolUp.Facts.Presentation.LayoutTool+Tags.SetRequest : System.Int32 (literal)
+ToolUp.Facts.Presentation.LayoutTool+Tags.SetSection : System.Int32 (literal)
+ToolUp.Facts.Presentation.LayoutTools (class)
+ToolUp.Facts.Presentation.LayoutTools.ProposedKind : System.String (literal)
+ToolUp.Facts.Presentation.LayoutTools.all : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Presentation.LayoutTool] { get }
+ToolUp.Facts.Presentation.LayoutTools.answer(ToolUp.Facts.Presentation.LayoutTool, Microsoft.AspNetCore.Http.HttpContext, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.ToolHelpers+ToolAnswer]
+ToolUp.Facts.Presentation.LayoutTools.answerWith(ToolUp.Facts.Presentation.LayoutTool, ToolUp.Facts.Presentation.LayoutCaller, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.ToolHelpers+ToolAnswer]
+ToolUp.Facts.Presentation.LayoutTools.definition(ToolUp.Facts.Presentation.LayoutTool) : ToolUp.Platform.AIToolDefinition
+ToolUp.Facts.Presentation.LayoutTools.inlineRows(Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Facts.Presentation.PageRequest], Fuaran.UI.Generated+Node`1[Microsoft.FSharp.Core.Unit]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Presentation.LayoutRefusal]
+ToolUp.Facts.Presentation.LayoutTools.mintKey(System.String, ToolUp.Facts.Presentation.PageRequest) : Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Facts.Presentation.LayoutRefusal]
+ToolUp.Facts.Presentation.LayoutTools.name(ToolUp.Facts.Presentation.LayoutTool) : System.String
+ToolUp.Facts.Presentation.LayoutTools.register(Microsoft.Extensions.DependencyInjection.IServiceCollection) : Microsoft.Extensions.DependencyInjection.IServiceCollection
+ToolUp.Facts.Presentation.LayoutTools.tools : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.ToolHelpers+ToolAnswer]]]]] { get }
+ToolUp.Facts.Presentation.LayoutToolsRuntime (class)
+ToolUp.Facts.Presentation.LayoutToolsRuntime..ctor(ToolUp.Platform.Compose.IPageDocumentStore, ToolUp.Facts.Presentation.PageRequestResolvers, ToolUp.Facts.Presentation.LayoutProposalStore)
+ToolUp.Facts.Presentation.LayoutToolsRuntime.Proposals : ToolUp.Facts.Presentation.LayoutProposalStore { get }
+ToolUp.Facts.Presentation.LayoutToolsRuntime.Resolvers : ToolUp.Facts.Presentation.PageRequestResolvers { get }
+ToolUp.Facts.Presentation.LayoutToolsRuntime.Store : ToolUp.Platform.Compose.IPageDocumentStore { get }
+ToolUp.Facts.Presentation.PageDefaults (class)
+ToolUp.Facts.Presentation.PageDefaults..ctor(Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.Presentation.PresentationPeriod])
+ToolUp.Facts.Presentation.PageDefaults.Period : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.Presentation.PresentationPeriod] { get }
+ToolUp.Facts.Presentation.PageDefaults.Site : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]] { get }
+ToolUp.Facts.Presentation.PageGateSources (class)
+ToolUp.Facts.Presentation.PageGateSources..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Config.TeamManagement+ITeamStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ITeamOutputVisibilitySource])
+ToolUp.Facts.Presentation.PageGateSources.OutputVisibility : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ITeamOutputVisibilitySource] { get }
+ToolUp.Facts.Presentation.PageGateSources.Teams : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Config.TeamManagement+ITeamStore] { get }
+ToolUp.Facts.Presentation.PageGateViewer (class)
+ToolUp.Facts.Presentation.PageGateViewer..ctor(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Facts.Presentation.PageGateViewer.ActiveTeamId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Facts.Presentation.PageGateViewer.IsPlatformAdmin : System.Boolean { get }
+ToolUp.Facts.Presentation.PageGateViewer.OutputVisibility : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Facts.Presentation.PageGateViewer.Principal : System.String { get }
+ToolUp.Facts.Presentation.PageGateViewer.ScopeId : System.String { get }
+ToolUp.Facts.Presentation.PageGateViewer.TeamRole : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Facts.Presentation.PageGateViewerModule (class)
+ToolUp.Facts.Presentation.PageGateViewerModule.fingerprint(ToolUp.Facts.Presentation.PageGateViewer) : System.String
+ToolUp.Facts.Presentation.PageGateViewerModule.forRequest(ToolUp.Facts.Presentation.PageGateSources, Microsoft.AspNetCore.Http.HttpContext, ToolUp.Platform.ResolvedScope, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Facts.Presentation.PageGateViewer]
+ToolUp.Facts.Presentation.PageReadSet (class)
+ToolUp.Facts.Presentation.PageReadSet..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]], Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Facts.Presentation.PageReadSet.Levels : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]] { get }
+ToolUp.Facts.Presentation.PageReadSet.Metrics : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]] { get }
+ToolUp.Facts.Presentation.PageReadSet.Tables : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.Presentation.PageReadSet.Verbs : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.Presentation.PageReadSetModule (class)
+ToolUp.Facts.Presentation.PageReadSetModule.Version : System.String (literal)
+ToolUp.Facts.Presentation.PageReadSetModule.check(ToolUp.Facts.FactBrowseHandler+FactBrowseDeps, ToolUp.Facts.Presentation.PageReadSet) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Facts.Presentation.PageReadSetModule.ofRequests(Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Facts.Presentation.PageRequest]) : ToolUp.Facts.Presentation.PageReadSet
+ToolUp.Facts.Presentation.PageRefusal (class)
+ToolUp.Facts.Presentation.PageRefusal.IsBudget : System.Boolean { get }
+ToolUp.Facts.Presentation.PageRefusal.IsDefect : System.Boolean { get }
+ToolUp.Facts.Presentation.PageRefusal.IsEvaluation : System.Boolean { get }
+ToolUp.Facts.Presentation.PageRefusal.IsMalformedRequest : System.Boolean { get }
+ToolUp.Facts.Presentation.PageRefusal.IsNoFactStore : System.Boolean { get }
+ToolUp.Facts.Presentation.PageRefusal.IsNoFacts : System.Boolean { get }
+ToolUp.Facts.Presentation.PageRefusal.IsReadRefused : System.Boolean { get }
+ToolUp.Facts.Presentation.PageRefusal.IsUnknownKind : System.Boolean { get }
+ToolUp.Facts.Presentation.PageRefusal.IsUnknownTable : System.Boolean { get }
+ToolUp.Facts.Presentation.PageRefusal.IsWithheld : System.Boolean { get }
+ToolUp.Facts.Presentation.PageRefusal.NoFactStore : ToolUp.Facts.Presentation.PageRefusal { get }
+ToolUp.Facts.Presentation.PageRefusal.Tag : System.Int32 { get }
+ToolUp.Facts.Presentation.PageRefusal+Budget (class)
+ToolUp.Facts.Presentation.PageRefusal+Budget.reason : System.String { get }
+ToolUp.Facts.Presentation.PageRefusal+Defect (class)
+ToolUp.Facts.Presentation.PageRefusal+Defect.reason : System.String { get }
+ToolUp.Facts.Presentation.PageRefusal+Evaluation (class)
+ToolUp.Facts.Presentation.PageRefusal+Evaluation.reason : System.String { get }
+ToolUp.Facts.Presentation.PageRefusal+MalformedRequest (class)
+ToolUp.Facts.Presentation.PageRefusal+MalformedRequest.reason : System.String { get }
+ToolUp.Facts.Presentation.PageRefusal+NoFacts (class)
+ToolUp.Facts.Presentation.PageRefusal+NoFacts.tableId : System.String { get }
+ToolUp.Facts.Presentation.PageRefusal+ReadRefused (class)
+ToolUp.Facts.Presentation.PageRefusal+ReadRefused.reason : System.String { get }
+ToolUp.Facts.Presentation.PageRefusal+Tags (class)
+ToolUp.Facts.Presentation.PageRefusal+Tags.Budget : System.Int32 (literal)
+ToolUp.Facts.Presentation.PageRefusal+Tags.Defect : System.Int32 (literal)
+ToolUp.Facts.Presentation.PageRefusal+Tags.Evaluation : System.Int32 (literal)
+ToolUp.Facts.Presentation.PageRefusal+Tags.MalformedRequest : System.Int32 (literal)
+ToolUp.Facts.Presentation.PageRefusal+Tags.NoFactStore : System.Int32 (literal)
+ToolUp.Facts.Presentation.PageRefusal+Tags.NoFacts : System.Int32 (literal)
+ToolUp.Facts.Presentation.PageRefusal+Tags.ReadRefused : System.Int32 (literal)
+ToolUp.Facts.Presentation.PageRefusal+Tags.UnknownKind : System.Int32 (literal)
+ToolUp.Facts.Presentation.PageRefusal+Tags.UnknownTable : System.Int32 (literal)
+ToolUp.Facts.Presentation.PageRefusal+Tags.Withheld : System.Int32 (literal)
+ToolUp.Facts.Presentation.PageRefusal+UnknownKind (class)
+ToolUp.Facts.Presentation.PageRefusal+UnknownKind.kind : System.String { get }
+ToolUp.Facts.Presentation.PageRefusal+UnknownTable (class)
+ToolUp.Facts.Presentation.PageRefusal+UnknownTable.declared : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.Presentation.PageRefusal+UnknownTable.tableId : System.String { get }
+ToolUp.Facts.Presentation.PageRefusal+Withheld (class)
+ToolUp.Facts.Presentation.PageRefusal+Withheld.read : System.Int32 { get }
+ToolUp.Facts.Presentation.PageRefusal+Withheld.withheld : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.BlockWithheld] { get }
+ToolUp.Facts.Presentation.PageRefusalModule (class)
+ToolUp.Facts.Presentation.PageRefusalModule.cause(ToolUp.Facts.Presentation.PageRefusal) : System.String
+ToolUp.Facts.Presentation.PageRefusalModule.describe(ToolUp.Facts.Presentation.PageRefusal) : System.String
+ToolUp.Facts.Presentation.PageRefusalModule.ofPipeline(ToolUp.Facts.PipelineRefusal) : ToolUp.Facts.Presentation.PageRefusal
+ToolUp.Facts.Presentation.PageRefusalModule.ofRequestError(ToolUp.Facts.Presentation.PageRequestError) : ToolUp.Facts.Presentation.PageRefusal
+ToolUp.Facts.Presentation.PageRequestResolver (class)
+ToolUp.Facts.Presentation.PageRequestResolver..ctor(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.Presentation.PageRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.Presentation.PageResolution, ToolUp.Facts.Presentation.PageRefusal]]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.Presentation.PresentationRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.Presentation.PageResolution, ToolUp.Facts.Presentation.PageRefusal]]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.Presentation.PipelineBlockRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.Presentation.PageResolution, ToolUp.Facts.Presentation.PageRefusal]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Facts.Presentation.PageRefusal]]]])
+ToolUp.Facts.Presentation.PageRequestResolver.ByKind : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Facts.Presentation.PageRefusal]]]] { get }
+ToolUp.Facts.Presentation.PageRequestResolver.Resolve : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.Presentation.PageRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.Presentation.PageResolution, ToolUp.Facts.Presentation.PageRefusal]]] { get }
+ToolUp.Facts.Presentation.PageRequestResolver.ResolvePipeline : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.Presentation.PipelineBlockRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.Presentation.PageResolution, ToolUp.Facts.Presentation.PageRefusal]]] { get }
+ToolUp.Facts.Presentation.PageRequestResolver.ResolvePresentation : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.Presentation.PresentationRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.Presentation.PageResolution, ToolUp.Facts.Presentation.PageRefusal]]] { get }
+ToolUp.Facts.Presentation.PageRequestResolverModule (class)
+ToolUp.Facts.Presentation.PageRequestResolverModule.byKind(ToolUp.Facts.Presentation.PageRequestResolver) : Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Facts.Presentation.PageRefusal]]]]
+ToolUp.Facts.Presentation.PageRequestResolverModule.create(ToolUp.Facts.Presentation.PageResolutionSession, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[System.String]], ToolUp.Facts.FactBrowseHandler+FactBrowseDeps, ToolUp.Platform.ResolvedScope, System.String) : ToolUp.Facts.Presentation.PageRequestResolver
+ToolUp.Facts.Presentation.PageRequestResolverModule.kinds : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.Presentation.PageRequestResolverModule.requestHash(ToolUp.Facts.Presentation.PageRequest) : Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Facts.Presentation.PageRefusal]
+ToolUp.Facts.Presentation.PageRequestResolvers (class)
+ToolUp.Facts.Presentation.PageRequestResolvers..ctor(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.Presentation.PageRequestResolver, ToolUp.Facts.Presentation.PageRefusal]]])
+ToolUp.Facts.Presentation.PageRequestResolvers.ForRequest : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.Presentation.PageRequestResolver, ToolUp.Facts.Presentation.PageRefusal]]] { get }
+ToolUp.Facts.Presentation.PageRequestResolversModule (class)
+ToolUp.Facts.Presentation.PageRequestResolversModule.create(ToolUp.Facts.Presentation.PageResolutionCache, ToolUp.Facts.Presentation.PageGateSources) : ToolUp.Facts.Presentation.PageRequestResolvers
+ToolUp.Facts.Presentation.PageRequestResolversModule.register(Microsoft.Extensions.DependencyInjection.IServiceCollection) : Microsoft.Extensions.DependencyInjection.IServiceCollection
+ToolUp.Facts.Presentation.PageRequestSidecar (class)
+ToolUp.Facts.Presentation.PageRequestSidecar..ctor(Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Facts.Presentation.PageRequest], ToolUp.Facts.Presentation.PageDefaults)
+ToolUp.Facts.Presentation.PageRequestSidecar.Defaults : ToolUp.Facts.Presentation.PageDefaults { get }
+ToolUp.Facts.Presentation.PageRequestSidecar.Requests : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Facts.Presentation.PageRequest] { get }
+ToolUp.Facts.Presentation.PageRequestSidecarModule (class)
+ToolUp.Facts.Presentation.PageRequestSidecarModule.Format : System.String (literal)
+ToolUp.Facts.Presentation.PageRequestSidecarModule.empty : ToolUp.Facts.Presentation.PageRequestSidecar { get }
+ToolUp.Facts.Presentation.PageRequestSidecarModule.ofBytes(System.Byte[]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.Presentation.PageRequestSidecar, System.String]
+ToolUp.Facts.Presentation.PageRequestSidecarModule.toBytes(ToolUp.Facts.Presentation.PageRequestSidecar) : Microsoft.FSharp.Core.FSharpResult`2[System.Byte[], System.String]
+ToolUp.Facts.Presentation.PageRequestSidecarModule.toJVal(ToolUp.Facts.Presentation.PageRequestSidecar) : Microsoft.FSharp.Core.FSharpResult`2[Fuaran.Core.JVal, System.String]
+ToolUp.Facts.Presentation.PageResolutionCache (class)
+ToolUp.Facts.Presentation.PageResolutionCache..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.IFactTableChangeSignal])
+ToolUp.Facts.Presentation.PageResolutionCache..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.IFactTableChangeSignal], System.Int32, System.Int32)
+ToolUp.Facts.Presentation.PageResolutionCache.Invalidate(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : System.Void
+ToolUp.Facts.Presentation.PageResolutionCache.Session(ToolUp.Platform.ResolvedScope, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Facts.Presentation.PageResolutionSession]
+ToolUp.Facts.Presentation.PageResolutionSession (class)
+ToolUp.Facts.Presentation.PageResolutionSession..ctor(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.Presentation.PageResolution]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.Presentation.PageResolution, Microsoft.FSharp.Core.Unit]]]])
+ToolUp.Facts.Presentation.PageResolutionSession.Put : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.Presentation.PageResolution, Microsoft.FSharp.Core.Unit]]]] { get }
+ToolUp.Facts.Presentation.PageResolutionSession.TryGet : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.Presentation.PageResolution]]] { get }
 ToolUp.Facts.Presentation.PipelineAnsweringTool (class)
 ToolUp.Facts.Presentation.PipelineAnsweringTool.answer(Microsoft.AspNetCore.Http.HttpContext, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.ToolHelpers+ToolAnswer]
 ToolUp.Facts.Presentation.PipelineAnsweringTool.answerAsserting(Microsoft.AspNetCore.Http.HttpContext, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.ToolHelpers+ToolAnswer]
@@ -12,13 +291,16 @@ ToolUp.Facts.Presentation.PipelineAnsweringTool.api(Microsoft.AspNetCore.Http.Ht
 ToolUp.Facts.Presentation.PipelineAnsweringTool.assertingTool : System.Tuple`2[ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.ToolHelpers+ToolAnswer]]]] { get }
 ToolUp.Facts.Presentation.PipelineAnsweringTool.handler : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]] { get }
 ToolUp.Facts.Presentation.PipelineAnsweringTool.requestOf(ToolUp.Facts.PipelineToolResult) : ToolUp.Facts.Presentation.PipelineBlockRequest
+ToolUp.Facts.Presentation.PipelineAnsweringTool.rerun(ToolUp.Facts.FactBrowseHandler+FactBrowseDeps, ToolUp.Platform.ResolvedScope, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.Presentation.PipelineBlockResult, ToolUp.Facts.PipelineRefusal]]
 ToolUp.Facts.Presentation.PipelineAnsweringTool.rerunWith(ToolUp.Facts.FactBrowseHandler+FactBrowseDeps, ToolUp.Platform.ResolvedScope, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.Presentation.PipelineBlockResult, System.String]]
 ToolUp.Facts.Presentation.PipelineAnsweringTool.resultOf(ToolUp.Facts.PipelineToolResult) : ToolUp.Facts.Presentation.PipelineBlockResult
 ToolUp.Facts.Presentation.PipelineAnsweringTool.tool : System.Tuple`2[ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.ToolHelpers+ToolAnswer]]]] { get }
 ToolUp.Facts.Presentation.PresentationCompose (class)
-ToolUp.Facts.Presentation.PresentationCompose.withDerivedAssertions(ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
-ToolUp.Facts.Presentation.PresentationCompose.withPipelineTool(ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
-ToolUp.Facts.Presentation.PresentationCompose.withRenderTools(ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
+ToolUp.Facts.Presentation.PresentationCompose.withDerivedAssertions(ToolUp.Platform.Compose.ServerApp, ToolUp.AI.AICompose+AIOptions) : System.Tuple`2[ToolUp.Platform.Compose.ServerApp, ToolUp.AI.AICompose+AIOptions]
+ToolUp.Facts.Presentation.PresentationCompose.withLayoutTools(ToolUp.Platform.Compose.ServerApp, ToolUp.AI.AICompose+AIOptions) : System.Tuple`2[ToolUp.Platform.Compose.ServerApp, ToolUp.AI.AICompose+AIOptions]
+ToolUp.Facts.Presentation.PresentationCompose.withPageRequests(ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
+ToolUp.Facts.Presentation.PresentationCompose.withPipelineTool(ToolUp.Platform.Compose.ServerApp, ToolUp.AI.AICompose+AIOptions) : System.Tuple`2[ToolUp.Platform.Compose.ServerApp, ToolUp.AI.AICompose+AIOptions]
+ToolUp.Facts.Presentation.PresentationCompose.withRenderTools(ToolUp.Platform.Compose.ServerApp, ToolUp.AI.AICompose+AIOptions) : System.Tuple`2[ToolUp.Platform.Compose.ServerApp, ToolUp.AI.AICompose+AIOptions]
 ToolUp.Facts.Presentation.RenderTool (class)
 ToolUp.Facts.Presentation.RenderTool.Chart : ToolUp.Facts.Presentation.RenderTool { get }
 ToolUp.Facts.Presentation.RenderTool.IsChart : System.Boolean { get }
@@ -38,3 +320,32 @@ ToolUp.Facts.Presentation.RenderTools.kinds(ToolUp.Facts.Presentation.RenderTool
 ToolUp.Facts.Presentation.RenderTools.name(ToolUp.Facts.Presentation.RenderTool) : System.String
 ToolUp.Facts.Presentation.RenderTools.summary(ToolUp.Facts.Presentation.PresentationRequest, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Presentation.SeriesAnswer], ToolUp.Platform.AI.BlockProvenance) : System.String
 ToolUp.Facts.Presentation.RenderTools.tools : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.ToolHelpers+ToolAnswer]]]]] { get }
+ToolUp.Facts.Presentation.TabRefusal (class)
+ToolUp.Facts.Presentation.TabRefusal.IsBlockNamedTwice : System.Boolean { get }
+ToolUp.Facts.Presentation.TabRefusal.IsNotInSection : System.Boolean { get }
+ToolUp.Facts.Presentation.TabRefusal.IsNotTabbed : System.Boolean { get }
+ToolUp.Facts.Presentation.TabRefusal.IsSeveralTabSets : System.Boolean { get }
+ToolUp.Facts.Presentation.TabRefusal.IsTabNamedTwice : System.Boolean { get }
+ToolUp.Facts.Presentation.TabRefusal.IsUnassigned : System.Boolean { get }
+ToolUp.Facts.Presentation.TabRefusal.IsUnknownTab : System.Boolean { get }
+ToolUp.Facts.Presentation.TabRefusal.NotTabbed : ToolUp.Facts.Presentation.TabRefusal { get }
+ToolUp.Facts.Presentation.TabRefusal.SeveralTabSets : ToolUp.Facts.Presentation.TabRefusal { get }
+ToolUp.Facts.Presentation.TabRefusal.Tag : System.Int32 { get }
+ToolUp.Facts.Presentation.TabRefusal+BlockNamedTwice (class)
+ToolUp.Facts.Presentation.TabRefusal+BlockNamedTwice.blockId : System.String { get }
+ToolUp.Facts.Presentation.TabRefusal+NotInSection (class)
+ToolUp.Facts.Presentation.TabRefusal+NotInSection.blockId : System.String { get }
+ToolUp.Facts.Presentation.TabRefusal+TabNamedTwice (class)
+ToolUp.Facts.Presentation.TabRefusal+TabNamedTwice.tabId : System.String { get }
+ToolUp.Facts.Presentation.TabRefusal+Tags (class)
+ToolUp.Facts.Presentation.TabRefusal+Tags.BlockNamedTwice : System.Int32 (literal)
+ToolUp.Facts.Presentation.TabRefusal+Tags.NotInSection : System.Int32 (literal)
+ToolUp.Facts.Presentation.TabRefusal+Tags.NotTabbed : System.Int32 (literal)
+ToolUp.Facts.Presentation.TabRefusal+Tags.SeveralTabSets : System.Int32 (literal)
+ToolUp.Facts.Presentation.TabRefusal+Tags.TabNamedTwice : System.Int32 (literal)
+ToolUp.Facts.Presentation.TabRefusal+Tags.Unassigned : System.Int32 (literal)
+ToolUp.Facts.Presentation.TabRefusal+Tags.UnknownTab : System.Int32 (literal)
+ToolUp.Facts.Presentation.TabRefusal+Unassigned (class)
+ToolUp.Facts.Presentation.TabRefusal+Unassigned.blockId : System.String { get }
+ToolUp.Facts.Presentation.TabRefusal+UnknownTab (class)
+ToolUp.Facts.Presentation.TabRefusal+UnknownTab.tabId : System.String { get }

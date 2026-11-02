@@ -45,6 +45,8 @@ open System.Globalization
 open ToolUp.Platform.Narrative
 open ProcessedDataTypes
 open DataManagementTypes
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
 
 // ─── Formatting (locale-stable) ──────────────────────────────────────
 

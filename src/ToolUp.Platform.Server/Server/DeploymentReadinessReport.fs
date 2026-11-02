@@ -1,15 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.DeploymentReadinessReport
+module ToolUp.Platform.Compose.DeploymentReadinessReport
 
 open System
 open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
-open ToolUp.Platform.ConfigValidatorAggregator
+open ToolUp.Platform.Compose.ConfigValidatorAggregator
 open ToolUp.Platform.HealthChecks
 open ToolUp.Platform.SmokeTests
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
 
 // Deliberately NOT opening `ToolUp.Platform.ConfigValidation` — its
 // `ValidationResult` cases (`Ok | Warning | Error`) would shadow the
@@ -101,8 +103,8 @@ let private gatherPreflight (ctx: HttpContext) : DeploymentReadiness.PreflightSu
 /// on, nothing to fail). Any `Fail` ⇒ `Failed`, naming the probes.
 let private gatherSmoke (config: ServerConfig) (ctx: HttpContext) : Async<DeploymentReadiness.SmokeSummary> = async {
     match config.SmokeTest with
-    | NoSmokeTest -> return DeploymentReadiness.SmokeSummary.notComposed
-    | EnabledSmokeTest ->
+    | FeatureMode.Disabled -> return DeploymentReadiness.SmokeSummary.notComposed
+    | FeatureMode.Enabled ->
         let tests = ctx.RequestServices.GetServices<ISmokeTest>() |> List.ofSeq
 
         if tests.IsEmpty then
@@ -148,8 +150,8 @@ let private gatherSmoke (config: ServerConfig) (ctx: HttpContext) : Async<Deploy
 /// signal can't be read, but that is not a fabricated pass).
 let private gatherDrift (config: ServerConfig) (ctx: HttpContext) : Async<DeploymentReadiness.DriftSummary> = async {
     match config.ConfigDriftDetection with
-    | NoConfigDriftDetection -> return DeploymentReadiness.DriftSummary.notComposed
-    | EnabledConfigDriftDetection ->
+    | FeatureMode.Disabled -> return DeploymentReadiness.DriftSummary.notComposed
+    | FeatureMode.Enabled ->
         match ctx.RequestServices.GetService(typeof<IAuditLog>) with
         | :? IAuditLog as auditLog ->
             let now = DateTime.UtcNow

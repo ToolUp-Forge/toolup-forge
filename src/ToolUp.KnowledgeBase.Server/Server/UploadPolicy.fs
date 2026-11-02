@@ -12,6 +12,9 @@ open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.ConfigValidation
 open SharedTypes
 open KnowledgeBase.ServerIndexStorage
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 119 — KB upload-policy preflight ────────────────────────
 //
@@ -51,8 +54,8 @@ type private UploadPolicyValidator(serverConfig: ServerConfig, policy: Knowledge
 /// by `KnowledgeApiDeps.resolve`) plus a startup preflight validator that
 /// emits a `Warning` on an uncapped Team / MultiTeam deployment. Threads
 /// through the shared `ComposeExtensions.ServiceConfig` seam (the same
-/// pattern as `withOriginalSourceResolver`) so `AIServerApp` /
-/// `RAGServerApp` inherit it via their `Base`. Apps that never call this
+/// pattern as `withOriginalSourceResolver`) so the AI and RAG
+/// companions see it on either side of them. Apps that never call this
 /// get `KnowledgeUploadPolicy.permissive` — no caps, pre-119 behaviour
 /// (GP 11 / GP 13).
 /// **Adds** its registrations through `ServerApp.addServiceConfig`; a later `withExtensions` keeps them.
@@ -75,7 +78,7 @@ let withUploadPolicy (policy: KnowledgeUploadPolicy) (app: ServerApp) : ServerAp
 /// record); the opt-out restores the pre-14x upload path byte-for-byte
 /// (GP 11 — no hash computed, no ref written). Threads through the same
 /// `ComposeExtensions.ServiceConfig` seam as `withUploadPolicy`, so
-/// `AIServerApp` / `RAGServerApp` inherit it via their `Base`.
+/// the AI and RAG companions see it on either side of them.
 /// **Adds** its registrations through `ServerApp.addServiceConfig`; a later `withExtensions` keeps them.
 let withDocumentDedup (enabled: bool) (app: ServerApp) : ServerApp =
     let policy: KnowledgeDedupPolicy = { DedupUploads = enabled }
@@ -107,8 +110,8 @@ let withDocumentDedup (enabled: bool) (app: ServerApp) : ServerApp =
 /// byte-identical re-upload still dedups (nothing changed, so there is
 /// no version to mint) and only a byte-different one supersedes.
 /// Threads through the same `ComposeExtensions.ServiceConfig` seam as
-/// `withUploadPolicy`, so `AIServerApp` / `RAGServerApp` inherit it via
-/// their `Base`.
+/// `withUploadPolicy`, so the AI and RAG companions see it on either
+/// side of them.
 /// **Adds** its registrations through `ServerApp.addServiceConfig`; a later `withExtensions` keeps them.
 let withDocumentVersioning (enabled: bool) (app: ServerApp) : ServerApp =
     let policy: KnowledgeVersioningPolicy = { VersionUploads = enabled }
@@ -330,17 +333,19 @@ let withKnowledgeRetention (policy: KnowledgeRetentionPolicy) (scopes: string li
         if KnowledgeRetentionPolicy.isInert policy || List.isEmpty scopes then
             withPolicy
         else
-            // Phase 1051 — exempt from the profile matrix: the sweep runs as
-            // a scheduler job, placed by the scheduler's own gate.
-            withPolicy
-            |> ProcessProfileGate.addDeferredJobs "Knowledge Base retention sweep" [
-                DeferredScheduledJobDeclaration.create (fun provider ->
-                    ScheduledJobDeclaration.create
-                        KnowledgeBase.ServerRetentionSweep.SweepHandlerName
-                        (KnowledgeBase.ServerRetentionSweep.RetentionSweepJobHandler(provider, policy) :> IJobHandler)
-                        (Trigger.CronTrigger policy.SweepSchedule)
-                    |> ScheduledJobDeclaration.withScopes scopes)
-            ]
+            // Once at start: the sweep runs as a scheduler job, placed by
+            // the scheduler's own unit.
+            Hosting.register
+                withPolicy
+                (Hosting.deferredJobs "knowledge-base-retention-sweep" [
+                    DeferredScheduledJobDeclaration.create (fun provider ->
+                        ScheduledJobDeclaration.create
+                            KnowledgeBase.ServerRetentionSweep.SweepHandlerName
+                            (KnowledgeBase.ServerRetentionSweep.RetentionSweepJobHandler(provider, policy)
+                            :> IJobHandler)
+                            (Trigger.CronTrigger policy.SweepSchedule)
+                        |> ScheduledJobDeclaration.withScopes scopes)
+                ])
 
     app |> ServerApp.addServiceConfig register
 

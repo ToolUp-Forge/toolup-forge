@@ -8,10 +8,13 @@ open System.Collections.Concurrent
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.EntityStore
-open ToolUp.Platform.AuditLog
+open ToolUp.Platform.Infra.EntityStore
+open ToolUp.Platform.Audit.AuditLog
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 6f.A — external contacts ──────────────────────────────────
 //
@@ -426,7 +429,7 @@ let tests =
 
             testCaseAsync "with NO external store composed, every external recipient resolves to nothing"
             <| async {
-                // A deployment on the default `NoExternalContactStore`
+                // A deployment on the default `FeatureMode.Disabled`
                 // holds no consent record, and no consent record means
                 // no lawful basis. `None` is the correct answer, not a
                 // degraded one.

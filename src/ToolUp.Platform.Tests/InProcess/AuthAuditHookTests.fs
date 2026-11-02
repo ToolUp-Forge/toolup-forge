@@ -4,7 +4,10 @@ open System
 open System.Collections.Concurrent
 open Expecto
 open ToolUp.Platform
-open ToolUp.Platform.AuthAuditHook
+open ToolUp.Platform.Audit.AuthAuditHook
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Audit
+open ToolUp.Platform.Compose
 
 // ─── Phase 120 — IAuthAuditHook default-impl contract ────────────────
 //

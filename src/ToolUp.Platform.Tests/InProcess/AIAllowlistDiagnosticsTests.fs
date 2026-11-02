@@ -29,6 +29,7 @@ open System.Collections.Concurrent
 open Expecto
 open ToolUp.Platform
 open ToolUp.AI
+open ToolUp.Platform.Infra
 
 // ─── Fixtures ────────────────────────────────────────────────────────
 

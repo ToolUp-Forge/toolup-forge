@@ -2,8 +2,10 @@ module MultiSitePublic.Program
 
 open System
 open ToolUp.Platform
-open ToolUp.Platform.Server
+open ToolUp.Platform.Compose.Server
 open ToolUp.PublicRendering
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // Phase 115 worked sample. One process serves three independent
 // markdown-file-backed websites, matched on the request's Host
@@ -84,19 +86,22 @@ let main _ =
             ]
     }
 
-    PublicRenderingCompose.PublicRenderingServerApp.create ()
-    |> PublicRenderingCompose.PublicRenderingServerApp.withConfig config
-    |> PublicRenderingCompose.PublicRenderingServerApp.withLogger logger
-    |> PublicRenderingCompose.PublicRenderingServerApp.withLayout (LayoutName "page") Layouts.SharedLayout.render
-    // Compose-level feed — once satellites exist this serves the
-    // DEFAULT site's hosts only (Phase 115); the satellites' own
-    // `Feeds` lists above are mounted host-gated against each site's
-    // content API.
-    |> PublicRenderingCompose.PublicRenderingServerApp.withFeed {
-        NarrativeFeedConfig.defaults with
-            Title = "Default Site — Feed"
-            AlternateUrl = "http://localhost:13950/"
-    }
-    |> PublicRenderingCompose.PublicRenderingServerApp.withSite siteA
-    |> PublicRenderingCompose.PublicRenderingServerApp.withSite siteB
-    |> PublicRenderingCompose.PublicRenderingServerApp.run
+    ServerApp.empty
+    |> ServerApp.withConfig config
+    |> ServerApp.withLogger logger
+    |> PublicRenderingCompose.withPublicRendering (
+        PublicRenderingOptions.create ()
+        |> PublicRenderingOptions.withLayout (LayoutName "page") Layouts.SharedLayout.render
+        // Compose-level feed — once satellites exist this serves the
+        // DEFAULT site's hosts only (Phase 115); the satellites' own
+        // `Feeds` lists above are mounted host-gated against each site's
+        // content API.
+        |> PublicRenderingOptions.withFeed {
+            NarrativeFeedConfig.defaults with
+                Title = "Default Site — Feed"
+                AlternateUrl = "http://localhost:13950/"
+        }
+        |> PublicRenderingOptions.withSite siteA
+        |> PublicRenderingOptions.withSite siteB
+    )
+    |> ServerApp.run

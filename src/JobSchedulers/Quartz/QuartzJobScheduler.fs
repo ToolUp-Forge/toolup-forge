@@ -11,6 +11,10 @@ open Microsoft.Extensions.Hosting
 open Quartz
 open ToolUp.Platform
 open ToolUp.Platform.JobSchedulers.QuartzStore
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── IJobScheduler over Quartz.NET ───────────────────────────────────
 //

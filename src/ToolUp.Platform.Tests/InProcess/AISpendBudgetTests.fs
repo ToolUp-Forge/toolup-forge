@@ -14,6 +14,9 @@ open ToolUp.Platform.AI
 open ToolUp.Platform.Providers
 open ToolUp.Platform.Usage
 open ToolUp.AI
+open ToolUp.Platform.Infra.Usage
+open ToolUp.Platform.Config
+open ToolUp.Platform.Compose
 
 // ─── Phase 499 — monetary AI cost budgets ────────────────────────
 //
@@ -90,7 +93,7 @@ type private CountingEventStore(inner: IEventStore) =
             inner.Erase(scopeId, subjectUserId, policy, dryRun)
 
 let private newEventStore () =
-    CountingEventStore(ToolUp.Platform.InMemoryEventStore.InMemoryEventStore() :> IEventStore)
+    CountingEventStore(ToolUp.Platform.Infra.InMemoryEventStore.InMemoryEventStore() :> IEventStore)
 
 /// Write one Phase 6i.A latency record with the full four-field token
 /// report a priced turn needs.

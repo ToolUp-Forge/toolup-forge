@@ -17,6 +17,7 @@ open ToolUp.Platform.Secrets
 open ToolUp.AuthProviders
 open ToolUp.AuthProviders.GitHubAuthConfig
 open ToolUp.AuthProviders.GitHubOAuth
+open ToolUp.Platform.Scope
 
 // ─── GitHub auth-provider contract tests ─────────────────────────────
 //

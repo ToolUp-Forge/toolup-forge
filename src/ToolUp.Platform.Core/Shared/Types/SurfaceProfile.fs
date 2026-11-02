@@ -56,7 +56,7 @@ type TeamConfig = {
 
 /// Per-shape config for the `ClaimBearer` surface. Backend choice
 /// (the concrete `IShareTokenStore` impl) stays on
-/// `ServerConfig.ShareTokenStore` — §3.0 OQ4 resolution. This
+/// `ServerConfig.Stores.ShareTokenStore` — §3.0 OQ4 resolution. This
 /// record carries only the policy fields that influence
 /// share-token issuance defaults.
 type ClaimBearerConfig = {

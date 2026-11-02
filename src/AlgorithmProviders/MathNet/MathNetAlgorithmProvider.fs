@@ -9,6 +9,7 @@ open ToolUp.Algorithms.AlgorithmTypes
 open ToolUp.Algorithms.AlgorithmsCompose
 open ToolUp.AlgorithmProviders
 open ToolUp.AlgorithmProviders.MathNetAlgorithmSupport
+open ToolUp.Platform.Compose
 
 // ─── Phase 11.E.3 — the assembled Math.NET provider ─────────────────
 //
@@ -118,37 +119,35 @@ let provider: IAlgorithmProvider =
 
 // ═══ Composition ════════════════════════════════════════════════════
 
-/// Register the Math.NET provider on an algorithms pipeline. The shape
-/// `AlgorithmsServerApp.withProvider` expects, curried for the
-/// `withAlgorithms` configurator:
+/// **Adds** the Math.NET provider to the algorithms companion's options:
 ///
 ///     ServerApp.empty
 ///     |> ServerApp.withConfig config
-///     |> AlgorithmsCompose.withAlgorithms MathNetAlgorithms.withMathNetAlgorithmProvider
+///     |> AlgorithmsCompose.withAlgorithms (AlgorithmsOptions.create () |> MathNetAlgorithms.withMathNetAlgorithmProvider)
 ///     |> ServerApp.run
 ///
 /// A deployment registering several providers chains this with its own:
 ///
-///     |> AlgorithmsCompose.withAlgorithms (fun a ->
-///         a
+///     |> AlgorithmsCompose.withAlgorithms (
+///         AlgorithmsOptions.create ()
 ///         |> MathNetAlgorithms.withMathNetAlgorithmProvider
-///         |> AlgorithmsServerApp.withProvider myOtherProvider)
+///         |> AlgorithmsOptions.withProvider myOtherProvider)
 ///
 /// Registration is append-only, and the registry REFUSES a second claim
 /// on any of the four canonical ids at compose time — two
 /// implementations of `regression.linear` differ in convention and
 /// precision, which is exactly what the catalog exists to make legible.
-let withMathNetAlgorithmProvider (app: AlgorithmsServerApp) : AlgorithmsServerApp =
-    AlgorithmsServerApp.withProvider provider app
+let withMathNetAlgorithmProvider (options: AlgorithmsOptions) : AlgorithmsOptions =
+    AlgorithmsOptions.withProvider provider options
 
 /// One-call composition for a deployment whose algorithms come entirely
-/// from this provider: stacks the algorithms companion onto an existing
-/// `ServerApp` pipeline with the Math.NET provider registered and the
-/// catalog API plus the AI tool family at their defaults.
+/// from this provider: sets the algorithms companion on the `ServerApp`
+/// with the Math.NET provider registered and the catalog API plus the AI
+/// tool family at their defaults.
 ///
 ///     ServerApp.empty
 ///     |> ServerApp.withConfig config
 ///     |> MathNetAlgorithms.withMathNetAlgorithms
 ///     |> ServerApp.run
 let withMathNetAlgorithms (app: ServerApp) : ServerApp =
-    withAlgorithms withMathNetAlgorithmProvider app
+    withAlgorithms (AlgorithmsOptions.create () |> withMathNetAlgorithmProvider) app

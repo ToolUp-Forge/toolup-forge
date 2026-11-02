@@ -2,12 +2,13 @@
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
 /// Preflight guard over the *values* inside `TOOLUP_TRACE_CATEGORIES`.
-module ToolUp.Platform.TraceCategoriesValidator
+module ToolUp.Platform.Config.TraceCategoriesValidator
 
 open System
 open ToolUp.Platform
 open ToolUp.Platform.ConfigKeys
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Infra
 
 // ─── Phase 9m.C (Gap 11) — the value-level trace-category guard ───────
 //
@@ -65,7 +66,7 @@ let private describeValue (registered: string list) (value: string) =
 /// `registered` is the declared canonical set; `configured` is what the
 /// deployment put in `TOOLUP_TRACE_CATEGORIES` (already parsed into a
 /// set by `ConsoleLogger.envSettings` and mirrored onto
-/// `ServerConfig.TraceCategories`).
+/// `ServerConfig.Observability.TraceCategories`).
 let evaluate (registered: string list) (configured: Set<string>) : ValidationResult =
     if Set.isEmpty configured then
         // Nothing was asked for — the default posture, no Trace output.
@@ -149,9 +150,10 @@ type TraceCategoriesContributor(configured: Set<string>, registered: unit -> str
 /// The guard over this deployment's configured whitelist and the live
 /// registry — the shape `compose` registers.
 let validator (config: ServerConfig) : IConfigValidator =
-    TraceCategoriesValidator(config.TraceCategories, Logger.registeredCategories) :> IConfigValidator
+    TraceCategoriesValidator(config.Observability.TraceCategories, Logger.registeredCategories) :> IConfigValidator
 
 /// The `/dev/inspect` panel over the same two inputs — the shape
 /// `compose` registers when dev endpoints are enabled.
 let contributor (config: ServerConfig) : IDevDiagnosticsContributor =
-    TraceCategoriesContributor(config.TraceCategories, Logger.registeredCategories) :> IDevDiagnosticsContributor
+    TraceCategoriesContributor(config.Observability.TraceCategories, Logger.registeredCategories)
+    :> IDevDiagnosticsContributor

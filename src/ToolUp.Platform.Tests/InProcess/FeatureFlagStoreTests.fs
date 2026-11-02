@@ -4,8 +4,10 @@ open System
 open System.IO
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.FeatureFlagStore
+open ToolUp.Platform.Config.FeatureFlagStore
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
 
 /// Bind the `IFeatureFlagStore` contract test pack to the blob-backed
 /// `BlobFeatureFlagStore`. Each factory call creates a fresh temp-dir

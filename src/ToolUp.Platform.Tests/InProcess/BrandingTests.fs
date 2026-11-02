@@ -2,6 +2,9 @@ module ToolUp.Platform.Tests.InProcess.BrandingTests
 
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs.SmokeTests
+open ToolUp.Platform.Compose
 
 /// Phase 5e — per-tenant branding. Pins the two pure pieces the feature
 /// rests on: `Branding.resolve` (the client-side blank-fallback + hex-

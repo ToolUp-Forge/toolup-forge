@@ -1,12 +1,13 @@
-module ToolUp.Platform.AuditLogModeValidator
+module ToolUp.Platform.Audit.AuditLogModeValidator
 
 open System
 open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
+open ToolUp.Platform.Config
 
 // ─── Phase 6l.B — AuditLog off in authenticated modes ────────────────
 //
-// `ServerConfig.AuditLog` defaults to `NoAuditLog`. In Anonymous /
+// `ServerConfig.AuditLog` defaults to `FeatureMode.Disabled`. In Anonymous /
 // dev / demo deployments that's correct — audit emission has cost and
 // no caller is going to forensic-trail an anonymous session. In any
 // authenticated mode (`Individual` / `Team` / `MultiTeam` /
@@ -39,7 +40,7 @@ open ToolUp.Platform.ConfigValidation
 // they had it off get a clear nudge.
 
 /// Phase 6l.B — config validator that warns when an authenticated
-/// `Mode` is paired with `NoAuditLog`. Does not refuse startup —
+/// `Mode` is paired with `FeatureMode.Disabled`. Does not refuse startup —
 /// some deployments legitimately want this combination.
 type AuditLogModeValidator(config: ServerConfig, ?timeout: TimeSpan) =
     let timeout = defaultArg timeout IConfigValidator.defaultTimeout
@@ -53,14 +54,14 @@ type AuditLogModeValidator(config: ServerConfig, ?timeout: TimeSpan) =
 
             let auditOff =
                 match config.AuditLog with
-                | NoAuditLog -> true
-                | EnabledAuditLog -> false
+                | FeatureMode.Disabled -> true
+                | FeatureMode.Enabled -> false
 
             if requiresAuth && auditOff then
                 return
                     Warning(
                         sprintf
-                            "ServerConfig.Surfaces = %s but ServerConfig.AuditLog = NoAuditLog. Audit emission sites (login, permission changes, file ops, team mutations) are firing into a no-op — no compliance trail is being kept. Set ServerConfig.AuditLog = EnabledAuditLog (or env var equivalent) unless this is a deliberate dev/demo configuration."
+                            "ServerConfig.Surfaces = %s but ServerConfig.AuditLog = FeatureMode.Disabled. Audit emission sites (login, permission changes, file ops, team mutations) are firing into a no-op — no compliance trail is being kept. Set ServerConfig.AuditLog = FeatureMode.Enabled (or env var equivalent) unless this is a deliberate dev/demo configuration."
                             (DeploymentConfig.surfacesLabel config)
                     )
             else

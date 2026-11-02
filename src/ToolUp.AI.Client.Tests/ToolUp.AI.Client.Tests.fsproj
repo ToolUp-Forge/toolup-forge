@@ -307,6 +307,7 @@
         <Compile Include="ConversationBlockTests.fs" />
         <Compile Include="BlockRenderTests.fs" />
         <Compile Include="ChatWatchdogTests.fs" />
+        <Compile Include="NarrativePromptAdminUITests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

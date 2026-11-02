@@ -4,8 +4,8 @@
 # removal is breaking and must be reviewed; an addition is non-breaking but must
 # still be folded into this file in the same PR.
 ToolUp.Platform.AuditSinks.Cef (class)
-ToolUp.Platform.AuditSinks.Cef.create(System.String, ToolUp.Platform.AuditSinks.Cef+CefSinkSettings, ToolUp.Platform.Secrets+ISecretStore, System.String, ToolUp.Platform.BlobStorage+IBlobStorage) : ToolUp.Platform.IAuditSink
-ToolUp.Platform.AuditSinks.Cef.createWith(System.String, ToolUp.Platform.AuditSinks.Cef+CefSinkSettings, ToolUp.Platform.Secrets+ISecretStore, System.String, ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.AuditSinks.CefSyslog+ICefLineTransport) : ToolUp.Platform.IAuditSink
+ToolUp.Platform.AuditSinks.Cef.create(System.String, ToolUp.Platform.AuditSinks.Cef+CefSinkSettings, ToolUp.Platform.Secrets+ISecretStore, System.String, ToolUp.Platform.BlobStorage+IBlobStorage) : ToolUp.Platform.Audit.IAuditSink
+ToolUp.Platform.AuditSinks.Cef.createWith(System.String, ToolUp.Platform.AuditSinks.Cef+CefSinkSettings, ToolUp.Platform.Secrets+ISecretStore, System.String, ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.AuditSinks.CefSyslog+ICefLineTransport) : ToolUp.Platform.Audit.IAuditSink
 ToolUp.Platform.AuditSinks.Cef.parseIdentityJson(ToolUp.Platform.AuditSinks.CefFormat+CefDeviceIdentity, System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AuditSinks.CefFormat+CefDeviceIdentity]
 ToolUp.Platform.AuditSinks.Cef+CefAuditSink (class)
 ToolUp.Platform.AuditSinks.Cef+CefAuditSink..ctor(System.String, ToolUp.Platform.AuditSinks.Cef+CefSinkSettings, ToolUp.Platform.Secrets+ISecretStore, System.String, ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.AuditSinks.CefSyslog+ICefLineTransport)

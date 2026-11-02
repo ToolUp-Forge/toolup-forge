@@ -104,7 +104,7 @@ type AlertRule = {
 }
 
 module AlertRule =
-    /// The empty rule set — the `ServerConfig.AlertRules` default. An
+    /// The empty rule set — the `ServerConfig.Observability.AlertRules` default. An
     /// empty set means the engine's `BackgroundService` is never hosted
     /// (GP 13: no rules ⇒ zero runtime cost).
     let none: AlertRule list = []

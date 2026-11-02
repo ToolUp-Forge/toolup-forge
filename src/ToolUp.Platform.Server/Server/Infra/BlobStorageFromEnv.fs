@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-module ToolUp.Platform.BlobStorageEnv
+module ToolUp.Platform.Config.BlobStorageEnv
 
 open System
 open System.IO
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.Infra
 
 /// Resolver for one cloud-blob-storage companion. The consumer passes
 /// one entry per companion the deployment has wired (e.g. `{ Name =

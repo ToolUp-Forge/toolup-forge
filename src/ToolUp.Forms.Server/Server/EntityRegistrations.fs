@@ -24,7 +24,7 @@ open ToolUp.Forms.FormSubmission
 //     - Compound `FormId+State` — "show me all open submissions
 //       of this form" (the most common admin query)
 //
-// `FormsServerApp.run` pipes these through `ServerApp.withEntity`
+// `FormsCompose.withForms` pipes these through `ServerApp.withEntity`
 // at compose time so the entity store knows about the types and
 // their indexes before any handler runs.
 

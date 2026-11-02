@@ -21,7 +21,9 @@
 ///
 /// Forge calls `UseUrls` only for rungs 3 and 4, so rungs 1 and 2 behave
 /// exactly as ASP.NET Core documents them.
-module ToolUp.Platform.ServerBinding
+module ToolUp.Platform.Config.ServerBinding
+
+open ToolUp.Platform
 
 open System
 open System.Net
@@ -35,7 +37,7 @@ let DefaultBindAddress = "127.0.0.1"
 /// `SERVER_PORT` it carries no `TOOLUP_` prefix: orchestrators and launchers
 /// inject the pair together.
 [<Literal>]
-let BindAddressEnvVar = "SERVER_BIND_ADDRESS"
+let BindAddressEnvVar = ConfigKeys.Names.serverBindAddress
 
 /// Which setting decided where the HTTP listener binds, in precedence order.
 type ListenSource =
@@ -184,7 +186,7 @@ let isLoopbackUrl (url: string) : bool =
 ///   * `DOTNET_RUNNING_IN_CONTAINER=true` — set by the official .NET container
 ///     images, which the shipped Dockerfile templates build on;
 ///   * `KUBERNETES_SERVICE_HOST` set — present in every Kubernetes pod;
-///   * `ServerConfig.ReplicaCount > 1` — instances behind a load balancer,
+///   * `ServerConfig.MultiInstance.ReplicaCount > 1` — instances behind a load balancer,
 ///     which cannot reach a loopback listener on another host.
 let deployedSignals (config: ServerConfig) (getEnv: string -> string option) : string list = [
     match getEnv "DOTNET_RUNNING_IN_CONTAINER" with
@@ -197,8 +199,10 @@ let deployedSignals (config: ServerConfig) (getEnv: string -> string option) : s
         "KUBERNETES_SERVICE_HOST is set (the process runs in a Kubernetes pod)"
     | _ -> ()
 
-    if config.ReplicaCount > 1 then
-        sprintf "ServerConfig.ReplicaCount = %d (instances behind a load balancer)" config.ReplicaCount
+    if config.MultiInstance.ReplicaCount > 1 then
+        sprintf
+            "ServerConfig.MultiInstance.ReplicaCount = %d (instances behind a load balancer)"
+            config.MultiInstance.ReplicaCount
 ]
 
 /// Read an environment variable, folding null / empty to `None`.

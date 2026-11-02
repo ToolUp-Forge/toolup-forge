@@ -15,6 +15,9 @@ open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Facts
 open ToolUp.Platform.ProviderExceptions
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Jobs
+open ToolUp.Platform.Compose
 
 // ─── Phase 888 — PostgreSQL-backed IFactStore ────────────────────────
 //
@@ -533,9 +536,18 @@ module internal FactRow =
     let deserialise (payload: string) : Fact =
         JsonSerializer.Deserialize<Fact>(payload, jsonOptions)
 
-    /// The `lineage_hash` column: the SHA-256 of the fact's lineage key.
+    /// The `lineage_hash` column: the SHA-256 of the fact's lineage key,
+    /// built through `Fact.instant`, so the same fact hashes the same on
+    /// every machine.
     let lineageHash (f: Fact) =
         Sha256.hexOfUtf8 (Fact.lineageKey f.Subject f.Metric f.Period f.Method)
+
+    /// The `lineage_hash` a stored row's payload says it should carry: the
+    /// hash of the fact the store reads back, which is what every lineage
+    /// lookup the server makes computes. A row whose column differs was
+    /// keyed by other arithmetic (a key computed on a machine whose zone
+    /// moved its period) and its lineage cannot be found.
+    let lineageHashOfPayload (payload: string) = lineageHash (deserialise payload)
 
     /// Write `f` as one row of an open `Sql.copyIn` import. Every column
     /// but the head flag is a projection of the stored payload, so a column
@@ -553,11 +565,11 @@ module internal FactRow =
         importer.Write(stored.Period.From.Ticks, NpgsqlDbType.Bigint)
         importer.Write(stored.Period.To.Ticks, NpgsqlDbType.Bigint)
         importer.Write(Fact.methodIdentity stored.Method, NpgsqlDbType.Text)
-        importer.Write(lineageHash f, NpgsqlDbType.Text)
-        importer.Write(f.AsOf.Ticks, NpgsqlDbType.Bigint)
-        importer.Write(DateTime(f.AsOf.Ticks, DateTimeKind.Utc), NpgsqlDbType.TimestampTz)
+        importer.Write(lineageHash stored, NpgsqlDbType.Text)
+        importer.Write(stored.AsOf.Ticks, NpgsqlDbType.Bigint)
+        importer.Write(DateTime(stored.AsOf.Ticks, DateTimeKind.Utc), NpgsqlDbType.TimestampTz)
 
-        match f.Supersedes with
+        match stored.Supersedes with
         | Some id -> importer.Write(id, NpgsqlDbType.Text)
         | None -> importer.WriteNull()
 
@@ -1508,6 +1520,14 @@ type PostgresFactStore
     /// The pool and options this store reads and writes through — the
     /// Phase 941 migration writes its rows into the same table, through
     /// the same connection pool, as the store it verifies them with.
+    /// The store's own answer to `query` in the shard `scopeId`, through the
+    /// read path `IFactStore.Query` takes — for the migration's differential
+    /// check, which compares two executors' read paths shard by shard.
+    member internal _.QueryShard(scopeId: string, query: FactQuery) : Async<Fact list> = async {
+        let! _, listing = runQuery scopeId query
+        return listing
+    }
+
     member internal _.DataSource: NpgsqlDataSource = dataSource
 
     member internal _.Options: PostgresFactStoreOptions = options
@@ -1523,45 +1543,23 @@ type PostgresFactStore
         Threading.Interlocked.Read(&taintIndexRebuilds[0])
 
     interface IDisclosureTaintIndexSource with
-        member _.ReadTaintIndex(scopeId: string) = readTaintIndex scopeId
         member _.ReadTaintIndex(scope: ResolvedScope) = readTaintIndex scope.ScopeId
 
     interface IFactStore with
 
-        // Phase 797 — the request-path form keys on the resolved scope's
-        // shard, exactly as the string form does.
-        member this.Assert(scope: ResolvedScope, draft: FactDraft) : Async<Result<Fact, string>> =
-            (this :> IFactStore).Assert(scope.ScopeId, draft)
+        // The store keys on the resolved scope's shard id and on nothing
+        // else. A read that meets a fault answers `StorageFault` — never a
+        // shorter answer.
 
-        member this.AssertBatch
-            (scope: ResolvedScope, drafts: FactDraft list)
-            : Async<Result<BatchAssertReceipt, string>> =
-            (this :> IFactStore).AssertBatch(scope.ScopeId, drafts)
+        member _.Assert(scope: ResolvedScope, draft: FactDraft) : Async<Result<Fact, FactStoreError>> = async {
+            let scopeId = scope.ScopeId
 
-        member this.Get(scope: ResolvedScope, factId: string) : Async<Fact option> =
-            (this :> IFactStore).Get(scope.ScopeId, factId)
-
-        member this.Query(scope: ResolvedScope, query: FactQuery) : Async<Fact list> =
-            (this :> IFactStore).Query(scope.ScopeId, query)
-
-        member this.QueryWithCompetition(scope: ResolvedScope, query: FactQuery) : Async<FactWithCompetition list> =
-            (this :> IFactStore).QueryWithCompetition(scope.ScopeId, query)
-
-        member this.QuerySupersessionChain(scope: ResolvedScope, factId: string) : Async<Fact list> =
-            (this :> IFactStore).QuerySupersessionChain(scope.ScopeId, factId)
-
-        member this.QueryPopulation
-            (scope: ResolvedScope, query: PopulationQuery)
-            : Async<Result<PopulationResult, string>> =
-            (this :> IFactStore).QueryPopulation(scope.ScopeId, query)
-
-        member _.Assert(scopeId: string, draft: FactDraft) : Async<Result<Fact, string>> = async {
             try
                 match FactWrite.prepare WriteShape.ScalarAssert [ draft ] with
-                | Error offenders -> return Error(FactWrite.renderOffenders 1 offenders)
+                | Error refused -> return Error refused
                 | Ok request ->
                     match! writeDrafts scopeId request with
-                    | Error e -> return Error e
+                    | Error e -> return Error(FactStoreError.StorageFault("assert", e))
                     | Ok plan ->
                         do! FactAudit.write events scopeId plan.Audit
 
@@ -1573,73 +1571,111 @@ type PostgresFactStore
                             // no audit.
                             match! load scopeId factId with
                             | Some fact -> return Ok fact
-                            | None -> return Error(sprintf "fact store read failed: %s is stored but unreadable" factId)
+                            | None ->
+                                return
+                                    Error(
+                                        FactStoreError.StorageFault(
+                                            "read",
+                                            sprintf "%s is stored but unreadable" factId
+                                        )
+                                    )
                         | facts, unchanged ->
                             return
                                 Error(
-                                    sprintf
-                                        "fact store assert failed: %d dispositions for one draft"
-                                        (List.length facts + List.length unchanged)
+                                    FactStoreError.StorageFault(
+                                        "assert",
+                                        sprintf
+                                            "%d dispositions for one draft"
+                                            (List.length facts + List.length unchanged)
+                                    )
                                 )
             with ex ->
-                return Error(sprintf "fact store assert failed: %s" ex.Message)
+                return Error(FactStoreError.StorageFault("assert", ex.Message))
         }
 
-        member _.AssertBatch(scopeId: string, drafts: FactDraft list) : Async<Result<BatchAssertReceipt, string>> = async {
-            try
-                match FactWrite.prepare WriteShape.BatchAssert drafts with
-                | Error offenders -> return Error(FactWrite.renderOffenders (List.length drafts) offenders)
-                | Ok request when List.isEmpty request.Drafts -> return Ok BatchAssertReceipt.empty
-                | Ok request ->
-                    match! writeDrafts scopeId request with
-                    | Error e -> return Error e
-                    | Ok plan ->
-                        do! FactAudit.write events scopeId plan.Audit
-                        return Ok plan.Receipt
-            with ex ->
-                return Error(sprintf "fact store batch assert failed: %s" ex.Message)
-        }
+        member _.AssertBatch
+            (scope: ResolvedScope, drafts: FactDraft list)
+            : Async<Result<BatchAssertReceipt, FactStoreError>> =
+            async {
+                let scopeId = scope.ScopeId
 
-        member _.Get(scopeId: string, factId: string) : Async<Fact option> = load scopeId factId
+                try
+                    match FactWrite.prepare WriteShape.BatchAssert drafts with
+                    | Error refused -> return Error refused
+                    | Ok request when List.isEmpty request.Drafts -> return Ok BatchAssertReceipt.empty
+                    | Ok request ->
+                        match! writeDrafts scopeId request with
+                        | Error e -> return Error(FactStoreError.StorageFault("batch assert", e))
+                        | Ok plan ->
+                            do! FactAudit.write events scopeId plan.Audit
+                            return Ok plan.Receipt
+                with ex ->
+                    return Error(FactStoreError.StorageFault("batch assert", ex.Message))
+            }
 
-        member _.Query(scopeId: string, query: FactQuery) : Async<Fact list> = async {
-            let! _, listing = runQuery scopeId query
-            return listing
-        }
+        member _.Get(scope: ResolvedScope, factId: string) : Async<Result<Fact option, FactStoreError>> =
+            FactStoreResult.ofRead "get" (load scope.ScopeId factId)
 
-        member _.QueryWithCompetition(scopeId: string, query: FactQuery) : Async<FactWithCompetition list> = async {
-            let! heads, listing = runQuery scopeId query
-
-            return
-                listing
-                |> List.map (fun f -> {
-                    Fact = f
-                    CompetingMethods = FactCompetition.competingMethods heads f
+        member _.Query(scope: ResolvedScope, query: FactQuery) : Async<Result<Fact list, FactStoreError>> =
+            FactStoreResult.ofRead
+                "query"
+                (async {
+                    let! _, listing = runQuery scope.ScopeId query
+                    return listing
                 })
-        }
 
-        member _.QueryPopulation(scopeId: string, query: PopulationQuery) : Async<Result<PopulationResult, string>> =
-            runPopulation scopeId query
+        member _.QueryWithCompetition
+            (scope: ResolvedScope, query: FactQuery)
+            : Async<Result<FactWithCompetition list, FactStoreError>> =
+            FactStoreResult.ofRead
+                "query"
+                (async {
+                    let! heads, listing = runQuery scope.ScopeId query
 
-        member _.QuerySupersessionChain(scopeId: string, factId: string) : Async<Fact list> = async {
-            let! target = load scopeId factId
+                    return
+                        listing
+                        |> List.map (fun f -> {
+                            Fact = f
+                            CompetingMethods = FactCompetition.competingMethods heads f
+                        })
+                })
 
-            match target with
-            | None -> return []
-            | Some f ->
-                let key = lineageKeyOf f
+        member _.QueryPopulation
+            (scope: ResolvedScope, query: PopulationQuery)
+            : Async<Result<PopulationResult, FactStoreError>> =
+            async {
+                match! FactStoreResult.ofRead "population query" (runPopulation scope.ScopeId query) with
+                | Ok(Ok result) -> return Ok result
+                | Ok(Error refusal) -> return Error(FactStoreError.Refused refusal)
+                | Error fault -> return Error fault
+            }
 
-                let! lineage =
-                    queryPayloads (Sql.lineage table) (fun cmd ->
-                        addText cmd "scope" scopeId
-                        addText cmd "lineage" (lineageHashOf f.Subject f.Metric f.Period f.Method))
+        member _.QuerySupersessionChain
+            (scope: ResolvedScope, factId: string)
+            : Async<Result<Fact list, FactStoreError>> =
+            let scopeId = scope.ScopeId
 
-                return
-                    lineage
-                    |> byContentAddress
-                    |> List.filter (fun g -> lineageKeyOf g = key)
-                    |> List.sortBy _.AsOf
-        }
+            FactStoreResult.ofRead
+                "supersession chain"
+                (async {
+                    let! target = load scopeId factId
+
+                    match target with
+                    | None -> return []
+                    | Some f ->
+                        let key = lineageKeyOf f
+
+                        let! lineage =
+                            queryPayloads (Sql.lineage table) (fun cmd ->
+                                addText cmd "scope" scopeId
+                                addText cmd "lineage" (lineageHashOf f.Subject f.Metric f.Period f.Method))
+
+                        return
+                            lineage
+                            |> byContentAddress
+                            |> List.filter (fun g -> lineageKeyOf g = key)
+                            |> List.sortBy _.AsOf
+                })
 
 /// Construction for `PostgresFactStore`.
 module PostgresFactStore =
@@ -1756,9 +1792,9 @@ module PostgresFactStoreCompose =
     /// misconfigured database fails the first resolution loudly rather than
     /// a later request.
     ///
-    /// Requires the fact tier (`ServerConfig.FactStore = EnabledFactStore`)
+    /// Requires the fact tier (`ServerConfig.Stores.FactStore = FeatureMode.Enabled`)
     /// and goes straight after `FactsCompose.withFactStore`; under
-    /// `NoFactStore` the app is returned unchanged.
+    /// `FeatureMode.Disabled` the app is returned unchanged.
     ///
     /// ```fsharp
     /// ServerApp.empty

@@ -563,7 +563,7 @@ let chunkSpreadsheet (config: ChunkingConfig) (data: SheetData) : string list =
 /// (boilerplate-heavy contracts, repetitive financial tables). See
 /// `ITextSummariser` in core for the extension point.
 let withContextualHeader
-    (summariser: ToolUp.Platform.ITextSummariser.ITextSummariser option)
+    (summariser: ToolUp.Platform.Infra.ITextSummariser.ITextSummariser option)
     (documentContext: string)
     (chunk: string)
     : Async<string> =
