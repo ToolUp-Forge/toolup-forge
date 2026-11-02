@@ -190,6 +190,43 @@ module Lists =
         let body = if everything then [ Everything ] else names
         String.Join("\n", header @ body) + "\n"
 
+    /// The residue pack's row: the umbrella's pack, which held every list
+    /// before the Platform pack was partitioned by server part.
+    [<Literal>]
+    let ResidueRow = "Platform"
+
+    /// A name qualified by the Platform-family row that holds it:
+    /// `Platform/<list>` or `Platform.<Part>/<list>`.
+    let private qualified =
+        Text.RegularExpressions.Regex(@"^(Platform(?:\.[A-Za-z]+)?)/(.+)$")
+
+    /// The share of `file` the Platform-family pack `row` reads. A name
+    /// qualified `<row>/<list>` belongs to that row, and `<row>/*` keeps the
+    /// whole pack; an unqualified name belongs to the residue, where every
+    /// name lived before the partition, so a lists file written then still
+    /// means what it meant. A pack the file names nothing of keeps nothing
+    /// and runs its registration guard alone.
+    let forPack (row: string) (file: File) : File =
+        if file.Everything then
+            file
+        else
+            let mine = [
+                for n in file.Names do
+                    let m = qualified.Match n
+
+                    if m.Success then
+                        if m.Groups[1].Value = row then
+                            yield m.Groups[2].Value
+                    elif row = ResidueRow then
+                        yield n
+            ]
+
+            {
+                file with
+                    Everything = List.contains Everything mine
+                    Names = mine |> List.filter ((<>) Everything) |> List.distinct
+            }
+
     /// The file `TOOLUP_TEST_LISTS` names, read and parsed. An unset
     /// variable, a missing file and a file naming nothing are each an
     /// `Error` saying which: the lane has no meaning without its lists.

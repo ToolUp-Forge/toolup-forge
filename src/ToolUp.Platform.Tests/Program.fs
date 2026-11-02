@@ -1,23 +1,22 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
+
 module ToolUp.Platform.Tests.Program
 
 open System.Reflection
 open Expecto
-// Phase 762 — the `TOOLUP_TEST_LANE` vocabulary, shared with the
-// `VerifyAll` driver by source-link (see Support/TestLane.fs).
-open ToolUp.Forge
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.InProcess
 open ToolUp.Platform.Tests.AI
 open ToolUp.Platform.Tests.RAG
 open ToolUp.Platform.Tests.Graph
-// Phase 784 — the remoting wire differential corpus's two suites.
 open ToolUp.Platform.Tests.Remoting
 open ToolUp.Platform.Tests.Support
 
-/// The explicitly-enumerated list this pack runs. `[<Tests>]` alone does
-/// NOT get a list into this run — `runTestsWithCLIArgs` executes exactly
-/// what is registered here — which is why `allTests` below appends the
-/// Phase 722 registration guard over it.
+/// The explicitly-enumerated list this pack runs: the lists whose test files reach the umbrella
+/// (Compose, Lifecycle, Files) or a companion built on it. Which list is in which pack, and why:
+/// docs/migrations/1194-platform-pack-partition.md. `[<Tests>]` alone does NOT get a list into this
+/// run, which is why the registration guard runs over it.
 let private registeredTests =
     testList "ToolUp.Platform.Tests" [
         LocalFileStorageTests.tests
@@ -788,8 +787,6 @@ let private registeredTests =
         BootVerificationPreflightTests.tests
         GroundedAnswerChainJoinTests.tests
         GroundingEnvelopeSealTests.tests
-        // Phase 860 - the live-interface posture reaches the composition
-        // manifest as an unsealed field, and readiness reads it without RAG.
         CompositionManifestLiveInterfaceTests.tests
         DeployPlaneTests.defaultPipelineRollbackTests
         SvgPropTests.tests
@@ -985,7 +982,6 @@ let private registeredTests =
         ToolEffectEnvelopeTests.tests
         ToolGateProofOracleTests.tests
         ModelInputProofOracleTests.tests
-
         TaintFlowProofOracleTests.tests
         ElmishProofOracleTests.tests
         ElmishLoopProofOracleTests.tests
@@ -1035,7 +1031,7 @@ let private registeredTests =
     ]
 
 /// The `[<Tests>]` bindings this pack deliberately does not run, each
-/// with the reason. Phase 722: a deliberate omission is declared data the
+/// with the reason. A deliberate omission is declared data the
 /// guard reads, not prose beside the list — a stale entry here fails the
 /// guard rather than quietly excusing something.
 let private deliberatelyUnregistered = [
@@ -1050,7 +1046,7 @@ let private deliberatelyUnregistered = [
     }
 ]
 
-/// Phase 762 — what this pack declares about its own lists for the
+/// What this pack declares about its own lists for the
 /// `TOOLUP_TEST_LANE` lanes. See `Support/TestLane.fs` for the lane
 /// vocabulary and `Support/TestLaneFilter.fs` for how a declaration is
 /// applied (by physical identity, after the guard).
@@ -1060,14 +1056,14 @@ let private deliberatelyUnregistered = [
 /// i.e. it is slow because it holds long-running cases (benchmarks,
 /// timeout clamps, polling waits), not because it holds many cheap ones.
 /// The second clause is what earns the rule its keep: on the 2026-09-12
-/// measurement it correctly leaves `Phase 175 — Public-API approval
-/// baseline` (13.6 s spread over 182 cases, slowest 0.3 s) IN the fast
-/// lane, where a cheap, frequently-broken gate belongs, while a
-/// `≥ 10 s` rule alone would have thrown it out.
+/// measurement it correctly left the public-API approval baseline
+/// (13.6 s spread over 182 cases, slowest 0.3 s) IN the fast lane, where a
+/// cheap, frequently-broken gate belongs, while a `≥ 10 s` rule alone would
+/// have thrown it out. The rule holds for every pack of the Platform family.
 ///
 /// Re-derive it — do not trust this list because it is written down:
 ///
-///     dotnet src/ToolUp.Platform.Tests/bin/Debug/net10.0/ToolUp.Platform.Tests.dll \
+///     dotnet src/ToolUp.Platform.Tests<.Part>/bin/Debug/net10.0/ToolUp.Platform.Tests<.Part>.dll \
 ///         --junit-summary platform.xml
 ///
 /// then group `//testcase/@time` by the second `;`-separated segment of
@@ -1092,7 +1088,7 @@ let private laneDeclaration: TestLaneFilter.LaneDeclaration = {
         // 10.0 s / 9 cases — a 10 s cancel-law defect probe.
         IExternalComputeDispatcherContract.selfTests
         // 20.7 s / 11 cases — four cases outlive a 4 s server-token lifetime
-        // (Phase 1047, measured 2026-10-21); slowest case 4.9 s.
+        // (measured 2026-10-21); slowest case 4.9 s.
         StreamAuthBothSignInsTests.tests
         // ~10 s / 2 cases — one case starts a child run of this pack.
         FactRenderingTests.invariantGlobalizationTests
@@ -1111,90 +1107,18 @@ let private laneDeclaration: TestLaneFilter.LaneDeclaration = {
     Pure = []
 }
 
-/// The `affected` lane's lists, resolved against the registered list —
-/// `None` in every other lane. Resolved once, so the tree that runs and
-/// the account printed of it are the same resolution.
-let private affectedKeep: Result<TestLaneFilter.Keep, string> option =
-    match TestLane.current with
-    | TestLane.Lane.Affected ->
-        TestLane.Lists.read ()
-        |> Result.bind (fun (_, lists) ->
-            TestLaneFilter.resolveKeep
-                (TestLaneFilter.bindingResolver (Assembly.GetExecutingAssembly()))
-                lists
-                registeredTests)
-        |> Some
-    | TestLane.Lane.Pure
-    | TestLane.Lane.Fast
-    | TestLane.Lane.Full -> None
-
-let private keep =
-    match affectedKeep with
-    | Some(Ok k) -> Some k
-    | Some(Error _)
-    | None -> None
-
-/// The registered list plus the guard that makes an unregistered
-/// `[<Tests>]` binding fail loudly instead of vanishing. The floor is a
-/// LOWER BOUND (140 against ~170 attributed bindings), so adding a pack
-/// never needs an edit here; it only moves when bindings are deliberately
-/// removed.
-///
-/// The lane filter is applied AFTER the guard, deliberately: the guard is
-/// about what this pack REGISTERS (all of it, in every lane), the lane
-/// only about what RUNS. Under `full` — the default, and the only lane a
-/// ship may cite — the guarded tree is returned physically unchanged.
-let allTests =
-    TestRegistrationGuard.withGuardExempting
-        (Assembly.GetExecutingAssembly())
-        140
-        deliberatelyUnregistered
-        registeredTests
-    |> TestLaneFilter.forLaneIn TestLane.current laneDeclaration keep registeredTests
-
-let private describe (tree: Test) =
-    sprintf
-        "%s — %d case(s)"
-        (TestLaneFilter.labelOf tree |> Option.defaultValue "<unlabelled list>")
-        (TestLaneFilter.caseCount tree)
-
-// Sequenced by default — Expecto deadlocks when parallel tests write to
-// the console (the subject's own ConsoleLogger / compose warnings are enough).
-// `--parallel` still overrides. See docs/platform/testing-conventions.md
-// § "Every Expecto pack runs sequenced by default".
+/// The guard's floor is a LOWER BOUND on the `[<Tests>]` bindings its sweep
+/// finds (about 85 % of them), so adding a list never needs an edit here; it
+/// moves only when bindings are deliberately removed.
 [<EntryPoint>]
 let main argv =
-    // Say which lane produced the result, so a log a reader finds later
-    // cannot be mistaken for a full run. Silent under `full` (the
-    // default), so the shipping gate's output is unchanged.
-    match affectedKeep with
-    | Some(Error why) ->
-        eprintfn "%s" why
-        2
-    | _ ->
-        let dropped =
-            TestLaneFilter.droppedIn TestLane.current laneDeclaration keep registeredTests
-
-        TestLane.announce (
-            sprintf
-                "%d case(s) in %d registered list(s) are not in this run"
-                (dropped |> List.sumBy TestLaneFilter.caseCount)
-                (List.length dropped)
-        )
-
-        match keep with
-        | Some k ->
-            printfn
-                "  kept %d list(s), %d case(s); skipped %d list(s); map: none"
-                k.Kept.Length
-                (k.Kept |> List.sumBy (snd >> TestLaneFilter.caseCount))
-                k.Skipped.Length
-
-            for line, tree in k.Kept do
-                printfn "  kept     %s  [%s]" (describe tree) line
-
-            for tree in k.Skipped do
-                printfn "  skipped  %s" (describe tree)
-        | None -> ()
-
-        runTestsWithCLIArgs [ CLIArguments.Sequenced ] argv allTests
+    PackEntry.run
+        {
+            Row = "Platform"
+            Assembly = Assembly.GetExecutingAssembly()
+            GuardFloor = 207
+            Exemptions = deliberatelyUnregistered
+            Lanes = laneDeclaration
+            Registered = registeredTests
+        }
+        argv

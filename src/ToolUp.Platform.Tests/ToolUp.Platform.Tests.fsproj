@@ -4,7 +4,7 @@
         <OutputType>Exe</OutputType>
         <TargetFramework>net10.0</TargetFramework>
         <IsPackable>false</IsPackable>
-        <!-- Phase 784 — Remoting\WireCorpus.fs is source-linked into
+        <!-- Remoting\WireCorpus.fs is source-linked into
              ToolUp.AI.Client.Tests so the Fable parity leg compares against
              the same declaration this pack does. Its encoders, its generator
              and its filesystem half need the server tier and this pack's own
@@ -16,20 +16,15 @@
              project has the server tier" — and only this project declares it. -->
         <DefineConstants>$(DefineConstants);TOOLUP_WIRE_CORPUS_DOTNET</DefineConstants>
     </PropertyGroup>
-    <!-- Phase 11.B follow-up Tests fsproj migration (2026-05-08): replaced
-         ~100 <Compile Link> entries that hard-linked SDK + companion source
-         files with <ProjectReference> entries to the matching DLL projects.
-         The previous design kept the test project on a lean dep surface
-         ("no Saturn / Giraffe / middleware just to exercise an IBlobStorage")
-         by source-linking only the specific files under test. After Phase 11.B
-         the SDK ships as ToolUp.Platform.Server.dll, so Tests pulls the same
-         types via DLL reference. Lean-dep design intent is preserved by the
-         per-package fsproj split (Tests transitively gets only what the DLLs
-         it references actually depend on). -->
     <ItemGroup>
         <FrameworkReference Include="Microsoft.AspNetCore.App" />
     </ItemGroup>
-    <!-- Test source files (contract packs + in-process bindings + runner). -->
+    <!-- The residue pack: the lists whose test files reach the umbrella (Compose,
+         Lifecycle, Files) or a companion built on it. The lists that reach only a
+         server part are in that part's pack, and the approval gate in its own
+         (docs/migrations/1194-platform-pack-partition.md). Sources those packs
+         compile stay here; this project compiles only its own and the helpers
+         they use. -->
     <ItemGroup>
         <Compile Include="Support\TestScope.fs" />
         <Compile Include="Contracts\IBlobStorageContract.fs" />
@@ -168,7 +163,6 @@
         <Compile Include="Support\SubjectWildcardAnalyzer.fs" />
         <Compile Include="..\ToolUp.Remoting.Analyzers\Recognition.fs" Link="Support\RemotingAnalyzerRecognition.fs" />
         <Compile Include="Support\MixedDimFixture.fs" />
-        <Compile Include="Support\CorpusAnchor.fs" />
         <Compile Include="Remoting\WireCorpus.fs" />
         <Compile Include="Remoting\ProcessedDataEnvelopeFixture.fs" />
         <Compile Include="Remoting\MsgPackRoundTripTests.fs" />
@@ -837,7 +831,6 @@
         <Compile Include="InProcess\NotificationPreferenceTests.fs" />
         <Compile Include="Support\PrincipalRecordingEntityStore.fs" />
         <Compile Include="InProcess\SeamPrincipalTests.fs" />
-        <Compile Include="Support\TestRegistrationGuard.fs" />
         <Compile Include="InProcess\ModelInputEntryTests.fs" />
         <Compile Include="InProcess\ModelInputProofOracleTests.fs" />
         <Compile Include="InProcess\ConversationRetentionTests.fs" />
@@ -864,7 +857,6 @@
         <Compile Include="InProcess\ServerAppOrderTests.fs" />
         <Compile Include="InProcess\ServerBindAddressTests.fs" />
         <Compile Include="InProcess\PageDocumentStoreTests.fs" />
-        <Compile Include="Support\FireAndForgetHarness.fs" />
         <Compile Include="InProcess\AuditFireAndForgetTests.fs" />
         <Compile Include="InProcess\StoreFireAndForgetTests.fs" />
         <Compile Include="InProcess\LineageDurabilityTests.fs" />
@@ -878,11 +870,10 @@
         <Compile Include="InProcess\AppCompositionCorpus.fs" />
         <Compile Include="InProcess\AppCompositionConformanceTests.fs" />
         <Compile Include="InProcess\NarrativeCalculationTests.fs" />
-        <Compile Include="Support\TestLane.fs" />
-        <Compile Include="Support\TestLaneFilter.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>
+        <ProjectReference Include="..\ToolUp.Platform.Tests.Support\ToolUp.Platform.Tests.Support.fsproj" />
         <ProjectReference Include="..\..\proofs\oracle\ToolUp.Remoting.Proofs.Oracle.fsproj" />
         <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
         <ProjectReference Include="..\ToolUp.Remoting.Generator\ToolUp.Remoting.Generator.fsproj" />
@@ -972,7 +963,7 @@
     <ItemGroup>
         <PackageReference Include="OpenFeature" />
     </ItemGroup>
-    <!-- Phase 14k WS5 Item 2 — mixed-dim fixture JSON co-located with the
+    <!-- The mixed-dimension fixture JSON, co-located with the
          existing eval-baseline.json in the RAG.Evaluation project. Linked
          into Tests' output so the loader finds it at runtime. -->
     <ItemGroup>
@@ -980,7 +971,7 @@
               Link="fixtures\eval-mixed-dim.json"
               CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
-    <!-- Phase 717 — the published SPDX 2.3 / CycloneDX 1.6 JSON schemas,
+    <!-- The published SPDX 2.3 / CycloneDX 1.6 JSON schemas,
          vendored verbatim so the SBOM conformance pack validates offline
          against the formats' own definitions rather than a local
          paraphrase. Provenance, upstream tags, licences and hashes are in
@@ -989,7 +980,7 @@
     <ItemGroup>
         <None Include="fixtures\sbom-schemas\*.json" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
-    <!-- Phase 715 — the evidence-chain break-injection corpus. ONE home,
+    <!-- The evidence-chain break-injection corpus. ONE home,
          at the repo-root tests/fixtures/ tree, linked into the runner's
          output so the pack reads the same files a reader browses rather
          than a second copy that could drift from them. Test-tier only —
@@ -1008,11 +999,11 @@
         <PackageReference Include="HNSW" />
         <PackageReference Include="Microsoft.AspNetCore.TestHost" />
         <PackageReference Include="System.Reflection.MetadataLoadContext" />
-        <!-- Phase 717 — JSON Schema evaluator for the SBOM conformance
+        <!-- JSON Schema evaluator for the SBOM conformance
              pack. Test-tier only; never reaches a shipped package (GP 1 /
              GP 13). Rationale + version pin in Directory.Packages.props. -->
         <PackageReference Include="JsonSchema.Net" />
-        <!-- Phase 617 — the linux-x64 SkiaSharp native, so the
+        <!-- The linux-x64 SkiaSharp native, so the
              `IAssetStore` contract pack (which mints real PNGs through
              SkiaSharp) runs on a Linux CI runner instead of erroring
              out ten cases with `DllNotFoundException: libSkiaSharp`.

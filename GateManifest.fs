@@ -487,7 +487,7 @@ let rows (b: Bodies) : GateLeg<Lane> list = [
 
 /// The test projects `VerifyAll` deliberately does not run as
 /// packs, each with the runner that does run it or the input it needs. The
-/// `GateReconcile` leg is red for any `*.Tests.fsproj` (in the solution, or
+/// `GateReconcile` leg is red for any test project (in the solution, or
 /// on disk under `src/`, `tests/`, `tools/`) that is neither a pack row of `rows` nor
 /// named here, and for an entry here that names nothing.
 let exclusions: Gate.Exclusion list = [
@@ -506,6 +506,9 @@ let exclusions: Gate.Exclusion list = [
     Gate.exclude
         "tests/CompanionFuzz/ToolUp.Companions.Fuzz.Tests.fsproj"
         "needs Verovio.NET's native libverovio off the local feed (not on nuget.org, so it cannot join the solution CI restores) and a host that enforces a per-child kernel memory cap; run by an operator per tests/CompanionFuzz/README.md."
+    Gate.exclude
+        "src/ToolUp.Platform.Tests.Support/ToolUp.Platform.Tests.Support.fsproj"
+        "a library, not a pack: the harness every pack of the Platform family references (the lane filter, the registration guard, the shared entry point). It holds no cases."
 ]
 
 /// The `checks.yml` jobs that are not rows, each with why: a lint with no
