@@ -5,7 +5,6 @@ open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
 open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
-open ToolUp.Platform.Compose
 
 let private cfg (surfaces: SurfaceProfile list) (replicas: int) (notifications: NotificationMode) : ServerConfig = {
     ServerConfig.defaults with

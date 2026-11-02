@@ -687,6 +687,8 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "ToolUp.Platform.Tests.Confi
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "ToolUp.Platform.Tests.Scope", "src\ToolUp.Platform.Tests.Scope\ToolUp.Platform.Tests.Scope.fsproj", "{7EC328D0-8E6F-443B-B97A-3F6BF0E5AD2E}"
 EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "ToolUp.Platform.Tests.Jobs", "src\ToolUp.Platform.Tests.Jobs\ToolUp.Platform.Tests.Jobs.fsproj", "{AA466218-3660-4C57-BB33-AFCFD6082AD9}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -3721,6 +3723,18 @@ Global
 		{7EC328D0-8E6F-443B-B97A-3F6BF0E5AD2E}.Release|x64.Build.0 = Release|Any CPU
 		{7EC328D0-8E6F-443B-B97A-3F6BF0E5AD2E}.Release|x86.ActiveCfg = Release|Any CPU
 		{7EC328D0-8E6F-443B-B97A-3F6BF0E5AD2E}.Release|x86.Build.0 = Release|Any CPU
+		{AA466218-3660-4C57-BB33-AFCFD6082AD9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AA466218-3660-4C57-BB33-AFCFD6082AD9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AA466218-3660-4C57-BB33-AFCFD6082AD9}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{AA466218-3660-4C57-BB33-AFCFD6082AD9}.Debug|x64.Build.0 = Debug|Any CPU
+		{AA466218-3660-4C57-BB33-AFCFD6082AD9}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{AA466218-3660-4C57-BB33-AFCFD6082AD9}.Debug|x86.Build.0 = Debug|Any CPU
+		{AA466218-3660-4C57-BB33-AFCFD6082AD9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AA466218-3660-4C57-BB33-AFCFD6082AD9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AA466218-3660-4C57-BB33-AFCFD6082AD9}.Release|x64.ActiveCfg = Release|Any CPU
+		{AA466218-3660-4C57-BB33-AFCFD6082AD9}.Release|x64.Build.0 = Release|Any CPU
+		{AA466218-3660-4C57-BB33-AFCFD6082AD9}.Release|x86.ActiveCfg = Release|Any CPU
+		{AA466218-3660-4C57-BB33-AFCFD6082AD9}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -4039,5 +4053,6 @@ Global
 		{790E2B55-AFA9-408F-86D2-012DF0C52D91} = {6CE72D10-CE79-4FAA-8BDA-FCA071FB6F3B}
 		{A30197BA-2B7D-425C-87CF-DA367B4E0F04} = {6CE72D10-CE79-4FAA-8BDA-FCA071FB6F3B}
 		{7EC328D0-8E6F-443B-B97A-3F6BF0E5AD2E} = {6CE72D10-CE79-4FAA-8BDA-FCA071FB6F3B}
+		{AA466218-3660-4C57-BB33-AFCFD6082AD9} = {6CE72D10-CE79-4FAA-8BDA-FCA071FB6F3B}
 	EndGlobalSection
 EndGlobal

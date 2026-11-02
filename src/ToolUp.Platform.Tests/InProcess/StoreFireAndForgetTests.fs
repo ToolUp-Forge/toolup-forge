@@ -45,7 +45,6 @@ open ToolUp.Platform.Tests.Support.FireAndForgetHarness
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
-open ToolUp.Platform.Compose
 
 type StoreDownException(marker: string) =
     inherit Exception(marker)

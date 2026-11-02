@@ -17,7 +17,6 @@ open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
-open ToolUp.Platform.Compose
 
 // ─── Phase 16a — the webhook dispatcher's failure-state lease ────────
 //

@@ -8,7 +8,6 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Jobs
-open ToolUp.Platform.Compose
 
 // ─── Phase 6f.A — IExternalContactStore conformance pack ─────────────
 //

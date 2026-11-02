@@ -9,12 +9,10 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Infra.EntityStore
-open ToolUp.Platform.Audit.AuditLog
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Jobs
-open ToolUp.Platform.Compose
 
 // ─── Phase 6f.A — external contacts ──────────────────────────────────
 //

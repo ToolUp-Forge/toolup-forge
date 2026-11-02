@@ -15,7 +15,6 @@ open ToolUp.Platform.Jobs.WebhookDispatcher
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
-open ToolUp.Platform.Compose
 
 // ─── Phase 464 — cross-instance signing-secret rotation fanout ───────
 //

@@ -11,7 +11,6 @@ open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Infra.DataObjectStore
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Jobs
-open ToolUp.Platform.Compose
 
 // --- Phase 482 -- privacy-provenance labels -----------------------------
 //
