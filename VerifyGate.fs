@@ -762,8 +762,8 @@ module Runs =
                         lane,
                         {
                             GateManifest.LaneTiming.Median = tenth (median wall)
-                            P90 = tenth (p90 wall)
-                            Runs = wall.Length
+                            GateManifest.LaneTiming.P90 = tenth (p90 wall)
+                            GateManifest.LaneTiming.Runs = wall.Length
                         }
                 ]
                 Rows = [
@@ -777,7 +777,7 @@ module Runs =
                         name,
                         {
                             GateManifest.RowTiming.Median = tenth (median (legs |> List.map _.Seconds))
-                            Runs = legs.Length
+                            GateManifest.RowTiming.Runs = legs.Length
                         }
                 ]
                 FoldedAt = None
