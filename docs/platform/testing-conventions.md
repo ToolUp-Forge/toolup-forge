@@ -166,6 +166,47 @@ Everything that used to restate the list is a render of the rows, and each rende
 
 `dotnet run --project Build.fsproj -- Gate --run <row>` runs one row on its own (building what it names), which is how the CI-only jobs invoke theirs. A consumer's `Build.fs` that sets `TestPacks` and calls `VerifyLeg.register` is unchanged: both are derived views onto `Gate.register`.
 
+## What the gate reads: `gate-reads.json`, and what belongs in `reads` versus `notRead`
+
+`gate-reads.json` at the repository root says which NON-CODE files the gate reads. The landing tooling treats the
+.NET default (sources, tests, proofs, every build and project file, the solution's project directories, the
+formatter's configuration and `verify.ps1`) plus the record's `reads` as the gate's inputs, and everything outside the
+union as gate-inert: a commit on `main` touching only gate-inert files is crossed by a landing without a re-gate.
+The record is **generated**. `GateManifest.fs` declares it (`stepReads` for `verify.ps1`'s own steps, `rowReads` per
+row, `notRead`), `dotnet run --project Build.fsproj -- Gate --render` writes it, and `Gate --check` and the
+`GateReconcile` row are red when the committed file is not the render. Never edit the JSON by hand.
+
+**A path belongs in `reads` when the gate `verify.ps1` runs opens it.** That means one of its own steps (the root
+`dotnet-tools.json` for the tool restore), a project item the build copies or embeds (`perf-budgets.json`, which the
+Build pack copies into its output), or a file a row's sources open from the real repository (`api-baselines/**`,
+`CHANGELOG.md`, the docs and samples the publication-boundary sweep reads). Declare it on the row whose sources open
+it. That row must read the tree (`Input.Tree` in its `Reads`) and must be a row `VerifyAll` runs in the full lane.
+Name a directory with `**` when the row walks it. Do not list files one by one under a directory the row walks.
+Count an existence check as a read. Deleting the file changes the verdict.
+
+**A path belongs in `notRead` only when the census names it and the gate does not open it**, each with its reason:
+a fixture literal that shares the file's name (a test writing `README.md` into a temp directory), a file a target
+writes but no leg reads (`THIRD_PARTY_NOTICES.md`), or a file only a CI-only row reads (`docs-snippets/corpus-floor.txt`,
+the `doc-snippets` job). A CI-only row is not the gate a landing re-runs, so its reads go in `notRead`, never in
+`reads`. A `notRead` entry never widens the inert set. The landing tooling does not consult it. It only settles a
+census finding, and an entry that settles nothing is itself red.
+
+**The census is static and over-reports on purpose** (`GateReadsCensusTests`, registered under the `Gate.reconcile`
+list). It names a tracked file outside the default in two cases. A source that reaches the repository (it mentions a
+root locator, or is a root driver file or a `ToolUp.Platform.Build` source) carries a literal equal to the file's name
+or path, or a `Path.Combine(<locator>, ...)` prefix of it. Or a project, props or targets file outside `templates/`
+carries an item that resolves to it. Every named file must be covered by `reads` or `notRead`. The census cannot see
+a path assembled with no literal naming it, or a reference held in data. When a test opens such a file, add it to
+`reads` by hand. That is what the record exists to say.
+
+**No row sweeps the whole tracked set.** A row that did would record `**`, which leaves nothing inert. The
+publication-boundary sweep (`OpenCoreVocabularyNeutralityTests`) reads a declared surface: `docs/**`, `samples/**`,
+the root README, CONTRIBUTING and SECURITY, and the packable projects' sources and READMEs under `src/`. So `docs/**` is
+a gate input, and a docs-only commit still re-gates. That is the honest answer while the sweep scans docs. The fitness
+sweeps enumerate the checkout with `git ls-files --exclude-standard` and open only code-shaped files. They read every
+`.gitignore`, which is why `.gitignore` and `**/.gitignore` are in `reads`. Background and the census's red run:
+[`docs/migrations/1208-gate-reads.md`](../migrations/1208-gate-reads.md).
+
 ## The Platform family: one pack per server part
 
 The Platform test pack is partitioned the way the server tier is: one pack per part, each a row of the gate manifest,
