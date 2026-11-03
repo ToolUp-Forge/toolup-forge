@@ -7013,7 +7013,7 @@ let main args =
                 match findings with
                 | [] ->
                     Trace.tracefn
-                        "▶ Gate: OK — EXPECTED_PACKS: %d, the CI table and gate-reads.json are the manifest's renders (%d row(s))."
+                        "▶ Gate: OK — EXPECTED_PACKS: %d, the CI table and gate-reads.json are the manifest's renders, and gate-timings.json measures its rows (%d row(s))."
                         floor
                         manifest.Length
                 | drifted ->
