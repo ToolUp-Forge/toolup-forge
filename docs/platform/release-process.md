@@ -117,10 +117,19 @@ The trigger block is tag-only plus manual dispatch, and the Build test pack lint
 [`CHANGELOG.md`](../../CHANGELOG.md) is generated (`dotnet run --project Build.fsproj -- Changelog`)
 from the release tags, each tag's API baselines and the migration notes under `docs/migrations/`. The
 tracked file holds the **released** sections only, and it changes once per release, never per change.
-A change that moves a public surface regenerates its baselines and appends its line to the draft note in
-`Directory.Build.props`; it does not touch `CHANGELOG.md`. When every such change regenerated the file,
-two of them landing concurrently always conflicted in the same unreleased section, and a text merge of a
-generated file is the one resolution that can silently drop a side.
+A change that moves a public surface regenerates its baselines and appends its line to
+[`DRAFT-NOTES.md`](../../DRAFT-NOTES.md); it does not touch `CHANGELOG.md`. When every such change
+regenerated the file, two of them landing concurrently always conflicted in the same unreleased section,
+and a text merge of a generated file is the one resolution that can silently drop a side.
+
+**A draft note goes in `DRAFT-NOTES.md`, never in `Directory.Build.props` (Phase 1210).** The props are
+imported by every project, so the affected lane's `msbuild-import` rule runs every test for any change to
+them, and rightly: the project graph cannot see past an import. Kept there, a one-line note put almost
+every versioned change on the full lane. The props keep the `<Version>` itself, which is a real build
+input; the note is prose and lives beside the changelog, append-only, merged by the `toolup-draftnote`
+driver `Setup` registers. Why not the changelog's own draft: the tracked file holds released sections
+only, and `Changelog --check` refuses anything else. The move and its replay:
+[`docs/migrations/1210-draft-note-ledger.md`](../migrations/1210-draft-note-ledger.md).
 
 The render is the same function wherever it runs, so where it runs is a matter of having the inputs:
 
