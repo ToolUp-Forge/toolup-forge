@@ -24,6 +24,7 @@ open ToolUp.Platform
 open ToolUp.Platform.Scope
 open ToolUp.AI
 open ToolUp.AI.SystemPromptBuilder
+open ToolUp.Facts.Presentation
 
 /// The registration the migration note shows: a pilot deployment's
 /// summary card beside a chart or a table.
@@ -37,16 +38,21 @@ let private pilotProfile: LanguageProfile =
     |> LanguageProfile.withKind "DataGrid" [ "columns"; "rowKeyField"; "source" ]
 
 let private registered (profile: LanguageProfile) : RegisteredLanguageProfile =
-    match LanguageProfile.register profile with
+    match LanguageProfile.register RenderTools.languageSchema profile with
     | Ok r -> r
     | Error refusals -> failwithf "the profile did not register: %A" refusals
 
 let private refusalsOf (profile: LanguageProfile) : LanguageProfileRefusal list =
-    match LanguageProfile.register profile with
+    match LanguageProfile.register RenderTools.languageSchema profile with
     | Ok _ -> failwith "the profile registered, and should have been refused"
     | Error refusals -> refusals
 
-let private requests = set [ "revenue-by-day"; "revenue-by-site" ]
+/// The presentation requests the conversation holds, by key.
+let private requests: Map<string, PresentationRequest> =
+    Map.ofList [
+        "revenue-by-day", FactRenderToolTests.RenderFixtures.trendRequest
+        "revenue-by-site", FactRenderToolTests.RenderFixtures.trendRequest
+    ]
 
 let private box (children: string list) =
     sprintf
@@ -69,7 +75,7 @@ let private grid (extra: string) =
         extra
 
 let private refusedBlock (profile: RegisteredLanguageProfile) (json: string) : ComposedBlockRefusal list =
-    match LanguageProfile.validateBlock profile requests json with
+    match RenderTools.validateComposedBlock profile requests json with
     | Ok _ -> failwithf "the block was admitted, and should have been refused: %s" json
     | Error refusals -> refusals
 
@@ -104,6 +110,20 @@ let private capturingLogger () =
 
 let registrationTests =
     testList "Language profile registration" [
+
+        test "the schema is the vocabulary the pinned Fuaran.UI package publishes" {
+            let schema = RenderTools.languageSchema
+
+            Expect.equal
+                (schema.Kinds |> Map.keys |> Set.ofSeq)
+                (Set.ofList Fuaran.UI.Generated.allWireTags)
+                "every wire kind, by its discriminator"
+
+            Expect.isTrue (schema.Kinds["DataGrid"].Contains "staticRows") "a kind's wire fields"
+            Expect.equal (schema.Categories.TryFind "Chart") (Some "Visualisation") "a kind's category"
+            Expect.isTrue (schema.NodeProperties.Contains "style") "the node properties"
+        }
+
 
         test "a profile of known kinds and fields registers" {
             let r = registered pilotProfile
@@ -227,7 +247,10 @@ let grammarTests =
 
         test "a block of admitted kinds drawing from requests is admitted" {
             match
-                LanguageProfile.validateBlock (registered pilotProfile) requests (box [ heading; queryChart; grid "" ])
+                RenderTools.validateComposedBlock
+                    (registered pilotProfile)
+                    requests
+                    (box [ heading; queryChart; grid "" ])
             with
             | Ok node -> Expect.equal node.Id "card" "the decoded block"
             | Error refusals -> failwithf "refused: %A" refusals

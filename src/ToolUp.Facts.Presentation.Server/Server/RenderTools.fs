@@ -393,3 +393,62 @@ module RenderTools =
         definition RenderTool.Chart, answer RenderTool.Chart
         definition RenderTool.Table, answer RenderTool.Table
     ]
+
+    // ── The language profile's grammar ────────────────────────────
+    //
+    // The AI tier's `LanguageProfile` references no Fuaran-UI assembly; this
+    // tier supplies the vocabulary it is registered against and runs the
+    // language's decoder and pre-emit validator over a block it admitted.
+
+    /// The vocabulary the pinned `Fuaran.UI` package publishes, generated from
+    /// the IDL its encoder and decoder are: the kinds and their wire fields,
+    /// the node properties and the kind categories. Register a profile
+    /// against it: `LanguageProfile.register RenderTools.languageSchema`.
+    let languageSchema: LanguageSchema = {
+        Kinds = Fuaran.UI.Generated.kindFieldNames
+        NodeProperties = Fuaran.UI.Generated.envelopeFieldNames
+        Categories =
+            Fuaran.UI.Generated.kindCategories
+            |> Map.toList
+            |> List.collect (fun (category, kinds) -> kinds |> Set.toList |> List.map (fun kind -> kind, category))
+            |> Map.ofList
+    }
+
+    /// Validate a model-composed block (its wire JSON) under `profile`. A
+    /// data-bearing node names one of `requests`, the presentation requests
+    /// the caller holds, so its rows come from a gated read and never inline.
+    /// The profile's own check runs first; a block it admits is decoded under
+    /// a policy admitting exactly the profile's kinds and must pass the
+    /// pre-emit validator. `Ok` carries the decoded node.
+    let validateComposedBlock
+        (profile: RegisteredLanguageProfile)
+        (requests: Map<string, PresentationRequest>)
+        (blockJson: string)
+        : Result<Fuaran.UI.Types.Node<unit>, ComposedBlockRefusal list> =
+        match LanguageProfile.check profile (requests |> Map.keys |> Set.ofSeq) blockJson with
+        | Error refusals -> Error refusals
+        | Ok() ->
+            let policy =
+                Fuaran.UI.KindPolicy.DecodePolicy.admitting profile.Profile.Name (profile.Profile.Kinds |> Map.keys)
+
+            match Fuaran.UI.Ops.JsonDecode.decodeNodeWithPolicy policy blockJson with
+            | Error e -> Error [ ComposedBlockRefusal.Decode(Fuaran.UI.Ops.JsonDecode.DecodeError.render e) ]
+            | Ok tree ->
+                let node =
+                    Fuaran.UI.Ops.Types.WireTree.reify tree
+                    |> Fuaran.UI.NodeMap.mapMsg (fun _ -> ())
+
+                let errors =
+                    match Fuaran.UI.PreEmitValidate.validateForTransport node with
+                    | Ok() -> []
+                    | Error defects ->
+                        defects
+                        |> List.choose (fun d ->
+                            match Fuaran.UI.PreEmitValidate.describe d with
+                            | code, Fuaran.Core.Severity.Error, message -> Some(sprintf "%s: %s" code message)
+                            | _ -> None)
+
+                if List.isEmpty errors then
+                    Ok node
+                else
+                    Error [ ComposedBlockRefusal.Grammar errors ]

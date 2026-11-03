@@ -1246,10 +1246,10 @@ ToolUp.AI.LanguageProfile.Kinds : Microsoft.FSharp.Collections.FSharpMap`2[Syste
 ToolUp.AI.LanguageProfile.Name : System.String { get }
 ToolUp.AI.LanguageProfile.NodeProperties : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
 ToolUp.AI.LanguageProfileModule (class)
-ToolUp.AI.LanguageProfileModule.fragment(ToolUp.AI.LanguageProfile) : System.String
+ToolUp.AI.LanguageProfileModule.check(ToolUp.AI.RegisteredLanguageProfile, Microsoft.FSharp.Collections.FSharpSet`1[System.String], System.String) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ComposedBlockRefusal]]
+ToolUp.AI.LanguageProfileModule.fragment(ToolUp.AI.LanguageSchema, ToolUp.AI.LanguageProfile) : System.String
 ToolUp.AI.LanguageProfileModule.named(System.String) : ToolUp.AI.LanguageProfile
-ToolUp.AI.LanguageProfileModule.register(ToolUp.AI.LanguageProfile) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.AI.RegisteredLanguageProfile, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.LanguageProfileRefusal]]
-ToolUp.AI.LanguageProfileModule.validateBlock(ToolUp.AI.RegisteredLanguageProfile, Microsoft.FSharp.Collections.FSharpSet`1[System.String], System.String) : Microsoft.FSharp.Core.FSharpResult`2[Fuaran.UI.Generated+Node`1[Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ComposedBlockRefusal]]
+ToolUp.AI.LanguageProfileModule.register(ToolUp.AI.LanguageSchema, ToolUp.AI.LanguageProfile) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.AI.RegisteredLanguageProfile, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.LanguageProfileRefusal]]
 ToolUp.AI.LanguageProfileModule.withKind(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.AI.LanguageProfile) : ToolUp.AI.LanguageProfile
 ToolUp.AI.LanguageProfileModule.withNodeProperties(Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.AI.LanguageProfile) : ToolUp.AI.LanguageProfile
 ToolUp.AI.LanguageProfileRefusal (class)
@@ -1281,6 +1281,11 @@ ToolUp.AI.LanguageProfileRefusal+UnknownNodeProperty (class)
 ToolUp.AI.LanguageProfileRefusal+UnknownNodeProperty.property : System.String { get }
 ToolUp.AI.LanguageProfileRefusalModule (class)
 ToolUp.AI.LanguageProfileRefusalModule.describe(ToolUp.AI.LanguageProfileRefusal) : System.String
+ToolUp.AI.LanguageSchema (class)
+ToolUp.AI.LanguageSchema..ctor(Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpSet`1[System.String]], Microsoft.FSharp.Collections.FSharpSet`1[System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String])
+ToolUp.AI.LanguageSchema.Categories : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
+ToolUp.AI.LanguageSchema.Kinds : Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpSet`1[System.String]] { get }
+ToolUp.AI.LanguageSchema.NodeProperties : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
 ToolUp.AI.LegacyAIConfigProviderProfile (class)
 ToolUp.AI.LegacyAIConfigProviderProfile.create(ToolUp.Platform.BlobStorage+IBlobStorage) : ToolUp.Platform.Providers+IProviderProfile
 ToolUp.AI.LegacyAIConfigProviderProfile.wrap(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.Providers+IProviderProfile) : ToolUp.Platform.Providers+IProviderProfile
@@ -1365,6 +1370,7 @@ ToolUp.AI.RegisteredLanguageProfile (class)
 ToolUp.AI.RegisteredLanguageProfile.Fragment : System.String { get }
 ToolUp.AI.RegisteredLanguageProfile.FragmentBytes : System.Int32 { get }
 ToolUp.AI.RegisteredLanguageProfile.Profile : ToolUp.AI.LanguageProfile { get }
+ToolUp.AI.RegisteredLanguageProfile.Schema : ToolUp.AI.LanguageSchema { get }
 ToolUp.AI.SSEHandler (class)
 ToolUp.AI.SSEHandler.LegacyChannelDeprecatedOn : System.String (literal)
 ToolUp.AI.SSEHandler.LegacyChannelMigrationGuide : System.String (literal)

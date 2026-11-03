@@ -14,15 +14,6 @@
         <ProjectReference Include="..\ToolUp.AI.Core\ToolUp.AI.Core.fsproj" />
     </ItemGroup>
     <ItemGroup>
-        <!-- The language profile reads the published Fuaran-UI vocabulary and
-             runs its decoder and pre-emit validator. Both already arrive
-             through ToolUp.Platform.Server's Fuaran.UI.Ops reference; named
-             here because this tier now uses them directly. Pinned in
-             Directory.Packages.props. -->
-        <PackageReference Include="Fuaran.UI" />
-        <PackageReference Include="Fuaran.UI.Ops" />
-    </ItemGroup>
-    <ItemGroup>
         <!-- The parent companion README, packed into each tier's nupkg. -->
         <None Include="..\ToolUp.AI\README.md" Pack="true" PackagePath="\" />
     </ItemGroup>
@@ -34,8 +25,10 @@
         <Compile Include="Server\AISurfaceCapability.fs" />
         <!-- The assistant's language profile: the Fuaran-UI subset a
              deployment registers, its cached prompt fragment and the grammar
-             a model-composed block is validated against. Must precede
-             SystemPromptBuilder, which serves the fragment. -->
+             a model-composed block is read against. The schema is a value
+             the presentation tier supplies, so this tier references no
+             Fuaran-UI assembly. Must precede SystemPromptBuilder, which
+             serves the fragment. -->
         <Compile Include="Server\LanguageProfile.fs" />
         <Compile Include="Server\SystemPromptBuilder.fs" />
         <Compile Include="Server\ToolContext.fs" />

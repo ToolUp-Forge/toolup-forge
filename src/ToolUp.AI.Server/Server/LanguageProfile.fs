@@ -5,7 +5,6 @@ namespace ToolUp.AI
 
 open System
 open System.Text
-open Fuaran.Core
 open ToolUp.AI.Wire
 
 // ─── The assistant's language profile ──────────────────────────────
@@ -16,34 +15,50 @@ open ToolUp.AI.Wire
 // the whole language, so the trade between prompt size and the range of what
 // the model can compose is the deployment's to make.
 //
-// **Registration validates against the published schema.** The kinds and
-// fields are checked against the vocabulary the pinned `Fuaran.UI` package
-// publishes (`Generated.kindFieldNames`, `Generated.envelopeFieldNames`), the
-// same IDL its encoder and decoder are generated from. An unknown kind or
-// field refuses the registration by name, so a profile cannot name something
-// the language does not have.
+// **The AI tier holds no copy of the language and references none of it.**
+// The vocabulary a profile is checked against is a value, `LanguageSchema`,
+// and the presentation tier supplies the one the pinned `Fuaran.UI` package
+// publishes (`RenderTools.languageSchema`), so this assembly stays free of the
+// Fuaran-UI dependency.
+//
+// **Registration validates against that schema.** An unknown kind, field or
+// node property, and a field that carries rows inline, refuses the
+// registration by name, so a profile cannot name something the language does
+// not have.
 //
 // **The fragment is rendered once.** `register` renders the profile into a
 // prompt fragment and keeps it; `SystemPromptBuilder.languageProfile` serves
 // that one string on every turn. A deployment with no profile composes
 // nothing, and its prompt is byte-identical to what it was before.
 //
-// **The profile is the validator's grammar.** `LanguageProfile.validateBlock`
-// runs a model-composed block, as wire JSON, through four checks, each a
-// typed refusal naming the node:
+// **The profile is the grammar.** `LanguageProfile.check` reads a
+// model-composed block, as wire JSON, and refuses, naming the node:
 //
-//   1. every node's kind, kind field and node property is one the profile
-//      admits (read off the JSON, because the decoder drops a member it does
+//   1. a kind, kind field or node property the profile does not admit (read
+//      off the JSON, because the language's decoder drops a member it does
 //      not know rather than refusing it);
-//   2. a data-bearing node draws from a request: a `Chart`'s, `DataGrid`'s
-//      or `Sparkline`'s `source`, and a `Metric`'s `value`, is a `Query`
-//      binding naming a request the caller holds, and a `DataGrid` carries no
-//      `staticRows`. Rows are never written inline, so a model cannot put a
-//      figure on the page;
-//   3. the language tier's decoder, under a decode policy admitting exactly
-//      the profile's kinds;
-//   4. the pre-emit validator (`PreEmitValidate.validateForTransport`, the
-//      block travels as wire JSON) finds no Error.
+//   2. a data-bearing node that does not draw from a request: a `Chart`'s,
+//      `DataGrid`'s or `Sparkline`'s `source`, and a `Metric`'s `value`, must
+//      be a `Query` binding naming a request the caller holds, and a
+//      `DataGrid` carries no `staticRows`. Rows are never written inline, so a
+//      model cannot put a figure on the page.
+//
+// The language's decoder and pre-emit validator then run over a block that
+// passed, in the presentation tier (`RenderTools.validateComposedBlock`).
+
+/// The vocabulary a language profile is checked against: each kind of the
+/// language by its wire discriminator, its fields, the node properties beside
+/// `id` and `kind`, and each kind's category. The presentation tier supplies
+/// the published one (`RenderTools.languageSchema`).
+type LanguageSchema = {
+    /// Each kind's wire discriminator (`kind.$type`) and its wire fields.
+    Kinds: Map<string, Set<string>>
+    /// The node properties beside `id` and `kind` (`style`, `tooltip`, …).
+    NodeProperties: Set<string>
+    /// Each kind's category (`Layout`, `Display`, `Visualisation`, …), named
+    /// in the prompt fragment.
+    Categories: Map<string, string>
+}
 
 /// A deployment's language profile, before registration: the kinds the
 /// assistant may compose and the fields of each it may write. Built with
@@ -57,8 +72,8 @@ type LanguageProfile = {
     /// Each admitted kind, by its wire discriminator (`kind.$type`), and the
     /// kind fields of it the model may write.
     Kinds: Map<string, Set<string>>
-    /// The node properties beside `id` and `kind` the model may write
-    /// (`style`, `tooltip`, …). Empty by default.
+    /// The node properties beside `id` and `kind` the model may write. Empty
+    /// by default.
     NodeProperties: Set<string>
 }
 
@@ -69,21 +84,23 @@ type LanguageProfileRefusal =
     | NoName
     /// The profile admits no kind.
     | NoKinds
-    /// The published schema has no kind of this name.
+    /// The schema has no kind of this name.
     | UnknownKind of kind: string
-    /// The published schema gives the kind no field of this name.
+    /// The schema gives the kind no field of this name.
     | UnknownField of kind: string * field: string
-    /// The published schema has no node property of this name.
+    /// The schema has no node property of this name.
     | UnknownNodeProperty of property: string
     /// The field carries rows inline, which no profile may admit.
     | InlineRowsField of kind: string * field: string
 
-/// A profile that passed registration, with its prompt fragment rendered
-/// once. Only `LanguageProfile.register` makes one.
+/// A profile that passed registration against a schema, with its prompt
+/// fragment rendered once. Only `LanguageProfile.register` makes one.
 [<Sealed>]
-type RegisteredLanguageProfile internal (profile: LanguageProfile, fragment: string) =
+type RegisteredLanguageProfile internal (profile: LanguageProfile, schema: LanguageSchema, fragment: string) =
     /// The profile as registered.
     member _.Profile = profile
+    /// The schema it was registered against.
+    member _.Schema = schema
     /// The prompt fragment, rendered once at registration.
     member _.Fragment = fragment
     /// The fragment's size in UTF-8 bytes, as the boot log reports it.
@@ -106,16 +123,14 @@ type ComposedBlockRefusal =
     | InlineRows of nodeId: string * kind: string * field: string
     /// A data-bearing node names a request the caller does not hold.
     | UnknownRequest of nodeId: string * kind: string * key: string
-    /// The language tier's decoder refused the block.
+    /// The language's decoder refused the block.
     | Decode of reason: string
-    /// The pre-emit validator found errors, as `code: message`.
+    /// The language's pre-emit validator found errors, as `code: message`.
     | Grammar of findings: string list
 
 /// The registration builder, the fragment and the grammar.
 [<RequireQualifiedAccess>]
 module LanguageProfile =
-
-    // ── The published schema ──────────────────────────────────────
 
     /// The data-bearing slot of each kind that draws rows or a value: it must
     /// be a `Query` binding naming a request.
@@ -129,12 +144,6 @@ module LanguageProfile =
 
     /// Fields that carry rows inline, whatever their binding.
     let private inlineRowFields: Set<string * string> = set [ "DataGrid", "staticRows" ]
-
-    let private wireTags: Set<string> = Set.ofList Fuaran.UI.Generated.allWireTags
-
-    let private categoryOf (kind: string) : string option =
-        Fuaran.UI.Generated.kindCategories
-        |> Map.tryPick (fun category kinds -> if kinds.Contains kind then Some category else None)
 
     // ── The builder ───────────────────────────────────────────────
 
@@ -171,10 +180,10 @@ module LanguageProfile =
         else
             fields |> Seq.map code |> String.concat ", "
 
-    /// The prompt fragment for `profile`: the kinds and fields it admits and
-    /// the rule a data-bearing node is held to. Pure; `register` renders it
-    /// once and keeps it.
-    let fragment (profile: LanguageProfile) : string =
+    /// The prompt fragment for `profile`: the kinds and fields it admits, each
+    /// kind's category in `schema`, and the rule a data-bearing node is held
+    /// to. Pure; `register` renders it once and keeps it.
+    let fragment (schema: LanguageSchema) (profile: LanguageProfile) : string =
         let sb = StringBuilder()
         let line (s: string) = sb.Append(s).Append('\n') |> ignore
 
@@ -193,7 +202,9 @@ module LanguageProfile =
 
         for KeyValue(kind, fields) in profile.Kinds do
             let category =
-                categoryOf kind |> Option.map (sprintf " (%s)") |> Option.defaultValue ""
+                schema.Categories.TryFind kind
+                |> Option.map (sprintf " (%s)")
+                |> Option.defaultValue ""
 
             let rows =
                 match dataSlots.TryFind kind with
@@ -224,16 +235,19 @@ module LanguageProfile =
 
     // ── Registration ──────────────────────────────────────────────
 
-    /// Check `profile` against the published schema and render its fragment
-    /// once. Every refusal is reported, each by name.
-    let register (profile: LanguageProfile) : Result<RegisteredLanguageProfile, LanguageProfileRefusal list> =
+    /// Check `profile` against `schema` and render its fragment once. Every
+    /// refusal is reported, each by name.
+    let register
+        (schema: LanguageSchema)
+        (profile: LanguageProfile)
+        : Result<RegisteredLanguageProfile, LanguageProfileRefusal list> =
         let refusals = [
             if String.IsNullOrWhiteSpace profile.Name then
                 LanguageProfileRefusal.NoName
             if profile.Kinds.IsEmpty then
                 LanguageProfileRefusal.NoKinds
             for KeyValue(kind, fields) in profile.Kinds do
-                match Fuaran.UI.Generated.kindFieldNames.TryFind kind with
+                match schema.Kinds.TryFind kind with
                 | None -> LanguageProfileRefusal.UnknownKind kind
                 | Some known ->
                     for field in fields do
@@ -242,12 +256,12 @@ module LanguageProfile =
                         elif inlineRowFields.Contains(kind, field) then
                             LanguageProfileRefusal.InlineRowsField(kind, field)
             for property in profile.NodeProperties do
-                if not (Fuaran.UI.Generated.envelopeFieldNames.Contains property) then
+                if not (schema.NodeProperties.Contains property) then
                     LanguageProfileRefusal.UnknownNodeProperty property
         ]
 
         if List.isEmpty refusals then
-            Ok(RegisteredLanguageProfile(profile, fragment profile))
+            Ok(RegisteredLanguageProfile(profile, schema, fragment schema profile))
         else
             Error refusals
 
@@ -263,15 +277,18 @@ module LanguageProfile =
     /// A node's id, wire kind and kind members, when `members` is a node: an
     /// object with a string `id` and a `kind` object whose `$type` is a kind
     /// of the language. A column's `kind` (`{"$type":"Text"}`) is not.
-    let private asNode (members: (string * JsonValue) list) : (string * string * (string * JsonValue) list) option =
+    let private asNode
+        (schema: LanguageSchema)
+        (members: (string * JsonValue) list)
+        : (string * string * (string * JsonValue) list) option =
         match stringMember "id" members, members |> List.tryFind (fun (k, _) -> k = "kind") with
         | Some id, Some(_, JsonValue.JObject kindMembers) ->
             match stringMember "$type" kindMembers with
-            | Some kind when wireTags.Contains kind -> Some(id, kind, kindMembers)
+            | Some kind when schema.Kinds.ContainsKey kind -> Some(id, kind, kindMembers)
             | _ -> None
         | _ -> None
 
-    /// The data slot's request key, or the inline-rows refusal.
+    /// The data slot's request, or the inline-rows refusal.
     let private slotCheck
         (requests: Set<string>)
         (id: string)
@@ -296,15 +313,17 @@ module LanguageProfile =
         ]
 
     let rec private walk
-        (profile: LanguageProfile)
+        (registered: RegisteredLanguageProfile)
         (requests: Set<string>)
         (value: JsonValue)
         : ComposedBlockRefusal list =
+        let profile = registered.Profile
+
         match value with
-        | JsonValue.JArray items -> items |> List.collect (walk profile requests)
+        | JsonValue.JArray items -> items |> List.collect (walk registered requests)
         | JsonValue.JObject members ->
-            match asNode members with
-            | None -> members |> List.collect (snd >> walk profile requests)
+            match asNode registered.Schema members with
+            | None -> members |> List.collect (snd >> walk registered requests)
             | Some(id, kind, kindMembers) ->
                 let own = [
                     match profile.Kinds.TryFind kind with
@@ -327,32 +346,21 @@ module LanguageProfile =
                 let nested =
                     (kindMembers |> List.filter (fun (k, _) -> k <> "$type"))
                     @ (members |> List.filter (fun (k, _) -> k <> "id" && k <> "kind"))
-                    |> List.collect (snd >> walk profile requests)
+                    |> List.collect (snd >> walk registered requests)
 
                 own @ nested
         | _ -> []
 
-    let private grammarErrors (node: Fuaran.UI.Types.Node<unit>) : string list =
-        match Fuaran.UI.PreEmitValidate.validateForTransport node with
-        | Ok() -> []
-        | Error defects ->
-            defects
-            |> List.choose (fun d ->
-                match Fuaran.UI.PreEmitValidate.describe d with
-                | code, Severity.Error, message -> Some(sprintf "%s: %s" code message)
-                | _ -> None)
-
-    /// Run a model-composed block (its wire JSON) against the profile, with
+    /// Read a model-composed block (its wire JSON) against the profile, with
     /// `requests` the keys of the requests a data-bearing node may name.
-    /// `Ok` carries the decoded node; `Error` every refusal, each naming its
-    /// node.
-    let validateBlock
+    /// `Error` carries every refusal, each naming its node. A block that
+    /// passes still goes through the language's decoder and pre-emit
+    /// validator (`RenderTools.validateComposedBlock`).
+    let check
         (registered: RegisteredLanguageProfile)
         (requests: Set<string>)
         (blockJson: string)
-        : Result<Fuaran.UI.Types.Node<unit>, ComposedBlockRefusal list> =
-        let profile = registered.Profile
-
+        : Result<unit, ComposedBlockRefusal list> =
         let parsed =
             if String.IsNullOrWhiteSpace blockJson then
                 None
@@ -361,23 +369,10 @@ module LanguageProfile =
 
         match parsed with
         | None -> Error [ ComposedBlockRefusal.Malformed "the block is not JSON" ]
-        | Some(JsonValue.JObject members as root) when (asNode members).IsSome ->
-            match walk profile requests root with
-            | _ :: _ as refusals -> Error refusals
-            | [] ->
-                let policy =
-                    Fuaran.UI.KindPolicy.DecodePolicy.admitting profile.Name (profile.Kinds |> Map.keys)
-
-                match Fuaran.UI.Ops.JsonDecode.decodeNodeWithPolicy policy blockJson with
-                | Error e -> Error [ ComposedBlockRefusal.Decode(Fuaran.UI.Ops.JsonDecode.DecodeError.render e) ]
-                | Ok tree ->
-                    let node =
-                        Fuaran.UI.Ops.Types.WireTree.reify tree
-                        |> Fuaran.UI.NodeMap.mapMsg (fun _ -> ())
-
-                    match grammarErrors node with
-                    | [] -> Ok node
-                    | findings -> Error [ ComposedBlockRefusal.Grammar findings ]
+        | Some(JsonValue.JObject members as root) when (asNode registered.Schema members).IsSome ->
+            match walk registered requests root with
+            | [] -> Ok()
+            | refusals -> Error refusals
         | Some _ -> Error [ ComposedBlockRefusal.Malformed "the block is not a node" ]
 
 /// Companion helpers for `LanguageProfileRefusal`.
