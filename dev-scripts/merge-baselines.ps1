@@ -47,18 +47,18 @@
                        name (`Type.Member`, `Type..ctor`, or the type itself),
                        so an overload set shares one key.
 
-      -Mode draftnote  `Directory.Build.props`. Not a projection: an ordinary
+      -Mode draftnote  `DRAFT-NOTES.md`. Not a projection: an ordinary
                        three-way merge (`git merge-file`), with ONE rule on
-                       top. The draft note below `<Version>` is append-only —
-                       each change adds one line at the end of the list under
-                       the marker line, and never edits one — so two branches
+                       top. The draft-note list is append-only — each change
+                       adds one line at the end of the list under the marker
+                       line, and never edits one — so two branches
                        that each appended a line conflict only because git's
                        line merge cannot order two insertions at one point. A
                        conflict that lies inside that list and is a pure
                        insertion on both sides is resolved as ours, then
                        theirs. Every other conflict, including an edit to a
-                       note already in the list and any disagreement over
-                       `<Version>` itself, is left with its markers.
+                       note already in the list or to the text above the
+                       marker, is left with its markers.
 
     Exit 0 with the merged bytes in %A, or exit 1 with %A carrying standard
     conflict markers and the reason on stderr.
@@ -545,13 +545,14 @@ function Invoke-MembersMerge() {
 # ─── Mode: draftnote ─────────────────────────────────────────────────
 
 # The marker line that opens the append-only list, compared after a trim. It
-# is spelled with `=` because an XML comment cannot contain `--`. The list it
-# opens ends at the comment's closing line.
+# is spelled with `=` because the list first lived in an XML comment, which
+# cannot contain `--`. The list it opens ends at a closing `-->` line, or at the
+# end of the file when none follows, as in `DRAFT-NOTES.md`.
 $script:DraftNoteMarker = '==== draft notes: append ONE line per change below this marker, never edit one ===='
 
 function Invoke-DraftNoteMerge() {
     $git = Get-Command git -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
-    $where = if ([string]::IsNullOrWhiteSpace($Pathname)) { 'Directory.Build.props' } else { $Pathname }
+    $where = if ([string]::IsNullOrWhiteSpace($Pathname)) { 'DRAFT-NOTES.md' } else { $Pathname }
 
     if ($null -eq $git) {
         [Console]::Error.WriteLine("merge-baselines (draftnote): ``git`` is not on PATH, so $where cannot be merged here; resolve it by hand.")

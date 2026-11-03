@@ -32,7 +32,7 @@ maintenance commitment, and how to sign your work.
    commit for a `Signed-off-by:` trailer matching the commit author.
 5. **Run `dotnet run --project Build.fsproj -- Setup` once per clone.** It registers the
    three-way merge drivers for the generated `api-baselines/` projections and the append-only
-   draft note in `Directory.Build.props` — see
+   draft notes in `DRAFT-NOTES.md` — see
    [Generated baselines and their merge driver](#generated-baselines-and-their-merge-driver).
 6. **Run the gates** locally — the same commands CI runs, so a green run here
    predicts a green run there:
@@ -342,7 +342,7 @@ dotnet run --project Build.fsproj -- Setup
 ```
 
 This registers a three-way **merge driver** for those two paths, and for the
-draft note in `Directory.Build.props` (below), in your clone's `.git/config`. It
+draft notes in `DRAFT-NOTES.md` (below), in your clone's `.git/config`. It
 is a one-time, per-clone step, and it is not optional if you work on more than
 one branch at a time.
 
@@ -405,15 +405,19 @@ A change that moves a public surface records it in two places, and neither is
 `CHANGELOG.md`:
 
 - its regenerated baselines, above;
-- **one line** appended at the end of the draft-note list in
-  `Directory.Build.props`, below the `<Version>` it rides and its marker line,
-  in the form `- <phase> (<version>): <class> — <one sentence>`. Never insert a
+- **one line** appended at the end of
+  [`DRAFT-NOTES.md`](DRAFT-NOTES.md), below its marker line, in the form
+  `- <phase> (<version>): <class> — <one sentence>`, where `<version>` is the
+  `<Version>` in `Directory.Build.props` the change rides. Never insert a
   paragraph, and never edit or reorder a line already there. Two branches that
   each append a line still collide under git's line merge (both insert at one
   point), so `Setup` registers a third mode of the same driver for that file. It
   runs an ordinary three-way merge and resolves only a conflict that is a pure
   insertion on both sides inside the list, ours first; anything else in the
-  file, a disagreement over `<Version>` included, is left with its markers.
+  file is left with its markers.
+
+Not in `Directory.Build.props`: every project imports it, so any edit to it runs
+the full test lane, and a note there sent almost every versioned change to it.
 
 `CHANGELOG.md` is rendered from the release tags at release time and changes
 once per release — see
