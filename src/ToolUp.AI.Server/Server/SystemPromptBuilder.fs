@@ -185,6 +185,29 @@ module SystemPromptBuilder =
             return parts |> Array.filter (fun s -> s <> "") |> String.concat "\n\n"
         }
 
+    /// Built-in builder that serves a registered language profile's prompt
+    /// fragment: the one string `LanguageProfile.register` rendered, on every
+    /// turn. Construct it once at boot; construction reports the fragment's
+    /// size to `logger`. With no profile it contributes `""`, which `compose`
+    /// drops, so a deployment that registers none sends the prompt it sent
+    /// before, byte for byte.
+    let languageProfile (logger: ILogger option) (profile: RegisteredLanguageProfile option) : SystemPromptBuilder =
+        match profile with
+        | None -> fun _ -> async.Return ""
+        | Some registered ->
+            logger
+            |> Option.iter (fun l ->
+                l.Info(
+                    sprintf
+                        "Language profile '%s': %d kind(s), prompt fragment %d bytes."
+                        registered.Profile.Name
+                        registered.Profile.Kinds.Count
+                        registered.FragmentBytes
+                ))
+
+            let fragment = registered.Fragment
+            fun _ -> async.Return fragment
+
 /// What a prompt builder contributed to one turn: the prompt text and the
 /// side data a RAG-style builder reports beside it. The turn reads this
 /// record and nothing else of the builder's run.

@@ -325,9 +325,11 @@ ToolUp.Facts.Presentation.RenderTools.answer(ToolUp.Facts.Presentation.RenderToo
 ToolUp.Facts.Presentation.RenderTools.answerWith(ToolUp.Facts.Presentation.RenderTool, ToolUp.Facts.FactBrowseHandler+FactBrowseDeps, ToolUp.Platform.ResolvedScope, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.ToolHelpers+ToolAnswer]
 ToolUp.Facts.Presentation.RenderTools.definition(ToolUp.Facts.Presentation.RenderTool) : ToolUp.Platform.AIToolDefinition
 ToolUp.Facts.Presentation.RenderTools.kinds(ToolUp.Facts.Presentation.RenderTool) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Presentation.PresentationKind]
+ToolUp.Facts.Presentation.RenderTools.languageSchema : ToolUp.AI.LanguageSchema { get }
 ToolUp.Facts.Presentation.RenderTools.name(ToolUp.Facts.Presentation.RenderTool) : System.String
 ToolUp.Facts.Presentation.RenderTools.summary(ToolUp.Facts.Presentation.PresentationRequest, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Presentation.SeriesAnswer], ToolUp.Platform.AI.BlockProvenance) : System.String
 ToolUp.Facts.Presentation.RenderTools.tools : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.ToolHelpers+ToolAnswer]]]]] { get }
+ToolUp.Facts.Presentation.RenderTools.validateComposedBlock(ToolUp.AI.RegisteredLanguageProfile, Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Facts.Presentation.PresentationRequest], System.String) : Microsoft.FSharp.Core.FSharpResult`2[Fuaran.UI.Generated+Node`1[Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ComposedBlockRefusal]]
 ToolUp.Facts.Presentation.TabRefusal (class)
 ToolUp.Facts.Presentation.TabRefusal.IsBlockNamedTwice : System.Boolean { get }
 ToolUp.Facts.Presentation.TabRefusal.IsNotInSection : System.Boolean { get }

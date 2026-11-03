@@ -675,6 +675,7 @@ let private registeredTests =
         PageRequestResolverTests.tests
         LayoutToolsTests.tests
         NarrativeCalculationTests.tests
+        LanguageProfileTests.tests
     ]
 
 let private deliberatelyUnregistered: TestRegistrationGuard.Exemption list = []

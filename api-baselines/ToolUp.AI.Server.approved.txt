@@ -865,6 +865,51 @@ ToolUp.AI.ClientToolDispatch+ClientToolDispatchRegistry.RegisterPending(System.G
 ToolUp.AI.ClientToolDispatch+ClientToolDispatchRegistry.SourceModuleOf(System.Guid) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.AI.ClientToolDispatch+ClientToolDispatchRegistry.TryAbort(System.Guid, System.String) : System.Boolean
 ToolUp.AI.ClientToolDispatch+ClientToolDispatchRegistry.TryComplete(System.Guid, System.String) : System.Boolean
+ToolUp.AI.ComposedBlockRefusal (class)
+ToolUp.AI.ComposedBlockRefusal.IsDecode : System.Boolean { get }
+ToolUp.AI.ComposedBlockRefusal.IsFieldNotInProfile : System.Boolean { get }
+ToolUp.AI.ComposedBlockRefusal.IsGrammar : System.Boolean { get }
+ToolUp.AI.ComposedBlockRefusal.IsInlineRows : System.Boolean { get }
+ToolUp.AI.ComposedBlockRefusal.IsKindNotInProfile : System.Boolean { get }
+ToolUp.AI.ComposedBlockRefusal.IsMalformed : System.Boolean { get }
+ToolUp.AI.ComposedBlockRefusal.IsNodePropertyNotInProfile : System.Boolean { get }
+ToolUp.AI.ComposedBlockRefusal.IsUnknownRequest : System.Boolean { get }
+ToolUp.AI.ComposedBlockRefusal.Tag : System.Int32 { get }
+ToolUp.AI.ComposedBlockRefusal+Decode (class)
+ToolUp.AI.ComposedBlockRefusal+Decode.reason : System.String { get }
+ToolUp.AI.ComposedBlockRefusal+FieldNotInProfile (class)
+ToolUp.AI.ComposedBlockRefusal+FieldNotInProfile.field : System.String { get }
+ToolUp.AI.ComposedBlockRefusal+FieldNotInProfile.kind : System.String { get }
+ToolUp.AI.ComposedBlockRefusal+FieldNotInProfile.nodeId : System.String { get }
+ToolUp.AI.ComposedBlockRefusal+Grammar (class)
+ToolUp.AI.ComposedBlockRefusal+Grammar.findings : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.AI.ComposedBlockRefusal+InlineRows (class)
+ToolUp.AI.ComposedBlockRefusal+InlineRows.field : System.String { get }
+ToolUp.AI.ComposedBlockRefusal+InlineRows.kind : System.String { get }
+ToolUp.AI.ComposedBlockRefusal+InlineRows.nodeId : System.String { get }
+ToolUp.AI.ComposedBlockRefusal+KindNotInProfile (class)
+ToolUp.AI.ComposedBlockRefusal+KindNotInProfile.kind : System.String { get }
+ToolUp.AI.ComposedBlockRefusal+KindNotInProfile.nodeId : System.String { get }
+ToolUp.AI.ComposedBlockRefusal+Malformed (class)
+ToolUp.AI.ComposedBlockRefusal+Malformed.reason : System.String { get }
+ToolUp.AI.ComposedBlockRefusal+NodePropertyNotInProfile (class)
+ToolUp.AI.ComposedBlockRefusal+NodePropertyNotInProfile.nodeId : System.String { get }
+ToolUp.AI.ComposedBlockRefusal+NodePropertyNotInProfile.property : System.String { get }
+ToolUp.AI.ComposedBlockRefusal+Tags (class)
+ToolUp.AI.ComposedBlockRefusal+Tags.Decode : System.Int32 (literal)
+ToolUp.AI.ComposedBlockRefusal+Tags.FieldNotInProfile : System.Int32 (literal)
+ToolUp.AI.ComposedBlockRefusal+Tags.Grammar : System.Int32 (literal)
+ToolUp.AI.ComposedBlockRefusal+Tags.InlineRows : System.Int32 (literal)
+ToolUp.AI.ComposedBlockRefusal+Tags.KindNotInProfile : System.Int32 (literal)
+ToolUp.AI.ComposedBlockRefusal+Tags.Malformed : System.Int32 (literal)
+ToolUp.AI.ComposedBlockRefusal+Tags.NodePropertyNotInProfile : System.Int32 (literal)
+ToolUp.AI.ComposedBlockRefusal+Tags.UnknownRequest : System.Int32 (literal)
+ToolUp.AI.ComposedBlockRefusal+UnknownRequest (class)
+ToolUp.AI.ComposedBlockRefusal+UnknownRequest.key : System.String { get }
+ToolUp.AI.ComposedBlockRefusal+UnknownRequest.kind : System.String { get }
+ToolUp.AI.ComposedBlockRefusal+UnknownRequest.nodeId : System.String { get }
+ToolUp.AI.ComposedBlockRefusalModule (class)
+ToolUp.AI.ComposedBlockRefusalModule.describe(ToolUp.AI.ComposedBlockRefusal) : System.String
 ToolUp.AI.ConversationExportAuditHandler (class)
 ToolUp.AI.ConversationExportAuditHandler.exportAuditHandler(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.AspNetCore.Http.HttpContext) : System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]
 ToolUp.AI.ConversationExportAuditHandler+ExportAuditRequest (class)
@@ -1195,6 +1240,52 @@ ToolUp.AI.ICitationCounters.Record(System.String, System.String, ToolUp.AI.Citat
 ToolUp.AI.ICitationCounters.Snapshot() : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.CitationCounterRow]
 ToolUp.AI.ICitationNormaliser (interface)
 ToolUp.AI.ICitationNormaliser.Normalise(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+RetrievedSource], System.String, System.String, System.String) : ToolUp.AI.CitationNormalisation
+ToolUp.AI.LanguageProfile (class)
+ToolUp.AI.LanguageProfile..ctor(System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpSet`1[System.String]], Microsoft.FSharp.Collections.FSharpSet`1[System.String])
+ToolUp.AI.LanguageProfile.Kinds : Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpSet`1[System.String]] { get }
+ToolUp.AI.LanguageProfile.Name : System.String { get }
+ToolUp.AI.LanguageProfile.NodeProperties : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
+ToolUp.AI.LanguageProfileModule (class)
+ToolUp.AI.LanguageProfileModule.check(ToolUp.AI.RegisteredLanguageProfile, Microsoft.FSharp.Collections.FSharpSet`1[System.String], System.String) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ComposedBlockRefusal]]
+ToolUp.AI.LanguageProfileModule.fragment(ToolUp.AI.LanguageSchema, ToolUp.AI.LanguageProfile) : System.String
+ToolUp.AI.LanguageProfileModule.named(System.String) : ToolUp.AI.LanguageProfile
+ToolUp.AI.LanguageProfileModule.register(ToolUp.AI.LanguageSchema, ToolUp.AI.LanguageProfile) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.AI.RegisteredLanguageProfile, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.LanguageProfileRefusal]]
+ToolUp.AI.LanguageProfileModule.withKind(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.AI.LanguageProfile) : ToolUp.AI.LanguageProfile
+ToolUp.AI.LanguageProfileModule.withNodeProperties(Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.AI.LanguageProfile) : ToolUp.AI.LanguageProfile
+ToolUp.AI.LanguageProfileRefusal (class)
+ToolUp.AI.LanguageProfileRefusal.IsInlineRowsField : System.Boolean { get }
+ToolUp.AI.LanguageProfileRefusal.IsNoKinds : System.Boolean { get }
+ToolUp.AI.LanguageProfileRefusal.IsNoName : System.Boolean { get }
+ToolUp.AI.LanguageProfileRefusal.IsUnknownField : System.Boolean { get }
+ToolUp.AI.LanguageProfileRefusal.IsUnknownKind : System.Boolean { get }
+ToolUp.AI.LanguageProfileRefusal.IsUnknownNodeProperty : System.Boolean { get }
+ToolUp.AI.LanguageProfileRefusal.NoKinds : ToolUp.AI.LanguageProfileRefusal { get }
+ToolUp.AI.LanguageProfileRefusal.NoName : ToolUp.AI.LanguageProfileRefusal { get }
+ToolUp.AI.LanguageProfileRefusal.Tag : System.Int32 { get }
+ToolUp.AI.LanguageProfileRefusal+InlineRowsField (class)
+ToolUp.AI.LanguageProfileRefusal+InlineRowsField.field : System.String { get }
+ToolUp.AI.LanguageProfileRefusal+InlineRowsField.kind : System.String { get }
+ToolUp.AI.LanguageProfileRefusal+Tags (class)
+ToolUp.AI.LanguageProfileRefusal+Tags.InlineRowsField : System.Int32 (literal)
+ToolUp.AI.LanguageProfileRefusal+Tags.NoKinds : System.Int32 (literal)
+ToolUp.AI.LanguageProfileRefusal+Tags.NoName : System.Int32 (literal)
+ToolUp.AI.LanguageProfileRefusal+Tags.UnknownField : System.Int32 (literal)
+ToolUp.AI.LanguageProfileRefusal+Tags.UnknownKind : System.Int32 (literal)
+ToolUp.AI.LanguageProfileRefusal+Tags.UnknownNodeProperty : System.Int32 (literal)
+ToolUp.AI.LanguageProfileRefusal+UnknownField (class)
+ToolUp.AI.LanguageProfileRefusal+UnknownField.field : System.String { get }
+ToolUp.AI.LanguageProfileRefusal+UnknownField.kind : System.String { get }
+ToolUp.AI.LanguageProfileRefusal+UnknownKind (class)
+ToolUp.AI.LanguageProfileRefusal+UnknownKind.kind : System.String { get }
+ToolUp.AI.LanguageProfileRefusal+UnknownNodeProperty (class)
+ToolUp.AI.LanguageProfileRefusal+UnknownNodeProperty.property : System.String { get }
+ToolUp.AI.LanguageProfileRefusalModule (class)
+ToolUp.AI.LanguageProfileRefusalModule.describe(ToolUp.AI.LanguageProfileRefusal) : System.String
+ToolUp.AI.LanguageSchema (class)
+ToolUp.AI.LanguageSchema..ctor(Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpSet`1[System.String]], Microsoft.FSharp.Collections.FSharpSet`1[System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String])
+ToolUp.AI.LanguageSchema.Categories : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
+ToolUp.AI.LanguageSchema.Kinds : Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpSet`1[System.String]] { get }
+ToolUp.AI.LanguageSchema.NodeProperties : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
 ToolUp.AI.LegacyAIConfigProviderProfile (class)
 ToolUp.AI.LegacyAIConfigProviderProfile.create(ToolUp.Platform.BlobStorage+IBlobStorage) : ToolUp.Platform.Providers+IProviderProfile
 ToolUp.AI.LegacyAIConfigProviderProfile.wrap(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.Providers+IProviderProfile) : ToolUp.Platform.Providers+IProviderProfile
@@ -1275,6 +1366,11 @@ ToolUp.AI.PlatformAIKeysHandler (class)
 ToolUp.AI.PlatformAIKeysHandler.platformAIKeysApi(ToolUp.AI.IAIProviderFactory, Microsoft.AspNetCore.Http.HttpContext) : ToolUp.AI.PlatformAIKeysApi
 ToolUp.AI.PlatformAITools (class)
 ToolUp.AI.PlatformAITools.builtIn : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.AIToolRegistry+RegisteredTool] { get }
+ToolUp.AI.RegisteredLanguageProfile (class)
+ToolUp.AI.RegisteredLanguageProfile.Fragment : System.String { get }
+ToolUp.AI.RegisteredLanguageProfile.FragmentBytes : System.Int32 { get }
+ToolUp.AI.RegisteredLanguageProfile.Profile : ToolUp.AI.LanguageProfile { get }
+ToolUp.AI.RegisteredLanguageProfile.Schema : ToolUp.AI.LanguageSchema { get }
 ToolUp.AI.SSEHandler (class)
 ToolUp.AI.SSEHandler.LegacyChannelDeprecatedOn : System.String (literal)
 ToolUp.AI.SSEHandler.LegacyChannelMigrationGuide : System.String (literal)
@@ -1343,6 +1439,7 @@ ToolUp.AI.SystemPromptBuilder+SystemPromptBuilderModule.activeModuleContext(Tool
 ToolUp.AI.SystemPromptBuilder+SystemPromptBuilderModule.compose(Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.SystemPromptBuilder+PromptContext, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]], ToolUp.AI.SystemPromptBuilder+PromptContext) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
 ToolUp.AI.SystemPromptBuilder+SystemPromptBuilderModule.currentNarrativeContext(ToolUp.AI.SystemPromptBuilder+PromptContext) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
 ToolUp.AI.SystemPromptBuilder+SystemPromptBuilderModule.fromStatic(System.String, ToolUp.AI.SystemPromptBuilder+PromptContext) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
+ToolUp.AI.SystemPromptBuilder+SystemPromptBuilderModule.languageProfile(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.RegisteredLanguageProfile]) : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.SystemPromptBuilder+PromptContext, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]
 ToolUp.AI.TeamConversationPolicyStore (class)
 ToolUp.AI.TeamConversationPolicyStore.teamConversationVisibilityApi(Microsoft.AspNetCore.Http.HttpContext) : ToolUp.AI.TeamConversationVisibilityApi
 ToolUp.AI.TeamConversationPolicyStore+ConversationVisibility (class)
