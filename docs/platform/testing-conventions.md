@@ -160,11 +160,35 @@ Everything that used to restate the list is a render of the rows, and each rende
 - The `pure` lane is the pack rows with `Reads = []`; `PureLaneTests` re-runs the recorded grep over each such row's sources and is red when one reads the tree.
 - CI's `EXPECTED_PACKS` is `Gate.ciFloor`, the count of rows whose `Where` carries `Ci "verify-all"`; `dotnet run --project Build.fsproj -- Gate --check` refuses a drift and `Gate --render` writes it. The CI table in `CLAUDE.md` is rendered from `Where` the same way, and `GateManifestTests` holds every `checks.yml` job to a row or a named CI-only reason, and every row's job to a step that runs it.
 - Each pack is launched under a scrubbed environment: every `Env` variable some other row declares and this row does not is cleared, so a pack cannot read a credential it did not name (`Gate.scrubbedFor`).
-- `VerifyGate` serialises `VerifyAll` and every `Body` row that reads the tree for over a minute; its stale-holder bound is twice the full lane's summed `Budget`, never a literal.
-- `VerifyAll` prints the lane's measured duration once at the end of a run and a trailer naming the rows it did not run (`Where` without `Local`) with their reads; `VerifyGate` appends one admission record per run to `.git/fuaran-gate/verify-runs.jsonl`, and `dotnet run --project Build.fsproj -- GateTimings [--since <days>]` folds them into per-lane and per-row medians, which is where a row's `Budget` is re-derived from.
+- `VerifyGate` serialises `VerifyAll` and every `Body` row that reads the tree for over a minute; its stale-holder bound is twice the full lane's summed `Budget`, never a literal. Each budget is read from `gate-timings.json` (below), or is the row's declared seed where the record has no median for it.
+- `VerifyAll` prints the lane's measured duration once at the end of a run and a trailer naming the rows it did not run (`Where` without `Local`) with their reads; `VerifyGate` appends one admission record per run to `.git/fuaran-gate/verify-runs.jsonl`, and `dotnet run --project Build.fsproj -- GateTimings [--since <days>]` folds them into per-lane and per-row medians. With `--record` the fold is written to `gate-timings.json`.
 - A `Floor` is applied by the fold, not the body: `AtLeast n` / `Exactly n` against the `Pass` count, `HighWater <file>` against the committed mark, `FromRegistry proofs.json` by `proofs/check.ps1`, which reads each differential host's case names from the claims registry and fails by name on a case that stops running.
 
 `dotnet run --project Build.fsproj -- Gate --run <row>` runs one row on its own (building what it names), which is how the CI-only jobs invoke theirs. A consumer's `Build.fs` that sets `TestPacks` and calls `VerifyLeg.register` is unchanged: both are derived views onto `Gate.register`.
+
+## What the gate costs: `gate-timings.json`
+
+How long the gate takes is a committed record, not a figure to quote: read `gate-timings.json` at the repository root.
+It is the fold of the admission journal, and it states its window (`since`, `until`), the runs it folds and the
+machines that ran them. Per lane it gives the median and p90 wall clock of the green `VerifyAll` runs. Per row it gives
+the median seconds over the green full-lane runs. A run is green when its exit code is 0 and no leg failed.
+
+- `dotnet run --project Build.fsproj -- GateTimings --record` writes it. The window is seven days (`--since <days>`
+  widens it) ending at the newest recorded run, so the same journal folds to the same record whenever it is folded. A
+  re-fold that would change nothing but `foldedAt` leaves the file alone, which makes a second `--record` over the same
+  journal a no-op diff. A journal with no runs writes nothing and says so.
+- A row's `Budget` in `GateManifest.rows` is its seed. `GateManifest.withRecordedBudgets` replaces it with the record's
+  median, and `budgetSource` says which one a row carries. `VerifyGate` reads the derived budgets, so the stale-holder
+  bound sums the same figures the planning tooling reads.
+- `GateReconcile` and `Gate --check` are red when the record measures a row `VerifyAll` does not run in the full lane,
+  or when a row it runs has neither a median in the record nor a seed. They warn when the record's window ended more
+  than 14 days ago. `--record` refuses to write a record that would fail that check.
+- The record is in `gate-reads.json`'s `notRead`, so a commit carrying only it is gate-inert. The close-out of a series
+  of landings runs `GateTimings --record` and commits `gate-timings.json` by name.
+- Never edit it by hand. A row added to the manifest needs a seed until a recorded run measures it.
+
+The journal lives under one clone's git directory, so a record folds one machine's runs. A fold on another machine
+replaces the record with that machine's window, and `machines` says which machine was measured.
 
 ## What the gate reads: `gate-reads.json`, and what belongs in `reads` versus `notRead`
 
