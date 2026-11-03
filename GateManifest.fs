@@ -799,6 +799,7 @@ let rowReads: (string * string list) list = [
     [
         ".gitignore"
         "**/.gitignore"
+        "DRAFT-NOTES.md"
         "api-baselines/**"
         "composition-baselines/**"
         "dev-scripts/merge-baselines.ps1"

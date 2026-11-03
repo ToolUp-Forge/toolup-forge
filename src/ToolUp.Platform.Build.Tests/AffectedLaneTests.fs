@@ -30,7 +30,11 @@ let private forcingTable = [
         "src/ToolUp.Sdk/build/ToolUp.Sdk.props"
         "x/a.targets"
     ],
-    [ "docs/props.md"; "src/ToolUp.Platform.Server/Server/Props.fs" ]
+    [
+        "docs/props.md"
+        "src/ToolUp.Platform.Server/Server/Props.fs"
+        "DRAFT-NOTES.md"
+    ]
     "solution", [ "ToolUp.Forge.sln"; "tools/x.slnx" ], [ "docs/solution.md" ]
     "build-script",
     [ "Build.fs"; "Build.fsproj"; "SampleGate.fs"; "verify.ps1" ],
@@ -645,6 +649,24 @@ let tests =
                     "a blind rule"
 
                 Expect.isFalse root.Forced "the composition root forced a graph selection"
+
+            testCase "a draft note is not an import: appending one forces nothing and the graph selects"
+            <| fun () ->
+                let code = graphOver [ "src/Umbrella/Server/B1.fs" ]
+                let noted = graphOver [ "src/Umbrella/Server/B1.fs"; "DRAFT-NOTES.md" ]
+                Expect.isFalse noted.Forced (sprintf "a draft note forced the full lane: %A" noted.Fired)
+                Expect.isEmpty noted.Fired "a forcing rule fired on the draft note"
+                Expect.equal (selectedPacks noted) (selectedPacks code) "the note changed what the graph selects"
+                Expect.equal (skippedPacks noted) (skippedPacks code) "the note changed what the graph skips"
+
+                Expect.equal
+                    (noted.Graph |> Option.map _.Unowned)
+                    (Some [ "DRAFT-NOTES.md" ])
+                    "the note is an unowned path, which selects nothing"
+
+                Expect.isTrue
+                    (graphOver [ "src/Umbrella/Server/B1.fs"; "Directory.Build.props" ]).Forced
+                    "falsifier: the same change with its note in the props forces the full lane"
 
             testCase "the graph manifest says its source and reads back to itself"
             <| fun () ->

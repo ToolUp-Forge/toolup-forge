@@ -921,42 +921,38 @@ let private worktreeRegistrationTest =
 // ─── The append-only draft note (draftnote mode) ─────────────────────
 
 /// The marker that opens the list. Spelled here, in the driver and in the
-/// root `Directory.Build.props`; the first case pins the three together.
+/// root `DRAFT-NOTES.md`; the first case pins the three together.
 let private draftNoteMarker =
     "==== draft notes: append ONE line per change below this marker, never edit one ===="
 
-let private rootProps =
-    lazy (File.ReadAllText(Path.Combine(root, "Directory.Build.props")).Replace("\r\n", "\n"))
+/// The file the notes live in, at the repository root. Not
+/// `Directory.Build.props`: every project imports the props, so a note
+/// there sent its change to the full test lane.
+let private draftNotesFile = "DRAFT-NOTES.md"
 
-/// `props` with `note` appended at the end of the draft-note list: the line
-/// before the comment's closing `-->` that follows the marker.
-let private appendNote (props: string) (note: string) =
-    let lines = props.Split('\n') |> List.ofArray
+let private readRoot (name: string) =
+    File.ReadAllText(Path.Combine(root, name)).Replace("\r\n", "\n")
 
-    let marker =
-        lines
-        |> List.tryFindIndex (fun l -> l.Trim() = draftNoteMarker)
-        |> Option.defaultWith (fun () -> failtest "the props carry no draft-note marker")
+let private rootNotes = lazy (readRoot draftNotesFile)
 
-    let closing =
-        lines
-        |> List.indexed
-        |> List.tryFind (fun (i, l) -> i > marker && l.Trim() = "-->")
-        |> Option.map fst
-        |> Option.defaultWith (fun () -> failtest "the draft-note list has no closing `-->`")
+/// `notes` with `note` appended at the end of the file, which is the end of
+/// the list the marker opens.
+let private appendNote (notes: string) (note: string) =
+    if not (notes.Split('\n') |> Array.exists (fun l -> l.Trim() = draftNoteMarker)) then
+        failtest "the notes file carries no draft-note marker"
 
-    List.insertAt closing ("      " + note) lines |> String.concat "\n"
+    notes.TrimEnd('\n') + "\n" + note + "\n"
 
-/// Two branches of a repo holding the root props: `ours` on main, `theirs`
-/// merged into it. Returns git's exit code and the merged props.
-let private mergeProps (registerDriver: bool) (ours: string -> string) (theirs: string -> string) =
+/// Two branches of a repo holding the root notes file: `ours` on main,
+/// `theirs` merged into it. Returns git's exit code and the merged file.
+let private mergeNotes (registerDriver: bool) (ours: string -> string) (theirs: string -> string) =
     let shell = pwsh.Value |> Option.defaultWith (fun () -> failwith "pwsh not on PATH")
     let result = ref (-1, "")
 
-    withScratch "toolup-1149-note-" (fun dir ->
+    withScratch "toolup-1210-note-" (fun dir ->
         newRepo dir
-        let props = Path.Combine(dir, "Directory.Build.props")
-        File.WriteAllText(Path.Combine(dir, ".gitattributes"), "/Directory.Build.props merge=toolup-draftnote\n")
+        let notes = Path.Combine(dir, draftNotesFile)
+        File.WriteAllText(Path.Combine(dir, ".gitattributes"), "/DRAFT-NOTES.md merge=toolup-draftnote\n")
 
         if registerDriver then
             gitIn dir [
@@ -966,17 +962,17 @@ let private mergeProps (registerDriver: bool) (ours: string -> string) (theirs: 
             ]
             |> ignore
 
-        File.WriteAllText(props, rootProps.Value)
+        File.WriteAllText(notes, rootNotes.Value)
         gitIn dir [ "add"; "-A" ] |> ignore
         gitIn dir [ "commit"; "-m"; "base" ] |> ignore
         gitIn dir [ "checkout"; "-b"; "theirs" ] |> ignore
-        File.WriteAllText(props, theirs rootProps.Value)
+        File.WriteAllText(notes, theirs rootNotes.Value)
         gitIn dir [ "commit"; "-am"; "theirs" ] |> ignore
         gitIn dir [ "checkout"; "main" ] |> ignore
-        File.WriteAllText(props, ours rootProps.Value)
+        File.WriteAllText(notes, ours rootNotes.Value)
         gitIn dir [ "commit"; "-am"; "ours" ] |> ignore
         let exit, _, _ = run "git" [ "merge"; "--no-edit"; "theirs" ] dir
-        result.Value <- (exit, File.ReadAllText(props).Replace("\r\n", "\n")))
+        result.Value <- (exit, File.ReadAllText(notes).Replace("\r\n", "\n")))
 
     result.Value
 
@@ -987,77 +983,81 @@ let private theirsNote =
 
 let private draftNoteTests =
     testList "the append-only draft note merges without a hand resolution" [
-        test "the root props and the driver carry the same marker" {
+        test "the notes file, the driver and the attributes agree, and the props carry no list" {
             Expect.isTrue
-                (rootProps.Value.Split('\n')
+                (rootNotes.Value.Split('\n')
                  |> Array.exists (fun l -> l.Trim() = draftNoteMarker))
-                "Directory.Build.props carries the draft-note marker line"
+                "DRAFT-NOTES.md carries the draft-note marker line"
 
             Expect.stringContains
                 (File.ReadAllText driverPath)
                 draftNoteMarker
                 "the draftnote mode matches the same marker"
+
+            let binding = [| "/" + draftNotesFile; "merge=toolup-draftnote" |]
+
+            Expect.isTrue
+                ((readRoot ".gitattributes").Split('\n')
+                 |> Array.exists (fun l -> l.Split([| ' '; '\t' |], StringSplitOptions.RemoveEmptyEntries) = binding))
+                "the root .gitattributes binds the draftnote driver to DRAFT-NOTES.md"
+
+            let props = readRoot "Directory.Build.props"
+
+            Expect.isFalse
+                (props.Split('\n') |> Array.exists (fun l -> l.Trim() = draftNoteMarker))
+                "Directory.Build.props carries no draft-note list: a note there runs every project's tests"
+
+            Expect.isFalse
+                ((readRoot ".gitattributes").Contains "/Directory.Build.props")
+                "the props are bound to no merge driver: nothing in them is appended to"
         }
 
         test "two branches that each append a line merge clean, ours then theirs" {
             let exit, merged =
-                mergeProps true (fun p -> appendNote p oursNote) (fun p -> appendNote p theirsNote)
+                mergeNotes true (fun n -> appendNote n oursNote) (fun n -> appendNote n theirsNote)
 
             Expect.equal exit 0 "two appended notes merge with no conflict"
             Expect.isFalse (merged.Contains "<<<<<<< ") "no conflict markers"
 
-            Expect.stringContains
-                merged
-                ("      " + oursNote + "\n      " + theirsNote + "\n    -->")
+            Expect.isTrue
+                (merged.EndsWith(oursNote + "\n" + theirsNote + "\n"))
                 "both lines survive, ours first, at the end of the list"
         }
 
         test "falsifier: without the driver the same two appends conflict" {
             let exit, _ =
-                mergeProps false (fun p -> appendNote p oursNote) (fun p -> appendNote p theirsNote)
+                mergeNotes false (fun n -> appendNote n oursNote) (fun n -> appendNote n theirsNote)
 
             Expect.notEqual exit 0 "git's line merge cannot order two insertions at one point"
         }
 
-        test "two different <Version> lines stay a conflict, even with the notes resolved" {
-            // The fixture is the live root props, so the standing <Version> is read off it rather
-            // than written here: a literal went red at the first version cut after it was written.
-            let current =
-                System.Text.RegularExpressions.Regex.Match(rootProps.Value, @"<Version>([0-9][^<]*)</Version>")
+        test "two different edits above the marker stay a conflict, even with the notes resolved" {
+            let heading = rootNotes.Value.Split('\n') |> Array.head
 
-            Expect.isTrue current.Success "precondition: the fixture declares a <Version> line"
-            let currentLine = current.Value
+            Expect.isTrue (heading.StartsWith "# ") "precondition: the notes file opens with its heading"
 
-            let bump (v: string) (p: string) =
-                p.Replace(currentLine, sprintf "<Version>%s</Version>" v)
-
-            let parts = current.Groups[1].Value.Split('.')
-            let major, minor, patch = int parts[0], int parts[1], int parts[2]
-            let oursVersion = sprintf "%d.%d.0" major (minor + 1)
-            let theirsVersion = sprintf "%d.%d.%d" major minor (patch + 1)
+            let retitle (suffix: string) (n: string) =
+                (heading + suffix) + n.Substring heading.Length
 
             let exit, merged =
-                mergeProps true (fun p -> appendNote (bump oursVersion p) oursNote) (fun p ->
-                    appendNote (bump theirsVersion p) theirsNote)
+                mergeNotes true (fun n -> appendNote (retitle " (ours)" n) oursNote) (fun n ->
+                    appendNote (retitle " (theirs)" n) theirsNote)
 
-            Expect.notEqual exit 0 "a version disagreement is not the driver's to decide"
+            Expect.notEqual exit 0 "a disagreement outside the list is not the driver's to decide"
 
-            Expect.stringContains
-                merged
-                (sprintf "<<<<<<< ours\n    <Version>%s</Version>" oursVersion)
-                "the version line keeps its markers"
+            Expect.stringContains merged (sprintf "<<<<<<< ours\n%s (ours)" heading) "the heading keeps its markers"
 
-            Expect.stringContains merged ("      " + oursNote + "\n      " + theirsNote) "the notes are still joined"
+            Expect.stringContains merged (oursNote + "\n" + theirsNote) "the notes are still joined"
         }
 
         test "an edit to a note already in the list stays a conflict" {
             let existing =
-                rootProps.Value.Split('\n')
+                rootNotes.Value.Split('\n')
                 |> Array.find (fun l -> l.TrimStart().StartsWith "- 1149 (")
 
-            let edit (suffix: string) (p: string) = p.Replace(existing, existing + suffix)
+            let edit (suffix: string) (n: string) = n.Replace(existing, existing + suffix)
 
-            let exit, _ = mergeProps true (edit " Ours.") (edit " Theirs.")
+            let exit, _ = mergeNotes true (edit " Ours.") (edit " Theirs.")
             Expect.notEqual exit 0 "the list is append-only; an edit on both sides is a real disagreement"
         }
     ]
