@@ -24,6 +24,17 @@ import base from "./vite.config.mts";
 // sums the entry's static closure, read from the manifest this build writes
 // to `.vite/manifest.json`. The gate script refuses a build in which those
 // two chunks stopped being on demand.
+//
+// The Fuaran-UI renderer is the third on-demand chunk. The tree lowering's
+// runtime half reaches it, and nothing at boot may: the group below gathers
+// the renderer's packages and that half into one chunk named FuaranUIRenderer,
+// so the gate can name it. A static reference to the renderer from anything the
+// first load reaches then puts that chunk in the entry's static closure, which
+// the gate refuses. A shell with no tree surface builds no such chunk. The group
+// only names the chunk the default split would already make; a consumer's own
+// build needs no such setting to load the renderer on demand.
+const fuaranUIRenderer = /fable_modules[\\/]Fuaran\.UI\.(Renderer|Renderer\.Core|Charts)\.[0-9][^\\/]*[\\/]|[\\/]TreeLoweringRuntime\.js$/;
+
 export default defineConfig((env) =>
     mergeConfig(typeof base === "function" ? base(env) : base, {
         // The SDK's `./icons/*.svg?react` imports resolve to files under the
@@ -36,6 +47,11 @@ export default defineConfig((env) =>
             rolldownOptions: {
                 input: "output/src/ToolUp.Platform.Client/Client/SDK.Client.js",
                 preserveEntrySignatures: "strict",
+                output: {
+                    codeSplitting: {
+                        groups: [{ name: "FuaranUIRenderer", test: fuaranUIRenderer }],
+                    },
+                },
             },
         },
     }),
