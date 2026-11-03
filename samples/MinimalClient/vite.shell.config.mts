@@ -25,15 +25,16 @@ import base from "./vite.config.mts";
 // to `.vite/manifest.json`. The gate script refuses a build in which those
 // two chunks stopped being on demand.
 //
-// The Fuaran-UI renderer is the third on-demand chunk. The tree lowering's
-// runtime half reaches it, and nothing at boot may: the group below gathers
-// the renderer's packages and that half into one chunk named FuaranUIRenderer,
-// so the gate can name it. A static reference to the renderer from anything the
-// first load reaches then puts that chunk in the entry's static closure, which
-// the gate refuses. A shell with no tree surface builds no such chunk. The group
-// only names the chunk the default split would already make; a consumer's own
-// build needs no such setting to load the renderer on demand.
-const fuaranUIRenderer = /fable_modules[\\/]Fuaran\.UI\.(Renderer|Renderer\.Core|Charts)\.[0-9][^\\/]*[\\/]|[\\/]TreeLoweringRuntime\.js$/;
+// The Fuaran-UI renderer is the third on-demand chunk: the tree lowering's
+// runtime half reaches it through a dynamic import, so the default split puts
+// it in the TreeLoweringRuntime chunk, and nothing at boot may reach it. The
+// group below captures a renderer module only when it is in the entry's static
+// closure (rolldown's `$initial` tag) and names that chunk
+// FuaranUIRendererAtBoot, which the gate refuses: a static import of the renderer
+// from a boot path is named as that rather than only reported as a size. It
+// moves nothing into the first load that was not there already, and a
+// consumer's own build needs no such setting to load the renderer on demand.
+const fuaranUIRenderer = /fable_modules[\\/]Fuaran\.UI\.(Renderer|Renderer\.Core|Charts)\.[0-9][^\\/]*[\\/]/;
 
 export default defineConfig((env) =>
     mergeConfig(typeof base === "function" ? base(env) : base, {
@@ -49,7 +50,7 @@ export default defineConfig((env) =>
                 preserveEntrySignatures: "strict",
                 output: {
                     codeSplitting: {
-                        groups: [{ name: "FuaranUIRenderer", test: fuaranUIRenderer }],
+                        groups: [{ name: "FuaranUIRendererAtBoot", test: fuaranUIRenderer, tags: ["$initial"] }],
                     },
                 },
             },

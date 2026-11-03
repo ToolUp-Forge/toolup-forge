@@ -58,9 +58,11 @@
 # rather than only reported as a size. The teeth check feeds it a collapsed
 # manifest and requires a refusal.
 #
-# The Fuaran-UI renderer is the third: the shell build gathers it into a chunk
-# named FuaranUIRenderer, the check refuses a build whose first load holds it,
-# and the teeth check feeds it a manifest with the renderer imported statically.
+# The Fuaran-UI renderer is the third: it loads in the TreeLoweringRuntime
+# chunk, the shell build names any renderer module its first load holds into a
+# chunk called FuaranUIRendererAtBoot, the check refuses either in the first
+# load, and the teeth check feeds it a manifest with the renderer imported
+# statically.
 #
 # ── The load half (Phase 886) ────────────────────────────────────────────
 #
@@ -589,16 +591,20 @@ function Get-ShellChunkFinding {
         }
     }
 
-    # The Fuaran-UI renderer, which vite.shell.config.mts gathers with the tree lowering's runtime half into one
-    # chunk named FuaranUIRenderer. A shell with no tree surface builds none, which is not a finding; one that
-    # builds it must reach it only through a dynamic import.
-    $renderer = "FuaranUIRenderer"
-    if (@($seen.Keys | Where-Object { $manifest[$_].file -match "/$renderer-" }).Count -gt 0) {
-        return "the Fuaran-UI renderer ($renderer) is in the shell's first load; a static reference from a boot path collapsed its chunk"
+    # The Fuaran-UI renderer. The tree lowering reaches it through a dynamic import, so the default split puts it
+    # in the TreeLoweringRuntime chunk; vite.shell.config.mts names any renderer module in the entry's static
+    # closure into a chunk called FuaranUIRendererAtBoot. A shell with no tree surface builds neither, which is
+    # not a finding.
+    if (@($seen.Keys | Where-Object { $manifest[$_].file -match "/FuaranUIRendererAtBoot-" }).Count -gt 0) {
+        return "the Fuaran-UI renderer is in the shell's first load (FuaranUIRendererAtBoot); a static reference from a boot path collapsed its chunk"
     }
-    $rendererBuilt = @($manifest.Keys | Where-Object { $manifest[$_].file -match "/$renderer-" }).Count -gt 0
-    if ($rendererBuilt -and @($reachedLater | Where-Object { $manifest[$_].file -match "/$renderer-" }).Count -eq 0) {
-        return "the Fuaran-UI renderer ($renderer) is built but is not a dynamic import of the shell's first load, so it is no longer loaded on demand"
+    $runtime = "TreeLoweringRuntime"
+    if (@($seen.Keys | Where-Object { $manifest[$_].file -match "/$runtime-" }).Count -gt 0) {
+        return "$runtime, the Fuaran-UI renderer's chunk, is in the shell's first load; a static reference collapsed its chunk"
+    }
+    $runtimeBuilt = @($manifest.Keys | Where-Object { $manifest[$_].file -match "/$runtime-" }).Count -gt 0
+    if ($runtimeBuilt -and @($reachedLater | Where-Object { $manifest[$_].file -match "/$runtime-" }).Count -eq 0) {
+        return "$runtime, the Fuaran-UI renderer's chunk, is not a dynamic import of the shell's first load, so it is no longer loaded on demand"
     }
 
     return $null
@@ -959,8 +965,8 @@ if ($TeethCheck) {
     $staticRendererManifest = Join-Path ([IO.Path]::GetTempPath()) "toolup-perf-teeth-static-renderer-manifest.json"
     @'
 {
-  "SDK.Client.js": { "file": "assets/SDK.Client-x.js", "isEntry": true, "imports": ["_FuaranUIRenderer-x.js"], "dynamicImports": ["AgGridRuntime.js", "AgChartRuntime.js"] },
-  "_FuaranUIRenderer-x.js": { "file": "assets/FuaranUIRenderer-x.js" },
+  "SDK.Client.js": { "file": "assets/SDK.Client-x.js", "isEntry": true, "imports": ["_FuaranUIRendererAtBoot-x.js"], "dynamicImports": ["AgGridRuntime.js", "AgChartRuntime.js"] },
+  "_FuaranUIRendererAtBoot-x.js": { "file": "assets/FuaranUIRendererAtBoot-x.js" },
   "AgGridRuntime.js": { "file": "assets/AgGridRuntime-x.js", "isDynamicEntry": true },
   "AgChartRuntime.js": { "file": "assets/AgChartRuntime-x.js", "isDynamicEntry": true }
 }
