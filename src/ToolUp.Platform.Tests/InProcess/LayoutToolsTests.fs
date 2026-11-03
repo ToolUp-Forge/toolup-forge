@@ -400,6 +400,87 @@ let private acceptanceTests =
             Expect.equal section [ "by-site"; "revenue-day-one" ] "added last in the section"
             Expect.isTrue ((requestsOf after).ContainsKey(keyOf chart)) "the sidecar holds the request"
         }
+
+        test "comparing against last year instead of last week is a baseline edit, saved under an owner" {
+            let r = seeded ()
+            let lastDay = day1.AddDays 2.0
+
+            // The same day last week and the same weekday last year hold facts too.
+            let writer = r.Deps.Writer.Value
+
+            let opened = ok "open" (writer.OpenRun(teamScope, trade.Id))
+
+            ok
+                "write"
+                (writer.WriteRows(
+                    teamScope,
+                    opened.RunId,
+                    [
+                        // A run is the table's whole delivery: the three
+                        // seeded days again, then the two earlier days.
+                        for day in 0..2 do
+                            for site in [ "s1"; "s2" ] do
+                                {
+                                    Subject = [ "north"; site ]
+                                    Period = {
+                                        From = day1.AddDays(float day)
+                                        To = day1.AddDays(float day + 1.0)
+                                        Label = None
+                                    }
+                                    Values = Map.ofList [ "revenue", Scalar(revenueOn day site) ]
+                                }
+                        for before in [ 7.0; 364.0 ] do
+                            for site, value in [ "s1", 900.25M; "s2", 800.75M ] do
+                                {
+                                    Subject = [ "north"; site ]
+                                    Period = {
+                                        From = lastDay.AddDays -before
+                                        To = lastDay.AddDays(1.0 - before)
+                                        Label = None
+                                    }
+                                    Values = Map.ofList [ "revenue", Scalar value ]
+                                }
+                    ]
+                ))
+            |> ignore
+
+            ok "commit" (writer.Commit(teamScope, opened.RunId)) |> ignore
+
+            let edit (baseline: string) =
+                let answer =
+                    call
+                        r
+                        "owner"
+                        LayoutTool.SetRequest
+                        (pageArgs (
+                            sprintf
+                                """ "key":"%s","compareTo":"%s" """
+                                (keyOf (chartOf (folded r "owner").Tree "revenue-chart"))
+                                baseline
+                        ))
+
+                expectProposed answer
+                let saved = save r "owner" (proposalOf answer) "team"
+                Expect.stringContains saved.Text "Saved proposal" saved.Text
+
+            edit "daysBefore:7"
+
+            Expect.equal
+                (chartOf (folded r "owner").Tree "revenue-chart").YFields
+                [ "2026-09-26"; "2026-10-03" ]
+                "last week"
+
+            edit "daysBefore:364"
+            let after = folded r "owner"
+            let chart = chartOf after.Tree "revenue-chart"
+            Expect.equal chart.YFields [ "2025-10-04"; "2026-10-03" ] "the same weekday last year"
+
+            match (requestsOf after).TryFind(keyOf chart) with
+            | Some(PageRequest.Presentation(request, _)) ->
+                Expect.equal request.CompareTo (Some(PresentationCompareTo.DaysBefore 364)) "the stored baseline"
+                Expect.equal request.Period comparison.Period "the period is untouched"
+            | other -> failtestf "expected the changed request, got %A" other
+        }
     ]
 
 

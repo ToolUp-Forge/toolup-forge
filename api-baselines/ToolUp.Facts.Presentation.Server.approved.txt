@@ -158,6 +158,7 @@ ToolUp.Facts.Presentation.LayoutTools.all : Microsoft.FSharp.Collections.FSharpL
 ToolUp.Facts.Presentation.LayoutTools.answer(ToolUp.Facts.Presentation.LayoutTool, Microsoft.AspNetCore.Http.HttpContext, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.ToolHelpers+ToolAnswer]
 ToolUp.Facts.Presentation.LayoutTools.answerWith(ToolUp.Facts.Presentation.LayoutTool, ToolUp.Facts.Presentation.LayoutCaller, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.ToolHelpers+ToolAnswer]
 ToolUp.Facts.Presentation.LayoutTools.definition(ToolUp.Facts.Presentation.LayoutTool) : ToolUp.Platform.AIToolDefinition
+ToolUp.Facts.Presentation.LayoutTools.definitionOffering(Microsoft.FSharp.Collections.FSharpList`1[System.Int32], ToolUp.Facts.Presentation.LayoutTool) : ToolUp.Platform.AIToolDefinition
 ToolUp.Facts.Presentation.LayoutTools.inlineRows(Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Facts.Presentation.PageRequest], Fuaran.UI.Generated+Node`1[Microsoft.FSharp.Core.Unit]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Presentation.LayoutRefusal]
 ToolUp.Facts.Presentation.LayoutTools.mintKey(System.String, ToolUp.Facts.Presentation.PageRequest) : Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Facts.Presentation.LayoutRefusal]
 ToolUp.Facts.Presentation.LayoutTools.name(ToolUp.Facts.Presentation.LayoutTool) : System.String
@@ -304,6 +305,7 @@ ToolUp.Facts.Presentation.PipelineAnsweringTool.rerunWith(ToolUp.Facts.FactBrows
 ToolUp.Facts.Presentation.PipelineAnsweringTool.resultOf(ToolUp.Facts.PipelineToolResult) : ToolUp.Facts.Presentation.PipelineBlockResult
 ToolUp.Facts.Presentation.PipelineAnsweringTool.tool : System.Tuple`2[ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.ToolHelpers+ToolAnswer]]]] { get }
 ToolUp.Facts.Presentation.PresentationCompose (class)
+ToolUp.Facts.Presentation.PresentationCompose.withComparisonOffsets(Microsoft.FSharp.Collections.FSharpList`1[System.Int32], ToolUp.Platform.Compose.ServerApp, ToolUp.AI.AICompose+AIOptions) : System.Tuple`2[ToolUp.Platform.Compose.ServerApp, ToolUp.AI.AICompose+AIOptions]
 ToolUp.Facts.Presentation.PresentationCompose.withDerivedAssertions(ToolUp.Platform.Compose.ServerApp, ToolUp.AI.AICompose+AIOptions) : System.Tuple`2[ToolUp.Platform.Compose.ServerApp, ToolUp.AI.AICompose+AIOptions]
 ToolUp.Facts.Presentation.PresentationCompose.withLayoutTools(ToolUp.Platform.Compose.ServerApp, ToolUp.AI.AICompose+AIOptions) : System.Tuple`2[ToolUp.Platform.Compose.ServerApp, ToolUp.AI.AICompose+AIOptions]
 ToolUp.Facts.Presentation.PresentationCompose.withPageRequests(ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
@@ -323,12 +325,16 @@ ToolUp.Facts.Presentation.RenderTools.ChartToolName : System.String (literal)
 ToolUp.Facts.Presentation.RenderTools.TableToolName : System.String (literal)
 ToolUp.Facts.Presentation.RenderTools.answer(ToolUp.Facts.Presentation.RenderTool, Microsoft.AspNetCore.Http.HttpContext, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.ToolHelpers+ToolAnswer]
 ToolUp.Facts.Presentation.RenderTools.answerWith(ToolUp.Facts.Presentation.RenderTool, ToolUp.Facts.FactBrowseHandler+FactBrowseDeps, ToolUp.Platform.ResolvedScope, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.ToolHelpers+ToolAnswer]
+ToolUp.Facts.Presentation.RenderTools.checkOffsets(Microsoft.FSharp.Collections.FSharpList`1[System.Int32]) : Microsoft.FSharp.Collections.FSharpList`1[System.Int32]
+ToolUp.Facts.Presentation.RenderTools.compareToValues(Microsoft.FSharp.Collections.FSharpList`1[System.Int32]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Facts.Presentation.RenderTools.definition(ToolUp.Facts.Presentation.RenderTool) : ToolUp.Platform.AIToolDefinition
+ToolUp.Facts.Presentation.RenderTools.definitionOffering(Microsoft.FSharp.Collections.FSharpList`1[System.Int32], ToolUp.Facts.Presentation.RenderTool) : ToolUp.Platform.AIToolDefinition
 ToolUp.Facts.Presentation.RenderTools.kinds(ToolUp.Facts.Presentation.RenderTool) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Presentation.PresentationKind]
 ToolUp.Facts.Presentation.RenderTools.languageSchema : ToolUp.AI.LanguageSchema { get }
 ToolUp.Facts.Presentation.RenderTools.name(ToolUp.Facts.Presentation.RenderTool) : System.String
 ToolUp.Facts.Presentation.RenderTools.summary(ToolUp.Facts.Presentation.PresentationRequest, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Presentation.SeriesAnswer], ToolUp.Platform.AI.BlockProvenance) : System.String
 ToolUp.Facts.Presentation.RenderTools.tools : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.ToolHelpers+ToolAnswer]]]]] { get }
+ToolUp.Facts.Presentation.RenderTools.toolsOffering(Microsoft.FSharp.Collections.FSharpList`1[System.Int32]) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.ToolHelpers+ToolAnswer]]]]]
 ToolUp.Facts.Presentation.RenderTools.validateComposedBlock(ToolUp.AI.RegisteredLanguageProfile, Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Facts.Presentation.PresentationRequest], System.String) : Microsoft.FSharp.Core.FSharpResult`2[Fuaran.UI.Generated+Node`1[Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ComposedBlockRefusal]]
 ToolUp.Facts.Presentation.TabRefusal (class)
 ToolUp.Facts.Presentation.TabRefusal.IsBlockNamedTwice : System.Boolean { get }
