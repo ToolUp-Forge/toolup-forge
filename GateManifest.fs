@@ -732,3 +732,202 @@ let regionLines (beginMarker: string) (endMarker: string) (text: string) : strin
         text.Substring(b + beginMarker.Length, e - b - beginMarker.Length).Replace("\r\n", "\n").Trim('\n').Split('\n')
         |> List.ofArray
         |> Some
+
+// ─── What the gate reads ─────────────────────────────────────────────
+//
+// `gate-reads.json` at the repository root is the record the landing
+// tooling reads to decide whether a commit on `main` owes a re-gate: the
+// .NET default (sources, tests, proofs, build and project files, the
+// formatter's configuration, the gate script) plus the record's `reads`
+// is the gate's input set, and everything outside it is gate-inert. It is
+// a RENDER of the declarations below: `Gate --render` writes it, and both
+// `Gate --check` and the `GateReconcile` row are red when the file on disk
+// is not the render. It is CHECKED, not trusted: `GateReadsCensusTests`
+// fails by name for a file the suite's sources or project files name that
+// is in neither `reads` nor `notRead`.
+//
+// A row's `Reads` says which KIND of input it depends on (`Input.Tree`);
+// these lists say which non-code files of the tree. They describe the gate
+// `verify.ps1` runs (its own steps and the rows `VerifyAll` runs in the
+// full lane), never a CI-only row, which no landing re-runs.
+
+/// The record's file name, at the repository root.
+let GateReadsFile = "gate-reads.json"
+
+/// The `kind` the record carries.
+let GateReadsKind = "gateReads"
+
+/// Does `spec` cover the repo-relative `path`? The record's grammar: a spec
+/// with no `*` names a file or a directory (and everything beneath it); a
+/// spec with wildcards is a glob in which `**` crosses `/` and `*` does not.
+/// Case-sensitive, because folding case only ever widens the inert set.
+let specCovers (spec: string) (path: string) : bool =
+    let s = spec.Trim().Replace('\\', '/').Trim('/')
+    let p = path.Trim().Replace('\\', '/').TrimStart('/')
+
+    if s = "" || p = "" then
+        false
+    elif not (s.Contains "*") then
+        p = s || p.StartsWith(s + "/", StringComparison.Ordinal)
+    else
+        let pattern =
+            Regex.Escape(s).Replace(@"\*\*", "\u0001").Replace(@"\*", "[^/]*").Replace("\u0001", ".*")
+
+        Regex.IsMatch(p, "^" + pattern + "$")
+
+/// What `verify.ps1`'s own steps read beyond the .NET default, before any
+/// row runs: the tool manifest `dotnet tool restore` resolves (at the root,
+/// not under `.config/`), the files `Directory.Build.props` packs beside
+/// every project, and the template files `ToolUp.Cli` embeds.
+let stepReads: (string * string list) list = [
+    "tool restore", [ "dotnet-tools.json" ]
+    "build",
+    [
+        "README.md"
+        "icon.png"
+        "templates/platformsdk-docker/**"
+        "templates/platformsdk-k8s/**"
+    ]
+]
+
+/// The non-code files each row's sources open from the real repository,
+/// beyond the .NET default. Keyed by row name; a key names a row
+/// `VerifyAll` runs in the full lane, and that row reads the tree.
+let rowReads: (string * string list) list = [
+    // The fitness sweeps enumerate the checkout through
+    // `git ls-files --exclude-standard`, which reads every ignore file.
+    "Platform",
+    [
+        ".gitignore"
+        "**/.gitignore"
+        "api-baselines/**"
+        "composition-baselines/**"
+        "dev-scripts/merge-baselines.ps1"
+        "docs/**"
+        "samples/**"
+        "spec/**"
+    ]
+    // The publication-boundary sweep reads a declared surface, not the
+    // whole tracked set: `docs/**`, `samples/**`, the root README,
+    // CONTRIBUTING and SECURITY, and the packable projects' sources and
+    // READMEs under `src/` (a default input). So it records those, not `**`.
+    "Platform.Remoting",
+    [
+        "CONTRIBUTING.md"
+        "README.md"
+        "SECURITY.md"
+        "docs/**"
+        "samples/**"
+        "spec/**"
+    ]
+    "Platform.PublicApi", [ "api-baselines/**"; "docs/platform/deprecation-policy.md" ]
+    "Build",
+    [
+        ".github/workflows/checks.yml"
+        ".github/workflows/publish-nuget.yml"
+        "CHANGELOG.md"
+        "CLAUDE.md"
+        "api-baselines/**"
+        "build-census.json"
+        "dev-scripts/cwv-budget-gate.ps1"
+        "dev-scripts/perf-budget-gate.ps1"
+        "docs/migrations/**"
+        "docs/platform/open-core-boundary.md"
+        "fuaran-ui-floors.json"
+        "perf-budgets.json"
+        "proofs.json"
+        "release-channel.json"
+        "samples/PublicSite/cwv-budget.json"
+        "v1-readiness.json"
+        "version-groups.json"
+    ]
+    "Samples", [ "samples/**" ]
+]
+
+/// Paths the census flags (a source names them) that the gate does not
+/// read, each with why. Read by the census only: a `notRead` entry never
+/// widens what the landing tooling treats as inert.
+let notRead: (string * string) list = [
+    "**/README.md",
+    "file-name literal: AffectedLaneTests, TemplateGateTests and the driver's template gates name README.md for fixtures; the READMEs the gate opens are in reads (the root README, docs/**, samples/**) or a default input (src/**)"
+    "THIRD_PARTY_NOTICES.md", "written, not read: the ThirdPartyNotices target emits it and no leg opens it"
+    "docs-snippets/corpus-floor.txt",
+    "read by the DocSnippets row, which the doc-snippets CI job runs and VerifyAll does not"
+    "docs-snippets/known-drift.txt",
+    "read by the DocSnippets row, which the doc-snippets CI job runs and VerifyAll does not"
+    "templates/*/global.json",
+    "named by the template gates (CI-only rows) and by AffectedLaneTests' fixture literals; no leg VerifyAll runs opens a template's own"
+    "templates/*/nuget.config",
+    "named by the template gates (CI-only rows) and by fixture literals in AffectedLaneTests and PublishedSmokeTests; no leg VerifyAll runs opens a template's own"
+    "templates/*/.config/dotnet-tools.json",
+    "named by the template gates (CI-only rows); the gate restores the root tool manifest only"
+    "templates/*/compose.yml", "named by tools/ToolUp.PortGuard, which is outside the solution and which no leg runs"
+    "templates/**/vite.config.mts",
+    "named by tools/ToolUp.PortGuard, which is outside the solution and which no leg runs"
+    "templates/**/launchSettings.json",
+    "named by tools/ToolUp.PortGuard, which is outside the solution and which no leg runs"
+]
+
+/// The record's `reads`: the union of the step and row declarations, each
+/// entry dropped when another glob in the set already covers it, sorted
+/// ordinally.
+let gateReads () : string list =
+    let all = (stepReads @ rowReads) |> List.collect snd |> List.distinct
+
+    all
+    |> List.filter (fun p -> not (all |> List.exists (fun s -> s <> p && s.Contains "*" && specCovers s p)))
+    |> List.sortWith (fun a b -> String.CompareOrdinal(a, b))
+
+let private jsonString (s: string) =
+    "\"" + s.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\""
+
+/// Why the record exists, as its `_` member says it.
+let private gateReadsNote =
+    "GENERATED by `dotnet run --project Build.fsproj -- Gate --render` from GateManifest.fs (stepReads, rowReads, notRead); do not edit by hand. The non-code files the gate verify.ps1 runs reads beyond the .NET default (sources, tests, proofs, build and project files, the formatter configuration, the gate script); a commit touching nothing in the union is gate-inert. Checked by GateReadsCensusTests. CI-only rows are not the gate a landing re-runs, so their reads are not here. No row sweeps the whole tracked set: the publication-boundary sweep reads docs/**, samples/** and the root README, CONTRIBUTING and SECURITY, so it records those rather than **."
+
+/// The record's text, exactly as `Gate --render` writes it.
+let renderGateReads () : string =
+    let reads = gateReads () |> List.map (fun p -> "    " + jsonString p)
+
+    let notReadLines =
+        notRead
+        |> List.map (fun (p, why) -> sprintf "    { \"path\": %s, \"reason\": %s }" (jsonString p) (jsonString why))
+
+    String.concat "\n" [
+        "{"
+        sprintf "  \"kind\": %s," (jsonString GateReadsKind)
+        sprintf "  \"_\": %s," (jsonString gateReadsNote)
+        "  \"reads\": ["
+        String.concat ",\n" reads
+        "  ],"
+        "  \"notRead\": ["
+        String.concat ",\n" notReadLines
+        "  ]"
+        "}"
+        ""
+    ]
+
+/// Why the declarations or the committed record disagree with the rows: a
+/// key naming no row, a key naming a row the gate does not run, a row
+/// declaring file reads without reading the tree, and a record that is not
+/// the render. Empty when they agree.
+let gateReadsFindings (rows: GateLeg<Lane> list) (recordText: string option) : string list = [
+    let local = localRows rows |> List.map (fun r -> r.Name, r) |> Map.ofList
+
+    for name, _ in rowReads do
+        match rows |> List.exists (fun r -> r.Name = name), Map.tryFind name local with
+        | false, _ -> sprintf "rowReads names `%s`, which is no row of the manifest" name
+        | true, None ->
+            sprintf
+                "rowReads names `%s`, which VerifyAll does not run in the full lane; the record describes the gate a landing re-runs"
+                name
+        | true, Some row when not (List.contains Input.Tree row.Reads) ->
+            sprintf "row `%s` declares file reads in rowReads but its `Reads` does not name the tree" name
+        | _ -> ()
+
+    match recordText with
+    | None -> sprintf "%s is absent; `Gate --render` writes it" GateReadsFile
+    | Some text when text.Replace("\r\n", "\n") <> renderGateReads () ->
+        sprintf "%s is not the render of GateManifest.fs (stepReads, rowReads, notRead)" GateReadsFile
+    | Some _ -> ()
+]

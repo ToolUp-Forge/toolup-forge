@@ -245,17 +245,36 @@ let main args =
         else
             None
 
-    /// Every test project runs or is excluded by name. Pure file reading
-    /// (the solution and three directory scans), so its row runs in every
+    /// Every test project runs or is excluded by name, and `gate-reads.json`
+    /// is the render of the manifest's read declarations. Pure file reading
+    /// (the solution, three directory scans and the record), so its row runs in every
     /// lane, `pure` included. Reconciles the FULL pack list, not the lane's
     /// projection of it: a lane narrows what runs, it does not make an
     /// undeclared project declared.
     let runGateReconcile () : Verdict =
-        Trace.tracefn "▶ VerifyAll: GateReconcile (every test project is a pack or a named exclusion)"
+        Trace.tracefn
+            "▶ VerifyAll: GateReconcile (every test project is a pack or a named exclusion; gate-reads.json is the manifest's render)"
 
-        match Gate.reconcile (Path.getFullName ".") config.TestPacks GateManifest.exclusions with
-        | Ok() -> Verdict.Pass None
-        | Error findings ->
+        let readsRecord =
+            let path = Path.getFullName GateManifest.GateReadsFile
+
+            if File.exists path then
+                Some(File.readAsString path)
+            else
+                None
+
+        let readsFindings =
+            GateManifest.gateReadsFindings (GateManifest.rows GateManifest.unbound) readsRecord
+
+        match Gate.reconcile (Path.getFullName ".") config.TestPacks GateManifest.exclusions, readsFindings with
+        | Ok(), [] -> Verdict.Pass None
+        | reconciled, readsFindings ->
+            let findings =
+                (match reconciled with
+                 | Ok() -> []
+                 | Error found -> found)
+                @ readsFindings
+
             for f in findings do
                 Trace.traceError (sprintf "GateReconcile: %s" f)
 
@@ -6863,8 +6882,10 @@ let main args =
     // The manifest's renders, checked or written, and one row run alone.
     //
     //   dotnet run -- Gate                refuse a render that drifted
-    //   dotnet run -- Gate --render       write EXPECTED_PACKS into checks.yml
-    //                                     and the CI table into CLAUDE.md
+    //   dotnet run -- Gate --render       write EXPECTED_PACKS into checks.yml,
+    //                                     the CI table into CLAUDE.md and the
+    //                                     record of what the gate reads into
+    //                                     gate-reads.json
     //   dotnet run -- Gate --run <row>    run one row (build what it names,
     //                                     apply its floor), which is how the
     //                                     CI-only jobs invoke theirs
@@ -6872,6 +6893,7 @@ let main args =
         let root = __SOURCE_DIRECTORY__
         let checksPath = Path.Combine(root, ".github", "workflows", "checks.yml")
         let claudePath = Path.Combine(root, "CLAUDE.md")
+        let readsPath = Path.Combine(root, GateManifest.GateReadsFile)
 
         match Flags.value "--run" flags with
         | Some name ->
@@ -6924,10 +6946,14 @@ let main args =
                 | None ->
                     failwith "Gate --render: CLAUDE.md carries no gate-manifest:ci-table markers to render between."
 
+                File.WriteAllText(readsPath, GateManifest.renderGateReads ())
+
                 Trace.tracefn
-                    "▶ Gate --render: EXPECTED_PACKS: %d written to checks.yml; the CI table (%d job(s)) written to CLAUDE.md."
+                    "▶ Gate --render: EXPECTED_PACKS: %d written to checks.yml; the CI table (%d job(s)) written to CLAUDE.md; %s written (%d read(s))."
                     floor
                     (table.Length - 2)
+                    GateManifest.GateReadsFile
+                    (GateManifest.gateReads ()).Length
             else
                 let findings = [
                     match GateManifest.readExpectedPacks checksText with
@@ -6943,12 +6969,20 @@ let main args =
                     | Some lines when lines = table -> ()
                     | Some _ -> "CLAUDE.md's generated CI table is not the render of the manifest's `Where`"
                     | None -> "CLAUDE.md carries no gate-manifest:ci-table markers"
+
+                    yield!
+                        GateManifest.gateReadsFindings
+                            manifest
+                            (if File.Exists readsPath then
+                                 Some(File.ReadAllText readsPath)
+                             else
+                                 None)
                 ]
 
                 match findings with
                 | [] ->
                     Trace.tracefn
-                        "▶ Gate: OK — EXPECTED_PACKS: %d and the CI table are the manifest's renders (%d row(s))."
+                        "▶ Gate: OK — EXPECTED_PACKS: %d, the CI table and gate-reads.json are the manifest's renders (%d row(s))."
                         floor
                         manifest.Length
                 | drifted ->

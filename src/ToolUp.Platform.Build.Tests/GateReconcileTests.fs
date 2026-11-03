@@ -20,18 +20,7 @@ open ToolUp.Forge
 // row with the project still in the solution makes it red again (the
 // last case below), so the green is not vacuous.
 
-let repoRoot =
-    let rec walkUp (dir: DirectoryInfo) =
-        if isNull (box dir) then
-            None
-        elif File.Exists(Path.Combine(dir.FullName, "ToolUp.Forge.sln")) then
-            Some dir.FullName
-        else
-            walkUp dir.Parent
-
-    match walkUp (DirectoryInfo AppContext.BaseDirectory) with
-    | Some root -> root
-    | None -> failwith "could not locate the repo root (ToolUp.Forge.sln) — this pack would be vacuously green"
+let repoRoot = GateReadsCensusTests.repoRoot
 
 /// The manifest's pack rows as `TestPack`s, and its named exclusions.
 let declared () =
@@ -131,6 +120,70 @@ let tests =
             Expect.equal (Gate.solutionProjects sln) [ "src/A.Tests/A.Tests.fsproj" ] ".sln"
             Expect.equal (Gate.solutionProjects slnx) [ "src/B.Tests/B.Tests.fsproj" ] ".slnx"
         }
+
+        // The record of what the gate reads is a render of the manifest's
+        // declarations; the row is red when the two disagree.
+        testList "gate-reads.json" [
+            let rows = GateManifest.rows GateManifest.unbound
+
+            let record () =
+                File.ReadAllText(Path.Combine(repoRoot, GateManifest.GateReadsFile))
+
+            test "the committed record is the render of the manifest" {
+                match GateManifest.gateReadsFindings rows (Some(record ())) with
+                | [] -> ()
+                | found ->
+                    failtestf
+                        "%s (run `dotnet run --project Build.fsproj -- Gate --render` and commit gate-reads.json)"
+                        (String.concat "; " found)
+            }
+
+            test "a hand edit of the record is red" {
+                let edited = (record ()).Replace("\"perf-budgets.json\"", "\"perf-budget.json\"")
+                Expect.notEqual edited (record ()) "the fixture edit landed"
+
+                Expect.exists
+                    (GateManifest.gateReadsFindings rows (Some edited))
+                    (fun f -> f.Contains "not the render")
+                    "a record that is not the render"
+            }
+
+            test "an absent record is red" {
+                Expect.exists (GateManifest.gateReadsFindings rows None) (fun f -> f.Contains "absent") "absent"
+            }
+
+            test "declared reads on a row the manifest no longer has, or on a row that reads no tree, are red" {
+                let withoutSamples = rows |> List.filter (fun r -> r.Name <> "Samples")
+
+                Expect.exists
+                    (GateManifest.gateReadsFindings withoutSamples (Some(record ())))
+                    (fun f -> f.Contains "`Samples`" && f.Contains "no row")
+                    "a key naming no row"
+
+                let blind =
+                    rows
+                    |> List.map (fun r -> if r.Name = "Build" then { r with Reads = [] } else r)
+
+                Expect.exists
+                    (GateManifest.gateReadsFindings blind (Some(record ())))
+                    (fun f -> f.Contains "`Build`" && f.Contains "tree")
+                    "a row declaring file reads without reading the tree"
+            }
+
+            test "the record parses as the gateReads kind, and every reads path is repo-relative" {
+                use doc = System.Text.Json.JsonDocument.Parse(record ())
+                Expect.equal (doc.RootElement.GetProperty("kind").GetString()) GateManifest.GateReadsKind "kind"
+
+                for e in doc.RootElement.GetProperty("reads").EnumerateArray() do
+                    let p = e.GetString()
+
+                    Expect.isFalse
+                        (p.StartsWith "/" || p.Contains "\\" || p.Contains "..")
+                        (sprintf "%s is repo-relative" p)
+            }
+        ]
+
+        GateReadsCensusTests.tests
     ]
 // ─── Every vendored contract copy matches its source ──────────────────
 //

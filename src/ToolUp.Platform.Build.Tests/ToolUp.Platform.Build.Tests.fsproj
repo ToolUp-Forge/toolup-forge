@@ -124,7 +124,9 @@
         <Compile Include="FuaranCoResolutionTests.fs" />
         <!-- The gate manifest's renders and parity, the GateReconcile row's
              go-red proof and the pure lane's membership audit, each reading
-             the manifest's rows. -->
+             the manifest's rows. The census of what the gate reads comes first:
+             GateReconcileTests registers it. -->
+        <Compile Include="GateReadsCensusTests.fs" />
         <Compile Include="GateReconcileTests.fs" />
         <Compile Include="PureLaneTests.fs" />
         <Compile Include="GateManifestTests.fs" />
