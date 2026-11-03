@@ -4,12 +4,6 @@
         <TargetFramework>net10.0</TargetFramework>
         <Description>ToolUp.AI Server — agent loop, SSE streaming, tool registry, system-prompt composition (platform + team + module layers), AICompose. Depends on ToolUp.Platform.Server + ToolUp.AI.Core.</Description>
         <PackageTags>fsharp;sdk;server;ai;llm</PackageTags>
-        <!-- Phase 11.B follow-up cross-tier cutover (2026-05-08): ToolUp.AI
-             Server carries the server-side AI surface (agent loop, SSE,
-             tool registry, system prompt builder, AICompose). Depends on
-             ToolUp.AI.Core for shared types and ToolUp.Platform.Server for
-             the runtime substrate. Phase 11.C.4 (2026-05-10): Server/
-             source relocated into this fsproj's own directory tree. -->
     </PropertyGroup>
     <ItemGroup>
         <FrameworkReference Include="Microsoft.AspNetCore.App" />
@@ -20,36 +14,48 @@
         <ProjectReference Include="..\ToolUp.AI.Core\ToolUp.AI.Core.fsproj" />
     </ItemGroup>
     <ItemGroup>
-        <!-- Phase 11.C.2 closure: parent companion README packed into each tier's nupkg. -->
+        <!-- The language profile reads the published Fuaran-UI vocabulary and
+             runs its decoder and pre-emit validator. Both already arrive
+             through ToolUp.Platform.Server's Fuaran.UI.Ops reference; named
+             here because this tier now uses them directly. Pinned in
+             Directory.Packages.props. -->
+        <PackageReference Include="Fuaran.UI" />
+        <PackageReference Include="Fuaran.UI.Ops" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- The parent companion README, packed into each tier's nupkg. -->
         <None Include="..\ToolUp.AI\README.md" Pack="true" PackagePath="\" />
     </ItemGroup>
     <ItemGroup>
-        <!-- Phase 251's HttpClientTransport moved to ToolUp.Platform.Server
-             in Phase 128 (namespace ToolUp.Platform.Transport). -->
-        <!-- Phase 6g.F — AISurfaceDerivationMode + signed capability
+        <!-- AISurfaceDerivationMode + signed capability
              cookie + pure surface resolver. No deps on other AI.Server
              files; must precede SystemPromptBuilder (AIAssistantServerConfig
              carries the mode). -->
         <Compile Include="Server\AISurfaceCapability.fs" />
+        <!-- The assistant's language profile: the Fuaran-UI subset a
+             deployment registers, its cached prompt fragment and the grammar
+             a model-composed block is validated against. Must precede
+             SystemPromptBuilder, which serves the fragment. -->
+        <Compile Include="Server\LanguageProfile.fs" />
         <Compile Include="Server\SystemPromptBuilder.fs" />
         <Compile Include="Server\ToolContext.fs" />
         <Compile Include="Server\ToolHelpers.fs" />
         <Compile Include="Server\AIToolRegistry.fs" />
-        <!-- Phase 793 — the effect envelope a running tool body is held to:
+        <!-- The effect envelope a running tool body is held to:
              the ambient declaration, the host-capability and outbound seams
              under it, and the verified-profile refusal of an undeclared tool.
              Depends on AIToolRegistry (the policy) and the platform capability
              gate; MUST precede AIAgentEngine, which stamps it around Execute. -->
         <Compile Include="Server\ToolEffectEnvelope.fs" />
         <Compile Include="Server\NarrativeTools.fs" />
-        <!-- Phase 503 — the suspended-dispatch mechanism, once: the
+        <!-- The suspended-dispatch mechanism, once: the
              pending-prompt registry, the abandon-on-timeout race, and the
              one budget every suspended round trip in this tier waits on.
              MUST precede AIConsentDispatch (whose registry is a facade
              over it) and ToolApprovalDispatch. Depends on nothing but the
              BCL. -->
         <Compile Include="Server\SuspendedPrompt.fs" />
-        <!-- Phase 859 - the per-team conversation visibility policy. MUST
+        <!-- The per-team conversation visibility policy. MUST
              precede ConversationBlobs (whose append gate reads it),
              AIAssistantHandler, which filters every conversation read and
              write through it, and AICompose, which mounts its API. -->
@@ -60,7 +66,7 @@
              AIConsentDispatch (the consent record), AIAssistantHandler and
              FastPathBeaconHandler. `internal`, so it adds no public surface. -->
         <Compile Include="Server\ConversationBlobs.fs" />
-        <!-- Phase 36.D — per-conversation cross-module read consent: the
+        <!-- Per-conversation cross-module read consent: the
              suspended-dispatch registry, the persisted per-conversation
              record, and the gate the four reach tools call. Depends only
              on AI.Core + the platform blob substrate; MUST precede
@@ -68,31 +74,31 @@
              (which reads the one shared suspended-dispatch timeout from
              here and stamps the items the gate reads). -->
         <Compile Include="Server\AIConsentDispatch.fs" />
-        <!-- Phase 36.E — the cross-module read audit decorator. Reads the
+        <!-- The cross-module read audit decorator. Reads the
              conversation-id item AIConsentDispatch declares, so it follows
              that file; MUST precede PlatformAITools, which registers its six
              tools through it, and AIAssistantHandler, which stamps the
              active-module item declared here. -->
         <Compile Include="Server\AICrossModuleAudit.fs" />
-        <!-- Phase 503 — the human-in-the-loop approval gate: the policy
+        <!-- The human-in-the-loop approval gate: the policy
              consult, the held-invocation registry and the approval audit
              trail. Depends on AIToolRegistry (the access-context
              reconstruction) and AIConsentDispatch (the per-turn items
              stamps and the argument-preview redaction it shares); MUST
              precede AIAgentEngine, which calls the gate. -->
         <Compile Include="Server\ToolApprovalDispatch.fs" />
-        <!-- Phase 36.B — built-in cross-module AI read tools (`_platform.ai.*`).
+        <!-- Built-in cross-module AI read tools (`_platform.ai.*`).
              Depends only on AIToolRegistry + the platform substrate; registered
              by AICompose alongside NarrativeTools.builtInTools. -->
         <Compile Include="Server\PlatformAITools.fs" />
         <Compile Include="Server\SSEHandler.fs" />
         <Compile Include="Server\ClientToolDispatch.fs" />
-        <!-- Phase 36.D — the `/api/ai/consent` POST handler. Mirrors
+        <!-- The `/api/ai/consent` POST handler. Mirrors
              ClientToolDispatch's result endpoint and sits beside it;
              depends on AIToolRegistry (the permission re-check) and
              AIConsentDispatch (the registry + the persisted record). -->
         <Compile Include="Server\AIConsentHandler.fs" />
-        <!-- Phase 503 — the `/api/ai/tool-approval` POST handler. Mirrors
+        <!-- The `/api/ai/tool-approval` POST handler. Mirrors
              AIConsentHandler and sits beside it; depends on
              ToolApprovalDispatch (the registry + the audit writer). -->
         <Compile Include="Server\ToolApprovalHandler.fs" />
@@ -100,13 +106,13 @@
         <!-- An IAIFieldRegistry a composition root fills from declared
              surfaces. Depends only on the AI.Core field-registry seam. -->
         <Compile Include="Server\DeclaredAIFieldRegistry.fs" />
-        <!-- Phase 6j.B — Tier-3 fast-path triage. Depends on ToolContext
+        <!-- Tier-3 fast-path triage. Depends on ToolContext
              (the ModuleAction emit) + the AI.Core field-registry seam;
              must precede AILatencyMetrics (which registers its metric
              series) and AIAgentEngine (which calls it). -->
         <Compile Include="Server\FastPathTriageResolver.fs" />
         <Compile Include="Server\AILatencyMetrics.fs" />
-        <!-- Phase 523 — numeric-fidelity answer gate: canonicalisation +
+        <!-- Numeric-fidelity answer gate: canonicalisation +
              IAnswerVerifier seam + post-response stage. Depends only on
              AITypes (Core) + the metric registry / retrieval types (Platform)
              + the metrics seam; placed before the handler that wires it. -->
@@ -114,7 +120,7 @@
         <Compile Include="Server\AIDenialRateMonitor.fs" />
         <Compile Include="Server\ICitationNormaliser.fs" />
         <Compile Include="Server\AIAgentEngine.fs" />
-        <!-- Phase 985 — the grounded narrative run: the agent loop over
+        <!-- The grounded narrative run: the agent loop over
              only the tools passed in, its output through the fact tier's
              grounding gate, published only when every number is a Fact. -->
         <Compile Include="Server\GroundedNarrativeRun.fs" />
@@ -122,11 +128,11 @@
              GroundedNarrativeRun, whose trail rows and wording store it
              reads; before NarrativePromptHandler, which approves. -->
         <Compile Include="Server\NarrativeOffenceHistory.fs" />
-        <!-- Phase 1111 - the narrative wording admin API and the regenerate job.
+        <!-- The narrative wording admin API and the regenerate job.
              After GroundedNarrativeRun, whose wording store, rules and audit
              row it reads. -->
         <Compile Include="Server\NarrativePromptHandler.fs" />
-        <!-- Phase 6k - the supervised agent-loop worker. Depends on the
+        <!-- The supervised agent-loop worker. Depends on the
              platform ILogger/Logger only; MUST precede AIAssistantHandler,
              which enqueues onto it, and AICompose, which registers it. -->
         <Compile Include="Server\AIChatWorker.fs" />
@@ -136,7 +142,7 @@
         <Compile Include="Server\DefaultAIProviderFactory.fs" />
         <Compile Include="Server\BlobPlatformAIKeyStore.fs" />
         <Compile Include="Server\PlatformAIKeysHandler.fs" />
-        <!-- Phase 43.C — the AI tier's IProviderEntryProbe over
+        <!-- The AI tier's IProviderEntryProbe over
              IAIProviderFactory.TryResolveByLabel. After the factory it
              builds on; before AISettingsHandler (verification on
              add/rotate) and AICompose (DI registration). -->
@@ -145,26 +151,26 @@
         <Compile Include="Server\FastPathBeaconHandler.fs" />
         <Compile Include="Server\ConversationExportAuditHandler.fs" />
         <Compile Include="Server\UIDecodeErrorHandler.fs" />
-        <!-- Phase 36.E — the rolling-window arithmetic the four AI-tier
+        <!-- The rolling-window arithmetic the four AI-tier
              `/dev/*` rollups share (window constant + percentiles). Must
              precede all four; `internal`, so it adds no public surface. -->
         <Compile Include="Server\AIDiagnosticsWindow.fs" />
         <Compile Include="Server\FastPathTelemetryHandler.fs" />
         <Compile Include="Server\AILatencyHandler.fs" />
         <Compile Include="Server\AIAllowlistDiagnosticsHandler.fs" />
-        <!-- Phase 36.E — `/dev/ai-cross-module`, the read side of the
+        <!-- `/dev/ai-cross-module`, the read side of the
              cross-module audit trail. Mounted by AICompose under the same
              EnableDevEndpoints gate as its three siblings above. -->
         <Compile Include="Server\AICrossModuleObservability.fs" />
-        <!-- Phase 9s - the per-user token-budget check (policy read, window
+        <!-- The per-user token-budget check (policy read, window
              sum over the latency stream, read-through cache, refusal
              record, /dev/inspect panel). Before AIProviderUsageMiddleware,
              which stacks the decorator that consumes it into the same
-             provider-factory chain as Phase 9d's quota gate. -->
+             provider-factory chain as the quota gate. -->
         <Compile Include="Server\AIBudgetEnforcer.fs" />
         <Compile Include="Server\AIProviderUsageMiddleware.fs" />
         <Compile Include="Server\AICancellationDispatchInstanceValidator.fs" />
-        <!-- Phase 6m — the anonymous-surface AI cost refusal. Depends on
+        <!-- The anonymous-surface AI cost refusal. Depends on
              ServerConfig + the IAIProviderFactory interface only; before
              AICompose, which registers it. -->
         <Compile Include="Server\AnonymousAIModeValidator.fs" />
@@ -172,7 +178,7 @@
         <Compile Include="Server\AIModelEnvValidator.fs" />
         <Compile Include="Server\AIProviderProbeValidator.fs" />
         <Compile Include="Server\LegacyAIConfigProviderProfile.fs" />
-        <!-- Phase 171 — IActiveAiProbe seam for the platform Home overview. -->
+        <!-- The IActiveAiProbe seam for the platform Home overview. -->
         <Compile Include="Server\ActiveAiProbe.fs" />
         <Compile Include="Server\AICompose.fs" />
     </ItemGroup>

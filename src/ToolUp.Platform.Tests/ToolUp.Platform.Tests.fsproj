@@ -546,6 +546,7 @@
         <Compile Include="InProcess\PageRequestResolverTests.fs" />
         <Compile Include="InProcess\LayoutToolsTests.fs" />
         <Compile Include="InProcess\NarrativeCalculationTests.fs" />
+        <Compile Include="InProcess\LanguageProfileTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>
