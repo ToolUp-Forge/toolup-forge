@@ -34,6 +34,7 @@
   "notRead": [
     { "path": "**/README.md", "reason": "file-name literal: AffectedLaneTests, TemplateGateTests and the driver's template gates name README.md for fixtures; the READMEs the gate opens are in reads (the root README, docs/**, samples/**) or a default input (src/**)" },
     { "path": "THIRD_PARTY_NOTICES.md", "reason": "written, not read: the ThirdPartyNotices target emits it and no leg opens it" },
+    { "path": "gate-timings.json", "reason": "the gate's measured cost, written by GateTimings --record: GateReconcile reads it only to hold it against the manifest, and --record refuses to write a record that check fails, so committing a fold never flips a verdict; the stale-holder bound reads its budgets, which decide how long a run waits, never whether it passes" },
     { "path": "docs-snippets/corpus-floor.txt", "reason": "read by the DocSnippets row, which the doc-snippets CI job runs and VerifyAll does not" },
     { "path": "docs-snippets/known-drift.txt", "reason": "read by the DocSnippets row, which the doc-snippets CI job runs and VerifyAll does not" },
     { "path": "templates/*/global.json", "reason": "named by the template gates (CI-only rows) and by AffectedLaneTests' fixture literals; no leg VerifyAll runs opens a template's own" },

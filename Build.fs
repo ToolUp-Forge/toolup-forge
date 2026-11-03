@@ -37,8 +37,8 @@ let config = {
 // and the Fable ones transpiled — is part of every full lane. No figure
 // is restated here: one stated six ways went stale six ways, and none
 // counted the samples leg. `VerifyAll` prints the measured figure itself
-// at the end of every run (`dotnet run -- GateTimings` folds the recorded
-// runs). A dispatched worker has to spend all of it before
+// at the end of every run, and `gate-timings.json` is the committed fold of
+// the recorded runs (`dotnet run -- GateTimings --record`). A dispatched worker has to spend all of it before
 // it learns whether its own change is green, and then spend it AGAIN on
 // the folded tree, which is the only run a ship may cite.
 //
@@ -253,7 +253,7 @@ let main args =
     /// undeclared project declared.
     let runGateReconcile () : Verdict =
         Trace.tracefn
-            "▶ VerifyAll: GateReconcile (every test project is a pack or a named exclusion; gate-reads.json is the manifest's render)"
+            "▶ VerifyAll: GateReconcile (every test project is a pack or a named exclusion; gate-reads.json is the manifest's render; gate-timings.json measures its rows)"
 
         let readsRecord =
             let path = Path.getFullName GateManifest.GateReadsFile
@@ -263,8 +263,23 @@ let main args =
             else
                 None
 
+        let timingsFindings, timingsWarnings =
+            let path = Path.getFullName GateManifest.GateTimingsFile
+
+            GateManifest.timingsFindings
+                (GateManifest.rows GateManifest.unbound)
+                System.DateTimeOffset.UtcNow
+                (if File.exists path then
+                     Some(File.readAsString path)
+                 else
+                     None)
+
+        for w in timingsWarnings do
+            Trace.traceImportant (sprintf "GateReconcile: %s" w)
+
         let readsFindings =
             GateManifest.gateReadsFindings (GateManifest.rows GateManifest.unbound) readsRecord
+            @ timingsFindings
 
         match Gate.reconcile (Path.getFullName ".") config.TestPacks GateManifest.exclusions, readsFindings with
         | Ok(), [] -> Verdict.Pass None
@@ -6977,6 +6992,22 @@ let main args =
                                  Some(File.ReadAllText readsPath)
                              else
                                  None)
+
+                    let timingsPath = Path.Combine(root, GateManifest.GateTimingsFile)
+
+                    let timingsErrors, timingsWarnings =
+                        GateManifest.timingsFindings
+                            manifest
+                            System.DateTimeOffset.UtcNow
+                            (if File.Exists timingsPath then
+                                 Some(File.ReadAllText timingsPath)
+                             else
+                                 None)
+
+                    for w in timingsWarnings do
+                        Trace.traceImportant (sprintf "Gate: %s" w)
+
+                    yield! timingsErrors
                 ]
 
                 match findings with
@@ -6992,10 +7023,15 @@ let main args =
                         (String.concat "; " drifted))
 
     // The recorded gate runs, folded: each run's admission line, then the
-    // per-lane and per-row medians a row's `Budget` is re-derived from.
+    // per-lane and per-row medians. `--record` writes the fold to
+    // `gate-timings.json`, the committed record the rows' budgets are read
+    // from: the window is `--since` days (default seven) ending at the
+    // newest recorded run, so the same journal folds to the same record.
     //
-    //   dotnet run -- GateTimings [--since <days>]
+    //   dotnet run -- GateTimings [--since <days>] [--record]
     Target.create "GateTimings" (fun _ ->
+        let root = __SOURCE_DIRECTORY__
+
         let since =
             Flags.value "--since" flags
             |> Option.map (fun d -> System.TimeSpan.FromDays(float d))
@@ -7010,8 +7046,60 @@ let main args =
             if skipped > 0 then
                 Trace.traceImportantfn "GateTimings: %d line(s) of %s were not records and were skipped." skipped file
 
-            for line in VerifyGate.Runs.report System.DateTimeOffset.UtcNow since runs do
-                Trace.tracefn "%s" line)
+            if not (Flags.has "--record" flags) then
+                for line in VerifyGate.Runs.report System.DateTimeOffset.UtcNow since runs do
+                    Trace.tracefn "%s" line
+            else
+                let path = Path.Combine(root, GateManifest.GateTimingsFile)
+                let rows = GateManifest.rows GateManifest.unbound
+                let width = since |> Option.defaultValue (System.TimeSpan.FromDays 7.)
+
+                match
+                    VerifyGate.Runs.fold
+                        System.Environment.MachineName
+                        (GateManifest.localRows rows |> List.map _.Name)
+                        width
+                        runs
+                with
+                | Error why -> Trace.traceImportantfn "GateTimings --record: %s in %s; nothing written." why file
+                | Ok folded ->
+                    let existing =
+                        if File.Exists path then
+                            GateManifest.parseTimings (File.ReadAllText path) |> Result.toOption
+                        else
+                            None
+
+                    match existing with
+                    | Some e when { e with FoldedAt = None } = folded ->
+                        Trace.tracefn
+                            "▶ GateTimings --record: %s already holds this fold (%d run(s)); not rewritten."
+                            GateManifest.GateTimingsFile
+                            folded.Runs
+                    | _ ->
+                        let record = {
+                            folded with
+                                FoldedAt = VerifyGate.headCommit root
+                        }
+
+                        let text = GateManifest.renderTimings record
+
+                        match GateManifest.timingsFindings rows System.DateTimeOffset.UtcNow (Some text) with
+                        | [], _ ->
+                            File.WriteAllText(path, text)
+
+                            Trace.tracefn
+                                "▶ GateTimings --record: %s written — %d run(s) from %s to %s on %s; %d lane(s), %d row(s)."
+                                GateManifest.GateTimingsFile
+                                record.Runs
+                                (record.Since.ToString "yyyy-MM-dd HH:mm")
+                                (record.Until.ToString "yyyy-MM-dd HH:mm")
+                                (String.concat ", " record.Machines)
+                                record.Lanes.Length
+                                record.Rows.Length
+                        | errors, _ ->
+                            failwithf
+                                "GateTimings --record: the fold would fail GateReconcile, so nothing was written — %s. Widen --since to a window the rows ran in, or declare a seed."
+                                (String.concat "; " errors))
 
 
     // Phase 735 — `VerifyAll` serialises itself machine-wide, per repository:

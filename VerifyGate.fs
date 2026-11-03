@@ -46,10 +46,10 @@
 /// cannot wedge the gate the way a lock directory could. What remains is
 /// a holder that is alive and stuck — a test host wedged at 0% CPU — and
 /// for that the wait is bounded (`TOOLUP_VERIFY_GATE_WAIT_MINUTES`; the
-/// default is DERIVED, twice the full lane's summed row `Budget` from the
-/// gate manifest — never a literal, which went stale the moment a leg was
-/// added — and `dotnet run -- GateTimings` is where the budgets are
-/// re-derived from). Past the bound the run PROCEEDS
+/// default is DERIVED, twice the full lane's summed row `Budget` — never a
+/// literal, which went stale the moment a leg was added — and each budget
+/// is the median the committed `gate-timings.json` measures for its row,
+/// or the row's declared seed where the record has none). Past the bound the run PROCEEDS
 /// unserialised with a loud line, because the pre-phase behaviour is the
 /// floor: a gate that fails BECAUSE it is guarding against slowness has
 /// traded a slow run for no run.
@@ -71,9 +71,11 @@
 /// **The admission record.** Every gated run appends one line to
 /// `<common git dir>/fuaran-gate/verify-runs.jsonl` — when, which target
 /// and lane, how it was admitted and how long it waited, how long it ran,
-/// how it exited, and each row's verdict and seconds — and
-/// `dotnet run -- GateTimings [--since <days>]` folds those lines into
-/// the per-lane and per-row medians a `Budget` is re-derived from.
+/// how it exited, which machine ran it, and each row's verdict and
+/// seconds — and `dotnet run -- GateTimings [--since <days>]` folds those
+/// lines into per-lane and per-row medians. With `--record` it writes them
+/// to `gate-timings.json` (`Runs.fold`), the committed record the budgets
+/// are read from.
 ///
 /// **Why this file is at the repository root and FAKE-free.** The
 /// `VerifyAll` target's body is published SDK surface
@@ -99,17 +101,21 @@ open System.Threading
 [<Literal>]
 let OptOutVariable = "TOOLUP_VERIFY_NO_GATE_MUTEX"
 
-/// The stale-holder bound in whole minutes; unset ⇒ `DefaultWaitBound`.
+/// The stale-holder bound in whole minutes; unset ⇒ `defaultWaitBound`.
 [<Literal>]
 let WaitBoundVariable = "TOOLUP_VERIFY_GATE_WAIT_MINUTES"
 
-/// The manifest's rows, bodies unbound: the data this module derives from.
-let private manifest = GateManifest.rows GateManifest.unbound
+/// The manifest's rows, bodies unbound, with the budgets the timings
+/// record at the repository root `root` measures: the data this module
+/// derives from.
+let manifestAt (root: string) =
+    GateManifest.rows GateManifest.unbound
+    |> GateManifest.withRecordedBudgets (GateManifest.readTimings root)
 
 /// Twice the full lane's summed budget: one lane for the holder to finish
 /// and one for an advisory lane queued ahead. See the header.
-let DefaultWaitBound =
-    let full = GateManifest.fullBudget manifest
+let defaultWaitBound (rows: GateLeg<TestLane.Lane> list) =
+    let full = GateManifest.fullBudget rows
 
     if full > TimeSpan.Zero then
         full + full
@@ -118,10 +124,6 @@ let DefaultWaitBound =
 
 /// How often a waiting run reports that it is still waiting.
 let DefaultSlice = TimeSpan.FromSeconds 30.
-
-/// The targets that take the gate: `VerifyAll` and the manifest's
-/// tree-reading rows over a minute. See the header.
-let gatedTargets = GateManifest.gatedTargets manifest
 
 /// The target `argv` requests, read by the same rule `execute` applies
 /// (`Flags.targetOf`), so the gate can never gate a different target from
@@ -145,6 +147,7 @@ let driverFlags: FlagSpec =
             "--render"
             "--write-table"
             "--apply-declarations"
+            "--record"
         ]
         Valued = [
             "--root"
@@ -181,14 +184,14 @@ let optedOut () =
 /// positive whole number of minutes is IGNORED with the default in its
 /// place, never read as zero: a typo that produced a zero bound would make
 /// every wait proceed immediately, which is the opt-out spelled wrong.
-let waitBoundFromEnvironment () =
+let waitBoundFromEnvironment (fallback: TimeSpan) =
     match Environment.GetEnvironmentVariable WaitBoundVariable with
     | null
-    | "" -> DefaultWaitBound
+    | "" -> fallback
     | raw ->
         match Int32.TryParse(raw.Trim()) with
         | true, minutes when minutes > 0 -> TimeSpan.FromMinutes(float minutes)
-        | _ -> DefaultWaitBound
+        | _ -> fallback
 
 /// `git rev-parse --git-common-dir` from `workingDir`, resolved to a full
 /// path. `Error` names why it could not be had — git missing, not a
@@ -207,6 +210,18 @@ let commonGitDir (workingDir: string) : Result<string, string> =
             | raw -> Ok(Path.GetFullPath(Path.Combine(workingDir, raw)))
     with e ->
         Error(sprintf "git could not be started, or did not return within 15 s: %s" e.Message)
+
+/// `git rev-parse HEAD` from `workingDir`: the commit a timings record is
+/// folded at. `None` when it cannot be had.
+let headCommit (workingDir: string) : string option =
+    try
+        let r = Git.within (TimeSpan.FromSeconds 15.) workingDir [ "rev-parse"; "HEAD" ]
+
+        match r.ExitCode, r.StdOut.Trim() with
+        | 0, sha when sha <> "" -> Some sha
+        | _ -> None
+    with _ ->
+        None
 
 /// A short, filesystem- and kernel-safe token for a path: the first 16
 /// hex digits of its SHA-256, over the path normalised the way the host
@@ -478,6 +493,10 @@ module Runs =
         WaitedSeconds: float
         ElapsedSeconds: float
         Exit: int
+        /// The machine that ran it. `None` on a line written before the
+        /// journal recorded it; the fold reads such a line as the folding
+        /// machine's, since the journal lives in one clone's git directory.
+        Machine: string option
         Legs: Leg list
     }
 
@@ -532,6 +551,7 @@ module Runs =
             w.WriteNumber("waitedSeconds", Math.Round(run.WaitedSeconds, 1))
             w.WriteNumber("elapsedSeconds", Math.Round(run.ElapsedSeconds, 1))
             w.WriteNumber("exit", run.Exit)
+            run.Machine |> Option.iter (fun m -> w.WriteString("machine", m))
             w.WriteStartArray "legs"
 
             for leg in run.Legs do
@@ -594,6 +614,10 @@ module Runs =
                         WaitedSeconds = num "waitedSeconds"
                         ElapsedSeconds = num "elapsedSeconds"
                         Exit = int (num "exit")
+                        Machine =
+                            match r.TryGetProperty "machine" with
+                            | true, v -> Some(v.GetString())
+                            | _ -> None
                         Legs = legs
                     }
                 with _ ->
@@ -675,6 +699,81 @@ module Runs =
                 sprintf "  %-24s %d run(s), median %s" name legs.Length (clock (median (legs |> List.map _.Seconds)))
           ]
 
+    /// A run that passed: exit 0 and no leg failed. Both, because a line
+    /// written before the gate recorded the driver's exit code carries
+    /// `exit 0` over a failed leg.
+    let green (run: Run) =
+        run.Exit = 0 && not (run.Legs |> List.exists (fun l -> l.Verdict = "fail"))
+
+    /// Nearest-rank 90th percentile.
+    let private p90 (xs: float list) =
+        match List.sort xs with
+        | [] -> 0.
+        | sorted -> sorted[int (Math.Ceiling(0.9 * float sorted.Length)) - 1]
+
+    let private tenth (x: float) =
+        Math.Round(x, 1, MidpointRounding.AwayFromZero)
+
+    /// The record `GateTimings --record` writes, folded from `runs`: the
+    /// window is `width` ending at the newest run (so the same journal folds
+    /// to the same record whenever it is folded); lanes are the green
+    /// `VerifyAll` runs per lane; rows are the passing legs of the green
+    /// full-lane `VerifyAll` runs, for the rows named in `rowNames` (the
+    /// rows `VerifyAll` runs in the full lane). A run with no machine on
+    /// its line is `machine`'s. `Error` when the window holds no run; the
+    /// record carries no commit (`FoldedAt`), which the caller stamps.
+    let fold
+        (machine: string)
+        (rowNames: string list)
+        (width: TimeSpan)
+        (runs: Run list)
+        : Result<GateManifest.Timings, string> =
+        match runs with
+        | [] -> Error "the journal holds no runs"
+        | runs ->
+            let until = runs |> List.map _.At |> List.max
+            let since = until - width
+            let window = runs |> List.filter (fun r -> r.At >= since)
+            let verifyAll = window |> List.filter (fun r -> r.Target = "VerifyAll" && green r)
+            let known = set rowNames
+
+            Ok {
+                Since = since
+                Until = until
+                Runs = window.Length
+                Machines =
+                    window
+                    |> List.map (fun r -> r.Machine |> Option.defaultValue machine)
+                    |> List.distinct
+                    |> List.sort
+                Lanes = [
+                    for lane, group in verifyAll |> List.groupBy _.Lane |> List.sortBy fst do
+                        let wall = group |> List.map _.ElapsedSeconds
+
+                        lane,
+                        {
+                            GateManifest.LaneTiming.Median = tenth (median wall)
+                            P90 = tenth (p90 wall)
+                            Runs = wall.Length
+                        }
+                ]
+                Rows = [
+                    let legs =
+                        verifyAll
+                        |> List.filter (fun r -> r.Lane = "full")
+                        |> List.collect _.Legs
+                        |> List.filter (fun l -> l.Verdict = "pass" && Set.contains l.Name known)
+
+                    for name, legs in legs |> List.groupBy _.Name |> List.sortBy fst do
+                        name,
+                        {
+                            GateManifest.RowTiming.Median = tenth (median (legs |> List.map _.Seconds))
+                            Runs = legs.Length
+                        }
+                ]
+                FoldedAt = None
+            }
+
 // ─── The driver's entry point ────────────────────────────────────────
 
 /// Run `body` under the gate `name` with `options`, writing the holder
@@ -723,10 +822,11 @@ let aroundWith
 /// `Build.fsproj` was run in, which `verify.ps1` sets to the repository
 /// root — and the wait is reported on stdout, where the gate's transcript
 /// already goes.
-let around (workingDir: string) (argv: string[]) (body: unit -> 'a) : 'a =
+let around (workingDir: string) (argv: string[]) (body: unit -> int) : int =
     let target = requestedTarget argv
+    let rows = manifestAt workingDir
 
-    if not (Set.contains target gatedTargets) then
+    if not (Set.contains target (GateManifest.gatedTargets rows)) then
         body ()
     else
         let key, commonDir =
@@ -742,7 +842,7 @@ let around (workingDir: string) (argv: string[]) (body: unit -> 'a) : 'a =
         let notePath = commonDir |> Option.map holderNotePath
 
         let options = {
-            Bound = waitBoundFromEnvironment ()
+            Bound = waitBoundFromEnvironment (defaultWaitBound rows)
             Slice = DefaultSlice
             Report = printfn "%s"
             DescribeHolder =
@@ -752,7 +852,13 @@ let around (workingDir: string) (argv: string[]) (body: unit -> 'a) : 'a =
                     | None -> "holder unknown — not a git repository"
         }
 
-        let record (admission, elapsed: TimeSpan, exit) =
+        // The driver reports a failed target by its exit code, not by
+        // throwing, so the record takes the code the body returned.
+        let code = ref 0
+
+        let record (admission, elapsed: TimeSpan, thrown) =
+            let exit = if thrown <> 0 then thrown else code.Value
+
             commonDir
             |> Option.iter (fun dir ->
                 Runs.append dir {
@@ -763,7 +869,10 @@ let around (workingDir: string) (argv: string[]) (body: unit -> 'a) : 'a =
                     WaitedSeconds = (Runs.waited admission).TotalSeconds
                     ElapsedSeconds = elapsed.TotalSeconds
                     Exit = exit
+                    Machine = Some Environment.MachineName
                     Legs = Runs.legsOf (Gate.lastRun ())
                 })
 
-        aroundWith (mutexName key) notePath options workingDir record body
+        aroundWith (mutexName key) notePath options workingDir record (fun () ->
+            code.Value <- body ()
+            code.Value)

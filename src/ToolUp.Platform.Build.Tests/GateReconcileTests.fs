@@ -183,6 +183,95 @@ let tests =
             }
         ]
 
+        // The committed timings record measures the rows the gate runs; the
+        // row is red when the two disagree in membership and warns when the
+        // record's window has aged.
+        testList "gate-timings.json" [
+            let rows = GateManifest.rows GateManifest.unbound
+
+            let record () =
+                File.ReadAllText(Path.Combine(repoRoot, GateManifest.GateTimingsFile))
+
+            let parsed () =
+                match GateManifest.parseTimings (record ()) with
+                | Ok t -> t
+                | Error why -> failtestf "gate-timings.json parses: %s" why
+
+            let until = (parsed ()).Until
+
+            test "the committed record agrees with the manifest" {
+                match GateManifest.timingsFindings rows until (Some(record ())) with
+                | [], [] -> ()
+                | errors, warnings ->
+                    failtestf
+                        "%s (run `dotnet run --project Build.fsproj -- GateTimings --record` and commit gate-timings.json)"
+                        (String.concat "; " (errors @ warnings))
+            }
+
+            test "a record measuring a row the manifest no longer runs is red" {
+                let withoutBuild = rows |> List.filter (fun r -> r.Name <> "Build")
+
+                Expect.exists
+                    (fst (GateManifest.timingsFindings withoutBuild until (Some(record ()))))
+                    (fun f -> f.Contains "`Build`" && f.Contains "no row")
+                    "a measured row the manifest lacks"
+            }
+
+            test "a row the record does not measure is red unless it declares a seed" {
+                let t = parsed ()
+
+                let unmeasured = {
+                    t with
+                        Rows = t.Rows |> List.filter (fun (name, _) -> name <> "Forms" && name <> "Samples")
+                }
+
+                let text = GateManifest.renderTimings unmeasured
+                let errors, _ = GateManifest.timingsFindings rows until (Some text)
+                Expect.exists errors (fun f -> f.Contains "`Forms`" && f.Contains "no seed") "Forms has no seed"
+                Expect.isFalse (errors |> List.exists (fun f -> f.Contains "`Samples`")) "Samples keeps its seed"
+            }
+
+            test "an aged window warns and is not red; an absent record is red" {
+                let errors, warnings =
+                    GateManifest.timingsFindings rows (until + TimeSpan.FromDays 15.) (Some(record ()))
+
+                Expect.isEmpty errors "age alone is not red"
+                Expect.exists warnings (fun w -> w.Contains "more than 14 days") "it warns"
+
+                Expect.isEmpty
+                    (snd (GateManifest.timingsFindings rows (until + TimeSpan.FromDays 13.) (Some(record ()))))
+                    "thirteen days is not stale"
+
+                Expect.exists
+                    (fst (GateManifest.timingsFindings rows until None))
+                    (fun f -> f.Contains "absent")
+                    "absent"
+            }
+
+            test "every budget the stale-holder bound sums is read from the record or is the row's seed" {
+                let timings = Some(parsed ())
+                let derived = VerifyGate.manifestAt repoRoot
+
+                for row in GateManifest.localRows rows do
+                    let read = derived |> List.find (fun r -> r.Name = row.Name)
+
+                    match GateManifest.budgetSource timings row with
+                    | GateManifest.BudgetSource.Measured(median, _) ->
+                        Expect.equal read.Budget (Some median) (sprintf "%s reads the record" row.Name)
+                    | GateManifest.BudgetSource.Seed s ->
+                        Expect.equal read.Budget (Some s) (sprintf "%s keeps its seed" row.Name)
+                    | GateManifest.BudgetSource.Unbudgeted -> failtestf "%s is neither measured nor seeded" row.Name
+
+                let full = GateManifest.fullBudget derived
+                Expect.isGreaterThan full TimeSpan.Zero "the full lane carries measured budgets"
+                Expect.equal (VerifyGate.defaultWaitBound derived) (full + full) "the bound sums the derived budgets"
+            }
+
+            test "the committed record is its own render, so a re-fold of the same journal is a no-op diff" {
+                Expect.equal (GateManifest.renderTimings (parsed ())) (record ()) "render(parse(record)) = record"
+            }
+        ]
+
         GateReadsCensusTests.tests
     ]
 // ─── Every vendored contract copy matches its source ──────────────────

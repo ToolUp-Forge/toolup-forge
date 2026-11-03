@@ -137,7 +137,7 @@ let private elsewhere name kind (where: Site list) (reads: Input list) : GateLeg
     Floor = None
 }
 
-let private budget (b: TimeSpan option) (row: GateLeg<Lane>) = { row with Budget = b }
+let private seed (b: TimeSpan option) (row: GateLeg<Lane>) = { row with Budget = b }
 let private floor' (f: Floor) (row: GateLeg<Lane>) = { row with Floor = Some f }
 
 let private also (site: Site) (row: GateLeg<Lane>) = {
@@ -255,19 +255,18 @@ let private dataSourcesEnv =
     )
 
 /// The rows. Order is the order `VerifyAll` runs them: the packs, then the
-/// legs, then the rows that run elsewhere. The `Budget` seeds are the
-/// measurements on record — the Platform pack's 884.8 s and the Fable
-/// recipe's ~1.5 min from the 2026-09-12 lane measurement, the Samples
-/// leg's ~10 minutes and the Analyzers leg's ~6 s from their own phases —
-/// and `dotnet run -- GateTimings` re-derives every one from the recorded
-/// runs; a row with no measurement on record carries none rather than a
-/// guess.
+/// legs, then the rows that run elsewhere. A row's `Budget` here is its
+/// SEED (`seed`): the figure it keeps when the committed timings record
+/// (`gate-timings.json`) carries no measured median for it.
+/// `withRecordedBudgets` replaces every seed the record measures, and
+/// `budgetSource` says which one a row's budget is. A row with neither a
+/// measurement nor a seed carries no budget rather than a guess.
 let rows (b: Bodies) : GateLeg<Lane> list = [
     pack
         "Platform"
         "src/ToolUp.Platform.Tests/ToolUp.Platform.Tests.fsproj"
         ([ Input.Tree; Input.Git; Input.Docker ] @ platformEnv)
-    |> budget (minutes 15.)
+    |> seed (minutes 15.)
     // The Platform pack partitioned by server part: each part's pack holds the
     // lists whose test files reach that part and no later one, and references
     // only the part's closure (docs/migrations/1194-platform-pack-partition.md).
@@ -284,9 +283,9 @@ let rows (b: Bodies) : GateLeg<Lane> list = [
              "TOOLUP_REGEN_PLATFORM_JSON_DECODERS"
              "TOOLUP_TEST_AGE_CONNSTRING"
          ])
-    |> budget (minutes 2.)
+    |> seed (minutes 2.)
     pack "Platform.Infra" "src/ToolUp.Platform.Tests.Infra/ToolUp.Platform.Tests.Infra.fsproj" [ Input.Tree ]
-    |> budget (seconds 20.)
+    |> seed (seconds 20.)
     pack
         "Platform.Config"
         "src/ToolUp.Platform.Tests.Config/ToolUp.Platform.Tests.Config.fsproj"
@@ -297,24 +296,24 @@ let rows (b: Bodies) : GateLeg<Lane> list = [
              "TOOLUP_SECRETS_MASTER_KEY"
              "TOOLUP_SECRET_STORE"
          ])
-    |> budget (seconds 10.)
+    |> seed (seconds 10.)
     pack
         "Platform.Scope"
         "src/ToolUp.Platform.Tests.Scope/ToolUp.Platform.Tests.Scope.fsproj"
         ([ Input.Tree ] @ env [ "TOOLUP_AUTH_MODE"; "TOOLUP_OIDC_AUDIENCE" ])
-    |> budget (seconds 10.)
+    |> seed (seconds 10.)
     pack
         "Platform.Jobs"
         "src/ToolUp.Platform.Tests.Jobs/ToolUp.Platform.Tests.Jobs.fsproj"
         ([ Input.Tree ] @ env [ "TOOLUP_OAUTH_REDIRECT_BASE"; "TOOLUP_REDIS_CONNECTION" ])
-    |> budget (seconds 20.)
+    |> seed (seconds 20.)
     pack "Platform.Audit" "src/ToolUp.Platform.Tests.Audit/ToolUp.Platform.Tests.Audit.fsproj" [ Input.Tree ]
-    |> budget (seconds 10.)
+    |> seed (seconds 10.)
     pack
         "Platform.PublicApi"
         "src/ToolUp.Platform.Tests.PublicApi/ToolUp.Platform.Tests.PublicApi.fsproj"
         ([ Input.Tree ] @ env [ "TOOLUP_APPROVE_API" ])
-    |> budget (minutes 1.5)
+    |> seed (minutes 1.5)
     pack "Forms" "src/ToolUp.Forms.Tests/ToolUp.Forms.Tests.fsproj" [ Input.Tree ]
     pack "Scheduling" "src/ToolUp.Scheduling.Tests/ToolUp.Scheduling.Tests.fsproj" [ Input.Tree ]
     // Each per-provider arm runs when its key is set and reports Pending
@@ -444,14 +443,14 @@ let rows (b: Bodies) : GateLeg<Lane> list = [
     // The client-tier `node:test` harness; the `fable-tier` job runs the
     // same recipe on a Node-provisioned runner.
     leg "Fable" b.Fable readingLanes [ Input.Tree; Input.Node ]
-    |> budget (minutes 1.5)
+    |> seed (minutes 1.5)
     |> floor' (Floor.AtLeast 100)
     |> also (Site.Ci "fable-tier")
     // Every sample builds; the Fable ones transpile in the full lane only.
     leg "Samples" b.Samples readingLanes [ Input.Tree; Input.Node ]
-    |> budget (minutes 10.)
+    |> seed (minutes 10.)
     leg "Analyzers" b.Analyzers readingLanes [ Input.Tree; Input.Git ]
-    |> budget (seconds 6.)
+    |> seed (seconds 6.)
     leg "ScopeLiterals" b.ScopeLiterals readingLanes [ Input.Tree ]
     leg "ServiceConfigFold" b.ServiceConfigFold readingLanes [ Input.Tree ]
     leg "FuaranCoResolution" b.FuaranCoResolution readingLanes [ Input.Tree ]
@@ -851,6 +850,8 @@ let notRead: (string * string) list = [
     "**/README.md",
     "file-name literal: AffectedLaneTests, TemplateGateTests and the driver's template gates name README.md for fixtures; the READMEs the gate opens are in reads (the root README, docs/**, samples/**) or a default input (src/**)"
     "THIRD_PARTY_NOTICES.md", "written, not read: the ThirdPartyNotices target emits it and no leg opens it"
+    "gate-timings.json",
+    "the gate's measured cost, written by GateTimings --record: GateReconcile reads it only to hold it against the manifest, and --record refuses to write a record that check fails, so committing a fold never flips a verdict; the stale-holder bound reads its budgets, which decide how long a run waits, never whether it passes"
     "docs-snippets/corpus-floor.txt",
     "read by the DocSnippets row, which the doc-snippets CI job runs and VerifyAll does not"
     "docs-snippets/known-drift.txt",
@@ -931,3 +932,254 @@ let gateReadsFindings (rows: GateLeg<Lane> list) (recordText: string option) : s
         sprintf "%s is not the render of GateManifest.fs (stepReads, rowReads, notRead)" GateReadsFile
     | Some _ -> ()
 ]
+
+// ─── The timings record: gate-timings.json ───────────────────────────
+//
+// `gate-timings.json` at the repository root is the committed fold of the
+// gate's admission journal (`VerifyGate.Runs`): the window it covers, the
+// machines whose runs it folds, per lane the median and p90 wall clock of
+// the green `VerifyAll` runs, and per row the median seconds over the
+// green full-lane runs. `dotnet run -- GateTimings --record` writes it;
+// nothing else does. The planning tooling that reads a repository's
+// `gate-timings.json` prices the gate from it, and `VerifyGate`'s
+// stale-holder bound and gated set read the row budgets it measures
+// (`withRecordedBudgets`), so the bound and the planner read one figure.
+//
+// It is gate-inert (listed in `notRead`): `GateReconcile` reads it only
+// to hold it against the manifest, and `--record` refuses to write a
+// record that check would fail, so committing a fold never flips a
+// verdict.
+
+/// The record's file name, at the repository root.
+let GateTimingsFile = "gate-timings.json"
+
+/// The `kind` the record carries.
+let GateTimingsKind = "gateTimings"
+
+/// How old the record's window may grow before `GateReconcile` warns.
+let TimingsStaleAfter = TimeSpan.FromDays 14.
+
+/// A lane's figures: seconds, over the green `VerifyAll` runs in that lane.
+type LaneTiming = { Median: float; P90: float; Runs: int }
+
+/// A row's figures: seconds, over the green full-lane runs that ran it.
+type RowTiming = { Median: float; Runs: int }
+
+/// The record, as `GateTimings --record` writes it.
+type Timings = {
+    /// The window's start: `Until` less the fold's width.
+    Since: DateTimeOffset
+    /// The newest run the journal holds.
+    Until: DateTimeOffset
+    /// Every run in the window, green or not, of every gated target.
+    Runs: int
+    /// The machines whose runs the window holds, sorted.
+    Machines: string list
+    /// Sorted by lane name.
+    Lanes: (string * LaneTiming) list
+    /// Sorted by row name.
+    Rows: (string * RowTiming) list
+    /// The commit the record was folded at. Not part of what a re-fold
+    /// compares: a fold that differs only here leaves the file alone.
+    FoldedAt: string option
+}
+
+let private invariant = Globalization.CultureInfo.InvariantCulture
+
+/// Seconds as the record writes them: one decimal, invariant.
+let private secondsText (s: float) = s.ToString("0.0", invariant)
+
+let private stampText (t: DateTimeOffset) =
+    t.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ", invariant)
+
+let private ordinal (a: string, _) (b: string, _) = String.CompareOrdinal(a, b)
+
+/// Why the record exists, as its `_` member says it.
+let private gateTimingsNote =
+    "GENERATED by `dotnet run --project Build.fsproj -- GateTimings --record` from the gate's admission journal (<common git dir>/fuaran-gate/verify-runs.jsonl); do not edit by hand. Seconds. lanes: median and p90 wall clock of the green VerifyAll runs per lane. rows: median of each row over the green full-lane runs, which is the Budget the gate's stale-holder bound sums. The window is the given width ending at the newest recorded run. A re-fold that changes nothing but foldedAt leaves the file as it is. Gate-inert: listed in gate-reads.json's notRead."
+
+/// The record's text, exactly as `GateTimings --record` writes it: keys in
+/// a fixed order, lanes and rows sorted ordinally, seconds to one decimal.
+let renderTimings (t: Timings) : string =
+    let block (name: string) (entries: string list) (last: bool) = [
+        match entries with
+        | [] -> sprintf "  %s: {}%s" (jsonString name) (if last then "" else ",")
+        | entries ->
+            sprintf "  %s: {" (jsonString name)
+            String.concat ",\n" entries
+            if last then "  }" else "  },"
+    ]
+
+    let lanes =
+        t.Lanes
+        |> List.sortWith ordinal
+        |> List.map (fun (name, l) ->
+            sprintf
+                "    %s: { \"median\": %s, \"p90\": %s, \"runs\": %d }"
+                (jsonString name)
+                (secondsText l.Median)
+                (secondsText l.P90)
+                l.Runs)
+
+    let rows =
+        t.Rows
+        |> List.sortWith ordinal
+        |> List.map (fun (name, r) ->
+            sprintf "    %s: { \"median\": %s, \"runs\": %d }" (jsonString name) (secondsText r.Median) r.Runs)
+
+    String.concat "\n" [
+        "{"
+        sprintf "  \"kind\": %s," (jsonString GateTimingsKind)
+        sprintf "  \"_\": %s," (jsonString gateTimingsNote)
+        sprintf "  \"since\": %s," (jsonString (stampText t.Since))
+        sprintf "  \"until\": %s," (jsonString (stampText t.Until))
+        sprintf "  \"runs\": %d," t.Runs
+        sprintf "  \"machines\": [%s]," (t.Machines |> List.sort |> List.map jsonString |> String.concat ", ")
+        match t.FoldedAt with
+        | Some commit -> sprintf "  \"foldedAt\": %s," (jsonString commit)
+        | None -> ()
+        yield! block "lanes" lanes false
+        yield! block "rows" rows true
+        "}"
+        ""
+    ]
+
+/// Read a record. `Error` names why the text is not one.
+let parseTimings (text: string) : Result<Timings, string> =
+    try
+        use doc = Text.Json.JsonDocument.Parse text
+        let r = doc.RootElement
+
+        let prop (name: string) =
+            match r.TryGetProperty name with
+            | true, v -> v
+            | _ -> failwithf "it has no `%s`" name
+
+        let stamp (name: string) =
+            DateTimeOffset.Parse((prop name).GetString(), invariant, Globalization.DateTimeStyles.AssumeUniversal)
+
+        let entries (name: string) = [
+            for p in (prop name).EnumerateObject() do
+                p.Name, p.Value
+        ]
+
+        match (prop "kind").GetString() with
+        | kind when kind <> GateTimingsKind -> Error(sprintf "its kind is `%s`, not `%s`" kind GateTimingsKind)
+        | _ ->
+            Ok {
+                Since = stamp "since"
+                Until = stamp "until"
+                Runs = (prop "runs").GetInt32()
+                Machines = [ for m in (prop "machines").EnumerateArray() -> m.GetString() ]
+                Lanes = [
+                    for name, v in entries "lanes" ->
+                        name,
+                        {
+                            LaneTiming.Median = v.GetProperty("median").GetDouble()
+                            P90 = v.GetProperty("p90").GetDouble()
+                            Runs = v.GetProperty("runs").GetInt32()
+                        }
+                ]
+                Rows = [
+                    for name, v in entries "rows" ->
+                        name,
+                        {
+                            RowTiming.Median = v.GetProperty("median").GetDouble()
+                            Runs = v.GetProperty("runs").GetInt32()
+                        }
+                ]
+                FoldedAt =
+                    match r.TryGetProperty "foldedAt" with
+                    | true, v -> Some(v.GetString())
+                    | _ -> None
+            }
+    with e ->
+        Error e.Message
+
+/// Read the record at the repository root `root`; `None` when it is absent
+/// or does not parse (`timingsFindings` names which).
+let readTimings (root: string) : Timings option =
+    let path = IO.Path.Combine(root, GateTimingsFile)
+
+    if IO.File.Exists path then
+        parseTimings (IO.File.ReadAllText path) |> Result.toOption
+    else
+        None
+
+/// Where a row's budget comes from.
+[<RequireQualifiedAccess>]
+type BudgetSource =
+    /// The record's median for the row, over `runs` runs.
+    | Measured of median: TimeSpan * runs: int
+    /// The row's declared seed: the record carries no median for it.
+    | Seed of TimeSpan
+    /// Neither.
+    | Unbudgeted
+
+/// Where `row`'s budget comes from, given the record.
+let budgetSource (timings: Timings option) (row: GateLeg<Lane>) : BudgetSource =
+    match
+        timings
+        |> Option.bind (fun t -> t.Rows |> List.tryFind (fun (name, _) -> name = row.Name))
+    with
+    | Some(_, measured) -> BudgetSource.Measured(TimeSpan.FromSeconds measured.Median, measured.Runs)
+    | None ->
+        match row.Budget with
+        | Some s -> BudgetSource.Seed s
+        | None -> BudgetSource.Unbudgeted
+
+/// The rows with every budget the record measures read from it; a row the
+/// record does not measure keeps its seed.
+let withRecordedBudgets (timings: Timings option) (rows: GateLeg<Lane> list) : GateLeg<Lane> list =
+    rows
+    |> List.map (fun row ->
+        match budgetSource timings row with
+        | BudgetSource.Measured(median, _) -> { row with Budget = Some median }
+        | BudgetSource.Seed _
+        | BudgetSource.Unbudgeted -> row)
+
+/// The record held against the rows, at `now`: the findings that make
+/// `GateReconcile` red (absent, unreadable, a row the record measures that
+/// `VerifyAll` does not run in the full lane, a row it runs that the record
+/// does not measure and that declares no seed), and the warnings that do
+/// not (the window ended more than `TimingsStaleAfter` ago).
+let timingsFindings
+    (rows: GateLeg<Lane> list)
+    (now: DateTimeOffset)
+    (recordText: string option)
+    : string list * string list =
+    match recordText with
+    | None -> [ sprintf "%s is absent; `GateTimings --record` writes it" GateTimingsFile ], []
+    | Some text ->
+        match parseTimings text with
+        | Error why -> [ sprintf "%s is not a timings record: %s" GateTimingsFile why ], []
+        | Ok t ->
+            let local = localRows rows
+            let measured = t.Rows |> List.map fst |> Set.ofList
+
+            let errors = [
+                for name in measured do
+                    if not (local |> List.exists (fun r -> r.Name = name)) then
+                        sprintf
+                            "%s measures `%s`, which is no row VerifyAll runs in the full lane; re-run `GateTimings --record`"
+                            GateTimingsFile
+                            name
+
+                for row in local do
+                    if not (Set.contains row.Name measured) && row.Budget.IsNone then
+                        sprintf
+                            "row `%s` has no median in %s and declares no seed; re-run `GateTimings --record` over a window it ran in, or give it a seed"
+                            row.Name
+                            GateTimingsFile
+            ]
+
+            let warnings = [
+                if now - t.Until > TimingsStaleAfter then
+                    sprintf
+                        "%s's window ended %s, more than %d days ago; run `GateTimings --record` and commit it"
+                        GateTimingsFile
+                        (stampText t.Until)
+                        (int TimingsStaleAfter.TotalDays)
+            ]
+
+            errors, warnings
