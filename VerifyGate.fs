@@ -699,6 +699,14 @@ module Runs =
                 sprintf "  %-24s %d run(s), median %s" name legs.Length (clock (median (legs |> List.map _.Seconds)))
           ]
 
+    /// The label a machine carries in the committed record: the first eight
+    /// hex digits of the SHA-256 of its upper-cased host name. Stable per
+    /// machine and says nothing about it. The journal is machine-local and
+    /// keeps the host name; the record, which is published, never does.
+    let machineLabel (host: string) =
+        let digest = SHA256.HashData(Encoding.UTF8.GetBytes(host.Trim().ToUpperInvariant()))
+        Convert.ToHexString(digest, 0, 4).ToLowerInvariant()
+
     /// A run that passed: exit 0 and no leg failed. Both, because a line
     /// written before the gate recorded the driver's exit code carries
     /// `exit 0` over a failed leg.
@@ -720,8 +728,9 @@ module Runs =
     /// `VerifyAll` runs per lane; rows are the passing legs of the green
     /// full-lane `VerifyAll` runs, for the rows named in `rowNames` (the
     /// rows `VerifyAll` runs in the full lane). A run with no machine on
-    /// its line is `machine`'s. `Error` when the window holds no run; the
-    /// record carries no commit (`FoldedAt`), which the caller stamps.
+    /// its line is `machine`'s. Machines are written as `machineLabel`s,
+    /// never host names. `Error` when the window holds no run; the record
+    /// carries no commit (`FoldedAt`), which the caller stamps.
     let fold
         (machine: string)
         (rowNames: string list)
@@ -743,7 +752,7 @@ module Runs =
                 Runs = window.Length
                 Machines =
                     window
-                    |> List.map (fun r -> r.Machine |> Option.defaultValue machine)
+                    |> List.map (fun r -> r.Machine |> Option.defaultValue machine |> machineLabel)
                     |> List.distinct
                     |> List.sort
                 Lanes = [

@@ -59,6 +59,13 @@ Now:
   did not. Each line now carries `machine`. A line written before this carries none, and the fold reads it as the
   folding machine's, since the journal lives in one clone's git directory.
 
+## Machines are hashed labels
+
+The journal is gitignored and machine-local, and it records the host name. The committed record is published, so it
+never carries one: the fold writes each machine as a label, the first eight hex digits of the SHA-256 of the
+upper-cased host name (`VerifyGate.Runs.machineLabel`). A label is stable per machine and says nothing about it. The
+fold applies it to every line, so an older line carrying a raw host name folds to the label as well.
+
 ## The first record
 
 Folded from one machine's journal: the 18 runs between 2026-11-02 01:36 UTC and 2026-11-03 00:51 UTC, which are the
@@ -68,7 +75,7 @@ another machine writes that machine's window in its place.
 
 | Window | Runs | Machines |
 |---|---|---|
-| 2026-10-27 00:51 to 2026-11-03 00:51 UTC (the runs fall on 2026-11-02 and 03) | 18 | one (the record's `machines` names it) |
+| 2026-10-27 00:51 to 2026-11-03 00:51 UTC (the runs fall on 2026-11-02 and 03) | 18 | one, labelled `bc424cbe` |
 
 | Lane | Median | p90 | Green runs |
 |---|---|---|---|

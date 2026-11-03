@@ -188,7 +188,9 @@ the median seconds over the green full-lane runs. A run is green when its exit c
 - Never edit it by hand. A row added to the manifest needs a seed until a recorded run measures it.
 
 The journal lives under one clone's git directory, so a record folds one machine's runs. A fold on another machine
-replaces the record with that machine's window, and `machines` says which machine was measured.
+replaces the record with that machine's window, and `machines` says which machine was measured. Machines are hashed
+labels (the first eight hex digits of the SHA-256 of the upper-cased host name), never host names: the journal is
+machine-local, the record is published.
 
 ## What the gate reads: `gate-reads.json`, and what belongs in `reads` versus `notRead`
 
