@@ -754,8 +754,74 @@ let private routeTests =
         }
     ]
 
+/// The third seeded day against the first, two days before it and outside
+/// the one-day period, so it is drawn only from the resolver's second read.
+let private offsetRequest: PresentationRequest = {
+    trendRequest with
+        Kind = PresentationKind.Comparison
+        Period = PresentationPeriod.Ending(day1.AddDays 2.0, 1)
+        CompareTo = Some(PresentationCompareTo.DaysBefore 2)
+}
+
+let private offsetTests =
+    testList "a comparison with a day offset" [
+        test "the resolver reads the comparison day, a withheld point absent and counted" {
+            let w = world ()
+            w.Gate.Deny [ revenueFactId w "s2" 0 ]
+
+            let resolution =
+                (freshResolver w "u").ResolvePresentation offsetRequest
+                |> run
+                |> okOf "the comparison"
+
+            let table = tableOf resolution
+            Expect.equal resolution.Rows 1 "only s1 is published on both deliveries"
+            Expect.equal resolution.Columns [ "subject"; "2026-10-01"; "2026-10-03" ] "against the comparison day"
+
+            Expect.equal
+                resolution.Withheld
+                [
+                    {
+                        PolicyRef = "trade-figures"
+                        Count = 1
+                    }
+                ]
+                "the comparison day's withheld point is counted"
+
+            Expect.isFalse (numbers table |> List.contains 0.0) "no point is drawn as zero"
+
+            Expect.isTrue
+                (resolution.Notes
+                 |> List.exists (fun n -> n.Contains "s2 is not drawn: 2026-10-01 withheld"))
+                "the left-out subject is named"
+        }
+
+        test "the resolver and a block rebuilt from the same reads draw the same table" {
+            let w = world ()
+
+            let resolution =
+                (freshResolver w "u").ResolvePresentation offsetRequest
+                |> run
+                |> okOf "the comparison"
+
+            let answers =
+                PresentationRequest.toQueries FactBrowseApi.MaxSeriesPoints offsetRequest
+                |> List.map (fun q ->
+                    match FactBrowseHandler.querySeries w.Deps w.Scope "u" q |> run with
+                    | Ok s -> SeriesAnswer.Answered s
+                    | Error e -> SeriesAnswer.Refused(q.Metric, e))
+
+            Expect.equal (List.length answers) 2 "two reads"
+
+            match Presentation.data offsetRequest answers with
+            | Ok { Table = Some drawn } -> Expect.equal (tableOf resolution) drawn "the same rows"
+            | other -> failtestf "the data step drew nothing: %A" other
+        }
+    ]
+
 let tests =
     testList "page request resolvers — the data a stored page renders, under the reader's gate" [
+        offsetTests
         codecTests
         withheldTests
         refusalTests

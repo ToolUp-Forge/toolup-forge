@@ -176,7 +176,7 @@ module Presentation =
 
     /// The series's withheld count by policy, as the read reports it. Counts
     /// only: a policy is never a value.
-    let private withheldSummary (series: FactSeries) : string list =
+    let private withheldOf (what: string) (series: FactSeries) : string list =
         if series.WithheldCount = 0 then
             []
         else
@@ -186,8 +186,10 @@ module Presentation =
                 |> String.concat ", "
 
             [
-                sprintf "%d point(s) of %s are withheld from you (%s)." series.WithheldCount series.Metric byPolicy
+                sprintf "%d point(s) of %s are withheld from you (%s)." series.WithheldCount what byPolicy
             ]
+
+    let private withheldSummary (series: FactSeries) : string list = withheldOf series.Metric series
 
     /// The author's annotations as notes (a kind with no date axis).
     let private annotationNotes (request: PresentationRequest) : string list =
@@ -349,33 +351,77 @@ module Presentation =
         |> List.sortDescending
         |> List.tryHead
 
-    /// The delivery against the one before it, per subject. A subject is drawn
-    /// only when both deliveries carry a published number for it; any other
-    /// is named with what is missing.
-    let private comparison (request: PresentationRequest) (series: FactSeries) : Panel =
+    /// The delivery against its baseline, per subject: the delivery before it
+    /// in the period's series, or, for a day offset, the comparison day's
+    /// delivery in `offset`, the second read (`None` when that read was
+    /// refused). A subject is drawn only when both deliveries carry a
+    /// published number for it; any other is named with what is missing. A
+    /// missing comparison delivery is named, never drawn as zero.
+    let private comparison (request: PresentationRequest) (series: FactSeries) (offset: FactSeries option) : Panel =
         let day = PresentationRequest.delivery request
         let thisLabel = iso day
 
+        let baseline =
+            match PresentationRequest.comparisonDay request with
+            | Some offsetDay ->
+                let days = int (day - offsetDay).TotalDays
+
+                let points = offset |> Option.map (pointsOn offsetDay) |> Option.defaultValue []
+
+                {|
+                    Against = sprintf "against %s, %d days before" (iso offsetDay) days
+                    Day = (if List.isEmpty points then None else Some offsetDay)
+                    Points = points
+                    Missing =
+                        match offset with
+                        | Some _ -> sprintf "No delivery on %s, %d days before %s." (iso offsetDay) days thisLabel
+                        | None ->
+                            sprintf
+                                "The delivery on %s, %d days before %s, could not be read."
+                                (iso offsetDay)
+                                days
+                                thisLabel
+                    Withheld =
+                        offset
+                        |> Option.map (fun s -> withheldOf (sprintf "%s on %s" s.Metric (iso offsetDay)) s)
+                        |> Option.defaultValue []
+                |}
+            | None ->
+                let previous = previousDelivery day series
+
+                {|
+                    Against = "against the delivery before"
+                    Day = previous
+                    Points = previous |> Option.map (fun p -> pointsOn p series) |> Option.defaultValue []
+                    Missing = sprintf "No delivery before %s in this range." thisLabel
+                    Withheld = []
+                |}
+
         let shell = {
             emptyPanel request with
-                Title = sprintf "%s, %s against the delivery before" (PresentationRequest.title request) thisLabel
+                Title = sprintf "%s, %s %s" (PresentationRequest.title request) thisLabel baseline.Against
         }
 
-        match previousDelivery day series with
+        match baseline.Day with
         | None -> {
             shell with
                 Notes = [
-                    sprintf "No delivery before %s in this range." thisLabel
+                    baseline.Missing
+                    // An offset baseline's absence still counts what the
+                    // period's read withheld; the delivery before keeps the
+                    // note it always had.
+                    if (PresentationRequest.comparisonDay request).IsSome then
+                        yield! withheldSummary series
+                    yield! baseline.Withheld
                     yield! annotationNotes request
                 ]
           }
         | Some previous ->
             let prevLabel = iso previous
-            let both = pointsOn day series @ pointsOn previous series
+            let both = pointsOn day series @ baseline.Points
             let names = labels [] both
 
-            let before =
-                pointsOn previous series |> List.map (fun p -> p.Subject, p) |> Map.ofList
+            let before = baseline.Points |> List.map (fun p -> p.Subject, p) |> Map.ofList
 
             let current = pointsOn day series |> List.map (fun p -> p.Subject, p) |> Map.ofList
             let subjects = both |> List.map _.Subject |> List.distinct
@@ -427,6 +473,7 @@ module Presentation =
                             }
                     Notes = [
                         yield! withheldSummary series
+                        yield! baseline.Withheld
                         yield!
                             pairs
                             |> List.choose (function
@@ -652,8 +699,9 @@ module Presentation =
                 let code, _, message = PreEmitValidate.describe d
                 sprintf "%s: %s" code message)
 
-    /// Checks the answers are exactly the reads the request asks for: one per
-    /// metric, each of the request's table.
+    /// Checks the answers are exactly the reads the request asks for
+    /// (`PresentationRequest.toQueries`): one per metric, and the comparison
+    /// day's for an offset comparison, each of the request's table.
     let private checkAnswers (request: PresentationRequest) (answers: SeriesAnswer list) : Result<unit, string> =
         let metricOf =
             function
@@ -677,8 +725,12 @@ module Presentation =
                 match request.Metrics |> List.tryFind (fun m -> not (List.contains m answered)) with
                 | Some m -> Error(sprintf "metric '%s' was not answered" m)
                 | None ->
-                    if List.length answered <> List.length request.Metrics then
+                    let expected = PresentationRequest.toQueries 1 request |> List.length
+
+                    if List.length answered > expected then
                         Error "a metric was answered twice"
+                    elif List.length answered < expected then
+                        Error "the comparison day's read was not answered"
                     else
                         Ok()
 
@@ -710,19 +762,43 @@ module Presentation =
                         | SeriesAnswer.Answered s -> Some s
                         | SeriesAnswer.Refused _ -> None)
 
-                let refusals =
-                    ordered
-                    |> List.choose (function
-                        | SeriesAnswer.Refused(metric, why) ->
-                            Some(sprintf "The fact series read refused %s" metric, why)
-                        | SeriesAnswer.Answered _ -> None)
+                // An offset comparison's second read: the answer after the
+                // period's, in the order `toQueries` asks for them.
+                let offset =
+                    match PresentationRequest.comparisonDay request with
+                    | Some day ->
+                        answers
+                        |> List.filter (function
+                            | SeriesAnswer.Answered s -> s.Metric = request.Metrics.Head
+                            | SeriesAnswer.Refused(metric, _) -> metric = request.Metrics.Head)
+                        |> List.tryItem 1
+                        |> Option.map (fun answer -> day, answer)
+                    | None -> None
+
+                let refusals = [
+                    yield!
+                        ordered
+                        |> List.choose (function
+                            | SeriesAnswer.Refused(metric, why) ->
+                                Some(sprintf "The fact series read refused %s" metric, why)
+                            | SeriesAnswer.Answered _ -> None)
+                    match offset with
+                    | Some(day, SeriesAnswer.Refused(metric, why)) ->
+                        sprintf "The fact series read refused %s on %s" metric (iso day), why
+                    | _ -> ()
+                ]
+
+                let offsetSeries =
+                    match offset with
+                    | Some(_, SeriesAnswer.Answered s) -> Some s
+                    | _ -> None
 
                 let panel =
                     match request.Kind, served with
                     | PresentationKind.Table, _ :: _ -> table request served
                     | PresentationKind.Trend, [ s ] -> trend request s
                     | PresentationKind.Breakdown, [ s ] -> breakdown request s
-                    | PresentationKind.Comparison, [ s ] -> comparison request s
+                    | PresentationKind.Comparison, [ s ] -> comparison request s offsetSeries
                     | _ -> emptyPanel request
 
                 Ok { panel with Refusals = refusals }

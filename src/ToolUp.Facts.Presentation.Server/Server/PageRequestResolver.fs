@@ -380,7 +380,9 @@ module PageRequestResolver =
             PageRefusal.Defect(sprintf "the resolution's table could not be encoded: %s" reason))
 
     /// A presentation request answered through the series read and the
-    /// builders' data step.
+    /// builders' data step: one read per query the request asks for, which for
+    /// a comparison with a day offset includes the second read of the
+    /// comparison day, under the same gate.
     let private presentation
         (browse: IFactBrowseApi)
         (deps: FactBrowseHandler.FactBrowseDeps)

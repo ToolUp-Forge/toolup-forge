@@ -58,6 +58,12 @@
 # rather than only reported as a size. The teeth check feeds it a collapsed
 # manifest and requires a refusal.
 #
+# The Fuaran-UI renderer is the third: it loads in the TreeLoweringRuntime
+# chunk, the shell build names any renderer module its first load holds into a
+# chunk called FuaranUIRendererAtBoot, the check refuses either in the first
+# load, and the teeth check feeds it a manifest with the renderer imported
+# statically.
+#
 # ── The load half (Phase 886) ────────────────────────────────────────────
 #
 # Last, the script measures the FACT and RETRIEVAL paths under concurrent
@@ -585,6 +591,22 @@ function Get-ShellChunkFinding {
         }
     }
 
+    # The Fuaran-UI renderer. The tree lowering reaches it through a dynamic import, so the default split puts it
+    # in the TreeLoweringRuntime chunk; vite.shell.config.mts names any renderer module in the entry's static
+    # closure into a chunk called FuaranUIRendererAtBoot. A shell with no tree surface builds neither, which is
+    # not a finding.
+    if (@($seen.Keys | Where-Object { $manifest[$_].file -match "/FuaranUIRendererAtBoot-" }).Count -gt 0) {
+        return "the Fuaran-UI renderer is in the shell's first load (FuaranUIRendererAtBoot); a static reference from a boot path collapsed its chunk"
+    }
+    $runtime = "TreeLoweringRuntime"
+    if (@($seen.Keys | Where-Object { $manifest[$_].file -match "/$runtime-" }).Count -gt 0) {
+        return "$runtime, the Fuaran-UI renderer's chunk, is in the shell's first load; a static reference collapsed its chunk"
+    }
+    $runtimeBuilt = @($manifest.Keys | Where-Object { $manifest[$_].file -match "/$runtime-" }).Count -gt 0
+    if ($runtimeBuilt -and @($reachedLater | Where-Object { $manifest[$_].file -match "/$runtime-" }).Count -eq 0) {
+        return "$runtime, the Fuaran-UI renderer's chunk, is not a dynamic import of the shell's first load, so it is no longer loaded on demand"
+    }
+
     return $null
 }
 
@@ -936,6 +958,28 @@ if ($TeethCheck) {
     }
     finally {
         Remove-Item $collapsedManifest -ErrorAction SilentlyContinue
+    }
+
+    # A build whose AG chunks are on demand and whose renderer is a static import of the entry, as a boot path
+    # that imports the renderer directly would write.
+    $staticRendererManifest = Join-Path ([IO.Path]::GetTempPath()) "toolup-perf-teeth-static-renderer-manifest.json"
+    @'
+{
+  "SDK.Client.js": { "file": "assets/SDK.Client-x.js", "isEntry": true, "imports": ["_FuaranUIRendererAtBoot-x.js"], "dynamicImports": ["AgGridRuntime.js", "AgChartRuntime.js"] },
+  "_FuaranUIRendererAtBoot-x.js": { "file": "assets/FuaranUIRendererAtBoot-x.js" },
+  "AgGridRuntime.js": { "file": "assets/AgGridRuntime-x.js", "isDynamicEntry": true },
+  "AgChartRuntime.js": { "file": "assets/AgChartRuntime-x.js", "isDynamicEntry": true }
+}
+'@ | Set-Content -Path $staticRendererManifest -Encoding utf8
+    try {
+        $rendererFinding = Get-ShellChunkFinding -ManifestPath $staticRendererManifest
+        if (-not $rendererFinding -or $rendererFinding -notmatch "renderer") {
+            Write-Error "perf-budget: TEETH CHECK FAILED — the chunk check passed a build with the renderer in the first load. A static import of the renderer from a boot path would not go red."
+            exit 1
+        }
+    }
+    finally {
+        Remove-Item $staticRendererManifest -ErrorAction SilentlyContinue
     }
 
     if ($bundleTeeth -eq 0) {

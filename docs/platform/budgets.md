@@ -226,6 +226,35 @@ its `-TeethCheck` feeds that refusal a collapsed manifest. The binding files imp
 `ag-charts-react` only through `[<Import>]`, because neither package declares `sideEffects`: one unused import
 at the top of a file keeps the whole library in the entry.
 
+**The Fuaran-UI renderer (Phase 1202).** A forge surface authored as a Fuaran-UI tree is lowered through an internal
+seam in two files: `TreeLowering`, the authoring helpers and the `lower` call a view makes, and `TreeLoweringRuntime`,
+everything that imports the renderer, reached only through a dynamic import. While the chunk loads a tree shows the
+grid's placeholder (`role="status"`, `aria-busy`); a chunk that fails rejects into `ModuleBoundary`, whose
+**Reload module** fetches it again. The shell build names any renderer module its first load holds into a chunk called
+`FuaranUIRendererAtBoot`, and the gate script refuses a build that has one, or whose `TreeLoweringRuntime` chunk is in
+the first load or is not reached by a dynamic import. A shell with no tree surface builds neither and pays nothing.
+
+| On-demand chunk | Bytes | Gzipped | Fetched when |
+|---|---:|---:|---|
+| `AgGridRuntime` | 1,140,619 | 316,514 | the first grid mounts |
+| `AgChartRuntime` | 1,178,697 | 343,679 | the first chart mounts |
+| `TreeLoweringRuntime` (the renderer: `Fuaran.UI.Renderer`, `.Renderer.Core`, `.Charts`) | 284,224 | 85,698 | the first tree surface mounts |
+
+The split does not make a tree surface free at boot. Measured 2026-11-03 with three real surfaces authored as trees
+(a team manager, a module-visibility admin, the command palette behind an island) in a scratch tree:
+
+| Shell | First load, bytes | First load, KiB | Whole shell, KiB |
+|---|---:|---:|---:|
+| no tree surface (today) | 1,511,762 | 1,476.33 | 3,741.29 |
+| three surfaces, renderer imported statically | 2,128,132 | 2,078.25 | 4,343.34 |
+| three surfaces, renderer on demand | 1,847,215 | 1,803.92 | 4,346.47 |
+
+The import takes 280,917 bytes out of the first load, but the authoring helpers still reach `Fuaran.UI`'s node
+vocabulary statically, and its closure holds `Fuaran.Compute.DataFrame` and `Fuaran.Core.Column`: one shared chunk of
+379,258 bytes (100,275 gzipped) that both halves import. That leaves the first load 1.22x its baseline and over its
+ceiling, so a tree surface does not return to a view the shell imports at boot until that closure is cut on the
+Fuaran-UI side or the surface builds its tree behind the same import.
+
 The split points came from the bundle, by package (rendered bytes, before minifying):
 
 | Candidate | KiB | Decision |

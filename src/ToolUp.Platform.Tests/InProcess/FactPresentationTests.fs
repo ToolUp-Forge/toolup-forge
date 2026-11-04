@@ -515,6 +515,204 @@ let private provenanceTests =
         }
     ]
 
+// ─── Comparison deliveries with a day offset ────────────────────────
+//
+// `DaysBefore` draws the delivery against the one a number of days before it:
+// 364 is the same weekday last year. The comparison day is a second read, so
+// it is gated as the period's read is, and the builders' rule holds: a
+// withheld point is absent from every row and counted, and a missing
+// comparison delivery is named, never drawn as zero.
+
+/// 364 days before 3 October 2026: the same weekday, 4 October 2025.
+let private lastYear = DateTime(2025, 10, 4, 0, 0, 0, DateTimeKind.Utc)
+
+/// The comparison day's read of revenue.
+let private lastYearRevenue (points: (string * decimal option * bool) list) : FactSeries =
+    let withheld = points |> List.filter (fun (_, _, w) -> w) |> List.length
+
+    {
+        series "revenue" [] with
+            PeriodFrom = lastYear
+            PeriodTo = lastYear.AddDays 1.0
+            Points =
+                points
+                |> List.map (fun (subject, value, w) -> {
+                    point subject 1 value w with
+                        PeriodFrom = lastYear
+                        PeriodTo = lastYear.AddDays 1.0
+                        FactId = sprintf "fact-%s-last-year" subject
+                })
+            WithheldCount = withheld
+            Withheld =
+                if withheld = 0 then
+                    []
+                else
+                    [
+                        {
+                            PolicyRef = "small-cells"
+                            Count = withheld
+                        }
+                    ]
+    }
+
+let private yearOnYear: PresentationRequest = {
+    request PresentationKind.Comparison [ "revenue" ] 3 with
+        CompareTo = Some(PresentationCompareTo.DaysBefore 364)
+}
+
+let private offsetTests =
+    testList "comparisons with a day offset" [
+        test "the offset round-trips in its one canonical text and is refused out of bounds by name" {
+            let json = PresentationRequest.toJson yearOnYear
+            Expect.stringContains json "\"compareTo\":\"daysBefore:364\"" "the canonical text"
+            Expect.equal (PresentationRequest.ofJson json) (Ok yearOnYear) "round-trips"
+
+            let withCompare (text: string) =
+                "{\"kind\":\"comparison\",\"tableId\":\"t\",\"metrics\":[\"a\"],\"period\":{\"day\":\"2026-10-03\"},\"compareTo\":\""
+                + text
+                + "\"}"
+                |> PresentationRequest.ofJson
+
+            Expect.equal
+                (withCompare " DaysBefore:7 " |> Result.map _.CompareTo)
+                (Ok(Some(PresentationCompareTo.DaysBefore 7)))
+                "case and space are ignored"
+
+            for bad in
+                [
+                    "daysBefore:0"
+                    "daysBefore:3661"
+                    "daysBefore:"
+                    "daysBefore:-7"
+                    "daysBefore:1y"
+                ] do
+                match withCompare bad with
+                | Error(PresentationRequestError.InvalidField("compareTo", _)) -> ()
+                | other -> failtestf "'%s' should be refused naming compareTo, got %A" bad other
+
+            match withCompare "daysBefore:3661" with
+            | Error e -> Expect.stringContains (PresentationRequestError.describe e) "3660" "the bound is named"
+            | Ok _ -> failtest "an offset past the bound is refused"
+
+            Expect.equal
+                (PresentationRequest.validate {
+                    yearOnYear with
+                        Kind = PresentationKind.Trend
+                })
+                (Error(PresentationRequestError.InvalidField("compareTo", "a trend compares to nothing")))
+                "a trend still compares to nothing"
+        }
+
+        test "the comparison day is a second read of the metric over that day alone" {
+            let queries = PresentationRequest.toQueries 2000 yearOnYear
+            Expect.equal (queries |> List.map _.Metric) [ "revenue"; "revenue" ] "the period's read, then the day's"
+            let second = List.item 1 queries
+            Expect.equal (second.PeriodFrom, second.PeriodTo) (lastYear, lastYear.AddDays 1.0) "the one day"
+            Expect.equal (PresentationRequest.comparisonDay yearOnYear) (Some lastYear) "364 days before"
+
+            Expect.equal
+                (PresentationRequest.toQueries 2000 (request PresentationKind.Comparison [ "revenue" ] 3)
+                 |> List.length)
+                1
+                "the delivery before needs no second read"
+        }
+
+        test "a 364-day comparison draws the same weekday last year, a withheld point absent and counted" {
+            let offset = lastYearRevenue [ "north", Some 90m, false; "south", Some 280m, true ]
+
+            let block =
+                built yearOnYear [ SeriesAnswer.Answered revenue; SeriesAnswer.Answered offset ]
+
+            let chart = chartOf block.Node |> Option.get
+            Expect.equal chart.YFields [ "2025-10-04"; "2026-10-03" ] "this delivery against last year's"
+            let rows = rowsOf chart
+            Expect.equal (rows |> List.map (fun r -> unbox<string> r.["subject"])) [ "north" ] "south is not a row"
+            Expect.equal (unbox<float> rows.Head.["2025-10-04"]) 90.0 "last year's published number"
+
+            Expect.isFalse
+                (rows |> List.exists (fun r -> r |> Map.exists (fun _ v -> v = box 0.0)))
+                "nothing is drawn as zero"
+
+            Expect.isTrue (notesContain block "south is not drawn: 2025-10-04 withheld") "south is named, with why"
+
+            Expect.isTrue
+                (notesContain block "1 point(s) of revenue on 2025-10-04 are withheld from you (small-cells: 1).")
+                "the comparison day's withheld point is counted"
+
+            Expect.equal
+                (chart.Title |> Option.map literal)
+                (Some "trade.site: revenue, 2026-10-03 against 2025-10-04, 364 days before")
+                "the title says what it is drawn against"
+
+            Expect.equal
+                block.Provenance.Withheld
+                [ { PolicyRef = "small-cells"; Count = 2 } ]
+                "both reads' withheld points, by policy"
+
+            Expect.isTrue
+                (block.Provenance.FactIds |> List.contains "fact-south-last-year")
+                "the withheld point's id is read, never its value"
+
+            Expect.isEmpty (Presentation.findings block.Node) "the node passes the pre-emit validator"
+        }
+
+        test "a stored page and a built block draw the same offset rows" {
+            let answers = [
+                SeriesAnswer.Answered revenue
+                SeriesAnswer.Answered(lastYearRevenue [ "north", Some 90m, false; "south", Some 280m, true ])
+            ]
+
+            let block = built yearOnYear answers
+
+            match Presentation.data yearOnYear answers with
+            | Ok data ->
+                let chart = chartOf block.Node |> Option.get
+
+                match chart.Source, data.Table with
+                | Binding.Transform(TransformSource.Data(Embedded table), [], _), Some drawn ->
+                    Expect.equal drawn table "the same table"
+                | other -> failtestf "expected an embedded table and a data table, got %A" other
+
+                Expect.equal data.Notes block.Notes "the same notes"
+                Expect.equal data.Provenance block.Provenance "the same provenance"
+            | Error defect -> failtestf "the data step refused: %s" (PresentationDefect.describe defect)
+        }
+
+        test "a missing comparison delivery is named, never drawn as zero" {
+            let block =
+                built yearOnYear [ SeriesAnswer.Answered revenue; SeriesAnswer.Answered(lastYearRevenue []) ]
+
+            Expect.isNone (chartOf block.Node) "no chart"
+            Expect.isTrue (notesContain block "No delivery on 2025-10-04, 364 days before 2026-10-03.") "named"
+
+            let refused =
+                built yearOnYear [
+                    SeriesAnswer.Answered revenue
+                    SeriesAnswer.Refused("revenue", "over the point cap")
+                ]
+
+            Expect.isNone (chartOf refused.Node) "no chart"
+            Expect.isTrue (notesContain refused "could not be read") "the unread delivery is named"
+
+            Expect.equal
+                (callouts refused.Node |> List.map (fun c -> c.Heading |> Option.map literal))
+                [ Some "The fact series read refused revenue on 2025-10-04" ]
+                "the refusal is a callout naming the day"
+        }
+
+        test "an offset comparison missing its second answer is a mismatch, not a drawing" {
+            match Presentation.build<unit> yearOnYear [ SeriesAnswer.Answered revenue ] with
+            | Error(PresentationDefect.AnswersMismatch reason) -> Expect.stringContains reason "comparison day" "named"
+            | other -> failtestf "expected a mismatch, got %A" other
+        }
+    ]
+
 [<Tests>]
 let tests =
-    testList "Phase 1129 — fact presentation builders" [ codecTests; builderTests; validationTests; provenanceTests ]
+    testList "Phase 1129 — fact presentation builders" [
+        codecTests
+        builderTests
+        validationTests
+        provenanceTests
+        offsetTests
+    ]

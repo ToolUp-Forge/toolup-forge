@@ -692,6 +692,123 @@ let private layoutCensusTests =
         }
     ]
 
+// ─── Comparison offsets in the census ────────────────────────────────
+//
+// A deployment that offers comparison day offsets tells the model about them
+// in render_chart's, layout_add_block's and layout_set_request's compareTo; one
+// that offers none lists every tool exactly as it did, byte for byte.
+
+let private offsetCensusTests =
+    let composedAll () =
+        LayoutCensus.aiApp FeatureMode.Enabled true
+        |> PresentationCompose.withRenderTools
+        |> PresentationCompose.withLayoutTools
+
+    /// The compareTo enum values each composed tool's schema declares.
+    let compareToValues (definitions: string list) : (string * string list) list =
+        definitions
+        |> List.choose (fun text ->
+            let name = text.Substring(0, text.IndexOf '\n')
+            use doc = JsonDocument.Parse(text.Substring(text.LastIndexOf '\n' + 1))
+
+            let rec find (e: JsonElement) : JsonElement option =
+                match e.ValueKind with
+                | JsonValueKind.Object ->
+                    match e.TryGetProperty "properties" with
+                    | true, props ->
+                        match props.TryGetProperty "compareTo" with
+                        | true, c -> Some c
+                        | _ -> props.EnumerateObject() |> Seq.tryPick (fun p -> find p.Value)
+                    | _ -> None
+                | _ -> None
+
+            find doc.RootElement
+            |> Option.map (fun c ->
+                name, c.GetProperty("enum").EnumerateArray() |> Seq.map _.GetString() |> List.ofSeq))
+
+    testList "comparison offsets" [
+        test "a deployment offering no comparison offsets lists the same tools byte for byte" {
+            let without = LayoutCensus.providerDefinitions (composedAll ())
+
+            let offeringNone =
+                LayoutCensus.providerDefinitions (composedAll () |> PresentationCompose.withComparisonOffsets [])
+
+            Expect.equal offeringNone without "offering none changes nothing"
+
+            Expect.equal
+                (compareToValues without)
+                [
+                    "render_chart", [ "previousDelivery" ]
+                    "layout_add_block", [ "previousDelivery" ]
+                    "layout_set_request", [ "previousDelivery" ]
+                ]
+                "the delivery before is the one baseline offered"
+
+            Expect.equal
+                (RenderTools.definitionOffering [] RenderTool.Chart)
+                (RenderTools.definition RenderTool.Chart)
+                "the definition with no offsets is the definition"
+        }
+
+        test "offered offsets are listed as baselines, and every other tool is unchanged" {
+            let without = LayoutCensus.providerDefinitions (composedAll ())
+
+            let offered =
+                LayoutCensus.providerDefinitions (
+                    composedAll () |> PresentationCompose.withComparisonOffsets [ 7; 364 ]
+                )
+
+            Expect.equal (List.length offered) (List.length without) "no tool added"
+
+            Expect.equal
+                (compareToValues offered)
+                [
+                    "render_chart", [ "previousDelivery"; "daysBefore:7"; "daysBefore:364" ]
+                    "layout_add_block", [ "previousDelivery"; "daysBefore:7"; "daysBefore:364" ]
+                    "layout_set_request", [ "previousDelivery"; "daysBefore:7"; "daysBefore:364" ]
+                ]
+                "each offset is a baseline"
+
+            let changed =
+                List.zip without offered
+                |> List.filter (fun (a, b) -> a <> b)
+                |> List.map (fun (a, _) -> a.Substring(0, a.IndexOf '\n'))
+
+            Expect.equal
+                changed
+                [ "render_chart"; "layout_add_block"; "layout_set_request" ]
+                "only the three baselines move"
+        }
+
+        test "offering composes the render tools, and refuses an offset out of bounds or offered twice" {
+            let offered =
+                LayoutCensus.aiApp FeatureMode.Enabled false
+                |> PresentationCompose.withComparisonOffsets [ 364 ]
+                |> LayoutCensus.providerDefinitions
+
+            Expect.equal
+                (compareToValues offered)
+                [ "render_chart", [ "previousDelivery"; "daysBefore:364" ] ]
+                "the render tools are composed, offering the offset"
+
+            for bad in [ [ 0 ]; [ 3661 ]; [ 7; 7 ] ] do
+                Expect.throwsT<ArgumentException>
+                    (fun () ->
+                        LayoutCensus.aiApp FeatureMode.Enabled false
+                        |> PresentationCompose.withComparisonOffsets bad
+                        |> ignore)
+                    (sprintf "%A is refused at composition" bad)
+
+            let disabled = LayoutCensus.aiApp FeatureMode.Disabled false
+
+            Expect.equal
+                ((snd (disabled |> PresentationCompose.withComparisonOffsets [ 7 ])).AIAnsweringTools
+                 |> List.map fst)
+                ((snd disabled).AIAnsweringTools |> List.map fst)
+                "without the fact store nothing changes"
+        }
+    ]
+
 let tests =
     testList "Phase 508 rich AI tool parameter schemas" [
         flatUnchangedTests
@@ -700,4 +817,5 @@ let tests =
         malformedTests
         decodeTests
         layoutCensusTests
+        offsetCensusTests
     ]

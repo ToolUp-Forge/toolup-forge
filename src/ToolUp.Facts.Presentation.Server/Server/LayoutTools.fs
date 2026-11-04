@@ -812,9 +812,7 @@ module LayoutTools =
             ToolSchema.field "to" "The day after the last day covered, yyyy-MM-dd (exclusive)." false ToolSchema.text
         ]
 
-    let private compareToValues = [ "previousDelivery" ]
-
-    let private requestSchema =
+    let private requestSchema (offsets: int list) =
         ToolSchema.objectOf [
             ToolSchema.field
                 "kind"
@@ -840,7 +838,11 @@ module LayoutTools =
                         (ToolSchema.arrayOf ToolSchema.text)
                     ToolSchema.field "subjectLevel" "A presentation's subject level." false ToolSchema.text
                     ToolSchema.field "period" "A presentation's whole UTC days." false periodSchema
-                    ToolSchema.field "compareTo" "A comparison's baseline." false (ToolSchema.enumOf compareToValues)
+                    ToolSchema.field
+                        "compareTo"
+                        "A comparison's baseline."
+                        false
+                        (ToolSchema.enumOf (RenderTools.compareToValues offsets))
                     ToolSchema.field "title" "A presentation's title." false ToolSchema.text
                     ToolSchema.field "table" "A pipeline's fact table." false ToolSchema.text
                     ToolSchema.field "period_from" "A pipeline's first instant (inclusive)." false ToolSchema.text
@@ -888,12 +890,12 @@ module LayoutTools =
             PageLayer.toToken PageLayer.Individual
         ]
 
-    let private parameters (tool: LayoutTool) : ToolParameterSchema list =
+    let private parameters (offsets: int list) (tool: LayoutTool) : ToolParameterSchema list =
         match tool with
         | LayoutTool.AddBlock ->
             pageParameters
             @ [
-                ToolSchema.parameter "request" "The request the block draws. Never rows." true requestSchema
+                ToolSchema.parameter "request" "The request the block draws. Never rows." true (requestSchema offsets)
                 ToolSchema.parameter
                     "block"
                     "chart or table. Omit to take the request's own: a table-kind or pipeline request is a table, any other a chart."
@@ -927,7 +929,7 @@ module LayoutTools =
                     "compareTo"
                     "A comparison's new baseline."
                     false
-                    (ToolSchema.enumOf compareToValues)
+                    (ToolSchema.enumOf (RenderTools.compareToValues offsets))
                 ToolSchema.parameter "metrics" "The new metric columns." false (ToolSchema.arrayOf ToolSchema.text)
                 ToolSchema.parameter "subjectLevel" "The new subject level." false ToolSchema.text
                 ToolSchema.parameter
@@ -1023,11 +1025,16 @@ module LayoutTools =
 
     /// A tool's declaration: server-resident, on both surfaces. The eight
     /// proposing tools read the page and the facts its requests name; the
-    /// save writes the page store.
-    let definition (tool: LayoutTool) : AIToolDefinition = {
+    /// save writes the page store. `offsets` are the comparison day offsets
+    /// the deployment offers (`PresentationCompose.withComparisonOffsets`):
+    /// the `compareTo` baselines of `layout_add_block` and
+    /// `layout_set_request` list each, as `RenderTools.definitionOffering`
+    /// does; with none the schemas are unchanged. Raises `ArgumentException`
+    /// on an offset out of bounds or offered twice.
+    let definitionOffering (offsets: int list) (tool: LayoutTool) : AIToolDefinition = {
         Name = name tool
         Description = description tool
-        Parameters = parameters tool
+        Parameters = parameters (RenderTools.checkOffsets offsets) tool
         SourceModule = FactEvents.SourceModule
         EmitsActions = None
         Location = ServerResident
@@ -1040,10 +1047,14 @@ module LayoutTools =
             | _ -> ToolEffectDeclaration.declare [ ToolEffect.ReadFacts; ToolEffect.ReadContent ]
     }
 
+    /// A tool's declaration for a deployment that offers no comparison
+    /// offsets: `definitionOffering []`.
+    let definition (tool: LayoutTool) : AIToolDefinition = definitionOffering [] tool
+
     // ── Arguments ─────────────────────────────────────────────────
 
     let private allowed (tool: LayoutTool) : Set<string> =
-        parameters tool |> List.map _.Name |> Set.ofList
+        parameters [] tool |> List.map _.Name |> Set.ofList
 
     /// Members that would carry rows into a page. Refused by name wherever
     /// they appear in the arguments, before anything else is read.

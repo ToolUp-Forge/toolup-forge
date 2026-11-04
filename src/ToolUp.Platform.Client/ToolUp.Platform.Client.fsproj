@@ -40,7 +40,7 @@
          the nupkg; Fable's package loader extracts and compiles source
          directly. Mirrors the Feliz / Fable.Elmish convention. -->
     <ItemGroup>
-        <Content Include="**\*.fsproj;**\*.fs;**\*.svg;**\*.png" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
+        <Content Include="**\*.fsproj;**\*.fs;**\*.svg;**\*.png;**\TreeLoweringRuntime.js" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
     </ItemGroup>
     <ItemGroup>
         <!-- Phase 11.C.2 closure: parent companion README packed into each tier's nupkg. -->
@@ -308,6 +308,14 @@
              ClientHostBridge (it extends withElementView's shape) and the
              Core HostBindingSources type. -->
         <Compile Include="Client\HostStateProjection.fs" />
+        <!-- The internal lowering of a Fuaran-UI tree to the ReactElement the
+             view contract still returns. After HostStateProjection, whose
+             seams it wires. The runtime half holds the renderer and is reached
+             only through the dynamic import in TreeLowering, so it compiles
+             first; TreeLoweringRuntime.js beside it is the re-export a feed
+             consumer's bundle resolves that import through. -->
+        <Compile Include="Client\UI\TreeLoweringRuntime.fs" />
+        <Compile Include="Client\UI\TreeLowering.fs" />
         <!-- Phase 275 — hosted-tree i18n resolution seam: IHostI18nResolver
              resolves key + placeholder + locale against the Phase 179 i18n
              substrate (Translations / PseudoLocale / ApiError.applyPlaceholders,
@@ -557,5 +565,6 @@
     <PackageReference Include="Fable.SimpleJson" />
     <PackageReference Include="Fable.SimpleHttp" />
     <PackageReference Include="Feliz" />
+    <PackageReference Include="Fuaran.UI.Renderer" />
   </ItemGroup>
 </Project>

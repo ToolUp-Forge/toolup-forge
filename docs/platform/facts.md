@@ -845,6 +845,31 @@ it needs, and `Presentation.build` draws the answers as a Fuaran-UI node with th
   quoted numbers use. The attribute is host-side: a block that travels as wire JSON is
   rebuilt from its request where the reader is, under the reader's gate.
 
+#### A comparison with a day offset (Phase 1171)
+
+A comparison draws its delivery against a baseline, `compareTo`. `previousDelivery` (the
+default) is the latest earlier day the period's read holds a fact for. `daysBefore:<days>`
+is the delivery that many days before: `daysBefore:7` is the same day last week,
+`daysBefore:364` the same weekday last year. The offset is from 1 to 3,660 days; the codec
+refuses anything else naming `compareTo`.
+
+- **A second read, under the same gate.** `PresentationRequest.toQueries` asks for the
+  period's read and then a read of the one metric over the comparison day alone, however
+  far outside the period it lies. Every caller of `toQueries` (the render tools, the page
+  request resolver, a block the conversation panel rebuilds, a report's projection) issues
+  it, so one request resolves to the same rows on the client and on the server.
+- **The gap rule holds.** A subject is drawn only when both deliveries carry a published
+  number for it. A withheld point on the comparison day is absent from the rows and counted
+  in the notes (`… of revenue on 2025-10-04 are withheld …`) and in the provenance. A
+  comparison day with no facts, or one whose read was refused, is named on the block and
+  draws no chart; it is never drawn as zero.
+- **What the assistant is told is the deployment's choice.**
+  `PresentationCompose.withComparisonOffsets [ 7; 364 ]` lists each offset as a
+  `compareTo` baseline in `render_chart`, `layout_add_block` and `layout_set_request`. A
+  deployment that never calls it has the tool schemas it had before, byte for byte. The
+  offering is what the model is told, not what the vocabulary accepts: a stored request
+  naming any offset in bounds is drawn either way.
+
 ### A first upload leaves its metrics' surfaces warm (Phase 1124)
 
 `AssertBatch` loads the whole scope to find lineage heads whenever the

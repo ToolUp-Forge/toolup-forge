@@ -199,3 +199,51 @@ module PresentationCompose =
                             else
                                 definition, answer)
             }
+
+    /// Offer comparison day offsets to the assistant: `render_chart`'s
+    /// `compareTo`, and that of `layout_add_block` and `layout_set_request`
+    /// when the layout tools are composed, list a `daysBefore:<days>` baseline
+    /// per offset (7 is the same day last week, 364 the same weekday last
+    /// year). Composes the render tools first when they are not composed
+    /// (`withRenderTools`); call it after `withLayoutTools` for the layout
+    /// tools to take it. Only under `FeatureMode.Enabled`; under
+    /// `FeatureMode.Disabled` both are returned unchanged. A deployment that
+    /// never calls this has the tool schemas it had before, byte for byte.
+    /// The offering shapes what the model is told only: a stored request, a
+    /// report or a tool argument naming any offset in bounds is drawn either
+    /// way. **Sets** the composed tools' declarations, keeping their
+    /// executors; a later call replaces the offering. Raises
+    /// `ArgumentException` naming an offset out of bounds or offered twice.
+    ///
+    /// ```fsharp skip=fragment
+    /// let app, ai =
+    ///     (app, AIOptions.create factory providerProfile)
+    ///     |> PresentationCompose.withRenderTools
+    ///     |> PresentationCompose.withComparisonOffsets [ 7; 364 ]
+    /// app |> AICompose.withAI ai
+    /// ```
+    let withComparisonOffsets (offsets: int list) (app: ServerApp, ai: AIOptions) : ServerApp * AIOptions =
+        match app.Config.Stores.FactStore with
+        | FeatureMode.Disabled -> app, ai
+        | FeatureMode.Enabled ->
+            let offsets = RenderTools.checkOffsets offsets
+            let withTools, composed = withRenderTools (app, ai)
+
+            let offering (definition: AIToolDefinition) =
+                if definition.Name = RenderTools.ChartToolName then
+                    Some(RenderTools.definitionOffering offsets RenderTool.Chart)
+                else
+                    LayoutTools.all
+                    |> List.tryFind (fun tool -> LayoutTools.name tool = definition.Name)
+                    |> Option.map (LayoutTools.definitionOffering offsets)
+
+            withTools,
+            {
+                composed with
+                    AIAnsweringTools =
+                        composed.AIAnsweringTools
+                        |> List.map (fun (definition, answer) ->
+                            match offering definition with
+                            | Some offered -> offered, answer
+                            | None -> definition, answer)
+            }

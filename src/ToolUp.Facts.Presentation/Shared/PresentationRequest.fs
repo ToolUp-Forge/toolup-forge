@@ -52,6 +52,51 @@ type PresentationPeriod =
 type PresentationCompareTo =
     /// The latest earlier day the series holds any fact for.
     | PreviousDelivery
+    /// The delivery `days` days before the drawn one: 7 is the same day last
+    /// week, 364 the same weekday last year. Positive, and at most
+    /// `PresentationCompareTo.MaxDaysBefore`.
+    | DaysBefore of days: int
+
+/// A comparison baseline's canonical text.
+[<RequireQualifiedAccess>]
+module PresentationCompareTo =
+    /// The largest day offset a comparison may draw against: ten years.
+    [<Literal>]
+    let MaxDaysBefore = 3660
+
+    /// The prefix of an offset baseline's canonical text, `daysBefore:<days>`.
+    [<Literal>]
+    let DaysBeforePrefix = "daysBefore:"
+
+    /// The baseline's canonical text: `previousDelivery`, or
+    /// `daysBefore:<days>` for an offset.
+    let text (compareTo: PresentationCompareTo) : string =
+        match compareTo with
+        | PresentationCompareTo.PreviousDelivery -> "previousDelivery"
+        | PresentationCompareTo.DaysBefore days -> DaysBeforePrefix + string days
+
+    /// The baseline `s` names (case and surrounding space ignored), or `None`
+    /// when it names none. The offset's bound is the validator's to hold, so
+    /// an offset out of range parses and is refused by name.
+    let tryParse (s: string) : PresentationCompareTo option =
+        let t = s.Trim().ToLowerInvariant()
+        let prefix = DaysBeforePrefix.ToLowerInvariant()
+
+        if t = "previousdelivery" then
+            Some PresentationCompareTo.PreviousDelivery
+        elif t.StartsWith prefix then
+            let digits = t.Substring prefix.Length
+
+            if
+                digits.Length > 0
+                && digits.Length <= 9
+                && digits |> Seq.forall (fun c -> c >= '0' && c <= '9')
+            then
+                Some(PresentationCompareTo.DaysBefore(int digits))
+            else
+                None
+        else
+            None
 
 /// A labelled day the author marks: an event marker on a trend's axis, and a
 /// note beside any other kind. A label is text, never a number to plot.
@@ -232,6 +277,19 @@ module PresentationRequest =
             invalid "subjectLevel" "the level is blank"
         elif request.CompareTo.IsSome && request.Kind <> PresentationKind.Comparison then
             invalid "compareTo" (sprintf "a %s compares to nothing" (kindName request.Kind))
+        elif
+            (match request.CompareTo with
+             | Some(PresentationCompareTo.DaysBefore days) -> days < 1 || days > PresentationCompareTo.MaxDaysBefore
+             | _ -> false)
+        then
+            let days =
+                match request.CompareTo with
+                | Some(PresentationCompareTo.DaysBefore days) -> days
+                | _ -> 0
+
+            invalid
+                "compareTo"
+                (sprintf "the offset is %d days; it must be from 1 to %d" days PresentationCompareTo.MaxDaysBefore)
         elif request.Annotations |> List.exists (fun a -> blank a.Label) then
             invalid "annotations" "an annotation's label is blank"
         else
@@ -246,13 +304,24 @@ module PresentationRequest =
                     (sprintf "'to' (%s) is not after 'from' (%s)" (PresentationDay.iso until) (PresentationDay.iso from))
             | _ -> Ok request
 
-    /// The series reads the request asks for: one per metric, in the order
-    /// the request names them, at `maxPoints` (clamped by the read itself).
+    /// The day a comparison with a day offset draws against: the delivery
+    /// `days` before the drawn one. `None` for any other request.
+    let comparisonDay (request: PresentationRequest) : DateTime option =
+        match request.Kind, request.CompareTo with
+        | PresentationKind.Comparison, Some(PresentationCompareTo.DaysBefore days) ->
+            Some((delivery request).AddDays(float -days))
+        | _ -> None
+
+    /// The series reads the request asks for, at `maxPoints` (clamped by the
+    /// read itself): one per metric over the period, in the order the
+    /// request names them; then, for a comparison with a day offset, a
+    /// second read of its one metric over the comparison day alone, so the
+    /// comparison delivery is read under the same gate however far outside
+    /// the period it lies. The builders take the answers in this order.
     let toQueries (maxPoints: int) (request: PresentationRequest) : FactSeriesQuery list =
         let from, until = range request
 
-        request.Metrics
-        |> List.map (fun metric -> {
+        let query (metric: string) (from: DateTime) (until: DateTime) : FactSeriesQuery = {
             TableId = request.TableId
             Metric = metric
             SubjectPrefix = request.SubjectPrefix
@@ -260,7 +329,14 @@ module PresentationRequest =
             PeriodFrom = from
             PeriodTo = until
             MaxPoints = maxPoints
-        })
+        }
+
+        [
+            yield! request.Metrics |> List.map (fun metric -> query metric from until)
+            match comparisonDay request, request.Metrics with
+            | Some day, metric :: _ -> query metric day (day.AddDays 1.0)
+            | _ -> ()
+        ]
 
     // ── The JSON codec ────────────────────────────────────────────────
 
@@ -288,7 +364,7 @@ module PresentationRequest =
             | None -> ()
             "period", period
             match request.CompareTo with
-            | Some PresentationCompareTo.PreviousDelivery -> "compareTo", jstr "previousDelivery"
+            | Some compareTo -> "compareTo", jstr (PresentationCompareTo.text compareTo)
             | None -> ()
             match request.Title with
             | Some t -> "title", jstr t
@@ -382,16 +458,18 @@ module PresentationRequest =
     let private compareTo (v: JsonValue) : Result<PresentationCompareTo option, PresentationRequestError> =
         optionalString "compareTo" v
         |> Result.bind (fun s ->
-            match s |> Option.map (fun s -> s.Trim().ToLowerInvariant()) with
+            match s with
             | None -> Ok None
-            | Some "previousdelivery" -> Ok(Some PresentationCompareTo.PreviousDelivery)
-            | Some other ->
-                Error(
-                    PresentationRequestError.InvalidField(
-                        "compareTo",
-                        sprintf "'%s' is not 'previousDelivery'" (Option.defaultValue other s)
-                    )
-                ))
+            | Some text ->
+                match PresentationCompareTo.tryParse text with
+                | Some compareTo -> Ok(Some compareTo)
+                | None ->
+                    Error(
+                        PresentationRequestError.InvalidField(
+                            "compareTo",
+                            sprintf "'%s' is not 'previousDelivery' or 'daysBefore:<days>'" text
+                        )
+                    ))
 
     let private annotations (v: JsonValue) : Result<PresentationAnnotation list, PresentationRequestError> =
         match field "annotations" v with
@@ -583,8 +661,11 @@ module PresentationNarrative =
         | Ok request ->
             match undrawable request, series with
             | Some why, _ -> Error why
-            | None, _ when List.map (fun (s: FactSeries) -> s.Metric) series <> request.Metrics ->
-                Error "the series are not one per metric the request names, in its order"
+            | None, _ when
+                List.map (fun (s: FactSeries) -> s.Metric) series
+                <> (PresentationRequest.toQueries 1 request |> List.map _.Metric)
+                ->
+                Error "the series are not the reads the request asks for, in its order"
             | None, _ when series |> List.exists (fun s -> s.TableId <> request.TableId) ->
                 Error(sprintf "a series is not of table '%s'" request.TableId)
             | None, [] -> Error "the request names no metric"
@@ -626,23 +707,33 @@ module PresentationNarrative =
                 | PresentationKind.Comparison ->
                     let metric = request.Metrics.Head
 
-                    let before =
-                        first.Points
-                        |> List.map (fun p -> dayOf p.PeriodFrom)
-                        |> List.filter (fun d -> d < day)
-                        |> List.sortDescending
-                        |> List.tryHead
+                    // An offset comparison reads its comparison day as the
+                    // second series; the delivery before reads the period's.
+                    let before, header =
+                        match PresentationRequest.comparisonDay request, series with
+                        | Some offsetDay, [ _; offset ] when not (List.isEmpty (pointsOn offsetDay offset)) ->
+                            Some(pointsOn offsetDay offset), sprintf "%s, offset delivery" metric
+                        | Some _, _ -> None, ""
+                        | None, _ ->
+                            first.Points
+                            |> List.map (fun p -> dayOf p.PeriodFrom)
+                            |> List.filter (fun d -> d < day)
+                            |> List.sortDescending
+                            |> List.tryHead
+                            |> Option.map (fun d -> pointsOn d first),
+                            sprintf "%s, previous delivery" metric
 
                     match before with
+                    | None when (PresentationRequest.comparisonDay request).IsSome ->
+                        Error "the comparison day holds no fact to draw"
                     | None -> Error "the period holds no delivery before the one compared"
-                    | Some before ->
-                        let earlier = pointsOn before first
+                    | Some earlier ->
                         let known = labels (onDay.Head @ earlier)
 
                         Ok(
                             tableOf
                                 request
-                                [ level; metric; sprintf "%s, previous delivery" metric ]
+                                [ level; metric; header ]
                                 (subjects (onDay.Head @ earlier)
                                  |> List.map (fun s ->
                                      labelOf known s,

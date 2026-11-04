@@ -979,10 +979,55 @@ let private endToEndTests =
         }
     ]
 
+// ─── A comparison with a day offset ──────────────────────────────────
+//
+// The comparison day lies outside the one-day period, so the chart is drawn
+// only if the tool issues the second read, and that read is judged at the
+// same door as the first.
+
+/// The third seeded day against the first: two days before, outside the period.
+let private offsetComparison (tableId: string) (metric: string) : string =
+    PresentationRequest.toJson {
+        trendRequest with
+            Kind = PresentationKind.Comparison
+            TableId = tableId
+            Metrics = [ metric ]
+            Period = PresentationPeriod.Ending(day1.AddDays 2.0, 1)
+            CompareTo = Some(PresentationCompareTo.DaysBefore 2)
+            Title = Some "Revenue against two days before"
+    }
+
+let private offsetTests =
+    testList "a comparison with a day offset" [
+        test "render_chart reads the comparison day and draws the delivery against it" {
+            let w = world ()
+            let answered = answer RenderTool.Chart w (offsetComparison trade.Id "revenue")
+
+            Expect.equal
+                answered.Text
+                "Drew a comparison of revenue from fact table 'daily-trade' over 2026-10-03/2026-10-04, titled \"Revenue against two days before\": 4 point(s) read, none withheld. The user sees the block; this result carries none of its values, so state none."
+                "both reads are counted"
+
+            let node, provenance = blockOf answered
+            Expect.stringContains node "2026-10-01" "the comparison day is a series of the chart"
+            Expect.equal (List.length provenance.FactIds) 4 "both reads' points are cited"
+            Expect.allEqual w.Gate.Surfaces FactToolResult "both reads are judged at the tool-result door"
+        }
+
+        test "a comparison day the gate withholds is counted, never drawn" {
+            let w = world ()
+
+            answer RenderTool.Chart w (offsetComparison margins.Id "margin")
+            |> refusedWith
+                "render_chart refused the request: no point it reads carries a number you may be shown: 4 point(s) read, 4 withheld under trade-figures."
+        }
+    ]
+
 let tests =
     testList "Phase 1132 — render tools draw a chart or table from gated facts" [
         refusalTests
         answerTests
         compositionTests
         endToEndTests
+        offsetTests
     ]

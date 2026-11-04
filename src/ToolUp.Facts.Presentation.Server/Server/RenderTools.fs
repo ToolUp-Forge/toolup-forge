@@ -28,7 +28,8 @@ open ToolUp.Platform.Jobs.SmokeTests
 //      malformed one by name, and refuses a kind the other tool draws;
 //   2. checks the table, each metric and the subject level against the
 //      deployment's declarations, refusing an unknown one by name;
-//   3. reads one series per metric through the fact browse's series read,
+//   3. reads the series the request asks for (one per metric, and an offset
+//      comparison's comparison day) through the fact browse's series read,
 //      with the gate asked at the TOOL-RESULT door (`FactToolResult`): the
 //      result reaches the model and the conversation, so it is judged where
 //      every other fact tool's result is judged, never at the browse door;
@@ -111,13 +112,43 @@ module RenderTools =
             ToolSchema.field "label" "What the mark says. Text, never a number to plot." true ToolSchema.text
         ]
 
-    let private parameters (tool: RenderTool) : ToolParameterSchema list = [
+    /// The comparison baselines a schema offers: `previousDelivery`, then one
+    /// `daysBefore:<days>` per offered offset, in the order given.
+    let compareToValues (offsets: int list) : string list =
+        "previousDelivery"
+        :: (offsets
+            |> List.map (PresentationCompareTo.DaysBefore >> PresentationCompareTo.text))
+
+    /// The offsets as a deployment may offer them: each from 1 to
+    /// `PresentationCompareTo.MaxDaysBefore`, none twice. Raises
+    /// `ArgumentException` naming the first offset it refuses, so a bad
+    /// offering fails at composition, never in a model's turn.
+    let checkOffsets (offsets: int list) : int list =
+        match
+            offsets
+            |> List.tryFind (fun d -> d < 1 || d > PresentationCompareTo.MaxDaysBefore)
+        with
+        | Some d ->
+            invalidArg
+                "offsets"
+                (sprintf
+                    "a comparison offset of %d days is offered; each must be from 1 to %d"
+                    d
+                    PresentationCompareTo.MaxDaysBefore)
+        | None ->
+            match offsets |> List.countBy id |> List.tryFind (fun (_, n) -> n > 1) with
+            | Some(d, _) -> invalidArg "offsets" (sprintf "the comparison offset of %d days is offered twice" d)
+            | None -> offsets
+
+    let private parameters (offsets: int list) (tool: RenderTool) : ToolParameterSchema list = [
         ToolSchema.parameter
             "kind"
-            (match tool with
-             | RenderTool.Chart ->
+            (match tool, offsets with
+             | RenderTool.Chart, [] ->
                  "trend: one line per subject over the days of the period. breakdown: one bar per subject for the last day. comparison: the last day against the delivery before it, per subject."
-             | RenderTool.Table -> "Always table: subjects by metrics for the last day of the period.")
+             | RenderTool.Chart, _ ->
+                 "trend: one line per subject over the days of the period. breakdown: one bar per subject for the last day. comparison: the last day against the delivery before it, or against the delivery a given number of days before, per subject."
+             | RenderTool.Table, _ -> "Always table: subjects by metrics for the last day of the period.")
             true
             (ToolSchema.enumOf (kinds tool |> List.map PresentationRequest.kindName))
         ToolSchema.parameter "tableId" "The fact table to read." true ToolSchema.text
@@ -143,9 +174,12 @@ module RenderTools =
         | RenderTool.Chart ->
             ToolSchema.parameter
                 "compareTo"
-                "A comparison only: what the last day is drawn against."
+                (match offsets with
+                 | [] -> "A comparison only: what the last day is drawn against."
+                 | _ ->
+                     "A comparison only: what the last day is drawn against. previousDelivery: the latest earlier day with facts. daysBefore:<days>: the delivery that many days earlier (daysBefore:7 is the same day last week, daysBefore:364 the same weekday last year).")
                 false
-                (ToolSchema.enumOf [ "previousDelivery" ])
+                (ToolSchema.enumOf (compareToValues offsets))
         | RenderTool.Table -> ()
         ToolSchema.parameter
             "title"
@@ -173,10 +207,18 @@ module RenderTools =
     /// A tool's declaration: server-resident (a part is the server's judgement
     /// of a read the server made), on both surfaces, declaring `ReadFacts`
     /// only, under the fact store's reserved source.
-    let definition (tool: RenderTool) : AIToolDefinition = {
+    ///
+    /// `offsets` are the comparison day offsets the deployment offers
+    /// (`PresentationCompose.withComparisonOffsets`): `render_chart`'s schema
+    /// lists each as a `daysBefore:<days>` baseline. With none it is the schema
+    /// a deployment that offers none has always had, byte for byte. The
+    /// offsets shape what the model is told only: the request vocabulary
+    /// accepts any offset in bounds. Raises `ArgumentException` on an offset
+    /// out of bounds or offered twice.
+    let definitionOffering (offsets: int list) (tool: RenderTool) : AIToolDefinition = {
         Name = name tool
         Description = description tool
-        Parameters = parameters tool
+        Parameters = parameters (checkOffsets offsets) tool
         SourceModule = FactEvents.SourceModule
         EmitsActions = None
         Location = ServerResident
@@ -185,6 +227,10 @@ module RenderTools =
         ResultBudget = DefaultResultBudget
         Effects = ToolEffectDeclaration.readFacts
     }
+
+    /// A tool's declaration for a deployment that offers no comparison
+    /// offsets: `definitionOffering []`.
+    let definition (tool: RenderTool) : AIToolDefinition = definitionOffering [] tool
 
     // ── The answer ────────────────────────────────────────────────
 
@@ -388,11 +434,19 @@ module RenderTools =
                 refusal tool "the fact store is not composed in this deployment, so there are no facts to draw"
             )
 
-    /// Both tools, as `AIOptions.withAIAnsweringTools` takes them.
-    let tools: (AIToolDefinition * (HttpContext -> string -> Async<ToolHelpers.ToolAnswer>)) list = [
-        definition RenderTool.Chart, answer RenderTool.Chart
-        definition RenderTool.Table, answer RenderTool.Table
-    ]
+    /// Both tools, as `AIOptions.withAIAnsweringTools` takes them, their
+    /// schemas offering the comparison day `offsets` (`definitionOffering`).
+    let toolsOffering
+        (offsets: int list)
+        : (AIToolDefinition * (HttpContext -> string -> Async<ToolHelpers.ToolAnswer>)) list =
+        [
+            definitionOffering offsets RenderTool.Chart, answer RenderTool.Chart
+            definitionOffering offsets RenderTool.Table, answer RenderTool.Table
+        ]
+
+    /// Both tools, offering no comparison offsets: `toolsOffering []`.
+    let tools: (AIToolDefinition * (HttpContext -> string -> Async<ToolHelpers.ToolAnswer>)) list =
+        toolsOffering []
 
     // ── The language profile's grammar ────────────────────────────
     //
