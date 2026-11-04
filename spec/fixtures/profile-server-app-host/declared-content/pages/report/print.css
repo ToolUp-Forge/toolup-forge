@@ -1,0 +1,4 @@
+/* A print stylesheet a report page inlines (profile section P3.18). Synthetic. */
+@media print {
+  .report-frame { max-width: none; }
+}

@@ -28,9 +28,11 @@ open ToolUp.Platform.Compose
 // What it holds together:
 //   1. the fixtures and their recorded digests, and the profile version
 //      across the document, the registry, the manifest and the binding;
-//   2. the document's tables against the registry, in both directions;
+//   2. the document's tables against the registry, in both directions,
+//      each node kind's member table in the registry's order;
 //   3. the registered setting grammars against the vectors that must
-//      admit, or refuse, a setting value;
+//      admit, or refuse, a setting value, and the content a vector
+//      declares against the files it carries under its contentRoot;
 //   4. §P8's facet declaration against the core's facet-family vectors for
 //      this profile, pinned by digest in `spec/fixtures/core/`;
 //   5. base-token ownership: the registry's root bases are distinct, and a
@@ -128,6 +130,22 @@ let private sectionOf (doc: string) (heading: string) : string option =
 let private firstColumnTokens (section: string) = [
     for m in Regex.Matches(section, @"(?m)^\|\s*`([^`]+)`\s*\|") -> m.Groups[1].Value
 ]
+
+/// The first-column tokens of the section's FIRST table only, in order.
+let private firstTableTokens (section: string) =
+    section.Split('\n')
+    |> Array.skipWhile (fun l -> not (l.StartsWith "|"))
+    |> Array.takeWhile _.StartsWith("|")
+    |> String.concat "\n"
+    |> firstColumnTokens
+
+/// The `name` of each object in a registry member list, in order.
+let private memberNames (e: JsonElement option) : string list =
+    match e with
+    | Some v when v.ValueKind = JsonValueKind.Array -> [
+        for x in v.EnumerateArray() -> str "name" x |> Option.defaultValue "?"
+      ]
+    | _ -> []
 
 // ── 1. fixtures, digests and versions ─────────────────────────────────
 
@@ -241,6 +259,8 @@ let private tokenSections = [
     "§P2.19 `reportTemplate.placeholders` `kind`", "reportTemplate.placeholders.kind"
     "§P2.20 `reportTemplate.placeholders` `columns` `kind`", "reportTemplate.placeholders.columns.kind"
     "§P2.21 `factBrowse.mount`", "factBrowse.mount"
+    "§P2.22 `pageRef.content` and `layoutRef.content` `mode`", "pageRef.content.mode"
+    "§P2.22 `pageRef.content` and `layoutRef.content` `mode`", "layoutRef.content.mode"
     "§P2.8.1 A column's `shape`", "moduleRef.factTables.definition.columns.shape"
     "§P2.8.2 A definition's `historyMode`", "moduleRef.factTables.definition.historyMode"
     "§P2.8.3 A disclosure's `class`", "moduleRef.factTables.definition.disclosure.class"
@@ -456,6 +476,55 @@ let documentFindings (p: Profile) : string list = [
             ("§P3", kinds)
             ("the registry", members (prop "nodeKinds" p.Registry) |> List.map fst)
 
+    // Each kind's member table, in the registry's order: the order is the canonical encoding's.
+    for m in Regex.Matches(doc, @"(?m)^### §P3\.\d+ `([a-zA-Z]+)`.*$") do
+        let kind = m.Groups[1].Value
+
+        let inDoc =
+            sectionOf doc m.Value |> Option.map firstTableTokens |> Option.defaultValue []
+
+        let inReg =
+            p.Registry
+            |> prop "nodeKinds"
+            |> Option.bind (prop kind)
+            |> Option.bind (prop "members")
+            |> memberNames
+
+        if inDoc <> inReg then
+            sprintf "%s: §P3 lists the members %A, the registry %A" kind inDoc inReg
+
+    // §P3.18 — the content entry, its inline forms and its serve prefix.
+    let declared = prop "declaredContent" p.Registry
+
+    match sectionOf doc "### §P3.18 What declared content obliges" with
+    | None -> "the document has no §P3.18 section, which the registry's declaredContent renders"
+    | Some section ->
+        let entry = declared |> Option.bind (prop "entry") |> memberNames
+
+        if entry.IsEmpty || firstTableTokens section <> entry then
+            sprintf
+                "declared content: §P3.18 lists the entry members %A, the registry %A"
+                (firstTableTokens section)
+                entry
+
+        yield!
+            both
+                "inline forms"
+                ("§P3.18",
+                 [
+                     for f in Regex.Matches(section, @"(?m)^\|\s*`(\.[a-z0-9]+)`\s*\|\s*`<([a-z]+)>`\s*\|") ->
+                         f.Groups[1].Value + " " + f.Groups[2].Value
+                 ])
+                ("the registry",
+                 declared
+                 |> Option.bind (prop "inlineForms")
+                 |> members
+                 |> List.map (fun (ext, element) -> ext + " " + element.GetString()))
+
+        match declared |> Option.bind (str "servePrefix") with
+        | Some prefix when section.Contains(sprintf "The prefix `%s` is fixed" prefix) -> ()
+        | other -> sprintf "§P3.18 does not fix the serve prefix the registry declares (%A)" other
+
     // Every refusal class the registry lists is stated in the document.
     for c in strings (prop "refusalClasses" p.Registry) do
         if not (doc.Contains("`" + c + "`")) then
@@ -636,6 +705,96 @@ let grammarFindings (p: Profile) : string list = [
     for g in grammars do
         if not (refusedUnder.Contains g) then
             sprintf "no knob-value-unregistered vector refuses a value under the %s grammar" g
+]
+
+// ── 3a. declared content against the bytes its vectors carry ─────────
+
+/// Every content entry a composition declares, as (node id, source, contentHash).
+let private contentEntries (doc: JsonElement) : (string * string * string) list =
+    let found = ResizeArray()
+
+    let rec walk (n: JsonElement) =
+        match n.ValueKind with
+        | JsonValueKind.Array -> n.EnumerateArray() |> Seq.iter walk
+        | JsonValueKind.Object ->
+            match str "kind" n, prop "content" n with
+            | Some("layoutRef" | "pageRef"), Some content when content.ValueKind = JsonValueKind.Array ->
+                for entry in content.EnumerateArray() do
+                    match str "source" entry, str "contentHash" entry with
+                    | Some source, Some hash -> found.Add(str "id" n |> Option.defaultValue "?", source, hash)
+                    | _ -> ()
+            | _ -> ()
+
+            for p in n.EnumerateObject() do
+                walk p.Value
+        | _ -> ()
+
+    walk doc
+    List.ofSeq found
+
+/// The bytes at `source` under a vector's content root, or None when no file is there.
+let readContent (root: string) (source: string) : byte array option =
+    let path = Path.Combine(root, source.Replace('/', Path.DirectorySeparatorChar))
+
+    if File.Exists path then
+        Some(File.ReadAllBytes path)
+    else
+        None
+
+/// A vector that carries its files (§P6) names a `contentRoot`; there, every declared hash is the
+/// hash of the file it names, except in the content-hash-mismatch vectors, which must not be.
+let contentFindings (p: Profile) (read: string -> string -> byte array option) : string list = [
+    let fixtures = Path.Combine(p.Dir, "fixtures")
+    let mutable carrying = 0
+    let mutable mismatches = 0
+
+    for e in vectorEntries p do
+        let id = str "id" e |> Option.defaultValue "?"
+        let isMismatch = str "reject" e = Some "content-hash-mismatch"
+
+        let entries =
+            contentEntries (readJson (Path.Combine(fixtures, str "file" e |> Option.defaultValue "")))
+
+        let mustCarry =
+            isMismatch || str "kind" e = Some "round-trip" || str "kind" e = Some "accept"
+
+        match str "contentRoot" e with
+        | None when mustCarry && not entries.IsEmpty ->
+            sprintf "%s: declares content and names no contentRoot its sources resolve against" id
+        | None -> ()
+        | Some root ->
+            let rootDir = Path.Combine(fixtures, root)
+
+            if not (Directory.Exists rootDir) then
+                sprintf "%s: its contentRoot %s is not a directory" id root
+            elif entries.IsEmpty then
+                sprintf "%s: names a contentRoot and declares no content" id
+            else
+                carrying <- carrying + 1
+
+                let unmatched =
+                    entries
+                    |> List.filter (fun (_, source, hash) ->
+                        match read rootDir source with
+                        | Some bytes -> "sha256:" + sha256Hex bytes <> hash
+                        | None -> true)
+
+                if isMismatch then
+                    mismatches <- mismatches + 1
+
+                    if unmatched.IsEmpty then
+                        sprintf
+                            "%s: refused as content-hash-mismatch, and every file it declares hashes to its contentHash"
+                            id
+                else
+                    for node, source, _ in unmatched do
+                        sprintf "%s: %s's %s is absent or does not hash to its contentHash under %s" id node source root
+
+    if carrying = 0 then
+        "no vector carries the files its content declares, so no contentHash was checked"
+
+    if mismatches = 0 then
+        "no content-hash-mismatch vector carries its files, so §P4.81 went untested"
 ]
 
 // ── 4. §P8 certified against the core's facet-family vectors ─────────
@@ -975,6 +1134,37 @@ let surfaceFindings (p: Profile) (surface: Surface) : string list = [
              (List.ofSeq caseKnobs
               |> List.filter (fun k -> surface.Knobs |> List.exists (fst >> (=) k)))
              @ unregisteredKnobs)
+
+    // Declared content: each registered mode reduces to something forge has, under the registry's prefix.
+    let declared = prop "declaredContent" b
+    let modes = declared |> Option.bind (prop "modes") |> members
+
+    for slot in [ "pageRef.content.mode"; "layoutRef.content.mode" ] do
+        yield! both slot ("the registry", registryTokens slot) ("the surface binding", modes |> List.map fst)
+
+    let prefixOf e =
+        prop "declaredContent" e |> Option.bind (str "servePrefix")
+
+    if prefixOf b <> prefixOf p.Registry then
+        sprintf
+            "declared content: the surface binding serves under %A, the registry fixes %A"
+            (prefixOf b)
+            (prefixOf p.Registry)
+
+    for mode, target in modes do
+        match str "field" target with
+        | Some field ->
+            for f in field :: Option.toList (str "behaviourField" target) do
+                if (fieldType f).IsNone then
+                    sprintf "declared content %s: ServerConfig has no field %s" mode f
+        | None -> yield! resolveTarget ("declared content " + mode) target
+
+        if (str "reducesTo" target |> Option.defaultValue "").Trim() = "" then
+            sprintf "declared content %s: the binding states nothing it reduces to" mode
+
+    match declared |> Option.bind (prop "contentPolicy") with
+    | Some policy -> yield! resolveTarget "declared content's content-policy admission" policy
+    | None -> "declared content: the surface binding names no route by which an inline element is admitted"
 ]
 
 // ── the suite ─────────────────────────────────────────────────────────
@@ -993,6 +1183,10 @@ let tests =
 
         test "the setting grammars admit every accepted vector and refuse every knob-value-unregistered one" {
             expectNone (grammarFindings (load ()))
+        }
+
+        test "the content a vector declares is the bytes it carries, except where §P4.81 refuses it" {
+            expectNone (contentFindings (load ()) readContent)
         }
 
         test "§P8's facet declaration is certified against the core's facet-family vectors" {
@@ -1041,6 +1235,26 @@ let tests =
                     (withBinding (fun t ->
                         t.Replace("ToolUp.RAG.RAGCompose.RagOptions", "ToolUp.RAG.RAGCompose.Planted")))
                     surface
+                // a declared file's bytes move under the hash that pins them.
+                "a declared file whose bytes moved",
+                contentFindings p (fun root source ->
+                    readContent root source
+                    |> Option.map (fun bytes -> Array.append bytes [| 10uy |]))
+                // the binding serves declared content somewhere the registry does not fix.
+                "a serve prefix the registry does not fix",
+                surfaceFindings
+                    (withBinding (fun t -> t.Replace("\"servePrefix\": \"_declared\"", "\"servePrefix\": \"_content\"")))
+                    surface
+                // the document's member table drops a registered member.
+                "a member table missing a member",
+                documentFindings {
+                    p with
+                        Document =
+                            p.Document.Replace(
+                                "| `content` | array of content entry objects (§P3.18) | OPTIONAL (7.1); non-empty when present |\n",
+                                ""
+                            )
+                }
                 // the document drops a registered token.
                 "a document missing a token",
                 documentFindings {

@@ -1,6 +1,6 @@
 # forge composition profile — `server-app-host`
 
-**Profile version 7.0.** forge's evaluator profile of the **App-composition wire specification, format version 1**
+**Profile version 7.1.** forge's evaluator profile of the **App-composition wire specification, format version 1**
 (<https://github.com/Fuaran-Build/fuaran-app-composition-specification>, cited throughout as *core*). Sections §P1–§P8 are **normative** within this profile. §P0 and Appendix P-A
 are not.
 
@@ -47,7 +47,7 @@ Each shape this profile fills in is the core's, cited by its section: the root (
 | | |
 |---|---|
 | Profile identifier | `server-app-host` |
-| Profile version | 7.0 |
+| Profile version | 7.1 |
 | Profile kind | vocabulary (core §8.6) |
 | Core | App-composition wire specification, format version 1 — <https://github.com/Fuaran-Build/fuaran-app-composition-specification> |
 | Core version | 1 |
@@ -368,6 +368,19 @@ forge's composable surface. And three vectors that had been captured from built 
 vectors exercising the same tokens, kinds and rules — `layered-client-app`, `connector-host` and
 `server-rendered-host` — and a module name the fact-tier vectors shared is renamed; the history above names vectors
 by their 7.0 identifiers.
+
+**7.0 → 7.1 lets a page and a layout declare content, additively.** Until 7.1 a page or layout author had no way to
+say that a stylesheet or a script belongs to the document they write: the author of a page or a layout writes one
+file, compiled into a project the reduction generates, so a resource or a content file of their own reached the host
+only by an edit outside the composition, which the composition's record never showed.
+7.1 gives `layoutRef` and `pageRef` the OPTIONAL `content` member (§P3.2, §P3.3): an ordered list of files, each
+declared by its `source` and the `contentHash` of its bytes — the content-addressed spelling a reference dataset, a
+binary template and a theme already use — and a `mode` from the closed vocabulary of §P2.22, `inline` (the bytes
+enter the server-rendered document's head) or `serve` (the bytes are served beside it, under a prefix this profile
+fixes). §P3.18 states what each mode obliges, the order the elements take, and what the declaration does not claim;
+§P4.76–§P4.81 add six rules, each refusing at the composition, or at the reduction, what a host would otherwise
+serve wrongly or not at all. Every 7.0 composition carries no `content`, so it encodes byte for byte as before and
+meets every new rule vacuously.
 
 ## §P2. Token vocabularies
 
@@ -868,6 +881,18 @@ Which halves of a fact browse a host mounts (§P3.15).
 A token outside this set is `token-unregistered`. An absent `mount` is the surface and the client module that
 browses it, together. A client module without the surface is not registered: it would call routes nothing serves.
 
+### §P2.22 `pageRef.content` and `layoutRef.content` `mode` — **closed**
+
+How a content entry's bytes reach the document a page or layout renders (7.1, §P3.18). The two slots range over one
+set.
+
+| Token | The bytes |
+|---|---|
+| `inline` | Enter the server-rendered document's head as an element of its own — a `<style>` for a `.css` file, a `<script>` for a `.js` one. No other file has an inline form (§P4.78). |
+| `serve` | Are written to the host's public directory at `_declared/<node id>/<file name>` and served at that path; the document links a `.css` file and loads a `.js` one from there, and any other file is the page's own to reference. |
+
+A token outside this set is `token-unregistered`.
+
 ## §P3. Profile-only node kinds
 
 All of them are declared by this profile and none exists in the core (core §5.9). A `core` reader
@@ -903,6 +928,7 @@ access grant: a reader who follows it meets the page's own audience (§P3.3).
 | `name` | string | REQUIRED |
 | `view` | profile token (§P2.4), `fuaranUI` only | OPTIONAL |
 | `viewSpec` | citation object (core §6) | per §P2.4, when `view` is present |
+| `content` | array of content entry objects (§P3.18) | OPTIONAL (7.1); non-empty when present |
 
 Names a server-side rendering layout the composition selects. `name` MUST be non-empty. Its one
 admissible child is the `entityReads` naming what it reads (§P3.10, §P4.1).
@@ -912,6 +938,9 @@ rendered on the server, and the page it frames is rendered within it. `view` is 
 — a layout is rendered before any client runs, and a view composed outside anything this composition
 types is what an absent `view` already says — and any other token is a malformed node. An absent `view`
 is a layout the deployment writes itself, exactly as before 2.3.
+
+`content` is the layout's declared content (7.1): files of its author's own that enter the document of every page it
+frames, inlined or served as §P3.18 obliges.
 
 The value space is deliberately **not** registered: which layouts exist is a property of a particular
 deployment's own content, not of the evaluator family, and a closed list here would go stale on
@@ -932,6 +961,7 @@ somebody else's schedule.
 | `title` | string | OPTIONAL |
 | `layout` | string | OPTIONAL |
 | `captures` | object: capture name → profile token (§P2.11) | OPTIONAL; non-empty when present |
+| `content` | array of content entry objects (§P3.18) | OPTIONAL (7.1); non-empty when present |
 
 A page the composition **publishes**: rendered server-side and served at `route`, to the readers
 `audience` names. Its one admissible child is the `entityReads` naming what it reads (§P3.10, §P4.1). A `layoutRef` names a template a page is framed by; a `pageRef` is the
@@ -950,7 +980,8 @@ document say two things, and is refused as a malformed node.
 naming none is framed by the first `layoutRef` the composition declares. `captures` declares the type
 of each named capture, its members in the order written: a capture it does not name is an untyped
 segment, and an empty `captures` object is a malformed node — "no typed capture" has one spelling, the
-absent member.
+absent member. `content` is the page's declared content (7.1), inlined into its document or served beside it as
+§P3.18 obliges, after the content of the layout that frames it.
 
 **What serving a page obliges.** Two things, both stated here because an evaluator that left them to
 its own route matching would serve pages the composition never declared:
@@ -1386,6 +1417,81 @@ control — the resolution in the client and the assistant's own tool calls on t
 declaration, so the two cannot disagree. A switch a host does not implement is one it leaves off, and never one it
 widens: a host that cannot resolve an instruction directly takes its ordinary path for every instruction, and the
 allowlist still binds it.
+
+### §P3.18 What declared content obliges *(the `content` member of §P3.2 and §P3.3)*
+
+A `layoutRef` or a `pageRef` may declare **content** (7.1): files of the author's own that belong to the document the
+node renders — a layout's stylesheet, a page's script, an image a page shows. The member is an array of content
+entry objects in the order written. It is omitted when the node declares none, and an empty array is refused
+(§P4.76), because "declares none" has one spelling. A content entry object is, in this order:
+
+| Member | Type | Presence |
+|---|---|---|
+| `source` | string | REQUIRED |
+| `contentHash` | string | REQUIRED |
+| `mode` | profile token (§P2.22) | REQUIRED |
+
+- `source` is the file: a relative path under the application's root, in §P4.32's grammar (§P4.77).
+- `contentHash` is `sha256:` followed by the 64 lower-case hexadecimal digits of the SHA-256 of the file's **raw
+  bytes**, as §P3.6 states it for a dataset (§P4.76).
+- `mode` is how the bytes reach the document (§P2.22).
+
+**The inline forms.** An `inline` entry's element is fixed by its source's extension, written in lower case:
+
+| Extension | Element |
+|---|---|
+| `.css` | `<style>` |
+| `.js` | `<script>` |
+
+The element's content is the file's text, UTF-8, exactly as the file holds it: a host neither minifies, escapes nor
+rewrites it. A file of any other extension has no inline form (§P4.78).
+
+**The serve prefix.** A `serve` entry is written to the host's public directory at `_declared/<id>/<file name>` —
+`<id>` the `id` of the node that declares it, `<file name>` the last segment of its `source` — and served at the path
+`/_declared/<id>/<file name>`, each segment percent-encoded as a URL path segment. The prefix `_declared` is fixed by
+this profile and reserved to declared content: a host writes nothing of its own under it and serves nothing else
+there, and a composition that serves declared content routes no page under it (§P4.80). The document links a served
+`.css` file with `<link rel="stylesheet">` and loads a served `.js` file with `<script src>`. For any other served
+file, an image or a font, the host adds nothing to the document, and the page's own view references it at its path.
+A served file's name carries an extension, which names the media type it is served with, and a node that serves
+content has an `id` that is one path segment (§P4.76).
+
+**What reducing obliges.** Before it writes anything, a host reads every declared file and refuses to reduce when a
+file is absent or its bytes do not hash to `contentHash` (§P4.81): the check §P3.6 obliges of a reference dataset,
+made where the files are read. A host never inlines or serves bytes other than the ones the composition declares, so
+replacing a file is a change to the composition — the file, and the hash that pins it — and to nothing else.
+
+**The order.** The elements of a page's document head stand in one order, so which stylesheet wins the cascade is the
+composition's to say and not an accident of the host's:
+
+1. the stylesheets the host itself carries into every document it renders on the server;
+2. the content of the layout that frames the page, then the content of the page, each in the order written: an inline
+   entry as its element, and a served `.css` or `.js` entry as its link or its script, in the same position;
+3. the house theme's values (§P3.16), when the composition declares one.
+
+So the theme overrides declared content, declared content overrides the host's own stylesheets, and a page's content
+overrides its layout's. A layout's content enters the document of every page it frames.
+
+**What the audience does not cover.** A host serves a served file before it routes any page and before it identifies
+any reader, so the file is served to anyone who asks for its path, whatever the audience of the page that declares
+it. A page's audience gates the page (§P3.3), never its served content; content that must be gated is inlined.
+
+**The escape hatch.** Declared content is the bounded route by which an author's own bytes enter what the host
+serves. It is stated in three parts so that an inventory of the stack's escape hatches can cite it:
+
+- **What crosses.** Author-declared bytes, into a document the host renders on the server — a stylesheet or a script
+  inlined in its head — or served beside it at a path this profile fixes. A declared script runs with the authority
+  of the page it enters.
+- **What mediates.** The content hash, checked against the file's raw bytes when the composition is reduced
+  (§P4.81); the closed `mode` (§P2.22) and its two inline forms (§P4.78); the source grammar, which keeps every source
+  under the application's root (§P4.77); and the fixed serve prefix, under which a host writes and routes nothing of
+  its own (§P4.80).
+- **What is not claimed.** Anything about the bytes' safety for the page they enter. The hash detects drift from what
+  the composition declared and authenticates nobody: it says the bytes are the declared ones, not that they are
+  benign. A host does not escape inlined text, so a sequence in it that closes its element ends the element early. A
+  served file is not confidential (above). And under a content security policy that admits no inline element, an
+  inlined element runs only where the deployment admits it, by a nonce or by the hash of its bytes; that admission is
+  the deployment's configuration, not this declaration's.
 
 ## §P4. Composition rules
 
@@ -1977,6 +2083,51 @@ it first.
 A `uiControl` node's `triageProvider`, when present, is the `id` of a `companionSelection` whose `slot` is
 `aiProvider` (6.8). A host cannot route an instruction to a provider the composition does not compose.
 
+### §P4.76 Declared content is well formed — `content-malformed`
+
+A node's `content`, when present, is not empty. Each entry's `contentHash` is `sha256:` followed by exactly 64
+lower-case hexadecimal digits. A `serve` entry's file name — the last segment of its `source` — carries an extension:
+a `.` that is neither its first nor its last character. A node carrying a `serve` entry has an `id` that is one path
+segment: non-empty, neither `.` nor `..`, and carrying no `/`, `\`, `:` or control character (7.1). Each is a
+declaration a host could only meet as a refusal when it reduces, or as a file nobody can fetch; the composition
+refuses it first. A `mode` outside §P2.22 is `token-unregistered`.
+
+### §P4.77 A declared source stays inside the application — `content-source-invalid`
+
+An entry's `source` is a relative path in §P4.32's grammar — one or more segments separated by `/`, no segment empty,
+`.` or `..`, and no `\`, `:` or control character anywhere — so it names one file under the application's root on
+every host and cannot name an absolute path or a file outside the root (7.1).
+
+### §P4.78 An inline entry has an inline form — `content-inline-unsupported`
+
+An `inline` entry's `source` ends `.css` or `.js`, in lower case (§P3.18). Inlining an image or a font would oblige a
+host to invent an element for it, and two hosts would invent two documents.
+
+### §P4.79 A node declares a file once — `content-duplicate`
+
+No two entries of one node's `content` carry the same `source`, compared character for character, whatever their
+modes (7.1). A file declared twice would enter the document twice, or by two routes, and the composition would say two
+things about one file. Two NODES may declare one file: a layout and a page it frames that both declare it put it in
+the page's document twice, which is theirs to avoid, and not a malformed declaration. Refused once per repeated
+source.
+
+### §P4.80 A served file has a path of its own — `content-path-collision`
+
+No two `serve` entries of one node have file names that are equal once ASCII letters are lower-cased: a host's file
+system may not distinguish them, and two files written to one path leave one of them unserved. And a composition
+carrying any `serve` entry carries no `pageRef` whose `route` begins with the literal segment `_declared`: the prefix
+is declared content's (§P3.18), and a page under it would be served or shadowed according to which files a reduction
+wrote (7.1). Entries on different nodes cannot collide, because the node's `id` is a segment of the path and no two
+nodes share an `id` (core §3.2); two entries naming one source are §P4.79's, not this rule's. Refused once per
+colliding entry and once per page.
+
+### §P4.81 Declared bytes are the bytes the composition pins — `content-hash-mismatch`
+
+When it reduces a composition, a host reads each declared file at its `source` under the application's root, and
+refuses to reduce when the file is absent or the SHA-256 of its raw bytes is not the entry's `contentHash` (7.1). The
+composition alone cannot answer this rule, because it does not carry the bytes; the reduction answers it, before it
+writes anything (§P3.18). A vector of this rule names the directory its sources resolve against (§P6).
+
 ## §P5. Extension
 
 This profile registers no extension declaration of its own. The core registry (core §7.4) applies
@@ -1995,14 +2146,21 @@ the profile by name. It carries every `core` obligation (core §2.1) and additio
 - refuses, on a **registered** key of §P2.5, a value its grammar does not admit;
 - reads and writes `clientShell`, `layoutRef`, `pageRef`, `groundedNarrative`, `aiFunding`,
   `referenceData`, `dataDelivery`, `entityReads`, `reportTemplate`, `reportProducer`,
-  `subscriptionPrincipal`, `standingSubscription`, `factBrowse`, `theme` and `uiControl` (§P3);
-- enforces §P4.1–§P4.3, §P4.5, §P4.7–§P4.55 and §P4.57–§P4.75, builds each project the root declares as §P4.56 obliges,
+  `subscriptionPrincipal`, `standingSubscription`, `factBrowse`, `theme` and `uiControl` (§P3), and the
+  `content` member of `layoutRef` and `pageRef` (§P3.18);
+- enforces §P4.1–§P4.3, §P4.5, §P4.7–§P4.55 and §P4.57–§P4.81, builds each project the root declares as §P4.56 obliges,
   serves a page as §P3.3 obliges, a fact browse as §P3.15 obliges and a client shell's home entries as §P3.1 obliges,
-  applies a declared theme as §P3.16 obliges, enforces a declared allowlist as §P3.17 obliges,
-  verifies every
-  reference dataset as §P3.6 obliges and every binary template body as §P3.11 obliges before it serves,
-  honours each unit's AI exposure and
-  classified fields as §P3.7 obliges, and registers each declared disclosure policy as §P3.9 obliges.
+  applies a declared theme as §P3.16 obliges, inlines and serves declared content as §P3.18 obliges, enforces a
+  declared allowlist as §P3.17 obliges, verifies every reference dataset as §P3.6 obliges and every binary template
+  body as §P3.11 obliges before it serves, honours each unit's AI exposure and classified fields as §P3.7 obliges, and
+  registers each declared disclosure policy as §P3.9 obliges.
+
+**A vector that carries its files.** §P4.81 is answered by a reduction, not by the composition, so its vector supplies
+the bytes the composition declares: its manifest entry's `contentRoot` names a directory, relative to the manifest,
+that stands for the application's root, and every `source` in the vector resolves against it. A claim to this profile
+reads the declared files there when it runs the vector, as it reads them under an application's root when it
+reduces. The round-trip vectors that declare content carry a `contentRoot` too, and each of their hashes is the hash
+of the file it names there, so the one vector whose bytes do not match is the reject.
 
 An implementation that reads compositions written for this profile but implements none of the above
 claims `core`, not this profile, and that claim is both honest and useful (core Appendix B.4).
@@ -2019,8 +2177,8 @@ A change to this profile updates, in the same change-set: this document, [`regis
 `profile-server-app-host` vectors and their digests in [`fixtures/manifest.json`](fixtures/manifest.json), the facet
 declaration in §P8 and its renderings in the registry and that manifest, and forge's binding of the registry to its
 surface ([`surface-binding.json`](surface-binding.json)). When the change is one §P1 names as a version event, the
-profile version moves in all four of its renderings — the header, the §P1 table, the registry's `profileVersion` and
-the manifest's — in that same change-set. A forge change that moves the composable surface this profile registers is
+profile version moves in all five of its renderings — the header, the §P1 table, the registry's `profileVersion`, the
+manifest's and the surface binding's — in that same change-set. A forge change that moves the composable surface this profile registers is
 such a change, and lands with it.
 
 The gate is the composition-profile surface check in forge's Platform test pack, run by `verify.ps1`. It compares

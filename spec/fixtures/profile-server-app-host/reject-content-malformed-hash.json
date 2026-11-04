@@ -1,0 +1,1 @@
+{"kind":"appRoot","base":"publicRenderingServerApp","layers":[],"id":"reject-content-malformed-hash","children":[{"kind":"layoutRef","name":"report","content":[{"source":"layouts/report/report.css","contentHash":"sha256:8C48BAC778FCCE876CA63618F36C2386BCB66DA9BB493F9FF4B5D6D88A3A96BC","mode":"inline"}],"id":"layout-report","children":[]}]}

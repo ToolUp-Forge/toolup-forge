@@ -2,7 +2,7 @@
   "specification": "app-composition-wire",
   "coreVersion": 1,
   "profile": "server-app-host",
-  "profileVersion": "7.0",
+  "profileVersion": "7.1",
   "note": "The machine-readable rendering of composition-profile.md sections P2, P3 and P8. Normative; the composition-profile surface check in this repository compares the two renderings and fails when they disagree. Counts appear nowhere: this file is the enumeration.",
   "tokens": {
     "appRoot.base": {
@@ -181,6 +181,14 @@
     "factBrowse.mount": {
       "closure": "closed",
       "tokens": ["serverOnly"]
+    },
+    "pageRef.content.mode": {
+      "closure": "closed",
+      "tokens": ["inline", "serve"]
+    },
+    "layoutRef.content.mode": {
+      "closure": "closed",
+      "tokens": ["inline", "serve"]
     }
   },
   "nodeKinds": {
@@ -194,7 +202,8 @@
       "members": [
         { "name": "name", "type": "string", "presence": "required" },
         { "name": "view", "type": "token", "presence": "optional; fuaranUI when present" },
-        { "name": "viewSpec", "type": "citation", "presence": "per moduleRef.view, when view is present" }
+        { "name": "viewSpec", "type": "citation", "presence": "per moduleRef.view, when view is present" },
+        { "name": "content", "type": "array of content entry objects", "presence": "optional; non-empty when present" }
       ],
       "leaf": false
     },
@@ -210,7 +219,8 @@
         { "name": "viewSpec", "type": "citation", "presence": "per moduleRef.view" },
         { "name": "title", "type": "string", "presence": "optional" },
         { "name": "layout", "type": "string", "presence": "optional" },
-        { "name": "captures", "type": "object of token", "presence": "optional; non-empty when present" }
+        { "name": "captures", "type": "object of token", "presence": "optional; non-empty when present" },
+        { "name": "content", "type": "array of content entry objects", "presence": "optional; non-empty when present" }
       ],
       "leaf": false
     },
@@ -363,6 +373,16 @@
     "layoutRef": ["entityReads"],
     "groundedNarrative": ["entityReads"]
   },
+  "declaredContent": {
+    "note": "The content entry object the content member of layoutRef and pageRef holds (section P3.18), the prefix every served entry is written and served under, and the element each inline extension enters the document as.",
+    "entry": [
+      { "name": "source", "type": "string", "presence": "required" },
+      { "name": "contentHash", "type": "string", "presence": "required" },
+      { "name": "mode", "type": "profile token", "presence": "required" }
+    ],
+    "servePrefix": "_declared",
+    "inlineForms": { ".css": "style", ".js": "script" }
+  },
   "atMostOne": ["serverConfig", "clientShell", "portAllocation", "factBrowse", "theme", "uiControl"],
   "clientBearingBases": ["serverApp"],
   "undeclaredSurfaceKind": "view",
@@ -457,6 +477,12 @@
     "theme-malformed",
     "ui-control-client-absent",
     "ui-control-allow-malformed",
-    "ui-control-triage-provider-unknown"
+    "ui-control-triage-provider-unknown",
+    "content-malformed",
+    "content-source-invalid",
+    "content-inline-unsupported",
+    "content-duplicate",
+    "content-path-collision",
+    "content-hash-mismatch"
   ]
 }

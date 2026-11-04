@@ -1,6 +1,6 @@
 {
   "profile": "server-app-host",
-  "profileVersion": "7.0",
+  "profileVersion": "7.1",
   "note": "forge's binding of the profile's registered tokens to its own composable surface. Not part of the wire format and not normative for any other evaluator: a token is a wire spelling, and this file says which forge type, field or builder each one reduces to. It also names the parts of forge's reflected surface the profile deliberately does not register, each with its reason, so a forge release that grows its surface fails the surface check until the profile either registers the addition or says here why it does not.",
   "bases": {
     "serverApp": { "assembly": "ToolUp.Platform.Server", "type": "ToolUp.Platform.Compose.ServerApp" },
@@ -96,6 +96,30 @@
       "type": "ToolUp.Platform.Compose.ServerAppModule",
       "member": "withEncryptedBlobStorage",
       "reason": "No ServerConfig field: SingleKeyResolver names the key arrangement forge composes through this builder."
+    }
+  },
+  "declaredContent": {
+    "note": "What each mode of a content entry (profile section P3.18) reduces to in forge. No new forge member: an inline entry is written by the reduction into the head of the layout it registers, and a served entry is a file the reduction writes into the deployment's public directory, which forge serves as it serves the client shell.",
+    "servePrefix": "_declared",
+    "modes": {
+      "inline": {
+        "reducesTo": "An element in the head of the layout function the reduction registers with withLayout: a style element for a .css file, a script element for a .js one, after the stylesheets the reduction itself carries and before the theme's.",
+        "assembly": "ToolUp.PublicRendering",
+        "type": "ToolUp.PublicRendering.PublicRenderingCompose.PublicRenderingOptionsModule",
+        "member": "withLayout"
+      },
+      "serve": {
+        "reducesTo": "A file under ServerConfig.PublicPath at _declared/<node id>/<file name>, served by the UseStaticFiles stage forge composes over that directory, ahead of authentication and page routing; a .css file is linked from the layout's head and a .js file loaded from it, in the inline elements' order.",
+        "field": "PublicPath",
+        "pipeline": "UseStaticFiles",
+        "behaviourField": "StaticPathBehaviour"
+      }
+    },
+    "contentPolicy": {
+      "reason": "Under a SecurityHardening mode forge's content security policy admits no inline script, and under the strict mode no inline style, so an inline element executes only where the deployment admits it: by the per-request nonce (NonceCsp) or, for a script, by the hash of its bytes (HashCsp). Served files are same-origin and need no admission.",
+      "assembly": "ToolUp.Platform.Server",
+      "type": "ToolUp.Platform.Compose.ServerAppModule",
+      "member": "withCspSourceMode"
     }
   },
   "unregisteredSettings": {

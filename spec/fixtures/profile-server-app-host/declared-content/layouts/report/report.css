@@ -1,0 +1,5 @@
+/* A layout stylesheet a report layout inlines (profile section P3.18). Synthetic. */
+.report-frame {
+  max-width: 60rem;
+  margin: 0 auto;
+}

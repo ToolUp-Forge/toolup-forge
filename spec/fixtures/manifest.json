@@ -3,7 +3,7 @@
   "formatVersion": 1,
   "profile": "server-app-host",
   "profileKind": "vocabulary",
-  "profileVersion": "7.0",
+  "profileVersion": "7.1",
   "registry": "../registry.json",
   "conformanceFamilies": [
     "document",
@@ -1897,6 +1897,137 @@
       "reject": "ui-control-triage-provider-unknown",
       "detect": "profile",
       "description": "A uiControl whose triageProvider, cheap, names no companion selection (section P4.75): the composition's only AI provider is ai, and a host cannot route an instruction to a provider the composition does not compose."
+    },
+    {
+      "id": "profile-server-app-host/declared-content-inline",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "round-trip",
+      "file": "profile-server-app-host/declared-content-inline.json",
+      "sha256": "5da407e930516a9b9eb3e7d81a1f80c1b9f0b0948e8fb445e493979096681154",
+      "contentRoot": "profile-server-app-host/declared-content",
+      "description": "Declared content inlined (7.1, section P3.18): a report layout inlines its stylesheet and a dated report page framed by it inlines a print stylesheet and a script, so the page's document head carries, after the host's own stylesheets and before any theme, the layout's style element, then the page's style and script elements in written order. Each source resolves against contentRoot and each contentHash is the SHA-256 of that file's raw bytes. Every 7.1 rule is met."
+    },
+    {
+      "id": "profile-server-app-host/declared-content-serve",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "round-trip",
+      "file": "profile-server-app-host/declared-content-serve.json",
+      "sha256": "f57b5eb378489bce16fc76c91fa307f122d7339a44aa7a60e3f914e01d195c31",
+      "contentRoot": "profile-server-app-host/declared-content",
+      "description": "Declared content served (7.1, section P3.18): a brochure layout serves its stylesheet and an about page serves a stylesheet and an image, so the reduction writes them under the reserved prefix at _declared/layout-brochure/brochure.css, _declared/page-about/about.css and _declared/page-about/team.svg, the document links the two stylesheets in its head, and the image is the page's own to reference. The page is gated to authenticated readers and the files are not: a served file is served to any reader who asks for its path. Every 7.1 rule is met."
+    },
+    {
+      "id": "profile-server-app-host/reject-content-malformed",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-content-malformed.json",
+      "sha256": "34e88f3d9bf2aaf54187f4d9819b34de397be6f0afaddb7564c7dc26a896e450",
+      "reject": "content-malformed",
+      "detect": "profile",
+      "description": "A layout whose content list is empty (section P4.76): a node that declares no content omits the member, so the empty list is that meaning spelled a second way."
+    },
+    {
+      "id": "profile-server-app-host/reject-content-malformed-hash",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-content-malformed-hash.json",
+      "sha256": "479498dff157f560409dc2fabdaaee305000bb1e8f1cb6202ec28526008510a3",
+      "reject": "content-malformed",
+      "detect": "profile",
+      "description": "A content entry whose contentHash spells its digest in upper-case hexadecimal (section P4.76): the digest is written in lower case, one spelling for one value, as section P4.32 holds a dataset's."
+    },
+    {
+      "id": "profile-server-app-host/reject-content-source-invalid",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-content-source-invalid.json",
+      "sha256": "593df0ba0a4da64a8259a5332222884c05bb116c15f17296cf95eb0365b755a5",
+      "reject": "content-source-invalid",
+      "detect": "profile",
+      "description": "A content entry whose source, layouts/../../shared/report.css, climbs out of the application's root (section P4.77): a declared source names one file under the root and cannot name one outside it."
+    },
+    {
+      "id": "profile-server-app-host/reject-content-hash-mismatch",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-content-hash-mismatch.json",
+      "sha256": "aa55d7cd77f2c679a3af875adacae6975a4a567cb4ad23395fd0b3c6a4dd5d84",
+      "reject": "content-hash-mismatch",
+      "detect": "profile",
+      "contentRoot": "profile-server-app-host/declared-content",
+      "description": "A content entry whose contentHash is the digest of another file (section P4.81): the composition is well formed, and only reading the file at its source under contentRoot shows the bytes are not the ones it pins. A reduction refuses it before it writes anything."
+    },
+    {
+      "id": "profile-server-app-host/reject-content-inline-unsupported",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-content-inline-unsupported.json",
+      "sha256": "35604e4e139396582868082b9544b597e3e7812f914b5d3ef5e6d7b644d2cbd3",
+      "reject": "content-inline-unsupported",
+      "detect": "profile",
+      "description": "A page inlining an image (section P4.78): only a .css or .js file has an inline form, so an inline entry of any other extension names an element no host writes."
+    },
+    {
+      "id": "profile-server-app-host/reject-content-path-collision",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-content-path-collision.json",
+      "sha256": "521aaf905d0623dcecb71836caadcd709d2b923f01319ca6e462a942eddbf845",
+      "reject": "content-path-collision",
+      "detect": "profile",
+      "description": "A page serving two files of one name, print.css and Print.css, from different folders (section P4.80): both would be written to the one served path _declared/page-latest/print.css on a host whose file names ignore case, and only one of them could be served. The bytes are not read."
+    },
+    {
+      "id": "profile-server-app-host/reject-content-path-collision-route",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-content-path-collision-route.json",
+      "sha256": "5fc2707c85a9c36aed38016e66263cb1ff96c3d261842a0ab0a59b3dac67ef35",
+      "reject": "content-path-collision",
+      "detect": "profile",
+      "description": "A composition serving declared content beside a page whose route begins with the reserved prefix, _declared/notes (section P4.80): the prefix is declared content's, and a page under it would be served or shadowed according to which files a reduction wrote."
+    },
+    {
+      "id": "profile-server-app-host/reject-content-duplicate",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-content-duplicate.json",
+      "sha256": "bab4271b3ac61b79727c2cc57e48528aeedd908db2f8325219d6ee5e70232a1d",
+      "reject": "content-duplicate",
+      "detect": "profile",
+      "description": "A page declaring one source twice, once to inline and once to serve (section P4.79): a node names a file once, and two entries for it would put its bytes into the document twice or by two routes."
+    },
+    {
+      "id": "profile-server-app-host/reject-token-unregistered-content-mode",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-token-unregistered-content-mode.json",
+      "sha256": "4eb461afb14ebcb358079105f6bd0e69b233b826419f5807012c995e3140e5b6",
+      "reject": "token-unregistered",
+      "detect": "profile",
+      "description": "A content entry whose mode, embed, is not one of section P2.22's two: the mode is closed, so an evaluator never guesses what an unregistered one would do with the bytes."
     }
   ]
 }
