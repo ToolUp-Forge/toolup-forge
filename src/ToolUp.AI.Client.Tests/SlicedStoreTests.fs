@@ -538,6 +538,138 @@ let private gridChunkTests =
                 Expect.equal grids 1 "and the grid from the chunk is mounted"
     ]
 
+[<Emit("Promise.reject(new Error($0))")>]
+let private rejected (reason: string) : JS.Promise<obj> = jsNative
+
+[<Emit("Array.from($0)")>]
+let private arrayFrom (arrayLike: obj) : obj array = jsNative
+
+/// The tree renderer is a dynamic import, the same shape as the grid's: the
+/// prerender pass emits the loading state, hydration adopts it and the real
+/// chunk then draws the tree under jsdom. The failed chunk is driven through
+/// the loader seam, because a real import cannot be made to fail on demand.
+let private treeChunkTests =
+    let tree () =
+        TreeLowering.column "tree" [ TreeLowering.heading "tree-heading" 2 "Tree from the chunk" ]
+
+    let lowered () =
+        TreeLowering.lower HostBindingSources.empty ignore<unit> (tree ())
+
+    let headings (document: obj) =
+        unbox<int> (document?querySelectorAll "h2")?length
+
+    testList "the tree renderer chunk" [
+
+        testCase "the prerender pass emits the loading state and no tree" (fun () ->
+            let html = renderToString (Html.div [ prop.id "ssr"; prop.children [ lowered () ] ])
+            Expect.isTrue (html.Contains "aria-busy=\"true\"") $"the placeholder is in the markup: {html}"
+            Expect.isFalse (html.Contains "Tree from the chunk") "no tree can render before its chunk has loaded")
+
+        testCaseDeferred "hydration adopts the prerendered page, and the tree replaces the placeholder" 15000
+        <| fun () ->
+            let document = installDom "tree-h"
+
+            let view () =
+                Html.div [ prop.id "tree-h-out"; prop.children [ lowered () ] ]
+
+            let host = document?getElementById "tree-h"
+            host?innerHTML <- renderToString (view ())
+            let serverNode = document?getElementById "tree-h-out"
+            let mutable adopted = false
+            let mutable placeholders = -1
+            let mutable drawn = 0
+            let store = ModelStore.create<int, CounterMsg> ()
+
+            Program.mkProgram (fun () -> 0, Cmd.none) (fun Bump model -> model + 1, Cmd.none) (fun _ _ -> view ())
+            |> Program.withReactStoreHydrate store "tree-h"
+            |> Program.run
+
+            JS.setTimeout
+                (fun () ->
+                    adopted <- obj.ReferenceEquals(document?getElementById "tree-h-out", serverNode)
+                    placeholders <- unbox<int> (document?querySelectorAll "[aria-busy=true]")?length
+                    drawn <- headings document)
+                12000
+            |> ignore
+
+            fun () ->
+                Expect.isTrue adopted "hydration kept the server's node"
+                Expect.equal placeholders 0 "the loading state is gone"
+                Expect.equal drawn 1 "and the tree from the chunk is drawn"
+
+        testCaseDeferred "a failed chunk shows the module error, and Reload fetches it again" 15000
+        <| fun () ->
+            let document = installDom "tree-f"
+            let mutable fetches = 0
+
+            // The first fetch fails and every later one is the real import, so
+            // the Reload below succeeds only if the failed component was dropped.
+            TreeLowering.useLoader (
+                Some(fun () ->
+                    fetches <- fetches + 1
+
+                    if fetches = 1 then
+                        rejected "the renderer chunk did not arrive"
+                    else
+                        TreeLowering.importRuntime ())
+            )
+
+            let messages = MessageCatalog.english.ModuleBoundary
+
+            let view (resets: int) dispatch =
+                Components.ModuleBoundary.wrapWith
+                    messages
+                    "tree-module"
+                    (string resets)
+                    (Some ignore)
+                    (fun () -> dispatch Bump)
+                    InputsPaneWidth.Narrow
+                    (fun () -> PageContent.Custom(lowered ()))
+
+            let store = ModelStore.create<int, CounterMsg> ()
+
+            Program.mkProgram (fun () -> 0, Cmd.none) (fun Bump model -> model + 1, Cmd.none) view
+            |> Program.withReactStore store "tree-f"
+            |> Program.run
+
+            let reloadButton () =
+                arrayFrom (document?querySelectorAll "button")
+                |> Array.tryFind (fun b -> string b?textContent = messages.Reload)
+
+            let mutable failedFetches = 0
+            let mutable errorShown = false
+            let mutable blank = true
+            let mutable drawnAfterReload = 0
+            let mutable totalFetches = 0
+            let mutable boundaryAfterReload = true
+
+            JS.setTimeout
+                (fun () ->
+                    failedFetches <- fetches
+                    errorShown <- (reloadButton ()).IsSome
+                    blank <- string document?body?textContent = ""
+                    reloadButton () |> Option.iter (fun b -> b?click ())
+
+                    JS.setTimeout
+                        (fun () ->
+                            totalFetches <- fetches
+                            drawnAfterReload <- headings document
+                            boundaryAfterReload <- (reloadButton ()).IsSome)
+                        8000
+                    |> ignore)
+                3000
+            |> ignore
+
+            fun () ->
+                TreeLowering.useLoader None
+                Expect.equal failedFetches 1 "the chunk was asked for once"
+                Expect.isTrue errorShown "the module error with its Reload button is shown"
+                Expect.isFalse blank "not a blank module"
+                Expect.equal totalFetches 2 "Reload asked for the chunk again"
+                Expect.equal drawnAfterReload 1 "and the tree from it is drawn"
+                Expect.isFalse boundaryAfterReload "and the module error is gone"
+    ]
+
 let tests =
     testList "Phase 852 - the sliced model store" [
         storeBindingTests
@@ -545,4 +677,5 @@ let tests =
         gridCompareTests
         sidebarBoundaryTests
         gridChunkTests
+        treeChunkTests
     ]
