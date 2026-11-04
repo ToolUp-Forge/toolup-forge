@@ -1,7 +1,9 @@
 # Comparisons with a day offset — this delivery against last week, or the same weekday last year
 
-**Ships in:** ToolUp.Facts.Presentation and ToolUp.Facts.Presentation.Server 0.39.0. Rides the 0.39.0 draft. The
-class is additive: a union case, functions and one compose verb, and no existing request or schema changes.
+**Ships in:** ToolUp.Facts.Presentation and ToolUp.Facts.Presentation.Server 0.39.0. Rides the 0.39.0 draft, which
+is already breaking, so no version moves. The class is breaking: `PresentationCompareTo` is a closed union that
+gains a case, and an exhaustive match over it must add that case; everything else is additions (functions and one
+compose verb), and no existing request or schema changes.
 
 **Affected:** nobody until they opt in. The one source-level effect: code that matches **exhaustively** over
 `PresentationCompareTo` now sees a second case (FS0025, an error under warnings-as-errors).
