@@ -1378,6 +1378,22 @@ module Client =
             @ teamScopedLoaders
         )
 
+    /// Whether the deployment wants a sign-in and this reader has not done one.
+    ///
+    /// A dev composition root that sets `DevDefaultUserId` ships a stable
+    /// header identity (X-User-Id) that the boot loaders attach via
+    /// `UserSession.withRequestHeaders`, so they succeed against a
+    /// header-auth-accepting server even with no JWT. That identity counts like
+    /// a token: without it a no-JWT dev build skips the team / role / config
+    /// loaders entirely, so the shell never learns the caller's active team —
+    /// and the no-team gate (`NoActiveTeamLandingModuleId`) would then
+    /// mis-classify every dev user as teamless. Production (real OIDC) always
+    /// has a token, so this only changes the no-JWT dev path.
+    let private isSignedOut (config: ClientConfig) : bool =
+        ClientConfig.requiresAnyAuth config
+        && UserSession.getAuthToken () |> Option.isNone
+        && config.DevDefaultUserId |> Option.isNone
+
     let init (_config: ClientConfig) (queryBus: IModuleQueryBus) (modules: ErasedModule list) () =
         // Phase 6g.C: publish the registered module list so companion
         // packages (e.g. a client-resident navigate executor) can
@@ -1395,14 +1411,22 @@ module Client =
             : RegisteredModules.ModuleEntry))
         |> RegisteredModules.publish
 
+        let signedOut = isSignedOut _config
+        let signedIn = ClientConfig.requiresAnyAuth _config && not signedOut
+
         // Phase 1240 — the view the URL names, if the deployment gave views
         // URLs. It only chooses the initial selection: the deny-before-`Init`
         // decisions below read this module exactly as they read a default one.
+        // Phase 1241 — signed in with no view in the URL, the view kept across
+        // sign-in stands in for it, under those same decisions.
         let restoredView =
             match _config.BrowserHistory with
             | NoBrowserHistory -> None
             | HashHistory ->
-                BrowserHistory.current (RegisteredModules.snapshot ())
+                let entries = RegisteredModules.snapshot ()
+
+                BrowserHistory.current entries
+                |> Option.orElseWith (fun () -> if signedIn then BrowserHistory.stored entries else None)
                 |> Option.map parseSidebarId
 
         let moduleImpl =
@@ -1422,27 +1446,11 @@ module Client =
 
             tryFind modules initialId |> Option.defaultValue modules[0]
 
-        let needsAuth = ClientConfig.requiresAnyAuth _config
-        let hasToken = UserSession.getAuthToken () |> Option.isSome
-
-        // A dev composition root that sets `DevDefaultUserId` ships a stable
-        // header identity (X-User-Id) that the boot loaders attach via
-        // `UserSession.withRequestHeaders`, so they succeed against a
-        // header-auth-accepting server even with no JWT. Treat that identity
-        // like a token for the boot-fetch gate: without it a no-JWT dev build
-        // skips the team / role / config loaders entirely, so the shell never
-        // learns the caller's active team — and the no-team gate
-        // (`NoActiveTeamLandingModuleId`) would then mis-classify every dev
-        // user as teamless. Production (real OIDC) always has a token, so this
-        // only changes the no-JWT dev path.
-        let hasDevIdentity = _config.DevDefaultUserId |> Option.isSome
-
         // 0.5.16 — defer module `Init` only when prefetches are in flight
         // AND will populate real values before the active module renders.
-        // That is: `needsAuth && hasToken`. The other two cases mount
-        // immediately:
+        // That is: signed in. The other two cases mount immediately:
         //
-        // - `needsAuth && not hasToken` (Welcome Page / mixed-mode
+        // - signed out (Welcome Page / mixed-mode
         //   anonymous-side): boot loaders are skipped below, so there's
         //   no prefetch window to wait on. Module `Init` runs with the
         //   empty seed; the auth gate covers the shell for single-auth
@@ -1451,7 +1459,7 @@ module Client =
         //   `AuthTokenAcquired` which flips Ready → Reprefetching and
         //   takes the standard skip-when-unchanged path.
         //
-        // - `not needsAuth` (anonymous-only deployment): loaders fire
+        // - no sign-in wanted (anonymous-only deployment): loaders fire
         //   and typically return empty maps from the server. Module
         //   `Init` runs with the empty seed; on prefetch arrival the
         //   existing `reinitActiveAfterPrefetch` skip-when-unchanged
@@ -1461,7 +1469,7 @@ module Client =
         // the `Prefetching` invariant holds and the view renders the
         // skeleton; `initActiveOnFirstPrefetchReady` populates the
         // entry on Ready promotion.
-        let willDeferInit = needsAuth && (hasToken || hasDevIdentity)
+        let willDeferInit = signedIn
 
         // Phase 569.B — the route guard on the immediate-mount boot path
         // (anonymous-only deployments and the pre-sign-in side of mixed
@@ -1567,7 +1575,7 @@ module Client =
         // See `programLifetimeEffects` below.
 
         let initCmds =
-            if needsAuth && not hasToken && not hasDevIdentity then
+            if signedOut then
                 // Welcome-Page case: the user hasn't signed in yet and
                 // every auth-required fetch would 401. Drop them
                 // entirely; the `auth-token-acquired` lifetime effect
@@ -1579,12 +1587,27 @@ module Client =
 
         // Phase 1240 — the first entry names its view too, or Back to it would
         // land on a URL with nothing to restore.
+        //
+        // Phase 1241 — a signed-in boot has used the kept view or been overruled
+        // by the URL, so it goes either way. A signed-out boot keeps the view its
+        // URL named, and only that: an issuer's callback boots the shell signed
+        // out with no fragment, on its way to reloading `/`, and the default view
+        // it shows meanwhile must not overwrite the view being carried.
         let firstEntryCmd =
             match _config.BrowserHistory with
             | NoBrowserHistory -> []
             | HashHistory ->
                 let view = BrowserHistory.viewId model.ActiveModuleId model.ActivePageRoute
-                [ Cmd.ofEffect (fun _ -> BrowserHistory.replace view) ]
+
+                [
+                    Cmd.ofEffect (fun _ ->
+                        BrowserHistory.replace view
+
+                        if signedIn then
+                            BrowserHistory.forget ()
+                        elif signedOut && restoredView.IsSome then
+                            BrowserHistory.store view)
+                ]
 
         model, Cmd.batch (initCmds @ firstEntryCmd)
 
@@ -2159,7 +2182,7 @@ module Client =
                 // `ConfigsLoaded` / `FlagsLoaded` second-arrival promotes
                 // back to `Ready` via the skip-when-unchanged guard.
                 // `Prefetching` is unreachable here in practice (only set
-                // when `needsAuth && hasToken` at boot, which precludes
+                // when signed in at boot, which precludes
                 // a later `None → Some` token transition) but defensively
                 // a no-op: loaders are already in flight from `init`.
                 match model.InitPhase with
@@ -2598,6 +2621,11 @@ module Client =
     /// entry, so Back does not land on a view that would redirect again. A Back
     /// or Forward arrives here as `ModuleSelected` too, and adds nothing: the
     /// URL already names the view when the write runs.
+    ///
+    /// Phase 1241 — while signed out, the view kept across sign-in follows the
+    /// reader. Whether they are signed out is read when the command runs, so
+    /// `update` stays free of reads too. A token arriving with the reader still
+    /// on the kept view is a sign-in that did not leave the page, so it goes.
     let update (config: ClientConfig) (queryBus: IModuleQueryBus) (modules: ErasedModule list) msg model =
         let next, cmd = updateShell config queryBus modules msg model
 
@@ -2607,14 +2635,25 @@ module Client =
             let view = BrowserHistory.viewId next.ActiveModuleId next.ActivePageRoute
 
             if view = BrowserHistory.viewId model.ActiveModuleId model.ActivePageRoute then
-                next, cmd
+                match msg with
+                | AuthTokenAcquired ->
+                    next, Cmd.batch [ cmd; Cmd.ofEffect (fun _ -> BrowserHistory.forgetIfNames view) ]
+                | _ -> next, cmd
             else
                 let write =
                     match msg with
                     | ModuleSelected _ -> BrowserHistory.push
                     | _ -> BrowserHistory.replace
 
-                next, Cmd.batch [ cmd; Cmd.ofEffect (fun _ -> write view) ]
+                next,
+                Cmd.batch [
+                    cmd
+                    Cmd.ofEffect (fun _ ->
+                        write view
+
+                        if isSignedOut config then
+                            BrowserHistory.store view)
+                ]
 
     /// Phase 1069 — the module-state observer publish (Phase 6g.A, 536),
     /// moved out of `update` so the shell's `update` performs no side

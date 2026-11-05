@@ -24,6 +24,15 @@ open ToolUp.Platform.RegisteredModules
 // Both writes compare against the URL when they run, which is what keeps a
 // Back or Forward from pushing again: by the time the navigation it dispatched
 // reaches a write, the URL already names that view.
+//
+// ─── Phase 1241 — a view across sign-in ────────────────────────────────
+//
+// Signing in can leave the page: the reader goes to an issuer and comes back on
+// a reload of `/`, with the fragment gone. The shell cannot see that happen, so
+// while signed out it keeps the reader's view in `sessionStorage`, which is per
+// tab and survives the trip, and a signed-in boot takes it. Storage can refuse
+// anything, a full quota or a private window, down to the property access, so
+// every call is caught: the view is simply not carried.
 
 [<Emit("typeof window !== 'undefined' && typeof window.history !== 'undefined'")>]
 let private hasHistory () : bool = jsNative
@@ -49,6 +58,17 @@ let private encodeUri (text: string) : string = jsNative
 
 [<Emit("decodeURI($0)")>]
 let private decodeUri (text: string) : string = jsNative
+
+[<Emit("window.sessionStorage.getItem($0)")>]
+let private sessionGet (key: string) : string = jsNative
+
+[<Emit("window.sessionStorage.setItem($0, $1)")>]
+let private sessionSet (key: string) (value: string) : unit = jsNative
+
+[<Emit("window.sessionStorage.removeItem($0)")>]
+let private sessionRemove (key: string) : unit = jsNative
+
+let private storedViewKey = "toolup-view-before-sign-in"
 
 /// The sidebar id of a view: `{moduleId}{pageRoute}`.
 let viewId (moduleId: string) (pageRoute: string option) : string = moduleId + defaultArg pageRoute ""
@@ -120,3 +140,38 @@ let subscribe (entries: unit -> ModuleEntry list) (onView: string -> unit) : uni
         fun () -> removePopStateListener handler
     else
         ignore
+
+let private readStored () : string option =
+    try
+        match sessionGet storedViewKey with
+        | null -> None
+        | stored -> Some stored
+    with _ ->
+        None
+
+/// Keep a view for the trip through sign-in.
+let store (sidebarId: string) : unit =
+    try
+        sessionSet storedViewKey sidebarId
+    with _ ->
+        ()
+
+/// The view kept for this tab, resolved against the registered modules. Stored
+/// text is reader input exactly as a URL is, so it is held to the same check,
+/// and the shell's route guard still decides what the reader sees.
+let stored (entries: ModuleEntry list) : string option =
+    readStored () |> Option.bind (resolve entries)
+
+/// Drop the view kept for this tab, so it cannot resurface later.
+let forget () : unit =
+    try
+        sessionRemove storedViewKey
+    with _ ->
+        ()
+
+/// Drop the view kept for this tab if it is this one: a sign-in that finished
+/// without leaving the page has nothing left to carry. Another view is left
+/// alone, since that is a page about to reload onto `/` with the view still owed.
+let forgetIfNames (sidebarId: string) : unit =
+    if readStored () = Some sidebarId then
+        forget ()

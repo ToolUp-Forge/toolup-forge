@@ -15,9 +15,11 @@ With `ClientConfig.BrowserHistory = HashHistory`:
 - selecting a view adds one history entry, and Back and Forward move between views without adding any;
 - a reload or a pasted URL restores the view, including a page of a multi-page module;
 - a redirect the shell makes for itself, such as the no-active-team gate sending a caller to the landing module, replaces
-  the current entry, so Back does not land on a view that redirects again.
+  the current entry, so Back does not land on a view that redirects again;
+- a signed-out reader who opens a view's URL, signs in and returns in the same tab lands on the view they were on when
+  they left (Phase 1241). The view waits in `sessionStorage`, is used once, and is removed if the URL names a view.
 
-A URL is reader input, so restoring one goes through the route guard. A module the reader may not see renders the typed
+A URL or a stored view is reader input, so restoring one goes through the route guard. A module the reader may not see renders the typed
 "not authorised" view with its `Init` not run. An unknown id is ignored, and an undeclared page falls back to the
 module's first page.
 
@@ -42,8 +44,6 @@ Nothing else is needed. `AIClientConfig.withSidePanel` and any other composer ov
 
 ## Limits to check before you opt in
 
-- **Sign-in drops the fragment.** The OIDC callback finishes with a reload of `/`, so a signed-out reader who opens a
-  view's URL lands on the default surface after signing in. A signed-in reader's reload is not affected.
 - **A prerendered page.** If a prerendered route hydrates with a fragment naming a different view from the one rendered,
   React reports a hydration mismatch and re-renders on the client. The view is still correct.
 - **Bookmarks name module ids.** A view's URL is built from its module id and page route, so renaming either breaks URLs
@@ -55,6 +55,8 @@ Nothing else is needed. `AIClientConfig.withSidePanel` and any other composer ov
 2. Reload on a page of a multi-page module. The same page returns.
 3. Paste the URL of an admin module as a non-admin. The "not authorised" view renders and its API calls are not made.
 4. Open a path your server answers, such as an auth callback or a server-rendered page. It resolves as before.
+5. Signed out, open a view's URL and sign in. The same view returns. Open `/` again in that tab and the default surface
+   does.
 
 ## Rollback
 
