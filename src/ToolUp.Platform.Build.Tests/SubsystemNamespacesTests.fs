@@ -18,8 +18,10 @@ open ToolUp.Platform
 // of a moved path is rewritten, a qualified path too, the opens a file
 // needs are derived from the names its code uses (never a name inside a
 // string or a comment) and placed after its header whatever the header's
-// spelling, where the old resolution is kept, a tier file never opens a
-// later part, and a second run changes nothing. The
+// spelling, where the old resolution is kept, inside a nested module that has
+// opens of its own, never from a case name the tree or another open already
+// answers, a tier file never opens a later part, a dead open is reported and
+// not deleted, and a second run changes nothing. The
 // TABLE arm holds the shipped name table to a fresh scan of the tree,
 // so the resource the Codemod reads cannot drift from the sources.
 
@@ -71,6 +73,12 @@ let private table =
             NewNamespace = "ToolUp.Platform.Infra.Metrics"
         }
     ]
+
+/// The hand-built table with what an open of `ToolUp.Platform` reaches.
+let private tableWithPlatform = {
+    table with
+        Reaches = table.Reaches.Add("ToolUp.Platform", set [ "ServerConfig"; "Ok"; "String" ])
+}
 
 let private rewrite (text: string) =
     SubsystemNamespaces.rewriteText table (text.Replace("\r\n", "\n"))
@@ -225,7 +233,7 @@ let tests =
                     "only the code paths move"
 
             testCase
-                "a consumer's opens are derived from the names it mentions, after its last open, and the run is idempotent"
+                "a consumer's opens are derived from the names it mentions, after its open of ToolUp.Platform, and the run is idempotent"
             <| fun () ->
                 let before =
                     "module Consumer.Server\n\nopen System\nopen ToolUp.Platform\n\nlet app = ServerApp.create ()\nlet schedule (s: IJobScheduler) = s\nlet unrelated = Widget\n"
@@ -344,7 +352,7 @@ let tests =
 
                     Expect.equal
                         after
-                        (sprintf "module Consumer.Server\n\nopen System\nopen ToolUp.Platform.Jobs\n\n%s\n" body)
+                        (sprintf "module Consumer.Server\n\nopen ToolUp.Platform.Jobs\nopen System\n\n%s\n" body)
                         name
 
             testCase "a qualified path or an open inside a string spanning lines is not rewritten"
@@ -405,6 +413,302 @@ let tests =
                 Expect.equal (header |> Option.map _.Path) (Some "``Some name``") "the code's header"
                 Expect.equal (header |> Option.map _.Line) (Some 3) "and its line"
 
+            testCase "a consumer's part opens go straight after its open of ToolUp.Platform, above its later opens"
+            <| fun () ->
+                let before =
+                    "module Consumer.Server\n\nopen System\nopen ToolUp.Platform\nopen Consumer.Domain\n\nlet schedule (s: IJobScheduler) = s\n"
+
+                let after, _ = rewrite before
+
+                Expect.equal
+                    (lines after)
+                    [
+                        "module Consumer.Server"
+                        ""
+                        "open System"
+                        "open ToolUp.Platform"
+                        "open ToolUp.Platform.Jobs"
+                        "open Consumer.Domain"
+                        ""
+                        "let schedule (s: IJobScheduler) = s"
+                        ""
+                    ]
+                    "the consumer's own module still shadows the part"
+
+                Expect.equal (rewrite after |> fst) after "a second run changes nothing"
+
+            testCase "a consumer with no open of ToolUp.Platform takes its part opens above its own"
+            <| fun () ->
+                let before =
+                    "module Consumer.Server\n\nopen Consumer.Domain\n\nlet schedule (s: IJobScheduler) = s\n"
+
+                let after, _ = rewrite before
+
+                Expect.equal
+                    (lines after)
+                    [
+                        "module Consumer.Server"
+                        ""
+                        "open ToolUp.Platform.Jobs"
+                        "open Consumer.Domain"
+                        ""
+                        "let schedule (s: IJobScheduler) = s"
+                        ""
+                    ]
+                    "above, not below"
+
+                Expect.equal (rewrite after |> fst) after "a second run changes nothing"
+
+            testCase "a nested module's dead open of ToolUp.Platform is replaced inside the module"
+            <| fun () ->
+                let before =
+                    "namespace Consumer\n\nmodule Briefing =\n\n    open ToolUp.Platform\n\n    let schedule (s: IJobScheduler) = s\n"
+
+                let after, _ = SubsystemNamespaces.rewriteText tableWithPlatform before
+
+                Expect.equal
+                    (lines after)
+                    [
+                        "namespace Consumer"
+                        ""
+                        "module Briefing ="
+                        ""
+                        "    open ToolUp.Platform.Jobs"
+                        ""
+                        "    let schedule (s: IJobScheduler) = s"
+                        ""
+                    ]
+                    "in the module, in the open's place"
+
+                Expect.equal
+                    (SubsystemNamespaces.rewriteText tableWithPlatform after |> fst)
+                    after
+                    "a second run changes nothing"
+
+            testCase "a nested module still reaching ToolUp.Platform keeps that open and takes the part beside it"
+            <| fun () ->
+                let before =
+                    "namespace Consumer\n\nmodule Briefing =\n    open ToolUp.Platform\n\n    let schedule (s: IJobScheduler) (c: ServerConfig) = s\n"
+
+                let after, _ = SubsystemNamespaces.rewriteText tableWithPlatform before
+
+                Expect.equal
+                    (lines after)
+                    [
+                        "namespace Consumer"
+                        ""
+                        "module Briefing ="
+                        "    open ToolUp.Platform"
+                        "    open ToolUp.Platform.Jobs"
+                        ""
+                        "    let schedule (s: IJobScheduler) (c: ServerConfig) = s"
+                        ""
+                    ]
+                    "both, indented"
+
+            testCase "a nested module's opens cover only its body, and a module with none takes the namespace's"
+            <| fun () ->
+                let before =
+                    "namespace Consumer\n\nmodule Own =\n    open Consumer.Domain\n\n    let a (s: IJobScheduler) = s\n\nmodule Bare =\n    let b = ServerApp.create ()\n"
+
+                let after, _ = rewrite before
+
+                Expect.equal
+                    (lines after)
+                    [
+                        "namespace Consumer"
+                        ""
+                        "open ToolUp.Platform.Compose"
+                        ""
+                        "module Own ="
+                        "    open ToolUp.Platform.Jobs"
+                        "    open Consumer.Domain"
+                        ""
+                        "    let a (s: IJobScheduler) = s"
+                        ""
+                        "module Bare ="
+                        "    let b = ServerApp.create ()"
+                        ""
+                    ]
+                    "each open where it is used"
+
+                Expect.equal (rewrite after |> fst) after "a second run changes nothing"
+
+            testCase "a case name the file declares for itself derives nothing, whatever the union's spelling"
+            <| fun () ->
+                for declaration in
+                    [
+                        "type Mode =\n    | Coalesced\n    | Other"
+                        "type Mode = Coalesced | Other"
+                        "type Mode = Other | Coalesced of int"
+                        "type Coalesced = { A: int }"
+                        "type Row = {\n    Coalesced: bool\n}"
+                    ] do
+                    let before =
+                        sprintf "module Consumer.Server\n\n%s\n\nlet x = Coalesced\n" declaration
+
+                    let after, rewrites = rewrite before
+                    Expect.equal after before (sprintf "untouched under %s" declaration)
+                    Expect.isEmpty rewrites "nothing derived"
+
+            testCase "a case name the tree declares derives nothing; a type of the same table still does"
+            <| fun () ->
+                let before =
+                    "module Consumer.Server\n\nlet x = Coalesced\nlet schedule (s: IJobScheduler) = s\n"
+
+                let treeDeclares = {
+                    SubsystemNamespaces.consumerReach with
+                        TreeDeclared = set [ "Coalesced"; "IJobScheduler" ]
+                }
+
+                let segments = Text.RegularExpressions.Regex.Split(before, "(\n)")
+                let after, _ = SubsystemNamespaces.rewrite table treeDeclares segments
+
+                Expect.stringContains (String.concat "" after) "open ToolUp.Platform.Jobs" "the type row still derives"
+
+                let caseOnly =
+                    Text.RegularExpressions.Regex.Split("module Consumer.Server\n\nlet x = Coalesced\n", "(\n)")
+
+                let untouched, rewrites = SubsystemNamespaces.rewrite table treeDeclares caseOnly
+                Expect.equal untouched caseOnly "the case row does not"
+                Expect.isEmpty rewrites "and nothing is reported"
+
+            testCase "a match arm declares nothing, and a case it names still derives"
+            <| fun () ->
+                let before =
+                    "module Consumer.Server\n\nopen ToolUp.Platform\n\nlet f o =\n    match o with\n    | Coalesced -> 1\n    | _ -> 2\n"
+
+                let after, _ = rewrite before
+                Expect.stringContains after "open ToolUp.Platform.Jobs" "the arm's case derives"
+
+                Expect.isEmpty
+                    (SubsystemNamespaces.declaredNames [|
+                        "let f o ="
+                        "    match o with"
+                        "    | Required"
+                        "    | Other -> 1"
+                    |])
+                    "an or-pattern under no type is not a declaration"
+
+                Expect.equal
+                    (SubsystemNamespaces.declaredNames [|
+                        "type Need ="
+                        "    private"
+                        "    // a comment"
+                        "    | Required of int"
+                        "    | Optional"
+                        "let g = 1"
+                        "    | Stray"
+                        "type Row = {"
+                        "    Field: int"
+                        "}"
+                        "exception Refused of string"
+                        "let (|Big|Small|) x = Big"
+                    |])
+                    (set [ "Need"; "Required"; "Optional"; "Row"; "Field"; "Refused"; "Big"; "Small" ])
+                    "the type, its cases, a field, an exception and an active pattern"
+
+            testCase "a case name an open outside the tier resolves derives nothing; ToolUp.Platform does not count"
+            <| fun () ->
+                let resolved = {
+                    table with
+                        Reaches =
+                            table.Reaches
+                                .Add("Consumer.Facts", set [ "Coalesced" ])
+                                .Add("ToolUp.Platform", set [ "Coalesced" ])
+                }
+
+                let viaFacts =
+                    "module Consumer.Server\n\nopen Consumer.Facts\n\nlet x = Coalesced\n"
+
+                Expect.equal (SubsystemNamespaces.rewriteText resolved viaFacts |> fst) viaFacts "already resolved"
+
+                let viaPlatform =
+                    "module Consumer.Server\n\nopen ToolUp.Platform\n\nlet x = Coalesced\n"
+
+                Expect.stringContains
+                    (SubsystemNamespaces.rewriteText resolved viaPlatform |> fst)
+                    "open ToolUp.Platform.Jobs"
+                    "the server half still wins over Core's"
+
+            testCase "an open the move left dead is reported and left in place; a live or unknown one is not"
+            <| fun () ->
+                let report (text: string) =
+                    SubsystemNamespaces.likelyDeadOpens tableWithPlatform SubsystemNamespaces.consumerReach text
+
+                Expect.equal
+                    (report "module C\n\nopen ToolUp.Platform\n\nlet x = 1\n")
+                    [ 3, "open ToolUp.Platform" ]
+                    "reaches nothing here"
+
+                Expect.equal
+                    (report "module C\n\nopen ToolUp.Platform\n\nlet x = Ok (String.length \"\")\n")
+                    [ 3, "open ToolUp.Platform" ]
+                    "a name that resolves without the open keeps nothing alive"
+
+                Expect.isEmpty (report "module C\n\nopen ToolUp.Platform\n\nlet x (c: ServerConfig) = c\n") "live"
+
+                Expect.equal
+                    (report "module C\n\nopen ToolUp.Platform\n\n// ServerConfig\nlet x = \"ServerConfig\"\n")
+                    [ 3, "open ToolUp.Platform" ]
+                    "a name in a comment or a string keeps nothing alive"
+
+                Expect.isEmpty (report "module C\n\nopen Consumer.Domain\n\nlet x = 1\n") "not the move's to kill"
+
+                Expect.equal
+                    (report "module C\n\nopen ToolUp.Platform.Scope.Teams.TeamInvitationHandler\nlet x = 1\n")
+                    []
+                    "a path the tables hold no members for is never called dead"
+
+                Expect.isEmpty
+                    (SubsystemNamespaces.likelyDeadOpens
+                        tableWithPlatform
+                        {
+                            SubsystemNamespaces.consumerReach with
+                                ReachesServer = false
+                        }
+                        "module C\n\nopen ToolUp.Platform\n")
+                    "a project out of scope reports nothing"
+
+                let text = "module C\n\nopen ToolUp.Platform\n\nlet x = 1\n"
+                let after, _ = SubsystemNamespaces.rewriteText tableWithPlatform text
+                Expect.equal after text "and the rewrite deletes nothing"
+
+            testCase "the Codemod reads the tree's declarations and reports dead opens as review findings"
+            <| fun () ->
+                let dir =
+                    Path.Combine(Path.GetTempPath(), "codemod-1198-" + Guid.NewGuid().ToString "N")
+
+                Directory.CreateDirectory dir |> ignore
+
+                try
+                    File.WriteAllText(
+                        Path.Combine(dir, "App.fsproj"),
+                        "<Project><ItemGroup><Compile Include=\"Modes.fs\" /><Compile Include=\"Use.fs\" /><PackageReference Include=\"ToolUp.Sdk\" /></ItemGroup></Project>"
+                    )
+
+                    File.WriteAllText(
+                        Path.Combine(dir, "Modes.fs"),
+                        "module App.Modes\n\ntype Need =\n    | Required\n    | Optional\n"
+                    )
+
+                    File.WriteAllText(
+                        Path.Combine(dir, "Use.fs"),
+                        "module App.Use\n\nopen ToolUp.Platform\nopen App.Modes\n\nlet x = Required\n"
+                    )
+
+                    let plan = Codemod.planFor [ CodemodMigration.SubsystemNamespaces ] dir
+                    let file = plan.Files |> List.find (fun f -> f.RelativePath = "Use.fs")
+
+                    Expect.equal file.Rewritten file.Original "Required is the tree's own, so nothing is derived"
+
+                    Expect.equal
+                        (file.Findings |> List.map (fun f -> f.RuleId, f.Line))
+                        [ "1198-likely-dead-open", 3 ]
+                        "the open that now reaches nothing is reported, and stays"
+                finally
+                    Directory.Delete(dir, true)
+
             testCase "a file whose projects do not reach the server tier is left alone"
             <| fun () ->
                 let before =
@@ -417,6 +721,7 @@ let tests =
                             ReachesServer = false
                             LevelCap = None
                             Allowed = None
+                            TreeDeclared = Set.empty
                         }
                         (before.Split([| "\n" |], StringSplitOptions.None)
                          |> Array.collect (fun l -> [| l; "\n" |])
@@ -442,6 +747,21 @@ let tests =
                     (committed.Replace("\r\n", "\n"))
                     rendered
                     "regenerate with `dotnet run --project Build.fsproj -- SubsystemNamespaces --write-table`"
+
+            testCase "the reach table answers for ToolUp.Platform, a namespace outside the tier and a moved module"
+            <| fun () ->
+                let reaches = SubsystemNamespaces.embeddedIndex.Value.Reaches
+
+                let has path name =
+                    reaches.TryFind path
+                    |> Option.exists (fun (names: Set<string>) -> names.Contains name)
+
+                Expect.isTrue (has "ToolUp.Platform" "ServerConfig") "Core's namespace"
+                Expect.isTrue (has "ToolUp.Facts" "Scalar") "a union case outside the tier"
+
+                Expect.isTrue
+                    (has "ToolUp.Platform.Scope.StorageScopeResolver" "IStorageScopeResolver")
+                    "a moved module's member"
 
             testCase "round-trips through its text form and is the table the Codemod reads"
             <| fun () ->

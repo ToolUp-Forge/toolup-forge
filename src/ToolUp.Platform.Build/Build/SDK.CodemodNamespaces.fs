@@ -33,8 +33,11 @@ open System.Text.RegularExpressions
 /// a consumer file: rewrites an `open` of a path that moved, rewrites a
 /// qualified `ToolUp.Platform.X` path that moved, and DERIVES the opens
 /// the file needs from the symbols it mentions — never a blanket list of
-/// every part — inserting them after the file's last `open`. A second
-/// run finds every open in place and changes nothing.
+/// every part — inserting them beside the file's `open ToolUp.Platform`,
+/// or above its own opens when it has none, and inside a nested module
+/// that carries its own opens. A second run finds every open in place and
+/// changes nothing. It also reports the opens that look dead after the
+/// move (`likelyDeadOpens`) and deletes none of them.
 module SubsystemNamespaces =
 
     // ── The parts and their namespaces ────────────────────────────────
@@ -773,10 +776,130 @@ module SubsystemNamespaces =
 
         List.ofSeq files, entries |> Seq.distinct |> List.ofSeq
 
+    /// What an `open` of a path reaches, for the paths the name table cannot
+    /// answer: everything `ToolUp.Platform` reaches (the table records only what
+    /// moved), each moved module's members, and the union cases of every other
+    /// path outside the tier, the only thing asked of those. One `(path, name)`
+    /// per line of `reachResourceName`.
+    let scanReach (repoRoot: string) : (string * string) list =
+        let tierProjects = parts |> List.map _.Project |> Set.ofList
+
+        let notTheSdk (project: string) =
+            let name = Path.GetFileName project
+
+            not (tierProjects.Contains name)
+            && name <> "ToolUp.Platform.Build"
+            && not (name.EndsWith ".Tests")
+
+        let membersOf (lines: string[]) (h: Header) =
+            let asNamespace = declarations lines (Some { h with Keyword = "namespace" })
+
+            let asModule =
+                declarations
+                    lines
+                    (Some {
+                        h with
+                            Keyword = "module"
+                            AutoOpen = true
+                    })
+
+            asNamespace @ asModule |> List.map snd
+
+        let outsideTier = [
+            for project in
+                Directory.GetDirectories(Path.Combine(repoRoot, "src"))
+                |> Array.filter notTheSdk do
+                let fsproj = Path.Combine(project, Path.GetFileName project + ".fsproj")
+
+                if File.Exists fsproj then
+                    for file in compileItems fsproj do
+                        if File.Exists file then
+                            let lines = readLines file
+
+                            match header lines with
+                            | None -> ()
+                            | Some h ->
+                                // A path under the platform is also reached
+                                // through its first segment.
+                                if h.Path.StartsWith(platform + ".") then
+                                    platform, h.Path.Substring(platform.Length + 1).Split('.')[0]
+
+                                let rowsAt (path: string) (asRead: Header) = [
+                                    for kind, name in declarations lines (Some asRead) do
+                                        if path = platform || kind = EntryKind.Case then
+                                            path, name
+                                ]
+
+                                if h.Keyword = "namespace" then
+                                    yield! rowsAt h.Path h
+                                else
+                                    yield! rowsAt h.Path { h with Keyword = "namespace" }
+
+                                    if h.AutoOpen then
+                                        yield! rowsAt (namespaceOf h) h
+        ]
+
+        let movedModules = [
+            for part in parts do
+                for file in compileItems (projectPath repoRoot part) do
+                    let lines = readLines file
+
+                    match header lines with
+                    | Some h when h.Keyword = "module" ->
+                        for name in membersOf lines h do
+                            h.Path, name
+                    | Some h ->
+                        // A namespace's nested modules, read as if each were
+                        // a file of its own.
+                        for i in h.Line + 1 .. lines.Length - 1 do
+                            let m = nestedModuleRx.Match lines[i]
+
+                            if m.Success && m.Groups["indent"].Value = "" then
+                                let body =
+                                    lines
+                                    |> Array.skip (i + 1)
+                                    |> Array.takeWhile (fun l -> String.IsNullOrWhiteSpace l || indentOf l > 0)
+                                    |> Array.map (fun l -> if l.Length >= 4 then l.Substring 4 else "")
+
+                                for name in membersOf body { h with Line = -1 } do
+                                    h.Path + "." + m.Groups["name"].Value, name
+                    | None -> ()
+        ]
+
+        outsideTier @ movedModules |> List.distinct
+
     // ── The table on disk ─────────────────────────────────────────────
 
     /// The embedded resource's logical name in `ToolUp.Platform.Build`.
     let resourceName = "codemod-1198-namespaces.txt"
+
+    /// The logical name of the reach table (`scanReach`). Unlike the name
+    /// table it is not held to a fresh scan: it answers only what a tree below
+    /// 0.39.0 could name, so a name added to Core since then cannot make it wrong.
+    let reachResourceName = "codemod-1198-reach.txt"
+
+    /// Renders the reach table, sorted, LF throughout.
+    let renderReach (rows: (string * string) list) : string =
+        let sb = StringBuilder()
+
+        sb.Append "# Phase 1198 — what an open of a path reaches. Generated by\n"
+        |> ignore
+
+        sb.Append "# `dotnet run --project Build.fsproj -- SubsystemNamespaces --write-table`; do not edit.\n"
+        |> ignore
+
+        sb.Append "# path name\n" |> ignore
+
+        for path, name in
+            rows
+            |> List.distinct
+            |> List.sortWith (fun (a, b) (c, d) ->
+                match String.CompareOrdinal(a, c) with
+                | 0 -> String.CompareOrdinal(b, d)
+                | o -> o) do
+            sb.Append(path).Append(' ').Append(name).Append('\n') |> ignore
+
+        sb.ToString()
 
     let private kindName kind =
         match kind with
@@ -895,6 +1018,9 @@ module SubsystemNamespaces =
         Mentions: Map<string, (EntryKind * string * string) list>
         /// New namespace → the old one other sources still declare.
         Splits: Map<string, string>
+        /// Path → the names an `open` of it reaches, for the paths that are
+        /// known; a path absent here is never called dead.
+        Reaches: Map<string, Set<string>>
     }
 
     /// Builds the index over a table.
@@ -934,14 +1060,59 @@ module SubsystemNamespaces =
                 | _ -> None)
             |> Map.ofList
 
+        let reaches =
+            entries
+            |> List.choose (fun e ->
+                match e.Kind with
+                | EntryKind.Namespace
+                | EntryKind.Split -> None
+                | _ -> Some(e.NewNamespace, e.Name))
+            |> List.groupBy fst
+            |> List.map (fun (path, xs) -> path, xs |> List.map snd |> Set.ofList)
+            |> Map.ofList
+
         {
             Moves = moves
             Mentions = mentions
             Splits = splits
+            Reaches = reaches
         }
 
-    /// The index over the embedded table.
-    let embeddedIndex: Lazy<Index> = lazy (index embedded.Value)
+    /// The reach table shipped inside this assembly.
+    let private embeddedReach: Lazy<(string * string) list> =
+        lazy
+            (let asm = System.Reflection.Assembly.GetExecutingAssembly()
+
+             use stream = asm.GetManifestResourceStream reachResourceName
+
+             if isNull stream then
+                 failwithf "SubsystemNamespaces: embedded resource %s is missing from %s" reachResourceName asm.FullName
+
+             use reader = new StreamReader(stream, Encoding.UTF8)
+
+             [
+                 for raw in reader.ReadToEnd().Split('\n', StringSplitOptions.RemoveEmptyEntries) do
+                     let line = raw.Trim()
+
+                     if not (line.StartsWith "#") then
+                         match line.Split ' ' with
+                         | [| path; name |] -> path, name
+                         | _ -> failwithf "SubsystemNamespaces: malformed reach line: %s" line
+             ])
+
+    /// The index over the embedded tables.
+    let embeddedIndex: Lazy<Index> =
+        lazy
+            (let idx = index embedded.Value
+
+             let reaches =
+                 embeddedReach.Value
+                 |> List.fold
+                     (fun (m: Map<string, Set<string>>) (path, name) ->
+                         m.Add(path, (m.TryFind path |> Option.defaultValue Set.empty).Add name))
+                     idx.Reaches
+
+             { idx with Reaches = reaches })
 
     let private lineSplitter = Regex(@"(\r\n|\n|\r)", RegexOptions.CultureInvariant)
 
@@ -974,6 +1145,82 @@ module SubsystemNamespaces =
             @"^(?:\s*(?:type|and|exception|module)\s+(?:\[<[^\]]*>\]\s*)*(?:rec\s+|internal\s+|private\s+)*|\s*let\s+(?:inline\s+|rec\s+|mutable\s+|private\s+)*|\s{4}\|\s*(?!.*->))(?<name>[A-Z]\w*)",
             RegexOptions.CultureInvariant
         )
+
+    let private typeHeadRx =
+        Regex(
+            @"^\s*(?:type|and)\s+(?:\[<[^\]]*>\]\s*)*(?:rec\s+|internal\s+|private\s+|public\s+)*(?<name>[A-Za-z_]\w*)[^=]*=\s*(?:internal\s+|private\s+|public\s+)?(?<rest>.*)$",
+            RegexOptions.CultureInvariant
+        )
+
+    let private exceptionHeadRx =
+        Regex(@"^\s*exception\s+(?<name>[A-Z]\w*)", RegexOptions.CultureInvariant)
+
+    let private firstCaseRx =
+        Regex(@"^(?<name>[A-Z]\w*)\s*(?:of\b|\|)", RegexOptions.CultureInvariant)
+
+    let private activePatternRx =
+        Regex(@"^\s*let\s[^=]*\(\|(?<ap>[^)]*)\|\)", RegexOptions.CultureInvariant)
+
+    let private recordFieldRx =
+        Regex(@"^\s*\{?\s*(?:mutable\s+)?(?<name>[A-Z]\w*)\s*:", RegexOptions.CultureInvariant)
+
+    /// The types, union cases, record fields, exceptions and active patterns
+    /// `lines` declare. A union case is read only under its `type`, so a match
+    /// arm's `| Required` is not mistaken for one.
+    let declaredNames (lines: string[]) : Set<string> =
+        let code = maskNonCode lines
+        let names = Collections.Generic.HashSet<string>()
+        let mutable inUnion = false
+
+        for line in code do
+            let head = typeHeadRx.Match line
+
+            if head.Success then
+                names.Add head.Groups["name"].Value |> ignore
+                let rest = head.Groups["rest"].Value.Trim()
+                let first = firstCaseRx.Match rest
+
+                if first.Success then
+                    names.Add first.Groups["name"].Value |> ignore
+
+                for c in inlineCaseRx.Matches rest do
+                    names.Add c.Groups["name"].Value |> ignore
+
+                inUnion <- rest = "" || rest.StartsWith "|" || first.Success
+            else
+                let t = line.Trim()
+
+                if inUnion && t.StartsWith "|" then
+                    let c = inlineCaseRx.Match t
+
+                    if c.Success then
+                        names.Add c.Groups["name"].Value |> ignore
+                elif
+                    inUnion
+                    && t <> ""
+                    && not (t.StartsWith "[<")
+                    && t <> "private"
+                    && t <> "internal"
+                then
+                    inUnion <- false
+
+                let e = exceptionHeadRx.Match line
+
+                if e.Success then
+                    names.Add e.Groups["name"].Value |> ignore
+
+                let field = recordFieldRx.Match line
+
+                if field.Success then
+                    names.Add field.Groups["name"].Value |> ignore
+
+                let ap = activePatternRx.Match line
+
+                if ap.Success then
+                    for n in ap.Groups["ap"].Value.Split('|', StringSplitOptions.RemoveEmptyEntries) do
+                        names.Add(n.Trim()) |> ignore
+
+        Set.ofSeq names
 
     /// F# opens no enclosing namespace on its own: a declaration in `own`
     /// sees `own` and nothing above it (which is why every tier file now
@@ -1021,6 +1268,10 @@ module SubsystemNamespaces =
         /// files): the tier namespaces those sources declare, the only
         /// ones its files can open. `None` means no such restriction.
         Allowed: Set<string> option
+        /// The names the consumer's own tree declares. A table `case` row of
+        /// one of these derives nothing: a case name in a file says nothing
+        /// about whose union it is, and the tree already has its own.
+        TreeDeclared: Set<string>
     }
 
     /// A consumer file: everything is open to it.
@@ -1028,7 +1279,118 @@ module SubsystemNamespaces =
         ReachesServer = true
         LevelCap = None
         Allowed = None
+        TreeDeclared = Set.empty
     }
+
+    let private isSkippable (l: string) =
+        let t = l.TrimStart()
+
+        String.IsNullOrWhiteSpace l || t.StartsWith "#" || t.StartsWith "[<"
+
+    /// The `open` lines of the block starting at `first`.
+    let private leadingOpens (code: string[]) (first: int) : int list =
+        let rec go i acc =
+            if i >= code.Length then List.rev acc
+            elif openRx.IsMatch code[i] then go (i + 1) (i :: acc)
+            elif isSkippable code[i] then go (i + 1) acc
+            else List.rev acc
+
+        go first []
+
+    let private openPathAt (code: string[]) (i: int) =
+        let m = openRx.Match code[i]
+
+        if m.Success && m.Groups["type"].Value = "" then
+            Some m.Groups["path"].Value
+        else
+            None
+
+    /// An outermost nested module that carries its own opens: an open there
+    /// covers the module's body and nothing else.
+    type private ModuleScope = {
+        /// The lines of the module's body.
+        Body: int list
+        /// The module's own `open` lines.
+        Opens: int list
+    }
+
+    let private moduleScopes (code: string[]) (headerLine: int option) : ModuleScope list = [
+        for i in 0 .. code.Length - 1 do
+            let m = nestedModuleRx.Match code[i]
+
+            if m.Success && m.Groups["indent"].Value = "" && Some i <> headerLine then
+                let stop =
+                    seq { i + 1 .. code.Length - 1 }
+                    |> Seq.tryFind (fun j -> not (isSkippable code[j]) && indentOf code[j] = 0)
+                    |> Option.defaultValue code.Length
+
+                match leadingOpens code (i + 1) |> List.filter (fun o -> o < stop) with
+                | [] -> ()
+                | opens -> {
+                    Body = [ i + 1 .. stop - 1 ]
+                    Opens = opens
+                  }
+    ]
+
+    let private localNames (code: string[]) =
+        code
+        |> Array.choose (fun l ->
+            let m = localDeclRx.Match l
+            if m.Success then Some m.Groups["name"].Value else None)
+        |> Set.ofArray
+
+    /// Names that resolve with or without a platform open, whichever union or
+    /// module of the platform also spells them: a use of one keeps nothing alive.
+    let private ambientNames =
+        set [
+            "Array"
+            "Async"
+            "DateTime"
+            "DateTimeOffset"
+            "Error"
+            "Guid"
+            "List"
+            "Map"
+            "None"
+            "Ok"
+            "Option"
+            "Result"
+            "Seq"
+            "Set"
+            "Some"
+            "String"
+            "System"
+            "Task"
+            "TimeSpan"
+        ]
+
+    /// Whether nothing on `body` names anything an open of `path` reaches. A
+    /// path the tables do not know is never dead. A dotted mention counts its
+    /// qualifier: `x.Foo` says nothing about an open reaching `Foo`.
+    let private isDeadOpen
+        (idx: Index)
+        (code: string[])
+        (headerLine: int option)
+        (local: Set<string>)
+        (body: int seq)
+        (path: string)
+        =
+        match idx.Reaches.TryFind path with
+        | None -> false
+        | Some names ->
+            body
+            |> Seq.filter (fun i -> Some i <> headerLine && not (openRx.IsMatch code[i]))
+            |> Seq.collect (fun i -> mentionRx.Matches code[i])
+            |> Seq.forall (fun m ->
+                let qualifier = m.Groups["qualifier"]
+
+                let used =
+                    if qualifier.Success then
+                        qualifier.Value
+                    else
+                        m.Groups["name"].Value
+
+                local.Contains used || ambientNames.Contains used || not (names.Contains used))
 
     let private rewriteAll
         (idx: Index)
@@ -1108,47 +1470,49 @@ module SubsystemNamespaces =
                     None)
             |> Set.ofArray
 
-        let mentioned = Collections.Generic.HashSet<string>()
+        let local = localNames current
 
-        let local =
+        // A `case` row says nothing about whose union a name is, so one the
+        // file or its tree declares for itself derives nothing, and neither
+        // does one the file already resolves through an open outside the tier
+        // (`Scalar` in a file opening `ToolUp.Facts`). `ToolUp.Platform` does
+        // not count: a server case won over a Core case of the same spelling.
+        let ownDeclared = Set.union reach.TreeDeclared (declaredNames lines)
+
+        let resolvedElsewhere =
             current
             |> Array.choose (fun l ->
-                let m = localDeclRx.Match l
-                if m.Success then Some m.Groups["name"].Value else None)
-            |> Set.ofArray
+                let m = openRx.Match l
+                if m.Success then Some m.Groups["path"].Value else None)
+            |> Array.filter (fun path -> path <> platform && (levelOf path).IsNone)
+            |> Array.choose idx.Reaches.TryFind
+            |> Set.unionMany
 
-        // A file now declared in a part's namespace sees nothing of
-        // `ToolUp.Platform` until it opens it.
-        if own <> platform && own.StartsWith(platform + ".") && (levelOf own).IsSome then
-            mentioned.Add platform |> ignore
+        let targetsOf (name: string) =
+            idx.Mentions.TryFind name
+            |> Option.defaultValue []
+            |> List.filter (fun (kind, _, _) ->
+                not (
+                    kind = EntryKind.Case
+                    && (ownDeclared.Contains name || resolvedElsewhere.Contains name)
+                ))
 
-        // A file whose namespace moved out of one other sources still
-        // declare keeps seeing that half.
-        match idx.Splits.TryFind own with
-        | Some old -> mentioned.Add old |> ignore
-        | None -> ()
+        let collectMentions (mentioned: Collections.Generic.HashSet<string>) (body: int seq) =
+            for i in body do
+                let line = current[i]
 
-        for i in 0 .. current.Length - 1 do
-            let line = current[i]
+                if Some i <> headerLine && not (openRx.IsMatch line) then
+                    for m in mentionRx.Matches line do
+                        let name = m.Groups["name"].Value
+                        let qualifier = m.Groups["qualifier"]
 
-            if Some i <> headerLine && not (openRx.IsMatch line) then
-                for m in mentionRx.Matches line do
-                    let name = m.Groups["name"].Value
-                    let qualifier = m.Groups["qualifier"]
-
-                    // The qualifier is itself a bare mention: in a dotted mention of the form Qualifier.member, the qualifier half.
-                    if qualifier.Success && not (local.Contains qualifier.Value) then
-                        match idx.Mentions.TryFind qualifier.Value with
-                        | None -> ()
-                        | Some targets ->
-                            for _, ns, _ in targets do
+                        // The qualifier is itself a bare mention: in a dotted mention of the form Qualifier.member, the qualifier half.
+                        if qualifier.Success && not (local.Contains qualifier.Value) then
+                            for _, ns, _ in targetsOf qualifier.Value do
                                 mentioned.Add ns |> ignore
 
-                    if not (local.Contains name) then
-                        match idx.Mentions.TryFind name with
-                        | None -> ()
-                        | Some targets ->
-                            for _, ns, declaredIn in targets do
+                        if not (local.Contains name) then
+                            for _, ns, declaredIn in targetsOf name do
                                 // Unqualified, or qualified by the declaring
                                 // namespace's own last segment: a Core module
                                 // whose nested module moved is still reached
@@ -1166,9 +1530,9 @@ module SubsystemNamespaces =
                                     else
                                         mentioned.Add ns |> ignore
 
-        let needed =
+        let neededFrom (mentioned: string seq) (alreadyOpen: Set<string>) =
             mentioned
-            |> Seq.filter (fun ns -> not (isOwn own ns) && ns <> ownPath && not (opened.Contains ns))
+            |> Seq.filter (fun ns -> not (isOwn own ns) && ns <> ownPath && not (alreadyOpen.Contains ns))
             // A project compiling tier sources against Core can open only the
             // namespaces those sources declare.
             |> Seq.filter (fun ns ->
@@ -1193,77 +1557,116 @@ module SubsystemNamespaces =
             |> Seq.sortBy openOrder
             |> List.ofSeq
 
+        let scopes = moduleScopes current headerLine
+        let inScopes = scopes |> List.collect _.Body |> Set.ofList
+        let mentioned = Collections.Generic.HashSet<string>()
+
+        // A file now declared in a part's namespace sees nothing of
+        // `ToolUp.Platform` until it opens it.
+        if own <> platform && own.StartsWith(platform + ".") && (levelOf own).IsSome then
+            mentioned.Add platform |> ignore
+
+        // A file whose namespace moved out of one other sources still
+        // declare keeps seeing that half.
+        match idx.Splits.TryFind own with
+        | Some old -> mentioned.Add old |> ignore
+        | None -> ()
+
+        collectMentions mentioned (seq { 0 .. current.Length - 1 } |> Seq.filter (inScopes.Contains >> not))
+        let needed = neededFrom mentioned opened
+
         let terminator = if out.Length > 1 then out[1] else Environment.NewLine
 
-        let isSkippable (l: string) =
-            let t = l.TrimStart()
+        let openLines (indent: string) (names: string list) =
+            names |> List.map (fun ns -> sprintf "%sopen %s" indent ns)
 
-            String.IsNullOrWhiteSpace l || t.StartsWith "#" || t.StartsWith "[<"
+        let record (at: int) (after: string) =
+            rewrites.Add(("1198-derived-open", at, out[contentIndex at], after))
+            out[contentIndex at] <- after
 
-        // The last `open` of the file's leading block, if it has one.
-        let lastOpen =
-            let firstLine = (headerLine |> Option.defaultValue -1) + 1
-            let mutable last = None
-            let mutable i = firstLine
-            let mutable stop = false
-
-            while not stop && i < current.Length do
-                let l = current[i]
-
-                if openRx.IsMatch l then
-                    last <- Some i
-                elif not (isSkippable l) then
-                    stop <- true
-
-                i <- i + 1
-
-            last
-
-        /// Appends `open` lines after content line `at` (`-1`: the top).
+        /// Appends `open` lines after content line `at`.
         let insertAfter (at: int) (blankBefore: bool) (indent: string) (names: string list) =
-            match names with
-            | [] -> ()
-            | names ->
-                let inserted = names |> List.map (fun ns -> sprintf "%sopen %s" indent ns)
+            if not names.IsEmpty then
+                let inserted = openLines indent names
 
                 let block =
                     (if blankBefore then "" :: inserted else inserted) |> String.concat terminator
 
-                if at < 0 then
-                    let before = out[0]
-                    let after = block + terminator + before
-                    rewrites.Add(("1198-derived-open", 0, before, after))
-                    out[0] <- after
-                else
-                    let before = out[contentIndex at]
-                    let after = before + terminator + block
-                    rewrites.Add(("1198-derived-open", at, before, after))
-                    out[contentIndex at] <- after
+                record at (out[contentIndex at] + terminator + block)
+
+        /// Puts `open` lines above content line `at`.
+        let insertBefore (at: int) (indent: string) (names: string list) =
+            if not names.IsEmpty then
+                let block = openLines indent names |> String.concat terminator
+                record at (block + terminator + out[contentIndex at])
 
         // Where the derived opens go decides what shadows what, and the
         // rule restores the resolution a file had while everything shared
-        // `ToolUp.Platform`: a server name won over a Core name of the same
-        // spelling (the server half was the later contribution to the
-        // merged namespace), and a module a file opened itself won over
-        // both. So a tier file that lacks `open ToolUp.Platform` takes it
-        // straight after its header, the part opens right after it, and
-        // both before the file's own opens; a file that already opens
-        // `ToolUp.Platform`, and every consumer, takes the part opens after
-        // its last open. Where the two halves genuinely collided (a record
-        // with the same labels on both sides) the codemod cannot know which
-        // was meant, and the site takes a type annotation by hand — the
-        // migration doc lists the shapes.
+        // `ToolUp.Platform`: a later open shadows an earlier one, a server
+        // name won over a Core name of the same spelling (the server half
+        // was the later contribution to the merged namespace), and a module
+        // a file opened itself won over both. So the part opens take the
+        // place of the file's `open ToolUp.Platform`, straight after it, with
+        // the file's other opens still below them; a file with no such open
+        // takes them above its own opens; and a tier file that lacks it takes
+        // it straight after its header with the part opens right after it.
+        // Where the two halves genuinely collided (a record with the same
+        // labels on both sides) the codemod cannot know which was meant, and
+        // the site takes a type annotation by hand — the migration doc lists
+        // the shapes.
         let platformOpen, partOpens = needed |> List.partition ((=) platform)
 
         let indentAt (i: int) =
             (openRx.Match current[i]).Groups["indent"].Value
 
-        match platformOpen, lastOpen, headerLine with
-        | _ :: _, _, Some hl -> insertAfter hl true "" (platformOpen @ partOpens)
-        | _ :: _, _, None -> insertAfter -1 false "" (platformOpen @ partOpens)
-        | [], Some i, _ -> insertAfter i false (indentAt i) partOpens
-        | [], None, Some hl -> insertAfter hl true "" partOpens
-        | [], None, None -> insertAfter -1 false "" partOpens
+        let firstLine = (headerLine |> Option.defaultValue -1) + 1
+        let fileOpens = leadingOpens current firstLine
+
+        let platformLine (candidates: int list) =
+            candidates |> List.tryFind (fun i -> openPathAt current i = Some platform)
+
+        match platformOpen, platformLine fileOpens, fileOpens, headerLine with
+        | _ :: _, _, _, Some hl -> insertAfter hl true "" (platformOpen @ partOpens)
+        | _ :: _, _, _, None -> insertBefore 0 "" (platformOpen @ partOpens)
+        | [], Some i, _, _ -> insertAfter i false (indentAt i) partOpens
+        | [], None, first :: _, _ -> insertBefore first (indentAt first) partOpens
+        | [], None, [], Some hl -> insertAfter hl true "" partOpens
+        | [], None, [], None -> insertBefore 0 "" partOpens
+
+        // A nested module with opens of its own takes what its body needs
+        // there, not at namespace level. Its `open ToolUp.Platform` gives way
+        // to them when its body reaches nothing through it, the one open this
+        // pass removes; everywhere else a dead open is reported, not deleted.
+        for scope in scopes do
+            let inModule = Collections.Generic.HashSet<string>()
+            collectMentions inModule scope.Body
+
+            let alreadyOpen =
+                scope.Opens
+                |> List.choose (openPathAt current)
+                |> Set.ofList
+                |> Set.union opened
+                |> Set.union (Set.ofList needed)
+
+            match neededFrom inModule alreadyOpen with
+            | [] -> ()
+            | names ->
+                let indent = indentAt scope.Opens.Head
+
+                match platformLine scope.Opens with
+                | Some p when isDeadOpen idx current headerLine local scope.Body platform ->
+                    let path = (openRx.Match current[p]).Groups["path"]
+                    let line = out[contentIndex p]
+
+                    let replaced =
+                        line.Substring(0, path.Index)
+                        + names.Head
+                        + line.Substring(path.Index + path.Length)
+
+                    let rest = openLines indent names.Tail
+                    record p (String.concat terminator (replaced :: rest))
+                | Some p -> insertAfter p false indent names
+                | None -> insertBefore scope.Opens.Head indent names
 
         out, List.ofSeq rewrites
 
@@ -1291,6 +1694,43 @@ module SubsystemNamespaces =
     let rewriteText (idx: Index) (text: string) : string * (string * int * string * string) list =
         let segments, rewrites = rewrite idx consumerReach (lineSplitter.Split text)
         String.concat "" segments, rewrites
+
+    /// The opens in a rewritten file the move looks to have killed: an open of
+    /// `ToolUp.Platform` or of a path that moved, where nothing in the code it
+    /// covers names anything it reaches. Each as `(1-based line, line text)`. A
+    /// candidate only, and nothing here deletes one: the tables hold no record
+    /// fields and no extension members, so only the compiler can confirm it.
+    let likelyDeadOpens (idx: Index) (reach: FileReach) (text: string) : (int * string) list =
+        if not reach.ReachesServer then
+            []
+        else
+            let segments = lineSplitter.Split text
+            let lines = [| for i in 0..2 .. segments.Length - 1 -> segments[i] |]
+            let code = maskNonCode lines
+            let headerLine = header lines |> Option.map _.Line
+            let local = localNames code
+            let scopes = moduleScopes code headerLine
+            let scoped = scopes |> List.collect _.Opens |> Set.ofList
+            let first = (headerLine |> Option.defaultValue -1) + 1
+            let movedTo = idx.Moves |> List.map (fun (_, target, _) -> target) |> Set.ofList
+
+            let candidates (opens: int list) (body: int seq) = [
+                for i in opens do
+                    match openPathAt code i with
+                    | Some path when
+                        (path = platform || movedTo.Contains path)
+                        && isDeadOpen idx code headerLine local body path
+                        ->
+                        i + 1, lines[i].Trim()
+                    | _ -> ()
+            ]
+
+            let fileLevel =
+                candidates
+                    (leadingOpens code first |> List.filter (scoped.Contains >> not))
+                    (seq { 0 .. code.Length - 1 })
+
+            fileLevel @ (scopes |> List.collect (fun s -> candidates s.Opens s.Body))
 
     // ── The declarations of the tier itself ───────────────────────────
 
@@ -1393,6 +1833,8 @@ module SubsystemNamespaces =
             /// compiles tier sources against Core (and compiles this file)
             /// declares through them; absent when no such project does.
             Allowed: Map<string, Set<string>>
+            /// What the tree's own sources declare, the tier's left out.
+            Declared: Set<string>
         }
 
         /// Reads every project under `root` and decides each.
@@ -1439,6 +1881,24 @@ module SubsystemNamespaces =
 
             let tierSources =
                 partLevels |> List.collect (fun (p, _) -> compileItems p) |> Set.ofList
+
+            // Every source under the root, compiled or not: a name a project
+            // declares is the tree's whichever project a file here belongs to.
+            let declared =
+                let rec sources (dir: string) = seq {
+                    for f in Directory.EnumerateFiles dir do
+                        if f.EndsWith ".fs" || f.EndsWith ".fsx" then
+                            yield f
+
+                    for d in Directory.EnumerateDirectories dir do
+                        if not (pruned.Contains(Path.GetFileName d)) then
+                            yield! sources d
+                }
+
+                sources (Path.GetFullPath root)
+                |> Seq.filter (tierSources.Contains >> not)
+                |> Seq.map (readLines >> declaredNames)
+                |> Set.unionMany
 
             let rec inScope (visiting: Set<string>) (project: string) =
                 match decided.TryGetValue project with
@@ -1556,6 +2016,7 @@ module SubsystemNamespaces =
                     |> List.groupBy fst
                     |> List.map (fun (f, xs) -> f, xs |> List.map snd |> Set.intersectMany)
                     |> Map.ofList
+                Declared = declared
             }
 
         /// Whether a file is in scope: every project that compiles it
@@ -1586,4 +2047,5 @@ module SubsystemNamespaces =
                 ReachesServer = includes scope path
                 LevelCap = scope.Levels.TryFind full
                 Allowed = scope.Allowed.TryFind full
+                TreeDeclared = scope.Declared
             }

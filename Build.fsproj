@@ -17,6 +17,7 @@
          SDK.Codemod.fs, which hooks it). -->
     <Compile Include="src\ToolUp.Platform.Build\Build\SDK.CodemodNamespaces.fs" />
     <EmbeddedResource Include="src\ToolUp.Platform.Build\Build\codemod-1198-namespaces.txt" LogicalName="codemod-1198-namespaces.txt" />
+    <EmbeddedResource Include="src\ToolUp.Platform.Build\Build\codemod-1198-reach.txt" LogicalName="codemod-1198-reach.txt" />
     <!-- Phase 183 — the consumer codemod behind the Codemod target
          registerTargets registers (compiled after this). -->
     <Compile Include="src\ToolUp.Platform.Build\Build\SDK.Codemod.fs" />

@@ -13,8 +13,9 @@
     consumer source directory: it rewrites an `open` of a path that moved, rewrites a qualified
     `ToolUp.Platform.X` path that moved, and inserts the part opens a file needs, DERIVED from
     the names its code uses (never a blanket list, and never a name inside a string or a
-    comment), after its header. Idempotent; `-Check` prints the pending
-    diff and changes nothing. Full account: docs/migrations/1198-subsystem-namespaces.md.
+    comment), beside its `open ToolUp.Platform` or above its own opens, and it reports the opens
+    the move looks to have left dead without deleting them. Idempotent; `-Check` prints the
+    pending diff and changes nothing. Full account: docs/migrations/1198-subsystem-namespaces.md.
 
     The name table the codemod reads ships inside ToolUp.Platform.Build as an embedded
     resource. In this repository, `-Declarations` is the first half of the same move: it

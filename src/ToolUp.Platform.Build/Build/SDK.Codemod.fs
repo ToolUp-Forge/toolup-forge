@@ -2184,6 +2184,24 @@ module Codemod =
 
         let rewritten, rewrites = rewriteTextIn reach only cls original
 
+        // Phase 1198: an open the move leaves dead is reported, never deleted.
+        let deadOpens =
+            if
+                List.contains CodemodMigration.SubsystemNamespaces only
+                && cls = CodemodFileClass.Source
+            then
+                SubsystemNamespaces.likelyDeadOpens SubsystemNamespaces.embeddedIndex.Value reach rewritten
+                |> List.map (fun (line, text) -> {
+                    RuleId = "1198-likely-dead-open"
+                    Migration = CodemodMigration.SubsystemNamespaces
+                    Line = line
+                    Text = text
+                    Guidance =
+                        "Nothing in the code this open covers names anything it reaches, so it looks dead after the move. Remove it if the file still compiles: record labels and extension members are not read here."
+                })
+            else
+                []
+
         {
             Path = Path.GetFullPath path
             RelativePath = toRelative root path
@@ -2193,7 +2211,7 @@ module Codemod =
             HasBom = bom
             Rewrites = rewrites
             Findings =
-                reviewTextFor only cls rewritten @ nestFindings only cls rewritten
+                reviewTextFor only cls rewritten @ nestFindings only cls rewritten @ deadOpens
                 |> List.sortBy _.Line
         }
 

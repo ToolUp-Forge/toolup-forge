@@ -28,6 +28,7 @@
              derived-opens pass the Codemod target's 1198 migration runs. -->
         <Compile Include="Build\SDK.CodemodNamespaces.fs" />
         <EmbeddedResource Include="Build\codemod-1198-namespaces.txt" LogicalName="codemod-1198-namespaces.txt" />
+        <EmbeddedResource Include="Build\codemod-1198-reach.txt" LogicalName="codemod-1198-reach.txt" />
         <!-- Phase 183 — the consumer codemod for the Epoch-1 0.x breaking
              renames (Phase 73 / 66 / 11.C.5): rules as data, the per-file
              rewrite, the walk and the renderings, FAKE-free. Compiled

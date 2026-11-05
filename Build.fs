@@ -6728,6 +6728,13 @@ let main args =
         if Flags.has "--write-table" flags then
             File.WriteAllText(tablePath, rendered, System.Text.UTF8Encoding false)
             Trace.tracefn "▶ SubsystemNamespaces: wrote %d entries to %s" entries.Length tablePath
+
+            File.WriteAllText(
+                Path.Combine(Path.GetDirectoryName tablePath, SubsystemNamespaces.reachResourceName),
+                SubsystemNamespaces.renderReach (SubsystemNamespaces.scanReach root),
+                System.Text.UTF8Encoding false
+            )
+
             acted <- true
 
         if Flags.has "--apply-declarations" flags then

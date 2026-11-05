@@ -91,12 +91,18 @@ inside one is not touched and derives nothing; an interpolated string's holes ar
    left alone.
 3. **Derives the opens the file needs from the names it mentions** — every namespace-level type, module and
    exception of the tier, every union case, and the members of its `[<AutoOpen>]` modules, read from the shipped
-   table — and inserts them after the file's last top-level `open`, or after its `namespace` / `module` header when
-   it has no open (whatever the header's spelling, a double-backticked name included), in the parts' dependency order. Never a
+   table — in the parts' dependency order, where [Where the opens go](#where-the-opens-go-and-why) says. Never a
    blanket list: a file that names nothing from the Jobs part does not open it. A qualified mention through a Core
    module whose nested module moved (`Auth.IdentitySanitiser`) opens the namespace above the moved one. Record
    fields are deliberately not read: `Decision = …` says nothing about which record is being built, and the
    tier's field names overlap Core's far too often.
+
+   A union case derives less readily than a type, because its name says nothing about whose union it is. A case
+   name derives no open when any file in the tree declares that name as a type, case, record field, exception or
+   active pattern, or when the file already resolves it through an open outside the tier (`Scalar` in a file that
+   opens `ToolUp.Facts`). An open of `ToolUp.Platform` does not count, because a server case won over a Core case of
+   the same spelling. If your tree declares `Required` and one file really does mean the tier's, that file fails to
+   compile at the site and takes the open by hand.
 
 Which projects it touches is read from the project files: a project that references the server tier (a part
 project, a `ToolUp.Platform.Server*` or `ToolUp.Sdk` package, an imported `.Server.props`, a project that reaches
@@ -105,13 +111,31 @@ not, and a file compiled by both kinds — a source linked into a Fable project 
 open the Fable compile could not resolve. A tier file compiled by a project that does not reference the parts (a
 test pack over a few server files and Core) may open only the tier namespaces those sources declare.
 
-**Idempotent.** A second run finds every open in place and changes nothing; in this repository the check over the
-whole tree after the move reports zero pending rewrites.
+**Idempotent.** A second run finds every open in place and changes nothing.
 
-**Where the opens go, and why.** Resolution is kept as it was while everything shared `ToolUp.Platform`: a server
-name won over a Core name of the same spelling, and a module a file opened itself won over both. So a tier file
-that lacked `open ToolUp.Platform` takes it straight after its header, the part opens right after it, and both
-before the file's own opens; a consumer takes the part opens after its last open.
+**Opens the move leaves dead are reported, never deleted.** An open of `ToolUp.Platform` or of a moved path, where
+the code it covers names nothing it reaches, appears as a `1198-likely-dead-open` review site. Remove it if the file
+still compiles. The tables hold no record labels and no extension members, so a file that reaches Core only through
+those is reported too, and the compiler is what decides. The one open the pass removes itself is in a nested module:
+see below.
+
+### Where the opens go, and why
+
+Resolution is kept as it was while everything shared `ToolUp.Platform`, where a later open shadows an earlier one: a
+server name won over a Core name of the same spelling, and a module a file opened itself won over both.
+
+- **A file that opens `ToolUp.Platform`** takes the part opens straight after that open, with its other opens still
+  below them, so its own modules keep shadowing the parts.
+- **A file that does not** takes them above its first open, or after its `namespace` / `module` header when it has no
+  open at all (whatever the header's spelling, a double-backticked name included).
+- **A tier file that lacks `open ToolUp.Platform`** takes it straight after its header, the part opens right after it,
+  and both before the file's own opens.
+- **A nested module with opens of its own** takes what its body needs inside the module, indented with those opens:
+  beside its `open ToolUp.Platform`, or above its first open when it has none. If its body reaches nothing through
+  `ToolUp.Platform`, the part opens replace that open. A nested module with no opens is covered from namespace level.
+
+The script as tagged at 0.39.0 appended a consumer's part opens below its last open, which let a forge name shadow the
+consumer's, and inserted a nested module's opens at namespace level; re-order those by hand if you ran it.
 
 ## What the codemod leaves to you
 
@@ -130,6 +154,9 @@ pack and 6 in the tier and its companions, in these shapes:
   and `ToolUp.Platform.Infra.IRateLimitStore`; qualify the one you mean.
 - **A file that was declared in the remoting library's namespace but is the platform's** (`IdempotencySweepJob`,
   now `ToolUp.Platform.Jobs`) opens `ToolUp.Remoting.Server` for the layout it reads.
+
+A nested module whose `open ToolUp.Platform` was replaced, but which built a Core record by its labels alone, fails to
+compile at the literal; put the open back beside the part opens.
 
 Each compiles to a clear error at the site, and the fix is one qualifier. Nothing is silent: a name that resolves
 to the wrong half is a type error, never a changed behaviour, because the two halves never share a shape.
