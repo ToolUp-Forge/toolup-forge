@@ -24,6 +24,8 @@ module ToolUp.AI.Client.Tests.FactBrowseClientTests
 // reflection, and rendering needs a JS runtime.
 
 open System
+open Fable.Core.JsInterop
+open Feliz
 open SharedTypes
 open ToolUp.Platform
 open ToolUp.Platform.Testing
@@ -123,6 +125,55 @@ let private dispatched (cmd: ToolUp.Elmish.Cmd<Msg>) : Msg list =
     List.ofSeq seen
 
 let private noop (_: Msg) = ()
+
+let private emptyRowPage: FactRowPage = {
+    TableId = "prices"
+    Metric = "elasticity"
+    Direction = TopOfRanking
+    SubjectPrefix = []
+    Page = 0
+    PageSize = FactBrowseApi.DefaultPageSize
+    MaxPageSize = FactBrowseApi.MaxPageSize
+    RankCeiling = 1000
+    Rows = []
+    WithheldCount = 0
+    Withheld = []
+    HasMore = false
+    ReachedRankCeiling = false
+    Population = {
+        SubjectCount = 0
+        FactCount = 0
+        ComparableCount = 0
+        NonComparableCount = 0
+        PeriodFrom = None
+        PeriodTo = None
+        FreshCount = 0
+        StaleCount = 0
+        Methods = []
+        Minimum = None
+        Maximum = None
+        Mean = None
+        ValueStatisticsWithheld = false
+    }
+}
+
+/// A page drawn from one model and then, on the button, from the next: the module re-rendering in place.
+[<ReactComponent>]
+let private Redraw (first: Model) (next: Model) (page: Model -> ReactElement) =
+    let model, setModel = React.useState first
+
+    Html.div [
+        Html.button [ prop.id "next-model"; prop.onClick (fun _ -> setModel next) ]
+        page model
+    ]
+
+/// The markup of `page` once it has been drawn from `first` and redrawn from `next`.
+let private redrawn (page: Model -> ReactElement) (first: Model) (next: Model) : string =
+    ViewMount.mountAndInteract
+        (fun host ->
+            let button: obj = host?querySelector ("#next-model")
+            button?click ())
+        (Redraw first next page)
 
 // ─── Model ───────────────────────────────────────────────────────────
 
@@ -287,47 +338,79 @@ let private pageTests =
 
         testCase "an empty drill-down page says where bulk extraction lives"
         <| fun _ ->
-            let page: FactRowPage = {
-                TableId = "prices"
-                Metric = "elasticity"
-                Direction = TopOfRanking
-                SubjectPrefix = []
-                Page = 0
-                PageSize = FactBrowseApi.DefaultPageSize
-                MaxPageSize = FactBrowseApi.MaxPageSize
-                RankCeiling = 1000
-                Rows = []
-                WithheldCount = 0
-                Withheld = []
-                HasMore = false
-                ReachedRankCeiling = false
-                Population = {
-                    SubjectCount = 0
-                    FactCount = 0
-                    ComparableCount = 0
-                    NonComparableCount = 0
-                    PeriodFrom = None
-                    PeriodTo = None
-                    FreshCount = 0
-                    StaleCount = 0
-                    Methods = []
-                    Minimum = None
-                    Maximum = None
-                    Mean = None
-                    ValueStatisticsWithheld = false
-                }
-            }
-
             let model = {
                 empty with
                     SelectedTable = Some "prices"
                     Detail = Loaded(detail "prices")
                     RowQuery = Some(defaultRowQuery "prices" "elasticity")
-                    Rows = Loaded page
+                    Rows = Loaded emptyRowPage
             }
 
             let markup = ViewMount.mount (FactBrowseView.RowsPage model noop)
             Expect.isTrue (markup.Contains "reporting path") "bulk extraction is an export, and the page says so"
+
+        testCase "the run history holds the page it shows while another is read"
+        <| fun _ ->
+            let shown = {
+                empty with
+                    SelectedTable = Some "prices"
+                    Detail = Loaded(detail "prices")
+                    Runs = Loaded(noRuns "prices")
+            }
+
+            let markup =
+                redrawn (fun m -> FactBrowseView.TablePage m noop) shown { shown with Runs = Loading }
+
+            Expect.isTrue (markup.Contains "not been refreshed yet") "the page it replaces stays on screen"
+            Expect.isTrue (markup.Contains "aria-busy=\"true\"") "marked as on its way out"
+
+        testCase "the drill-down holds the rows it shows while another page is read"
+        <| fun _ ->
+            let shown = {
+                empty with
+                    SelectedTable = Some "prices"
+                    Detail = Loaded(detail "prices")
+                    RowQuery = Some(defaultRowQuery "prices" "elasticity")
+                    Rows = Loaded emptyRowPage
+            }
+
+            let markup =
+                redrawn (fun m -> FactBrowseView.RowsPage m noop) shown { shown with Rows = Loading }
+
+            Expect.isTrue (markup.Contains "reporting path") "the page it replaces stays on screen"
+            Expect.isFalse (markup.Contains "Loading…") "the page does not collapse to a loading line"
+            Expect.isTrue (markup.Contains "aria-busy=\"true\"") "marked as on its way out"
+
+        testCase "the drill-down holds nothing on its first read, or from another table"
+        <| fun _ ->
+            let shown = {
+                empty with
+                    SelectedTable = Some "prices"
+                    Detail = Loaded(detail "prices")
+                    RowQuery = Some(defaultRowQuery "prices" "elasticity")
+                    Rows = Loading
+            }
+
+            Expect.isTrue
+                ((ViewMount.mount (FactBrowseView.RowsPage shown noop)).Contains "Loading…")
+                "nothing has been drawn to hold"
+
+            let other = {
+                shown with
+                    SelectedTable = Some "costs"
+                    RowQuery = Some(defaultRowQuery "costs" "elasticity")
+            }
+
+            let markup =
+                redrawn
+                    (fun m -> FactBrowseView.RowsPage m noop)
+                    {
+                        shown with
+                            Rows = Loaded emptyRowPage
+                    }
+                    other
+
+            Expect.isTrue (markup.Contains "Loading…") "another table's rows are not this one's"
     ]
 
 // ─── The knowledge base badge ────────────────────────────────────────

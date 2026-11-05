@@ -113,6 +113,26 @@ let private failed (message: string) =
 let private loadingNote () =
     Html.p [ prop.className "text-sm text-gray-500 italic"; prop.text "Loading…" ]
 
+/// A re-read draws what it replaces until its answer arrives. Swapping a page of
+/// rows for one "Loading…" line collapses the page, and the browser resets the
+/// reader's scroll to fit. `keeps` says whether the last answer still belongs on
+/// screen (it is the same table); the flag says the answer drawn is on its way out.
+let private useHeld (keeps: 'T -> bool) (load: Load<'T>) : Load<'T> * bool =
+    let held = React.useRef (None: 'T option)
+
+    match load with
+    | Loaded value -> held.current <- Some value
+    | Loading -> ()
+    | NotAsked
+    | LoadFailed _ -> held.current <- None
+
+    match load, held.current with
+    | Loading, Some value when keeps value -> Loaded value, true
+    | _ -> load, false
+
+/// The class of a container whose answer `useHeld` is holding.
+let private heldClass (busy: bool) = if busy then "opacity-60" else ""
+
 let private button (label: string) (enabled: bool) (onClick: unit -> unit) =
     Html.button [
         prop.className
@@ -445,6 +465,23 @@ let private runsTable (model: Model) (page: FactRunPage) (dispatch: Msg -> unit)
             ]
         ]
 
+/// The run history, holding the page it shows while another page is read.
+[<ReactComponent>]
+let private RunsSection (tableId: string) (model: Model) (dispatch: Msg -> unit) =
+    let runs, busy =
+        useHeld (fun (page: FactRunPage) -> page.TableId = tableId) model.Runs
+
+    match runs with
+    | NotAsked
+    | Loading -> loadingNote ()
+    | LoadFailed message -> failed message
+    | Loaded page ->
+        Html.div [
+            prop.ariaBusy busy
+            prop.className (heldClass busy)
+            prop.children [ runsTable model page dispatch ]
+        ]
+
 /// The Table detail page: declaration, population summary, run history.
 let TablePage (model: Model) (dispatch: Msg -> unit) =
     Html.div [
@@ -539,11 +576,7 @@ let TablePage (model: Model) (dispatch: Msg -> unit) =
 
                 sectionHeading "Runs"
 
-                match model.Runs with
-                | NotAsked
-                | Loading -> loadingNote ()
-                | LoadFailed message -> failed message
-                | Loaded page -> runsTable model page dispatch
+                RunsSection listing.TableId model dispatch
         ]
     ]
 
@@ -637,6 +670,9 @@ let RowsPage (model: Model) (dispatch: Msg -> unit) =
     let prefixText, setPrefixText = React.useState queryPrefix
     React.useEffect ((fun () -> setPrefixText queryPrefix), [| box queryPrefix |])
 
+    let rows, rowsBusy =
+        useHeld (fun (page: FactRowPage) -> model.SelectedTable = Some page.TableId) model.Rows
+
     Html.div [
         prop.className "p-6 space-y-3"
         prop.children [
@@ -709,7 +745,7 @@ let RowsPage (model: Model) (dispatch: Msg -> unit) =
                     ]
                 ]
 
-                match model.Rows with
+                match rows with
                 | NotAsked
                 | Loading -> loadingNote ()
                 | LoadFailed message -> failed message
@@ -732,6 +768,8 @@ let RowsPage (model: Model) (dispatch: Msg -> unit) =
                             ])
 
                     Html.div [
+                        prop.ariaBusy rowsBusy
+                        prop.className (heldClass rowsBusy)
                         prop.children [
                             if List.isEmpty page.Rows && page.WithheldCount = 0 then
                                 emptyState
@@ -811,7 +849,7 @@ let create (label: ModuleLabel option) : ErasedModule =
     |> ClientModule.withId FactBrowseLinks.ModuleId
     |> ClientModule.withPages [
         page FactBrowseLinks.TablesRoute "Tables" ToolUp.Platform.Icons.usage TablesPage
-        page FactBrowseLinks.TableRoute "Table" ToolUp.Platform.Icons.dataLoading TablePage
+        page FactBrowseLinks.TableRoute "Table" ToolUp.Platform.Icons.interconnected TablePage
         page FactBrowseLinks.RowsRoute "Rows" ToolUp.Platform.Icons.target RowsPage
     ]
     |> ClientModule.withEventSubscription FactBrowseLinks.OpenTableTopic OpenTable
