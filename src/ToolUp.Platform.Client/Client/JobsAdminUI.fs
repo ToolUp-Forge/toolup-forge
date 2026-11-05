@@ -814,7 +814,7 @@ let create (config: ModuleLabel option) : ErasedModule =
     let icon =
         config
         |> Option.map _.Icon
-        |> Option.defaultValue ToolUp.Platform.Icons.dataLoading
+        |> Option.defaultValue ToolUp.Platform.Icons.settings
 
     ToolUp.Platform.ClientModule.create {
         Init = init
