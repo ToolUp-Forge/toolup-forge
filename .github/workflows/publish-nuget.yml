@@ -55,11 +55,11 @@
 # one-hour temporary API key, validated on nuget.org against a Trusted
 # Publishing policy the operator registers there (Repository Owner
 # `ToolUp-Forge`, Repository `toolup-forge`, Workflow File
-# `publish-nuget.yml`, package glob `ToolUp.*`). The only stored value
-# is the `NUGET_USER` repo secret — the nuget.org PROFILE NAME (not
-# email) owning the policy. The login step is deliberately UNGUARDED:
+# `publish-nuget.yml`, package glob `ToolUp.*`). No value is stored:
+# the login names the nuget.org PROFILE NAME (not email) owning the
+# policy, which is public. The login step is deliberately UNGUARDED:
 # a tag push that cannot publish must fail loudly, because a silently
-# skipped release (a lost secret, a fork tag) reads as a green run.
+# skipped release (a fork tag) reads as a green run.
 # Nothing rotates: the temp key dies within the hour.
 #
 # ─── The `ToolUp.*` glob is a CONSTRAINT, not a description (Phase 754)
@@ -237,7 +237,7 @@ jobs:
         uses: NuGet/login@v1
         id: nuget-login
         with:
-          user: ${{ secrets.NUGET_USER }}
+          user: ajwillshire # the policy owner (a nuget.org profile name is public, not a secret)
 
       # The FAKE Publish target packs every public-surface fsproj into
       # ./artifacts/ and pushes each .nupkg to nuget.org with

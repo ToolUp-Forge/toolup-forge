@@ -492,9 +492,9 @@ consumer source — anonymous restore, no feed wiring), using
 — no long-lived API key exists: the workflow exchanges its GitHub OIDC
 token for a one-hour key, validated against a Trusted Publishing policy
 registered on nuget.org (Repository Owner `ToolUp-Forge`, Repository
-`toolup-forge`, Workflow File `publish-nuget.yml`). The only repo secret
-is `NUGET_USER` — the nuget.org profile name owning the policy. No
-contributor-side setup is needed. (The old `ToolUp-Forge` GitHub
+`toolup-forge`, Workflow File `publish-nuget.yml`). No repo secret is
+needed: the login names the nuget.org profile owning the policy,
+which is public. No contributor-side setup is needed. (The old `ToolUp-Forge` GitHub
 Packages feed is frozen — historical versions only, no longer pushed
 to.)
 
