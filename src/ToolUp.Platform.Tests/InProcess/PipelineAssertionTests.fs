@@ -198,7 +198,11 @@ let private refusalTests =
                 "names the column and what it holds"
         }
 
-        test "a host-rounded column is not one fact" {
+        // The evaluator computes `ln` (and `exp`, `log10`, a float `pow`) on
+        // pinned routines, so a column through it is the same bits on every
+        // host and asserts like any other. The host-rounded refusal stays for
+        // a column the evaluator itself marks host-rounded.
+        test "a column through a transcendental function is pinned, and asserts" {
             let w = assertingWorld ()
 
             let logged = [
@@ -215,10 +219,10 @@ let private refusalTests =
                 )
             ]
 
-            Expect.equal
-                (refusalOf w (assertArgs logged "log_total" "site_total" "site"))
-                (PipelineRefusal.AssertedColumnHostRounded "log_total")
-                "names the column"
+            let assertion = assertionOf w (assertArgs logged "log_total" "site_total" "site")
+
+            Expect.equal assertion.Column "log_total" "the asserted column"
+            Expect.equal assertion.Facts.Length 2 "one fact per subject"
         }
 
         test "an unregistered metric, and one the pipeline operation does not produce" {

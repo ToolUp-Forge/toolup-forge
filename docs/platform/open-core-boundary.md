@@ -211,7 +211,7 @@ CHANGELOG generator links (for the open row below,
 | Family | Floor here | Fuaran.UI release | Its floor | Status | Broken until closed |
 |---|---|---|---|---|---|
 | `Fuaran.Core` | `0.40.2` | `0.97.0` | `0.38.1` | closed by Fuaran.UI 0.98.1 | Every consumer composing the fact tier beside Fuaran-UI pages on Fuaran.UI 0.97.0 or older: the Core minors after 0.38 removed entities the UI tier calls (`Fuaran.Core.Canon` among them), so the server failed with FS0193 or a `TypeLoadException` for `Fuaran.Core.Canon`, and the Fable client failed compiling the UI tier's own sources. Recorded after the fact: this pin shipped in 0.35.0 before the rule existed. |
-| `Fuaran.Compute` | `0.42.0` | `0.99.1` | `0.41.0` | open | None observed. `Fuaran.Compute.DataFrame` 0.42.0 ships Fable sources byte-identical to 0.41.0's, and the co-build probe passes beside Fuaran.UI 0.99.1. Closes with the first Fuaran.UI release built on `Fuaran.Compute.DataFrame` 0.42.0 or later. |
+| `Fuaran.Compute` | `0.43.0` | `0.99.1` | `0.41.0` | open | None observed: the co-build probe passes beside Fuaran.UI 0.99.1. `Fuaran.Compute.DataFrame` 0.43.0 widens the `Transform`, `ColExpr` and `EvalError` unions the UI tier's sources were compiled without, so a UI tier match over them that is not total is the shape to watch. This row supersedes the lead declared at `0.42.0` (the floor moved; no Fuaran.UI release closed it). Closes with the first Fuaran.UI release built on `Fuaran.Compute.DataFrame` 0.43.0 or later. |
 
 The first row is the worked example. The 0.35.0 release pinned `Fuaran.Core.Column` 0.40.2 while
 every published Fuaran.UI was built on Core 0.38.1, and Fuaran.UI 0.98.1, built on Core 0.40.2,

@@ -420,14 +420,36 @@ let describeUnbuilt (config: string) (total: int) (missing: PackableAssembly lis
 /// Every `*.dll` under `src/**/bin/<config>/net10.0/` — the union of all
 /// packable assemblies + their copied NuGet deps — gives MLC enough to
 /// resolve base types / interfaces during surface enumeration.
+///
+/// One file per simple name: the HIGHEST assembly version among the copies.
+/// Projects in this tree can resolve different versions of one package (a
+/// project that reaches a package only transitively takes the floor its
+/// dependency declares, not the central pin), and the resolver keeps one
+/// file per name. Taking whichever copy enumerates first could bind an
+/// assembly built against the pin to an older copy, so its types fail to
+/// load and its surface reads as removed. The highest version is also what
+/// a consumer composing the whole graph resolves.
 let resolverPool (root: string) (config: string) : string list =
     let srcDir = Path.Combine(root, "src")
     let needle = sprintf "/bin/%s/net10.0/" config
+
+    let versionOf (path: string) =
+        try
+            AssemblyName.GetAssemblyName(path).Version
+            |> Option.ofObj
+            |> Option.defaultValue (Version())
+        with _ ->
+            Version()
 
     Directory.EnumerateFiles(srcDir, "*.dll", SearchOption.AllDirectories)
     |> Seq.filter (fun p ->
         let n = p.Replace('\\', '/')
         n.Contains needle && not (n.Contains "/obj/") && not (n.Contains "/ref/"))
+    |> Seq.groupBy (fun p -> Path.GetFileName(p).ToLowerInvariant())
+    |> Seq.map (fun (_, copies) ->
+        match List.ofSeq copies with
+        | [ only ] -> only
+        | many -> many |> List.maxBy versionOf)
     |> List.ofSeq
 
 // ─── Surface rendering (metadata-only) ───────────────────────────────

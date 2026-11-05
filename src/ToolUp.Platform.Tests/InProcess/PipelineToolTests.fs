@@ -184,6 +184,18 @@ let private refusalTests =
             with
             | PipelineRefusal.UnknownColumn(2, "subject", [ "who" ]) -> ()
             | other -> failtestf "a projected-away column is unknown after it, got %A" other
+
+            // A call's argument is read through the expansion, and the refusal
+            // names the position the step was written at, `define` included.
+            let absent = {
+                Name = "absent"
+                Params = [ { Name = "x"; Default = None } ]
+                Body = IsNull(Arg "x")
+            }
+
+            match refusalOf (answer w (revenueArgs [ Define absent; Filter(Call("absent", [ Col "profit" ])) ])) with
+            | PipelineRefusal.UnknownColumn(2, "profit", _) -> ()
+            | other -> failtestf "expected an unknown column at step 2 through a call, got %A" other
         }
 
         test "an output schema the walk cannot name" {
@@ -217,6 +229,20 @@ let private refusalTests =
             refusedWith
                 (PipelineRefusal.NamedSource(1, "join"))
                 (answer w (revenueArgs [ Join(Ref "elsewhere", [ "subject", "subject" ], Inner) ]))
+
+            // A prediction scores against a model read from a named source.
+            refusedWith
+                (PipelineRefusal.NamedSource(1, "predict"))
+                (answer
+                    w
+                    (revenueArgs [
+                        Predict {
+                            Fit = FitSpec.ols "revenue" [ "day", Col "period_from" ]
+                            Model = PredictModel.Coefficients(Ref "elsewhere")
+                            Scale = PredictScale.Response
+                            Interval = None
+                        }
+                    ]))
 
             refusedWith
                 (PipelineRefusal.UnboundParameter(1, [ "threshold" ]))

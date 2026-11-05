@@ -8,7 +8,7 @@
          released versions on nuget.org, never a local-feed build. -->
     <FuaranRestorePath>public</FuaranRestorePath>
     <FuaranCoreVersion>0.40.2</FuaranCoreVersion>
-    <FuaranComputeVersion>0.42.0</FuaranComputeVersion>
+    <FuaranComputeVersion>0.43.0</FuaranComputeVersion>
   </PropertyGroup>
   <PropertyGroup>
     <!-- Phase 1129 — the Fuaran-UI repository's pin, for Fuaran.UI and

@@ -303,6 +303,9 @@ module PipelineTool =
         | Union _ -> Some "union"
         | Intersect _ -> Some "intersect"
         | Except _ -> Some "except"
+        // A prediction scores against a model read from a named source (its
+        // training rows or a coefficient table), never from the slice alone.
+        | Predict _ -> Some "predict"
         | Filter _
         | Project _
         | Derive _
@@ -312,7 +315,9 @@ module PipelineTool =
         | Unpivot _
         | Sort _
         | Distinct
-        | Limit _ -> None
+        | Limit _
+        | Define _
+        | Fit _ -> None
 
     /// The refusals decided by the pipeline alone, before anything is read:
     /// another source, a parameter, the clock.
@@ -356,6 +361,13 @@ module PipelineTool =
             (cases |> List.collect (fun (w, t) -> exprColumns w @ exprColumns t))
             @ exprColumns otherwise
         | InList(a, items) -> List.collect exprColumns (a :: items)
+        | Interpolate(a, _, _, _) -> exprColumns a
+        // A parameter read reads no column. A call reaches here only as its
+        // arguments: `walk` expands every call to its body (`FnDef.expand`)
+        // before any lineage is read, so the body's own reads are attributed
+        // through the expansion.
+        | Arg _ -> []
+        | Call(_, args) -> List.collect exprColumns args
 
     /// True when a window function reads its `Of` column; a ranking reads only
     /// its keys.
@@ -388,8 +400,14 @@ module PipelineTool =
         | Pivot spec -> spec.Index @ [ spec.On; spec.Values ]
         | Unpivot(ids, values) -> ids @ values
         | Sort keys -> keys |> List.choose (fst >> Slot.tryLit)
+        | Fit spec ->
+            spec.Response :: spec.GroupBy
+            @ Option.toList spec.Weights
+            @ (FitSpec.exprs spec |> List.collect exprColumns)
         | Distinct
         | Limit _
+        | Define _
+        | Predict _
         | Join _
         | Union _
         | Intersect _
@@ -442,6 +460,12 @@ module PipelineTool =
             | Limit _ -> lineage.Columns, Set.union lineage.Rows lineage.Order, lineage.Order
             | Distinct ->
                 lineage.Columns, Set.union lineage.Rows (lineage.Columns |> Map.values |> Set.unionMany), lineage.Order
+            | Define _ -> lineage.Columns, lineage.Rows, lineage.Order
+            // A fit pools its rows into one model per group, and a prediction
+            // scores against a model: neither output is attributed column by
+            // column, so every column reads every slice column.
+            | Fit _
+            | Predict _
             | Pivot _
             | Join _
             | Union _
@@ -469,10 +493,10 @@ module PipelineTool =
             Order = Set.empty
         }
 
-        let rec go (i: int) (knowledge: SchemaKnowledge) (lineage: Lineage) (rest: Transform list) =
+        let rec go (knowledge: SchemaKnowledge) (lineage: Lineage) (rest: (int * Transform) list) =
             match rest with
             | [] -> Ok(lineage.Columns |> Map.map (fun _ read -> Set.union read lineage.Rows))
-            | step :: rest ->
+            | (i, step) :: rest ->
                 let available = SchemaWalk.names knowledge
 
                 match stepReads step |> List.tryFind (fun c -> not (SchemaWalk.has c knowledge)) with
@@ -482,9 +506,24 @@ module PipelineTool =
 
                     match SchemaWalk.reason after with
                     | Some reason -> Error(PipelineRefusal.OpenSchema(i, reason))
-                    | None -> go (i + 1) after (lineageAfter all (SchemaWalk.names after) lineage step) rest
+                    | None -> go after (lineageAfter all (SchemaWalk.names after) lineage step) rest
 
-        go 1 (SchemaWalk.ofSchema schema) start pipeline
+        // The walk reads the pipeline with every defined function expanded
+        // inline, as the evaluator does, so a call's lineage is its body's.
+        // Expansion removes each `define` step and keeps the rest in order, so
+        // each expanded step keeps the 1-based position it was written at.
+        match FnDef.expand pipeline with
+        | Error e -> Error(PipelineRefusal.EvaluationFailed(DataFrame.errorString e))
+        | Ok expanded ->
+            let positions =
+                pipeline
+                |> List.indexed
+                |> List.choose (fun (i, step) ->
+                    match step with
+                    | Define _ -> None
+                    | _ -> Some(i + 1))
+
+            go (SchemaWalk.ofSchema schema) start (List.zip positions expanded)
 
     /// Every output column's lineage over `schema`: the slice columns its
     /// values, and the rows it is computed over, depend on.

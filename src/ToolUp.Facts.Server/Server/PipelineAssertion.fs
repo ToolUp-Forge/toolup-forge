@@ -121,7 +121,8 @@ module PipelineAssertion =
         match step with
         | Filter _
         | Sort _
-        | Distinct -> l
+        | Distinct
+        | Define _ -> l
         | Limit _ -> { l with Limited = true }
         | Project pairs -> {
             l with
@@ -152,6 +153,8 @@ module PipelineAssertion =
                     && (spec.PartitionBy |> List.exists l.Copies.ContainsKey)
           }
         | Unpivot(ids, _) -> { l with Copies = keep ids l.Copies }
+        | Fit _
+        | Predict _
         | Pivot _
         | Join _
         | Union _
