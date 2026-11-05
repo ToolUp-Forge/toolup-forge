@@ -872,6 +872,15 @@ module Client =
         | Some _ -> moduleImpl.Definition.Pages |> List.tryHead |> Option.map _.Route
         | None -> None
 
+    /// Phase 1240 — the page a first mount or a re-init lands on. Those paths
+    /// reset to the first page, which under `HashHistory` would discard the
+    /// page the URL just restored, so the current page stands while the module
+    /// has not changed. Everything else resets as it always has.
+    let private settledPageRoute (config: ClientConfig) (model: Model) (moduleImpl: ErasedModule) =
+        match config.BrowserHistory, model.ActivePageRoute with
+        | HashHistory, Some route when model.ActiveModuleId = moduleImpl.Definition.Id -> Some route
+        | _ -> defaultPageRoute moduleImpl
+
     /// Resolve the sidebar-icon path for a module. Single-page modules
     /// (auto-derived: `Pages = []`) use `Definition.Icon` directly;
     /// modules with explicit `Pages` use the first page's icon. The
@@ -1059,6 +1068,13 @@ module Client =
                     bootDefaultModuleId config modules
                 else
                     model.ActiveModuleId
+            elif config.BrowserHistory = HashHistory && not model.ActiveTeamLoadCompleted then
+                // Phase 1240 — "no team" is not known yet, only "no team
+                // loaded". Forcing the landing here would lose a view the URL
+                // restored, since a team arriving moves a caller on the landing
+                // to the default surface. The route guard holds the selection
+                // back meanwhile; `ActiveTeamLoaded` re-runs this with the answer.
+                model.ActiveModuleId
             else
                 // Gate active — the selection survives only if it's still a
                 // gate-visible surface (the landing, or an admin/management
@@ -1133,7 +1149,7 @@ module Client =
                 let reset = {
                     model with
                         ActiveModuleId = activeId
-                        ActivePageRoute = defaultPageRoute moduleImpl
+                        ActivePageRoute = settledPageRoute config model moduleImpl
                         ModuleStates = Map.empty
                 }
 
@@ -1190,7 +1206,7 @@ module Client =
             let resolved = {
                 model with
                     ActiveModuleId = activeId
-                    ActivePageRoute = defaultPageRoute moduleImpl
+                    ActivePageRoute = settledPageRoute config model moduleImpl
             }
 
             // Phase 569.B — the route guard, on the deep-link path that
@@ -1379,6 +1395,16 @@ module Client =
             : RegisteredModules.ModuleEntry))
         |> RegisteredModules.publish
 
+        // Phase 1240 — the view the URL names, if the deployment gave views
+        // URLs. It only chooses the initial selection: the deny-before-`Init`
+        // decisions below read this module exactly as they read a default one.
+        let restoredView =
+            match _config.BrowserHistory with
+            | NoBrowserHistory -> None
+            | HashHistory ->
+                BrowserHistory.current (RegisteredModules.snapshot ())
+                |> Option.map parseSidebarId
+
         let moduleImpl =
             // The no-team gate lands a freshly-signed-in user (no active
             // team yet) on the landing module rather than the default
@@ -1386,9 +1412,10 @@ module Client =
             // active-team fetch reconciles the surface via `ActiveTeamLoaded`
             // once it resolves (team → default; still no team → landing).
             let initialId =
-                match _config.NoActiveTeamLandingModuleId with
-                | Some landingId when ClientConfig.hasTeamScope _config -> landingId
-                | _ ->
+                match restoredView, _config.NoActiveTeamLandingModuleId with
+                | Some(id, _), _ -> id
+                | None, Some landingId when ClientConfig.hasTeamScope _config -> landingId
+                | None, _ ->
                     match _config.ActiveModule with
                     | Some id -> id
                     | None -> modules[0].Definition.Id
@@ -1481,7 +1508,10 @@ module Client =
 
         let model = {
             ActiveModuleId = moduleImpl.Definition.Id
-            ActivePageRoute = defaultPageRoute moduleImpl
+            ActivePageRoute =
+                match restoredView with
+                | Some(_, Some route) -> Some route
+                | _ -> defaultPageRoute moduleImpl
             ModuleStates = moduleStates
             AccessibleModules = None
             ShowAllModules = false
@@ -1495,7 +1525,10 @@ module Client =
             ActiveTeamLoadCompleted = false
             PlatformRole = None
             ActiveTeamRole = None
-            CurrentArea = ModuleArea.Product
+            CurrentArea =
+                match restoredView with
+                | Some _ -> ClientConfig.effectiveArea moduleImpl.Area moduleImpl.Group
+                | None -> ModuleArea.Product
             ConfigsPrefetch = Prefetch.none
             FlagsPrefetch = Prefetch.none
             ResetCounters = Map.empty
@@ -1544,7 +1577,16 @@ module Client =
             else
                 [ moduleInitCmd; bootLoadCommands ]
 
-        model, Cmd.batch initCmds
+        // Phase 1240 — the first entry names its view too, or Back to it would
+        // land on a URL with nothing to restore.
+        let firstEntryCmd =
+            match _config.BrowserHistory with
+            | NoBrowserHistory -> []
+            | HashHistory ->
+                let view = BrowserHistory.viewId model.ActiveModuleId model.ActivePageRoute
+                [ Cmd.ofEffect (fun _ -> BrowserHistory.replace view) ]
+
+        model, Cmd.batch (initCmds @ firstEntryCmd)
 
     /// Shared body of the `ConfigsLoaded` arm — also invoked by the
     /// `BootLoadFailed("configs", _)` path with `Map.empty` so a failed
@@ -1611,7 +1653,7 @@ module Client =
         else
             updated, Cmd.none
 
-    let update (_config: ClientConfig) (queryBus: IModuleQueryBus) (modules: ErasedModule list) msg model =
+    let private updateShell (_config: ClientConfig) (queryBus: IModuleQueryBus) (modules: ErasedModule list) msg model =
         let newModel, cmd =
             match msg with
             | ModuleMsg moduleMsg ->
@@ -2547,6 +2589,32 @@ module Client =
                 |> Cmd.batch
 
         finalModel, Cmd.batch [ cmd; processedDataResetCmds ]
+
+    /// The shell's `update`. Phase 1240 — under `HashHistory`, a message that
+    /// moved the view also writes the URL, as a command (`update` performs no
+    /// side effect, Phase 1069), and at this one site so every composer over
+    /// `update` writes it too. A navigation adds a history entry. Anything else
+    /// that moved the view, the no-active-team gate above all, replaces the
+    /// entry, so Back does not land on a view that would redirect again. A Back
+    /// or Forward arrives here as `ModuleSelected` too, and adds nothing: the
+    /// URL already names the view when the write runs.
+    let update (config: ClientConfig) (queryBus: IModuleQueryBus) (modules: ErasedModule list) msg model =
+        let next, cmd = updateShell config queryBus modules msg model
+
+        match config.BrowserHistory with
+        | NoBrowserHistory -> next, cmd
+        | HashHistory ->
+            let view = BrowserHistory.viewId next.ActiveModuleId next.ActivePageRoute
+
+            if view = BrowserHistory.viewId model.ActiveModuleId model.ActivePageRoute then
+                next, cmd
+            else
+                let write =
+                    match msg with
+                    | ModuleSelected _ -> BrowserHistory.push
+                    | _ -> BrowserHistory.replace
+
+                next, Cmd.batch [ cmd; Cmd.ofEffect (fun _ -> write view) ]
 
     /// Phase 1069 — the module-state observer publish (Phase 6g.A, 536),
     /// moved out of `update` so the shell's `update` performs no side
@@ -4886,6 +4954,24 @@ module Client =
                     member _.Dispose() = unsubscribe ()
                 })
 
+        // Phase 1240 — Back and Forward reach the shell as the ordinary
+        // `ModuleSelected`, so the route guard, the area flip and the lazy
+        // `Init` all apply. Attached only under `HashHistory`: by default the
+        // shell does not listen, and this list is what it was.
+        let browserHistoryEffects =
+            match config.BrowserHistory with
+            | NoBrowserHistory -> []
+            | HashHistory -> [
+                EffectHandle.programLifetime "browser-history" (fun dispatch ->
+                    let unsubscribe =
+                        BrowserHistory.subscribe RegisteredModules.snapshot (fun sidebarId ->
+                            dispatch (ModuleSelected sidebarId))
+
+                    { new System.IDisposable with
+                        member _.Dispose() = unsubscribe ()
+                    })
+              ]
+
         [
             navigationEffect
             localeRequestEffect
@@ -4895,6 +4981,7 @@ module Client =
             authTokenAcquiredEffect
             bridgeHealthEffect
         ]
+        @ browserHistoryEffects
 
     /// Attach every shell program-lifetime effect to `prog`, lifting each
     /// into the program's message type via `wrap`. `Client.program` calls

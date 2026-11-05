@@ -350,6 +350,10 @@
              the shell's boot subscription + ModuleEventPublished fan-out. -->
         <Compile Include="Client\ModuleEvents.fs" />
         <Compile Include="Client\RegisteredModules.fs" />
+        <!-- Phase 1240 - a view's URL (the fragment, the history writes, the
+             popstate subscription). After RegisteredModules, which a URL is
+             checked against; before SDK.Client.fs, which uses it. -->
+        <Compile Include="Client\BrowserHistory.fs" />
         <Compile Include="Client\AuthUIProvider.fs" />
         <Compile Include="Client\FeatureFlags.fs" />
         <Compile Include="Client\I18n.fs" />

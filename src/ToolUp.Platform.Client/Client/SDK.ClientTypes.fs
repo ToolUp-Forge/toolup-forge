@@ -1605,6 +1605,16 @@ type AdminSurfaceMode =
     /// (derived via `ClientConfig.effectiveArea`) move to the admin area.
     | SeparateArea
 
+/// Phase 1240 — whether the shell's views have browser history and a URL.
+type BrowserHistoryMode =
+    /// The default — the active view lives in the model alone: no history
+    /// entry is written, and the URL is neither read nor changed.
+    | NoBrowserHistory
+    /// Each view has the URL `#/{moduleId}{pageRoute}`. A navigation adds a
+    /// history entry, Back and Forward move between views, and a reload
+    /// restores the view through the route guard (Phase 569).
+    | HashHistory
+
 /// Phase 24 — PWA install manifest, for deployments that opt into
 /// offline mode.
 ///
@@ -1951,6 +1961,10 @@ type ClientConfig = {
     /// splits the sidebar into Product and Administration areas with a
     /// role-gated switcher.
     AdminSurface: AdminSurfaceMode
+    /// Phase 1240 — browser history and a URL per view. **Default
+    /// `NoBrowserHistory`** (the URL is neither read nor written, as before
+    /// this field). `HashHistory` makes Back, Forward and reload work.
+    BrowserHistory: BrowserHistoryMode
     /// Phase 569 — the view rendered when the route guard refuses a
     /// deep-linked module (the caller could not have reached it from the
     /// sidebar either). **Default `DefaultNotAuthorised`** — the SDK's
@@ -2367,6 +2381,8 @@ module ClientConfig =
         // Phase 567 — inline admin groups by default (byte-identical to
         // pre-567); SeparateArea is the opt-in two-area sidebar.
         AdminSurface = InlineGroups
+        // Phase 1240 — opt-in (GP 11): the URL is untouched until asked for.
+        BrowserHistory = NoBrowserHistory
         // Phase 569 — the SDK's reason-aware denial surface; a deployment
         // swaps in its own with `CustomNotAuthorised`.
         NotAuthorisedView = DefaultNotAuthorised
