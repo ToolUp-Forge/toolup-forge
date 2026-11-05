@@ -405,8 +405,11 @@ module SubsystemNamespaces =
         | Type
         /// A namespace-level type or module whose old path a source
         /// outside the tier still declares (`ToolUp.Platform.BlobStorage`
-        /// is a Core module too): the old `open` stays, and the moved
-        /// half is opened beside it when one of its members is named.
+        /// is a Core module too): the old `open` stays. A moved MODULE is
+        /// opened beside it only when one of its members is named, through
+        /// its `Member` rows, since the bare name resolves to the half that
+        /// stayed. A moved TYPE (`EgressPolicy`, a module in Core) has no such
+        /// rows, and the bare name is the use.
         | Shared
         /// A value, function, active pattern or type an `[<AutoOpen>]`
         /// module exposes, or a member of a shared module's moved half.
@@ -584,6 +587,29 @@ module SubsystemNamespaces =
                             context <- ""
 
         out |> List.ofSeq |> List.distinct
+
+    /// The namespace-level modules of a `namespace` file, each with what its
+    /// body declares, read as if the module were a file of its own.
+    let private nestedModules (lines: string[]) (h: Header) : (string * string[] * Header) list = [
+        for i in h.Line + 1 .. lines.Length - 1 do
+            let m = nestedModuleRx.Match lines[i]
+
+            if m.Success && m.Groups["indent"].Value = "" then
+                let body =
+                    lines
+                    |> Array.skip (i + 1)
+                    |> Array.takeWhile (fun l -> String.IsNullOrWhiteSpace l || indentOf l > 0)
+                    |> Array.map (fun l -> if l.Length >= 4 then l.Substring 4 else "")
+
+                m.Groups["name"].Value,
+                body,
+                {
+                    h with
+                        Keyword = "module"
+                        AutoOpen = true
+                        Line = -1
+                }
+    ]
 
     // ── Scanning the tier ─────────────────────────────────────────────
 
@@ -768,10 +794,23 @@ module SubsystemNamespaces =
                             if not (staying.Contains oldFull) then
                                 entries.Add(entry EntryKind.Namespace oldFull "*" newFull)
 
+                            let nested = nestedModules lines h
+
                             for kind, name in declarations lines (Some h) do
                                 match kind with
                                 | EntryKind.Type when staying.Contains(oldFull + "." + name) ->
                                     entries.Add(entry EntryKind.Shared oldNs name newNs)
+
+                                    for moduleName, body, asFile in nested do
+                                        if moduleName = name then
+                                            for _, declared in declarations body (Some asFile) do
+                                                entries.Add(
+                                                    entry
+                                                        EntryKind.Member
+                                                        (oldFull + "." + name)
+                                                        declared
+                                                        (newFull + "." + name)
+                                                )
                                 | _ -> entries.Add(entry kind oldNs name newNs)
 
         List.ofSeq files, entries |> Seq.distinct |> List.ofSeq
@@ -849,20 +888,9 @@ module SubsystemNamespaces =
                         for name in membersOf lines h do
                             h.Path, name
                     | Some h ->
-                        // A namespace's nested modules, read as if each were
-                        // a file of its own.
-                        for i in h.Line + 1 .. lines.Length - 1 do
-                            let m = nestedModuleRx.Match lines[i]
-
-                            if m.Success && m.Groups["indent"].Value = "" then
-                                let body =
-                                    lines
-                                    |> Array.skip (i + 1)
-                                    |> Array.takeWhile (fun l -> String.IsNullOrWhiteSpace l || indentOf l > 0)
-                                    |> Array.map (fun l -> if l.Length >= 4 then l.Substring 4 else "")
-
-                                for name in membersOf body { h with Line = -1 } do
-                                    h.Path + "." + m.Groups["name"].Value, name
+                        for moduleName, body, asFile in nestedModules lines h do
+                            for name in membersOf body asFile do
+                                h.Path + "." + moduleName, name
                     | None -> ()
         ]
 
@@ -1041,12 +1069,21 @@ module SubsystemNamespaces =
             |> List.distinct
             |> List.sortByDescending (fun (o, _, _) -> o.Length)
 
+        // A shared name with member rows is a module, and only its members
+        // say the moved half is meant.
+        let sharedModules =
+            entries
+            |> List.filter (fun e -> e.Kind = EntryKind.Member)
+            |> List.map _.OldNamespace
+            |> Set.ofList
+
         let mentions =
             entries
             |> List.choose (fun e ->
                 match e.Kind with
                 | EntryKind.Namespace -> None
                 | EntryKind.Split -> None
+                | EntryKind.Shared when sharedModules.Contains(join e.OldNamespace e.Name) -> None
                 | k -> Some(e.Name, (k, e.NewNamespace, e.OldNamespace)))
             |> List.groupBy fst
             |> List.map (fun (name, xs) -> name, xs |> List.map snd |> List.distinct)
@@ -1162,7 +1199,7 @@ module SubsystemNamespaces =
         Regex(@"^\s*let\s[^=]*\(\|(?<ap>[^)]*)\|\)", RegexOptions.CultureInvariant)
 
     let private recordFieldRx =
-        Regex(@"^\s*\{?\s*(?:mutable\s+)?(?<name>[A-Z]\w*)\s*:", RegexOptions.CultureInvariant)
+        Regex(@"(?:^|[{;])\s*(?:mutable\s+)?(?<name>[A-Z]\w*)\s*:", RegexOptions.CultureInvariant)
 
     /// The types, union cases, record fields, exceptions and active patterns
     /// `lines` declare. A union case is read only under its `type`, so a match
@@ -1178,6 +1215,10 @@ module SubsystemNamespaces =
             if head.Success then
                 names.Add head.Groups["name"].Value |> ignore
                 let rest = head.Groups["rest"].Value.Trim()
+
+                for field in recordFieldRx.Matches rest do
+                    names.Add field.Groups["name"].Value |> ignore
+
                 let first = firstCaseRx.Match rest
 
                 if first.Success then
@@ -1209,9 +1250,7 @@ module SubsystemNamespaces =
                 if e.Success then
                     names.Add e.Groups["name"].Value |> ignore
 
-                let field = recordFieldRx.Match line
-
-                if field.Success then
+                for field in recordFieldRx.Matches line do
                     names.Add field.Groups["name"].Value |> ignore
 
                 let ap = activePatternRx.Match line
@@ -1488,6 +1527,19 @@ module SubsystemNamespaces =
             |> Array.choose idx.Reaches.TryFind
             |> Set.unionMany
 
+        // `Existing = n` opening a line or following `{`, `{|` or `;` is a record
+        // label, whichever record: it names no case.
+        let isRecordLabel (line: string) (m: Match) =
+            let before = line.Substring(0, m.Index).TrimEnd()
+            let after = line.Substring(m.Index + m.Length).TrimStart()
+
+            (before = ""
+             || before.EndsWith "{"
+             || before.EndsWith "{|"
+             || before.EndsWith ";")
+            && after.StartsWith "="
+            && not (after.StartsWith "==")
+
         let targetsOf (name: string) =
             idx.Mentions.TryFind name
             |> Option.defaultValue []
@@ -1496,6 +1548,12 @@ module SubsystemNamespaces =
                     kind = EntryKind.Case
                     && (ownDeclared.Contains name || resolvedElsewhere.Contains name)
                 ))
+
+        // A shared module's member is usually a common word (`create`, `token`),
+        // and undotted it is the module's only under an open of the old path.
+        let countsBare (ns: string) (declaredIn: string) =
+            let lastSegment = declaredIn.Substring(declaredIn.LastIndexOf '.' + 1)
+            not (ns.EndsWith("." + lastSegment)) || opened.Contains declaredIn
 
         let collectMentions (mentioned: Collections.Generic.HashSet<string>) (body: int seq) =
             for i in body do
@@ -1508,27 +1566,30 @@ module SubsystemNamespaces =
 
                         // The qualifier is itself a bare mention: in a dotted mention of the form Qualifier.member, the qualifier half.
                         if qualifier.Success && not (local.Contains qualifier.Value) then
-                            for _, ns, _ in targetsOf qualifier.Value do
-                                mentioned.Add ns |> ignore
+                            for _, ns, declaredIn in targetsOf qualifier.Value do
+                                if countsBare ns declaredIn then
+                                    mentioned.Add ns |> ignore
 
                         if not (local.Contains name) then
-                            for _, ns, declaredIn in targetsOf name do
-                                // Unqualified, or qualified by the declaring
-                                // namespace's own last segment: a Core module
-                                // whose nested module moved is still reached
-                                // through the Core module's name.
-                                if not qualifier.Success then
-                                    mentioned.Add ns |> ignore
-                                elif declaredIn = qualifier.Value || declaredIn.EndsWith("." + qualifier.Value) then
-                                    // `Auth.IdentitySanitiser` resolves through the
-                                    // namespace ABOVE `…Config.Auth`, where `Auth`
-                                    // is a fragment the Core module's name merges with.
-                                    let suffix = "." + qualifier.Value
+                            for kind, ns, declaredIn in targetsOf name do
+                                if not (kind = EntryKind.Case && isRecordLabel line m) then
+                                    // Unqualified, or qualified by the declaring
+                                    // namespace's own last segment: a Core module
+                                    // whose nested module moved is still reached
+                                    // through the Core module's name.
+                                    if not qualifier.Success then
+                                        if countsBare ns declaredIn then
+                                            mentioned.Add ns |> ignore
+                                    elif declaredIn = qualifier.Value || declaredIn.EndsWith("." + qualifier.Value) then
+                                        // `Auth.IdentitySanitiser` resolves through the
+                                        // namespace ABOVE `…Config.Auth`, where `Auth`
+                                        // is a fragment the Core module's name merges with.
+                                        let suffix = "." + qualifier.Value
 
-                                    if ns.EndsWith suffix then
-                                        mentioned.Add(ns.Substring(0, ns.Length - suffix.Length)) |> ignore
-                                    else
-                                        mentioned.Add ns |> ignore
+                                        if ns.EndsWith suffix then
+                                            mentioned.Add(ns.Substring(0, ns.Length - suffix.Length)) |> ignore
+                                        else
+                                            mentioned.Add ns |> ignore
 
         let neededFrom (mentioned: string seq) (alreadyOpen: Set<string>) =
             mentioned

@@ -74,6 +74,30 @@ let private table =
         }
     ]
 
+/// A shared module (`ServerConfig`, a Core type and a tier module), and a shared
+/// type (`EgressPolicy`, a Core module and a tier type).
+let private sharedTable =
+    SubsystemNamespaces.index [
+        {
+            Kind = SubsystemNamespaces.EntryKind.Shared
+            OldNamespace = "ToolUp.Platform"
+            Name = "ServerConfig"
+            NewNamespace = "ToolUp.Platform.Config"
+        }
+        {
+            Kind = SubsystemNamespaces.EntryKind.Member
+            OldNamespace = "ToolUp.Platform.ServerConfig"
+            Name = "fromEnv"
+            NewNamespace = "ToolUp.Platform.Config.ServerConfig"
+        }
+        {
+            Kind = SubsystemNamespaces.EntryKind.Shared
+            OldNamespace = "ToolUp.Platform"
+            Name = "EgressPolicy"
+            NewNamespace = "ToolUp.Platform.Audit"
+        }
+    ]
+
 /// The hand-built table with what an open of `ToolUp.Platform` reaches.
 let private tableWithPlatform = {
     table with
@@ -543,6 +567,8 @@ let tests =
                         "type Mode = Other | Coalesced of int"
                         "type Coalesced = { A: int }"
                         "type Row = {\n    Coalesced: bool\n}"
+                        "type Row = { Other: int; Coalesced: bool }"
+                        "let rows = [ {| Other = 1 |} ]\ntype Inner = { Coalesced: bool }"
                     ] do
                     let before =
                         sprintf "module Consumer.Server\n\n%s\n\nlet x = Coalesced\n" declaration
@@ -630,6 +656,81 @@ let tests =
                     (SubsystemNamespaces.rewriteText resolved viaPlatform |> fst)
                     "open ToolUp.Platform.Jobs"
                     "the server half still wins over Core's"
+
+            testCase "a record label spelling a case derives nothing; the case on the right of an equals does"
+            <| fun () ->
+                for label in
+                    [
+                        "let r = {| Coalesced = 1 |}"
+                        "let r = { Other = 2; Coalesced = 1 }"
+                        "let r =\n    {|\n        Coalesced = 1\n    |}"
+                    ] do
+                    let before = sprintf "module C\n\nopen ToolUp.Platform\n\n%s\n" label
+                    Expect.equal (rewrite before |> fst) before label
+
+                Expect.stringContains
+                    (rewrite "module C\n\nopen ToolUp.Platform\n\nlet same o = o = Coalesced\n"
+                     |> fst)
+                    "open ToolUp.Platform.Jobs"
+                    "a comparison names the case"
+
+            testCase "a shared module's bare name derives nothing; naming one of its moved members does"
+            <| fun () ->
+                let run (body: string) =
+                    SubsystemNamespaces.rewriteText
+                        sharedTable
+                        (sprintf "module C\n\nopen ToolUp.Platform\n\n%s\n" body)
+                    |> fst
+
+                let annotated = "let f (c: ServerConfig) = c"
+
+                Expect.equal
+                    (run annotated)
+                    (sprintf "module C\n\nopen ToolUp.Platform\n\n%s\n" annotated)
+                    "the Core type"
+
+                let coreMember = "let c = ServerConfig.defaults"
+
+                Expect.equal
+                    (run coreMember)
+                    (sprintf "module C\n\nopen ToolUp.Platform\n\n%s\n" coreMember)
+                    "a member that stayed"
+
+                let dottedValue = "let f fromEnv = fromEnv.Length"
+
+                Expect.equal
+                    (run dottedValue)
+                    (sprintf "module C\n\nopen ToolUp.Platform\n\n%s\n" dottedValue)
+                    "a value that spells a member, dotted"
+
+                let unrelated = "let fromEnv = 1"
+
+                Expect.equal
+                    (run unrelated)
+                    (sprintf "module C\n\nopen ToolUp.Platform\n\n%s\n" unrelated)
+                    "a bare word that only spells a member"
+
+                Expect.equal
+                    (run "let c = ServerConfig.fromEnv ()")
+                    "module C\n\nopen ToolUp.Platform\nopen ToolUp.Platform.Config\n\nlet c = ServerConfig.fromEnv ()\n"
+                    "the moved member opens the namespace its module merges through"
+
+                let viaModuleOpen =
+                    "module C\n\nopen ToolUp.Platform.ServerConfig\n\nlet c = fromEnv ()\n"
+
+                Expect.stringContains
+                    (SubsystemNamespaces.rewriteText sharedTable viaModuleOpen |> fst)
+                    "open ToolUp.Platform.Config.ServerConfig"
+                    "bare, under an open of the module's old path"
+
+            testCase "a shared type's bare name still derives its open"
+            <| fun () ->
+                let after, _ =
+                    SubsystemNamespaces.rewriteText
+                        sharedTable
+                        "module C\n\nopen ToolUp.Platform\n\nlet f (p: EgressPolicy) = p\n"
+
+                Expect.stringContains after "open ToolUp.Platform.Audit" "the moved half is a type"
 
             testCase "an open the move left dead is reported and left in place; a live or unknown one is not"
             <| fun () ->
@@ -758,6 +859,18 @@ let tests =
 
                 Expect.isTrue (has "ToolUp.Platform" "ServerConfig") "Core's namespace"
                 Expect.isTrue (has "ToolUp.Facts" "Scalar") "a union case outside the tier"
+
+                Expect.isTrue
+                    (SubsystemNamespaces.embedded.Value
+                     |> List.exists (fun e ->
+                         e.Kind = SubsystemNamespaces.EntryKind.Member
+                         && e.OldNamespace = "ToolUp.Platform.ScopeId"))
+                    "a shared nested module's members are in the name table"
+
+                Expect.isFalse
+                    (SubsystemNamespaces.embeddedIndex.Value.Mentions.TryFind "ScopeId"
+                     |> Option.isSome)
+                    "and its bare name derives nothing"
 
                 Expect.isTrue
                     (has "ToolUp.Platform.Scope.StorageScopeResolver" "IStorageScopeResolver")

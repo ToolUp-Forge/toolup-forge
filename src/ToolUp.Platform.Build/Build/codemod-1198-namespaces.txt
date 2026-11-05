@@ -602,6 +602,14 @@ member ToolUp.Platform ServerApp ToolUp.Platform.Compose
 member ToolUp.Platform createWebHost ToolUp.Platform.Compose
 member ToolUp.Platform createWorkerHost ToolUp.Platform.Compose
 member ToolUp.Platform.BlobStorage trySignedUrl ToolUp.Platform.Infra.BlobStorage
+member ToolUp.Platform.DataVocabulary hash ToolUp.Platform.Infra.DataVocabulary
+member ToolUp.Platform.DataVocabulary load ToolUp.Platform.Infra.DataVocabulary
+member ToolUp.Platform.DataVocabulary pin ToolUp.Platform.Infra.DataVocabulary
+member ToolUp.Platform.DeclaredPrincipal missingGrant ToolUp.Platform.Jobs.DeclaredPrincipal
+member ToolUp.Platform.DeclaredPrincipal user ToolUp.Platform.Jobs.DeclaredPrincipal
+member ToolUp.Platform.DeclaredPrincipal userOf ToolUp.Platform.Jobs.DeclaredPrincipal
+member ToolUp.Platform.ScopeId parse ToolUp.Platform.Compose.ScopeId
+member ToolUp.Platform.ServerConfig fromEnv ToolUp.Platform.Config.ServerConfig
 namespace ToolUp.Platform.Teams * ToolUp.Platform.Scope.Teams
 namespace ToolUp.Platform.Tracing * ToolUp.Platform.Infra.Tracing
 shared ToolUp.Platform BlobStorage ToolUp.Platform.Infra

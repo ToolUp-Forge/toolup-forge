@@ -99,10 +99,15 @@ inside one is not touched and derives nothing; an interpolated string's holes ar
 
    A union case derives less readily than a type, because its name says nothing about whose union it is. A case
    name derives no open when any file in the tree declares that name as a type, case, record field, exception or
-   active pattern, or when the file already resolves it through an open outside the tier (`Scalar` in a file that
-   opens `ToolUp.Facts`). An open of `ToolUp.Platform` does not count, because a server case won over a Core case of
+   active pattern, when the file already resolves it through an open outside the tier (`Scalar` in a file that
+   opens `ToolUp.Facts`), or when it is a record label (`{| Existing = n |}`). An open of `ToolUp.Platform` does not count, because a server case won over a Core case of
    the same spelling. If your tree declares `Required` and one file really does mean the tier's, that file fails to
    compile at the site and takes the open by hand.
+
+   A name Core and the tier both declare (`ServerConfig`, `ScopeId`, `BlobStorage`) derives an open only when the file
+   names one of the tier module's members: `ServerConfig.fromEnv` opens `ToolUp.Platform.Config`, while the bare
+   `ScopeId` is Core's type and opens nothing. Where the tier's half is a type (`EgressPolicy`, a module in Core), the
+   bare name is the use and does open it.
 
 Which projects it touches is read from the project files: a project that references the server tier (a part
 project, a `ToolUp.Platform.Server*` or `ToolUp.Sdk` package, an imported `.Server.props`, a project that reaches
