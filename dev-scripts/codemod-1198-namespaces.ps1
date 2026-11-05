@@ -12,7 +12,8 @@
     reaches. This script runs the Build project's `Codemod` target with `--phase 1198` over a
     consumer source directory: it rewrites an `open` of a path that moved, rewrites a qualified
     `ToolUp.Platform.X` path that moved, and inserts the part opens a file needs, DERIVED from
-    the names the file mentions (never a blanket list). Idempotent; `-Check` prints the pending
+    the names its code uses (never a blanket list, and never a name inside a string or a
+    comment), after its header. Idempotent; `-Check` prints the pending
     diff and changes nothing. Full account: docs/migrations/1198-subsystem-namespaces.md.
 
     The name table the codemod reads ships inside ToolUp.Platform.Build as an embedded

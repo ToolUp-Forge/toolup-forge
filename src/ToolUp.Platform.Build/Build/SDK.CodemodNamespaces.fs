@@ -197,27 +197,178 @@ module SubsystemNamespaces =
         AutoOpen: bool
     }
 
+    /// `lines` with everything that is not code blanked to spaces: comments
+    /// (a block comment nests, and spans lines), and string and character
+    /// literals of every spelling, across lines where they span them. An
+    /// interpolated string's holes are code and stay. A position in a masked
+    /// line is the same position in the line it masks, so a match found in
+    /// the mask can be applied to the source.
+    let private maskNonCode (lines: string[]) : string[] =
+        let text = String.Join("\n", lines)
+        let n = text.Length
+        let masked = text.ToCharArray()
+
+        let blank (from: int) (until: int) =
+            for k in from .. (min until n) - 1 do
+                if masked[k] <> '\n' then
+                    masked[k] <- ' '
+
+        let startsAt (i: int) (s: string) =
+            String.CompareOrdinal(text, i, s, 0, s.Length) = 0
+
+        let isIdentifierChar (c: char) = Char.IsLetterOrDigit c || c = '_'
+
+        // The length of a string opener at `i` (its `$` and `@` prefixes and
+        // its quotes), or 0 when no string opens there.
+        let openerAt (i: int) =
+            let mutable j = i
+
+            while j < n && (text[j] = '$' || text[j] = '@') do
+                j <- j + 1
+
+            if j < n && text[j] = '"' then
+                j - i + (if startsAt j "\"\"\"" then 3 else 1)
+            else
+                0
+
+        // The index past a character literal at `i`, or `i` when the quote
+        // is a type variable's or an identifier's.
+        let charLiteralEnd (i: int) =
+            if i > 0 && isIdentifierChar (text[i - 1]) then
+                i
+            elif i + 2 < n && text[i + 1] <> '\\' && text[i + 1] <> '\n' && text[i + 2] = '\'' then
+                i + 3
+            elif i + 1 < n && text[i + 1] = '\\' then
+                let close = text.IndexOf('\'', min n (i + 3))
+                if close >= 0 && close - i <= 10 then close + 1 else i
+            else
+                i
+
+        // Blanks the string opening at `i`, walks its holes as code, and
+        // returns the index past it. An unterminated one runs to the end.
+        let rec stringEnd (i: int) (openerLength: int) : int =
+            let opener = text.Substring(i, openerLength)
+            let triple = opener.EndsWith "\"\"\""
+            let dollars = opener |> Seq.filter ((=) '$') |> Seq.length
+            let verbatim = opener.Contains('@')
+            let holeOpen = String('{', max 1 dollars)
+            let mutable k = i + openerLength
+            let mutable segment = i
+            let mutable closed = false
+
+            while not closed && k < n do
+                if dollars = 1 && (startsAt k "{{" || startsAt k "}}") then
+                    k <- k + 2
+                elif dollars > 0 && startsAt k holeOpen then
+                    blank segment (k + holeOpen.Length)
+                    k <- codeEnd (k + holeOpen.Length) true
+                    segment <- k - 1
+                elif triple then
+                    if startsAt k "\"\"\"" then
+                        k <- k + 3
+                        closed <- true
+                    else
+                        k <- k + 1
+                elif verbatim && startsAt k "\"\"" then
+                    k <- k + 2
+                elif not verbatim && text[k] = '\\' then
+                    k <- k + 2
+                elif text[k] = '"' then
+                    k <- k + 1
+                    closed <- true
+                else
+                    k <- k + 1
+
+            blank segment k
+            min k n
+
+        // Blanks the block comment opening at `i` and returns the index past
+        // it. A string inside a comment is lexed, as the compiler does.
+        and commentEnd (i: int) : int =
+            let mutable k = i + 2
+            let mutable depth = 1
+
+            while depth > 0 && k < n do
+                if startsAt k "*)" then
+                    depth <- depth - 1
+                    k <- k + 2
+                elif startsAt k "(*" && not (startsAt k "(*)") then
+                    depth <- depth + 1
+                    k <- k + 2
+                else
+                    match (if text[k] = '$' then 0 else openerAt k) with
+                    | 0 -> k <- k + 1
+                    | length -> k <- stringEnd k length
+
+            blank i k
+            min k n
+
+        // Walks code from `i`, blanking what is not code. In a hole it
+        // returns the index past the hole's closing brace.
+        and codeEnd (i: int) (inHole: bool) : int =
+            let mutable k = i
+            let mutable depth = 0
+            let mutable closed = false
+
+            while not closed && k < n do
+                let c = text[k]
+
+                if startsAt k "//" then
+                    let eol = text.IndexOf('\n', k)
+                    let stop = if eol < 0 then n else eol
+                    blank k stop
+                    k <- stop
+                elif startsAt k "(*" && not (startsAt k "(*)") then
+                    k <- commentEnd k
+                elif c = '\'' then
+                    match charLiteralEnd k with
+                    | stop when stop > k ->
+                        blank k stop
+                        k <- stop
+                    | _ -> k <- k + 1
+                elif inHole && c = '{' then
+                    depth <- depth + 1
+                    k <- k + 1
+                elif inHole && c = '}' then
+                    k <- k + 1
+
+                    if depth = 0 then closed <- true else depth <- depth - 1
+                else
+                    match openerAt k with
+                    | 0 -> k <- k + 1
+                    | length -> k <- stringEnd k length
+
+            k
+
+        codeEnd 0 false |> ignore
+        String(masked).Split('\n')
+
+    // A top-level `module` may carry its attributes on its own line, and any
+    // segment of the path may be double-backticked.
     let private headerRx =
         Regex(
-            @"^(?<kw>namespace|module)\s+(?<mods>(?:rec\s+|internal\s+|private\s+|public\s+)*)(?<path>[A-Za-z_][\w.]*)\s*$",
+            @"^(?:\[<[^\]]*>\]\s*)*(?<kw>namespace|module)\s+(?<mods>(?:rec\s+|internal\s+|private\s+|public\s+)*)(?<path>(?:[A-Za-z_]\w*|``[^`]+``)(?:\.(?:[A-Za-z_]\w*|``[^`]+``))*)\s*$",
             RegexOptions.CultureInvariant
         )
 
     let private autoOpenRx =
         Regex(@"\[<\s*AutoOpen\s*>\]", RegexOptions.CultureInvariant)
 
-    /// The first header line of `lines`, if the file has one. A `module X =`
-    /// with a body is a nested module, not a header, and does not match.
+    /// The first header line of `lines`, if the file has one, read from its
+    /// code alone. A `module X =` with a body is a nested module, not a
+    /// header, and does not match.
     let header (lines: string[]) : Header option =
+        let code = maskNonCode lines
+
         let rec go i =
-            if i >= lines.Length then
+            if i >= code.Length then
                 None
             else
-                let m = headerRx.Match lines[i]
+                let m = headerRx.Match code[i]
 
-                if m.Success && not (lines[i].TrimStart().StartsWith "//") then
+                if m.Success then
                     let autoOpen =
-                        [ max 0 (i - 3) .. i - 1 ] |> List.exists (fun j -> autoOpenRx.IsMatch lines[j])
+                        [ max 0 (i - 3) .. i ] |> List.exists (fun j -> autoOpenRx.IsMatch code[j])
 
                     Some {
                         Keyword = m.Groups["kw"].Value
@@ -800,34 +951,6 @@ module SubsystemNamespaces =
     let private qualifiedRx =
         Regex(@"(?<![\w.'`])ToolUp\.Platform(?:\.[A-Z]\w*)+", RegexOptions.CultureInvariant)
 
-    /// A file extension or assembly-name tail after which a qualified
-    /// match is a path or a package id, never an F# path.
-    let private notAPath =
-        Regex(
-            @"^(?:[\\/""']|\.(?:fsproj|props|targets|dll|nupkg|csproj|md|json|Remoting|Infra|Config|Scope|Jobs|Audit|Tests)\b)",
-            RegexOptions.CultureInvariant
-        )
-
-    let private isComment (line: string) =
-        let t = line.TrimStart()
-        t.StartsWith "//" || t.StartsWith "(*"
-
-    /// Whether position `i` of `line` falls inside a string literal, read
-    /// as an odd number of unescaped quotes before it. A triple-quoted
-    /// string that spans lines is not seen; the path guard above covers
-    /// the project paths those carry.
-    let private inString (line: string) (i: int) =
-        let mutable quotes = 0
-        let mutable j = 0
-
-        while j < i do
-            if line[j] = '"' && (j = 0 || line[j - 1] <> '\\') then
-                quotes <- quotes + 1
-
-            j <- j + 1
-
-        quotes % 2 = 1
-
     /// The new path for `path` when a move's old path is it or a
     /// dotted prefix of it.
     let private moved (moves: (string * string * bool) list) (path: string) =
@@ -924,47 +1047,45 @@ module SubsystemNamespaces =
 
         let contentIndex (lineIndex: int) = lineIndex * 2
 
+        // Every pass reads the code alone: what a string holds or a comment
+        // says is neither an open, nor a path, nor a use of a name.
+        let code = maskNonCode lines
+
         // 1. `open` lines of a moved path.
         for i in 0 .. lines.Length - 1 do
-            let m = openRx.Match lines[i]
+            let m = openRx.Match code[i]
 
             if m.Success then
-                match moved idx.Moves m.Groups["path"].Value with
+                let path = m.Groups["path"]
+
+                match moved idx.Moves path.Value with
                 | Some target ->
                     let after =
-                        sprintf "%sopen %s%s" m.Groups["indent"].Value m.Groups["type"].Value target
+                        lines[i].Substring(0, path.Index)
+                        + target
+                        + lines[i].Substring(path.Index + path.Length)
 
                     rewrites.Add(("1198-open", i, lines[i], after))
                     out[contentIndex i] <- after
                 | None -> ()
 
-        // 2. Qualified paths, outside headers, opens, comments and strings.
+        // 2. Qualified paths, outside headers and opens.
         for i in 0 .. lines.Length - 1 do
             let line = out[contentIndex i]
 
             if
                 Some i <> headerLine
-                && not (openRx.IsMatch line)
-                && not (isComment line)
-                && qualifiedRx.IsMatch line
+                && not (openRx.IsMatch code[i])
+                && qualifiedRx.IsMatch code[i]
             then
                 let after =
                     qualifiedRx.Replace(
                         line,
                         MatchEvaluator(fun m ->
-                            let tail = line.Substring(m.Index + m.Length)
-
-                            if inString line m.Index || notAPath.IsMatch tail then
+                            if code[i][m.Index] <> m.Value[0] then
                                 m.Value
                             else
-                                let comment = line.IndexOf "//"
-
-                                if comment >= 0 && comment < m.Index && not (inString line comment) then
-                                    m.Value
-                                else
-                                    match moved idx.Moves m.Value with
-                                    | Some target -> target
-                                    | None -> m.Value)
+                                moved idx.Moves m.Value |> Option.defaultValue m.Value)
                     )
 
                 if after <> line then
@@ -972,7 +1093,7 @@ module SubsystemNamespaces =
                     out[contentIndex i] <- after
 
         // 3. Derived opens.
-        let current = [| for i in 0..2 .. out.Length - 1 -> out[i] |]
+        let current = maskNonCode [| for i in 0..2 .. out.Length - 1 -> out[i] |]
 
         // What the file already opens at the top level. An indented open
         // belongs to a nested module and covers nothing outside it.
@@ -1010,14 +1131,8 @@ module SubsystemNamespaces =
         for i in 0 .. current.Length - 1 do
             let line = current[i]
 
-            if Some i <> headerLine && not (openRx.IsMatch line) && not (isComment line) then
-                let code =
-                    match line.IndexOf "//" with
-                    | -1 -> line
-                    | c when inString line c -> line
-                    | c -> line.Substring(0, c)
-
-                for m in mentionRx.Matches code do
+            if Some i <> headerLine && not (openRx.IsMatch line) then
+                for m in mentionRx.Matches line do
                     let name = m.Groups["name"].Value
                     let qualifier = m.Groups["qualifier"]
 
@@ -1083,12 +1198,7 @@ module SubsystemNamespaces =
         let isSkippable (l: string) =
             let t = l.TrimStart()
 
-            String.IsNullOrWhiteSpace l
-            || t.StartsWith "//"
-            || t.StartsWith "#"
-            || t.StartsWith "[<"
-            || t.StartsWith "(*"
-            || t.StartsWith "*)"
+            String.IsNullOrWhiteSpace l || t.StartsWith "#" || t.StartsWith "[<"
 
         // The last `open` of the file's leading block, if it has one.
         let lastOpen =

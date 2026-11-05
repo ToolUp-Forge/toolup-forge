@@ -15,10 +15,11 @@ open ToolUp.Platform
 // part's root, a sub-namespace keeps its tail, the remoting library's
 // own namespaces stay, and the rule is idempotent. The REWRITE arm runs
 // the consumer pass over small texts with a hand-built table: an open
-// of a moved path is rewritten, a qualified path too (never inside a
-// string), the opens a file needs are derived from the names it
-// mentions and placed where the old resolution is kept, a tier file
-// never opens a later part, and a second run changes nothing. The
+// of a moved path is rewritten, a qualified path too, the opens a file
+// needs are derived from the names its code uses (never a name inside a
+// string or a comment) and placed after its header whatever the header's
+// spelling, where the old resolution is kept, a tier file never opens a
+// later part, and a second run changes nothing. The
 // TABLE arm holds the shipped name table to a fresh scan of the tree,
 // so the resource the Codemod reads cannot drift from the sources.
 
@@ -301,6 +302,108 @@ let tests =
                         ""
                     ]
                     "the split namespace is opened beside Core"
+
+            testCase "a name that appears only in a string or a comment derives no open"
+            <| fun () ->
+                let cases = [
+                    "a regular string", "let s = \"IJobScheduler and TeamManagement.create\""
+                    "an escaped quote", "let s = \"\\\"IJobScheduler\\\"\""
+                    "a verbatim string", "let s = @\"a \"\"quoted\"\" IJobScheduler\""
+                    "a triple-quoted string on one line", "let s = \"\"\"a \"quoted\" IJobScheduler\"\"\""
+                    "a triple-quoted string across lines",
+                    "let css = \"\"\"\n.IJobScheduler { color: red; }\nServerApp\n\"\"\""
+                    "a string across lines", "let s = \"first\nIJobScheduler\""
+                    "an interpolated string's text", "let s = $\"{{IJobScheduler}} {1 + 1}\""
+                    "a line comment", "let x = 1 // IJobScheduler"
+                    "a block comment across lines", "let x = 1 (* first\nIJobScheduler (* nested *)\nServerApp *)"
+                    "a string in a comment", "(* \"*)\" IJobScheduler *)\nlet x = 1"
+                ]
+
+                for name, body in cases do
+                    let before = sprintf "module Consumer.Styles\n\nopen System\n\n%s\n" body
+                    let after, rewrites = rewrite before
+                    Expect.equal after before name
+                    Expect.isEmpty rewrites name
+
+            testCase "a name used in code still derives its open beside a literal that could confuse the lexer"
+            <| fun () ->
+                let cases = [
+                    "after a quote character", "let q = '\"'\nlet s (x: IJobScheduler) = x"
+                    "after an escaped quote character", "let q = '\\\"'\nlet s (x: IJobScheduler) = x"
+                    "after a type variable", "let id' (x: 'a) = x\nlet s (x: IJobScheduler) = x"
+                    "after a string", "let q = \"text\"\nlet s (x: IJobScheduler) = x"
+                    "after the multiplication operator", "let m = (*) 2\nlet s (x: IJobScheduler) = x"
+                    "in an interpolated string's hole", "let s (x: obj) = $\"{x :?> IJobScheduler}\""
+                    "in a triple-quoted interpolated string's hole",
+                    "let s (x: obj) = $\"\"\"a {x :?> IJobScheduler} b\"\"\""
+                ]
+
+                for name, body in cases do
+                    let before = sprintf "module Consumer.Server\n\nopen System\n\n%s\n" body
+                    let after, _ = rewrite before
+
+                    Expect.equal
+                        after
+                        (sprintf "module Consumer.Server\n\nopen System\nopen ToolUp.Platform.Jobs\n\n%s\n" body)
+                        name
+
+            testCase "a qualified path or an open inside a string spanning lines is not rewritten"
+            <| fun () ->
+                let before =
+                    "module Consumer.Emit\n\nlet template = \"\"\"\nopen ToolUp.Platform.TeamManagement\nlet a = ToolUp.Platform.TeamManagement.create ()\n\"\"\"\n"
+
+                let after, rewrites = rewrite before
+                Expect.equal after before "the literal is data"
+                Expect.isEmpty rewrites "nothing reported"
+
+            testCase "an open with a trailing comment is read and rewritten, and keeps the comment"
+            <| fun () ->
+                let after, _ =
+                    rewrite "module Consumer.Server\n\nopen ToolUp.Platform.TeamManagement // teams\n\nlet x = 1\n"
+
+                Expect.equal
+                    (lines after)
+                    [
+                        "module Consumer.Server"
+                        ""
+                        "open ToolUp.Platform.Config.TeamManagement // teams"
+                        ""
+                        "let x = 1"
+                        ""
+                    ]
+                    "the path moves and the comment stays"
+
+            testCase "derived opens go after the top-level header whatever its spelling"
+            <| fun () ->
+                let headers = [
+                    "a plain module", [ "module Consumer" ]
+                    "a dotted module", [ "module Consumer.Server" ]
+                    "a namespace", [ "namespace Consumer.Server" ]
+                    "a recursive module", [ "module rec Consumer" ]
+                    "a double-backticked module", [ "module ``Some name``" ]
+                    "a dotted double-backticked module", [ "module Consumer.``Some name``" ]
+                    "a module with a trailing comment", [ "module ``Some name`` // the header" ]
+                    "a module under a comment and an attribute",
+                    [ "// module Commented"; "[<AutoOpen>]"; "module ``Some name``" ]
+                    "a module with its attribute on one line", [ "[<AutoOpen>] module ``Some name``" ]
+                ]
+
+                for name, header in headers do
+                    let body = "let schedule (s: IJobScheduler) = s"
+                    let before = String.Join("\n", header @ [ ""; body; "" ])
+                    let after, _ = rewrite before
+
+                    Expect.equal (lines after) (header @ [ ""; "open ToolUp.Platform.Jobs"; ""; body; "" ]) name
+
+                    Expect.equal (fst (rewrite after)) after (name + ": a second run changes nothing")
+
+            testCase "a header-shaped line in a comment is not the header"
+            <| fun () ->
+                let header =
+                    SubsystemNamespaces.header [| "(*"; "module InAComment"; "*)"; "module ``Some name``" |]
+
+                Expect.equal (header |> Option.map _.Path) (Some "``Some name``") "the code's header"
+                Expect.equal (header |> Option.map _.Line) (Some 3) "and its line"
 
             testCase "a file whose projects do not reach the server tier is left alone"
             <| fun () ->

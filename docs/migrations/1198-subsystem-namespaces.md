@@ -79,7 +79,9 @@ Build project reaches with `dotnet run --project Build.fsproj -- Codemod <dir> -
 its name table ship inside `ToolUp.Platform.Build`. It is named, never implied: the default every-migration pass
 does not run it, because its rewrites are derived from a table rather than fixed renames.
 
-Three things it does to a file whose project reaches the server tier:
+Three things it does to a file whose project reaches the server tier, reading only the file's code. A string of any
+spelling (regular, verbatim, triple-quoted, across lines) and a comment are data, so an `open` line, a path or a name
+inside one is not touched and derives nothing; an interpolated string's holes are code.
 
 1. **Rewrites an `open` of a path that moved.** `open ToolUp.Platform.TeamManagement` becomes
    `open ToolUp.Platform.Config.TeamManagement`; `open ToolUp.Platform.Teams` becomes `open ToolUp.Platform.Scope.Teams`;
@@ -89,7 +91,8 @@ Three things it does to a file whose project reaches the server tier:
    left alone.
 3. **Derives the opens the file needs from the names it mentions** — every namespace-level type, module and
    exception of the tier, every union case, and the members of its `[<AutoOpen>]` modules, read from the shipped
-   table — and inserts them after the file's last top-level `open`, in the parts' dependency order. Never a
+   table — and inserts them after the file's last top-level `open`, or after its `namespace` / `module` header when
+   it has no open (whatever the header's spelling, a double-backticked name included), in the parts' dependency order. Never a
    blanket list: a file that names nothing from the Jobs part does not open it. A qualified mention through a Core
    module whose nested module moved (`Auth.IdentitySanitiser`) opens the namespace above the moved one. Record
    fields are deliberately not read: `Decision = …` says nothing about which record is being built, and the
