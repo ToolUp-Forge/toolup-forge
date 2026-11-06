@@ -807,6 +807,9 @@ module Names =
     let acceptUnlimitedEventRetention = "TOOLUP_ACCEPT_UNLIMITED_EVENT_RETENTION"
 
     [<Literal>]
+    let acceptPlainDisclosure = "TOOLUP_ACCEPT_PLAIN_DISCLOSURE"
+
+    [<Literal>]
     let backfillMissedTicks = "TOOLUP_BACKFILL_MISSED_TICKS"
 
     [<Literal>]
@@ -2919,6 +2922,15 @@ let keys: ConfigKey list = [
         Seal = SealPosture.SealValue
     }
     {
+        EnvVar = Names.acceptPlainDisclosure
+        Description =
+            "Accepts a disclosure configuration that cannot withhold anything at the egress surfaces a deployment composes (every policy plain, unscoped and permitting them), where the withheld-point paths are unreachable. Silences a startup preflight finding."
+        Kind = ConfigKeyKind.BoolKey(Direction.Permissive, Some false)
+        IsSecret = false
+        Category = EscapeHatchCategory
+        Seal = SealPosture.SealValue
+    }
+    {
         EnvVar = Names.moduleBindingAllowUnbound
         Description = "Allows modules that carry no signed binding manifest to load."
         Kind = ConfigKeyKind.BoolKey(Direction.Protective, Some true)
@@ -3476,6 +3488,7 @@ let manifestBindable: Set<string> =
         Names.acceptLocalFallback
         Names.acceptNoRateLimitInAuthMode
         Names.acceptPendingInviteStoreMultiInstance
+        Names.acceptPlainDisclosure
         Names.acceptPlaintextSecrets
         Names.acceptPlaintextSecretsInAuthMode
         Names.acceptQueryParamSseAuthInAuthMode

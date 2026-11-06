@@ -1729,6 +1729,35 @@ Both run under the surface requirement the composition declares for their paths,
 when it declares none. The envelopes, the refusal codes and how a host builds its stored view from them:
 [`docs/migrations/1201-stored-page-routes.md`](../migrations/1201-stored-page-routes.md).
 
+#### A disclosure configuration that cannot withhold is named at startup (Phase 1252)
+
+The render tools, the page requests and the narrative publication read all promise that a withheld point is never
+drawn and is named. Whether that promise can ever fire is decided by the deployment's `DisclosureTaintConfig`, and a
+configuration can make it vacuous. Read it with `DisclosureTaintConfig.withholdingReachAt surfaces config` (or
+`withholdingReach` for every surface):
+
+| Reach | Meaning |
+|---|---|
+| `Unregistered` | No policy is registered. Every `Restricted` ref is unknown and denies, so withholding is real, if unconfigured. |
+| `CannotWithhold` | Policies are registered, none is `TaintPropagating` or contributor-scoped, and every one permits every asked surface. No declared ref can be withheld there. |
+| `CanWithhold` | A policy denies an asked surface, or can taint. It names the tainting policies and, per policy, the surfaces denied. |
+
+"Cannot taint" is therefore a statement about **`Restricted` refs**. `Internal` facts are withheld under every
+configuration. A reader who sees no withheld-point note on a chart, table or narrative is looking at a deployment where
+nothing was withheld, which under `CannotWithhold` is the only thing that could have happened.
+
+When a builder arms a withholding surface (`withRenderTools` asks at `ToolResult`, `withPageRequests` at `Browse`) it
+registers it with `FactsCompose.withWithholdingSurface`, and the fact tier's preflight check `fact-disclosure-reach`
+reports `FACTS-DISCLOSURE-CANNOT-TAINT` when the reach at the composed surfaces is `CannotWithhold`. It names each
+policy, its mode and what it permits. It is a report, never a refusal: a Warning when the deployment requires
+authentication, an Info line in the log otherwise. `TOOLUP_ACCEPT_PLAIN_DISCLOSURE=1` acknowledges a plain
+configuration and silences it. To make withholding real, narrow a policy's `PermitSurfaces` or mark it
+`TaintPropagating`.
+
+The reach is deliberately not `DisclosureTaintConfig.isTaintInert`, which asks only whether the taint walk can change a
+verdict (and so lets the gate skip the derivation graph): a `Plain` policy that permits a few surfaces is taint-inert
+and still withholds at the rest.
+
 #### Composing the tier onto a RAG app in one call
 
 ```fsharp skip=fragment

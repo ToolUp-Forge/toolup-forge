@@ -326,6 +326,7 @@ records them.
 | `TOOLUP_ACCEPT_PENDING_INVITE_STORE_MULTI_INSTANCE` | reads as `false` (permissive) | `false` |
 | `TOOLUP_ACCEPT_PLAINTEXT_SECRETS` | reads as `false` (permissive) | `false` |
 | `TOOLUP_ACCEPT_PLAINTEXT_SECRETS_IN_AUTH_MODE` | reads as `false` (permissive) | `false` |
+| `TOOLUP_ACCEPT_PLAIN_DISCLOSURE` | reads as `false` (permissive) | `false` |
 | `TOOLUP_ACCEPT_QUERYPARAM_SSE_AUTH_IN_AUTH_MODE` | reads as `false` (permissive) | `false` |
 | `TOOLUP_ACCEPT_SAMESITE_ONLY_CSRF_IN_AUTH_MODE` | reads as `false` (permissive) | `false` |
 | `TOOLUP_ACCEPT_SHARED_EMBEDDING_CACHE_IN_TEAM_MODE` | reads as `false` (permissive) | `false` |
@@ -414,7 +415,7 @@ records them.
 
 ### Boot seal coverage
 
-190 keys are sealed by value. 8 secrets are sealed by presence only (set or unset), so the credential is never written into the seal: `TOOLUP_ADMIN_TOKEN`, `TOOLUP_AZURE_STORAGE_CONNECTION_STRING`, `TOOLUP_GCS_CREDENTIALS_JSON`, `TOOLUP_MODULE_BINDING_ANCHORS`, `TOOLUP_REDIS_CONNECTION`, `TOOLUP_SECRETS_MASTER_KEY`, `TOOLUP_SMOKE_TOKEN`, `TOOLUP_SMTP_PASSWORD`.
+191 keys are sealed by value. 8 secrets are sealed by presence only (set or unset), so the credential is never written into the seal: `TOOLUP_ADMIN_TOKEN`, `TOOLUP_AZURE_STORAGE_CONNECTION_STRING`, `TOOLUP_GCS_CREDENTIALS_JSON`, `TOOLUP_MODULE_BINDING_ANCHORS`, `TOOLUP_REDIS_CONNECTION`, `TOOLUP_SECRETS_MASTER_KEY`, `TOOLUP_SMOKE_TOKEN`, `TOOLUP_SMTP_PASSWORD`.
 
 The 23 keys in the reference's Build & tooling section are not sealed: they are read by build, test and analyzer tooling, never by a running server. Nor are these, so changing one is not drift:
 

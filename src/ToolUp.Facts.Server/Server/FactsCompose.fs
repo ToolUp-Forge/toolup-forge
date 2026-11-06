@@ -283,6 +283,53 @@ type internal FactQuestionCompilerGuard(services: IServiceCollection) =
                         "The fact tier is composed but its answer planner has no question compiler, so fact clause planning (the push door: facts placed in the prompt ahead of retrieved passages) refuses every question and never pushes a fact; only the fact tools reach the store. Remedy: compose the AI tier (the planner then compiles through its IAIProviderFactory), register an IAIProvider, or supply a compiler with FactsCompose.withQuestionCompiler. To leave the push door off on purpose, compose FactsCompose.withQuestionCompiler AnswerPlanner.noQuestionCompiler."
         }
 
+/// Warns at startup when withholding surfaces are composed over a disclosure
+/// configuration that cannot withhold at them (`DisclosureReachFinding`). A
+/// report, never a refusal: a plain configuration is a legitimate choice.
+/// Warning when the deployment requires authentication, an Info line in the
+/// log otherwise; `TOOLUP_ACCEPT_PLAIN_DISCLOSURE` silences it. An instance
+/// deciding when it runs from the service collection as finally assembled,
+/// so the surfaces may be composed before or after the fact tier.
+type internal DisclosureReachGuard(requiresAuth: bool, services: IServiceCollection) =
+
+    member private _.Instances<'T when 'T: not struct>() : 'T list =
+        services
+        |> Seq.filter (fun d -> d.ServiceType = typeof<'T> && not d.IsKeyedService)
+        |> Seq.choose (fun d ->
+            match d.ImplementationInstance with
+            | :? 'T as instance -> Some instance
+            | _ -> None)
+        |> List.ofSeq
+
+    interface ConfigValidation.IConfigValidator with
+        member _.Name = "fact-disclosure-reach"
+        member _.Timeout = ConfigValidation.IConfigValidator.defaultTimeout
+
+        member this.Validate() = async {
+            let accepted =
+                match
+                    ConfigResolution.tryValue ConfigKeys.Names.acceptPlainDisclosure
+                    |> Option.map _.ToLowerInvariant()
+                with
+                | Some("1" | "true" | "yes" | "on") -> true
+                | _ -> false
+
+            let config =
+                this.Instances<DisclosureTaintConfig>()
+                |> List.tryLast
+                |> Option.defaultValue DisclosureTaintConfig.empty
+
+            match accepted, DisclosureReachFinding.assess config (this.Instances<WithholdingSurface>()) with
+            | false, Some message when requiresAuth -> return ConfigValidation.ValidationResult.Warning message
+            | false, Some message ->
+                this.Instances<ILogger>()
+                |> List.tryLast
+                |> Option.iter (fun logger -> logger.Info message)
+
+                return ConfigValidation.ValidationResult.Ok
+            | _ -> return ConfigValidation.ValidationResult.Ok
+        }
+
 module FactsCompose =
 
     /// Phase 1052 — the Facts companion's identity; every registration it
@@ -655,6 +702,19 @@ module FactsCompose =
                 BlobFactStoreScaleGuard(replicaCount, services) :> ConfigValidation.IConfigValidator
             )
 
+    // Once per collection, like the question-compiler guard above.
+    let private registerDisclosureReachGuard (requiresAuth: bool) (services: IServiceCollection) : IServiceCollection =
+        let present =
+            services
+            |> Seq.exists (fun d -> not d.IsKeyedService && (d.ImplementationInstance :? DisclosureReachGuard))
+
+        if present then
+            services
+        else
+            services.AddSingleton<ConfigValidation.IConfigValidator>(
+                DisclosureReachGuard(requiresAuth, services) :> ConfigValidation.IConfigValidator
+            )
+
     // Once per collection: validator names are unique at preflight, and a
     // composition that applies the fact tier twice must not refuse to start
     // over a duplicate warning.
@@ -819,6 +879,8 @@ module FactsCompose =
                 |> registerBlobScaleGuard app.Config.MultiInstance.ReplicaCount
                 // Phase 986 — the dormant-push-door warning.
                 |> registerQuestionCompilerGuard
+                // The withholding-surfaces-over-a-plain-configuration finding.
+                |> registerDisclosureReachGuard (DeploymentConfig.requiresAnyAuth app.Config)
                 // The undescribed-declarations report (information only).
                 |> FactDeclarationsValidatorRegistration.register
 
@@ -854,6 +916,25 @@ module FactsCompose =
                     AITools = app.AITools @ NarrativeGrounding.factTools
             }
             |> contribute register
+
+    /// **Adds** a composed withholding surface for the startup disclosure
+    /// finding (`DisclosureReachFinding`): `name` is what the finding calls it
+    /// and `surface` the egress door it asks the gate at. Call it from the
+    /// builder that arms the surface; a deployment composing none is never
+    /// told anything. Idempotent per name; a `FeatureMode.Disabled`
+    /// deployment is unchanged.
+    let withWithholdingSurface (name: string) (surface: FactEgressSurface) (app: ServerApp) : ServerApp =
+        let slot = ComponentId.forCompanionSlot ("ToolUp.Facts.WithholdingSurface." + name)
+
+        match app.Config.Stores.FactStore with
+        | FeatureMode.Disabled -> app
+        | FeatureMode.Enabled when app.Contributions |> List.exists (fun c -> c.Owner = slot) -> app
+        | FeatureMode.Enabled ->
+            app
+            |> ServerApp.addContribution (
+                Contribution.service slot (fun s ->
+                    s.AddSingleton<WithholdingSurface>({ Name = name; Surface = surface }))
+            )
 
     /// **Adds** the deployment's authorised narrative calculations: the
     /// grounding gate then derives every `calc:` reference a narrative cites
