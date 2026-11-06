@@ -3,7 +3,7 @@
   "formatVersion": 1,
   "profile": "server-app-host",
   "profileKind": "vocabulary",
-  "profileVersion": "7.1",
+  "profileVersion": "7.2",
   "registry": "../registry.json",
   "conformanceFamilies": [
     "document",
@@ -2028,6 +2028,28 @@
       "reject": "token-unregistered",
       "detect": "profile",
       "description": "A content entry whose mode, embed, is not one of section P2.22's two: the mode is closed, so an evaluator never guesses what an unregistered one would do with the bytes."
+    },
+    {
+      "id": "profile-server-app-host/client-shell-browser-history",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "round-trip",
+      "file": "profile-server-app-host/client-shell-browser-history.json",
+      "sha256": "344e08936f1d2906ebf1fb2bba68bee243901e03fde590cf96c3622a8a8490ea",
+      "description": "A client shell that declares browser history (7.2, section P3.1) beside its home entries, so the vector pins the member's place after home. Every other member is the client-shell-home round-trip vector's."
+    },
+    {
+      "id": "profile-server-app-host/reject-token-unregistered-browser-history",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-token-unregistered-browser-history.json",
+      "sha256": "7c3d64fb2c228e57e742b2b4f6b0bb03c218ada674eecd994a0ea6a612c776c1",
+      "reject": "token-unregistered",
+      "detect": "profile",
+      "description": "A client shell whose browser history, off, is not section P2.23's one token: the slot is closed, and a shell with no browser history has one spelling, the absent member."
     }
   ]
 }

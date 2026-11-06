@@ -1,0 +1,1 @@
+{"kind":"appRoot","base":"serverApp","layers":[],"shortName":"ProfileClientShell","id":"reject-token-unregistered-browser-history","children":[{"kind":"clientShell","browserHistory":"off","id":"clientShell","children":[]}]}

@@ -261,6 +261,7 @@ let private tokenSections = [
     "§P2.21 `factBrowse.mount`", "factBrowse.mount"
     "§P2.22 `pageRef.content` and `layoutRef.content` `mode`", "pageRef.content.mode"
     "§P2.22 `pageRef.content` and `layoutRef.content` `mode`", "layoutRef.content.mode"
+    "§P2.23 `clientShell.browserHistory`", "clientShell.browserHistory"
     "§P2.8.1 A column's `shape`", "moduleRef.factTables.definition.columns.shape"
     "§P2.8.2 A definition's `historyMode`", "moduleRef.factTables.definition.historyMode"
     "§P2.8.3 A disclosure's `class`", "moduleRef.factTables.definition.disclosure.class"
@@ -929,6 +930,7 @@ type Surface = {
     Slots: string list
     Knobs: (string * string list) list
     ConfigFields: (string * Type) list
+    ClientFields: (string * Type) list
 }
 
 let reflectedSurface () : Surface = {
@@ -946,6 +948,9 @@ let reflectedSurface () : Surface = {
         ]
 
         fields typeof<ServerConfig>
+    ClientFields = [
+        for f in FSharpType.GetRecordFields typeof<ClientConfig> -> f.Name, f.PropertyType
+    ]
 }
 
 /// The values a setting's field admits: the knob tokens for a `FeatureMode`
@@ -1165,6 +1170,36 @@ let surfaceFindings (p: Profile) (surface: Surface) : string list = [
     match declared |> Option.bind (prop "contentPolicy") with
     | Some policy -> yield! resolveTarget "declared content's content-policy admission" policy
     | None -> "declared content: the surface binding names no route by which an inline element is admitted"
+
+    // Browser history: each token reduces to a case of the client's field, and every case is a token or the absent member.
+    let history = prop "clientShell" b |> Option.bind (prop "browserHistory")
+
+    let boundHistory =
+        history
+        |> Option.bind (prop "tokens")
+        |> members
+        |> List.map (fun (k, v) -> k, v.GetString())
+
+    yield!
+        both
+            "clientShell.browserHistory"
+            ("the registry", registryTokens "clientShell.browserHistory")
+            ("the surface binding", boundHistory |> List.map fst)
+
+    let historyField = history |> Option.bind (str "field") |> Option.defaultValue "?"
+
+    match surface.ClientFields |> List.tryFind (fst >> (=) historyField) with
+    | None -> sprintf "clientShell.browserHistory: ClientConfig has no field %s" historyField
+    | Some(_, t) when not (FSharpType.IsUnion t) ->
+        sprintf "clientShell.browserHistory: ClientConfig.%s is not a union" historyField
+    | Some(_, t) ->
+        yield!
+            both
+                "clientShell.browserHistory values"
+                ("ClientConfig." + historyField, FSharpType.GetUnionCases t |> Array.map _.Name |> List.ofArray)
+                ("the profile (bound or the absent member)",
+                 (boundHistory |> List.map snd)
+                 @ Option.toList (history |> Option.bind (str "absent")))
 ]
 
 // ── the suite ─────────────────────────────────────────────────────────
@@ -1244,6 +1279,14 @@ let tests =
                 "a serve prefix the registry does not fix",
                 surfaceFindings
                     (withBinding (fun t -> t.Replace("\"servePrefix\": \"_declared\"", "\"servePrefix\": \"_content\"")))
+                    surface
+                // a token reduces to a case the client's field does not have.
+                "a browser-history token bound to no case",
+                surfaceFindings (withBinding (fun t -> t.Replace("\"HashHistory\"", "\"PlantedHistory\""))) surface
+                // the client's field grows a case nobody registered.
+                "a browser-history case nobody registered",
+                surfaceFindings
+                    (withBinding (fun t -> t.Replace("\"absent\": \"NoBrowserHistory\"", "\"_\": 0")))
                     surface
                 // the document's member table drops a registered member.
                 "a member table missing a member",

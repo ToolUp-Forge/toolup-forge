@@ -1,6 +1,6 @@
 # forge composition profile — `server-app-host`
 
-**Profile version 7.1.** forge's evaluator profile of the **App-composition wire specification, format version 1**
+**Profile version 7.2.** forge's evaluator profile of the **App-composition wire specification, format version 1**
 (<https://github.com/Fuaran-Build/fuaran-app-composition-specification>, cited throughout as *core*). Sections §P1–§P8 are **normative** within this profile. §P0 and Appendix P-A
 are not.
 
@@ -47,7 +47,7 @@ Each shape this profile fills in is the core's, cited by its section: the root (
 | | |
 |---|---|
 | Profile identifier | `server-app-host` |
-| Profile version | 7.1 |
+| Profile version | 7.2 |
 | Profile kind | vocabulary (core §8.6) |
 | Core | App-composition wire specification, format version 1 — <https://github.com/Fuaran-Build/fuaran-app-composition-specification> |
 | Core version | 1 |
@@ -381,6 +381,14 @@ fixes). §P3.18 states what each mode obliges, the order the elements take, and 
 §P4.76–§P4.81 add six rules, each refusing at the composition, or at the reduction, what a host would otherwise
 serve wrongly or not at all. Every 7.0 composition carries no `content`, so it encodes byte for byte as before and
 meets every new rule vacuously.
+
+**7.1 → 7.2 lets a client shell declare browser history, additively.** Until 7.2 a composition could not say that its
+bundled client's views have browser history: the setting lives in the client's configuration, the client entry is
+reduction output, and a hand edit to it is overwritten by the next reduction and never appears in the composition's
+record. 7.2 gives `clientShell` the OPTIONAL `browserHistory` member (§P3.1), whose closed vocabulary (§P2.23) has the
+one token `hash`. No composition rule is added: a token outside the vocabulary is `token-unregistered`, and "off" has
+one spelling, the absent member. Every 7.1 composition carries no `browserHistory`, so it encodes byte for byte as
+before and is valid at 7.2 with the same verdict.
 
 ## §P2. Token vocabularies
 
@@ -893,6 +901,17 @@ set.
 
 A token outside this set is `token-unregistered`.
 
+### §P2.23 `clientShell.browserHistory` — **closed**
+
+Whether the bundled client's views have browser history (7.2, §P3.1).
+
+| Token | The bundled client |
+|---|---|
+| `hash` | Gives each view a URL in the fragment, adds a history entry per navigation, moves between views on Back and Forward, and restores the view a reloaded URL names. |
+
+A token outside this set is `token-unregistered`. No token means "none": a client with no browser history is a shell
+without the member.
+
 ## §P3. Profile-only node kinds
 
 All of them are declared by this profile and none exists in the core (core §5.9). A `core` reader
@@ -903,6 +922,7 @@ encountering one refuses it as `node-kind-unknown`, which is correct (core §8.3
 | Member | Type | Presence |
 |---|---|---|
 | `home` | array of home entry objects | OPTIONAL (6.5); absent when the shell declares none, never empty |
+| `browserHistory` | profile token (§P2.23) | OPTIONAL (7.2); absent when the client has none |
 
 A home entry object:
 
@@ -920,6 +940,11 @@ shown under its `title` with its `description` and leading to the page it names.
 order (core §4.6), and a host shows the entries in it. An absent member is a shell whose home page links nothing of the
 composition's own; an empty array is refused, because "declares none" has one spelling. An entry is a link and never an
 access grant: a reader who follows it meets the page's own audience (§P3.3).
+
+`browserHistory` says whether the bundled client's views have browser history (7.2). Under `hash` a host gives its
+client what §P2.23 states. An absent member is a client whose active view lives in its own state, which neither reads
+nor changes the URL, and it reduces as it did before 7.2. A view's URL is an address and never an access grant: a reader
+who opens one meets the view's own guard.
 
 ### §P3.2 `layoutRef`
 
@@ -2149,7 +2174,7 @@ the profile by name. It carries every `core` obligation (core §2.1) and additio
   `subscriptionPrincipal`, `standingSubscription`, `factBrowse`, `theme` and `uiControl` (§P3), and the
   `content` member of `layoutRef` and `pageRef` (§P3.18);
 - enforces §P4.1–§P4.3, §P4.5, §P4.7–§P4.55 and §P4.57–§P4.81, builds each project the root declares as §P4.56 obliges,
-  serves a page as §P3.3 obliges, a fact browse as §P3.15 obliges and a client shell's home entries as §P3.1 obliges,
+  serves a page as §P3.3 obliges, a fact browse as §P3.15 obliges and a client shell's home entries and browser history as §P3.1 obliges,
   applies a declared theme as §P3.16 obliges, inlines and serves declared content as §P3.18 obliges, enforces a
   declared allowlist as §P3.17 obliges, verifies every reference dataset as §P3.6 obliges and every binary template
   body as §P3.11 obliges before it serves, honours each unit's AI exposure and classified fields as §P3.7 obliges, and
