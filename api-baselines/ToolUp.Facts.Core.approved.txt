@@ -354,6 +354,7 @@ ToolUp.Facts.DisclosureTaintConfig..ctor(Microsoft.FSharp.Collections.FSharpMap`
 ToolUp.Facts.DisclosureTaintConfig.Declassifiers : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Facts.DeclassificationRoutine] { get }
 ToolUp.Facts.DisclosureTaintConfig.Policies : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Facts.DisclosurePolicy] { get }
 ToolUp.Facts.DisclosureTaintConfigModule (class)
+ToolUp.Facts.DisclosureTaintConfigModule.allSurfaces : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface] { get }
 ToolUp.Facts.DisclosureTaintConfigModule.contributorScopes(ToolUp.Facts.DisclosureTaintConfig) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Facts.DisclosureTaintConfigModule.declassifierFor(ToolUp.Facts.DisclosureTaintConfig, System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.DeclassificationRoutine]
 ToolUp.Facts.DisclosureTaintConfigModule.empty : ToolUp.Facts.DisclosureTaintConfig { get }
@@ -365,6 +366,8 @@ ToolUp.Facts.DisclosureTaintConfigModule.resolver(ToolUp.Facts.DisclosureTaintCo
 ToolUp.Facts.DisclosureTaintConfigModule.routineClears(ToolUp.Facts.DisclosureTaintConfig, ToolUp.Facts.DeclassificationRoutine, System.String) : System.Boolean
 ToolUp.Facts.DisclosureTaintConfigModule.scopeOf(ToolUp.Facts.DisclosureTaintConfig, System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.Facts.DisclosureTaintConfigModule.taintVocabulary(ToolUp.Facts.DisclosureTaintConfig) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Facts.DisclosureTaintConfigModule.withholdingReach(ToolUp.Facts.DisclosureTaintConfig) : ToolUp.Facts.WithholdingReach
+ToolUp.Facts.DisclosureTaintConfigModule.withholdingReachAt(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface], ToolUp.Facts.DisclosureTaintConfig) : ToolUp.Facts.WithholdingReach
 ToolUp.Facts.DisclosureTaintDelta (class)
 ToolUp.Facts.DisclosureTaintDelta..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Facts.DisclosureTaintNode]])
 ToolUp.Facts.DisclosureTaintDelta.Entries : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Facts.DisclosureTaintNode]] { get }
@@ -1255,6 +1258,20 @@ ToolUp.Facts.ValueThresholdModule.satisfiesMagnitude(ToolUp.Facts.ValueThreshold
 ToolUp.Facts.ViewerAwareDisclosurePolicyResolverModule (class)
 ToolUp.Facts.ViewerAwareDisclosurePolicyResolverModule.ofResolver(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]]], System.String, ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, ToolUp.Facts.DisclosureViewer) : Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]
 ToolUp.Facts.ViewerAwareDisclosurePolicyResolverModule.withTeamOutputVisibility(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]]], System.String, ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, ToolUp.Facts.DisclosureViewer) : Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]
+ToolUp.Facts.WithholdingReach (class)
+ToolUp.Facts.WithholdingReach.CannotWithhold : ToolUp.Facts.WithholdingReach { get }
+ToolUp.Facts.WithholdingReach.IsCanWithhold : System.Boolean { get }
+ToolUp.Facts.WithholdingReach.IsCannotWithhold : System.Boolean { get }
+ToolUp.Facts.WithholdingReach.IsUnregistered : System.Boolean { get }
+ToolUp.Facts.WithholdingReach.Tag : System.Int32 { get }
+ToolUp.Facts.WithholdingReach.Unregistered : ToolUp.Facts.WithholdingReach { get }
+ToolUp.Facts.WithholdingReach+CanWithhold (class)
+ToolUp.Facts.WithholdingReach+CanWithhold.denials : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface]]] { get }
+ToolUp.Facts.WithholdingReach+CanWithhold.taintSources : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.WithholdingReach+Tags (class)
+ToolUp.Facts.WithholdingReach+Tags.CanWithhold : System.Int32 (literal)
+ToolUp.Facts.WithholdingReach+Tags.CannotWithhold : System.Int32 (literal)
+ToolUp.Facts.WithholdingReach+Tags.Unregistered : System.Int32 (literal)
 ToolUp.Facts.WritePlan (class)
 ToolUp.Facts.WritePlan..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.IndexDelta], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactAuditEvent], Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Facts.BatchAssertReceipt)
 ToolUp.Facts.WritePlan.Audit : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactAuditEvent] { get }

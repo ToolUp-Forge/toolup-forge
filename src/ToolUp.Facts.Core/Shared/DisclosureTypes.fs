@@ -309,6 +309,25 @@ type DisclosureTaintConfig = {
     Declassifiers: Map<string, DeclassificationRoutine>
 }
 
+/// What a `DisclosureTaintConfig` can withhold at the egress surfaces asked
+/// about (Phase 1252) — the reading a deployment's advertised withholding
+/// is checked against. `Internal` facts are withheld under every
+/// configuration; this is about `Restricted` refs, which a configuration
+/// decides.
+type WithholdingReach =
+    /// No policy is registered, so every `Restricted` ref is unknown and
+    /// denies (the conservative default). Withholding is real; it is not
+    /// configured.
+    | Unregistered
+    /// Policies are registered, none can taint, and none denies any surface
+    /// asked about: no declared ref can be withheld there, so a withheld
+    /// point is unreachable at those surfaces.
+    | CannotWithhold
+    /// Something can be withheld: the policies that can taint (a
+    /// `TaintPropagating` mode or a contributor scope), and for each policy
+    /// the asked-about surfaces it denies.
+    | CanWithhold of taintSources: string list * denials: (string * FactEgressSurface list) list
+
 module DisclosureTaintConfig =
 
     /// The inert config — no policy vocabulary, no declassifiers. A gate
@@ -335,6 +354,12 @@ module DisclosureTaintConfig =
     let isEmpty (config: DisclosureTaintConfig) : bool =
         config.Policies.IsEmpty && config.Declassifiers.IsEmpty
 
+    /// Whether a policy can taint: a `TaintPropagating` mode or a
+    /// contributor scope. The one definition `isTaintInert` and
+    /// `withholdingReachAt` share.
+    let private canTaint (policy: DisclosurePolicy) : bool =
+        policy.Mode <> Plain || Option.isSome policy.ContributorScope
+
     /// Phase 1134 — whether the taint walk can change nothing under this
     /// config: no registered policy is `TaintPropagating`, none declares a
     /// `ContributorScope`, and no declassification routine is registered.
@@ -348,8 +373,53 @@ module DisclosureTaintConfig =
     /// "this deployment cannot taint" is never decided twice.
     let isTaintInert (config: DisclosureTaintConfig) : bool =
         config.Declassifiers.IsEmpty
-        && config.Policies
-           |> Map.forall (fun _ policy -> policy.Mode = Plain && Option.isNone policy.ContributorScope)
+        && config.Policies |> Map.forall (fun _ policy -> not (canTaint policy))
+
+    /// Every egress surface, in declaration order. A test holds it to the
+    /// union's cases, so a surface added later cannot be missing here.
+    let allSurfaces: FactEgressSurface list = [
+        FactRetrieval
+        FactToolResult
+        FactNarrativePublication
+        FactExport
+        FactWebhook
+        FactPeerEgress
+        FactBrowse
+        FactTeamPublication
+    ]
+
+    /// What the config can withhold at `surfaces` (Phase 1252). A policy
+    /// withholds at a surface it does not permit (an unregistered ref denies
+    /// at every surface, which `Unregistered` states); a policy that can
+    /// taint withholds derived facts whatever it permits. The reading a
+    /// deployment's advertised withholding is checked against: where it is
+    /// `CannotWithhold`, a withheld-point note is unreachable.
+    ///
+    /// Distinct from `isTaintInert`, which asks only whether the taint walk
+    /// can change a verdict: a `Plain` policy that permits few surfaces is
+    /// taint-inert and still withholds at the rest.
+    let withholdingReachAt (surfaces: FactEgressSurface list) (config: DisclosureTaintConfig) : WithholdingReach =
+        if config.Policies.IsEmpty then
+            Unregistered
+        else
+            let policies = config.Policies |> Map.toList |> List.map snd
+
+            let taintSources = policies |> List.filter canTaint |> List.map _.PolicyRef
+
+            let denials =
+                policies
+                |> List.choose (fun policy ->
+                    match surfaces |> List.filter (fun s -> not (List.contains s policy.PermitSurfaces)) with
+                    | [] -> None
+                    | denied -> Some(policy.PolicyRef, denied))
+
+            if taintSources.IsEmpty && denials.IsEmpty then
+                CannotWithhold
+            else
+                CanWithhold(taintSources, denials)
+
+    /// `withholdingReachAt` every egress surface.
+    let withholdingReach (config: DisclosureTaintConfig) : WithholdingReach = withholdingReachAt allSurfaces config
 
     /// The Phase 525 `DisclosurePolicyResolver` built from the registered
     /// policies (Phase 562.A) — the policy vocabulary the resolver seam has

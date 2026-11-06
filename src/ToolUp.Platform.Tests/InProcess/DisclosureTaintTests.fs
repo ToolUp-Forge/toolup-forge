@@ -1587,8 +1587,184 @@ let derivedFactTests =
         }
     ]
 
+module private ReachFixtures =
+    open Microsoft.Extensions.DependencyInjection
+    open ToolUp.Platform.AI
+    open ToolUp.Platform.Providers
+    open ToolUp.AI
+    open ToolUp.AI.AICompose
+    open ToolUp.Facts.Presentation
+
+    let factory =
+        { new IAIProviderFactory with
+            member _.Available = []
+            member _.PlatformDescriptors = []
+            member _.PlatformDescriptor = None
+            member _.Resolve _ = async { return Error NoProviderConfigured }
+            member _.TryResolveByLabel(_, _) = async { return Error NoProviderConfigured }
+            member _.BuildPlatform(_, _, _) = None
+        }
+
+    let profile =
+        { new IProviderProfile with
+            member _.Get _ = async { return None }
+            member _.Set(_, _) = async { return Ok() }
+            member _.Clear _ = async { return () }
+            member _.ResolveEntry(_, _, _) = async { return None }
+            member _.SetEntryHealth(_, _, _) = async { return Ok() }
+        }
+
+    let allSurfacesPlain =
+        DisclosureTaintConfig.ofLists [ plainPolicy "trade-figures" DisclosureTaintConfig.allSurfaces ] []
+
+    /// The surfaces the composed render tools and page requests ask at.
+    let composedOnly =
+        DisclosureTaintConfig.ofLists [ plainPolicy "trade-figures" [ FactToolResult; FactBrowse ] ] []
+
+    let narrowed =
+        DisclosureTaintConfig.ofLists [ plainPolicy "trade-figures" [ FactRetrieval ] ] []
+
+    let tainting =
+        DisclosureTaintConfig.ofLists [
+            {
+                plainPolicy "trade-figures" DisclosureTaintConfig.allSurfaces with
+                    Mode = TaintPropagating
+            }
+        ] []
+
+    /// The reach guard's verdict for a fact-tier deployment over `config`,
+    /// requiring authentication or not, with the render tools composed or not.
+    let verdict (config: DisclosureTaintConfig) (auth: bool) (renderTools: bool) : ConfigValidation.ValidationResult =
+        let app: ServerApp =
+            {
+                ServerApp.empty with
+                    Config = {
+                        ServerConfig.defaults with
+                            Surfaces = [
+                                (if auth then
+                                     SurfaceProfile.individual
+                                 else
+                                     SurfaceProfile.anonymous)
+                            ]
+                            Stores = {
+                                ServerConfig.defaults.Stores with
+                                    FactStore = FeatureMode.Enabled
+                            }
+                    }
+            }
+            |> FactsCompose.withFactStore
+
+        let app =
+            if renderTools then
+                fst (PresentationCompose.withRenderTools (app, AIOptions.create factory profile))
+            else
+                app
+
+        let services = ServiceCollection() :> IServiceCollection
+        services.AddSingleton<DisclosureTaintConfig>(config) |> ignore
+
+        let services =
+            match ServerApp.serviceConfig app with
+            | Some configure -> configure services
+            | None -> services
+
+        services
+        |> Seq.choose (fun d ->
+            match d.ImplementationInstance with
+            | :? ConfigValidation.IConfigValidator as v when v.Name = "fact-disclosure-reach" -> Some v
+            | _ -> None)
+        |> Seq.exactlyOne
+        |> fun v -> v.Validate() |> Async.RunSynchronously
+
+    let withAccept (value: string option) (body: unit -> unit) =
+        let name = ConfigKeys.Names.acceptPlainDisclosure
+        let prior = Environment.GetEnvironmentVariable name
+
+        try
+            Environment.SetEnvironmentVariable(name, Option.toObj value)
+            body ()
+        finally
+            Environment.SetEnvironmentVariable(name, prior)
+
+let private reachTests =
+    let isWarning =
+        function
+        | ConfigValidation.ValidationResult.Warning m ->
+            m.Contains "FACTS-DISCLOSURE-CANNOT-TAINT" && m.Contains "trade-figures"
+        | _ -> false
+
+    testList "Phase 1252 a configuration that cannot withhold is named when withholding surfaces are composed" [
+        test "withholdingReach reads the config as a value" {
+            let reach = DisclosureTaintConfig.withholdingReach
+            Expect.equal (reach DisclosureTaintConfig.empty) Unregistered "nothing registered denies by default"
+            Expect.equal (reach ReachFixtures.allSurfacesPlain) CannotWithhold "all Plain, every surface"
+
+            match reach ReachFixtures.narrowed with
+            | CanWithhold([], [ "trade-figures", denied ]) ->
+                Expect.isFalse (List.contains FactRetrieval denied) "the permitted surface is not a denial"
+                Expect.isTrue (List.contains FactExport denied) "an unpermitted one is"
+            | other -> failtestf "expected a denial, got %A" other
+
+            match reach ReachFixtures.tainting with
+            | CanWithhold([ "trade-figures" ], []) -> ()
+            | other -> failtestf "expected a taint source, got %A" other
+        }
+
+        test "allSurfaces names every case of the union" {
+            let cases =
+                Microsoft.FSharp.Reflection.FSharpType.GetUnionCases typeof<FactEgressSurface>
+
+            Expect.equal DisclosureTaintConfig.allSurfaces.Length cases.Length "one entry per case"
+        }
+
+        test "the all-Plain configuration with render tools composed reports" {
+            ReachFixtures.withAccept None (fun () ->
+                Expect.isTrue
+                    (isWarning (ReachFixtures.verdict ReachFixtures.allSurfacesPlain true true))
+                    "warning under auth"
+
+                Expect.isTrue
+                    (isWarning (ReachFixtures.verdict ReachFixtures.composedOnly true true))
+                    "permits the composed surface")
+        }
+
+        test "under header auth it is Info: logged, never a Warning" {
+            ReachFixtures.withAccept None (fun () ->
+                Expect.equal
+                    (ReachFixtures.verdict ReachFixtures.allSurfacesPlain false true)
+                    ConfigValidation.ValidationResult.Ok
+                    "no warning")
+        }
+
+        test "the same configuration without the surfaces is silent" {
+            ReachFixtures.withAccept None (fun () ->
+                Expect.equal
+                    (ReachFixtures.verdict ReachFixtures.allSurfacesPlain true false)
+                    ConfigValidation.ValidationResult.Ok
+                    "nothing composed, nothing to say")
+        }
+
+        test "a policy that denies a composed surface, or taints, is silent" {
+            ReachFixtures.withAccept None (fun () ->
+                for config in [ ReachFixtures.narrowed; ReachFixtures.tainting; DisclosureTaintConfig.empty ] do
+                    Expect.equal
+                        (ReachFixtures.verdict config true true)
+                        ConfigValidation.ValidationResult.Ok
+                        "withholding is reachable")
+        }
+
+        test "TOOLUP_ACCEPT_PLAIN_DISCLOSURE silences it" {
+            ReachFixtures.withAccept (Some "1") (fun () ->
+                Expect.equal
+                    (ReachFixtures.verdict ReachFixtures.allSurfacesPlain true true)
+                    ConfigValidation.ValidationResult.Ok
+                    "accepted")
+        }
+    ]
+
 let tests =
     testList "Phase 562 taint-propagating disclosure" [
+        reachTests
         derivedFactTests
         indexLawTests
         stageTests

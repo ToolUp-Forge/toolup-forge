@@ -3167,6 +3167,7 @@ ToolUp.Platform.ConfigKeys+Names.acceptLocalEmbedderAtScale : System.String (lit
 ToolUp.Platform.ConfigKeys+Names.acceptLocalFallback : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.acceptNoRateLimitInAuthMode : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.acceptPendingInviteStoreMultiInstance : System.String (literal)
+ToolUp.Platform.ConfigKeys+Names.acceptPlainDisclosure : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.acceptPlaintextSecrets : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.acceptPlaintextSecretsInAuthMode : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.acceptQueryParamSseAuthInAuthMode : System.String (literal)

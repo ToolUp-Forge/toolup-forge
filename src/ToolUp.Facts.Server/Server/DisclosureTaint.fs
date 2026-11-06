@@ -6,6 +6,7 @@ namespace ToolUp.Facts
 open System.Collections.Generic
 open ToolUp.Platform
 open ToolUp.Platform.Infra
+open ToolUp.Platform.VectorKnowledgeTypes
 
 // ─── DisclosureTaint (Phase 562) ─────────────────────────────────────
 //
@@ -500,3 +501,58 @@ module AssemblyTaint =
         producedBy
         |> List.map (fun (factId, spec) -> factId, outputLabel labelOfSource spec)
         |> ComputedLineage.ofList
+
+/// A composed surface whose contract is that a withheld point is never drawn
+/// and is named: the fact render tools, the page requests, the narrative
+/// publication read. A composition registers one per surface it arms
+/// (`FactsCompose.withWithholdingSurface`), and the startup finding below
+/// reads them.
+type WithholdingSurface = {
+    /// What was composed, in the words the finding uses ("render tools").
+    Name: string
+    /// The egress door it asks the disclosure gate at.
+    Surface: FactEgressSurface
+}
+
+/// The finding raised when a withholding surface is composed over a
+/// disclosure configuration that cannot withhold at it.
+module DisclosureReachFinding =
+
+    /// The finding's code, leading its message.
+    [<Literal>]
+    let Code = "FACTS-DISCLOSURE-CANNOT-TAINT"
+
+    /// The message, or `None` when nothing needs saying: no surface is
+    /// composed, no policy is registered (every `Restricted` ref then
+    /// denies), or something can be withheld at the composed surfaces.
+    let assess (config: DisclosureTaintConfig) (composed: WithholdingSurface list) : string option =
+        let surfaces = composed |> List.map _.Surface |> List.distinct
+
+        match surfaces, DisclosureTaintConfig.withholdingReachAt surfaces config with
+        | [], _
+        | _, Unregistered
+        | _, CanWithhold _ -> None
+        | _, CannotWithhold ->
+            let policies =
+                config.Policies
+                |> Map.toList
+                |> List.map (fun (_, policy) ->
+                    sprintf
+                        "%s (%A; permits %s)"
+                        policy.PolicyRef
+                        policy.Mode
+                        (policy.PermitSurfaces
+                         |> List.map FactEgressSurface.toString
+                         |> String.concat ", "))
+                |> String.concat "; "
+
+            let names = composed |> List.map _.Name |> List.distinct |> String.concat ", "
+
+            Some(
+                sprintf
+                    "%s: %s composed, whose contract is that a withheld point is never drawn and is named, but the disclosure configuration cannot withhold at %s. Policies: %s. None is taint-propagating or contributor-scoped and each permits every composed surface, so no Restricted fact can be withheld there and the withheld-point paths are unreachable (Internal facts are still withheld). If a plain configuration is intended, set TOOLUP_ACCEPT_PLAIN_DISCLOSURE=1; otherwise narrow a policy's PermitSurfaces or mark one TaintPropagating."
+                    Code
+                    names
+                    (surfaces |> List.map FactEgressSurface.toString |> String.concat ", ")
+                    policies
+            )
