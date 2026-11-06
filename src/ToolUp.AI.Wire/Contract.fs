@@ -3,7 +3,7 @@
 
 namespace ToolUp.Platform.AI
 
-// ─── Portable connector contract (Wave 32, Phase 250) ────────────
+// ─── Portable connector contract ────────────
 //
 // The connector *value types* — the message / tool / response / error
 // records + DUs an `IAIProvider` exchanges with the platform — live here
@@ -41,7 +41,7 @@ type AIProviderToolCall = {
 /// A result returned to the AI provider after executing a tool call
 type AIProviderToolResult = { ToolCallId: string; Content: string }
 
-// ─── Multimodal content parts (Phase 6o) ─────────────────────────
+// ─── Multimodal content parts ─────────────────────────
 //
 // `AIContentPart` is the wire format for messages whose content is
 // richer than a single string — typically text + one or more
@@ -71,7 +71,7 @@ type ImagePayload = {
     Source: ImageSource
 }
 
-// ─── Block parts (Phase 1128) ────────────────────────────────────
+// ─── Block parts ────────────────────────────────────
 //
 // A block is a chart or table the conversation SHOWS rather than quotes:
 // a Fuaran-UI node, carried as its canonical wire JSON in a string so this
@@ -137,7 +137,7 @@ module BlockProvenance =
 type AIContentPart =
     | TextPart of string
     | ImagePart of ImagePayload
-    /// Phase 1128 — a Fuaran-UI node as canonical wire JSON, with the
+    /// A Fuaran-UI node as canonical wire JSON, with the
     /// request and the read that produced it.
     | BlockPart of node: string * provenance: BlockProvenance
 
@@ -217,7 +217,7 @@ type AIProviderMessage = {
     Content: string
     ToolCalls: AIProviderToolCall list
     ToolResults: AIProviderToolResult list
-    /// Phase 6o multimodal content blocks. Empty for plain-text
+    /// Multimodal content blocks. Empty for plain-text
     /// messages — providers continue to emit the legacy string
     /// shape. Populated for multipart messages — providers emit
     /// the vendor-native content-block array.
@@ -337,7 +337,7 @@ type AIProviderCapabilities = {
     /// rollup hides the cache-hit-rate column for that provider/model
     /// bucket.
     SupportsPromptCaching: bool
-    /// Phase 6j.B — this provider can serve a Tier-3 *triage* turn: a
+    /// This provider can serve a Tier-3 *triage* turn: a
     /// single, tool-free, schema-constrained call whose only job is to
     /// decide whether a trivial UI instruction ("set country to UK")
     /// maps onto one declared field, or needs the full agent loop.
@@ -351,12 +351,12 @@ type AIProviderCapabilities = {
     /// is a frontier model gains nothing from triage and should leave
     /// this `false`.
     SupportsTriage: bool
-    /// Phase 6j.B — the model id this provider family would use to
+    /// The model id this provider family would use to
     /// serve triage, when it has a cheaper tier than `Model` (an
     /// Anthropic connector names its Haiku-grade id here; an OpenAI
     /// connector its mini-grade id).
     ///
-    /// Since Phase 661 this is a **dispatch instruction the triage
+    /// This is a **dispatch instruction the triage
     /// resolver honours by itself**: with no explicit
     /// `FastPathTriageConfig.TriageProvider` wired, the resolver names
     /// this id on the triage call through the per-call model override
@@ -424,13 +424,13 @@ type AIProviderError =
     /// without a successful response. Wraps the last inner error so
     /// callers can still distinguish root cause.
     | RetriesExhausted of attempts: int * lastError: AIProviderError
-    /// Phase 6o — the caller asked for a feature the active model
+    /// The caller asked for a feature the active model
     /// doesn't support (currently: vision input against a
     /// non-vision-capable model). Fail synchronously rather than
     /// shipping the image to the vendor and waiting for HTTP 400;
     /// callers get the same diagnostic at substantially lower cost.
     | UnsupportedCapability of feature: string * detail: string
-    /// Phase 67b — `SendStructuredMessage` was called but the response
+    /// `SendStructuredMessage` was called but the response
     /// did not conform to the supplied JSON Schema. Distinct from
     /// `UnsupportedCapability` because the provider attempted the
     /// request (and may even support structured-output natively) — the
@@ -476,7 +476,7 @@ module AIProviderError =
         | SchemaUnsupported _ -> false
 
 
-// ─── Per-call options (Phase 661) ────────────────────────────────
+// ─── Per-call options ────────────────────────────────
 //
 // `IAIProvider.SendMessage` / `SendStructuredMessage` take positional
 // arguments, not a request record, so there was no request field to
@@ -500,25 +500,43 @@ type AIProviderCallOptions = {
     /// its configured model and reports `OverrideFellBack` rather than
     /// failing the call; see `ModelOverrideOutcome`.
     Model: string option
-    /// Phase 1109 — the reply-length budget (output tokens) for THIS call.
+    /// The reply-length budget (output tokens) for THIS call.
     /// `None` is today's behaviour: the provider's own constructed cap. A
     /// connector that sends a reply cap (Anthropic's `max_tokens`) sends
     /// this one instead; a connector that sends none leaves the reply
     /// uncapped either way. A value below 1 is ignored.
     MaxTokens: int option
+    /// The effort for THIS call, in the provider's own
+    /// vocabulary (an Anthropic connector sends it as
+    /// `output_config.effort`). `None` is today's behaviour: the provider's
+    /// configured effort if it has one, else the field is not sent and the
+    /// provider's API default applies. It is not validated here: a model
+    /// that rejects the value reports the provider's error. A connector
+    /// with no such setting ignores it, and a blank value is ignored.
+    Effort: string option
 }
 
 module AIProviderCallOptions =
     /// No per-call options — the configured model, unchanged bytes.
-    let none: AIProviderCallOptions = { Model = None; MaxTokens = None }
+    let none: AIProviderCallOptions = {
+        Model = None
+        MaxTokens = None
+        Effort = None
+    }
 
     /// Ask for one call on `model`.
     let forModel (model: string) : AIProviderCallOptions = { none with Model = Some model }
 
-    /// Phase 1109 — give one call a reply-length budget of `maxTokens`.
+    /// Give one call a reply-length budget of `maxTokens`.
     let withMaxTokens (maxTokens: int) (options: AIProviderCallOptions) : AIProviderCallOptions = {
         options with
             MaxTokens = Some maxTokens
+    }
+
+    /// Run one call at `effort`.
+    let withEffort (effort: string) (options: AIProviderCallOptions) : AIProviderCallOptions = {
+        options with
+            Effort = Some effort
     }
 
 /// What the provider did about `AIProviderCallOptions.Model` on one

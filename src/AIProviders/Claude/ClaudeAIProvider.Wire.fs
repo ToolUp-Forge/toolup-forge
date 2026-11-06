@@ -3,7 +3,7 @@ module internal ClaudeAIProviderWire
 open ToolUp.AI.Wire
 open ToolUp.Platform.AI
 
-// ─── Portable Claude wire mapping (Wave 32, Phase 254) ───────────
+// ─── Portable Claude wire mapping ───────────
 //
 // The Anthropic Messages API request build + response parse, mapped over
 // the portable `JsonValue` model (`ToolUp.AI.Wire`) instead of
@@ -13,7 +13,7 @@ open ToolUp.Platform.AI
 // well as the .NET server host (GP 12). Object members are built in a
 // fixed order and serialized by the canonical `JsonHost.serialize` writer,
 // so the request bytes are deterministic and byte-stable across hosts —
-// the property the Phase 255 conformance corpus pins.
+// the property the conformance corpus pins.
 //
 // The streaming assembly lives in the shared `ToolUp.AI.Wire.ClaudeStreaming`
 // state machine; this file owns the non-streaming request/response mapping
@@ -22,7 +22,7 @@ open ToolUp.Platform.AI
 // ─── Response parsing ────────────────────────────────────────────
 
 /// Parse Anthropic's `usage` block into the provider-neutral `TokenUsage`
-/// shape (Phase 6i.B). Returns `None` when no `usage` field is present —
+/// shape. Returns `None` when no `usage` field is present —
 /// healthy responses always carry one, so `None` typically signals a
 /// malformed response.
 ///
@@ -133,7 +133,7 @@ let parseResponse (json: string) : AIProviderResponse =
 
 // ─── Request building ────────────────────────────────────────────
 
-/// Anthropic prompt-caching marker (Phase 6i.B). Attached as `cache_control`
+/// Anthropic prompt-caching marker. Attached as `cache_control`
 /// metadata on a content block; the API stores a cache breakpoint at that
 /// position. The marker itself is metadata, not content — moving the marker
 /// between turns does not invalidate prior-turn cache writes; a longer
@@ -173,7 +173,7 @@ let private embeddedJson (raw: string) : JsonValue =
         | Some v -> v
         | None -> jobj []
 
-// ─── Phase 6o vision support ─────────────────────────────────────
+// ─── Vision support ─────────────────────────────────────
 //
 // Anthropic vision-capable models. Used to short-circuit a request
 // that carries `ImagePart` content against a non-vision model: the
@@ -224,7 +224,7 @@ let private buildMultipartContent (parts: AIContentPart list) (markForCache: boo
             match part with
             | TextPart s -> jobj [ "type", jstr "text"; "text", jstr s ]
             | ImagePart payload -> imageBlock payload
-            // Phase 1128 — a block reaches the model as its text summary;
+            // A block reaches the model as its text summary;
             // the node never enters a request body.
             | BlockPart _ -> jobj [ "type", jstr "text"; "text", jstr (AIContentPart.redactedSummary part) ])
 
@@ -255,7 +255,7 @@ let private buildMultipartContent (parts: AIContentPart list) (markForCache: boo
 /// When `markForCache` is true, the LAST content block of the produced array
 /// (or the single text block, in case 1) carries a `cache_control` marker.
 let private buildMessageContent (msg: AIProviderMessage) (markForCache: bool) : JsonValue =
-    // Phase 6o — multipart content. When `Parts` is populated the
+    // Multipart content. When `Parts` is populated the
     // message overrides the plain-text path entirely: providers see
     // the per-part wire blocks (text + image) instead of the legacy
     // `Content: string`. Tool-call / tool-result envelopes are
@@ -348,7 +348,7 @@ let private buildTools (tools: AIProviderToolDef list) : JsonValue list =
 
         if i = lastIdx then withCacheControl block else block)
 
-/// Phase 67b — fixed name for the synthesised schema-tool used in
+/// Fixed name for the synthesised schema-tool used in
 /// Claude's tool-based structured-output workaround. Anthropic has no
 /// native equivalent to Gemini's `responseSchema` or OpenAI's
 /// `response_format: json_schema`; the documented workaround is to
@@ -359,7 +359,7 @@ let private buildTools (tools: AIProviderToolDef list) : JsonValue list =
 [<Literal>]
 let StructuredResponseToolName = "structured_response"
 
-/// Phase 67b follow-up — deterministic repair of the two malformed
+/// Deterministic repair of the two malformed
 /// structured-output shapes Claude models have been observed emitting
 /// under the tool-based workaround (Haiku 4.5 / Sonnet 4.6 / Opus 4.8),
 /// even with `tool_choice` forcing the schema-tool:
@@ -439,7 +439,13 @@ let normaliseStructuredPayload (schemaJson: string) (payload: string) : string =
 
         JsonHost.serialize el
 
-let buildRequestBody
+/// `buildRequestBody` with an effort: `Some` writes `output_config.effort`
+///, and `None` or a blank value leaves the body byte-identical to
+/// `buildRequestBody`. The value is sent as given: which levels a model accepts
+/// is the API's to say, and it says so with an error. Effort sits in the part of
+/// the request a prompt cache keys on, so a change of effort is a cache miss.
+let buildRequestBodyWithEffort
+    (effort: string option)
     (model: string)
     (maxTokens: int)
     (messages: AIProviderMessage list)
@@ -452,7 +458,7 @@ let buildRequestBody
     // included (Claude rejects null/unknown fields) and the member order
     // (so the serialized bytes are deterministic across hosts).
     //
-    // Phase 6i.B: mark the second-to-last message for cache_control. On the
+    // Mark the second-to-last message for cache_control. On the
     // first turn (length < 2) no message-level breakpoint fires — the
     // system+tools breakpoints handle the static prefix. On later turns this
     // marker progresses naturally as the conversation grows; markers are
@@ -482,7 +488,7 @@ let buildRequestBody
           ]
         | None -> []
 
-    // Phase 67b — when a schema is supplied, append the synthesised
+    // When a schema is supplied, append the synthesised
     // schema-tool to user tools. The `tool_choice` directive below
     // forces the model to call only the schema-tool, so user tools
     // become unreachable on a structured-output turn (documented
@@ -519,7 +525,7 @@ let buildRequestBody
 
     let toolFields = if toolDefs.IsEmpty then [] else [ "tools", jarr toolDefs ]
 
-    // Phase 67b — force the schema-tool when structured output is
+    // Force the schema-tool when structured output is
     // requested. `disable_parallel_tool_use` keeps the assistant's
     // turn to exactly one tool call so the response parser picks up
     // a single structured-response payload (the model otherwise may
@@ -536,6 +542,11 @@ let buildRequestBody
           ]
         | None -> []
 
+    let outputConfigFields =
+        match effort with
+        | Some level when level.Trim() <> "" -> [ "output_config", jobj [ "effort", jstr level ] ]
+        | _ -> []
+
     let streamFields = if stream then [ "stream", jbool true ] else []
 
     jobj (
@@ -543,6 +554,19 @@ let buildRequestBody
         @ systemFields
         @ toolFields
         @ toolChoiceFields
+        @ outputConfigFields
         @ streamFields
     )
     |> JsonHost.serialize
+
+/// The request body for one call, with no effort sent.
+let buildRequestBody
+    (model: string)
+    (maxTokens: int)
+    (messages: AIProviderMessage list)
+    (tools: AIProviderToolDef list)
+    (systemPrompt: string option)
+    (stream: bool)
+    (structuredOutputSchema: string option)
+    : string =
+    buildRequestBodyWithEffort None model maxTokens messages tools systemPrompt stream structuredOutputSchema

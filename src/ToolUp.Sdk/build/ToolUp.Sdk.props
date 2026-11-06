@@ -132,7 +132,7 @@
        family's property in Directory.Packages.props moves that family alone.
   -->
   <PropertyGroup>
-    <ToolUpAIProvidersVersion Condition="'$(ToolUpAIProvidersVersion)' == ''">0.39.1</ToolUpAIProvidersVersion>
+    <ToolUpAIProvidersVersion Condition="'$(ToolUpAIProvidersVersion)' == ''">0.39.2</ToolUpAIProvidersVersion>
     <ToolUpAlgorithmProvidersVersion Condition="'$(ToolUpAlgorithmProvidersVersion)' == ''">0.39.1</ToolUpAlgorithmProvidersVersion>
     <ToolUpArtefactSigningVersion Condition="'$(ToolUpArtefactSigningVersion)' == ''">0.39.1</ToolUpArtefactSigningVersion>
     <ToolUpAuditSinksVersion Condition="'$(ToolUpAuditSinksVersion)' == ''">0.39.1</ToolUpAuditSinksVersion>

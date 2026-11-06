@@ -67,12 +67,15 @@ type SidePanelModel = {
     /// perpetually-streaming spinner (network disconnect, SSE drop,
     /// server crash mid-agent-loop all surface here).
     WatchdogToken: Guid option
-    /// Phase 6h: in-flight task Id captured from the `Submitted`
+    /// In-flight task Id captured from the `Submitted`
     /// event. `Some` while the agent loop is running; `None` after
     /// `MessageComplete` / `StreamCancelled` / `TaskStatusChanged
     /// AITaskFailed`. Drives the Cancel button (which shows only
     /// when this is `Some`) and seeds the `CancelTask` POST.
     CurrentTaskId: Guid option
+    /// The tool the live turn is running, from `ToolCallStarted`
+    /// until its `ToolCallCompleted`. Names what the wait line says.
+    RunningTool: string option
 }
 
 type SidePanelMsg =
@@ -98,7 +101,7 @@ type SidePanelMsg =
     /// `Send` opens a new server-side conversation. Use to purge
     /// in-conversation references to deleted KB files or to start over.
     | ClearSession
-    /// Phase 6h: user clicked Cancel on the in-flight task. Fires
+    /// User clicked Cancel on the in-flight task. Fires
     /// a fetch POST to /api/ai/cancel/{taskId}; the server flips
     /// the matching CancellationToken; the agent loop bails at the
     /// next turn boundary with a StreamCancelled SSE event.
@@ -131,7 +134,18 @@ let private sidePanelInit () : SidePanelModel = {
     DebugMode = false
     WatchdogToken = None
     CurrentTaskId = None
+    RunningTool = None
 }
+
+/// What the panel says while a turn runs with no text to show. The
+/// watchdog token is the in-flight flag (set at `Send`, kept by every event of
+/// the live turn, cleared by every way a turn ends), so the line is up from the
+/// moment of sending until the first text arrives or the turn ends.
+let internal turnStatus (model: SidePanelModel) : string option =
+    match model.WatchdogToken, model.Streaming, model.RunningTool with
+    | Some _, "", Some tool -> Some $"Calling {tool}…"
+    | Some _, "", None -> Some "Working…"
+    | _ -> None
 
 // ─── Stream-idle watchdog ────────────────────────────────────────
 //
@@ -310,7 +324,7 @@ let private sidePanelUpdate (msg: SidePanelMsg) (model: SidePanelModel) : SidePa
             // timeout. The scheduled `WatchdogFired` may still fire
             // later; it'll see `WatchdogToken = None` (or a newer
             // token, if a subsequent Send happened) and be ignored.
-            // Phase 6h: also clear `CurrentTaskId` — task is done,
+            // Also clear `CurrentTaskId` — task is done,
             // cancel button hides.
             {
                 model with
@@ -321,7 +335,7 @@ let private sidePanelUpdate (msg: SidePanelMsg) (model: SidePanelModel) : SidePa
             },
             Cmd.none
 
-        // Phase 6h: user clicked Cancel and the server confirmed the
+        // User clicked Cancel and the server confirmed the
         // agent loop is bailing. Commit whatever was streaming with a
         // cancelled footer so the user keeps the partial response;
         // clear watchdog + task id.
@@ -359,6 +373,11 @@ let private sidePanelUpdate (msg: SidePanelMsg) (model: SidePanelModel) : SidePa
         // displayed: the debug note is gated on `DebugMode`, the watchdog
         // re-arm is not.
         | ToolCallStarted(convId, toolName, toolCallId) when convId = model.ConversationId ->
+            let model = {
+                model with
+                    RunningTool = Some toolName
+            }
+
             if model.DebugMode then
                 let note = debugNote convId $"🔧 Calling tool `{toolName}` (id {toolCallId})"
 
@@ -370,6 +389,8 @@ let private sidePanelUpdate (msg: SidePanelMsg) (model: SidePanelModel) : SidePa
                 rearmWatchdog model
 
         | ToolCallCompleted(convId, _toolCallId, content) when convId = model.ConversationId ->
+            let model = { model with RunningTool = None }
+
             if model.DebugMode then
                 let note = debugNote convId $"↳ Tool result: {truncateForDebug 500 content}"
 
@@ -453,7 +474,7 @@ let private sidePanelUpdate (msg: SidePanelMsg) (model: SidePanelModel) : SidePa
                 Verification = None
             }
 
-            // Phase 6j.A: client-side fast-path resolver. Trivial UI
+            // Client-side fast-path resolver. Trivial UI
             // instructions ("set country to UK") resolve here before
             // the chat request leaves the page. Side-panel surface
             // carries the active analytical module so field patterns
@@ -497,7 +518,7 @@ let private sidePanelUpdate (msg: SidePanelMsg) (model: SidePanelModel) : SidePa
                     // Side-panel chat — Mode 1 only. Tools declared as
                     // FullPageOnly are filtered out for this request.
                     Surface = SidePanel
-                    // Phase 502.D — see the full-page site in AIAssistantUI:
+                    // See the full-page site in AIAssistantUI:
                     // the built-in side panel does not scope its own
                     // retrieval, so `None` leaves the request unchanged.
                     RetrievalFilters = None
@@ -510,6 +531,7 @@ let private sidePanelUpdate (msg: SidePanelMsg) (model: SidePanelModel) : SidePa
                         Messages = model.Messages @ [ userMsg ]
                         Streaming = ""
                         WatchdogToken = Some watchdogId
+                        RunningTool = None
                 },
                 Cmd.batch [
                     Cmd.OfRemoting.call aiApi.SubmitMessage request Submitted ApiError
@@ -517,7 +539,7 @@ let private sidePanelUpdate (msg: SidePanelMsg) (model: SidePanelModel) : SidePa
                 ]
 
     | Submitted task ->
-        // Phase 6h: capture the in-flight taskId so the Cancel
+        // Capture the in-flight taskId so the Cancel
         // button can target /api/ai/cancel/{taskId}. Cleared on
         // MessageComplete / StreamCancelled / TaskStatusChanged
         // failure.
@@ -622,7 +644,7 @@ let private sidePanelView
     (dispatch: SidePanelMsg -> unit)
     : ReactElement option =
     if isAiEnabled mode && model.Open then
-        // Phase 6h: capture the in-flight taskId in the cancel
+        // Capture the in-flight taskId in the cancel
         // closure so the component can fire the cancel without
         // knowing about Guid types.
         let onCancel =
@@ -630,7 +652,8 @@ let private sidePanelView
             |> Option.map (fun tid -> fun () -> dispatch (CancelTask tid))
 
         Some(
-            ConversationPanel.View
+            ConversationPanel.ViewWithStatus
+                (turnStatus model)
                 true
                 "AI Chat"
                 model.Messages
@@ -704,7 +727,7 @@ let private sidePanelHeaderAction
 /// present in the sidebar means enabling BYOK in the future is a
 /// policy flip, not a module-list change.
 let appendAssistantModule (mode: AIAssistantMode) (modules: ErasedModule list) : ErasedModule list =
-    // Phase 70 — Platform Admin keys module is appended alongside the
+    // Platform Admin keys module is appended alongside the
     // assistant + settings modules. Visibility filtering at sidebar-
     // render time hides it from non-admin callers, so the
     // unconditional append is safe regardless of deployment shape.
@@ -725,7 +748,7 @@ let appendAssistantModule (mode: AIAssistantMode) (modules: ErasedModule list) :
             PlatformAIKeysAdminUI.create ()
         ]
 
-// ─── Phase 910 — the composer's view, with one set of dispatchers per loop ──
+// ─── The composer's view, with one set of dispatchers per loop ──
 //
 // The shell holds two memo boundaries that key on its `dispatch` by
 // reference — the active module's dispatch prop (`moduleDispatchFor`) and
@@ -859,7 +882,7 @@ let private composerProgram
     (shellViewFor: ErasedModule list -> Client.ExtraChrome -> Client.Model -> (Client.Msg -> unit) -> ReactElement)
     : Program<unit, OuterModel, OuterMsg, ReactElement> =
 
-    // Phase 13a — `Client.boot` performs the boot-time composition
+    // `Client.boot` performs the boot-time composition
     // seam setup that every entry point (including `Client.program`)
     // shares: handler-cache population, validators,
     // `UserSession.configure` / `configureDevDefault`, request-guard
@@ -904,7 +927,7 @@ let private composerProgram
 
     let outerUpdate = composerUpdate config queryBus allModules
 
-    // Phase 3b.B — the shell view routes through the sign-in gate (both
+    // The shell view routes through the sign-in gate (both
     // `viewWithSignIn` and the store-bound `viewSlicedOver` do), so the
     // configured `AuthUI` gates this composer's shell too. Calling the raw
     // `Client.view` bypassed `AuthUIProvider.gate` entirely, so a
@@ -913,7 +936,7 @@ let private composerProgram
     let outerView = composerView mode allModules (shellViewFor allModules)
 
     // 0.4.1 — structured `withErrorReporter` replaces the upstream-shape
-    // `withConsoleTrace` shim (removed in Phase 815) here too. Trace and error routing follow the
+    // `withConsoleTrace` shim here too. Trace and error routing follow the
     // shape Client.program already uses (see SDK.Client.fs program/run).
     let elmishLog = Logger.forCategory "client.elmish"
 
@@ -945,7 +968,7 @@ let private composerProgram
                  outerUpdate)
             outerView
 
-    // Phase 1069 — the module-state observer publish left the shell's
+    // The module-state observer publish left the shell's
     // `update`; it is the shell program's post-update hook now, so a
     // composer that embeds the shell installs the same hook over its
     // `ShellMsg` / `Shell` projection, or no AI deployment would publish.
@@ -972,7 +995,7 @@ let private composerProgram
     // (`Client.programLifetimeEffects`) keeps this composer and
     // `Client.program` attaching the same set.
     //
-    // Phase 931 — the same call captures this Program's dispatcher as the
+    // The same call captures this Program's dispatcher as the
     // shell's, lifted through `ShellMsg`, exactly as `Client.run` does for
     // the plain shell. Without it a module's `OnTeamSwitched` and
     // `OnAccessibleModulesChanged` callbacks dispatched into nothing in
@@ -991,7 +1014,7 @@ let private composerProgram
 ///
 /// Its view renders the whole shell per message (`Client.viewWithSignIn`),
 /// so any React binding can mount it; `run` mounts the store-bound
-/// composition instead (Phase 910).
+/// composition instead.
 let withSidePanel
     (mode: AIAssistantMode)
     (config: ClientConfig)
@@ -1021,7 +1044,7 @@ let program
 /// that returns `true` short-circuits the full AI shell bootstrap (the
 /// dispatcher has rendered its own minimal program).
 let run (mode: AIAssistantMode) (config: ClientConfig) (modules: ErasedModule list) : unit =
-    // Phase 13a — install the request seam BEFORE consulting
+    // Install the request seam BEFORE consulting
     // PublicEntryDispatchers so dispatchers that fire authenticated
     // requests get the same header attachment any other request gets.
     // Mirrors `Client.run`; see the comment there.
@@ -1030,7 +1053,7 @@ let run (mode: AIAssistantMode) (config: ClientConfig) (modules: ErasedModule li
     if Client.tryDispatchPublicEntry config then
         ()
     else
-        // Phase 910 — the store-bound composition, as `Client.run` mounts
+        // The store-bound composition, as `Client.run` mounts
         // the shell: the composer publishes its model to one store per
         // run, and the shell's chrome and active module read their slices
         // of `OuterModel.Shell` from it, so a module message re-renders
@@ -1044,7 +1067,7 @@ let run (mode: AIAssistantMode) (config: ClientConfig) (modules: ErasedModule li
         |> Program.withReactStore store "elmish-app"
         |> Program.run
 
-/// Phase 1130 — register the series read a conversation block part is
+/// Register the series read a conversation block part is
 /// re-read through: the reader's own gated fact read. A client boot that
 /// composes the fact store calls it once, before `run`, with the fact
 /// client's resolver:

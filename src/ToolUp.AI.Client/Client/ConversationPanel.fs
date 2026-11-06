@@ -16,7 +16,7 @@ open ToolUp.AI
 
 // ─── Tool-call pill ─────────────────────────────────────────────
 //
-// Phase 6h: collapse/expand UI for tool calls. Replaces the
+// Collapse/expand UI for tool calls. Replaces the
 // previous debug-mode-only synthetic `[debug] Tool result: …`
 // messages with a real production component — every user sees a
 // pill per tool call with status icon + name; clicking expands to
@@ -45,7 +45,7 @@ let private safePrettyJson (raw: string) : string =
 let ToolCallPill (tc: ToolCallRecord) =
     let expanded, setExpanded = React.useState false
 
-    // Phase 6j.A: tool calls dispatched by the client-side fast-path
+    // Tool calls dispatched by the client-side fast-path
     // resolver use a `_fastpath.*` ToolName prefix and render with a
     // ⚡ icon instead of the standard ✓ so users can distinguish
     // resolver-generated turns from real LLM tool calls.
@@ -148,7 +148,7 @@ let ToolCallPill (tc: ToolCallRecord) =
 
 // ─── Conversation export ────────────────────────────────────────
 //
-// Phase 6h: lets the user download the active conversation as a
+// Lets the user download the active conversation as a
 // Markdown or JSON file. Pure client-side — formats the in-memory
 // message list, builds a Blob, triggers a browser download.
 // No server round-trip; the conversation is already in the
@@ -180,7 +180,7 @@ let private participantHeading (p: ParticipantType) =
     | AIAssistant -> "Assistant"
     | System -> "System"
 
-// Phase 6h.A — `includeToolDetails` gates raw `ToolCalls` (arguments +
+// `includeToolDetails` gates raw `ToolCalls` (arguments +
 // results) out of the export by default. Tool payloads regularly carry
 // user ids, internal keys, and RAG/KB chunks that may include PII; the
 // sanitised default writes only Participant / Content / Timestamp.
@@ -203,7 +203,7 @@ let exportAsMarkdown
         lines.Add($"## {participantHeading msg.Participant}")
         lines.Add("")
 
-        // Phase 6o follow-up B: multipart turns render via
+        // Multipart turns render via
         // `AIContentPart.exportPlaceholder` so embedded image bytes
         // never reach paste-able markdown. Text parts render verbatim;
         // image parts render as `![image #N]` placeholders. Plain-text
@@ -293,7 +293,7 @@ let private safeFilename (name: string) =
 [<ReactComponent>]
 let ExportMenu (conversationName: string) (messages: ConversationMessage list) =
     let isOpen, setIsOpen = React.useState false
-    // Phase 6h.A — defaults OFF: the export is sanitised unless the
+    // Defaults OFF: the export is sanitised unless the
     // user explicitly opts into (possibly-PII) tool payloads.
     let includeToolDetails, setIncludeToolDetails = React.useState false
 
@@ -471,11 +471,11 @@ let private truncateDocName (maxLen: int) (s: string) =
     else
         s.Substring(0, max 0 (maxLen - 1)) + "…"
 
-// Phase 6q follow-up B — render `[unverified]` inline as a muted-red
+// Render `[unverified]` inline as a muted-red
 // badge with a tooltip explaining why the model couldn't ground the
 // surrounding claim. The post-stream normaliser substitutes
 // `[unverified]` for phantom citations under the `Strict` policy
-// (see Phase 6q's `CitationNormaliser`); the user reads the model's
+// (see `CitationNormaliser`); the user reads the model's
 // prose with the badge in place of the would-be citation marker.
 //
 // Markdown is block-rendered, so splitting at the tag breaks the
@@ -485,7 +485,7 @@ let private truncateDocName (maxLen: int) (s: string) =
 // substrate-wiring follow-up; a true inline-markdown variant would
 // require Markdown.fs to expose an inline-only renderer.
 //
-// Phase 1130 — the same badge is the conjecture mark: prose a model
+// The same badge is the conjecture mark: prose a model
 // explicitly marks with `[conjecture]` as going beyond the facts (a
 // cause, a likelihood, a recommendation) renders with the badge
 // labelled "conjecture", so a reader can tell it from a figure the
@@ -493,7 +493,7 @@ let private truncateDocName (maxLen: int) (s: string) =
 [<Literal>]
 let private UnverifiedTag = "[unverified]"
 
-/// Phase 1130 — the marker a model writes before prose that goes beyond
+/// The marker a model writes before prose that goes beyond
 /// the facts. The panel renders it as the conjecture badge.
 [<Literal>]
 let ConjectureTag = "[conjecture]"
@@ -554,7 +554,7 @@ let private renderContentWithUnverifiedBadges (content: string) : ReactElement =
             ]
         ]
 
-// ─── "View original" affordance (Phase 102–107 client tail) ──────
+// ─── "View original" affordance ──────
 //
 // A citation whose `OriginalRef` is `Some r` can be opened at its
 // source. The AI client can't fetch the original itself — that surface
@@ -566,7 +566,7 @@ let private renderContentWithUnverifiedBadges (content: string) : ReactElement =
 // Knowledge Base, or a pre-103 chunk with `OriginalRef = None`) →
 // renders nothing, so the panel behaves exactly as before (GP 11).
 
-/// Phase 505 — render a citation's character span as a compact source
+/// Render a citation's character span as a compact source
 /// range. `chars 1024–1340`, not a raw pair: the label has to say what the
 /// numbers are, or two bare integers beside a page hint read as a second
 /// page reference. Half-open in the data, inclusive-looking in the display
@@ -643,7 +643,7 @@ let ViewOriginalButton (originalRef: OriginalDocumentRef) =
             ]
         ]
 
-// ─── Fact citation link (Phase 895) ──────────────────────────────
+// ─── Fact citation link ──────────────────────────────
 //
 // A source carrying a `FactId` is a fact the answer cited. When the fact
 // browse companion is composed (its module is in the shell's published
@@ -775,7 +775,7 @@ let MessageSources (sources: RetrievedSource list) (content: string) =
                         prop.className "mt-2 space-y-2"
                         prop.children [
                             for i, src in List.indexed sources do
-                                // Phase 6q follow-up B — uncited-but-
+                                // Uncited-but-
                                 // retrieved sources styled distinctly so
                                 // operators can tell "the system found
                                 // this but the model didn't actually use
@@ -845,7 +845,7 @@ let MessageSources (sources: RetrievedSource list) (content: string) =
                                                     Html.span [ prop.text "·" ]
                                                     Html.span [ prop.text hint ]
                                                 | _ -> Html.none
-                                                // Phase 505 — a citation whose
+                                                // A citation whose
                                                 // producer recorded character
                                                 // offsets shows the exact source
                                                 // range, and carries the resolved
@@ -880,7 +880,7 @@ let MessageSources (sources: RetrievedSource list) (content: string) =
                                                 prop.className "text-gray-600 mt-1 leading-relaxed"
                                                 prop.text src.Snippet
                                             ]
-                                        // Phase 102–107 tail — when the chunk's
+                                        // When the chunk's
                                         // source has a fetchable binary original,
                                         // offer to open it. `None` (notes,
                                         // narratives, pre-103 chunks) renders
@@ -888,7 +888,7 @@ let MessageSources (sources: RetrievedSource list) (content: string) =
                                         match src.OriginalRef with
                                         | Some r -> ViewOriginalButton r
                                         | None -> Html.none
-                                        // Phase 895 — a fact citation opens
+                                        // A fact citation opens
                                         // its row in the fact browse surface.
                                         // A non-fact source, or a deployment
                                         // without the browse module, renders
@@ -1039,12 +1039,12 @@ let private setRootCssVar (name: string) (value: string) : unit = jsNative
 
 // ─── Side panel component ────────────────────────────────────────
 
-// ─── Phase 859.H — who can see what the member types ─────────────
+// ─── Who can see what the member types ─────────────
 
 let private conversationVisibilityApi =
     Api.makeProxy<TeamConversationVisibilityApi> (customOptions = UserSession.withRequestHeaders)
 
-/// Phase 859.H — one line, where a conversation is started, saying who can
+/// One line, where a conversation is started, saying who can
 /// see the member's conversations under the active team's level, so a
 /// member never has to infer it. Renders nothing outside a team scope
 /// (a personal conversation is visible to its owner only) or when the
@@ -1072,7 +1072,7 @@ let ConversationVisibilityNotice () =
         ]
     | _ -> Html.none
 
-// ─── A message's bubble, and a message carrying a block (Phase 1130) ─
+// ─── A message's bubble, and a message carrying a block ─
 
 /// The chat bubble's classes for `msg`'s participant.
 let private bubbleClasses (msg: ConversationMessage) : string list = [
@@ -1100,7 +1100,7 @@ let private messageFooter (msg: ConversationMessage) : ReactElement list = [
 ]
 
 /// Whether `msg` carries a block part. Every other message renders exactly
-/// as it did before Phase 1130.
+/// as it would with no block support.
 let private hasBlockPart (msg: ConversationMessage) : bool =
     msg.Parts
     |> List.exists (function
@@ -1145,8 +1145,11 @@ let private blockMessage (msg: ConversationMessage) : ReactElement =
         ]
     ]
 
+/// The panel, with `turnStatus` naming what a running turn is doing while it has
+/// no text to show; `None` draws no such line.
 [<ReactComponent>]
-let View
+let ViewWithStatus
+    (turnStatus: string option)
     (isOpen: bool)
     (title: string)
     (messages: ConversationMessage list)
@@ -1313,7 +1316,7 @@ let View
     let userHistory =
         messages |> List.filter (fun m -> m.Participant = User) |> List.rev
 
-    // Phase 36.D — the cross-module read-consent modal, mounted here and
+    // The cross-module read-consent modal, mounted here and
     // only here.
     //
     // In BOTH branches on purpose. The panel is composed as shell chrome
@@ -1324,7 +1327,7 @@ let View
     // open. Mounting it in the full-page assistant as well would put two
     // hosts in one tab and stack two identical overlays over one question.
     if not isOpen then
-        // Phase 503 joins the consent modal here. A fragment rather than a
+        // The tool-approval modal joins the consent modal here. A fragment rather than a
         // wrapper element: the collapsed panel renders no chrome of its
         // own, and both dialogs are fixed-position overlays that return
         // `Html.none` when nothing is pending, so a real node would be a
@@ -1449,7 +1452,24 @@ let View
                                 ]
                             ]
 
-                        // Phase 6h: Cancel button rendered while a
+                        // A turn with no text yet still shows that
+                        // it is running; a screen reader hears it change.
+                        match turnStatus with
+                        | Some status ->
+                            Html.div [
+                                prop.role "status"
+                                prop.className
+                                    "mr-auto flex items-center gap-2 rounded-lg px-3 py-2 text-sm bg-gray-100 text-gray-600"
+                                prop.children [
+                                    Html.span [
+                                        prop.className "inline-block w-2 h-2 rounded-full bg-gray-400 animate-pulse"
+                                    ]
+                                    Html.span [ prop.text status ]
+                                ]
+                            ]
+                        | None -> ()
+
+                        // Cancel button rendered while a
                         // task is in flight. Caller passes
                         // `Some cancel` when there's a known taskId;
                         // the click handler is closed over the taskId
@@ -1489,7 +1509,7 @@ let View
                 Html.div [
                     prop.className "border-t border-gray-200 p-3"
                     prop.children [
-                        // Phase 859.H — who can see what is typed here.
+                        // Who can see what is typed here.
                         ConversationVisibilityNotice()
 
                         Html.div [
@@ -1553,7 +1573,7 @@ let View
                                         | _ -> ())
                                 ]
 
-                                // Phase 518 — optional prompt-input accessory
+                                // Optional prompt-input accessory
                                 // (e.g. a voice mic toggle). Rendered only when a
                                 // companion has registered one via
                                 // PromptAccessoryBridge; otherwise nothing is laid
@@ -1602,7 +1622,7 @@ let View
                 // affects nothing but where the one mount lives.
                 ConsentDialog.View()
 
-                // Phase 503 — the tool-approval modal, mounted beside the
+                // The tool-approval modal, mounted beside the
                 // consent one and on the same argument: one host per tab,
                 // in both branches, because a held invocation belongs to
                 // the conversation rather than to whether the panel is
@@ -1610,3 +1630,16 @@ let View
                 ToolApprovalDialog.View()
             ]
         ]
+
+/// The panel with no turn status line.
+let View
+    (isOpen: bool)
+    (title: string)
+    (messages: ConversationMessage list)
+    (streamingContent: string)
+    (onSendMessage: string -> unit)
+    (onClose: unit -> unit)
+    (onClearSession: unit -> unit)
+    (onCancel: (unit -> unit) option)
+    =
+    ViewWithStatus None isOpen title messages streamingContent onSendMessage onClose onClearSession onCancel

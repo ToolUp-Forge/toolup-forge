@@ -103,6 +103,21 @@ let requestNestedToolSchemaGolden =
     + WireFixtures.nestedToolInputSchema
     + ""","cache_control":{"type":"ephemeral"}}]}"""
 
+/// forge#1242 — an effort is the one extra member, after `tool_choice` and before
+/// `stream`, and every other byte stays where it was.
+let requestEffort () =
+    ClaudeAIProviderWire.buildRequestBodyWithEffort (Some "low") "m" 16 [ msgUser "hi" ] [] None true None
+
+let requestEffortGolden =
+    """{"model":"m","max_tokens":16,"messages":[{"role":"user","content":"hi"}],"output_config":{"effort":"low"},"stream":true}"""
+
+/// forge#1242 — no effort, and a blank one, are the minimal request's bytes.
+let requestNoEffort () =
+    ClaudeAIProviderWire.buildRequestBodyWithEffort None "m" 16 [ msgUser "hi" ] [] None false None
+
+let requestBlankEffort () =
+    ClaudeAIProviderWire.buildRequestBodyWithEffort (Some " ") "m" 16 [ msgUser "hi" ] [] None false None
+
 /// Every request fixture as `(name, thunk, golden)` so a host iterates them.
 let requestFixtures: (string * (unit -> string) * string) list = [
     "minimal", requestMinimal, requestMinimalGolden
@@ -110,6 +125,9 @@ let requestFixtures: (string * (unit -> string) * string) list = [
     "tool+stream", requestToolStream, requestToolStreamGolden
     "two-turn", requestTwoTurn, requestTwoTurnGolden
     "nested-tool-schema", requestNestedToolSchema, requestNestedToolSchemaGolden
+    "effort", requestEffort, requestEffortGolden
+    "no-effort", requestNoEffort, requestMinimalGolden
+    "blank-effort", requestBlankEffort, requestMinimalGolden
 ]
 
 // ─── Non-streaming response parse ────────────────────────────────

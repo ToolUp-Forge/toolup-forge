@@ -160,12 +160,13 @@ ToolUp.AI.Client.AIClientConfig+OuterMsg+Tags (class)
 ToolUp.AI.Client.AIClientConfig+OuterMsg+Tags.ShellMsg : System.Int32 (literal)
 ToolUp.AI.Client.AIClientConfig+OuterMsg+Tags.SidePanelMsg : System.Int32 (literal)
 ToolUp.AI.Client.AIClientConfig+SidePanelModel (class)
-ToolUp.AI.Client.AIClientConfig+SidePanelModel..ctor(System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ConversationMessage], System.String, System.Guid, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.Guid], Microsoft.FSharp.Core.FSharpOption`1[System.Guid])
+ToolUp.AI.Client.AIClientConfig+SidePanelModel..ctor(System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ConversationMessage], System.String, System.Guid, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.Guid], Microsoft.FSharp.Core.FSharpOption`1[System.Guid], Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.AI.Client.AIClientConfig+SidePanelModel.ConversationId : System.Guid { get }
 ToolUp.AI.Client.AIClientConfig+SidePanelModel.CurrentTaskId : Microsoft.FSharp.Core.FSharpOption`1[System.Guid] { get }
 ToolUp.AI.Client.AIClientConfig+SidePanelModel.DebugMode : System.Boolean { get }
 ToolUp.AI.Client.AIClientConfig+SidePanelModel.Messages : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ConversationMessage] { get }
 ToolUp.AI.Client.AIClientConfig+SidePanelModel.Open : System.Boolean { get }
+ToolUp.AI.Client.AIClientConfig+SidePanelModel.RunningTool : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.AI.Client.AIClientConfig+SidePanelModel.Streaming : System.String { get }
 ToolUp.AI.Client.AIClientConfig+SidePanelModel.WatchdogToken : Microsoft.FSharp.Core.FSharpOption`1[System.Guid] { get }
 ToolUp.AI.Client.AIClientConfig+SidePanelMsg (class)
@@ -383,6 +384,7 @@ ToolUp.AI.Client.ConversationPanel.MessageSources(Microsoft.FSharp.Collections.F
 ToolUp.AI.Client.ConversationPanel.ToolCallPill(ToolUp.AI.ToolCallRecord) : Fable.React.ReactElement
 ToolUp.AI.Client.ConversationPanel.View(System.Boolean, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ConversationMessage], System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]]) : Fable.React.ReactElement
 ToolUp.AI.Client.ConversationPanel.ViewOriginalButton(ToolUp.Platform.VectorKnowledgeTypes+OriginalDocumentRef) : Fable.React.ReactElement
+ToolUp.AI.Client.ConversationPanel.ViewWithStatus(Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ConversationMessage], System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]]) : Fable.React.ReactElement
 ToolUp.AI.Client.ConversationPanel.exportAsJson(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ConversationMessage], System.Boolean) : System.String
 ToolUp.AI.Client.ConversationPanel.exportAsMarkdown(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ConversationMessage], System.Boolean) : System.String
 ToolUp.AI.Client.FastPathBridge (class)

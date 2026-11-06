@@ -102,6 +102,21 @@ let resolveCallMaxTokens (configured: int) (options: AIProviderCallOptions) : in
     | Some budget when budget > 0 -> budget
     | _ -> configured
 
+/// The effort one call is sent with: `options.Effort` when it names
+/// one. Otherwise the provider's configured effort, but only on the configured
+/// model: that setting was chosen for that model, and a call moved to another one
+/// (a triage or title call on a cheaper id) may be on a model that rejects it.
+let resolveCallEffort
+    (configured: string option)
+    (configuredModel: string)
+    (servedModel: string)
+    (options: AIProviderCallOptions)
+    : string option =
+    match options.Effort with
+    | Some effort when not (String.IsNullOrWhiteSpace effort) -> Some effort
+    | _ when servedModel = configuredModel -> configured
+    | _ -> None
+
 /// The pause before retry `retryIndex` (0 = the first retry) after `err`.
 ///
 ///   - HTTP 429 (rate_limit_error): Anthropic's per-minute buckets can't be
@@ -162,6 +177,7 @@ type ClaudeAIProvider
         apiKeyFetcher: unit -> Async<string option>,
         model: string,
         maxTokens: int,
+        effort: string option,
         client: HttpClient,
         sleep: TimeSpan -> Async<unit>
     ) =
@@ -174,7 +190,12 @@ type ClaudeAIProvider
     /// Construct over an injected client and pause, so a test can answer
     /// the request and read the backoff without waiting it out.
     internal new(apiKey: string, client: HttpClient, sleep: TimeSpan -> Async<unit>) =
-        ClaudeAIProvider((fun () -> async { return Some apiKey }), DefaultModel, DefaultMaxTokens, client, sleep)
+        ClaudeAIProvider((fun () -> async { return Some apiKey }), DefaultModel, DefaultMaxTokens, None, client, sleep)
+
+    /// As above, on `model` at `effort`.
+    internal new
+        (apiKey: string, model: string, effort: string option, client: HttpClient, sleep: TimeSpan -> Async<unit>) =
+        ClaudeAIProvider((fun () -> async { return Some apiKey }), model, DefaultMaxTokens, effort, client, sleep)
 
     /// Construct with an API key provided directly. The factory
     /// path used by BYOK deployments — the factory resolves the user's
@@ -185,6 +206,22 @@ type ClaudeAIProvider
             (fun () -> async { return Some apiKey }),
             defaultArg model DefaultModel,
             defaultArg maxTokens DefaultMaxTokens,
+            None,
+            sharedClient.Value,
+            productionSleep
+        )
+
+    /// Construct with an API key and the effort this provider's calls run at
+    /// (`output_config.effort`). With no effort the field is not
+    /// sent and the API's default for the model applies. Effort trades against
+    /// answer quality per the provider's guidance; a model that does not accept
+    /// the value reports the provider's error, which is not retried.
+    new(apiKey: string, model: string, maxTokens: int, effort: string option) =
+        ClaudeAIProvider(
+            (fun () -> async { return Some apiKey }),
+            model,
+            maxTokens,
+            effort,
             sharedClient.Value,
             productionSleep
         )
@@ -198,6 +235,18 @@ type ClaudeAIProvider
             (fun () -> secretStore.GetSecret(ScopeKey.PlatformContainer, "ANTHROPIC_API_KEY")),
             defaultArg model DefaultModel,
             defaultArg maxTokens DefaultMaxTokens,
+            None,
+            sharedClient.Value,
+            productionSleep
+        )
+
+    /// The secret-store path, with the effort this provider's calls run at.
+    new(secretStore: ISecretStore, model: string, maxTokens: int, effort: string option) =
+        ClaudeAIProvider(
+            (fun () -> secretStore.GetSecret(ScopeKey.PlatformContainer, "ANTHROPIC_API_KEY")),
+            model,
+            maxTokens,
+            effort,
             sharedClient.Value,
             productionSleep
         )
@@ -270,7 +319,15 @@ type ClaudeAIProvider
                     // to back off or propagate.
                     let singleAttempt () : Async<Result<AIProviderResponse, AIProviderError>> = async {
                         let body =
-                            buildRequestBody model maxTokens messages tools systemPrompt useStreaming None
+                            buildRequestBodyWithEffort
+                                effort
+                                model
+                                maxTokens
+                                messages
+                                tools
+                                systemPrompt
+                                useStreaming
+                                None
 
                         let request = HttpRequest.post "/v1/messages" requestHeaders body
 
@@ -446,7 +503,15 @@ type ClaudeAIProvider
 
                     let singleAttempt () : Async<Result<AIProviderResponse, AIProviderError>> = async {
                         let body =
-                            buildRequestBody model maxTokens messages tools systemPrompt false (Some schema)
+                            buildRequestBodyWithEffort
+                                effort
+                                model
+                                maxTokens
+                                messages
+                                tools
+                                systemPrompt
+                                false
+                                (Some schema)
 
                         let request = HttpRequest.post "/v1/messages" requestHeaders body
 
@@ -546,17 +611,19 @@ type ClaudeAIProvider
     // instance for a composition root to wire. `options.Model = None`
     // delegates to this instance's own `SendMessage`, so the request
     // bytes are unchanged. The per-call reply cap
-    // (`options.MaxTokens`) is served the same way: a sibling bound to that
-    // cap, and this instance when neither the model nor the cap moves.
+    // (`options.MaxTokens`) and the per-call effort (`options.Effort`) are
+    // served the same way: a sibling bound to them, and this instance when
+    // none of the three moves.
     member private this.TargetFor(options: AIProviderCallOptions) : IAIProvider * ModelOverrideOutcome =
         let served, outcome = resolveCallModel model options
         let cap = resolveCallMaxTokens maxTokens options
+        let callEffort = resolveCallEffort effort model served options
 
         let target =
-            if served = model && cap = maxTokens then
+            if served = model && cap = maxTokens && callEffort = effort then
                 this :> IAIProvider
             else
-                ClaudeAIProvider(apiKeyFetcher, served, cap, client, sleep) :> IAIProvider
+                ClaudeAIProvider(apiKeyFetcher, served, cap, callEffort, client, sleep) :> IAIProvider
 
         target, outcome
 
@@ -590,6 +657,11 @@ let createWithApiKey (apiKey: string) : IAIProvider = ClaudeAIProvider(apiKey) :
 /// Create with an explicit API key and model.
 let createWithApiKeyAndModel (apiKey: string) (model: string) : IAIProvider =
     ClaudeAIProvider(apiKey, model) :> IAIProvider
+
+/// Create with an explicit API key, model and effort, for a
+/// descriptor's `Build`. `None` sends no effort.
+let createWithApiKeyModelAndEffort (apiKey: string) (model: string) (effort: string option) : IAIProvider =
+    ClaudeAIProvider(apiKey, model, DefaultMaxTokens, effort) :> IAIProvider
 
 /// Stable provider identifier. The factory and user-stored configs use
 /// this as the key. Pair with `ClaudeAIProvider.DefaultModel` /

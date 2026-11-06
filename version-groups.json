@@ -5,7 +5,7 @@
     {
       "id": "core",
       "property": "ToolUpSdkVersion",
-      "version": "0.40.0",
+      "version": "0.41.0",
       "lockstep": true,
       "projects": [
         "src/ToolUp.Platform.*/**",
@@ -44,7 +44,7 @@
     {
       "id": "ai-providers",
       "property": "ToolUpAIProvidersVersion",
-      "version": "0.39.1",
+      "version": "0.39.2",
       "projects": [
         "src/AIProviders/**"
       ]

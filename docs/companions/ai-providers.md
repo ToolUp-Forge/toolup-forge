@@ -80,6 +80,8 @@ Store API key under `_platform` scope, key name `ANTHROPIC_API_KEY`. The provide
 
 Model selection: `DefaultModel` is `claude-haiku-4-5-20251001`; the other ids the package knows are in `ClaudeAIProvider.KnownModels`. The factory invokes `Build` per-call with the configured `(apiKey, model)`, so a user can change model via the AI Settings UI under `AllowUserProviders`.
 
+Effort: by default the provider sends no effort, so the API's default for the model applies and the request body is unchanged. A deployment that wants another one builds its provider with it, `Build = fun key model -> ClaudeAIProvider.createWithApiKeyModelAndEffort key model (Some "high")`, and a single call can name its own with `AIProviderCallOptions.withEffort`. The value goes to `output_config.effort` as given. Effort trades against answer quality per Anthropic's guidance, and a change of effort is a prompt-cache miss. A model that does not accept the value reports the API's error, which is not retried. A configured effort applies on the model it was configured with: a call moved to another model (a triage or title call on a cheaper id) sends only the effort that call names, because not every model accepts one.
+
 ### `ToolUp.AIProviders.OpenAI` (OpenAI)
 
 Use when:

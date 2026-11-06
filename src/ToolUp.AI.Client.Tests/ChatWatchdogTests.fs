@@ -285,5 +285,87 @@ let private pageTests =
             Expect.isTrue (pageToken m1 = pageToken m0) "the live token is unchanged")
     ]
 
+// ─── forge#1242 — the panel shows the wait ──────────────────────────
+
+let private status (model: AIClientConfig.OuterModel) =
+    AIClientConfig.turnStatus model.SidePanel
+
+[<Fable.Core.Import("renderToStaticMarkup", from = "react-dom/server")>]
+let private renderToStaticMarkup (element: Feliz.ReactElement) : string = Fable.Core.Util.jsNative
+
+let private statusMarkup (turnStatus: string option) =
+    RenderScope.installDom "turn-status-1242" |> ignore
+
+    renderToStaticMarkup (ConversationPanel.ViewWithStatus turnStatus true "Assistant" [] "" ignore ignore ignore None)
+
+let private waitTests =
+    testList "forge#1242 — the side panel shows a turn is running until its text arrives" [
+        testCase "no turn, no line" (fun () -> Expect.isNone (status (idlePanel ())) "nothing is running")
+
+        testCase "the line is up from the moment of sending, through the tool calls, until the first text" (fun () ->
+            let m0 = sent ()
+            let conv = panelConversation m0
+            Expect.equal (status m0) (Some "Working…") "sending shows it, before any event"
+
+            let m1 =
+                m0
+                |> panel (AIClientConfig.SSEEvent(TaskStatusChanged(Guid.NewGuid(), InProgress)))
+
+            Expect.equal (status m1) (Some "Working…") "the task starting changes nothing a reader needs"
+
+            let m2 = m1 |> panelEvent (ToolCallStarted(conv, "query_facts", Guid.NewGuid()))
+            Expect.equal (status m2) (Some "Calling query_facts…") "a running tool is named"
+
+            let m3 = m2 |> panelEvent (ToolCallCompleted(conv, Guid.NewGuid(), "{}"))
+            Expect.equal (status m3) (Some "Working…") "the wait after the tool result is still shown"
+
+            let m4 = m3 |> panelEvent (MessageDelta(conv, "Sales rose"))
+            Expect.isNone (status m4) "the text takes over"
+
+            let m5 = m4 |> panelEvent (MessageComplete(conv, Guid.NewGuid()))
+            Expect.isNone (status m5) "and the turn ends with no line")
+
+        testCase "every way a turn ends without text takes the line down" (fun () ->
+            let m0 = sent ()
+            let conv = panelConversation m0
+
+            let running =
+                m0 |> panelEvent (ToolCallStarted(conv, "query_facts", Guid.NewGuid()))
+
+            Expect.isNone
+                (status (running |> panelEvent (MessageComplete(conv, Guid.NewGuid()))))
+                "the turn completes with no text"
+
+            Expect.isNone
+                (status (running |> panelEvent (TaskStatusChanged(Guid.NewGuid(), AITaskFailed "boom"))))
+                "the turn fails"
+
+            Expect.isNone (status (running |> panel (AIClientConfig.ApiError(exn "no route")))) "the send fails"
+            Expect.isNone (status (running |> panelFire (panelToken running))) "the watchdog fires"
+            Expect.isNone (status (running |> panel AIClientConfig.ClearSession)) "the reader starts over")
+
+        testCase "another conversation's tool call does not change the line" (fun () ->
+            let m0 = sent ()
+
+            let m1 =
+                m0
+                |> panelEvent (ToolCallStarted(Guid.NewGuid(), "someone_elses", Guid.NewGuid()))
+
+            Expect.equal (status m1) (Some "Working…") "the live turn's line is unchanged")
+
+        testCase "a tool left running by an ended turn is not named on the next one" (fun () ->
+            let m0 = sent ()
+            let conv = panelConversation m0
+            let m1 = m0 |> panelEvent (ToolCallStarted(conv, "query_facts", Guid.NewGuid()))
+            let m2 = m1 |> panelEvent (MessageComplete(conv, Guid.NewGuid()))
+            Expect.equal (status (m2 |> panel ask)) (Some "Working…") "the next turn starts clean")
+
+        testCase "the panel draws the line as a live status, and draws nothing without one" (fun () ->
+            let shown = statusMarkup (Some "Working…")
+            Expect.isTrue (shown.Contains "role=\"status\"") "a screen reader hears it"
+            Expect.isTrue (shown.Contains "Working…") "and a reader sees it"
+            Expect.isFalse ((statusMarkup None).Contains "role=\"status\"") "no line without a status")
+    ]
+
 let tests =
-    testList "Phase 1140 — the chat watchdog measures idleness" [ panelTests; pageTests ]
+    testList "Phase 1140 — the chat watchdog measures idleness" [ panelTests; pageTests; waitTests ]

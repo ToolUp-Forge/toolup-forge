@@ -534,6 +534,8 @@ ConversationPanel.View
     onCancel         // (unit -> unit) option
 ```
 
+`ConversationPanel.ViewWithStatus` takes a `string option` first: while it is `Some`, the panel draws it as a live status line, which is how the side panel shows a running turn that has no text yet.
+
 Reusable chat panel. Used internally by the AI assistant module + the side panel. Apps can drop it into their own modules for chat-shaped UI without adopting the full assistant.
 
 ### `SSEClient`
