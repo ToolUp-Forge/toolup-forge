@@ -141,6 +141,10 @@
              at call sites, not compose-registered (GP 11/13). Standalone;
              placed before the compose root by convention. -->
         <Compile Include="Server\HostRenderBoundary.fs" />
+        <!-- Declared pages in front of the content API. After the
+             page handler (the layout refusal) and PublicationReads; before the
+             compose root that wraps its API with them. -->
+        <Compile Include="Server\DeclaredPages.fs" />
         <Compile Include="Server\PublicRenderingCompose.fs" />
         <!-- Phase 276 — hosted-tree route registration (SSR half): registers
              a hosted multi-page module's neutral Core HostRoute declarations

@@ -368,6 +368,7 @@ ToolUp.Platform.Audit.EgressBoundary+Tags.ExportPayload : System.Int32 (literal)
 ToolUp.Platform.Audit.EgressBoundary+Tags.LogSink : System.Int32 (literal)
 ToolUp.Platform.Audit.EgressBoundary+Tags.RpcResponse : System.Int32 (literal)
 ToolUp.Platform.Audit.EgressBoundaryModule (class)
+ToolUp.Platform.Audit.EgressBoundaryModule.aiToolResult : ToolUp.Platform.Audit.EgressBoundary { get }
 ToolUp.Platform.Audit.EgressBoundaryModule.name(ToolUp.Platform.Audit.EgressBoundary) : System.String
 ToolUp.Platform.Audit.EgressContext (class)
 ToolUp.Platform.Audit.EgressContext..ctor(ToolUp.Platform.Audit.EgressBoundary, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.EgressLabel)
@@ -394,6 +395,8 @@ ToolUp.Platform.Audit.EgressDecision+Tags.Redact : System.Int32 (literal)
 ToolUp.Platform.Audit.EgressGate (class)
 ToolUp.Platform.Audit.EgressGate.RedactedPlaceholder : System.String (literal)
 ToolUp.Platform.Audit.EgressGate.apply(ToolUp.Platform.Audit.IFieldClassifier, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClassificationLevel, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.Audit.EgressContext, ToolUp.Platform.Audit.EgressDecision]], ToolUp.Platform.IAuditLog, ToolUp.Platform.Audit.EgressContext, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]]
+ToolUp.Platform.Audit.EgressGate.applyToJson(ToolUp.Platform.Audit.IFieldClassifier, ToolUp.Platform.Audit.IEgressGate, ToolUp.Platform.Audit.EgressContext, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.Audit.GatedJson]
+ToolUp.Platform.Audit.EgressGate.declaredDefaultPolicy(ToolUp.Platform.ClassificationLevel, ToolUp.Platform.Audit.EgressContext) : ToolUp.Platform.Audit.EgressDecision
 ToolUp.Platform.Audit.EgressGate.forExport(ToolUp.Platform.Audit.IFieldClassifier, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClassificationLevel, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.Audit.EgressContext, ToolUp.Platform.Audit.EgressDecision]], ToolUp.Platform.IAuditLog, System.String, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]]
 ToolUp.Platform.Audit.EgressGate.forResponse(ToolUp.Platform.Audit.IFieldClassifier, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClassificationLevel, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.Audit.EgressContext, ToolUp.Platform.Audit.EgressDecision]], ToolUp.Platform.IAuditLog, System.String, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]]
 ToolUp.Platform.Audit.EgressGate.make(ToolUp.Platform.Audit.IFieldClassifier, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClassificationLevel, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.Audit.EgressContext, ToolUp.Platform.Audit.EgressDecision]], ToolUp.Platform.IAuditLog) : ToolUp.Platform.Audit.IEgressGate
@@ -514,6 +517,10 @@ ToolUp.Platform.Audit.FeatureFlagStoreErasureHandler (class)
 ToolUp.Platform.Audit.FeatureFlagStoreErasureHandler.erasureHandler(ToolUp.Platform.Config.IFeatureFlagStore) : ToolUp.Platform.Audit.IDataExporter+IErasureHandler
 ToolUp.Platform.Audit.FeatureFlagStoreErasureHandler+FeatureFlagStoreErasureHandler (class)
 ToolUp.Platform.Audit.FeatureFlagStoreErasureHandler+FeatureFlagStoreErasureHandler..ctor(ToolUp.Platform.Config.IFeatureFlagStore)
+ToolUp.Platform.Audit.GatedJson (class)
+ToolUp.Platform.Audit.GatedJson..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Platform.Audit.GatedJson.Text : System.String { get }
+ToolUp.Platform.Audit.GatedJson.Withheld : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.Audit.HostActionAuditHook (class)
 ToolUp.Platform.Audit.HostActionAuditHook.authorizeAndAudit(ToolUp.Platform.IActionAuthorizer, ToolUp.Platform.Audit.HostActionAuditHook+IHostActionAuditHook, ToolUp.Platform.Subject, ToolUp.Platform.ActionDescriptor, ToolUp.Platform.AccessContext) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.AuthorizationDecision]
 ToolUp.Platform.Audit.HostActionAuditHook.disabled : ToolUp.Platform.Audit.HostActionAuditHook+IHostActionAuditHook { get }
@@ -610,6 +617,13 @@ ToolUp.Platform.Audit.Metrics.StandardMetrics.SseActiveConnections : System.Stri
 ToolUp.Platform.Audit.Metrics.StandardMetrics.StorageBytesRead : System.String (literal)
 ToolUp.Platform.Audit.Metrics.StandardMetrics.StorageBytesWritten : System.String (literal)
 ToolUp.Platform.Audit.Metrics.StandardMetrics.registrations : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Metrics.MetricRegistration] { get }
+ToolUp.Platform.Audit.ModuleClassificationRegistry (class)
+ToolUp.Platform.Audit.ModuleClassificationRegistryModule (class)
+ToolUp.Platform.Audit.ModuleClassificationRegistryModule.classifications(ToolUp.Platform.Audit.ModuleClassificationRegistry) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FieldClassification]
+ToolUp.Platform.Audit.ModuleClassificationRegistryModule.conflicts(ToolUp.Platform.Audit.ModuleClassificationRegistry) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Platform.Audit.ModuleClassificationRegistryModule.entitiesOf(System.String, ToolUp.Platform.Audit.ModuleClassificationRegistry) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Platform.Audit.ModuleClassificationRegistryModule.isEmpty(ToolUp.Platform.Audit.ModuleClassificationRegistry) : System.Boolean
+ToolUp.Platform.Audit.ModuleClassificationRegistryModule.ofDeclarations(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FieldClassification]]]) : ToolUp.Platform.Audit.ModuleClassificationRegistry
 ToolUp.Platform.Audit.PermissionAuditChain (class)
 ToolUp.Platform.Audit.PermissionAuditChain.canonicalForm(System.String, System.String, ToolUp.Platform.PermissionChangedPayload) : System.String
 ToolUp.Platform.Audit.PermissionAuditChain.chainedEventType : System.String (literal)

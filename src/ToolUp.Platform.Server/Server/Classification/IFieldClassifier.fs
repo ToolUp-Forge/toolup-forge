@@ -5,7 +5,7 @@ namespace ToolUp.Platform.Audit
 
 open ToolUp.Platform
 
-/// Phase 41 — registry of field classifications + the DSAR lookup key.
+/// Registry of field classifications + the DSAR lookup key.
 /// A deployment declares classifications in F# code via
 /// `FieldClassification.attach<'Entity>` (or loads them from a config
 /// store) and the runtime registry answers three questions: what is
@@ -28,7 +28,7 @@ type IFieldClassifier =
     abstract Classify: entityName: string -> Async<FieldClassification list>
 
     /// DSAR helper — the personal-data (`Pii` / `Spi`) fields that apply
-    /// to `subjectId`, as `FieldHit`s. Powers Phase 9h Article 15 export
+    /// to `subjectId`, as `FieldHit`s. Powers Article 15 export
     /// (which fields to pull) + Article 17 erasure (which to redact).
     abstract LookupBySubject: subjectId: string -> Async<FieldHit list>
 

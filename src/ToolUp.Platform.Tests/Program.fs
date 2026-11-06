@@ -377,6 +377,7 @@ let private registeredTests =
         AccessAttestationTests.tests
         GrantGovernanceTests.tests
         AIQueryabilityOptInTests.tests
+        ClassificationSeamTests.tests
         AIConsentTests.tests
         AICrossModuleAuditTests.tests
         GroundingCertificateTests.tests
@@ -655,6 +656,10 @@ let private registeredTests =
         Phase971PlatformRecordsTests.tests
         Phase971AITests.tests
         Phase971PublicRenderingTests.tests
+        DeclaredPagesTests.tests
+        DeclaredDataSourcesTests.tests
+        ReferenceDataTests.tests
+        OidcAdmissionTests.tests
         Phase971PlatformTenantTests.tests
         ProviderExceptionTests.tests
         OidcSignInSpaPrecedenceTests.tests

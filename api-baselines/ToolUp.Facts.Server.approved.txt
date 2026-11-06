@@ -788,6 +788,9 @@ ToolUp.Facts.DisclosureFanOut.MaxConcurrentReads : System.Int32 { get }
 ToolUp.Facts.DisclosureFanOutModule (class)
 ToolUp.Facts.DisclosureFanOutModule.DefaultMaxConcurrentReads : System.Int32 (literal)
 ToolUp.Facts.DisclosureFanOutModule.defaults : ToolUp.Facts.DisclosureFanOut { get }
+ToolUp.Facts.DisclosureReachFinding (class)
+ToolUp.Facts.DisclosureReachFinding.Code : System.String (literal)
+ToolUp.Facts.DisclosureReachFinding.assess(ToolUp.Facts.DisclosureTaintConfig, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.WithholdingSurface]) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.Facts.DisclosureStages (class)
 ToolUp.Facts.DisclosureStages.auditRows(ToolUp.Facts.DisclosureAuditContext, ToolUp.Facts.GroundedRead) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.DisclosureAuditRow]
 ToolUp.Facts.DisclosureStages.budget(ToolUp.Platform.VectorKnowledgeTypes+FactDisclosureVerdict, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.DeclassificationBudgetOutcome]) : ToolUp.Platform.VectorKnowledgeTypes+FactDisclosureVerdict
@@ -1408,6 +1411,7 @@ ToolUp.Facts.FactsCompose.withGroundingEnvelopeSeal(ToolUp.Platform.Compose.Comp
 ToolUp.Facts.FactsCompose.withNarrativeCalculations(ToolUp.Facts.NarrativeCalculations, ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.Facts.FactsCompose.withQuestionCompiler(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.CompiledQuestion, System.String]]], ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.Facts.FactsCompose.withTeamOutputVisibility(ToolUp.Platform.TeamVisibilityLevel, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamVisibilityLevel], ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
+ToolUp.Facts.FactsCompose.withWithholdingSurface(System.String, ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.Facts.FactsOperatorTaskCompose (class)
 ToolUp.Facts.FactsOperatorTaskCompose.withFactsOperatorTasks(ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.Facts.FactsOperatorTasks (class)
@@ -1779,3 +1783,7 @@ ToolUp.Facts.ViewerAwareDisclosureModule (class)
 ToolUp.Facts.ViewerAwareDisclosureModule.UnreadableRef : System.String (literal)
 ToolUp.Facts.ViewerAwareDisclosureModule.audienceIsRequester(ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface) : System.Boolean
 ToolUp.Facts.ViewerAwareDisclosureModule.resolveViewer(ToolUp.Facts.DisclosureViewerSources, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Scope.RequestViewer], System.String, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpOption`1[System.String]], ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.DisclosureViewer, System.String]]
+ToolUp.Facts.WithholdingSurface (class)
+ToolUp.Facts.WithholdingSurface..ctor(System.String, ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface)
+ToolUp.Facts.WithholdingSurface.Name : System.String { get }
+ToolUp.Facts.WithholdingSurface.Surface : ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface { get }

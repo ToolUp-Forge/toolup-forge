@@ -282,6 +282,7 @@ let composeAI (options: AIOptions) (app: ServerApp) : ServerApp =
         (moduleTools |> List.map (fun (def, exec) -> createTool def exec))
         @ (options.AIAnsweringTools
            |> List.map (fun (def, answer) -> createAnsweringTool def answer))
+        |> List.map withClassifiedResults
 
     // The registry lists and dispatches under the deployment's
     // `ToolPolicy`; none declared is `ToolPolicy.unrestricted` (GP 11).

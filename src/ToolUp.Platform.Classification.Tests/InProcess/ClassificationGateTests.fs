@@ -184,9 +184,60 @@ let private gateTests =
         }
     ]
 
+let private registryTests =
+    let email = FieldClassification.create "Customer" "Email" Pii
+    let iban = FieldClassification.create "Invoice" "Iban" Spi
+
+    testList "ModuleClassificationRegistry" [
+        testCase "folds modules, collapses identical repeats, and answers per module"
+        <| fun () ->
+            let registry =
+                ModuleClassificationRegistry.ofDeclarations [
+                    "Orders", [ email ]
+                    "Billing", [ iban; email ]
+                    "Orders", [ FieldClassification.create "Customer" "Phone" Pii ]
+                ]
+
+            Expect.hasLength (ModuleClassificationRegistry.classifications registry) 3 "email is declared twice, once"
+            Expect.isEmpty (ModuleClassificationRegistry.conflicts registry) "an identical repeat is no conflict"
+            Expect.equal (ModuleClassificationRegistry.entitiesOf "Orders" registry) [ "Customer" ] "one entity, twice"
+
+            Expect.equal
+                (ModuleClassificationRegistry.entitiesOf "Billing" registry)
+                [ "Invoice"; "Customer" ]
+                "a module's entities"
+
+            Expect.isEmpty (ModuleClassificationRegistry.entitiesOf "Nobody" registry) "an undeclared module has none"
+
+        testCase "a field declared two ways is a conflict, by name"
+        <| fun () ->
+            let registry =
+                ModuleClassificationRegistry.ofDeclarations [
+                    "Orders", [ email ]
+                    "Marketing", [ FieldClassification.create "Customer" "Email" Public ]
+                ]
+
+            Expect.equal (ModuleClassificationRegistry.conflicts registry) [ "Customer.Email" ] "named"
+
+        testCase "empty means no declaration anywhere"
+        <| fun () ->
+            Expect.isTrue (ModuleClassificationRegistry.isEmpty (ModuleClassificationRegistry.ofDeclarations [])) "none"
+
+            Expect.isTrue
+                (ModuleClassificationRegistry.isEmpty (ModuleClassificationRegistry.ofDeclarations [ "Orders", [] ]))
+                "a module declaring an empty list"
+
+            Expect.isFalse
+                (ModuleClassificationRegistry.isEmpty (
+                    ModuleClassificationRegistry.ofDeclarations [ "Orders", [ email ] ]
+                ))
+                "one declaration"
+    ]
+
 [<Tests>]
 let tests =
     testList "ToolUp.Platform.Classification" [
         IFieldClassifierContract.tests "DefaultFieldClassifier" fixture
         gateTests
+        registryTests
     ]

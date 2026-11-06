@@ -532,12 +532,16 @@ let private executeQueryModule (ctx: HttpContext) (argsJson: string) : Async<str
 
                         fableDeserialize<JsonElement> raw
 
-                    return
-                        fableSerialize {|
-                            targetModule = moduleName
-                            queryKey = queryKey
-                            result = resultElement
-                        |}
+                    return!
+                        gateModuleToolResult
+                            ctx
+                            queryModuleDef.Name
+                            moduleName
+                            (fableSerialize {|
+                                targetModule = moduleName
+                                queryKey = queryKey
+                                result = resultElement
+                            |})
             | _ ->
                 return
                     fableSerialize {|
@@ -661,6 +665,52 @@ let private queryEntityDef: AIToolDefinition = {
     Effects = ToolEffectDeclaration.readFacts
 }
 
+/// Every field a predicate tests.
+let rec private predicateFields (predicate: Predicate) : string list =
+    match predicate with
+    | Eq(f, _)
+    | Ne(f, _)
+    | Gt(f, _)
+    | Gte(f, _)
+    | Lt(f, _)
+    | Lte(f, _)
+    | In(f, _)
+    | FullText(f, _) -> [ f ]
+    | And(l, r)
+    | Or(l, r) -> predicateFields l @ predicateFields r
+    | Not inner -> predicateFields inner
+
+/// A filter on a field the model may not read answers questions
+/// about its value, row by row, so it is refused like the read: through the
+/// gate, audited, and naming the field.
+let private classifiedPredicateFields
+    (ctx: HttpContext)
+    (entityType: string)
+    (predicate: Predicate option)
+    : Async<string option> =
+    async {
+        let fields = predicate |> Option.map predicateFields |> Option.defaultValue []
+
+        if List.isEmpty fields then
+            return None
+        else
+            let probe = fields |> List.map (fun f -> f, "") |> dict |> JsonSerializer.Serialize
+            let! gated = gateToolResult ctx queryEntityDef.Name [ entityType ] probe
+
+            if gated = probe then
+                return None
+            else
+                return
+                    Some(
+                        fableSerialize {|
+                            error = "ClassifiedFieldInPredicate"
+                            entityType = entityType
+                            message =
+                                "This predicate tests a classified field the deployment keeps from the model. Query without it; asking again returns the same."
+                        |}
+                    )
+    }
+
 let private executeQueryEntity (ctx: HttpContext) (argsJson: string) : Async<string> = async {
     let scopeId = scopeIdOf ctx
 
@@ -775,23 +825,32 @@ let private executeQueryEntity (ctx: HttpContext) (argsJson: string) : Async<str
                         Take = cappedTake
                     }
 
-                    let! result = store.Query<JsonElement>(scopeId, query)
+                    let! refusedPredicate = classifiedPredicateFields ctx entityType wherePred
 
-                    match result with
-                    | Ok entities ->
-                        return
-                            fableSerialize {|
-                                entityType = entityType
-                                count = List.length entities
-                                entities = entities
-                            |}
-                    | Error err ->
-                        return
-                            fableSerialize {|
-                                error = "EntityQueryFailed"
-                                entityType = entityType
-                                message = EntityError.message err
-                            |}
+                    match refusedPredicate with
+                    | Some rendered -> return rendered
+                    | None ->
+                        let! result = store.Query<JsonElement>(scopeId, query)
+
+                        match result with
+                        | Ok entities ->
+                            return!
+                                gateToolResult
+                                    ctx
+                                    queryEntityDef.Name
+                                    [ entityType ]
+                                    (fableSerialize {|
+                                        entityType = entityType
+                                        count = List.length entities
+                                        entities = entities
+                                    |})
+                        | Error err ->
+                            return
+                                fableSerialize {|
+                                    error = "EntityQueryFailed"
+                                    entityType = entityType
+                                    message = EntityError.message err
+                                |}
                 | _ ->
                     return
                         fableSerialize {|
@@ -1047,7 +1106,11 @@ let private executeGetLatestResult (ctx: HttpContext) (argsJson: string) : Async
 
                     match outcome with
                     | Ok(meta, bytes) ->
-                        let decoded = Encoding.UTF8.GetString bytes
+                        // Gated before the cap: a cut document no longer
+                        // parses, and an unparsed result is not gated.
+                        let! decoded =
+                            gateModuleToolResult ctx getLatestResultDef.Name moduleName (Encoding.UTF8.GetString bytes)
+
                         let truncated = decoded.Length > ContentCharCap
 
                         let content =

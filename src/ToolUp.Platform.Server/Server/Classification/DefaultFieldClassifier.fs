@@ -5,7 +5,7 @@ namespace ToolUp.Platform.Audit
 
 open ToolUp.Platform
 
-/// Phase 41 — registry-backed default `IFieldClassifier`. Built from the
+/// Registry-backed default `IFieldClassifier`. Built from the
 /// classifications a deployment declares at compose time (via
 /// `FieldClassification.attach<'Entity>` lists, or hydrated from a
 /// config store keyed `_platform/classification/{entityName}.json`). The
@@ -15,7 +15,7 @@ open ToolUp.Platform
 /// `LookupBySubject` returns one `FieldHit` per declared personal-data
 /// (`Pii` / `Spi`) field. This is the *schema-level* answer — "these are
 /// the fields that hold personal data for any subject" — which is
-/// precisely what the Phase 9h export pipeline consumes to know which
+/// precisely what the export pipeline consumes to know which
 /// fields to pull for a subject; the per-row matching against the entity
 /// store happens in the exporter, not the classifier.
 type DefaultFieldClassifier(classifications: FieldClassification list) =
@@ -56,7 +56,7 @@ module DefaultFieldClassifier =
         DefaultFieldClassifier(classifications) :> IFieldClassifier
 
     /// Resolve the per-classification encryption key id for a field, if
-    /// any (Phase 22 integration). The entity-store encryption decorator
+    /// any. The entity-store encryption decorator
     /// calls this to route encrypt / decrypt through a per-classification
     /// KEK; `None` (field unclassified or no key configured) means use
     /// the deployment master key.

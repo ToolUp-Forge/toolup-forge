@@ -916,7 +916,14 @@ module private Dispatch =
 
         if winner = (pending :> Task) then
             let! posted = pending |> Async.AwaitTask
-            return ofClientResult posted
+
+            // What the browser posts reaches the model through
+            // the same door a server-resident result does.
+            match ofClientResult posted with
+            | ToolOutcome.Produced text ->
+                let! gated = gateModuleToolResult turn.Request def.Name def.SourceModule text
+                return ToolOutcome.Produced gated
+            | outcome -> return outcome
         else
             let detail = $"Client did not respond within {timeoutMs / 1000} seconds"
             turn.ClientDispatch.TryAbort(tcId, detail) |> ignore

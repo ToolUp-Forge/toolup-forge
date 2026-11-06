@@ -131,6 +131,7 @@
         <Compile Include="InProcess\AccessAttestationTests.fs" />
         <Compile Include="InProcess\GrantGovernanceTests.fs" />
         <Compile Include="InProcess\AIQueryabilityOptInTests.fs" />
+        <Compile Include="InProcess\ClassificationSeamTests.fs" />
         <Compile Include="InProcess\AIConsentTests.fs" />
         <Compile Include="InProcess\AICrossModuleAuditTests.fs" />
         <Compile Include="InProcess\MockOidcServer.fs" />
@@ -531,6 +532,10 @@
         <Compile Include="InProcess\Phase971PlatformRecordsTests.fs" />
         <Compile Include="InProcess\Phase971AITests.fs" />
         <Compile Include="InProcess\Phase971PublicRenderingTests.fs" />
+        <Compile Include="InProcess\DeclaredPagesTests.fs" />
+        <Compile Include="InProcess\DeclaredDataSourcesTests.fs" />
+        <Compile Include="InProcess\ReferenceDataTests.fs" />
+        <Compile Include="InProcess\OidcAdmissionTests.fs" />
         <Compile Include="InProcess\Phase971PlatformTenantTests.fs" />
         <Compile Include="InProcess\ProviderExceptionTests.fs" />
         <Compile Include="InProcess\OidcSignInSpaPrecedenceTests.fs" />

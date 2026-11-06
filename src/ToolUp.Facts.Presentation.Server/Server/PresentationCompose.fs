@@ -4,6 +4,8 @@
 namespace ToolUp.Facts.Presentation
 
 open ToolUp.Platform
+open ToolUp.Platform.VectorKnowledgeTypes
+open ToolUp.Facts
 open ToolUp.AI.AICompose
 open ToolUp.Platform.Compose
 
@@ -46,6 +48,10 @@ module PresentationCompose =
                 ai.AIAnsweringTools
                 |> List.map (fun (definition, _) -> definition.Name)
                 |> Set.ofList
+
+            let app =
+                app
+                |> FactsCompose.withWithholdingSurface "the fact render tools" FactToolResult
 
             match
                 RenderTools.tools
@@ -116,6 +122,7 @@ module PresentationCompose =
                 app with
                     Extensions.Handlers = app.Extensions.Handlers @ [ PageRequestRoute.handler ]
             }
+            |> FactsCompose.withWithholdingSurface "the page requests" FactBrowse
             |> ServerApp.addContribution (Contribution.service owner PageRequestResolvers.register)
 
     /// The layout tools' runtime is contributed under its own slot, so that

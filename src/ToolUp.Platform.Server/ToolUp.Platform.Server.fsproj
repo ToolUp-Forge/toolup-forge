@@ -355,6 +355,10 @@
              (it serves both) and BEFORE ServerApp.fs (run registers the
              renderer beside the inspector snapshot). -->
         <Compile Include="Server\ReflectionTools.fs" />
+        <!-- Declared data sources and reference data: what ServerApp.withDeclaredDataSources
+             and withReferenceData register. Before ServerApp.fs. -->
+        <Compile Include="Server\DeclaredDataSources.fs" />
+        <Compile Include="Server\ReferenceData.fs" />
         <Compile Include="Server\ServerApp.fs" />
         <!-- Detachable module-binding manifest reader. After
              ServerApp (it applies stamps onto ServerModule). -->
