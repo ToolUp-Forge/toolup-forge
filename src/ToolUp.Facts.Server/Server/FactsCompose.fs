@@ -924,17 +924,7 @@ module FactsCompose =
     /// told anything. Idempotent per name; a `FeatureMode.Disabled`
     /// deployment is unchanged.
     let withWithholdingSurface (name: string) (surface: FactEgressSurface) (app: ServerApp) : ServerApp =
-        let slot = ComponentId.forCompanionSlot ("ToolUp.Facts.WithholdingSurface." + name)
-
-        match app.Config.Stores.FactStore with
-        | FeatureMode.Disabled -> app
-        | FeatureMode.Enabled when app.Contributions |> List.exists (fun c -> c.Owner = slot) -> app
-        | FeatureMode.Enabled ->
-            app
-            |> ServerApp.addContribution (
-                Contribution.service slot (fun s ->
-                    s.AddSingleton<WithholdingSurface>({ Name = name; Surface = surface }))
-            )
+        WithholdingSurfaces.contribute name surface app
 
     /// **Adds** the deployment's authorised narrative calculations: the
     /// grounding gate then derives every `calc:` reference a narrative cites
@@ -1657,6 +1647,38 @@ module FactsCompose =
             app
             |> contribute register
             |> ServerApp.bindFactTables (Grounding.BindAllFactTables DefaultFactTableWriter.Destination)
+
+    /// **Adds** the once-per-delivery narrative trigger: the composed
+    /// `IFactTableWriter`, decorated so a successful commit of a table a run
+    /// names enqueues that run through `GroundedNarrativeTrigger`. `runsFor` says
+    /// which runs a table's commit enqueues (none: the table is not watched). The
+    /// firing rule is `DeliveryTrigger`'s. Compose it after `withFactTableWriter`,
+    /// whose registration it decorates; before it, the composition is refused
+    /// naming the order. Under `FeatureMode.Disabled` the app is unchanged.
+    let withDeliveryTrigger (runsFor: string -> string list) (app: ServerApp) : ServerApp =
+        match app.Config.Stores.FactStore with
+        | FeatureMode.Disabled -> app
+        | FeatureMode.Enabled ->
+            app
+            |> contribute (fun services ->
+                match ServiceComposition.captureDescriptor<IFactTableWriter> services with
+                | None ->
+                    ServiceComposition.refuse (
+                        CompositionRefusal.InvalidDeclaration(
+                            "FactsCompose.withDeliveryTrigger",
+                            "no IFactTableWriter is registered to decorate; compose it after FactsCompose.withFactTableWriter"
+                        )
+                    )
+                | Some captured ->
+                    services.AddSingleton<IFactTableWriter>(
+                        Func<IServiceProvider, IFactTableWriter>(fun sp ->
+                            DeliveryTrigger.decorate
+                                runsFor
+                                (fun () -> tryService<IJobScheduler> sp)
+                                (fun () -> tryService<Microsoft.AspNetCore.Http.IHttpContextAccessor> sp)
+                                (sp.GetRequiredService<ILogger>())
+                                (captured.Resolve sp))
+                    ))
 
     // ─── Phase 986 — the fact tier as one composition, and its compiler ─
 

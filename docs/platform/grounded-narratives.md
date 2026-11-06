@@ -481,6 +481,7 @@ it was told.
 | Scheduled report | the scope of the request that created the subscription, re-minted by the scheduler on every run |
 | Standing report | the scope the deployment's resolver resolves the subscription's declared principal to, at startup |
 | Data arrival | the scope of the request whose write invalidated the facts |
+| Once per delivery | the scope the platform resolved for the delivery: its request's, or its job's |
 
 **What a run records as its trigger.** Every run's audit row and last-run view carry the
 `GroundedNarrativeRequest.Trigger` that started it, named for what enqueued the work:
@@ -634,6 +635,82 @@ change made under a resolved scope enqueues a run (the job is scheduled under it
 — a boot seed, an import job's write — has no resolved scope to give the run, and enqueues nothing.
 A metric whose recompute policy is `Eager` recomputes in its own job; the narrative job waits for
 it (a transient failure, backed off by its retry policy), and on its last attempt runs regardless.
+
+**Once per delivery.** The data-arrival trigger reads metrics: every change that invalidates a run's
+facts enqueues it. A report over a daily table wants something else: once per delivery, over the newest
+period, however many tables the delivery carries. `FactsCompose.withDeliveryTrigger` decorates the composed
+`IFactTableWriter` to do that. Compose it after `withFactTableWriter`, whose registration it decorates;
+before it, the composition is refused naming the order.
+
+```fsharp skip=fragment
+app
+|> FactsCompose.withFactTableWriter
+|> FactsCompose.withDeliveryTrigger (function
+    | "trade.site" -> [ "narrative-daily-insights" ]
+    | _ -> [])
+```
+
+A delivery is the runs one unit of work opens naming the same inputs (`FactTableRunOptions`). When the
+unit completes, each run named by those tables fires at most once, through `GroundedNarrativeTrigger`, with
+the job's idempotency keyed on the delivery and its period. It fires when the delivery's newest period is not
+older than one the tables already hold, and a commit of that period brought it or changed it (`New + Changed +
+Removed > 0`):
+
+| The delivery | Fires |
+|---|---|
+| A new period, in one table or several | once |
+| A correction of the newest period, one row or many | once, so the report citing it regenerates |
+| The same content again | nothing |
+| A restatement of an earlier period, alone or beside an unchanged newer one | nothing |
+
+A delivery that declares no inputs is told from the one it corrects by its content, so a correction never
+coalesces onto that job. The table's held periods are read from its committed runs' slices, so a period held
+only through a whole-table run, whose record names no period, does not count as held. A run opened with no
+options keeps a per-commit trigger, on the request path only.
+
+Every refusal on the path is logged at Warning with the run key and the table, and none reaches the commit: no
+scheduler composed, a schedule or trigger refused, and a commit with no resolved scope to carry the run.
+
+**A delivery trigger and a completed-delivery hook count different events.** Use each for what it counts:
+
+| | `ServerModule.withDeliveryCompleted` | `FactsCompose.withDeliveryTrigger` |
+|---|---|---|
+| The event | one unit of work's ingestion finished | one delivery's newest period moved in a watched fact table |
+| A re-delivery that changed nothing | fires: the ingestion ran | nothing |
+| A request that commits a fact table and ingests nothing | nothing: no ingestion run to report | fires |
+| One request with two sets of inputs | once | once per set |
+| What it hands over | every table's run, committed or failed | a job for each named run |
+| Use it for | work owed for the arrival itself: a notification, a reconciliation, a partial-delivery alarm | regenerating a narrative that cites the table |
+
+They share a signal. Where a unit is a platform delivery, the trigger holds its commits on it
+(`DeliveryCompleted.tryDeliveryState`) and fires after the hooks have run: every ingestion job attempt, which
+fires under the scope the job carried, and a request where a hook mounted the seam. Otherwise it is the request
+itself, and fires on the response's completion under the request's resolved scope. A commit off both fires nothing,
+and the log says why.
+
+**The publication's reading principal.** A publication read re-checks disclosure in the publishing scope, so it
+needs a principal to resolve that scope. A read a deployment writes itself binds one per publishing scope, naming
+the setting that holds the user id, and asks for it by scope:
+
+```fsharp skip=fragment
+app |> FactPublication.withPublicationPrincipals [ "team-publishing", "PUBLICATION_PRINCIPAL_BOARD" ]
+
+// in the read:
+let! publishing = FactPublication.declaredPrincipal audience.PublishingScope services
+```
+
+`None` is a refusal, logged at Warning with its reason, and the read then withholds a narrative citing a fact: no
+binding, a setting with no value, no `DeclaredPrincipalResolver`, a principal lacking a grant, or one resolving to
+another scope. A declared page names its principal on the page instead (`ServedNarrative.PublishingPrincipal`).
+
+Binding a principal composes the narrative publication read, so the disclosure reach finding
+(`FACTS-DISCLOSURE-CANNOT-TAINT`) counts it. A deployment serving declared pages binds no principal here and
+`ToolUp.PublicRendering` takes no dependency on the fact tier, so its composition root says so itself:
+
+```fsharp skip=fragment
+app
+|> FactsCompose.withWithholdingSurface FactPublication.NarrativePublicationRead FactNarrativePublication
+```
 
 ## The learning loop: refusals that recur, and a wording an admin approves
 

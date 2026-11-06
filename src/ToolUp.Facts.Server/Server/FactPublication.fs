@@ -6,6 +6,7 @@ namespace ToolUp.Facts
 open System
 open System.Collections.Concurrent
 open System.Text
+open Microsoft.Extensions.DependencyInjection
 open ToolUp.ArtefactSigning
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
@@ -1658,8 +1659,119 @@ type internal FactPublicationService(deps: FactPublicationDeps) =
                         return Ok token
         }
 
+/// The composition of a withholding surface, for the disclosure reach finding:
+/// the one registration `FactsCompose.withWithholdingSurface` and a builder
+/// arming a surface of its own both make.
+module internal WithholdingSurfaces =
+
+    /// Idempotent per name; a `FeatureMode.Disabled` deployment is unchanged.
+    let contribute (name: string) (surface: FactEgressSurface) (app: ServerApp) : ServerApp =
+        let slot = ComponentId.forCompanionSlot ("ToolUp.Facts.WithholdingSurface." + name)
+
+        match app.Config.Stores.FactStore with
+        | FeatureMode.Disabled -> app
+        | FeatureMode.Enabled when app.Contributions |> List.exists (fun c -> c.Owner = slot) -> app
+        | FeatureMode.Enabled ->
+            app
+            |> ServerApp.addContribution (
+                Contribution.service slot (fun s ->
+                    s.AddSingleton<WithholdingSurface>({ Name = name; Surface = surface }))
+            )
+
+/// A deployment's publishing scopes, each with the name of the setting that
+/// holds its reading principal's user id. `FactPublication.withPublicationPrincipals`
+/// registers it.
+type PublicationPrincipalBindings = {
+    /// Publishing scope id to principal setting name.
+    Settings: Map<string, string>
+}
+
 /// Construction for the default `IFactPublication`.
 module FactPublication =
+
+    /// What the narrative publication read is called in the disclosure reach
+    /// finding.
+    [<Literal>]
+    let NarrativePublicationRead = "the narrative publication read"
+
+    let private principalsOwner =
+        ComponentId.forCompanionSlot "ToolUp.Facts.PublicationPrincipals"
+
+    /// **Sets** the deployment's publication principals, each pair a publishing
+    /// scope and the name of the setting holding the user id its read resolves
+    /// through; `declaredPrincipal` reads them. A later call replaces an earlier
+    /// one. A blank scope or setting, or one scope bound to two settings, refuses
+    /// the composition. Binding a principal composes the narrative publication
+    /// read, so the disclosure reach finding counts it as a withholding surface.
+    /// An empty list binds nothing and composes no surface.
+    let withPublicationPrincipals (bindings: (string * string) list) (app: ServerApp) : ServerApp =
+        let refuse reason =
+            ServiceComposition.refuse (
+                CompositionRefusal.InvalidDeclaration("FactPublication.withPublicationPrincipals", reason)
+            )
+
+        let settings =
+            bindings
+            |> List.fold
+                (fun (settings: Map<string, string>) (scope, setting) ->
+                    if String.IsNullOrWhiteSpace scope || String.IsNullOrWhiteSpace setting then
+                        refuse (sprintf "the binding ('%s', '%s') needs a scope and a setting name" scope setting)
+                    else
+                        match settings.TryFind scope with
+                        | Some bound when bound <> setting ->
+                            refuse (sprintf "scope '%s' is bound to both '%s' and '%s'" scope bound setting)
+                        | _ -> settings.Add(scope, setting))
+                Map.empty
+
+        let others = {
+            app with
+                Contributions = app.Contributions |> List.filter (fun c -> c.Owner <> principalsOwner)
+        }
+
+        if settings.IsEmpty then
+            others
+        else
+            others
+            |> ServerApp.addContribution (
+                Contribution.service principalsOwner (fun s ->
+                    s.AddSingleton<PublicationPrincipalBindings>({ Settings = settings }))
+            )
+            |> WithholdingSurfaces.contribute NarrativePublicationRead FactNarrativePublication
+
+    /// The scope a publication's disclosure re-check runs in: the reading
+    /// principal bound to `publishingScope`, resolved through the platform's
+    /// `DeclaredPrincipalResolver`. `None` is a refusal, logged at Warning with
+    /// its reason, and the publication read then withholds a narrative citing a
+    /// fact: no binding, a setting with no value, no resolver composed, a
+    /// principal lacking a grant, or one resolving to another scope.
+    let declaredPrincipal (publishingScope: string) (services: IServiceProvider) : Async<ResolvedScope option> = async {
+        let refused (reason: string) =
+            ServiceComposition.tryService<ILogger> services
+            |> Option.iter (fun logger ->
+                logger.Warn(
+                    sprintf
+                        "[FactPublication] publication '%s': %s; a narrative citing a fact is withheld"
+                        publishingScope
+                        reason
+                ))
+
+            None
+
+        let bound =
+            ServiceComposition.tryService<PublicationPrincipalBindings> services
+            |> Option.bind (fun bindings -> bindings.Settings.TryFind publishingScope)
+
+        match bound, ServiceComposition.tryService<DeclaredPrincipalResolver> services with
+        | None, _ -> return refused "no principal is bound to its scope (FactPublication.withPublicationPrincipals)"
+        | Some _, None -> return refused "this deployment composes no DeclaredPrincipalResolver"
+        | Some setting, Some resolver ->
+            match ToolUp.Platform.Config.ConfigResolution.tryValue setting with
+            | None -> return refused (sprintf "its principal setting '%s' has no value" setting)
+            | Some userId ->
+                match! DeclaredPrincipal.resolveInScope resolver publishingScope (userId.Trim()) with
+                | Ok scope -> return Some scope
+                | Error refusal -> return refused refusal
+    }
 
     /// The declaration's defects against the composed registries, or the
     /// empty list.

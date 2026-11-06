@@ -671,6 +671,7 @@ let private registeredTests =
         AuditCallSiteFireAndForgetTests.tests
         FileApiMountTests.tests
         StreamAuthBothSignInsTests.tests
+        DeliveryTriggerTests.tests
         DeliveryCompletedTests.tests
         FactRenderToolTests.tests
         PipelineToolTests.tests

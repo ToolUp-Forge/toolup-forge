@@ -1165,6 +1165,8 @@ ToolUp.Facts CalculationHolds
 ToolUp.Facts CalculationMoved
 ToolUp.Facts CalculationRefused
 ToolUp.Facts CalculationWithheld
+ToolUp.Facts CanWithhold
+ToolUp.Facts CannotWithhold
 ToolUp.Facts CanonicalMethodOnly
 ToolUp.Facts Categorical
 ToolUp.Facts CertificateIncluded
@@ -1351,6 +1353,7 @@ ToolUp.Facts UnpinnedClock
 ToolUp.Facts UnrecognisedMetric
 ToolUp.Facts UnrecognisedOrdering
 ToolUp.Facts UnrecognisedSubject
+ToolUp.Facts Unregistered
 ToolUp.Facts UnregisteredMetric
 ToolUp.Facts UseAggregate
 ToolUp.Facts UseFact
@@ -7433,6 +7436,7 @@ ToolUp.Platform.Jobs.DatasetRevintageJobHandler create
 ToolUp.Platform.Jobs.DatasetRevintageJobHandler failureOf
 ToolUp.Platform.Jobs.DatasetRevintageJobHandler job
 ToolUp.Platform.Jobs.DeclaredPrincipal missingGrant
+ToolUp.Platform.Jobs.DeclaredPrincipal resolveInScope
 ToolUp.Platform.Jobs.DeclaredPrincipal user
 ToolUp.Platform.Jobs.DeclaredPrincipal userOf
 ToolUp.Platform.Jobs.DeferredScheduledJobDeclaration create
@@ -7456,6 +7460,7 @@ ToolUp.Platform.Jobs.DeliveryCompleted Request
 ToolUp.Platform.Jobs.DeliveryCompleted aroundJob
 ToolUp.Platform.Jobs.DeliveryCompleted complete
 ToolUp.Platform.Jobs.DeliveryCompleted recording
+ToolUp.Platform.Jobs.DeliveryCompleted tryDeliveryState
 ToolUp.Platform.Jobs.DeployPlaneDepsValidator DeployPlaneDepsValidator
 ToolUp.Platform.Jobs.DigestRenderer body
 ToolUp.Platform.Jobs.DigestRenderer marker

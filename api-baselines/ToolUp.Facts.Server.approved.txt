@@ -761,6 +761,18 @@ ToolUp.Facts.DelegatedFactStore.Delegates : Microsoft.FSharp.Collections.FSharpL
 ToolUp.Facts.DelegatedFactStoreModule (class)
 ToolUp.Facts.DelegatedFactStoreModule.create(ToolUp.Facts.IFactStore, ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.DelegateFact], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime]) : ToolUp.Facts.DelegatedFactStore
 ToolUp.Facts.DelegatedFactStoreModule.writer(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.IFactTableWriter], ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore, ToolUp.Platform.Grounding.IFactTableRegistry, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.DelegateFact], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.IFactStore]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime]) : ToolUp.Facts.IFactTableWriter
+ToolUp.Facts.DeliveryTrigger (class)
+ToolUp.Facts.DeliveryTrigger.change(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.DeliveryTrigger+DeliveredCommit]) : Microsoft.FSharp.Collections.FSharpSet`1[System.String]
+ToolUp.Facts.DeliveryTrigger.decorate(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Jobs.IJobScheduler]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.IHttpContextAccessor]], ToolUp.Platform.ILogger, ToolUp.Facts.IFactTableWriter) : ToolUp.Facts.IFactTableWriter
+ToolUp.Facts.DeliveryTrigger.firing(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.DeliveryTrigger+DeliveredCommit]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.DeliveryTrigger+DeliveredCommit]
+ToolUp.Facts.DeliveryTrigger.key(ToolUp.Facts.FactTableRunOptions) : System.String
+ToolUp.Facts.DeliveryTrigger.moved(ToolUp.Platform.Grounding.FactTableCommit) : System.Boolean
+ToolUp.Facts.DeliveryTrigger.period(ToolUp.Facts.FactTableRunOptions) : System.Tuple`2[System.DateTime, System.DateTime]
+ToolUp.Facts.DeliveryTrigger+DeliveredCommit (class)
+ToolUp.Facts.DeliveryTrigger+DeliveredCommit..ctor(ToolUp.Facts.FactTableRunOptions, ToolUp.Platform.Grounding.FactTableCommit, Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[System.DateTime, System.DateTime]])
+ToolUp.Facts.DeliveryTrigger+DeliveredCommit.Commit : ToolUp.Platform.Grounding.FactTableCommit { get }
+ToolUp.Facts.DeliveryTrigger+DeliveredCommit.Options : ToolUp.Facts.FactTableRunOptions { get }
+ToolUp.Facts.DeliveryTrigger+DeliveredCommit.Standing : Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[System.DateTime, System.DateTime]] { get }
 ToolUp.Facts.DisclosureAuditContext (class)
 ToolUp.Facts.DisclosureAuditContext..ctor(ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, System.String, System.String, System.String)
 ToolUp.Facts.DisclosureAuditContext.Principal : System.String { get }
@@ -1005,9 +1017,12 @@ ToolUp.Facts.FactNarrativeGroundingGateModule.create(ToolUp.Facts.IFactStore, To
 ToolUp.Facts.FactNarrativeGroundingGateModule.createWithCalculations(ToolUp.Facts.NarrativeCalculations, ToolUp.Facts.IFactStore, ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.ICitableReferenceKind], ToolUp.Facts.IGroundingCertificateIssuer) : ToolUp.Platform.Compose.INarrativeGroundingGate
 ToolUp.Facts.FactNarrativeGroundingGateModule.createWithPolicy(ToolUp.Facts.GroundingPolicy, ToolUp.Facts.IFactStore, ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.ICitableReferenceKind], ToolUp.Facts.IGroundingCertificateIssuer) : ToolUp.Platform.Compose.INarrativeGroundingGate
 ToolUp.Facts.FactPublication (class)
+ToolUp.Facts.FactPublication.NarrativePublicationRead : System.String (literal)
 ToolUp.Facts.FactPublication.createDurable(ToolUp.Platform.Jobs.ScopeCarrier, ToolUp.Facts.FactPublicationConfig, ToolUp.Facts.IFactStore, ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore, ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, ToolUp.Platform.Grounding.IFactTableRegistry, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.IFactTableWriter], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamRole]]]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.ArtefactSigning.IArtefactSigner], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.ArtefactSigning.IArtefactVerifier], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime]) : ToolUp.Facts.IFactPublication
 ToolUp.Facts.FactPublication.createWith(ToolUp.Facts.FactPublicationConfig, ToolUp.Facts.IFactStore, ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore, ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, ToolUp.Platform.Grounding.IFactTableRegistry, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.IFactTableWriter], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamRole]]]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.ArtefactSigning.IArtefactSigner], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.ArtefactSigning.IArtefactVerifier], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime]) : ToolUp.Facts.IFactPublication
+ToolUp.Facts.FactPublication.declaredPrincipal(System.String, System.IServiceProvider) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ResolvedScope]]
 ToolUp.Facts.FactPublication.defects(ToolUp.Facts.FactPublicationConfig, ToolUp.Platform.Grounding.IFactTableRegistry, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Facts.FactPublication.withPublicationPrincipals(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]], ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.Facts.FactPublicationConfig (class)
 ToolUp.Facts.FactPublicationConfig..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactPublicationTarget], ToolUp.Facts.PublicationSigning)
 ToolUp.Facts.FactPublicationConfig.Signing : ToolUp.Facts.PublicationSigning { get }
@@ -1398,6 +1413,7 @@ ToolUp.Facts.FactsCompose.withCoverageNarratives(ToolUp.Facts.CoverageNarrative+
 ToolUp.Facts.FactsCompose.withDeclassificationBudgetConfig(ToolUp.Facts.DeclassificationBudgetConfig, ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.Facts.FactsCompose.withDeclassificationBudgets(ToolUp.Platform.Compose.IPrivacyBudgetLedger, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.DeclassificationBudget], ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.Facts.FactsCompose.withDelegateFacts(Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
+ToolUp.Facts.FactsCompose.withDeliveryTrigger(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]], ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.Facts.FactsCompose.withDisclosureFanOut(System.Int32, ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.Facts.FactsCompose.withDisclosurePurposes(ToolUp.Facts.DisclosurePurposeConfig, ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.Facts.FactsCompose.withFactImport(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.PeerTrustAnchor], ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
@@ -1425,6 +1441,7 @@ ToolUp.Facts.GroundedNarrativeTrigger.HandlerName : System.String (literal)
 ToolUp.Facts.GroundedNarrativeTrigger.TriggerName : System.String (literal)
 ToolUp.Facts.GroundedNarrativeTrigger.affectedRuns(ToolUp.Platform.Compose.GroundedNarrativeRegistry, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.GroundedNarrativeDefinition]
 ToolUp.Facts.GroundedNarrativeTrigger.armed(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Jobs.IJobScheduler]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Compose.GroundedNarrativeRegistry]], Microsoft.FSharp.Core.Unit) : System.Boolean
+ToolUp.Facts.GroundedNarrativeTrigger.enqueueChange(ToolUp.Platform.Jobs.IJobScheduler, ToolUp.Platform.ResolvedScope, System.String, Microsoft.FSharp.Collections.FSharpSet`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Facts.GroundedNarrativeTrigger+EnqueueOutcome]
 ToolUp.Facts.GroundedNarrativeTrigger.enqueueFor(ToolUp.Platform.Infra.ILineageStore, ToolUp.Facts.IFactStore, ToolUp.Platform.Jobs.IJobScheduler, ToolUp.Platform.Compose.GroundedNarrativeRegistry, ToolUp.Platform.ResolvedScope, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]
 ToolUp.Facts.GroundedNarrativeTrigger.hostedService(System.IServiceProvider) : Microsoft.Extensions.Hosting.IHostedService
 ToolUp.Facts.GroundedNarrativeTrigger.payloadFor(System.String, Microsoft.FSharp.Collections.FSharpSet`1[System.String]) : System.String
@@ -1433,6 +1450,24 @@ ToolUp.Facts.GroundedNarrativeTrigger.reacts(ToolUp.Platform.Compose.GroundedNar
 ToolUp.Facts.GroundedNarrativeTrigger.registrationFor(System.String, System.String, Microsoft.FSharp.Collections.FSharpSet`1[System.String]) : ToolUp.Platform.JobRegistration
 ToolUp.Facts.GroundedNarrativeTrigger.retryPolicy : ToolUp.Platform.JobRetryPolicy { get }
 ToolUp.Facts.GroundedNarrativeTrigger.tryParsePayload(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.GroundedNarrativeTrigger+GroundedNarrativeJobPayload]
+ToolUp.Facts.GroundedNarrativeTrigger+EnqueueOutcome (class)
+ToolUp.Facts.GroundedNarrativeTrigger+EnqueueOutcome.Coalesced : ToolUp.Facts.GroundedNarrativeTrigger+EnqueueOutcome { get }
+ToolUp.Facts.GroundedNarrativeTrigger+EnqueueOutcome.IsCoalesced : System.Boolean { get }
+ToolUp.Facts.GroundedNarrativeTrigger+EnqueueOutcome.IsScheduleRefused : System.Boolean { get }
+ToolUp.Facts.GroundedNarrativeTrigger+EnqueueOutcome.IsStarted : System.Boolean { get }
+ToolUp.Facts.GroundedNarrativeTrigger+EnqueueOutcome.IsTriggerRefused : System.Boolean { get }
+ToolUp.Facts.GroundedNarrativeTrigger+EnqueueOutcome.Started : ToolUp.Facts.GroundedNarrativeTrigger+EnqueueOutcome { get }
+ToolUp.Facts.GroundedNarrativeTrigger+EnqueueOutcome.Tag : System.Int32 { get }
+ToolUp.Facts.GroundedNarrativeTrigger+EnqueueOutcome+ScheduleRefused (class)
+ToolUp.Facts.GroundedNarrativeTrigger+EnqueueOutcome+ScheduleRefused.reason : System.String { get }
+ToolUp.Facts.GroundedNarrativeTrigger+EnqueueOutcome+Tags (class)
+ToolUp.Facts.GroundedNarrativeTrigger+EnqueueOutcome+Tags.Coalesced : System.Int32 (literal)
+ToolUp.Facts.GroundedNarrativeTrigger+EnqueueOutcome+Tags.ScheduleRefused : System.Int32 (literal)
+ToolUp.Facts.GroundedNarrativeTrigger+EnqueueOutcome+Tags.Started : System.Int32 (literal)
+ToolUp.Facts.GroundedNarrativeTrigger+EnqueueOutcome+Tags.TriggerRefused : System.Int32 (literal)
+ToolUp.Facts.GroundedNarrativeTrigger+EnqueueOutcome+TriggerRefused (class)
+ToolUp.Facts.GroundedNarrativeTrigger+EnqueueOutcome+TriggerRefused.jobId : System.Guid { get }
+ToolUp.Facts.GroundedNarrativeTrigger+EnqueueOutcome+TriggerRefused.reason : System.String { get }
 ToolUp.Facts.GroundedNarrativeTrigger+GroundedNarrativeJobHandler (class)
 ToolUp.Facts.GroundedNarrativeTrigger+GroundedNarrativeJobHandler..ctor(ToolUp.Facts.IFactStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], ToolUp.Platform.Compose.GroundedNarrativeRegistry, ToolUp.Platform.Compose.IGroundedNarrativeRun)
 ToolUp.Facts.GroundedNarrativeTrigger+GroundedNarrativeJobPayload (class)
@@ -1716,6 +1751,9 @@ ToolUp.Facts.PopulationQueryTool.MaxCompanionTopK : System.Int32 (literal)
 ToolUp.Facts.PopulationQueryTool.definition : ToolUp.Platform.AIToolDefinition { get }
 ToolUp.Facts.PopulationQueryTool.execute(Microsoft.AspNetCore.Http.HttpContext, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
 ToolUp.Facts.PopulationQueryTool.executeWith(ToolUp.Facts.IFactStore, ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime], ToolUp.Platform.ResolvedScope, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
+ToolUp.Facts.PublicationPrincipalBindings (class)
+ToolUp.Facts.PublicationPrincipalBindings..ctor(Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String])
+ToolUp.Facts.PublicationPrincipalBindings.Settings : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
 ToolUp.Facts.QuestionCompilerModule (class)
 ToolUp.Facts.QuestionCompilerModule.ofTriples(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.TripleCandidate], System.String]]], System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.CompiledQuestion, System.String]]
 ToolUp.Facts.ReactiveDataChange (class)

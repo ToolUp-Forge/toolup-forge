@@ -24,6 +24,8 @@ module ToolUp.Platform.Tests.InProcess.DeliveryCompletedTests
 //      queued refresh's delivery reaches the hook end to end.
 //   6. Registering no hook leaves the ingestor exactly as it was (GP 13),
 //      and the new files mint no scope (Phase 797).
+//   7. A completed delivery and a delivery trigger's firing are different
+//      events: each happens where the other does not.
 
 open System
 open System.Collections.Concurrent
@@ -672,6 +674,85 @@ let private jobTests =
         }
     ]
 
+/// The two counts of one deployment: a hook on the delivery and a trigger on the
+/// fact tables, over a route that ingests, commits, or does both.
+let private reconciliationTests =
+    let scopeId = "team-reconcile"
+
+    let extent: ToolUp.Facts.TemporalExtent = {
+        From = DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
+        To = DateTime(2026, 9, 2, 0, 0, 0, DateTimeKind.Utc)
+        Label = None
+    }
+
+    let options (input: char) =
+        ToolUp.Facts.FactTableRunOptions.none
+        |> ToolUp.Facts.FactTableRunOptions.withInputs [ "sha256:" + String(input, 64) ]
+        |> ToolUp.Facts.FactTableRunOptions.forSlice extent
+
+    let row: ToolUp.Facts.FactTableRow = {
+        Subject = [ "a1" ]
+        Period = extent
+        Values = Map.ofList [ "revenue", ToolUp.Facts.Scalar 10m ]
+    }
+
+    /// One request: `ingest` the tables, then commit the fact table, as the
+    /// module owning both would.
+    let route
+        (world: DeliveryTriggerTests.DeliveryTriggerWorld)
+        (ingest: string list)
+        (input: char)
+        (r: Rig)
+        : HttpHandler =
+        Giraffe.Routing.route "/deliver"
+        >=> fun next ctx -> task {
+            let scope = ScopeResolution.remember ctx (storage scopeId)
+            seedScope r.Configs r.Source scopeId
+            world.Serve ctx
+
+            for table in ingest do
+                let! _ = r.Ingestor.RunIngestion(scopeId, sourceId, table) |> Async.StartAsTask
+                ()
+
+            let! _ =
+                world.Publish(scope, "orders", Some(options input), [ row ])
+                |> Async.StartAsTask
+
+            return! text "delivered" next ctx
+        }
+
+    testList "the two counts" [
+
+        testCaseAsync "a re-delivery that changed nothing is a completed delivery and no firing"
+        <| async {
+            let seen = Seen()
+            let world = DeliveryTriggerTests.DeliveryTriggerWorld()
+            let app = ServerApp.empty |> ServerApp.withDeliveryCompleted ("seen", seen.Callback)
+
+            let! _ = hosted app (route world [ "orders" ] 'a') post
+            let! _ = seen.First
+            let! _ = seen.Settled
+            Expect.hasLength world.Fired 1 "the first delivery fires both"
+
+            let! _ = hosted app (route world [ "orders" ] 'b') post
+            let! deliveries = seen.Settled
+            Expect.hasLength deliveries 2 "the hook counts the second delivery"
+            Expect.hasLength world.Fired 1 "and the trigger does not: nothing changed"
+        }
+
+        testCaseAsync "a request that commits and ingests nothing is a firing and no completed delivery"
+        <| async {
+            let seen = Seen()
+            let world = DeliveryTriggerTests.DeliveryTriggerWorld()
+            let app = ServerApp.empty |> ServerApp.withDeliveryCompleted ("seen", seen.Callback)
+
+            let! _ = hosted app (route world [] 'a') post
+            let! deliveries = seen.Settled
+            Expect.isEmpty deliveries "the hook has no ingestion run to report"
+            Expect.hasLength world.Fired 1 "the trigger fires, on the same completion signal"
+        }
+    ]
+
 let private compositionTests =
     testList "composition" [
 
@@ -830,6 +911,7 @@ let tests =
         requestTests
         failureTests
         jobTests
+        reconciliationTests
         compositionTests
         conformanceTests
     ]

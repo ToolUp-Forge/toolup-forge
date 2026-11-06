@@ -610,6 +610,7 @@ member ToolUp.Platform.DataVocabulary hash ToolUp.Platform.Infra.DataVocabulary
 member ToolUp.Platform.DataVocabulary load ToolUp.Platform.Infra.DataVocabulary
 member ToolUp.Platform.DataVocabulary pin ToolUp.Platform.Infra.DataVocabulary
 member ToolUp.Platform.DeclaredPrincipal missingGrant ToolUp.Platform.Jobs.DeclaredPrincipal
+member ToolUp.Platform.DeclaredPrincipal resolveInScope ToolUp.Platform.Jobs.DeclaredPrincipal
 member ToolUp.Platform.DeclaredPrincipal user ToolUp.Platform.Jobs.DeclaredPrincipal
 member ToolUp.Platform.DeclaredPrincipal userOf ToolUp.Platform.Jobs.DeclaredPrincipal
 member ToolUp.Platform.ScopeId parse ToolUp.Platform.Compose.ScopeId

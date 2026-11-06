@@ -474,6 +474,39 @@ module GroundedNarrativeTrigger =
     let affectedRuns (registry: GroundedNarrativeRegistry) (heads: Fact list) : GroundedNarrativeDefinition list =
         registry.DependentOn(heads |> List.map _.Metric.Value |> List.distinct)
 
+    /// What asking the scheduler to run one report over one change came to.
+    [<RequireQualifiedAccess>]
+    type EnqueueOutcome =
+        /// A job this change created, and it was fired.
+        | Started
+        /// A replayed change inside the idempotency window: it coalesced onto
+        /// the job the first one created and fired, so the narrative runs once.
+        | Coalesced
+        /// The scheduler refused the job.
+        | ScheduleRefused of reason: string
+        /// The job was scheduled and its trigger refused. A `Manual` job never
+        /// fires on its own, so this is a run that did not start; the job stays
+        /// scheduled, and an operator can re-run it from the jobs admin.
+        | TriggerRefused of jobId: JobId * reason: string
+
+    /// Schedule `runKey`'s job over `change` and fire it. Only a job this
+    /// change created is fired.
+    let enqueueChange
+        (scheduler: IJobScheduler)
+        (resolved: ResolvedScope)
+        (runKey: string)
+        (change: Set<string>)
+        : Async<EnqueueOutcome> =
+        async {
+            match! scheduler.Schedule(resolved, registrationFor resolved.ScopeId runKey change) with
+            | Ok(Scheduled jobId) ->
+                match! scheduler.TriggerOnce(resolved.ScopeId, jobId, Actor) with
+                | Ok() -> return EnqueueOutcome.Started
+                | Error refusal -> return EnqueueOutcome.TriggerRefused(jobId, TriggerError.message refusal)
+            | Ok(Coalesced _) -> return EnqueueOutcome.Coalesced
+            | Error refusal -> return EnqueueOutcome.ScheduleRefused(sprintf "%A" refusal)
+        }
+
     /// `enqueueFor`, with the runs whose job was scheduled but whose trigger
     /// was refused beside the runs it enqueued (Phase 1105).
     let private enqueueOutcomes
@@ -499,27 +532,12 @@ module GroundedNarrativeTrigger =
                 let mutable refused = []
 
                 for definition in affectedRuns registry heads do
-                    let registration = registrationFor scopeId definition.Key invalidated
-                    let! scheduled = scheduler.Schedule(resolved, registration)
-
-                    // Only a job this change created is fired. A replayed change
-                    // inside the idempotency window coalesces onto the job the
-                    // first delivery created and fired, so it fires nothing:
-                    // the narrative runs once.
-                    match scheduled with
-                    | Ok(Scheduled jobId) ->
-                        // Phase 1105 — a `Manual` job never fires on its own, so
-                        // a refused trigger is a run that did not start: never
-                        // reported as enqueued. The job stays scheduled, so an
-                        // operator can re-run it from the jobs admin.
-                        match! scheduler.TriggerOnce(scopeId, jobId, Actor) with
-                        | Ok() -> enqueued <- definition.Key :: enqueued
-                        | Error refusal ->
-                            refused <-
-                                sprintf "%s (job %O: %s)" definition.Key jobId (TriggerError.message refusal)
-                                :: refused
-                    | Ok(Coalesced _)
-                    | Error _ -> ()
+                    match! enqueueChange scheduler resolved definition.Key invalidated with
+                    | EnqueueOutcome.Started -> enqueued <- definition.Key :: enqueued
+                    | EnqueueOutcome.TriggerRefused(jobId, reason) ->
+                        refused <- sprintf "%s (job %O: %s)" definition.Key jobId reason :: refused
+                    | EnqueueOutcome.Coalesced
+                    | EnqueueOutcome.ScheduleRefused _ -> ()
 
                 return List.rev enqueued, List.rev refused
         }

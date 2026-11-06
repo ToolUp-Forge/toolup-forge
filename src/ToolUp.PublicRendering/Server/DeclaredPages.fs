@@ -253,29 +253,14 @@ module DeclaredPages =
         async {
             match served.PublishingPrincipal, principals with
             | Some userId, Some resolver ->
-                let declared: DeclaredPrincipal = {
-                    Name = audience.PublishingScope
-                    UserId = userId
-                    DisplayName = userId
-                }
-
-                match! resolver.Resolve(DeclaredPrincipal.user declared) with
-                | Ok scope when scope.ScopeId = audience.PublishingScope -> return Some scope
-                | Ok scope ->
+                match! DeclaredPrincipal.resolveInScope resolver audience.PublishingScope userId with
+                | Ok scope -> return Some scope
+                | Error refusal ->
                     logger.Warn(
                         sprintf
-                            "PublicRendering: publication '%s': its principal resolves to scope '%s'; a narrative citing a fact is withheld"
+                            "PublicRendering: publication '%s': %s; a narrative citing a fact is withheld"
                             audience.PublishingScope
-                            scope.ScopeId
-                    )
-
-                    return None
-                | Error error ->
-                    logger.Warn(
-                        sprintf
-                            "PublicRendering: publication '%s': its principal lacks %s; a narrative citing a fact is withheld"
-                            audience.PublishingScope
-                            (DeclaredPrincipal.missingGrant error)
+                            refusal
                     )
 
                     return None

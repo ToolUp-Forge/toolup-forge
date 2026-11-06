@@ -109,6 +109,7 @@ ToolUp.Platform.Jobs.DatasetRevintageJobPayload..ctor(ToolUp.Platform.Infra.Data
 ToolUp.Platform.Jobs.DatasetRevintageJobPayload.SpecRef : ToolUp.Platform.Infra.DatasetVersionRef { get }
 ToolUp.Platform.Jobs.DeclaredPrincipalModule (class)
 ToolUp.Platform.Jobs.DeclaredPrincipalModule.missingGrant(ToolUp.Platform.ScopeResolutionError) : System.String
+ToolUp.Platform.Jobs.DeclaredPrincipalModule.resolveInScope(ToolUp.Platform.Jobs.DeclaredPrincipalResolver, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ResolvedScope, System.String]]
 ToolUp.Platform.Jobs.DeclaredPrincipalModule.user(ToolUp.Platform.DeclaredPrincipal) : ToolUp.Platform.Auth+AuthenticatedUser
 ToolUp.Platform.Jobs.DeclaredPrincipalModule.userOf(System.String, System.String) : ToolUp.Platform.Auth+AuthenticatedUser
 ToolUp.Platform.Jobs.DeclaredPrincipalResolver (class)
@@ -124,6 +125,7 @@ ToolUp.Platform.Jobs.DeliveryCompleted (class)
 ToolUp.Platform.Jobs.DeliveryCompleted.CallbackFailedEventType : System.String (literal)
 ToolUp.Platform.Jobs.DeliveryCompleted.DeliverySourceModule : System.String (literal)
 ToolUp.Platform.Jobs.DeliveryCompleted.aroundJob(System.String, ToolUp.Platform.Jobs.IJobHandler) : ToolUp.Platform.Jobs.IJobHandler
+ToolUp.Platform.Jobs.DeliveryCompleted.tryDeliveryState`1(System.Object, ToolUp.Platform.ILogger, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.Tuple`2[T, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ResolvedScope, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]]]]) : Microsoft.FSharp.Core.FSharpOption`1[T]
 ToolUp.Platform.Jobs.DeliveryCompleted+DeliveredOutcome (class)
 ToolUp.Platform.Jobs.DeliveryCompleted+DeliveredOutcome.Committed : ToolUp.Platform.Jobs.DeliveryCompleted+DeliveredOutcome { get }
 ToolUp.Platform.Jobs.DeliveryCompleted+DeliveredOutcome.IsCommitted : System.Boolean { get }
