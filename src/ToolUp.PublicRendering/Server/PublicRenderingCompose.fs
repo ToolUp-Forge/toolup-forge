@@ -1249,8 +1249,18 @@ let composePublicRendering (options: PublicRenderingOptions) (app: ServerApp) : 
                         // The declared pages in front of it, with
                         // the narrative read over these services.
                         let api =
+                            let principals =
+                                match sp.GetService(typeof<ToolUp.Platform.Jobs.DeclaredPrincipalResolver>) with
+                                | :? ToolUp.Platform.Jobs.DeclaredPrincipalResolver as resolver -> Some resolver
+                                | _ -> None
+
+                            let narratives =
+                                match sp.GetService(typeof<INarrativeStore>) with
+                                | :? INarrativeStore as store -> Some store
+                                | _ -> None
+
                             DeclaredPages.over
-                                (DeclaredPages.narrativeReadIn resolvedConfig prLogger sp)
+                                (DeclaredPages.narrativeReadIn resolvedConfig prLogger principals narratives sp)
                                 declaredPages
                                 api
 

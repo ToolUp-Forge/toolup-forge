@@ -278,7 +278,12 @@ let tests =
             use provider = services.BuildServiceProvider()
 
             let read =
-                DeclaredPages.narrativeReadIn ServerConfig.defaults (ConsoleLogger.ConsoleLogger() :> ILogger) provider
+                DeclaredPages.narrativeReadIn
+                    ServerConfig.defaults
+                    (ConsoleLogger.ConsoleLogger() :> ILogger)
+                    None
+                    (Some(store :> INarrativeStore))
+                    provider
 
             let served = {
                 Run = "daily"

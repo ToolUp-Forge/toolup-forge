@@ -240,23 +240,18 @@ module DeclaredPages =
     /// The tag a grounded-narrative run's narratives carry.
     let private runTag (run: string) = "grounded-run:" + run
 
-    let private tryService<'T> (services: IServiceProvider) : 'T option =
-        match services.GetService(typeof<'T>) with
-        | :? 'T as service -> Some service
-        | _ -> None
-
     /// The scope a publication's disclosure re-check runs in: its declared
     /// principal, through the platform's resolver. A principal that does not
     /// resolve, or resolves to another scope, is logged and answers `None`, and
     /// the read then withholds a narrative citing a fact.
     let private publishingScope
         (logger: ILogger)
-        (services: IServiceProvider)
+        (principals: DeclaredPrincipalResolver option)
         (served: ServedNarrative)
         (audience: PublicationAudience)
         : Async<ResolvedScope option> =
         async {
-            match served.PublishingPrincipal, tryService<DeclaredPrincipalResolver> services with
+            match served.PublishingPrincipal, principals with
             | Some userId, Some resolver ->
                 let declared: DeclaredPrincipal = {
                     Name = audience.PublishingScope
@@ -292,11 +287,20 @@ module DeclaredPages =
     /// is re-checked and the read is audited. Any other page reads the reader's own
     /// scope once its audience admits the reader. A page answers its own body when
     /// there is nothing to serve.
-    let narrativeReadIn (config: ServerConfig) (logger: ILogger) (services: IServiceProvider) : DeclaredNarrativeRead =
+    ///
+    /// The composition root resolves `principals` and `narratives` in its
+    /// registration factory and hands them over as values.
+    let narrativeReadIn
+        (config: ServerConfig)
+        (logger: ILogger)
+        (principals: DeclaredPrincipalResolver option)
+        (narratives: INarrativeStore option)
+        (services: IServiceProvider)
+        : DeclaredNarrativeRead =
         fun served audience slug reader -> async {
             match audience with
             | PageAudience.Publication publication ->
-                let! publishing = publishingScope logger services served publication
+                let! publishing = publishingScope logger principals served publication
 
                 match!
                     PublicationRead.latestNarrativeIn services publishing publication slug (runTag served.Run) reader
@@ -306,7 +310,7 @@ module DeclaredPages =
             | _ ->
                 match
                     AudienceGate.evaluate reader audience,
-                    tryService<INarrativeStore> services,
+                    narratives,
                     Middleware.StorageScopeDerivation.tryFromSubject (Some logger) config reader.Subject
                 with
                 | AudienceDecision.Allow, Some store, Some scope ->

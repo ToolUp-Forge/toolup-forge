@@ -180,7 +180,7 @@
         "src/ToolUp.AI.Server/Server/AILatencyHandler.fs": 1,
         "src/ToolUp.AI.Server/Server/AIProviderUsageMiddleware.fs": 13,
         "src/ToolUp.AI.Server/Server/AISettingsHandler.fs": 6,
-        "src/ToolUp.AI.Server/Server/AIToolRegistry.fs": 5,
+        "src/ToolUp.AI.Server/Server/AIToolRegistry.fs": 8,
         "src/ToolUp.AI.Server/Server/ClientToolDispatch.fs": 1,
         "src/ToolUp.AI.Server/Server/FastPathBeaconHandler.fs": 6,
         "src/ToolUp.AI.Server/Server/FastPathTelemetryHandler.fs": 1,
