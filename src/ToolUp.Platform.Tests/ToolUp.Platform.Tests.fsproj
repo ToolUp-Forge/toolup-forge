@@ -548,6 +548,7 @@
         <Compile Include="InProcess\FileApiMountTests.fs" />
         <Compile Include="InProcess\StreamAuthBothSignInsTests.fs" />
         <Compile Include="InProcess\DeliveryTriggerTests.fs" />
+        <Compile Include="InProcess\ToleranceTriggerTests.fs" />
         <Compile Include="InProcess\DeliveryCompletedTests.fs" />
         <Compile Include="InProcess\PageRequestResolverTests.fs" />
         <Compile Include="InProcess\LayoutToolsTests.fs" />

@@ -3,7 +3,7 @@
   "formatVersion": 1,
   "profile": "server-app-host",
   "profileKind": "vocabulary",
-  "profileVersion": "7.2",
+  "profileVersion": "7.3",
   "registry": "../registry.json",
   "conformanceFamilies": [
     "document",
@@ -2050,6 +2050,28 @@
       "reject": "token-unregistered",
       "detect": "profile",
       "description": "A client shell whose browser history, off, is not section P2.23's one token: the slot is closed, and a shell with no browser history has one spelling, the absent member."
+    },
+    {
+      "id": "profile-server-app-host/tolerance-trigger",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "round-trip",
+      "file": "profile-server-app-host/tolerance-trigger.json",
+      "sha256": "3283e0a717105af18af730d5e2c37e63fc4d26d94af2f62570d05b43e9324edb",
+      "description": "Two grounded narratives each carrying a tolerance trigger (7.3, section P3.4): one over every subject, a relative tolerance against the previous delivery; one over two subjects, an absolute tolerance seven days back. The vector pins the member's place after runsAs and the order within it. The table and metric are declared."
+    },
+    {
+      "id": "profile-server-app-host/reject-tolerance-trigger-undeclared-table",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-tolerance-trigger-undeclared-table.json",
+      "sha256": "5fe9e63492b19f8e3bee834d069df93d23512501a97dc00243220064d0e855b0",
+      "reject": "narrative-malformed",
+      "detect": "profile",
+      "description": "A tolerance trigger naming a fact table the composition does not declare (section P4.24, widened at 7.3). Every other member is in its grammar: a question about a table that is not there never fires."
     }
   ]
 }

@@ -672,6 +672,7 @@ let private registeredTests =
         FileApiMountTests.tests
         StreamAuthBothSignInsTests.tests
         DeliveryTriggerTests.tests
+        ToleranceTriggerTests.tests
         DeliveryCompletedTests.tests
         FactRenderToolTests.tests
         PipelineToolTests.tests

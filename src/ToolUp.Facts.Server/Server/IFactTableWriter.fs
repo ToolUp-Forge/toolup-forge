@@ -2073,6 +2073,105 @@ module DefaultFactTableWriter =
 // hook mounted the seam. Otherwise it is the request itself. Off both there is no
 // scope the platform resolved, so nothing fires and the log says why.
 
+/// What a trigger over committed tables shares: the unit of work its commits are
+/// held on until they have all landed, and the enqueue that logs what it refused.
+module internal CommitUnit =
+
+    /// What one unit of work has committed, each item under the commit's scope.
+    type Pending<'T>() =
+        let gate = obj ()
+        let items = ResizeArray<string * 'T>()
+
+        member _.Add(scopeId: string, item: 'T) =
+            lock gate (fun () -> items.Add((scopeId, item)))
+
+        member _.Items() = lock gate (fun () -> List.ofSeq items)
+
+    /// The items of the scope the unit resolved, and the rest under their scopes.
+    let split (pending: Pending<'T>) (resolved: ResolvedScope) : 'T list * (string * 'T) list =
+        let mine, foreign =
+            pending.Items()
+            |> List.partition (fun (scopeId, _) -> not resolved.IsAnonymous && scopeId = resolved.ScopeId)
+
+        List.map snd mine, foreign
+
+    /// Why a commit outside the scope the unit resolved enqueues nothing.
+    let foreignReason (resolved: ResolvedScope) (scopeId: string) : string =
+        if resolved.IsAnonymous then
+            sprintf "the delivery resolved no scope, so the commit in scope '%s' enqueued nothing" scopeId
+        else
+            sprintf
+                "the commit is in scope '%s' and the delivery resolved '%s', so it enqueued nothing"
+                scopeId
+                resolved.ScopeId
+
+    /// The request in progress, if any.
+    let httpContext
+        (accessor: unit -> Microsoft.AspNetCore.Http.IHttpContextAccessor option)
+        : Microsoft.AspNetCore.Http.HttpContext option =
+        accessor () |> Option.bind (fun a -> Option.ofObj a.HttpContext)
+
+    /// Enqueue `runKey` over `change`, telling `refused` the reason when it does
+    /// not start. Nothing here reaches the caller.
+    let enqueue
+        (scheduler: unit -> ToolUp.Platform.Jobs.IJobScheduler option)
+        (refused: string -> string -> string -> unit)
+        (resolved: ResolvedScope)
+        (runKey: string)
+        (table: string)
+        (change: Set<string>)
+        : Async<unit> =
+        async {
+            match scheduler () with
+            | None -> refused runKey table "no IJobScheduler is composed, so the run was not enqueued"
+            | Some jobs ->
+                match! Async.Catch(GroundedNarrativeTrigger.enqueueChange jobs resolved runKey change) with
+                | Choice1Of2 GroundedNarrativeTrigger.EnqueueOutcome.Started
+                | Choice1Of2 GroundedNarrativeTrigger.EnqueueOutcome.Coalesced -> ()
+                | Choice1Of2(GroundedNarrativeTrigger.EnqueueOutcome.ScheduleRefused reason) ->
+                    refused runKey table (sprintf "the scheduler refused the job (%s)" reason)
+                | Choice1Of2(GroundedNarrativeTrigger.EnqueueOutcome.TriggerRefused(jobId, reason)) ->
+                    refused runKey table (sprintf "job %O was scheduled and its trigger refused (%s)" jobId reason)
+                | Choice2Of2 ex -> refused runKey table (sprintf "scheduling threw (%s)" ex.Message)
+        }
+
+    /// The unit of work's pending items: the platform's delivery in progress, else
+    /// the request. `None` off both. `flush` runs when the unit completes, under the
+    /// scope the platform resolved for it.
+    let pendingOfUnit
+        (accessor: unit -> Microsoft.AspNetCore.Http.IHttpContextAccessor option)
+        (logger: ILogger)
+        (flush: Pending<'T> -> ResolvedScope -> Async<unit>)
+        : unit -> Pending<'T> option =
+        let stateKey = obj ()
+
+        fun () ->
+            let create () =
+                let pending = Pending<'T>()
+                pending, flush pending
+
+            match ToolUp.Platform.Jobs.DeliveryCompleted.tryDeliveryState stateKey logger create with
+            | Some pending -> Some pending
+            | None ->
+                match httpContext accessor with
+                | None -> None
+                | Some ctx ->
+                    match ctx.Items.TryGetValue stateKey with
+                    | true, (:? Pending<'T> as pending) -> Some pending
+                    | _ ->
+                        let pending = Pending<'T>()
+                        ctx.Items[stateKey] <- box pending
+
+                        ctx.Response.OnCompleted(fun () ->
+                            Async.StartAsTask(
+                                flush
+                                    pending
+                                    (ToolUp.Platform.Scope.StorageScopeResolver.ScopeResolution.forRequest ctx)
+                            )
+                            :> System.Threading.Tasks.Task)
+
+                        Some pending
+
 /// The firing rule of `FactsCompose.withDeliveryTrigger`, and the decoration.
 module DeliveryTrigger =
 
@@ -2161,17 +2260,6 @@ module DeliveryTrigger =
     let private commitChange (commit: FactTableCommit) : Set<string> =
         Set.singleton (sprintf "fact-table:%s@%d" commit.Watermark.TableId commit.Watermark.Sequence)
 
-    /// What one unit of work has committed of the watched tables.
-    type private Pending() =
-        let gate = obj ()
-        let commits = ResizeArray<string * DeliveredCommit>()
-
-        member _.Add(scopeId: string, commit: DeliveredCommit) =
-            lock gate (fun () -> commits.Add((scopeId, commit)))
-
-        member _.Commits() =
-            lock gate (fun () -> List.ofSeq commits)
-
     /// `inner`, enqueueing the runs `runsFor` names for a committed table. A run
     /// opened with options fires once per delivery, per `firing`, when its unit
     /// completes; one opened with none fires per commit. Every refusal on the
@@ -2188,45 +2276,20 @@ module DeliveryTrigger =
         let refused (runKey: string) (table: string) (reason: string) =
             logger.Warn(sprintf "[DeliveryTrigger] run '%s' on a commit of table '%s': %s" runKey table reason)
 
-        let enqueue (resolved: ResolvedScope) (runKey: string) (table: string) (change: Set<string>) = async {
-            match scheduler () with
-            | None -> refused runKey table "no IJobScheduler is composed, so the run was not enqueued"
-            | Some jobs ->
-                match! Async.Catch(GroundedNarrativeTrigger.enqueueChange jobs resolved runKey change) with
-                | Choice1Of2 GroundedNarrativeTrigger.EnqueueOutcome.Started
-                | Choice1Of2 GroundedNarrativeTrigger.EnqueueOutcome.Coalesced -> ()
-                | Choice1Of2(GroundedNarrativeTrigger.EnqueueOutcome.ScheduleRefused reason) ->
-                    refused runKey table (sprintf "the scheduler refused the job (%s)" reason)
-                | Choice1Of2(GroundedNarrativeTrigger.EnqueueOutcome.TriggerRefused(jobId, reason)) ->
-                    refused runKey table (sprintf "job %O was scheduled and its trigger refused (%s)" jobId reason)
-                | Choice2Of2 ex -> refused runKey table (sprintf "scheduling threw (%s)" ex.Message)
-        }
+        let enqueue = CommitUnit.enqueue scheduler refused
 
         /// The unit of work has completed, under the scope the platform resolved
         /// for it: each run fires at most once per delivery.
-        let flush (pending: Pending) (resolved: ResolvedScope) = async {
-            let mine, foreign =
-                pending.Commits()
-                |> List.partition (fun (scopeId, _) -> not resolved.IsAnonymous && scopeId = resolved.ScopeId)
+        let flush (pending: CommitUnit.Pending<DeliveredCommit>) (resolved: ResolvedScope) = async {
+            let mine, foreign = CommitUnit.split pending resolved
 
             for scopeId, commit in foreign do
                 let table = commit.Commit.Watermark.TableId
 
                 for runKey in runsFor table do
-                    refused
-                        runKey
-                        table
-                        (if resolved.IsAnonymous then
-                             sprintf
-                                 "the delivery resolved no scope, so the commit in scope '%s' enqueued nothing"
-                                 scopeId
-                         else
-                             sprintf
-                                 "the commit is in scope '%s' and the delivery resolved '%s', so it enqueued nothing"
-                                 scopeId
-                                 resolved.ScopeId)
+                    refused runKey table (CommitUnit.foreignReason resolved scopeId)
 
-            for _, delivered in mine |> List.map snd |> List.groupBy (_.Options >> key) do
+            for _, delivered in mine |> List.groupBy (_.Options >> key) do
                 let runs =
                     delivered
                     |> List.collect (fun c -> runsFor c.Commit.Watermark.TableId)
@@ -2243,39 +2306,7 @@ module DeliveryTrigger =
                     | first :: _ -> do! enqueue resolved runKey first.Commit.Watermark.TableId (change firingCommits)
         }
 
-        let stateKey = obj ()
-
-        let httpContext () =
-            accessor () |> Option.bind (fun a -> Option.ofObj a.HttpContext)
-
-        /// The unit of work's pending commits: the platform's delivery in
-        /// progress, else the request. `None` off both.
-        let pendingOfUnit () : Pending option =
-            let create () =
-                let pending = Pending()
-                pending, flush pending
-
-            match ToolUp.Platform.Jobs.DeliveryCompleted.tryDeliveryState stateKey logger create with
-            | Some pending -> Some pending
-            | None ->
-                match httpContext () with
-                | None -> None
-                | Some ctx ->
-                    match ctx.Items.TryGetValue stateKey with
-                    | true, (:? Pending as pending) -> Some pending
-                    | _ ->
-                        let pending = Pending()
-                        ctx.Items[stateKey] <- box pending
-
-                        ctx.Response.OnCompleted(fun () ->
-                            Async.StartAsTask(
-                                flush
-                                    pending
-                                    (ToolUp.Platform.Scope.StorageScopeResolver.ScopeResolution.forRequest ctx)
-                            )
-                            :> System.Threading.Tasks.Task)
-
-                        Some pending
+        let pendingOfUnit = CommitUnit.pendingOfUnit accessor logger flush
 
         /// What a commit means for its runs. Everything the trigger reads is read
         /// here, on the run's own record: its options, and the newest period an
@@ -2300,7 +2331,7 @@ module DeliveryTrigger =
 
                     if FactTableRunOptions.isNone options then
                         match
-                            httpContext ()
+                            CommitUnit.httpContext accessor
                             |> Option.map ToolUp.Platform.Scope.StorageScopeResolver.ScopeResolution.forRequest
                         with
                         | Some resolved when not resolved.IsAnonymous && resolved.ScopeId = scope.ScopeId ->

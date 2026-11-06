@@ -1171,6 +1171,11 @@ let surfaceFindings (p: Profile) (surface: Surface) : string list = [
     | Some policy -> yield! resolveTarget "declared content's content-policy admission" policy
     | None -> "declared content: the surface binding names no route by which an inline element is admitted"
 
+    // The tolerance trigger: the member reduces to a builder that resolves.
+    match prop "groundedNarrative" b |> Option.bind (prop "trigger") with
+    | Some target -> yield! resolveTarget "groundedNarrative.trigger" target
+    | None -> "groundedNarrative.trigger: the surface binding names no builder"
+
     // Browser history: each token reduces to a case of the client's field, and every case is a token or the absent member.
     let history = prop "clientShell" b |> Option.bind (prop "browserHistory")
 
@@ -1279,6 +1284,11 @@ let tests =
                 "a serve prefix the registry does not fix",
                 surfaceFindings
                     (withBinding (fun t -> t.Replace("\"servePrefix\": \"_declared\"", "\"servePrefix\": \"_content\"")))
+                    surface
+                // the tolerance trigger's builder is not there.
+                "a tolerance trigger bound to no builder",
+                surfaceFindings
+                    (withBinding (fun t -> t.Replace("\"withToleranceTriggers\"", "\"withPlantedTriggers\"")))
                     surface
                 // a token reduces to a case the client's field does not have.
                 "a browser-history token bound to no case",

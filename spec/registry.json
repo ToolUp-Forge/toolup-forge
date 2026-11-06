@@ -2,7 +2,7 @@
   "specification": "app-composition-wire",
   "coreVersion": 1,
   "profile": "server-app-host",
-  "profileVersion": "7.2",
+  "profileVersion": "7.3",
   "note": "The machine-readable rendering of composition-profile.md sections P2, P3 and P8. Normative; the composition-profile surface check in this repository compares the two renderings and fails when they disagree. Counts appear nowhere: this file is the enumeration.",
   "tokens": {
     "appRoot.base": {
@@ -245,7 +245,8 @@
         { "name": "onCommit", "type": "array of string", "presence": "required; may be empty" },
         { "name": "page", "type": "string", "presence": "optional" },
         { "name": "cadence", "type": "string", "presence": "optional" },
-        { "name": "runsAs", "type": "string", "presence": "optional" }
+        { "name": "runsAs", "type": "string", "presence": "optional" },
+        { "name": "trigger", "type": "trigger object", "presence": "optional; absent when no tolerance enqueues the run" }
       ],
       "leaf": false
     },

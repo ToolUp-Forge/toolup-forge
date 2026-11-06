@@ -1427,6 +1427,7 @@ ToolUp.Facts.FactsCompose.withGroundingEnvelopeSeal(ToolUp.Platform.Compose.Comp
 ToolUp.Facts.FactsCompose.withNarrativeCalculations(ToolUp.Facts.NarrativeCalculations, ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.Facts.FactsCompose.withQuestionCompiler(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.CompiledQuestion, System.String]]], ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.Facts.FactsCompose.withTeamOutputVisibility(ToolUp.Platform.TeamVisibilityLevel, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamVisibilityLevel], ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
+ToolUp.Facts.FactsCompose.withToleranceTriggers(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.ToleranceTrigger], ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.Facts.FactsCompose.withWithholdingSurface(System.String, ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.Facts.FactsOperatorTaskCompose (class)
 ToolUp.Facts.FactsOperatorTaskCompose.withFactsOperatorTasks(ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
@@ -1438,6 +1439,8 @@ ToolUp.Facts.FactsOperatorTasks.reissueJobsTask : ToolUp.Platform.Compose.Startu
 ToolUp.Facts.GroundedNarrativeTrigger (class)
 ToolUp.Facts.GroundedNarrativeTrigger.Actor : System.String (literal)
 ToolUp.Facts.GroundedNarrativeTrigger.HandlerName : System.String (literal)
+ToolUp.Facts.GroundedNarrativeTrigger.MovePrefix : System.String (literal)
+ToolUp.Facts.GroundedNarrativeTrigger.ToleranceTriggerName : System.String (literal)
 ToolUp.Facts.GroundedNarrativeTrigger.TriggerName : System.String (literal)
 ToolUp.Facts.GroundedNarrativeTrigger.affectedRuns(ToolUp.Platform.Compose.GroundedNarrativeRegistry, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.GroundedNarrativeDefinition]
 ToolUp.Facts.GroundedNarrativeTrigger.armed(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Jobs.IJobScheduler]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Compose.GroundedNarrativeRegistry]], Microsoft.FSharp.Core.Unit) : System.Boolean
@@ -1807,6 +1810,64 @@ ToolUp.Facts.TaintOutcome.InheritedLabel : ToolUp.Facts.TaintLabel { get }
 ToolUp.Facts.TaintOutcome.InheritedPolicyRef : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Facts.TaintOutcome.InheritedPolicyRefs : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Facts.TaintOutcome.UnsatisfiedScopes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.Tolerance (class)
+ToolUp.Facts.Tolerance.IsAbsolute : System.Boolean { get }
+ToolUp.Facts.Tolerance.IsRelative : System.Boolean { get }
+ToolUp.Facts.Tolerance.Tag : System.Int32 { get }
+ToolUp.Facts.Tolerance+Absolute (class)
+ToolUp.Facts.Tolerance+Absolute.Item : System.Decimal { get }
+ToolUp.Facts.Tolerance+Relative (class)
+ToolUp.Facts.Tolerance+Relative.Item : System.Decimal { get }
+ToolUp.Facts.Tolerance+Tags (class)
+ToolUp.Facts.Tolerance+Tags.Absolute : System.Int32 (literal)
+ToolUp.Facts.Tolerance+Tags.Relative : System.Int32 (literal)
+ToolUp.Facts.ToleranceComparison (class)
+ToolUp.Facts.ToleranceComparison.IsDaysBefore : System.Boolean { get }
+ToolUp.Facts.ToleranceComparison.IsPreviousDelivery : System.Boolean { get }
+ToolUp.Facts.ToleranceComparison.PreviousDelivery : ToolUp.Facts.ToleranceComparison { get }
+ToolUp.Facts.ToleranceComparison.Tag : System.Int32 { get }
+ToolUp.Facts.ToleranceComparison+DaysBefore (class)
+ToolUp.Facts.ToleranceComparison+DaysBefore.days : System.Int32 { get }
+ToolUp.Facts.ToleranceComparison+Tags (class)
+ToolUp.Facts.ToleranceComparison+Tags.DaysBefore : System.Int32 (literal)
+ToolUp.Facts.ToleranceComparison+Tags.PreviousDelivery : System.Int32 (literal)
+ToolUp.Facts.ToleranceMove (class)
+ToolUp.Facts.ToleranceMove..ctor(ToolUp.Facts.ToleranceTrigger, System.String, ToolUp.Facts.Fact, ToolUp.Facts.Fact, System.Decimal, System.Decimal)
+ToolUp.Facts.ToleranceMove.From : ToolUp.Facts.Fact { get }
+ToolUp.Facts.ToleranceMove.FromValue : System.Decimal { get }
+ToolUp.Facts.ToleranceMove.Subject : System.String { get }
+ToolUp.Facts.ToleranceMove.To : ToolUp.Facts.Fact { get }
+ToolUp.Facts.ToleranceMove.ToValue : System.Decimal { get }
+ToolUp.Facts.ToleranceMove.Trigger : ToolUp.Facts.ToleranceTrigger { get }
+ToolUp.Facts.ToleranceReading (class)
+ToolUp.Facts.ToleranceReading.IsCompared : System.Boolean { get }
+ToolUp.Facts.ToleranceReading.IsNothingToCompare : System.Boolean { get }
+ToolUp.Facts.ToleranceReading.Tag : System.Int32 { get }
+ToolUp.Facts.ToleranceReading+Compared (class)
+ToolUp.Facts.ToleranceReading+Compared.Item : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.ToleranceMove] { get }
+ToolUp.Facts.ToleranceReading+NothingToCompare (class)
+ToolUp.Facts.ToleranceReading+NothingToCompare.reason : System.String { get }
+ToolUp.Facts.ToleranceReading+Tags (class)
+ToolUp.Facts.ToleranceReading+Tags.Compared : System.Int32 (literal)
+ToolUp.Facts.ToleranceReading+Tags.NothingToCompare : System.Int32 (literal)
+ToolUp.Facts.ToleranceTrigger (class)
+ToolUp.Facts.ToleranceTrigger..ctor(System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], ToolUp.Facts.ToleranceComparison, ToolUp.Facts.Tolerance)
+ToolUp.Facts.ToleranceTrigger.Comparison : ToolUp.Facts.ToleranceComparison { get }
+ToolUp.Facts.ToleranceTrigger.Metric : System.String { get }
+ToolUp.Facts.ToleranceTrigger.RunKey : System.String { get }
+ToolUp.Facts.ToleranceTrigger.Subjects : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]] { get }
+ToolUp.Facts.ToleranceTrigger.Table : System.String { get }
+ToolUp.Facts.ToleranceTrigger.Tolerance : ToolUp.Facts.Tolerance { get }
+ToolUp.Facts.ToleranceTriggerModule (class)
+ToolUp.Facts.ToleranceTriggerModule.MaxDaysBefore : System.Int32 (literal)
+ToolUp.Facts.ToleranceTriggerModule.alreadySaid(System.String, Microsoft.FSharp.Collections.FSharpSet`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.JobDefinition]) : System.Boolean
+ToolUp.Facts.ToleranceTriggerModule.beyond(ToolUp.Facts.Tolerance, System.Decimal, System.Decimal) : System.Boolean
+ToolUp.Facts.ToleranceTriggerModule.change(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.ToleranceMove]) : Microsoft.FSharp.Collections.FSharpSet`1[System.String]
+ToolUp.Facts.ToleranceTriggerModule.decorate(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.ToleranceTrigger], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IFactTableRegistry]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.IFactStore]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Jobs.IJobScheduler]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.IHttpContextAccessor]], ToolUp.Platform.ILogger, ToolUp.Facts.IFactTableWriter) : ToolUp.Facts.IFactTableWriter
+ToolUp.Facts.ToleranceTriggerModule.malformed(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.ToleranceTrigger]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Facts.ToleranceTriggerModule.moveEntry(ToolUp.Facts.ToleranceMove) : System.String
+ToolUp.Facts.ToleranceTriggerModule.read(ToolUp.Facts.ToleranceTrigger, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact]) : ToolUp.Facts.ToleranceReading
+ToolUp.Facts.ToleranceTriggerModule.undeclared(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IFactTableRegistry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.ToleranceTrigger]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Facts.UndescribedDeclarations (class)
 ToolUp.Facts.UndescribedDeclarations..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String])
 ToolUp.Facts.UndescribedDeclarations.Metrics : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }

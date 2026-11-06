@@ -9,7 +9,7 @@ layers, companion slots and settings forge composes, registered as found on forg
 
 ## Which profile version this release satisfies
 
-**This release of forge satisfies `server-app-host` 7.2**, the version in `spec/composition-profile.md`, its
+**This release of forge satisfies `server-app-host` 7.3**, the version in `spec/composition-profile.md`, its
 registry and its fixture manifest. The profile is versioned with the surface it describes, so the version a forge
 release satisfies is the one in that release's own `spec/` folder. Pin a profile version, not a forge commit; a
 profile version moves only when its vocabulary does (§P1 of the profile).
@@ -21,7 +21,11 @@ is valid at 7.1 with the same verdict. What it asks of a composition, and of an 
 [`docs/migrations/1235-declared-content.md`](../migrations/1235-declared-content.md). 7.2 lets a client shell declare
 browser history (§P3.1, §P2.23): the optional `browserHistory` member, whose one token `hash` reduces to
 `ClientConfig.BrowserHistory = HashHistory`. It is additive too: a composition without the member encodes byte for byte
-as before, and an evaluator that reduces one with it writes the setting into the client entry it generates.
+as before, and an evaluator that reduces one with it writes the setting into the client entry it generates. 7.3 lets a
+grounded narrative be triggered by a fact moving beyond a tolerance (§P3.4, §P4.24): the optional `trigger` member,
+which reduces to `FactsCompose.withToleranceTriggers`. It is additive as well: a composition without the member encodes
+byte for byte as before. What it asks of a composition, and of an evaluator that reduces one:
+[`docs/migrations/1255-tolerance-trigger.md`](../migrations/1255-tolerance-trigger.md).
 
 ## How the check works
 
@@ -61,6 +65,9 @@ prefix must be the registry's, and the route by which a content security policy 
 **Browser history.** Each token of `clientShell.browserHistory` is bound to a case of the union behind
 `ClientConfig.BrowserHistory`, and the binding names the case an absent member means. Every case of that union must be
 one of the two, so a new mode fails the check until the profile registers it.
+
+**The tolerance trigger.** `groundedNarrative.trigger` is bound to the builder it reduces to, and the builder must
+resolve.
 
 So a forge change that adds a companion slot, a composition-mode setting or a mode value fails the check until the
 same change either registers it in the profile (a profile version event, §P7) or says in the binding why the profile
