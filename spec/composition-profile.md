@@ -1,6 +1,6 @@
 # forge composition profile — `server-app-host`
 
-**Profile version 7.2.** forge's evaluator profile of the **App-composition wire specification, format version 1**
+**Profile version 7.3.** forge's evaluator profile of the **App-composition wire specification, format version 1**
 (<https://github.com/Fuaran-Build/fuaran-app-composition-specification>, cited throughout as *core*). Sections §P1–§P8 are **normative** within this profile. §P0 and Appendix P-A
 are not.
 
@@ -47,7 +47,7 @@ Each shape this profile fills in is the core's, cited by its section: the root (
 | | |
 |---|---|
 | Profile identifier | `server-app-host` |
-| Profile version | 7.2 |
+| Profile version | 7.3 |
 | Profile kind | vocabulary (core §8.6) |
 | Core | App-composition wire specification, format version 1 — <https://github.com/Fuaran-Build/fuaran-app-composition-specification> |
 | Core version | 1 |
@@ -389,6 +389,15 @@ record. 7.2 gives `clientShell` the OPTIONAL `browserHistory` member (§P3.1), w
 one token `hash`. No composition rule is added: a token outside the vocabulary is `token-unregistered`, and "off" has
 one spelling, the absent member. Every 7.1 composition carries no `browserHistory`, so it encodes byte for byte as
 before and is valid at 7.2 with the same verdict.
+
+**7.2 → 7.3 lets a grounded narrative be triggered by a fact moving beyond a tolerance, additively.** Until 7.3 a
+composition could say that a run reacts to a metric's facts changing, to a table's commit or to a schedule, and could
+not say "write this when the figure moves further than this": a narrative that is news only past a tolerance was
+enqueued by module code the composition's record never showed. 7.3 gives `groundedNarrative` the OPTIONAL `trigger`
+member (§P3.4), a standing question naming a fact table, a metric, optionally the subjects, a comparison and a
+tolerance, each held to its grammar. No refusal class is added: §P4.24 widens, so a `trigger` written wrongly or naming
+a table or metric its composition does not declare is `narrative-malformed`. Every 7.2 composition carries no
+`trigger`, so it encodes byte for byte as before and meets the widened rule vacuously.
 
 ## §P2. Token vocabularies
 
@@ -1052,9 +1061,20 @@ reader from an application user:
 | `page` | string | OPTIONAL |
 | `cadence` | string | OPTIONAL; carried exactly when `runsAs` is (6.3, §P4.24) |
 | `runsAs` | string | OPTIONAL; carried exactly when `cadence` is (6.3, §P4.24) |
+| `trigger` | trigger object | OPTIONAL (7.3); absent when no tolerance enqueues the run |
 
 A section object is `{ "id": string, "heading": string, "guidance": string }`, all three REQUIRED, in
 that order.
+
+A trigger object, its members in this order:
+
+| Member | Type | Presence |
+|---|---|---|
+| `table` | string | REQUIRED; the `id` of a declared fact table (§P4.24) |
+| `metric` | string | REQUIRED; a metric that table carries as a scalar (§P4.24) |
+| `subjects` | array of string | OPTIONAL; absent for every subject of the table, never empty |
+| `comparison` | string | REQUIRED; `previousDelivery`, or `daysBefore:` and a day count |
+| `tolerance` | string | REQUIRED; `absolute:` or `relative:` and a decimal |
 
 A **grounded narrative run** the composition registers: a report a model writes from the facts the
 host holds, published only if every numeric claim in it is a reference to a current fact that the
@@ -1081,6 +1101,22 @@ surface may disclose. The node's `id` is the run's stable key. Its one admissibl
   no request whose scope it could inherit, so a cadence without a principal names no scope to run in, and a
   principal without a cadence names nothing to run. A cadence is a trigger beside `dependsOnMetrics` and
   `onCommit`, never instead of them: a run may be scheduled and triggered by a change at once.
+- `trigger`, when present, is a standing question a host asks when a unit of work moves `table` (7.3): whether
+  `metric`, in the newest period the table holds a fact of it for, has moved beyond `tolerance` against `comparison`,
+  for any subject `subjects` selects. If so the host enqueues the run, under the scope that unit of work resolved, naming
+  the subjects that moved; if not, it enqueues nothing and records no refusal. It is a trigger beside the others, never
+  instead of them. Its grammar:
+
+  - `comparison` is `previousDelivery`, the latest earlier period the table holds any fact of the metric for, or
+    `daysBefore:<n>`, the period exactly `n` days before the newest, `n` a whole number from 1 to 3660 with no leading
+    zero. When the table holds no such period there is nothing to compare, and nothing is enqueued.
+  - `tolerance` is `absolute:<d>`, a move's size in the metric's own unit, or `relative:<d>`, that size over the
+    magnitude of the compared figure, so `relative:0.1` is ten per cent. `<d>` is a non-negative decimal: digits with no
+    leading zero but a lone `0`, optionally a point and more digits. A move is beyond the tolerance only when strictly
+    greater, so `absolute:0` admits any move. Under `relative`, any move from a compared figure of zero is beyond the
+    tolerance, and zero to zero is no move.
+  - `subjects` are subject paths, each level joined by `>`. No entry is blank, and none appears twice. A subject
+    with no fact at either period, or with a recorded absence at either, has not moved: an absence is never a zero.
 - `allowsConjecture`, when `"true"`, permits the run to state a hypothesis the facts do not establish (6.7). A host
   publishes such a statement only marked as a conjecture, distinct from the narrative's grounded prose, and the mark
   does not relax the publication check: a conjecture carries no number, and every number the narrative states
@@ -1095,7 +1131,7 @@ surface may disclose. The node's `id` is the run's stable key. Its one admissibl
   absence, so it re-encodes without the member. Any other spelling, a JSON literal among them, is refused as
   `boolean-spelling-invalid` (core §4.5).
 
-Neither `dependsOnMetrics` nor `onCommit` narrows what the run READS. The model reads every fact its
+None of `dependsOnMetrics`, `onCommit` and `trigger` narrows what the run READS. The model reads every fact its
 scope holds through the host's fact-reading tools, under each fact's disclosure stance; a member that
 claimed a narrower read would claim a restriction this profile cannot oblige a host to enforce.
 
@@ -1704,8 +1740,11 @@ give it two latest narratives.
 
 A `groundedNarrative` has a non-empty `displayName`, `principal`, `title` and `prompt`; at least one
 section; a non-empty `id` and `heading` on every section, and no section `id` twice; no empty tag; no
-entry twice in `dependsOnMetrics` or `onCommit`; and `cadence` and `runsAs` both present or both absent (6.3,
-§P3.4).
+entry twice in `dependsOnMetrics` or `onCommit`; `cadence` and `runsAs` both present or both absent (6.3, §P3.4); and,
+when `trigger` is present (7.3), each of its members in §P3.4's grammar, its `table` the `id` of a fact table some
+`moduleRef` declares, and its `metric` one of that table's `metrics`, carried by a column whose `shape`, where the table
+declares a `definition`, is `scalar`. A question about a table that is not there, or a figure that cannot be compared,
+never fires, and a reader of the composition would believe it could.
 
 ### §P4.25 A funding composes over model inference — `ai-funding-tier-absent`
 

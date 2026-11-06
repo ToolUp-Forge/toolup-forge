@@ -283,6 +283,33 @@ type internal FactQuestionCompilerGuard(services: IServiceCollection) =
                         "The fact tier is composed but its answer planner has no question compiler, so fact clause planning (the push door: facts placed in the prompt ahead of retrieved passages) refuses every question and never pushes a fact; only the fact tools reach the store. Remedy: compose the AI tier (the planner then compiles through its IAIProviderFactory), register an IAIProvider, or supply a compiler with FactsCompose.withQuestionCompiler. To leave the push door off on purpose, compose FactsCompose.withQuestionCompiler AnswerPlanner.noQuestionCompiler."
         }
 
+/// Refuses to start a composition whose tolerance triggers name a table or metric
+/// no module declares. It reads the registry when it runs, because a registration
+/// runs before the modules' declarations are folded into one.
+type internal ToleranceTriggerGuard(triggers: ToleranceTrigger list, services: IServiceCollection) =
+    interface ConfigValidation.IConfigValidator with
+        member _.Name = "fact-tolerance-triggers"
+        member _.Timeout = ConfigValidation.IConfigValidator.defaultTimeout
+
+        member _.Validate() = async {
+            let tables =
+                services
+                |> Seq.filter (fun d -> d.ServiceType = typeof<Grounding.IFactTableRegistry> && not d.IsKeyedService)
+                |> Seq.choose (fun d ->
+                    match d.ImplementationInstance with
+                    | :? Grounding.IFactTableRegistry as registry -> Some registry
+                    | _ -> None)
+                |> Seq.tryLast
+
+            match ToleranceTrigger.undeclared tables triggers with
+            | [] -> return ConfigValidation.ValidationResult.Ok
+            | problems ->
+                return
+                    ConfigValidation.ValidationResult.Error(
+                        "FactsCompose.withToleranceTriggers: " + String.concat "; " problems
+                    )
+        }
+
 /// Warns at startup when withholding surfaces are composed over a disclosure
 /// configuration that cannot withhold at them (`DisclosureReachFinding`). A
 /// report, never a refusal: a plain configuration is a legitimate choice.
@@ -1679,6 +1706,53 @@ module FactsCompose =
                                 (sp.GetRequiredService<ILogger>())
                                 (captured.Resolve sp))
                     ))
+
+    /// **Adds** tolerance triggers: the composed `IFactTableWriter`, decorated so a
+    /// unit of work that moved a trigger's table asks whether its metric moved beyond
+    /// the tolerance, and enqueues the run through `GroundedNarrativeTrigger` when any
+    /// selected subject did. The firing rule is `ToleranceTrigger`'s. A trigger written
+    /// wrongly is refused here; one naming a table or metric no module declares is
+    /// refused by the compose-time preflight, once every module has declared its
+    /// tables. Compose it after `withFactTableWriter`, whose registration it decorates;
+    /// before it, the composition is refused naming the order. Under
+    /// `FeatureMode.Disabled` the app is unchanged.
+    let withToleranceTriggers (triggers: ToleranceTrigger list) (app: ServerApp) : ServerApp =
+        match app.Config.Stores.FactStore with
+        | FeatureMode.Disabled -> app
+        | FeatureMode.Enabled ->
+            match ToleranceTrigger.malformed triggers with
+            | problem :: _ ->
+                ServiceComposition.refuse (
+                    CompositionRefusal.InvalidDeclaration("FactsCompose.withToleranceTriggers", problem)
+                )
+            | [] ->
+                app
+                |> contribute (fun services ->
+                    match ServiceComposition.captureDescriptor<IFactTableWriter> services with
+                    | None ->
+                        ServiceComposition.refuse (
+                            CompositionRefusal.InvalidDeclaration(
+                                "FactsCompose.withToleranceTriggers",
+                                "no IFactTableWriter is registered to decorate; compose it after FactsCompose.withFactTableWriter"
+                            )
+                        )
+                    | Some captured ->
+                        services.AddSingleton<ConfigValidation.IConfigValidator>(
+                            ToleranceTriggerGuard(triggers, services) :> ConfigValidation.IConfigValidator
+                        )
+                        |> ignore
+
+                        services.AddSingleton<IFactTableWriter>(
+                            Func<IServiceProvider, IFactTableWriter>(fun sp ->
+                                ToleranceTrigger.decorate
+                                    triggers
+                                    (fun () -> tryService<Grounding.IFactTableRegistry> sp)
+                                    (fun () -> tryService<IFactStore> sp)
+                                    (fun () -> tryService<IJobScheduler> sp)
+                                    (fun () -> tryService<Microsoft.AspNetCore.Http.IHttpContextAccessor> sp)
+                                    (sp.GetRequiredService<ILogger>())
+                                    (captured.Resolve sp))
+                        ))
 
     // ─── Phase 986 — the fact tier as one composition, and its compiler ─
 

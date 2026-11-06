@@ -390,15 +390,28 @@ module GroundedNarrativeTrigger =
     [<Literal>]
     let TriggerName = "data-arrival"
 
+    /// The `GroundedNarrativeRequest.Trigger` a run a tolerance enqueued records.
+    [<Literal>]
+    let ToleranceTriggerName = "tolerance"
+
+    /// The prefix of a change-set entry naming a move beyond a tolerance.
+    [<Literal>]
+    let MovePrefix = "move:"
+
     /// The trigger a run of this handler records, named for what enqueued
     /// its job: a job on a cron trigger is a cadence's (`"cadence"`, however
-    /// this attempt was fired — a tick, a retry, or an operator's run-now),
-    /// and every other job keeps the data-arrival name it always recorded.
-    let private triggerNameOf (job: Trigger) : string =
+    /// this attempt was fired — a tick, a retry, or an operator's run-now), a
+    /// job whose change names a move is a tolerance's, and every other job
+    /// keeps the data-arrival name it always recorded.
+    let private triggerNameOf (job: Trigger) (change: string list) : string =
         match job with
         | Trigger.CronTrigger _ -> "cadence"
         | Trigger.OnEvent _
-        | Trigger.Manual -> TriggerName
+        | Trigger.Manual ->
+            if change |> List.exists _.StartsWith(MovePrefix, StringComparison.Ordinal) then
+                ToleranceTriggerName
+            else
+                TriggerName
 
     /// What a narrative job carries: the run, and the invalidation set that
     /// caused it (so the job can tell whether a recompute is still pending).
@@ -647,7 +660,7 @@ module GroundedNarrativeTrigger =
                                     RunKey = definition.Key
                                     Scope = ctx.Scope
                                     Access = None
-                                    Trigger = triggerNameOf ctx.Trigger
+                                    Trigger = triggerNameOf ctx.Trigger payload.InvalidatedInputs
                                 }
 
                             return GroundedNarrativeOutcome.toJobResult outcome

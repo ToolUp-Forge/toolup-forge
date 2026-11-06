@@ -482,6 +482,7 @@ it was told.
 | Standing report | the scope the deployment's resolver resolves the subscription's declared principal to, at startup |
 | Data arrival | the scope of the request whose write invalidated the facts |
 | Once per delivery | the scope the platform resolved for the delivery: its request's, or its job's |
+| Beyond a tolerance | the scope the platform resolved for the unit of work: its request's, or its job's |
 
 **What a run records as its trigger.** Every run's audit row and last-run view carry the
 `GroundedNarrativeRequest.Trigger` that started it, named for what enqueued the work:
@@ -490,13 +491,14 @@ it was told.
 |---|---|
 | `report-subscription` | a scheduled or standing report (`GroundedNarrativeProducer.TriggerName`) |
 | `data-arrival` | a change that invalidated the run's facts (`GroundedNarrativeTrigger.TriggerName`) |
+| `tolerance` | a figure that moved beyond a tolerance (`GroundedNarrativeTrigger.ToleranceTriggerName`) |
 | `cadence` | a cron job on the grounded-run handler (`GroundedNarrativeTrigger.HandlerName`) that a deployment registers |
 | `admin-regenerate` | an administrator's regeneration (`NarrativePromptHandler`) |
 
 The grounded-run handler reads the name from the job it runs: a job on a cron trigger records
-`cadence` however the attempt was fired (a tick, a retry, an operator's run-now from the jobs admin),
-and every other job records `data-arrival`, as it always has (Phase 1045; until then a cron job's runs
-also recorded `data-arrival`).
+`cadence` however the attempt was fired (a tick, a retry, an operator's run-now from the jobs admin), a
+job whose change names a move records `tolerance`, and every other job records `data-arrival`, as it
+always has (Phase 1045; until then a cron job's runs also recorded `data-arrival`).
 
 **Scheduled report.** Register a producer over the run; the narrative fills a template placeholder
 as a `NarrativeValue`, so the render goes through the ordinary pipeline and its export door. A
@@ -687,6 +689,74 @@ They share a signal. Where a unit is a platform delivery, the trigger holds its 
 fires under the scope the job carried, and a request where a hook mounted the seam. Otherwise it is the request
 itself, and fires on the response's completion under the request's resolved scope. A commit off both fires nothing,
 and the log says why.
+
+**Beyond a tolerance.** A report that is news only when a figure has moved far enough is a standing question.
+`FactsCompose.withToleranceTriggers` takes it as data, decorates the composed `IFactTableWriter`, and asks it when
+a unit of work that moved the table completes. Compose it after `withFactTableWriter`.
+
+```fsharp skip=fragment
+app
+|> FactsCompose.withFactTableWriter
+|> FactsCompose.withToleranceTriggers [
+    {
+        RunKey = "reading-change"
+        Table = "sensor.reading"
+        Metric = "temperature"
+        Subjects = None
+        Comparison = ToleranceComparison.PreviousDelivery
+        Tolerance = Tolerance.Relative 0.10m
+    }
+]
+```
+
+The newest period is the newest the table holds a fact of the metric for, over any subject. It is compared with:
+
+| `Comparison` | The period compared against |
+|---|---|
+| `PreviousDelivery` | the latest earlier period the table holds any fact of the metric for |
+| `DaysBefore n` | exactly `n` days before the newest, from 1 to 3660 |
+
+These are the cases and the bound of a presented comparison's `PresentationCompareTo`. The fact tier sits below the
+presentation tier and cannot name its type, so a test holds the two together.
+
+A figure moves beyond a tolerance only when strictly greater, so zero admits any move:
+
+| `Tolerance` | The move's size |
+|---|---|
+| `Absolute limit` | the difference, in the metric's own unit |
+| `Relative limit` | the difference over the compared figure's magnitude; `0.10m` is ten per cent |
+
+**Under a relative tolerance a compared figure of zero is defined, not a division.** Any move from zero is beyond the
+tolerance, whatever its limit, and zero to zero is no move.
+
+| The unit of work | What happens |
+|---|---|
+| A selected subject moved beyond the tolerance | the run is enqueued once, naming every subject that moved |
+| Every move is within the tolerance | nothing, and nothing is logged: it is not a refusal |
+| A first delivery, or no period `n` days back | nothing, and an Info line says there was nothing to compare |
+| A subject with no fact at either period | that subject did not move |
+| A recorded gap (`Absent`) at either period | that subject did not move: a gap is never a zero |
+| The same figures again, whichever facts state them | nothing, because the run's newest job already says so |
+| A correction of the newest figure | enqueued again, even back to a figure an earlier job named |
+| A commit that changed nothing | not asked |
+
+Several triggers may name one run. It is enqueued at most once per unit of work, however many tables they watch.
+
+The job's change set names each move as `move:<table>:<metric>:<subject>:<from fact>-><to fact>`, with the period it
+was observed at and a digest of the figures. It carries no figure itself, because a job's payload is not a disclosure
+surface. The run reads its figures through the fact tools, under each fact's disclosure stance, as every run does. The
+change set is on the job for an operator and is not put in the model's prompt, so a prompt that should cover only what
+moved asks the model to compare the same figures.
+
+A trigger written wrongly is refused at the call. A table no module declares, a metric the table does not carry, or
+a column that is not `Scalar` is refused by the `fact-tolerance-triggers` preflight at startup. Every other refusal on
+the path is logged at Warning with the run key and the table, and none reaches the commit: no scheduler composed, a
+schedule or trigger refused, a fault reading the facts, and a commit with no resolved scope to carry the run. A fault
+is never read as nothing having moved.
+
+It is not raised through `IFactTableChangeSignal`. A listener on that signal hears table ids in a scope it already
+named, on every replica the channel reaches, and a run needs the resolved scope of the one write. The composed member
+is `groundedNarrative.trigger` in the [composition profile](composition-profile.md).
 
 **The publication's reading principal.** A publication read re-checks disclosure in the publishing scope, so it
 needs a principal to resolve that scope. A read a deployment writes itself binds one per publishing scope, naming
