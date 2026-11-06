@@ -164,6 +164,7 @@ type PageContent =
 /// `Icon.ofImport`). The render path inlines the SVG component
 /// directly so `currentColor` cascades from the parent's CSS color.
 type PageConfig = {
+    /// The page's route. Starts with `/` on any module with more than one page.
     Route: string
     Title: string
     Icon: ReactElement
@@ -2579,6 +2580,20 @@ module ClientModule =
             failwithf
                 "ClientModule.register: module '%s' has neither View nor PageViews. Single-page modules must set View; multi-page modules must call withPages."
                 m.Definition.Id
+
+        // A sidebar entry for a page is "{moduleId}{route}" and the shell splits it
+        // at the first `/`, so a page of a multi-page module without one can never
+        // be opened: the click resolves to a module that does not exist.
+        match m.Definition.Pages with
+        | []
+        | [ _ ] -> ()
+        | pages ->
+            for page in pages do
+                if not (page.Route.StartsWith "/") then
+                    failwithf
+                        "ClientModule.register: module '%s' has a page route '%s' with no leading '/'. Every page of a multi-page module needs one, or its sidebar entry cannot open it."
+                        m.Definition.Id
+                        page.Route
 
         {
             Definition = m.Definition

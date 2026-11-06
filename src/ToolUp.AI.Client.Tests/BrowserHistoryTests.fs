@@ -241,6 +241,61 @@ type private Outer = Wrap of Client.Msg
 
 let tests =
     testList "Browser history (Phase 1240)" [
+        testList "multi-page routes" [
+            testCase "a Composition page opens from its sidebar entry" (fun () ->
+                let inspector = CompositionInspectorUI.create None
+                let modules = [ singlePage "home" (ResizeArray()); inspector ]
+                let model = boot ClientConfig.defaults modules
+
+                for page in inspector.Definition.Pages do
+                    let sidebarId = $"{inspector.Definition.Id}{page.Route}"
+
+                    let next, _ =
+                        Client.update ClientConfig.defaults bus modules (Client.ModuleSelected sidebarId) model
+
+                    Expect.equal next.ActiveModuleId inspector.Definition.Id $"{page.Title}: the module opens"
+                    Expect.equal next.ActivePageRoute (Some page.Route) $"{page.Title}: on the page clicked"
+
+                    Expect.isTrue
+                        (inspector.PageViews.Value.ContainsKey page.Route)
+                        $"{page.Title}: and the route has a view")
+
+            testCase "a route the sidebar could not address is refused at registration" (fun () ->
+                let refused =
+                    try
+                        ClientModule.create {
+                            Init = fun () -> 0, Cmd.none
+                            Update = fun (_: unit) m -> m, Cmd.none
+                            Name = "unaddressable"
+                            Icon = Html.none
+                        }
+                        |> ClientModule.withPages [ page "/first"; page "second" ]
+                        |> ClientModule.withId "unaddressable"
+                        |> ClientModule.register
+                        |> ignore
+
+                        None
+                    with e ->
+                        Some e.Message
+
+                Expect.isFalse refused.IsNone "registration fails"
+                Expect.isTrue (refused.Value.Contains "second") "and names the route")
+
+            testCase "a lone page may keep a bare route, which nothing has to address" (fun () ->
+                let registered =
+                    ClientModule.create {
+                        Init = fun () -> 0, Cmd.none
+                        Update = fun (_: unit) m -> m, Cmd.none
+                        Name = "lone"
+                        Icon = Html.none
+                    }
+                    |> ClientModule.withPages [ page "only" ]
+                    |> ClientModule.withId "lone"
+                    |> ClientModule.register
+
+                Expect.isTrue registered.PageViews.IsSome "registers as before")
+        ]
+
         testList "the URL" [
             testCase "a fragment round-trips a view's sidebar id"
             <| fun () ->

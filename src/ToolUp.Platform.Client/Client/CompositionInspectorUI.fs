@@ -505,7 +505,8 @@ let private provenanceBody (msgs: CompositionInspectorMessages) (model: Model) =
 
 let private page (panel: InspectorPanel) (render: CompositionInspectorMessages -> Model -> ReactElement) =
     let config: PageConfig = {
-        Route = InspectorPanel.slug panel
+        // The shell splits a sidebar id at its first `/`, so the route carries it.
+        Route = "/" + InspectorPanel.slug panel
         // The catalog is only readable from a hook site, so the sidebar
         // title falls back to the panel's slug-derived English. The page
         // BODY renders the localised title; a `PageConfig` is built
