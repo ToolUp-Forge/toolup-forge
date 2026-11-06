@@ -1,6 +1,6 @@
 # forge composition profile
 
-This folder publishes **forge's composition profile**, `server-app-host` 7.1: the vocabulary a composition carries when
+This folder publishes **forge's composition profile**, `server-app-host` 7.2: the vocabulary a composition carries when
 forge is the evaluator it reduces to. It is a profile of the
 [App-composition wire specification](https://github.com/Fuaran-Build/fuaran-app-composition-specification), format
 version 1, which registers it in its §8.5 and names this folder as its home. forge is the evaluator Fuaran app
@@ -30,6 +30,7 @@ conformance statement is [`docs/platform/composition-profile.md`](../docs/platfo
 The profile version moves independently of forge's package versions and of the specification's format version: it
 moves when the vocabulary moves (§P1). Pin a profile version, not a forge commit. 7.0 is the version at which the
 profile moved here; nothing normative changed with the move. 7.1 added declared content on pages and layouts.
+7.2 added browser history on the client shell.
 
 ## Licence
 
