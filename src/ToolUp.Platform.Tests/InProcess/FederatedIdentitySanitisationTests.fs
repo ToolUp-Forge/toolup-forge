@@ -166,6 +166,7 @@ let private claimBoundaryAccepts (claimName: string) (id: string) =
                 AllowedTenants = []
                 RequiredRoles = []
                 ApiRoleGrants = Set.empty
+                AdmitTeamMembers = false
                 PublicationReaders = []
             }
         else
@@ -178,6 +179,7 @@ let private claimBoundaryAccepts (claimName: string) (id: string) =
                 AllowedTenants = []
                 RequiredRoles = []
                 ApiRoleGrants = Set.empty
+                AdmitTeamMembers = false
                 PublicationReaders = []
             }
 
@@ -329,6 +331,7 @@ let parityTests =
                                 AllowedTenants = []
                                 RequiredRoles = []
                                 ApiRoleGrants = Set.empty
+                                AdmitTeamMembers = false
                                 PublicationReaders = []
                             }
                             [ "oid", id ]
@@ -459,6 +462,7 @@ let negativeControlTests =
                 AllowedTenants = []
                 RequiredRoles = []
                 ApiRoleGrants = Set.empty
+                AdmitTeamMembers = false
                 PublicationReaders = []
             }
 
@@ -525,6 +529,7 @@ let boundaryDetailTests =
                         AllowedTenants = []
                         RequiredRoles = []
                         ApiRoleGrants = Set.empty
+                        AdmitTeamMembers = false
                         PublicationReaders = []
                     }
                     [ "oid", "../../etc"; "sub", "well-formed-subject" ]
@@ -551,6 +556,7 @@ let boundaryDetailTests =
                         AllowedTenants = []
                         RequiredRoles = []
                         ApiRoleGrants = Set.empty
+                        AdmitTeamMembers = false
                         PublicationReaders = []
                     }
                     [ "oid", "user-1" ]

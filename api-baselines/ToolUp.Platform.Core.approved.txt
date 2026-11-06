@@ -2615,7 +2615,8 @@ ToolUp.Platform.ClaimBearerConfig..ctor(System.Int32, Microsoft.FSharp.Core.FSha
 ToolUp.Platform.ClaimBearerConfig.DefaultLifetimeDays : System.Int32 { get }
 ToolUp.Platform.ClaimBearerConfig.DefaultUseLimit : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
 ToolUp.Platform.ClaimMapping (class)
-ToolUp.Platform.ClaimMapping..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpSet`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Platform.ClaimMapping..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpSet`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean)
+ToolUp.Platform.ClaimMapping.AdmitTeamMembers : System.Boolean { get }
 ToolUp.Platform.ClaimMapping.AllowedTenants : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.ClaimMapping.ApiRoleGrants : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
 ToolUp.Platform.ClaimMapping.GroupAliases : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
@@ -2630,6 +2631,7 @@ ToolUp.Platform.ClaimMappingModule.directoryRoles : ToolUp.Platform.ClaimMapping
 ToolUp.Platform.ClaimMappingModule.isEmpty(ToolUp.Platform.ClaimMapping) : System.Boolean
 ToolUp.Platform.ClaimMappingModule.none : ToolUp.Platform.ClaimMapping { get }
 ToolUp.Platform.ClaimMappingModule.reservedApiRoleGrants : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
+ToolUp.Platform.ClaimMappingModule.validateAdmitTeamMembers(ToolUp.Platform.ClaimMapping) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]
 ToolUp.Platform.ClaimMappingModule.validateApiRoleGrants(Microsoft.FSharp.Collections.FSharpSet`1[System.String]) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]
 ToolUp.Platform.ClaimMappingModule.validatePublicationReaders(ToolUp.Platform.ClaimMapping) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]
 ToolUp.Platform.ClassificationLevel (class)
@@ -3298,6 +3300,7 @@ ToolUp.Platform.ConfigKeys+Names.notificationChannel : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.notifyInviterOnInviteExpiry : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.oauthRedirectBase : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.oauthRefresher : System.String (literal)
+ToolUp.Platform.ConfigKeys+Names.oidcAdmitTeamMembers : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.oidcApiRoleGrants : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.oidcAudience : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.oidcGroupsClaim : System.String (literal)

@@ -352,6 +352,54 @@ let internal recordPublicationReaderSignIn
     with ex ->
         warn "reader sign-in audit" ex
 
+/// Claim a signed-in member's pending team invite, once per session window, BEFORE
+/// its subject is resolved. Under team-only surfaces a member with no team has no
+/// subject until the invite makes it one, so a later claim would never be reached.
+/// A publication reader is never made an app member here.
+let private claimPendingInvite (ctx: HttpContext) (user: AuthenticatedUser) : System.Threading.Tasks.Task<unit> = task {
+    if
+        not (AuthenticatedUser.isAnonymous user)
+        && user.Admission = PrincipalAdmission.Member
+    then
+        match
+            ctx.RequestServices.GetService(typeof<IMemoryCache>),
+            ctx.RequestServices.GetService(typeof<IAuditLog>),
+            user.Email,
+            ctx.RequestServices.GetService(typeof<IPendingInviteStore>),
+            ctx.RequestServices.GetService(typeof<ITeamStore>)
+        with
+        | (:? IMemoryCache as cache),
+          (:? IAuditLog as auditLog),
+          Some _,
+          (:? IPendingInviteStore as pendingStore),
+          (:? ITeamStore as teamStore) ->
+            let key = "pending-invite:check:" + user.UserId
+
+            if not (fst (cache.TryGetValue(box key))) then
+                let options = MemoryCacheEntryOptions()
+                options.SlidingExpiration <- Nullable(TimeSpan.FromMinutes 20.0)
+                cache.Set(key, true, options) |> ignore
+
+                try
+                    let! _ =
+                        ToolUp.Platform.Scope.Teams.TeamInvitationHandler.tryConsumePendingForUser
+                            pendingStore
+                            teamStore
+                            auditLog
+                            user
+                        |> Async.StartAsTask
+
+                    ()
+                with ex ->
+                    Background.writeFailureWarner
+                        "ScopeResolutionMiddleware"
+                        (Background.requestLogger ctx)
+                        ctx
+                        "invite consumption"
+                        ex
+        | _ -> ()
+}
+
 /// ASP.NET Core middleware that resolves the per-request `Subject`,
 /// `StorageScope`, and authenticated user, stashing all three on
 /// `HttpContext.Items`. See the module preamble for the full key
@@ -519,6 +567,8 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                     ctx.Items["ToolUp.User"] <- box user
                     ctx.Items["ToolUp.UserId"] <- box user.UserId
 
+                    do! claimPendingInvite ctx user
+
                     let! resolvedByResolver = runAsync (resolver.Resolve request)
 
                     // Phase 1002 — a publication reader's subject does not
@@ -685,52 +735,6 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                                         |> Background.startAudit warn "login audit"
                                     with ex ->
                                         warn "login audit" ex
-
-                                    // Phase 3d — pending-invite-by-email
-                                    // consumption. Fires on the same
-                                    // first-request-per-session trigger
-                                    // as the login audit (separate cache
-                                    // key so the audit pathway's own
-                                    // cache hit doesn't suppress this).
-                                    // Distinct from the login audit
-                                    // because: (a) it needs IBlobStorage
-                                    // + ITeamStore which the audit
-                                    // pathway doesn't, and (b) on success
-                                    // it mutates state (AddMember),
-                                    // making the once-per-session
-                                    // semantics load-bearing rather than
-                                    // a cost-saving optimisation.
-                                    let pendingCacheKey = "pending-invite:check:" + user.UserId
-
-                                    let mutable pendingExisting = Unchecked.defaultof<obj>
-
-                                    // Phase 996 — a publication reader is never made an app
-                                    // member: its sign-in consumes no pending invite.
-                                    if
-                                        user.Admission = PrincipalAdmission.Member
-                                        && not (cache.TryGetValue(pendingCacheKey, &pendingExisting))
-                                    then
-                                        let pendingOpts = MemoryCacheEntryOptions()
-                                        pendingOpts.SlidingExpiration <- Nullable(TimeSpan.FromMinutes 20.0)
-                                        cache.Set(pendingCacheKey, true, pendingOpts) |> ignore
-
-                                        match
-                                            user.Email,
-                                            ctx.RequestServices.GetService(typeof<IPendingInviteStore>),
-                                            ctx.RequestServices.GetService(typeof<ITeamStore>)
-                                        with
-                                        | Some _, (:? IPendingInviteStore as pendingStore), (:? ITeamStore as teamStore) ->
-                                            try
-                                                ToolUp.Platform.Scope.Teams.TeamInvitationHandler.tryConsumePendingForUser
-                                                    pendingStore
-                                                    teamStore
-                                                    auditLog
-                                                    user
-                                                |> Async.Ignore
-                                                |> Background.startAudit warn "invite consumption"
-                                            with ex ->
-                                                warn "invite consumption" ex
-                                        | _ -> ()
                             | _ -> ()
 
                         // Team scopes — load the user's effective

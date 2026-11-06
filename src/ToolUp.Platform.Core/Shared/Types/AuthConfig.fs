@@ -232,6 +232,13 @@ type ClaimMapping = {
     /// (`ClaimMapping.validatePublicationReaders`; the OIDC provider refuses
     /// to build over it).
     PublicationReaders: string list
+    /// Whether a team membership, or a live pending invite to this principal's email,
+    /// also makes it an app member, so that adding someone in Team Management is
+    /// enough for them to sign in. `false` by default: the directory alone decides.
+    /// It wins over a publication-reader role. The tenant rule still binds, and it
+    /// requires a non-empty `AllowedTenants` (`ClaimMapping.validateAdmitTeamMembers`),
+    /// because an invite is matched on an email claim the issuer asserts.
+    AdmitTeamMembers: bool
 }
 
 module ClaimMapping =
@@ -247,6 +254,7 @@ module ClaimMapping =
         RequiredRoles = []
         ApiRoleGrants = Set.empty
         PublicationReaders = []
+        AdmitTeamMembers = false
     }
 
     /// Phase 987 — the conventional directory-role mapping: `roles` and
@@ -273,6 +281,7 @@ module ClaimMapping =
         && mapping.AllowedTenants.IsEmpty
         && mapping.RequiredRoles.IsEmpty
         && mapping.PublicationReaders.IsEmpty
+        && not mapping.AdmitTeamMembers
 
     /// Phase 993 — the role names an `ApiRoleGrants` set may not carry, and
     /// why: `PlatformAdmin` is resolved server-side (`IPlatformAdminStore`),
@@ -314,6 +323,14 @@ module ClaimMapping =
     /// member and nothing would confine it — the build is refused rather
     /// than silently admitting readers as members. The OIDC provider calls
     /// this when it is BUILT.
+    /// `AdmitTeamMembers` over no tenant rule would admit, from any tenant the issuer
+    /// serves, whoever presents an email an invite was issued to.
+    let validateAdmitTeamMembers (mapping: ClaimMapping) : Result<unit, string> =
+        if mapping.AdmitTeamMembers && mapping.AllowedTenants.IsEmpty then
+            Error "AdmitTeamMembers requires a non-empty AllowedTenants"
+        else
+            Ok()
+
     let validatePublicationReaders (mapping: ClaimMapping) : Result<unit, string> =
         let malformed (role: string) =
             System.String.IsNullOrWhiteSpace role

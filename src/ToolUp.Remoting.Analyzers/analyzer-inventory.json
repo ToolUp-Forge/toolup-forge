@@ -97,7 +97,7 @@
         "src/ToolUp.Platform.Server/Server/MaintenanceApiHandler.fs": 2,
         "src/ToolUp.Platform.Server/Server/MetricsEndpoint.fs": 1,
         "src/ToolUp.Platform.Server/Server/MetricsHistoryFlusher.fs": 2,
-        "src/ToolUp.Platform.Server/Server/Middleware.fs": 7,
+        "src/ToolUp.Platform.Server/Server/Middleware.fs": 11,
         "src/ToolUp.Platform.Server/Server/MigrationApiHandler.fs": 5,
         "src/ToolUp.Platform.Server/Server/ModelExecutionApi.fs": 1,
         "src/ToolUp.Platform.Server/Server/ModuleVisibilityApiHandler.fs": 5,
@@ -151,7 +151,7 @@
       "rule": "TUA001",
       "reason": "First-party modules and companions resolving substrate per request: the hand-resolution census the seam-aware service provider governs at runtime. Recorded so a new site is a finding; each moves to a registration factory as its module adopts the seam.",
       "sites": {
-        "src/AuthProviders/Oidc/OidcAuthProvider.fs": 2,
+        "src/AuthProviders/Oidc/OidcAuthProvider.fs": 4,
         "src/AuthProviders/Oidc/OidcSsrSignIn.fs": 3,
         "src/AuthProviders/Passkey/PasskeyAuthProvider.fs": 1,
         "src/AuthProviders/Passkey/PasskeyHost.fs": 2,

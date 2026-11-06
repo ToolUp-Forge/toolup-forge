@@ -1594,6 +1594,7 @@ let private fromEnvTests =
                                 AllowedTenants = []
                                 RequiredRoles = []
                                 ApiRoleGrants = Set.empty
+                                AdmitTeamMembers = false
                                 PublicationReaders = []
                             })
                             "both variables reach AuthConfig.ClaimMapping")
@@ -1619,6 +1620,7 @@ let private fromEnvTests =
                                 AllowedTenants = []
                                 RequiredRoles = []
                                 ApiRoleGrants = Set.empty
+                                AdmitTeamMembers = false
                                 PublicationReaders = []
                             })
                             "a UserId-only mapping is a legitimate configuration")
@@ -1662,6 +1664,7 @@ let private fromEnvTests =
                                 AllowedTenants = []
                                 RequiredRoles = []
                                 ApiRoleGrants = Set.empty
+                                AdmitTeamMembers = false
                                 PublicationReaders = []
                             })
                             "surrounding whitespace in an env value never reaches the claim lookup")
@@ -1863,6 +1866,7 @@ module private ClaimMappingFixture =
         AllowedTenants = []
         RequiredRoles = []
         ApiRoleGrants = Set.empty
+        AdmitTeamMembers = false
         PublicationReaders = []
     }
 
@@ -1975,6 +1979,7 @@ let private oidcClaimMappingTests =
                         AllowedTenants = []
                         RequiredRoles = []
                         ApiRoleGrants = Set.empty
+                        AdmitTeamMembers = false
                         PublicationReaders = []
                     })
 
@@ -2014,6 +2019,7 @@ let private oidcClaimMappingTests =
                         AllowedTenants = []
                         RequiredRoles = []
                         ApiRoleGrants = Set.empty
+                        AdmitTeamMembers = false
                         PublicationReaders = []
                     })
 
@@ -2046,6 +2052,7 @@ let private oidcClaimMappingTests =
                         AllowedTenants = []
                         RequiredRoles = []
                         ApiRoleGrants = Set.empty
+                        AdmitTeamMembers = false
                         PublicationReaders = []
                     })
 
@@ -2084,6 +2091,7 @@ let private oidcClaimMappingTests =
                         AllowedTenants = []
                         RequiredRoles = []
                         ApiRoleGrants = Set.empty
+                        AdmitTeamMembers = false
                         PublicationReaders = []
                     })
 
@@ -2106,6 +2114,7 @@ let private oidcClaimMappingTests =
                 AllowedTenants = []
                 RequiredRoles = []
                 ApiRoleGrants = Set.empty
+                AdmitTeamMembers = false
                 PublicationReaders = []
             }
 
@@ -2145,6 +2154,7 @@ let private oidcClaimMappingTests =
                         AllowedTenants = []
                         RequiredRoles = []
                         ApiRoleGrants = Set.empty
+                        AdmitTeamMembers = false
                         PublicationReaders = []
                     }
                     [ "oid", "" ]
@@ -2176,6 +2186,7 @@ let private oidcClaimMappingTests =
                             AllowedTenants = []
                             RequiredRoles = []
                             ApiRoleGrants = Set.empty
+                            AdmitTeamMembers = false
                             PublicationReaders = []
                         }
                         [ "oid", value ]
@@ -2200,6 +2211,7 @@ let private oidcClaimMappingTests =
                             AllowedTenants = []
                             RequiredRoles = []
                             ApiRoleGrants = Set.empty
+                            AdmitTeamMembers = false
                             PublicationReaders = []
                         }
                         [ "oid", value; "tid", value ]
@@ -2299,6 +2311,7 @@ let private oidcClaimMappingTests =
                             AllowedTenants = []
                             RequiredRoles = []
                             ApiRoleGrants = Set.empty
+                            AdmitTeamMembers = false
                             PublicationReaders = []
                         }
                         claims
@@ -2329,6 +2342,7 @@ let private oidcClaimMappingTests =
                             AllowedTenants = []
                             RequiredRoles = []
                             ApiRoleGrants = Set.empty
+                            AdmitTeamMembers = false
                             PublicationReaders = []
                         }
                         [ "oid", value ]

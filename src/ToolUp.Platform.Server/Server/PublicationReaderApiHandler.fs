@@ -112,7 +112,13 @@ let publicationReaderApi (ctx: HttpContext) : IPublicationReaderApi =
                     let entry = trimmed entry
                     let! roles = declaredRoles ctx scope
 
-                    if not (List.contains entry.Role roles) then
+                    // Grants are read by the id the token resolves to. Where sign-in ids are not
+                    // addresses (the caller's is not), an address would never match anyone.
+                    if entry.UserId.Contains '@' && not (accessContext.UserId.Contains '@') then
+                        return
+                            Error
+                                $"'{entry.UserId}' is an email address, and this deployment identifies people by their sign-in user id. To admit them by email, invite them from Team Management."
+                    elif not (List.contains entry.Role roles) then
                         let declared = String.concat ", " roles
 
                         return

@@ -736,6 +736,40 @@ let private holdsReaderGrant (ctx: HttpContext) (userId: string) : Async<bool> =
     | _ -> return false
 }
 
+/// Whether this principal is in a team, or holds a live pending invite to its
+/// email. A store failure reads as neither: a membership that cannot be read admits
+/// nobody.
+let private holdsAppMembership (ctx: HttpContext) (user: AuthenticatedUser) : Async<bool> = async {
+    if isNull ctx || isNull ctx.RequestServices then
+        return false
+    else
+        try
+            let! inTeam = async {
+                match ctx.RequestServices.GetService(typeof<ToolUp.Platform.Config.TeamManagement.ITeamStore>) with
+                | :? ToolUp.Platform.Config.TeamManagement.ITeamStore as teams ->
+                    let! held = teams.GetTeamsForUser user.UserId
+                    return not (List.isEmpty held)
+                | _ -> return false
+            }
+
+            if inTeam then
+                return true
+            else
+                match user.Email, ctx.RequestServices.GetService(typeof<IPendingInviteStore>) with
+                | Some email, (:? IPendingInviteStore as invites) ->
+                    match! invites.ListAll() with
+                    | Ok pending ->
+                        return
+                            pending
+                            |> List.exists (fun (invited, entry) ->
+                                String.Equals(invited, email, StringComparison.OrdinalIgnoreCase)
+                                && entry.ExpiresAt > DateTime.UtcNow)
+                    | Error _ -> return false
+                | _ -> return false
+        with _ ->
+            return false
+}
+
 // ─── Validation pipeline ─────────────────────────────────────────────
 
 /// Full validation: extract → parse → resolve JWKS → verify signature
@@ -897,15 +931,37 @@ let private validate
                                                     // member rule refuses may still
                                                     // hold an in-platform reader grant.
                                                     let! admission = async {
-                                                        match applyAdmission mapping mapped with
-                                                        | Result.Error reason ->
-                                                            let! granted = holdsReaderGrant ctx mapped.UserId
+                                                        let! byDirectory = async {
+                                                            match applyAdmission mapping mapped with
+                                                            | Result.Error reason ->
+                                                                let! granted = holdsReaderGrant ctx mapped.UserId
 
-                                                            if granted then
-                                                                return applyAdmissionWithGrant true mapping mapped
+                                                                if granted then
+                                                                    return applyAdmissionWithGrant true mapping mapped
+                                                                else
+                                                                    return Result.Error reason
+                                                            | admitted -> return admitted
+                                                        }
+
+                                                        let isMember =
+                                                            match byDirectory with
+                                                            | Result.Ok admitted ->
+                                                                admitted.Admission = PrincipalAdmission.Member
+                                                            | Result.Error _ -> false
+
+                                                        if isMember || not mapping.AdmitTeamMembers then
+                                                            return byDirectory
+                                                        else
+                                                            let! member' = holdsAppMembership ctx mapped
+
+                                                            if member' then
+                                                                // With no member rule this is the tenant rule alone.
+                                                                return
+                                                                    applyAdmission
+                                                                        { mapping with RequiredRoles = [] }
+                                                                        mapped
                                                             else
-                                                                return Result.Error reason
-                                                        | admitted -> return admitted
+                                                                return byDirectory
                                                     }
 
                                                     match admission with
@@ -1040,6 +1096,10 @@ let private buildProvider
         // Phase 996 — a publication audience with no member rule would admit
         // every principal as an app user: refused at construction.
         match ClaimMapping.validatePublicationReaders mapping with
+        | Error reason -> invalidArg (nameof config) $"OidcAuthProvider ClaimMapping: {reason}."
+        | Ok() -> ()
+
+        match ClaimMapping.validateAdmitTeamMembers mapping with
         | Error reason -> invalidArg (nameof config) $"OidcAuthProvider ClaimMapping: {reason}."
         | Ok() -> ()
     | None -> ()

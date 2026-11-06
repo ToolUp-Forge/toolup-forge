@@ -508,6 +508,9 @@ module Names =
     let oidcApiRoleGrants = "TOOLUP_OIDC_API_ROLE_GRANTS"
 
     [<Literal>]
+    let oidcAdmitTeamMembers = "TOOLUP_OIDC_ADMIT_TEAM_MEMBERS"
+
+    [<Literal>]
     let sseAuth = "TOOLUP_SSE_AUTH"
 
     [<Literal>]
@@ -1354,6 +1357,15 @@ let keys: ConfigKey list = [
         Description =
             "Comma-separated allow-list of mapped directory roles (after group aliasing) that are ALSO granted as API roles, which [<RequiresRole>] gates read. Unset grants none: role mapping then governs page audiences only. A blank entry, an entry carrying whitespace, or PlatformAdmin (resolved server-side, never from a token) refuses startup."
         Kind = ConfigKeyKind.StringKey None
+        IsSecret = false
+        Category = "Auth & identity"
+        Seal = SealPosture.SealValue
+    }
+    {
+        EnvVar = Names.oidcAdmitTeamMembers
+        Description =
+            "When true, a team membership or a live pending invite to the principal's email also makes it an app member, so adding someone in Team Management is enough for them to sign in. Requires a tenant rule (ClaimMapping.AllowedTenants). Unset: the directory alone decides."
+        Kind = ConfigKeyKind.BoolKey(Direction.Protective, Some false)
         IsSecret = false
         Category = "Auth & identity"
         Seal = SealPosture.SealValue
@@ -3529,6 +3541,7 @@ let manifestBindable: Set<string> =
         Names.notifyInviterOnInviteExpiry
         Names.oauthRedirectBase
         Names.oauthRefresher
+        Names.oidcAdmitTeamMembers
         Names.oidcApiRoleGrants
         Names.oidcAudience
         Names.oidcGroupsClaim

@@ -414,6 +414,7 @@ let private envMapping (env: (string * string option) list) =
             ConfigKeys.Names.oidcRolesClaim, None
             ConfigKeys.Names.oidcGroupsClaim, None
             ConfigKeys.Names.oidcApiRoleGrants, None
+            ConfigKeys.Names.oidcAdmitTeamMembers, None
          ]
          @ env)
         (fun () ->
@@ -433,6 +434,23 @@ let private configTests =
             <| fun _ ->
                 for grants in [ [ "" ]; [ " " ]; [ " Publisher" ]; [ "Report Publisher" ]; [ "Publisher\t" ] ] do
                     expectRefusedGrants grants "not a role name"
+
+            testCase "TOOLUP_OIDC_ADMIT_TEAM_MEMBERS is off unless set, on when set, and refuses a typo"
+            <| fun _ ->
+                let read value =
+                    envMapping [
+                        ConfigKeys.Names.oidcRolesClaim, Some "roles"
+                        ConfigKeys.Names.oidcAdmitTeamMembers, value
+                    ]
+
+                let admits =
+                    function
+                    | Ok(Some mapping) -> Some mapping.AdmitTeamMembers
+                    | _ -> None
+
+                Expect.equal (admits (read None)) (Some false) "off unless set"
+                Expect.equal (admits (read (Some "true"))) (Some true) "on when set"
+                Expect.isError (read (Some "ture")) "a typo refuses the boot"
 
             testCase "PlatformAdmin is refused: it is resolved server-side, never from a token"
             <| fun _ -> expectRefusedGrants [ "Publisher"; "PlatformAdmin" ] "IPlatformAdminStore"

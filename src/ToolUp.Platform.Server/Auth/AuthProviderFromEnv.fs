@@ -171,6 +171,12 @@ let private claimMappingFromEnv () : ClaimMapping option =
                 match ConfigResolution.tryValue ConfigKeys.Names.oidcApiRoleGrants with
                 | None -> Set.empty
                 | Some raw -> apiRoleGrantsFromEnv raw
+            AdmitTeamMembers =
+                let raw = ConfigResolution.tryValue ConfigKeys.Names.oidcAdmitTeamMembers
+
+                match ConfigKeys.ConfigKey.readBool (ConfigKeys.key ConfigKeys.Names.oidcAdmitTeamMembers) raw with
+                | Ok admit -> admit
+                | Error reason -> invalidOp reason
     }
 
     // Phase 993 — an allow-list with no role or group claim to draw from

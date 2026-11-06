@@ -821,6 +821,16 @@ section eliminates structurally.
 > that is no longer disclosable. A reader's sign-in is audited once per session
 > window as `PublicationReaderSignedIn` under `_platform` (the reader, the roles
 > it was admitted with, the time), never as a member's login.
+> **A deployment may opt in to Team Management admitting people**
+> (`ClaimMapping.AdmitTeamMembers`, `TOOLUP_OIDC_ADMIT_TEAM_MEMBERS`; off by
+> default). The member rule is then met by a team membership or by a live pending
+> invite to the token's email, as well as by `RequiredRoles`, so a team Owner or
+> Admin can make an app member with no directory change. It wins over a reader
+> role, and such a principal claims its invite and is a member, not a reader. The
+> tenant rule still binds, the provider refuses to build over an empty
+> `AllowedTenants` because an invite is matched on an email claim the issuer
+> asserts, and a store that cannot be read admits nobody. With the setting off,
+> everything above is unchanged.
 > **Every refusal of a reader, page or `/api`, is audited.** A page refusal is
 > written with the page decisions above. An `/api` refusal writes one
 > `SurfaceDenied` row under `_platform` per refusal: subject kind

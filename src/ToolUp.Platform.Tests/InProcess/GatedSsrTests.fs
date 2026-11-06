@@ -493,6 +493,10 @@ let private startHostWithApi
                             services.AddDataProtection() |> ignore
                             services.AddSingleton<ILogger>(silentLogger) |> ignore
                             services.AddSingleton<IAuthProvider>(auth) |> ignore
+
+                            if hasTeams then
+                                services.AddSingleton<TeamManagement.ITeamStore>(teamStore) |> ignore
+
                             configure services
 
                             services.AddSingleton<PermissionStore.IPermissionStore>(permissionStore)
@@ -2891,6 +2895,14 @@ let private inPlatformGrantTests =
             let! undeclared = owner.GrantReader { entry with Role = "other-readers" }
             Expect.isError undeclared "a role no publication of the team declares is refused"
 
+            let! byEmail =
+                owner.GrantReader {
+                    entry with
+                        UserId = "gina@example.com"
+                }
+
+            Expect.isError byEmail "an address is refused where sign-in ids are not addresses"
+
             match! owner.ListReaders() with
             | Ok r ->
                 Expect.equal r.PublishingScope "team-a" "the active team"
@@ -3047,6 +3059,141 @@ let private inPlatformGrantTests =
         }
     ]
 
+/// A pending-invite store over a mutable map: the admission reads `ListAll`, the
+/// claim `TryConsumeForEmail`.
+let private invitesFor (invites: (string * DateTime) list) =
+    let entries =
+        System.Collections.Concurrent.ConcurrentDictionary<string, PendingInviteByEmail>()
+
+    for email, expires in invites do
+        entries[email.ToLowerInvariant()] <- {
+            TeamId = "team-a"
+            Role = TeamRole.Member
+            ExpiresAt = expires
+            InviterUserId = "carol"
+            IssuedAt = DateTime.UtcNow
+        }
+
+    entries,
+    { new IPendingInviteStore with
+        member _.Upsert(_, _) = async { return Ok() }
+        member _.Remove _ = async { return Ok() }
+
+        member _.TryConsumeForEmail email = async {
+            match entries.TryRemove(email.ToLowerInvariant()) with
+            | true, entry when entry.ExpiresAt > DateTime.UtcNow -> return Ok(Some entry)
+            | _ -> return Ok None
+        }
+
+        member _.ListAll() = async { return Ok [ for kv in entries -> kv.Key, kv.Value ] }
+        member _.SweepExpired() = async { return Ok 0 }
+    }
+
+let private teamAdmissionTests =
+    let later = DateTime.UtcNow.AddDays 7.0
+
+    let mapping (admit: bool) = {
+        directoryMapping with
+            TenantIdClaim = Some "tid"
+            AllowedTenants = [ "t-ours" ]
+            RequiredRoles = [ "app-user" ]
+            PublicationReaders = [ "report-readers" ]
+            AdmitTeamMembers = admit
+    }
+
+    /// The subject a token for `subject` resolves to on a team-only deployment.
+    let resolve (admit: bool) (invites: (string * DateTime) list) subject claims = async {
+        let s = issuer.Force()
+        let entries, store = invitesFor invites
+        let _, auditLog = recordingAuditLog ()
+
+        let register (services: IServiceCollection) =
+            services.AddMemoryCache() |> ignore
+            services.AddSingleton<IPendingInviteStore>(store) |> ignore
+            services.AddSingleton<IAuditLog>(auditLog) |> ignore
+
+        use! host = startHostWith Surfaces.team (oidcProviderWith (mapping admit)) register [ scopeProbeRoute ]
+        use client = host.GetTestClient()
+        let token = s.MintTokenFor(subject, claims)
+        let! _, body, _ = sendToken client (Some token) false "/probe/scope"
+        do! host.StopAsync() |> Async.AwaitTask
+        return body, entries.Count
+    }
+
+    let ours (email: string) : (string * obj) list = [ "tid", box "t-ours"; "email", box email ]
+
+    testList "Team Management admits to sign-in, under AdmitTeamMembers" [
+        testCaseAsync "a team member with no directory role is admitted to their team"
+        <| async {
+            let! body, _ = resolve true [] "carol" (ours "carol@example.com")
+            Expect.stringContains body "TeamMemberKind" "a member"
+            Expect.stringContains body "team-a" "of their team"
+        }
+
+        testCaseAsync "an invited person is admitted on first sign-in, and the invite is claimed"
+        <| async {
+            let! body, left = resolve true [ "mia@example.com", later ] "mia" (ours "MIA@example.com")
+            Expect.stringContains body "TeamMemberKind" "joined on this very request"
+            Expect.equal left 0 "the invite is used"
+        }
+
+        testCaseAsync "team membership wins over a reader role"
+        <| async {
+            let claims = ("roles", box [| "report-readers" |]) :: ours "rhea@example.com"
+            let! body, left = resolve true [ "rhea@example.com", later ] "rhea" claims
+            Expect.stringContains body "TeamMemberKind" "a member, not a reader"
+            Expect.equal left 0 "the invite is used"
+        }
+
+        testCaseAsync "a reader with no invite and no team stays a reader"
+        <| async {
+            let claims = ("roles", box [| "report-readers" |]) :: ours "gina@example.com"
+            let! body, _ = resolve true [] "gina" claims
+            Expect.stringContains body "PublicationReaderKind" "still confined"
+        }
+
+        testCaseAsync "no team and no invite is refused"
+        <| async {
+            let! body, _ = resolve true [] "nia" (ours "nia@example.com")
+            Expect.isFalse (body.Contains "TeamMemberKind") "not a member"
+        }
+
+        testCaseAsync "an expired invite admits nobody"
+        <| async {
+            let! body, _ =
+                resolve true [ "mia@example.com", DateTime.UtcNow.AddDays -1.0 ] "mia" (ours "mia@example.com")
+
+            Expect.isFalse (body.Contains "TeamMemberKind") "refused"
+        }
+
+        testCaseAsync "the tenant rule still binds an invite"
+        <| async {
+            let claims: (string * obj) list = [ "tid", box "t-theirs"; "email", box "mia@example.com" ]
+            let! body, left = resolve true [ "mia@example.com", later ] "mia" claims
+            Expect.isFalse (body.Contains "TeamMemberKind") "refused"
+            Expect.equal left 1 "and the invite is left for the right person"
+        }
+
+        testCaseAsync "with the setting off, the directory alone decides"
+        <| async {
+            let! member', _ = resolve false [] "carol" (ours "carol@example.com")
+            let! invited, left = resolve false [ "mia@example.com", later ] "mia" (ours "mia@example.com")
+            Expect.isFalse (member'.Contains "TeamMemberKind") "a team member with no role is refused"
+            Expect.isFalse (invited.Contains "TeamMemberKind") "so is an invited person"
+            Expect.equal left 1 "and the invite is not used"
+        }
+
+        testCase "the setting needs a tenant rule, or any tenant could present an invited email"
+        <| fun _ ->
+            let unbound = {
+                ClaimMapping.none with
+                    AdmitTeamMembers = true
+            }
+
+            Expect.isError (ClaimMapping.validateAdmitTeamMembers unbound) "refused without AllowedTenants"
+            Expect.isOk (ClaimMapping.validateAdmitTeamMembers (mapping true)) "accepted with it"
+    ]
+
 let tests =
     testList "GatedSsr (Phase 86)" [
         parseTests
@@ -3057,6 +3204,7 @@ let tests =
         claimMappingTests
         directoryPipelineTests
         signInTests
+        teamAdmissionTests
         publicationUnitTests
         publicationReaderSubjectTests
         readerConfinementTests
