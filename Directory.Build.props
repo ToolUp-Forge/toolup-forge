@@ -1054,7 +1054,7 @@
     <ToolUpAlgorithmProvidersVersion>0.39.1</ToolUpAlgorithmProvidersVersion>
     <ToolUpArtefactSigningVersion>0.39.1</ToolUpArtefactSigningVersion>
     <ToolUpAuditSinksVersion>0.39.1</ToolUpAuditSinksVersion>
-    <ToolUpAuthProvidersVersion>0.39.1</ToolUpAuthProvidersVersion>
+    <ToolUpAuthProvidersVersion>0.39.2</ToolUpAuthProvidersVersion>
     <ToolUpCalendarVersion>0.39.1</ToolUpCalendarVersion>
     <ToolUpCloudVersion>0.39.0</ToolUpCloudVersion>
     <ToolUpContainerSchedulersVersion>0.39.1</ToolUpContainerSchedulersVersion>

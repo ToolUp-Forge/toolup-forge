@@ -76,7 +76,7 @@
     {
       "id": "auth-providers",
       "property": "ToolUpAuthProvidersVersion",
-      "version": "0.39.1",
+      "version": "0.39.2",
       "projects": [
         "src/AuthProviders/**",
         "src/ToolUp.AuthProviders.*/**"

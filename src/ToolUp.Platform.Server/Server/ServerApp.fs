@@ -1668,6 +1668,14 @@ module ServerApp =
             ComposedCompanions = app.ComposedCompanions @ [ companionName ]
     }
 
+    /// **Adds** data sources read from their named settings at start and seeded into the config store (`DataSourceFromSettings`).
+    let withDeclaredDataSources (sources: DataSourceFromSettings list) (app: ServerApp) : ServerApp =
+        addServiceConfig (DataSourceFromSettings.register sources) app
+
+    /// **Adds** reference datasets declared as data, verified now and readable through `IReferenceData` (`ReferenceData`).
+    let withReferenceData (datasets: ReferenceDataset list) (app: ServerApp) : ServerApp =
+        addServiceConfig (ReferenceData.register datasets) app
+
     /// **Sets** the consumer's `ServerConfig`, replacing any earlier
     /// `withConfig` value. The builders that append to it
     /// (`withAlertRule`, `withNotificationCategory`, `withPeerRoutePrefix`,

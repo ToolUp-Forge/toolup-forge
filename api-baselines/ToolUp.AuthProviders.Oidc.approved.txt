@@ -3,6 +3,18 @@
 # Do not edit by hand. Drift in EITHER direction fails the gate (Phase 618): a
 # removal is breaking and must be reviewed; an addition is non-breaking but must
 # still be folded into this file in the same PR.
+ToolUp.AuthProviders.OidcAdmission (class)
+ToolUp.AuthProviders.OidcAdmission.layered(ToolUp.AuthProviders.OidcAdmission+AdmissionSettings, ToolUp.Platform.AuthConfig) : ToolUp.Platform.AuthConfig
+ToolUp.AuthProviders.OidcAdmission.layeredFrom(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]], ToolUp.AuthProviders.OidcAdmission+AdmissionSettings, ToolUp.Platform.AuthConfig) : ToolUp.Platform.AuthConfig
+ToolUp.AuthProviders.OidcAdmission+AdmissionSettings (class)
+ToolUp.AuthProviders.OidcAdmission+AdmissionSettings..ctor(System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]], Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.AuthProviders.OidcAdmission+AdmissionSettings.AllowedTenants : System.String { get }
+ToolUp.AuthProviders.OidcAdmission+AdmissionSettings.GroupAliases : System.String { get }
+ToolUp.AuthProviders.OidcAdmission+AdmissionSettings.PublicationReaders : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]] { get }
+ToolUp.AuthProviders.OidcAdmission+AdmissionSettings.RequiredRoles : System.String { get }
+ToolUp.AuthProviders.OidcAdmission+AdmissionSettings.RequiredSettings : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.AuthProviders.OidcAdmission+AdmissionSettingsModule (class)
+ToolUp.AuthProviders.OidcAdmission+AdmissionSettingsModule.none : ToolUp.AuthProviders.OidcAdmission+AdmissionSettings { get }
 ToolUp.AuthProviders.OidcAuthProvider (class)
 ToolUp.AuthProviders.OidcAuthProvider.applyAdmission(ToolUp.Platform.ClaimMapping, ToolUp.Platform.Auth+AuthenticatedUser) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Auth+AuthenticatedUser, System.String]
 ToolUp.AuthProviders.OidcAuthProvider.applyAdmissionWithGrant(System.Boolean, ToolUp.Platform.ClaimMapping, ToolUp.Platform.Auth+AuthenticatedUser) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Auth+AuthenticatedUser, System.String]
