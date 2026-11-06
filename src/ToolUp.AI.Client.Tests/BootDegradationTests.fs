@@ -72,6 +72,7 @@ let private baseModel: Client.Model = {
     ResetCounters = Map.empty
     InitPhase = Client.Prefetching
     Degradations = []
+    AppAccessRefused = false
     // Phase 571 — the command palette's overlay state. Inert for these
     // arms (the fixture never opens it) but the field is not optional.
     CommandPalette = CommandPaletteNav.closed
@@ -90,6 +91,9 @@ let private baseModel: Client.Model = {
 // properties of null (reading 'DataManager')` regardless of arm, so we
 // pass the real `ClientConfig.defaults` (resolves under Fable — same
 // HomeLanding precedent).
+[<Import("renderToString", from = "react-dom/server")>]
+let private renderToString (element: Fable.React.ReactElement) : string = jsNative
+
 let private update msg model =
     Client.update ClientConfig.defaults Unchecked.defaultof<IModuleQueryBus> [] msg model
 
@@ -204,6 +208,56 @@ let tests =
 
                 let m4, _ = update (Client.BootLoadRecovered "auth-bridge") m1
                 Expect.isEmpty m4.Degradations "bridge recovery clears its entry")
+        ]
+
+        testList "the publication-reader refusal" [
+            let refusal status body =
+                ToolUp.Remoting.Client.ProxyRequestException(
+                    {
+                        StatusCode = status
+                        ResponseBody = body
+                    },
+                    "refused",
+                    body
+                )
+                :> exn
+
+            let readerBody = """{"error":"publication_reader_not_admitted","status":403}"""
+
+            testCase "only the reader's own 403 reads as the refusal" (fun () ->
+                Expect.isTrue (Client.isPublicationReaderRefusal (refusal 403 readerBody)) "the reader's refusal"
+
+                Expect.isFalse
+                    (Client.isPublicationReaderRefusal (refusal 403 """{"error":"team_required","status":403}"""))
+                    "another 403 stays a degraded load"
+
+                Expect.isFalse (Client.isPublicationReaderRefusal (refusal 500 readerBody)) "so does another status"
+                Expect.isFalse (Client.isPublicationReaderRefusal (exn "offline")) "and a transport failure")
+
+            testCase "the shell gives way to the refusal, with its banner and rail" (fun () ->
+                let degraded, _ = update (Client.BootLoadFailed("teams", "boom")) baseModel
+                let refused, _ = update Client.PublicationReaderRefused degraded
+                Expect.isTrue refused.AppAccessRefused "the arm sets the state"
+
+                let config = {
+                    ClientConfig.defaults with
+                        Handlers = {
+                            ClientConfig.defaults.Handlers with
+                                SignOutHandler = Some ignore
+                        }
+                }
+
+                let msgs = MessageCatalog.english
+                let html = renderToString (Client.view config [] Client.emptyChrome refused ignore)
+
+                // React escapes the apostrophe in the rendered text.
+                let title = msgs.NotAuthorised.TitleAppAccessRefused.Replace("'", "&#x27;")
+                Expect.isTrue (html.Contains title) "names the refusal"
+                Expect.isTrue (html.Contains msgs.Shell.SignOut) "offers the way out"
+
+                Expect.isFalse
+                    (html.Contains msgs.BootDegradation.Heading)
+                    "no degradation banner over a refusal it could not retry")
         ]
 
         testList "auth-bridge failure counter (UserSession)" [

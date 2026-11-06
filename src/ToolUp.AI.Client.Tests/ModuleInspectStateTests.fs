@@ -78,6 +78,7 @@ let private shellModel (activeId: string) (state: obj) : Client.Model = {
     ResetCounters = Map.empty
     InitPhase = Client.Ready
     Degradations = []
+    AppAccessRefused = false
     CommandPalette = CommandPaletteNav.closed
     LocaleOverride = None
 }

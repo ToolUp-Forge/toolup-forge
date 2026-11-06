@@ -6,9 +6,9 @@ module Components.NotAuthorised
 open Feliz
 open ToolUp.Platform
 
-// Phase 569 — the shell's typed "not authorised" surface.
+// The shell's typed "not authorised" surface.
 //
-// Hiding a sidebar entry never blocked navigation. Before this phase a
+// Hiding a sidebar entry alone would not block navigation: a
 // caller who deep-linked a module they could not see got the module's own
 // view, mounted, initialised, and backed only by server-side 403s: empty
 // panes, spinners that never resolve, and whatever raw error state the
@@ -42,7 +42,7 @@ let private title (msgs: NotAuthorisedMessages) (denial: SidebarVisibility.Navig
     match denial with
     | SidebarVisibility.NavigationDenial.NotSignedIn -> msgs.TitleNotSignedIn
     | SidebarVisibility.NavigationDenial.NoActiveTeam -> msgs.TitleNoActiveTeam
-    // Phase 637 — a curated-out module is not an access refusal, and
+    // A curated-out module is not an access refusal, and
     // titling it "you don't have access" would send the caller to ask an
     // admin for a permission nobody withheld. The page is not part of
     // this deployment's surface; say that.
@@ -75,7 +75,7 @@ let private hint
 /// redirect.
 [<ReactComponent>]
 let NotAuthorisedView (ctx: NotAuthorisedContext) =
-    // Phase 444 — the denial wording comes from the resolved catalog.
+    // The denial wording comes from the resolved catalog.
     // The `NotAuthorisedMessages` record carries one field per
     // `NavigationDenial` case, so a denial case added upstream fails to
     // compile until it has been worded here.
@@ -89,6 +89,20 @@ let NotAuthorisedView (ctx: NotAuthorisedContext) =
             Label = msgs.GoHome
             OnClick = ctx.GoHome
         })
+
+/// The refusal of the whole app, shown in place of the shell to a publication
+/// reader, whom every `/api` route refuses. There is no shell left around it,
+/// so its one action is signing out, where the deployment offers that.
+[<ReactComponent>]
+let AppAccessRefusedView (signOut: (string * (unit -> unit)) option) =
+    let msgs = (MessageCatalogProvider.useMessages ()).NotAuthorised
+
+    Toolup.UIToolkit.StateViews.emptyState
+        Icons.lock
+        msgs.TitleAppAccessRefused
+        msgs.HintAppAccessRefused
+        (signOut
+         |> Option.map (fun (label, onClick) -> { Label = label; OnClick = onClick }))
 
 /// Resolve the configured mode to an element. One call site in the shell;
 /// the `Custom` arm hands the deployment's renderer the same context the

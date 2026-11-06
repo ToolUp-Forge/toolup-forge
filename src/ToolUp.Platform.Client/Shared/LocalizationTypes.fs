@@ -182,6 +182,10 @@ type NotAuthorisedMessages = {
     HintNotInVisibilityProfile: string -> string
     /// The always-offered route home out of a refused deep link.
     GoHome: string
+    /// The whole-app refusal a publication reader sees at the shell: the
+    /// account is signed in, and may read published pages but not the app.
+    TitleAppAccessRefused: string
+    HintAppAccessRefused: string
 }
 
 /// The per-module error boundary (Phase 12c).

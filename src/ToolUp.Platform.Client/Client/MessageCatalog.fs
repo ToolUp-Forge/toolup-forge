@@ -151,6 +151,9 @@ module MessageCatalog =
             TitleNoActiveTeam = "Pick a team first"
             TitleNotInVisibilityProfile = "This page isn't part of this workspace"
             TitleNoAccess = "You don't have access to this page"
+            TitleAppAccessRefused = "You don't have access to this app"
+            HintAppAccessRefused =
+                "This account can only read the pages published to it. Open the link you were given, or sign out and use another account."
             HintNotSignedIn =
                 fun moduleName ->
                     $"\"{moduleName}\" isn't available to signed-out visitors. Sign in and try the link again."

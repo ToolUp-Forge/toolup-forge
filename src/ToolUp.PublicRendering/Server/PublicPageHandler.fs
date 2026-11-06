@@ -344,7 +344,9 @@ module PublicPageHandler =
     /// Only for `GET` / `HEAD` requests that accept `text/html` (a page
     /// navigation, not a script or a crawler fetching a resource), and never
     /// for a `403` — a signed-in principal who is refused would only be sent
-    /// round the sign-in again.
+    /// round the sign-in again. For the same reason a navigation that is `401`
+    /// only because a signed-in principal fell back to anonymous is answered
+    /// `403`, never redirected.
     /// Phase 1039 — a refused layout is a server misconfiguration: a 500
     /// naming the refusal, never another layout's frame. The one write
     /// shared by every serve path (uncached, conditional, cached).
@@ -375,7 +377,20 @@ module PublicPageHandler =
             (HttpMethods.IsGet ctx.Request.Method || HttpMethods.IsHead ctx.Request.Method)
             && (string ctx.Request.Headers.Accept).Contains("text/html", StringComparison.OrdinalIgnoreCase)
 
+        // A signed-in principal the deployment serves no subject shape for reaches
+        // here as anonymous. Another trip through sign-in would bring it back with
+        // the same token, and the identity provider's live session would complete
+        // that trip silently, so a redirect here is a loop.
+        let signedIn =
+            match ctx.Items.TryGetValue "ToolUp.User" with
+            | true, (:? ToolUp.Platform.Auth.AuthenticatedUser as user) ->
+                not (ToolUp.Platform.Auth.AuthenticatedUser.isAnonymous user)
+            | _ -> false
+
         match signIn with
+        | Some _ when code = 401 && isNavigation && signedIn ->
+            ctx.Response.StatusCode <- 403
+            ctx.WriteStringAsync "This account is signed in but has no access to this page."
         | Some s when code = 401 && isNavigation ->
             let returnUrl =
                 string ctx.Request.PathBase

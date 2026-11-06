@@ -1184,6 +1184,74 @@ let private signInTests =
             Expect.isNull page.Headers.Location "no redirect"
         }
 
+        testCaseAsync "a signed-in member no surface serves is refused, not sent back round the sign-in"
+        <| async {
+            let s = issuer.Force()
+
+            let signInConfig =
+                ToolUp.AuthProviders.OidcSsrSignIn.defaults
+                    $"{s.IssuerUrl}/authorize"
+                    $"{s.IssuerUrl}/token"
+                    "gated-ssr-client"
+                    "http://localhost/auth/callback"
+
+            let register (services: IServiceCollection) =
+                ToolUp.AuthProviders.OidcSsrSignIn.register services signInConfig |> ignore
+
+            let routes = [ ToolUp.AuthProviders.OidcSsrSignIn.routes (new HttpClient()) signInConfig ]
+            use! host = startHostWith Surfaces.team (oidcProviderWith directoryMapping) register routes
+            use client = host.GetTestClient()
+            use idp = new HttpClient(new HttpClientHandler(AllowAutoRedirect = false))
+            s.SetSignInIdentity("mia", [ "roles", box [| "editor" |] ])
+
+            let requestPage (cookie: string option) (navigation: bool) = async {
+                use request = new HttpRequestMessage(HttpMethod.Get, "/editors")
+
+                if navigation then
+                    request.Headers.Add("Accept", "text/html")
+
+                cookie
+                |> Option.iter (fun c -> request.Headers.Add("Cookie", $"{AuthSession.CookieName}={c}"))
+
+                use! response = client.SendAsync request |> Async.AwaitTask
+
+                let location =
+                    match response.Headers.Location with
+                    | null -> None
+                    | l -> Some(string l)
+
+                return int response.StatusCode, location
+            }
+
+            let! cold = requestPage None true
+            use! start = client.GetAsync "/auth/sign-in?returnUrl=%2Feditors" |> Async.AwaitTask
+
+            let stateCookie =
+                setCookie start ToolUp.AuthProviders.OidcSsrSignIn.StateCookieName |> Option.get
+
+            use! fromIdp = idp.GetAsync(string start.Headers.Location) |> Async.AwaitTask
+            let callback = Uri(string fromIdp.Headers.Location)
+
+            use callbackRequest = new HttpRequestMessage(HttpMethod.Get, callback.PathAndQuery)
+
+            callbackRequest.Headers.Add(
+                "Cookie",
+                $"{ToolUp.AuthProviders.OidcSsrSignIn.StateCookieName}={cookieValue stateCookie}"
+            )
+
+            use! landed = client.SendAsync callbackRequest |> Async.AwaitTask
+            let session = setCookie landed AuthSession.CookieName |> Option.get |> cookieValue
+
+            let! navigation = requestPage (Some session) true
+            let! fetch = requestPage (Some session) false
+            do! host.StopAsync() |> Async.AwaitTask
+
+            Expect.equal (fst cold) 302 "with no credential, a navigation is sent to sign in"
+            Expect.equal (int landed.StatusCode) 302 "the provider admits the token, so the callback succeeds"
+            Expect.equal navigation (403, None) "the navigation ends in a refusal, with no redirect"
+            Expect.equal fetch (401, None) "a non-navigation request keeps the 401 it had"
+        }
+
         testCaseAsync "a forged state, a missing state cookie and a foreign return URL are refused"
         <| async {
             let s = issuer.Force()

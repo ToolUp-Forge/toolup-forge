@@ -13,7 +13,7 @@
 // message is a FUNCTION field; it is left pointing at the English message until you
 // replace it with a lambda of the shape its comment names.
 //
-// Leaves: 1529 (223 parameterised).
+// Leaves: 1531 (223 parameterised).
 
 module ToolUp.Platform.Localization.Skeleton
 
@@ -152,6 +152,10 @@ let catalog (c: MessageCatalog) : MessageCatalog = {
                 HintNotInVisibilityProfile = c.NotAuthorised.HintNotInVisibilityProfile
                 // en: "Go to home"
                 GoHome = "Go to home"
+                // en: "You don't have access to this app"
+                TitleAppAccessRefused = "You don't have access to this app"
+                // en: "This account can only read the pages published to it. Open the link you were given, or sign out and use another account."
+                HintAppAccessRefused = "This account can only read the pages published to it. Open the link you were given, or sign out and use another account."
         }
         ModuleBoundary = {
             c.ModuleBoundary with

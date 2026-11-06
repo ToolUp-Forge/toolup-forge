@@ -165,6 +165,7 @@ Components.ModuleBoundary (class)
 Components.ModuleBoundary.wrap(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ModuleErrorReport, Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit], ToolUp.Platform.InputsPaneWidth, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.PageContent]) : Fable.React.ReactElement
 Components.ModuleBoundary.wrapWith(ToolUp.Platform.ModuleBoundaryMessages, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ModuleErrorReport, Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit], ToolUp.Platform.InputsPaneWidth, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.PageContent]) : Fable.React.ReactElement
 Components.NotAuthorised (class)
+Components.NotAuthorised.AppAccessRefusedView(Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]]]) : Fable.React.ReactElement
 Components.NotAuthorised.NotAuthorisedView(ToolUp.Platform.NotAuthorisedContext) : Fable.React.ReactElement
 Components.NotAuthorised.render(ToolUp.Platform.NotAuthorisedMode, ToolUp.Platform.NotAuthorisedContext) : Fable.React.ReactElement
 Components.RateLimitedBanner (class)
@@ -3412,13 +3413,14 @@ ToolUp.Platform.Client+InitPhase+Tags.Prefetching : System.Int32 (literal)
 ToolUp.Platform.Client+InitPhase+Tags.Ready : System.Int32 (literal)
 ToolUp.Platform.Client+InitPhase+Tags.Reprefetching : System.Int32 (literal)
 ToolUp.Platform.Client+Model (class)
-ToolUp.Platform.Client+Model..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Object], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AccessibleModulesResponse], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.FlagValue], SidebarPreferences+UserSidebarPreferences, Microsoft.FSharp.Collections.FSharpList`1[ProcessedDataTypes+ProcessedFileEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamInfo], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PlatformRole], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamRole], ToolUp.Platform.ModuleArea, System.Boolean, ToolUp.Elmish.Prefetch`1[Microsoft.FSharp.Core.Unit], ToolUp.Elmish.Prefetch`1[Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Int32], ToolUp.Platform.Client+InitPhase, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.BootDegradation+BootDegradation], Microsoft.FSharp.Collections.FSharpList`1[ProcessedDataTypes+ProcessedFileEntry], ToolUp.Platform.CommandPaletteNav+PaletteState, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.Client+Model..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Object], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AccessibleModulesResponse], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.FlagValue], SidebarPreferences+UserSidebarPreferences, Microsoft.FSharp.Collections.FSharpList`1[ProcessedDataTypes+ProcessedFileEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamInfo], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PlatformRole], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamRole], ToolUp.Platform.ModuleArea, System.Boolean, ToolUp.Elmish.Prefetch`1[Microsoft.FSharp.Core.Unit], ToolUp.Elmish.Prefetch`1[Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Int32], ToolUp.Platform.Client+InitPhase, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.BootDegradation+BootDegradation], System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ProcessedDataTypes+ProcessedFileEntry], ToolUp.Platform.CommandPaletteNav+PaletteState, Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Platform.Client+Model.AccessibleModules : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AccessibleModulesResponse] { get }
 ToolUp.Platform.Client+Model.ActiveModuleId : System.String { get }
 ToolUp.Platform.Client+Model.ActivePageRoute : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.Client+Model.ActiveTeamId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.Client+Model.ActiveTeamLoadCompleted : System.Boolean { get }
 ToolUp.Platform.Client+Model.ActiveTeamRole : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamRole] { get }
+ToolUp.Platform.Client+Model.AppAccessRefused : System.Boolean { get }
 ToolUp.Platform.Client+Model.CommandPalette : ToolUp.Platform.CommandPaletteNav+PaletteState { get }
 ToolUp.Platform.Client+Model.ConfigsPrefetch : ToolUp.Elmish.Prefetch`1[Microsoft.FSharp.Core.Unit] { get }
 ToolUp.Platform.Client+Model.CurrentArea : ToolUp.Platform.ModuleArea { get }
@@ -3468,6 +3470,7 @@ ToolUp.Platform.Client+Msg.IsModuleSelected : System.Boolean { get }
 ToolUp.Platform.Client+Msg.IsMyTeamsLoaded : System.Boolean { get }
 ToolUp.Platform.Client+Msg.IsPlatformInfoLoaded : System.Boolean { get }
 ToolUp.Platform.Client+Msg.IsPlatformRoleLoaded : System.Boolean { get }
+ToolUp.Platform.Client+Msg.IsPublicationReaderRefused : System.Boolean { get }
 ToolUp.Platform.Client+Msg.IsRefreshAccessibleModules : System.Boolean { get }
 ToolUp.Platform.Client+Msg.IsResetModule : System.Boolean { get }
 ToolUp.Platform.Client+Msg.IsRetryBootLoad : System.Boolean { get }
@@ -3479,6 +3482,7 @@ ToolUp.Platform.Client+Msg.IsSidebarModulePinToggled : System.Boolean { get }
 ToolUp.Platform.Client+Msg.IsSidebarModuleReordered : System.Boolean { get }
 ToolUp.Platform.Client+Msg.IsTeamSwitched : System.Boolean { get }
 ToolUp.Platform.Client+Msg.IsToggleShowAllModules : System.Boolean { get }
+ToolUp.Platform.Client+Msg.PublicationReaderRefused : ToolUp.Platform.Client+Msg { get }
 ToolUp.Platform.Client+Msg.RefreshAccessibleModules : ToolUp.Platform.Client+Msg { get }
 ToolUp.Platform.Client+Msg.Tag : System.Int32 { get }
 ToolUp.Platform.Client+Msg.ToggleShowAllModules : ToolUp.Platform.Client+Msg { get }
@@ -3574,6 +3578,7 @@ ToolUp.Platform.Client+Msg+Tags.ModuleSelected : System.Int32 (literal)
 ToolUp.Platform.Client+Msg+Tags.MyTeamsLoaded : System.Int32 (literal)
 ToolUp.Platform.Client+Msg+Tags.PlatformInfoLoaded : System.Int32 (literal)
 ToolUp.Platform.Client+Msg+Tags.PlatformRoleLoaded : System.Int32 (literal)
+ToolUp.Platform.Client+Msg+Tags.PublicationReaderRefused : System.Int32 (literal)
 ToolUp.Platform.Client+Msg+Tags.RefreshAccessibleModules : System.Int32 (literal)
 ToolUp.Platform.Client+Msg+Tags.ResetModule : System.Int32 (literal)
 ToolUp.Platform.Client+Msg+Tags.RetryBootLoad : System.Int32 (literal)
@@ -5173,8 +5178,9 @@ ToolUp.Platform.NotAuthorisedContext.GoHome : Microsoft.FSharp.Core.FSharpFunc`2
 ToolUp.Platform.NotAuthorisedContext.ModuleId : System.String { get }
 ToolUp.Platform.NotAuthorisedContext.ModuleName : System.String { get }
 ToolUp.Platform.NotAuthorisedMessages (class)
-ToolUp.Platform.NotAuthorisedMessages..ctor(System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String)
+ToolUp.Platform.NotAuthorisedMessages..ctor(System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, System.String)
 ToolUp.Platform.NotAuthorisedMessages.GoHome : System.String { get }
+ToolUp.Platform.NotAuthorisedMessages.HintAppAccessRefused : System.String { get }
 ToolUp.Platform.NotAuthorisedMessages.HintNoActiveTeam : Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String] { get }
 ToolUp.Platform.NotAuthorisedMessages.HintNotAvailableToSubject : Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String] { get }
 ToolUp.Platform.NotAuthorisedMessages.HintNotExposedToTeam : Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String] { get }
@@ -5182,6 +5188,7 @@ ToolUp.Platform.NotAuthorisedMessages.HintNotInVisibilityProfile : Microsoft.FSh
 ToolUp.Platform.NotAuthorisedMessages.HintNotSignedIn : Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String] { get }
 ToolUp.Platform.NotAuthorisedMessages.HintRequiresPlatformAdmin : Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String] { get }
 ToolUp.Platform.NotAuthorisedMessages.HintRequiresTeamOwnerAdmin : Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String] { get }
+ToolUp.Platform.NotAuthorisedMessages.TitleAppAccessRefused : System.String { get }
 ToolUp.Platform.NotAuthorisedMessages.TitleNoAccess : System.String { get }
 ToolUp.Platform.NotAuthorisedMessages.TitleNoActiveTeam : System.String { get }
 ToolUp.Platform.NotAuthorisedMessages.TitleNotInVisibilityProfile : System.String { get }

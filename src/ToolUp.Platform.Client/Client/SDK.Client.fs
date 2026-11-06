@@ -212,6 +212,10 @@ module Client =
         /// is distinguishable from genuinely-empty data (GP 9). Wiped on
         /// `TeamSwitched` like every other per-boot-cycle field.
         Degradations: BootDegradation.BootDegradation list
+        /// A boot load was refused because this principal is a publication
+        /// reader, whom every `/api` route refuses. The shell then renders the
+        /// whole-app refusal in place of itself. Wiped with `Degradations`.
+        AppAccessRefused: bool
         /// File snapshot prefetched at boot — its `Processed` entries. Merged
         /// into `ProcessedData` (so data modules see uploaded data on load
         /// without visiting Data Manager) until the DataManager module is
@@ -450,6 +454,8 @@ module Client =
         /// Phase 121 — user dismissed the degradation banner. Clears every
         /// entry; later failures re-surface it.
         | DismissBootDegradations
+        /// A boot load came back as the publication-reader refusal.
+        | PublicationReaderRefused
         /// Phase 571 — Ctrl+K / Cmd+K was pressed outside a text field
         /// (or the palette was opened by some other affordance). Opens
         /// the overlay with an empty query and the first entry
@@ -678,12 +684,25 @@ module Client =
 
     // ─── Phase 121 — boot-degradation plumbing ───────────────────────
 
+    /// Whether a failed load is the server refusing a publication reader: not a
+    /// degraded load to retry, but an account this app does not serve.
+    let internal isPublicationReaderRefusal (ex: exn) : bool =
+        match ex with
+        | :? ToolUp.Remoting.Client.ProxyRequestException as refused ->
+            refused.StatusCode = 403
+            && refused.ResponseText.Contains "publication_reader_not_admitted"
+        | _ -> false
+
     /// Wrap a boot loader so a thrown load surfaces as `BootLoadFailed`
     /// (typed accumulator + banner) instead of being swallowed into a
     /// benign-looking default. GP 9 — a failed load must be
     /// distinguishable from empty data.
     let private bootLoadCmd (source: string) (loader: Async<'T>) (onLoaded: 'T -> Msg) : Cmd<Msg> =
-        Cmd.OfAsync.either (fun () -> loader) () onLoaded (fun ex -> BootLoadFailed(source, ex.Message))
+        Cmd.OfAsync.either (fun () -> loader) () onLoaded (fun ex ->
+            if isPublicationReaderRefusal ex then
+                PublicationReaderRefused
+            else
+                BootLoadFailed(source, ex.Message))
 
     /// Phase 568 — re-read the caller's role on the (new) active team,
     /// or clear it when there is no active team to have a role on. The
@@ -1542,6 +1561,7 @@ module Client =
             ResetCounters = Map.empty
             InitPhase = initPhase
             Degradations = []
+            AppAccessRefused = false
             PrefetchedProcessedData = []
             CommandPalette = CommandPaletteNav.closed
             // Phase 444 — no in-session locale choice yet; the resolve
@@ -1992,6 +2012,7 @@ module Client =
                         // cycle are stale against the new scope; the
                         // re-issued loaders below re-add any that recur.
                         Degradations = []
+                        AppAccessRefused = false
                 }
 
                 reset,
@@ -2058,6 +2079,7 @@ module Client =
                             FlagsPrefetch = Prefetch.none
                             InitPhase = Prefetching
                             Degradations = []
+                            AppAccessRefused = false
                     }
 
                     reset,
@@ -2255,6 +2277,8 @@ module Client =
                 Cmd.none
 
             | DismissBootDegradations -> { model with Degradations = [] }, Cmd.none
+
+            | PublicationReaderRefused -> { model with AppAccessRefused = true }, Cmd.none
 
             // ─── Phase 571 — command palette ──────────────────────────
             //
@@ -3277,7 +3301,7 @@ module Client =
         /// Emit the store-subscribed host.
         | Subscribed of ShellStore
 
-    let private viewWith
+    let private viewShell
         (slot: ModuleSlot)
         (config: ClientConfig)
         (modules: ErasedModule list)
@@ -4014,6 +4038,30 @@ module Client =
         // strictly cheaper — a `match` and, only in the non-default
         // modes, one map read.
         MessageCatalogProvider.provider resolvedCatalog withBranding
+
+    /// The shell, or in its place the whole-app refusal once the server has
+    /// refused this principal as a publication reader. The module views, the
+    /// navigation and the degradation banner would only show the same refusal
+    /// over and over.
+    let private viewWith
+        (slot: ModuleSlot)
+        (config: ClientConfig)
+        (modules: ErasedModule list)
+        (chrome: ExtraChrome)
+        (model: Model)
+        (dispatch: Msg -> unit)
+        =
+        if model.AppAccessRefused then
+            let catalog = resolveCatalog config model.LocaleOverride model.PlatformConfig
+
+            let signOut =
+                config.Handlers.SignOutHandler
+                |> Option.map (fun signOut -> catalog.Shell.SignOut, signOut)
+
+            Components.NotAuthorised.AppAccessRefusedView signOut
+            |> MessageCatalogProvider.provider catalog
+        else
+            viewShell slot config modules chrome model dispatch
 
     /// The shell's view: chrome, sidebar and the active module, built from
     /// the model it is handed.

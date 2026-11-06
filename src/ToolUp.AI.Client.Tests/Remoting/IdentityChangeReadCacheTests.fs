@@ -170,6 +170,7 @@ let private shellModel () : Client.Model = {
     ResetCounters = Map.empty
     InitPhase = Client.Ready
     Degradations = []
+    AppAccessRefused = false
     CommandPalette = CommandPaletteNav.closed
     LocaleOverride = None
 }

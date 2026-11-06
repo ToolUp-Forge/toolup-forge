@@ -292,6 +292,7 @@ let private shellScopeTests =
                 ResetCounters = Map.empty
                 InitPhase = Client.Ready
                 Degradations = []
+                AppAccessRefused = false
                 CommandPalette = CommandPaletteNav.closed
                 LocaleOverride = None
             }
