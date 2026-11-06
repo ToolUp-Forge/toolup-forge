@@ -1132,6 +1132,7 @@ type ToolUp.Platform GateDirection ToolUp.Platform.Infra
 type ToolUp.Platform GateSpec ToolUp.Platform.Infra
 type ToolUp.Platform GateUnitMismatch ToolUp.Platform.Infra
 type ToolUp.Platform GateVerdict ToolUp.Platform.Infra
+type ToolUp.Platform GatedJson ToolUp.Platform.Audit
 type ToolUp.Platform GoogleIdentityCspValidator ToolUp.Platform.Scope
 type ToolUp.Platform GoogleIdentityServicesCspContributor ToolUp.Platform.Scope
 type ToolUp.Platform GrantAuthorityEntry ToolUp.Platform.Compose
@@ -1544,6 +1545,7 @@ type ToolUp.Platform ModuleApiFactory ToolUp.Platform.Compose
 type ToolUp.Platform ModuleBindingManifest ToolUp.Platform.Compose
 type ToolUp.Platform ModuleBindingRevocation ToolUp.Platform.Compose
 type ToolUp.Platform ModuleCertificationGate ToolUp.Platform.Compose
+type ToolUp.Platform ModuleClassificationRegistry ToolUp.Platform.Audit
 type ToolUp.Platform ModuleContractShape ToolUp.Platform.Compose
 type ToolUp.Platform ModuleDataNeed ToolUp.Platform.Compose
 type ToolUp.Platform ModuleGraphKey ToolUp.Platform.Compose

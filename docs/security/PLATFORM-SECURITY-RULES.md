@@ -763,7 +763,8 @@ section eliminates structurally.
 > **Evidence:**
 > `src/ToolUp.Platform.Server/Server/Classification/ClassificationGate.fs` ·
 > `src/ToolUp.Platform.Server/Server/Classification/IFieldClassifier.fs` ·
-> `src/ToolUp.Platform.Server/Server/Classification/DefaultFieldClassifier.fs`
+> `src/ToolUp.Platform.Server/Server/Classification/DefaultFieldClassifier.fs` ·
+> `src/ToolUp.AI.Server/Server/AIToolRegistry.fs` (`gateToolResult`, the door to a model)
 
 > **AZ-10 — A companion's effect, determinism, and distribution posture can be
 > declared as typed data and enforced by a default-deny gate.**

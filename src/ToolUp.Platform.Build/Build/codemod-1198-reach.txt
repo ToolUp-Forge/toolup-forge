@@ -2050,6 +2050,8 @@ ToolUp.Platform BrandMarkLoader
 ToolUp.Platform Branding
 ToolUp.Platform BrandingProvider
 ToolUp.Platform BrokenAt
+ToolUp.Platform BrowserHistory
+ToolUp.Platform BrowserHistoryMode
 ToolUp.Platform BrowserLocale
 ToolUp.Platform BudgetAccount
 ToolUp.Platform BudgetClaim
@@ -2767,6 +2769,7 @@ ToolUp.Platform HandlerPartialFailure
 ToolUp.Platform HandlerRefused
 ToolUp.Platform HardDelete
 ToolUp.Platform HasAttachment
+ToolUp.Platform HashHistory
 ToolUp.Platform HeaderSwitcher
 ToolUp.Platform HealthChecks
 ToolUp.Platform HealthMonitorMessages
@@ -3291,6 +3294,7 @@ ToolUp.Platform NoActiveTeamLandingUI
 ToolUp.Platform NoAdPanel
 ToolUp.Platform NoAuthUI
 ToolUp.Platform NoBackup
+ToolUp.Platform NoBrowserHistory
 ToolUp.Platform NoChange
 ToolUp.Platform NoCommandPalette
 ToolUp.Platform NoConfigMigrationPath
@@ -4531,12 +4535,15 @@ ToolUp.Platform.Audit.DsseEnvelope toJson
 ToolUp.Platform.Audit.Ed25519ArtifactSigner create
 ToolUp.Platform.Audit.Ed25519ArtifactSigner derivePublicKey
 ToolUp.Platform.Audit.Ed25519ArtifactVerifier create
+ToolUp.Platform.Audit.EgressBoundary aiToolResult
 ToolUp.Platform.Audit.EgressBoundary name
 ToolUp.Platform.Audit.EgressContext create
 ToolUp.Platform.Audit.EgressContext withDestination
 ToolUp.Platform.Audit.EgressContext withLabel
 ToolUp.Platform.Audit.EgressGate RedactedPlaceholder
 ToolUp.Platform.Audit.EgressGate apply
+ToolUp.Platform.Audit.EgressGate applyToJson
+ToolUp.Platform.Audit.EgressGate declaredDefaultPolicy
 ToolUp.Platform.Audit.EgressGate forExport
 ToolUp.Platform.Audit.EgressGate forResponse
 ToolUp.Platform.Audit.EgressGate make
@@ -4625,6 +4632,11 @@ ToolUp.Platform.Audit.Metrics.StandardMetrics SseActiveConnections
 ToolUp.Platform.Audit.Metrics.StandardMetrics StorageBytesRead
 ToolUp.Platform.Audit.Metrics.StandardMetrics StorageBytesWritten
 ToolUp.Platform.Audit.Metrics.StandardMetrics registrations
+ToolUp.Platform.Audit.ModuleClassificationRegistry classifications
+ToolUp.Platform.Audit.ModuleClassificationRegistry conflicts
+ToolUp.Platform.Audit.ModuleClassificationRegistry entitiesOf
+ToolUp.Platform.Audit.ModuleClassificationRegistry isEmpty
+ToolUp.Platform.Audit.ModuleClassificationRegistry ofDeclarations
 ToolUp.Platform.Audit.PermissionAuditChain ChainBrokenAt
 ToolUp.Platform.Audit.PermissionAuditChain ChainHeadReading
 ToolUp.Platform.Audit.PermissionAuditChain ChainIntact
@@ -6039,6 +6051,7 @@ ToolUp.Platform.Compose.ServerApp withAuditSink
 ToolUp.Platform.Compose.ServerApp withAuth
 ToolUp.Platform.Compose.ServerApp withBackfillMissedTicks
 ToolUp.Platform.Compose.ServerApp withBuildIdentity
+ToolUp.Platform.Compose.ServerApp withClassificationEgressPolicy
 ToolUp.Platform.Compose.ServerApp withCompanion
 ToolUp.Platform.Compose.ServerApp withCompanionMarker
 ToolUp.Platform.Compose.ServerApp withConfig
@@ -6112,6 +6125,7 @@ ToolUp.Platform.Compose.ServerModule describeSubjects
 ToolUp.Platform.Compose.ServerModule withAIExposure
 ToolUp.Platform.Compose.ServerModule withAITools
 ToolUp.Platform.Compose.ServerModule withBindingStamp
+ToolUp.Platform.Compose.ServerModule withClassifications
 ToolUp.Platform.Compose.ServerModule withComponentId
 ToolUp.Platform.Compose.ServerModule withConfig
 ToolUp.Platform.Compose.ServerModule withConfigMigration

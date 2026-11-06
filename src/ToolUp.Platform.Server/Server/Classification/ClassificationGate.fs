@@ -3,9 +3,11 @@
 
 namespace ToolUp.Platform.Audit
 
+open System.Text.Json
+open System.Text.Json.Nodes
 open ToolUp.Platform
 
-/// Phase 41 — per-classification access decision for a single field.
+/// Per-classification access decision for a single field.
 type ClassificationDecision =
     /// The caller may read the field value.
     | Allow
@@ -19,12 +21,12 @@ type ClassificationDecision =
 /// SDK ships `ClassificationGate.defaultPolicy`.
 type ClassificationPolicy = ClassificationLevel -> AccessContext -> ClassificationDecision
 
-/// Phase 41 — composes a classifier + a policy + audit into the
+/// Composes a classifier + a policy + audit into the
 /// read/write gate. Field-level: classified fields a caller may not read
 /// are redacted (or the deployment refuses the call); classified reads /
 /// writes emit value-free audit under `_platform.classification`.
 ///
-/// Composes with Phase 4 RBAC — the default policy treats
+/// Composes with RBAC — the default policy treats
 /// `PlatformAdmin` (or an explicit per-level reader capability) as the
 /// grant for sensitive classifications, layering on top of the existing
 /// `ModulePermission` checks rather than replacing them.
@@ -156,9 +158,9 @@ module ClassificationGate =
                         ()
         }
 
-// ─── Phase 188 — field-classification egress / DLP gate ────────────────
+// ─── Field-classification egress / DLP gate ────────────────
 //
-// Phase 41's `ClassificationGate` redacts on *read*. This extends the
+// `ClassificationGate` redacts on *read*. This extends the
 // same policy shape to a *terminal egress* boundary — export payload, RPC
 // response, audit / log sink — so a classified field cannot leave the
 // process unredacted by a path that bypassed the read gate (the DLP half
@@ -168,7 +170,7 @@ module ClassificationGate =
 // decision emits one `EgressBlocked` audit row (GP 12 — a deny is
 // observable, never silent).
 
-/// Phase 188 — the output boundary a classified field is leaving.
+/// The output boundary a classified field is leaving.
 /// Recorded on the `EgressBlocked` audit row so a reviewer can tell an
 /// export leak from an RPC-response leak. `CustomBoundary` names a bespoke
 /// sink without extending the DU.
@@ -190,7 +192,12 @@ module EgressBoundary =
         | EgressBoundary.LogSink -> "LogSink"
         | EgressBoundary.CustomBoundary label -> label
 
-/// Phase 188 — the egress decision for one classification level. Distinct
+    /// The boundary a tool result crosses on its way into a
+    /// model's context. A `CustomBoundary`, so no consumer's exhaustive
+    /// match over the type gains a case.
+    let aiToolResult = EgressBoundary.CustomBoundary "AiToolResult"
+
+/// The egress decision for one classification level. Distinct
 /// from `ClassificationDecision` (the read gate) because egress adds a
 /// hard `Block` (drop the field entirely) alongside `Redact` (placeholder
 /// substitution). `[<RequireQualifiedAccess>]` keeps `Allow` / `Redact`
@@ -202,7 +209,7 @@ type EgressDecision =
     | Redact
     | Block
 
-/// Phase 188 — the output-boundary context an `EgressPolicy` decides
+/// The output-boundary context an `EgressPolicy` decides
 /// against. Carries who/what the egress is destined for + which boundary,
 /// so a policy can (e.g.) allow `Financial` to an internal RPC peer but
 /// block it on an external export.
@@ -215,13 +222,13 @@ type EgressContext = {
     /// Optional concrete destination label (sink name, peer URL, file
     /// path). `None` when unspecified.
     Destination: string option
-    /// Phase 796 — the disclosure label of the payload these fields are
+    /// The disclosure label of the payload these fields are
     /// leaving in: the set of policy refs its lineage carries, or
     /// `Unlabelled` when no lineage was computed for it.
     ///
     /// It rides the CONTEXT rather than widening `EgressPolicy`'s own
-    /// signature, which is why that type alias is untouched by this
-    /// phase: the boundary, the actor and the label are all facts about
+    /// signature, which is why that type alias is unchanged:
+    /// the boundary, the actor and the label are all facts about
     /// the same crossing, and a deployment's existing policy function
     /// keeps compiling while gaining access to a fourth fact it may now
     /// read. `create` leaves it `Unlabelled`, so a caller that says
@@ -244,17 +251,17 @@ module EgressContext =
             Destination = Some destination
     }
 
-    /// Phase 796 — record the payload's computed disclosure label on the
+    /// Record the payload's computed disclosure label on the
     /// crossing, so a policy can decide on WHAT is leaving and not only
     /// on where it is going.
     let withLabel (label: EgressLabel) (ctx: EgressContext) = { ctx with Label = label }
 
-/// Phase 188 — maps a classification level + egress context to a decision.
+/// Maps a classification level + egress context to a decision.
 /// Deployments supply their own deny rules; the SDK ships
 /// `EgressGate.permissiveEgressPolicy` (`Allow` for every level).
 type EgressPolicy = ClassificationLevel -> EgressContext -> EgressDecision
 
-/// Phase 188 — the terminal egress enforcement seam. Acts on the Phase 41
+/// The terminal egress enforcement seam. Acts on the
 /// `FieldClassification` tags at an output boundary, redacting / dropping
 /// classified fields per the policy and auditing every non-`Allow`
 /// decision.
@@ -273,7 +280,12 @@ type IEgressGate =
     /// per non-`Allow` decision.
     abstract Apply: ctx: EgressContext * entityName: string * fields: Map<string, string> -> Async<Map<string, string>>
 
-/// Phase 188 — composes a classifier + an `EgressPolicy` + audit into the
+/// A JSON result after the gate: the text to send on, and the
+/// fields the gate refused, as `<entity>.<fieldPath>`. `Withheld` is empty
+/// exactly when `Text` is the input, byte for byte.
+type GatedJson = { Text: string; Withheld: string list }
+
+/// Composes a classifier + an `EgressPolicy` + audit into the
 /// terminal egress gate. Field-level: classified fields the policy denies
 /// at egress are redacted (`Redact`) or dropped (`Block`); every non-`Allow`
 /// decision emits a value-free `EgressBlocked` audit under
@@ -284,7 +296,7 @@ module EgressGate =
     /// Placeholder the gate substitutes for a `Redact`-ed field — matches
     /// the read gate's `ClassificationGate.RedactedPlaceholder`.
     [<Literal>]
-    let RedactedPlaceholder = "[redacted]"
+    let RedactedPlaceholder = ClassificationGate.RedactedPlaceholder
 
     /// SDK default policy — permissive: every level egresses unchanged, so
     /// a deployment that ships no deny rules behaves byte-for-byte as it
@@ -293,7 +305,25 @@ module EgressGate =
     /// boundaries a deployment's DLP posture requires.
     let permissiveEgressPolicy: EgressPolicy = fun _ _ -> EgressDecision.Allow
 
-    /// Phase 796 — refuse a classified field whose payload's label does
+    /// The policy the compose chain applies when a deployment
+    /// names none and a classification is declared. A declaration that
+    /// governs nothing is the defect the seam exists to close, so this is
+    /// not `permissiveEgressPolicy`: a sensitive field
+    /// (`ClassificationLevel.isSensitive`) does not reach a model, and
+    /// every other crossing is allowed. A deployment that declares no
+    /// classification never meets it. `ServerApp.withClassificationEgressPolicy`
+    /// replaces it whole.
+    let declaredDefaultPolicy: EgressPolicy =
+        fun level ctx ->
+            if
+                ctx.Boundary = EgressBoundary.aiToolResult
+                && ClassificationLevel.isSensitive level
+            then
+                EgressDecision.Block
+            else
+                EgressDecision.Allow
+
+    /// Refuse a classified field whose payload's label does
     /// not CLEAR egress, then defer to `inner`.
     ///
     /// The classification-gate twin of `EgressPolicy.requireClearedLabel`,
@@ -419,3 +449,173 @@ module EgressGate =
         (fields: Map<string, string>)
         : Async<Map<string, string>> =
         apply classifier policy audit (EgressContext.create EgressBoundary.RpcResponse actor) entityName fields
+
+    /// A field name as the JSON door matches it: a tool author's `orderId`
+    /// or `order_id` is the declared `OrderId`.
+    let private normaliseFieldPath (path: string) =
+        path.Replace("_", "").Replace("-", "").ToLowerInvariant()
+
+    /// Every property at or below `node`, with its path relative to `node`.
+    let rec private properties (prefix: string) (node: JsonObject) : (string * JsonObject * string) list = [
+        for KeyValue(key, value) in node do
+            let path = if prefix = "" then key else $"{prefix}.{key}"
+            yield path, node, key
+
+            match value with
+            | :? JsonObject as child -> yield! properties path child
+            | _ -> ()
+    ]
+
+    let private valueText (parent: JsonObject) (key: string) =
+        match parent[key] with
+        | null -> "null"
+        | value -> value.ToJsonString()
+
+    /// Apply the registered gate to a JSON result the door
+    /// knows only the candidate entities of. Every object in the document
+    /// is read as a possible row of each entity: a property whose path
+    /// matches a declared field path (ignoring case and `_` / `-`) goes
+    /// through `gate`, which audits it, and the verdict is written back:
+    /// a `Block` removes the property, a `Redact` replaces its value.
+    /// `Withheld` names each field the gate refused, as
+    /// `<entity>.<fieldPath>`.
+    ///
+    /// Text that does not parse as JSON, or that no declared field touches,
+    /// comes back byte-identical. This is a field-level gate over structure,
+    /// not content inspection: a value written into free text is not a
+    /// field, and no gate over fields can see it.
+    let applyToJson
+        (classifier: IFieldClassifier)
+        (gate: IEgressGate)
+        (ctx: EgressContext)
+        (entityNames: string list)
+        (json: string)
+        : Async<GatedJson> =
+        async {
+            let withheld = ResizeArray<string>()
+
+            let gateObject (node: JsonObject) (entityName: string, declared: Map<string, string>) = async {
+                let matches =
+                    properties "" node
+                    |> List.choose (fun (path, parent, key) ->
+                        Map.tryFind (normaliseFieldPath path) declared
+                        |> Option.map (fun fieldPath -> fieldPath, parent, key))
+                    // Two entities may declare one field name; a value the
+                    // first already redacted is not read, or audited, twice.
+                    |> List.filter (fun (_, parent, key) ->
+                        valueText parent key <> JsonSerializer.Serialize RedactedPlaceholder)
+
+                if not (List.isEmpty matches) then
+                    let fields =
+                        matches
+                        |> List.map (fun (fieldPath, parent, key) -> fieldPath, valueText parent key)
+                        |> Map.ofList
+
+                    let! admitted = gate.Apply(ctx, entityName, fields)
+
+                    for fieldPath, parent, key in matches do
+                        match Map.tryFind fieldPath admitted with
+                        | None ->
+                            parent.Remove key |> ignore
+                            withheld.Add $"{entityName}.{fieldPath}"
+                        | Some value when value <> fields[fieldPath] ->
+                            parent[key] <- JsonValue.Create value
+                            withheld.Add $"{entityName}.{fieldPath}"
+                        | Some _ -> ()
+            }
+
+            let rec walk (declared: (string * Map<string, string>) list) (node: JsonNode) = async {
+                match node with
+                | :? JsonObject as o ->
+                    for entity in declared do
+                        do! gateObject o entity
+
+                    for KeyValue(_, child) in List.ofSeq o do
+                        do! walk declared child
+                | :? JsonArray as a ->
+                    for child in List.ofSeq a do
+                        do! walk declared child
+                | _ -> ()
+            }
+
+            let! declared =
+                entityNames
+                |> List.distinct
+                |> List.map (fun entityName -> async {
+                    let! classifications = classifier.Classify entityName
+
+                    return
+                        entityName,
+                        classifications
+                        |> List.map (fun c -> normaliseFieldPath c.FieldPath, c.FieldPath)
+                        |> Map.ofList
+                })
+                |> Async.Sequential
+
+            let declared = declared |> List.ofArray |> List.filter (snd >> Map.isEmpty >> not)
+
+            let parsed =
+                if List.isEmpty declared then
+                    None
+                else
+                    try
+                        Option.ofObj (JsonNode.Parse json)
+                    with :? JsonException ->
+                        None
+
+            match parsed with
+            | None -> return { Text = json; Withheld = [] }
+            | Some root ->
+                do! walk declared root
+
+                if withheld.Count = 0 then
+                    return { Text = json; Withheld = [] }
+                else
+                    return {
+                        Text = root.ToJsonString()
+                        Withheld = withheld |> Seq.distinct |> List.ofSeq
+                    }
+        }
+
+/// What `ServerModule.withClassifications` declared, by module:
+/// the fold the compose chain builds the registered classifier from, and how
+/// a tool-result door knows which entities a module's result may carry.
+type ModuleClassificationRegistry = private {
+    ByModule: Map<string, FieldClassification list>
+}
+
+module ModuleClassificationRegistry =
+    /// Fold each module's declarations; a module named twice concatenates.
+    let ofDeclarations (declarations: (string * FieldClassification list) list) : ModuleClassificationRegistry = {
+        ByModule =
+            declarations
+            |> List.groupBy fst
+            |> List.map (fun (name, entries) -> name, entries |> List.collect snd)
+            |> Map.ofList
+    }
+
+    /// True when no module declared a classification.
+    let isEmpty (registry: ModuleClassificationRegistry) =
+        registry.ByModule |> Map.forall (fun _ declared -> List.isEmpty declared)
+
+    /// Every declaration in the composition, identical repeats collapsed:
+    /// the list the default classifier is built from.
+    let classifications (registry: ModuleClassificationRegistry) : FieldClassification list =
+        registry.ByModule |> Map.toList |> List.collect snd |> List.distinct
+
+    /// The entities `moduleName` declared classifications on.
+    let entitiesOf (moduleName: string) (registry: ModuleClassificationRegistry) : string list =
+        registry.ByModule
+        |> Map.tryFind moduleName
+        |> Option.defaultValue []
+        |> List.map _.EntityName
+        |> List.distinct
+
+    /// The fields declared differently by two declarations, as
+    /// `<entity>.<fieldPath>`. Resolving one silently could weaken a
+    /// classification by composition order, so the compose chain refuses them.
+    let conflicts (registry: ModuleClassificationRegistry) : string list =
+        classifications registry
+        |> List.countBy (fun c -> c.EntityName, c.FieldPath)
+        |> List.filter (fun (_, count) -> count > 1)
+        |> List.map (fun ((entityName, fieldPath), _) -> $"{entityName}.{fieldPath}")

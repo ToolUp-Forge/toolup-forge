@@ -131,6 +131,7 @@
         <Compile Include="InProcess\AccessAttestationTests.fs" />
         <Compile Include="InProcess\GrantGovernanceTests.fs" />
         <Compile Include="InProcess\AIQueryabilityOptInTests.fs" />
+        <Compile Include="InProcess\ClassificationSeamTests.fs" />
         <Compile Include="InProcess\AIConsentTests.fs" />
         <Compile Include="InProcess\AICrossModuleAuditTests.fs" />
         <Compile Include="InProcess\MockOidcServer.fs" />

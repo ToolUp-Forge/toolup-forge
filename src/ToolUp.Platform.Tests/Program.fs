@@ -377,6 +377,7 @@ let private registeredTests =
         AccessAttestationTests.tests
         GrantGovernanceTests.tests
         AIQueryabilityOptInTests.tests
+        ClassificationSeamTests.tests
         AIConsentTests.tests
         AICrossModuleAuditTests.tests
         GroundingCertificateTests.tests

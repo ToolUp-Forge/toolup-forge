@@ -259,6 +259,13 @@ type ServerModule = {
     /// that registers none composes byte-for-byte as before (GP 13).
     /// Register via `ServerModule.withDeliveryCompleted`.
     DeliveryCompletedHooks: DeliveryCompleted.DeliveryCompletedHook list
+    /// The field classifications this module declares for its
+    /// entities. `addModule` fans them into the app; the compose chain folds
+    /// them into the registered `IFieldClassifier` and the `IEgressGate` over
+    /// it. Empty (the default) — a module that declares none composes
+    /// byte-for-byte as before (GP 13). Declare via
+    /// `ServerModule.withClassifications`.
+    Classifications: FieldClassification list
 }
 
 module ServerModule =
@@ -289,6 +296,25 @@ module ServerModule =
         FactTables = []
         FactTableDescriptions = []
         DeliveryCompletedHooks = []
+        Classifications = []
+    }
+
+    /// Declare the classifications of this module's entity
+    /// fields. **Adds** to the module's list, so a generated declaration and
+    /// an authored one can both call it. The declaration is all a module
+    /// needs: the compose chain registers the classifier and the egress gate,
+    /// and a `Pii` field no longer reaches a model through the module's tools
+    /// or `_platform.ai.*`. See `docs/platform/classification.md`.
+    ///
+    /// ```fsharp
+    /// ServerModule.create "Orders"
+    /// |> ServerModule.withClassifications [
+    ///     FieldClassification.create "Order" "CustomerEmail" Pii
+    /// ]
+    /// ```
+    let withClassifications (classifications: FieldClassification list) (m: ServerModule) : ServerModule = {
+        m with
+            Classifications = m.Classifications @ classifications
     }
 
     /// Phase 551 — declare the module's grant policy: the precondition
@@ -1297,6 +1323,14 @@ type ServerApp = {
     /// because a drift here fails SILENTLY (a module the author opted in
     /// would simply stay invisible).
     ModuleAIExposures: (string * ModuleAIExposure) list
+    /// Each module's declared field classifications, keyed by
+    /// the module's `Name` and accumulated by `addModule`. `serviceConfig`
+    /// folds them into the registered `IFieldClassifier`.
+    ModuleClassifications: (string * FieldClassification list) list
+    /// The deployment's `EgressPolicy` for the registered
+    /// `IEgressGate`. `None` is `EgressGate.declaredDefaultPolicy`, never
+    /// "no gate". Set via `ServerApp.withClassificationEgressPolicy`.
+    ClassificationEgressPolicy: EgressPolicy option
     /// Phase 556 — how grant-event notices to affected principals are
     /// rendered and delivered. `None` means the shipped defaults, NOT
     /// "no notices": the notice loop is the point of the phase, and a
@@ -1419,6 +1453,8 @@ module ServerApp =
         ModuleComponentIds = []
         ModuleGrantPolicies = []
         ModuleAIExposures = []
+        ModuleClassifications = []
+        ClassificationEgressPolicy = None
         GrantNotifications = None
         ModelExecutionCompose = None
         TeamOutputVisibility = None
@@ -1524,6 +1560,36 @@ module ServerApp =
     let private addPlatformServices (register: IServiceCollection -> IServiceCollection) (app: ServerApp) =
         addContribution (Contribution.service EgressPolicy.platformComponent register) app
 
+    /// What the classification seam registers. `TryAdd`, and
+    /// after every host registration, so a host that registered its own
+    /// `IFieldClassifier` or `IEgressGate` keeps it; the gate is registered
+    /// over whichever classifier stands. A composition with neither a
+    /// declaration nor a host classifier registers nothing (GP 13).
+    let private classificationServices
+        (registry: ModuleClassificationRegistry)
+        (policy: EgressPolicy option)
+        (services: IServiceCollection)
+        : IServiceCollection =
+        if not (ModuleClassificationRegistry.isEmpty registry) then
+            services.AddSingleton<ModuleClassificationRegistry>(registry) |> ignore
+
+            Extensions.ServiceCollectionDescriptorExtensions.TryAddSingleton<IFieldClassifier>(
+                services,
+                DefaultFieldClassifier.create (ModuleClassificationRegistry.classifications registry)
+            )
+
+        if services |> Seq.exists (fun d -> d.ServiceType = typeof<IFieldClassifier>) then
+            Extensions.ServiceCollectionDescriptorExtensions.TryAddSingleton<IEgressGate>(
+                services,
+                fun (sp: IServiceProvider) ->
+                    EgressGate.make
+                        (sp.GetRequiredService<IFieldClassifier>())
+                        (defaultArg policy EgressGate.declaredDefaultPolicy)
+                        (sp.GetRequiredService<IAuditLog>())
+            )
+
+        services
+
     /// Phase 1052 — the DI registrations `run` applies at the fixed point
     /// after the SDK's own: the consumer's `Extensions.ServiceConfig`, then
     /// every contribution's, in the order added. `None` when there are
@@ -1545,6 +1611,20 @@ module ServerApp =
                 | Validator _
                 | Middleware _ -> acc)
             app.Extensions.ServiceConfig
+        |> fun registered ->
+            let classified =
+                ModuleClassificationRegistry.ofDeclarations app.ModuleClassifications
+
+            match ModuleClassificationRegistry.conflicts classified with
+            | [] -> ()
+            | fields ->
+                failwith
+                    $"""Field classification declared differently by two declarations: {String.Join(", ", fields)}. A field carries one classification; resolving this by composition order could weaken it."""
+
+            if Option.isNone registered && ModuleClassificationRegistry.isEmpty classified then
+                registered
+            else
+                ServiceConfig.append (classificationServices classified app.ClassificationEgressPolicy) registered
 
     /// The `ComposeExtensions` `run` hands `compose`: the
     /// consumer's record with the plan's DI registrations (`serviceConfig`),
@@ -1889,6 +1969,14 @@ module ServerApp =
     let withAuditSink (sink: IAuditSink) (app: ServerApp) : ServerApp = {
         app with
             AuditSinks = app.AuditSinks @ [ sink ]
+    }
+
+    /// The `EgressPolicy` of the `IEgressGate` the classification
+    /// seam registers, in place of `EgressGate.declaredDefaultPolicy`.
+    /// **Sets** the value; a later call replaces it.
+    let withClassificationEgressPolicy (policy: EgressPolicy) (app: ServerApp) : ServerApp = {
+        app with
+            ClassificationEgressPolicy = Some policy
     }
 
     /// Phase 9g — override the default audit replicator tuning
@@ -3382,6 +3470,11 @@ module ServerApp =
                             match m.AIExposure with
                             | Some exposure -> app.ModuleAIExposures @ [ m.Name, exposure ]
                             | None -> app.ModuleAIExposures
+                        // On the same naming axis.
+                        ModuleClassifications =
+                            match m.Classifications with
+                            | [] -> app.ModuleClassifications
+                            | declared -> app.ModuleClassifications @ [ m.Name, declared ]
                         Overrides = app.Overrides @ [ moduleConfigOverride ]
                 }
                 |> withRouteEffectObserver m

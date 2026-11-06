@@ -1,8 +1,11 @@
 module ToolUp.AI.AIToolRegistry
 
+open System.Collections.Generic
+open System.Text.Json.Nodes
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
 open ToolUp.Platform.AI
+open ToolUp.Platform.Audit
 open ToolUp.AI
 open ToolUp.Platform.Scope
 open ToolUp.Platform.Compose
@@ -565,6 +568,87 @@ let moduleAIQueryGate (ctx: HttpContext) : string -> bool =
     match ctx.RequestServices.GetService(typeof<ModuleAIExposureRegistry>) with
     | :? ModuleAIExposureRegistry as registry -> ModuleAIExposureRegistry.isQueryable registry
     | _ -> fun _ -> false
+
+/// The door a tool result passes on its way to a model: the
+/// registered `IEgressGate` over `entityNames`, at
+/// `EgressBoundary.aiToolResult`. Fields the gate refused are named beside
+/// the result, so the model reports the gap instead of planning around it;
+/// a result nothing was refused from is the executor's text, byte for byte.
+/// No registered gate is a composition with no classification (GP 13).
+let gateToolResult (ctx: HttpContext) (toolName: string) (entityNames: string list) (text: string) : Async<string> = async {
+    match
+        ctx.RequestServices.GetService(typeof<IEgressGate>), ctx.RequestServices.GetService(typeof<IFieldClassifier>)
+    with
+    | (:? IEgressGate as gate), (:? IFieldClassifier as classifier) ->
+        let userId =
+            match ctx.Items.TryGetValue "ToolUp.UserId" with
+            | true, (:? string as id) -> id
+            | _ -> "anonymous"
+
+        let crossing =
+            EgressContext.create EgressBoundary.aiToolResult userId
+            |> EgressContext.withDestination toolName
+
+        let! gated = EgressGate.applyToJson classifier gate crossing entityNames text
+
+        if List.isEmpty gated.Withheld then
+            return gated.Text
+        else
+            return
+                JsonObject(
+                    [
+                        KeyValuePair<string, JsonNode>(
+                            "withheldFields",
+                            JsonArray(
+                                gated.Withheld
+                                |> List.map (fun f -> JsonValue.Create f :> JsonNode)
+                                |> Array.ofList
+                            )
+                        )
+                        KeyValuePair<string, JsonNode>(
+                            "withheldReason",
+                            JsonValue.Create
+                                "This deployment's classification policy keeps these fields from the model. Asking again returns the same; say that they were withheld."
+                        )
+                        KeyValuePair<string, JsonNode>("result", JsonNode.Parse gated.Text)
+                    ]
+                )
+                    .ToJsonString()
+    | _ -> return text
+}
+
+/// `gateToolResult` over the entities `moduleName` declared
+/// classifications on. A module that declared none costs a dictionary read.
+let gateModuleToolResult (ctx: HttpContext) (toolName: string) (moduleName: string) (text: string) : Async<string> =
+    match ctx.RequestServices.GetService(typeof<ModuleClassificationRegistry>) with
+    | :? ModuleClassificationRegistry as registry ->
+        gateToolResult ctx toolName (ModuleClassificationRegistry.entitiesOf moduleName registry) text
+    | _ -> async { return text }
+
+/// Put a module tool's result through the door, wherever the
+/// tool is called from: the agent loop and the MCP host both run
+/// `Execute` / `Answer`. The attached parts go to the user's message, never
+/// to the model, so only the text is gated.
+let withClassifiedResults (tool: RegisteredTool) : RegisteredTool =
+    let name = tool.Definition.Name
+    let owner = tool.Definition.SourceModule
+
+    {
+        tool with
+            Execute =
+                fun ctx args -> async {
+                    let! text = tool.Execute ctx args
+                    return! gateModuleToolResult ctx name owner text
+                }
+            Answer =
+                tool.Answer
+                |> Option.map (fun answer ->
+                    fun ctx args -> async {
+                        let! answered = answer ctx args
+                        let! text = gateModuleToolResult ctx name owner answered.Text
+                        return { answered with Text = text }
+                    })
+    }
 
 /// Phase 730 — the audited dispatch-time twin of `moduleGrantGate`.
 ///

@@ -326,6 +326,10 @@ module ModuleSurface =
             // completed. `Provides` on the `JobHandlers` precedent: code the
             // module contributes for the platform to call.
             c (nameof m.DeliveryCompletedHooks) ProvidesFacet
+            // What the module states about its entity fields:
+            // declared data on the `FactTableDescriptions` precedent. The gate
+            // it implies is registered by the compose chain, never a need.
+            c (nameof m.Classifications) ProvidesFacet
         ]
 
     let private serverProvides (m: ServerModule) : ModuleSurfaceEntry list =
@@ -515,6 +519,18 @@ module ModuleSurface =
             m.DeliveryCompletedHooks
             |> List.map (fun h -> entry (nameof m.DeliveryCompletedHooks) "delivery-hook" h.Name "" None)
 
+        // One entry per classified field; a module declaring
+        // none emits nothing.
+        let classifications =
+            m.Classifications
+            |> List.map (fun c ->
+                entry
+                    (nameof m.Classifications)
+                    "field-classification"
+                    $"{c.EntityName}.{c.FieldPath}"
+                    (ClassificationLevel.name c.Level)
+                    None)
+
         List.concat [
             dataTypes
             vectorisation
@@ -537,6 +553,7 @@ module ModuleSurface =
             notificationCategories
             factTables
             deliveryHooks
+            classifications
         ]
 
     /// The substrate a module's own registrations IMPLY. Not a per-module
