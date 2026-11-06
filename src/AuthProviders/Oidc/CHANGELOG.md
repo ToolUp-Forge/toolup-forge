@@ -11,6 +11,10 @@ patch bump stays non-breaking.
 
 ### Added
 
+- Phase 1254: `OidcAdmission.layered` reads allowed tenants, required roles, group aliases
+  and publication readers from settings an application names, and lays them onto the
+  `AuthConfig` claim mapping. It refuses publication readers with no member rule and a
+  directory group aliased to two roles. Additive.
 - Phase 1139: sign-in failures in `OidcSsrSignIn` render a small HTML page
   (closed reason set, try-again link carrying the validated return URL,
   `no-store`) instead of bare `text/plain`; statuses are unchanged. New

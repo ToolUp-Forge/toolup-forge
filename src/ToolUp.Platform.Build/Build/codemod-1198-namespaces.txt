@@ -92,6 +92,7 @@ case ToolUp.Platform ConfigKnobAdded ToolUp.Platform.Compose
 case ToolUp.Platform ConfigKnobChanged ToolUp.Platform.Compose
 case ToolUp.Platform ConfigKnobRemoved ToolUp.Platform.Compose
 case ToolUp.Platform ConfigManifestBound ToolUp.Platform.Compose
+case ToolUp.Platform Configured ToolUp.Platform.Compose
 case ToolUp.Platform ConnectSrc ToolUp.Platform.Scope
 case ToolUp.Platform ConnectedAppliance ToolUp.Platform.Compose
 case ToolUp.Platform Contended ToolUp.Platform.Infra
@@ -126,6 +127,7 @@ case ToolUp.Platform DataObjectVersion ToolUp.Platform.Infra
 case ToolUp.Platform DataTypeComponent ToolUp.Platform.Compose
 case ToolUp.Platform DatasetUnavailable ToolUp.Platform.Jobs
 case ToolUp.Platform DatasetVersion ToolUp.Platform.Infra
+case ToolUp.Platform Date ToolUp.Platform.Compose
 case ToolUp.Platform DecisiveWinner ToolUp.Platform.Infra
 case ToolUp.Platform Declared ToolUp.Platform.Infra
 case ToolUp.Platform DeclaredOffline ToolUp.Platform.Compose
@@ -244,6 +246,7 @@ case ToolUp.Platform Inner ToolUp.Platform.Infra
 case ToolUp.Platform InputSchemaMismatch ToolUp.Platform.Infra
 case ToolUp.Platform InputUnavailable ToolUp.Platform.Infra
 case ToolUp.Platform InsufficientAuthority ToolUp.Platform.Infra
+case ToolUp.Platform Integer ToolUp.Platform.Compose
 case ToolUp.Platform InvalidDeclaration ToolUp.Platform.Compose
 case ToolUp.Platform InvalidIdentifier ToolUp.Platform.Infra
 case ToolUp.Platform InvalidPageRef ToolUp.Platform.Compose
@@ -525,6 +528,7 @@ case ToolUp.Platform TeamOwnerPrincipal ToolUp.Platform.Compose
 case ToolUp.Platform TenantCompositionInvalid ToolUp.Platform.Compose
 case ToolUp.Platform TenantNotRegistered ToolUp.Platform.Compose
 case ToolUp.Platform Terminal ToolUp.Platform.Jobs
+case ToolUp.Platform Text ToolUp.Platform.Compose
 case ToolUp.Platform TiedAtBest ToolUp.Platform.Infra
 case ToolUp.Platform TimeSeriesRange ToolUp.Platform.Infra
 case ToolUp.Platform TimedOut ToolUp.Platform.Jobs
@@ -940,6 +944,9 @@ type ToolUp.Platform DataProvenancePolicy ToolUp.Platform.Infra
 type ToolUp.Platform DataSourceCallContext ToolUp.Platform.Infra
 type ToolUp.Platform DataSourceConfigStore ToolUp.Platform.Infra
 type ToolUp.Platform DataSourceDelivery ToolUp.Platform.Infra
+type ToolUp.Platform DataSourceFromSettings ToolUp.Platform.Compose
+type ToolUp.Platform DataSourceSettingsReading ToolUp.Platform.Compose
+type ToolUp.Platform DataSourceSettingsRefusedException ToolUp.Platform.Compose
 type ToolUp.Platform DataSubjectRequestApiHandler ToolUp.Platform.Audit
 type ToolUp.Platform DataSubjectRequestLifecycle ToolUp.Platform.Compose
 type ToolUp.Platform DatadogReadbackHandlers ToolUp.Platform.Infra
@@ -1343,6 +1350,7 @@ type ToolUp.Platform IRagTelemetry ToolUp.Platform.Infra
 type ToolUp.Platform IRateLimitReader ToolUp.Platform.Infra
 type ToolUp.Platform IRateLimitStore ToolUp.Platform.Infra
 type ToolUp.Platform IRateLimitWriter ToolUp.Platform.Infra
+type ToolUp.Platform IReferenceData ToolUp.Platform.Compose
 type ToolUp.Platform IRemotingArgumentDecoderEvidence ToolUp.Platform.Compose
 type ToolUp.Platform IRemotingDecoderEvidence ToolUp.Platform.Compose
 type ToolUp.Platform IReranker ToolUp.Platform.Infra
@@ -1725,6 +1733,12 @@ type ToolUp.Platform RateLimiterInstanceValidator ToolUp.Platform.Config
 type ToolUp.Platform RateLimiting ToolUp.Platform.Infra
 type ToolUp.Platform RedactionAllowlist ToolUp.Platform.Config
 type ToolUp.Platform ReevaluationSweepRequest ToolUp.Platform.Jobs
+type ToolUp.Platform ReferenceCell ToolUp.Platform.Compose
+type ToolUp.Platform ReferenceColumn ToolUp.Platform.Compose
+type ToolUp.Platform ReferenceColumnType ToolUp.Platform.Compose
+type ToolUp.Platform ReferenceData ToolUp.Platform.Compose
+type ToolUp.Platform ReferenceDataRefusedException ToolUp.Platform.Compose
+type ToolUp.Platform ReferenceDataset ToolUp.Platform.Compose
 type ToolUp.Platform ReflectionTools ToolUp.Platform.Compose
 type ToolUp.Platform RegisteredPurpose ToolUp.Platform.Compose
 type ToolUp.Platform RegistrationCatalogue ToolUp.Platform.Compose
@@ -1930,6 +1944,7 @@ type ToolUp.Platform UserMembershipTeardownLifecycle ToolUp.Platform.Compose
 type ToolUp.Platform UserSchemaApiHandler ToolUp.Platform.Config
 type ToolUp.Platform VectorStoreErasureHandler ToolUp.Platform.Audit
 type ToolUp.Platform VerifiedCompositionProfile ToolUp.Platform.Compose
+type ToolUp.Platform VerifiedReferenceDataset ToolUp.Platform.Compose
 type ToolUp.Platform VerifyDetachedJws ToolUp.Platform.Compose
 type ToolUp.Platform VersionedBuildError ToolUp.Platform.Compose
 type ToolUp.Platform VersionedCompositionRule ToolUp.Platform.Compose

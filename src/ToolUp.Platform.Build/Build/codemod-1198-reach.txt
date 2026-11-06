@@ -5302,6 +5302,9 @@ ToolUp.Platform.Compose.DataFootprintPreflight ruleManifest
 ToolUp.Platform.Compose.DataFootprintPreflight serviceRegistration
 ToolUp.Platform.Compose.DataFootprintPreflight serviceRegistrationForApp
 ToolUp.Platform.Compose.DataFootprintPreflight toValidationResult
+ToolUp.Platform.Compose.DataSourceFromSettings read
+ToolUp.Platform.Compose.DataSourceFromSettings register
+ToolUp.Platform.Compose.DataSourceFromSettings seed
 ToolUp.Platform.Compose.DataSubjectRequestLifecycle ErasureSubstrate
 ToolUp.Platform.Compose.DataSubjectRequestLifecycle create
 ToolUp.Platform.Compose.DataSubjectRequestLifecycle exportArchive
@@ -5873,6 +5876,11 @@ ToolUp.Platform.Compose.ProcessProfileGate shouldRegisterHttpPipeline
 ToolUp.Platform.Compose.ProvenanceMismatch describe
 ToolUp.Platform.Compose.ProviderProfileApiHandler providerProfileApi
 ToolUp.Platform.Compose.ProviderProfileApiHandler routeHandlers
+ToolUp.Platform.Compose.ReferenceData hashOf
+ToolUp.Platform.Compose.ReferenceData ofDatasets
+ToolUp.Platform.Compose.ReferenceData read
+ToolUp.Platform.Compose.ReferenceData register
+ToolUp.Platform.Compose.ReferenceData verifyAll
 ToolUp.Platform.Compose.ReflectionTools AuditKind
 ToolUp.Platform.Compose.ReflectionTools CompositionDocument
 ToolUp.Platform.Compose.ReflectionTools DescribeCompositionTool
@@ -6061,6 +6069,7 @@ ToolUp.Platform.Compose.ServerApp withCspContributor
 ToolUp.Platform.Compose.ServerApp withCspSourceMode
 ToolUp.Platform.Compose.ServerApp withDataExporter
 ToolUp.Platform.Compose.ServerApp withDataObjectOrphanSweep
+ToolUp.Platform.Compose.ServerApp withDeclaredDataSources
 ToolUp.Platform.Compose.ServerApp withDeliveryCompleted
 ToolUp.Platform.Compose.ServerApp withDeploymentReadiness
 ToolUp.Platform.Compose.ServerApp withDeploymentVerification
@@ -6095,6 +6104,7 @@ ToolUp.Platform.Compose.ServerApp withPreMiddleware
 ToolUp.Platform.Compose.ServerApp withProviderProfile
 ToolUp.Platform.Compose.ServerApp withQuotaPolicy
 ToolUp.Platform.Compose.ServerApp withRateLimitDescriptor
+ToolUp.Platform.Compose.ServerApp withReferenceData
 ToolUp.Platform.Compose.ServerApp withRegisteredPurposes
 ToolUp.Platform.Compose.ServerApp withRemotingBatching
 ToolUp.Platform.Compose.ServerApp withScheduledJob

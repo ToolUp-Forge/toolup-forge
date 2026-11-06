@@ -136,7 +136,7 @@
     <ToolUpAlgorithmProvidersVersion Condition="'$(ToolUpAlgorithmProvidersVersion)' == ''">0.39.1</ToolUpAlgorithmProvidersVersion>
     <ToolUpArtefactSigningVersion Condition="'$(ToolUpArtefactSigningVersion)' == ''">0.39.1</ToolUpArtefactSigningVersion>
     <ToolUpAuditSinksVersion Condition="'$(ToolUpAuditSinksVersion)' == ''">0.39.1</ToolUpAuditSinksVersion>
-    <ToolUpAuthProvidersVersion Condition="'$(ToolUpAuthProvidersVersion)' == ''">0.39.1</ToolUpAuthProvidersVersion>
+    <ToolUpAuthProvidersVersion Condition="'$(ToolUpAuthProvidersVersion)' == ''">0.39.2</ToolUpAuthProvidersVersion>
     <ToolUpCalendarVersion Condition="'$(ToolUpCalendarVersion)' == ''">0.39.1</ToolUpCalendarVersion>
     <ToolUpCloudVersion Condition="'$(ToolUpCloudVersion)' == ''">0.39.0</ToolUpCloudVersion>
     <ToolUpContainerSchedulersVersion Condition="'$(ToolUpContainerSchedulersVersion)' == ''">0.39.1</ToolUpContainerSchedulersVersion>

@@ -1915,6 +1915,37 @@ ToolUp.Platform.Compose.DataFootprintPreflight.serviceRegistrationForApp(ToolUp.
 ToolUp.Platform.Compose.DataFootprintPreflight.toValidationResult(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.CompositionDefect]) : ToolUp.Platform.ConfigValidation+ValidationResult
 ToolUp.Platform.Compose.DataFootprintPreflight+DataFootprintCoverageValidator (class)
 ToolUp.Platform.Compose.DataFootprintPreflight+DataFootprintCoverageValidator..ctor(ToolUp.Platform.Compose.CompositionDefectSeverity, Microsoft.FSharp.Collections.FSharpSet`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DsrCoverage], Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.DataFootprint])
+ToolUp.Platform.Compose.DataSourceFromSettings (class)
+ToolUp.Platform.Compose.DataSourceFromSettings..ctor(System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]])
+ToolUp.Platform.Compose.DataSourceFromSettings.Connection : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]] { get }
+ToolUp.Platform.Compose.DataSourceFromSettings.CredentialKeySetting : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.Compose.DataSourceFromSettings.Id : System.String { get }
+ToolUp.Platform.Compose.DataSourceFromSettings.Kind : System.String { get }
+ToolUp.Platform.Compose.DataSourceFromSettings.ScopeSetting : System.String { get }
+ToolUp.Platform.Compose.DataSourceFromSettings.Tables : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]] { get }
+ToolUp.Platform.Compose.DataSourceFromSettingsModule (class)
+ToolUp.Platform.Compose.DataSourceFromSettingsModule.read(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Infra.IDataSource], ToolUp.Platform.Compose.DataSourceFromSettings) : ToolUp.Platform.Compose.DataSourceSettingsReading
+ToolUp.Platform.Compose.DataSourceFromSettingsModule.register(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.DataSourceFromSettings]) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.Extensions.DependencyInjection.IServiceCollection, Microsoft.Extensions.DependencyInjection.IServiceCollection]
+ToolUp.Platform.Compose.DataSourceFromSettingsModule.seed(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Infra.IDataSource], ToolUp.Platform.Infra.IDataSourceConfigStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.DataSourceFromSettings]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.Compose.DataSourceSettingsReading (class)
+ToolUp.Platform.Compose.DataSourceSettingsReading.IsConfigured : System.Boolean { get }
+ToolUp.Platform.Compose.DataSourceSettingsReading.IsDisabled : System.Boolean { get }
+ToolUp.Platform.Compose.DataSourceSettingsReading.IsRefused : System.Boolean { get }
+ToolUp.Platform.Compose.DataSourceSettingsReading.Tag : System.Int32 { get }
+ToolUp.Platform.Compose.DataSourceSettingsReading+Configured (class)
+ToolUp.Platform.Compose.DataSourceSettingsReading+Configured.config : ToolUp.Platform.DataSourceConfig { get }
+ToolUp.Platform.Compose.DataSourceSettingsReading+Configured.scope : System.String { get }
+ToolUp.Platform.Compose.DataSourceSettingsReading+Disabled (class)
+ToolUp.Platform.Compose.DataSourceSettingsReading+Disabled.note : System.String { get }
+ToolUp.Platform.Compose.DataSourceSettingsReading+Refused (class)
+ToolUp.Platform.Compose.DataSourceSettingsReading+Refused.reason : System.String { get }
+ToolUp.Platform.Compose.DataSourceSettingsReading+Tags (class)
+ToolUp.Platform.Compose.DataSourceSettingsReading+Tags.Configured : System.Int32 (literal)
+ToolUp.Platform.Compose.DataSourceSettingsReading+Tags.Disabled : System.Int32 (literal)
+ToolUp.Platform.Compose.DataSourceSettingsReading+Tags.Refused : System.Int32 (literal)
+ToolUp.Platform.Compose.DataSourceSettingsRefusedException (class)
+ToolUp.Platform.Compose.DataSourceSettingsRefusedException..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Platform.Compose.DataSourceSettingsRefusedException.Refusals : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.Compose.DataSubjectRequestLifecycle (class)
 ToolUp.Platform.Compose.DataSubjectRequestLifecycle.create(System.IServiceProvider) : ToolUp.Platform.Compose.ITenantLifecycle
 ToolUp.Platform.Compose.DataSubjectRequestLifecycle.exportArchive(System.IServiceProvider, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.LifecycleExportArchive, System.String]]
@@ -3417,6 +3448,8 @@ ToolUp.Platform.Compose.IPrivacyBudgetLedger.IsDurable : System.Boolean { get }
 ToolUp.Platform.Compose.IPrivacyBudgetLedger.RecordSpend(ToolUp.Platform.Compose.BudgetSpend, ToolUp.Platform.Compose.SpendOutcome) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.Compose.IPrivacyBudgetLedger.RemainingBudget(ToolUp.Platform.Compose.BudgetScope, System.Decimal) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.Compose.PrivacyBudget]
 ToolUp.Platform.Compose.IPrivacyBudgetLedger.ReserveBudget(ToolUp.Platform.Compose.BudgetSpend, System.Decimal) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.Compose.BudgetDecision]
+ToolUp.Platform.Compose.IReferenceData (interface)
+ToolUp.Platform.Compose.IReferenceData.Dataset(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Compose.VerifiedReferenceDataset]
 ToolUp.Platform.Compose.IRemotingArgumentDecoderEvidence (interface)
 ToolUp.Platform.Compose.IRemotingArgumentDecoderEvidence.RemotingArgumentDecoders : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Compose.RemotingDecoderIntegrity] { get }
 ToolUp.Platform.Compose.IRemotingDecoderEvidence (interface)
@@ -4238,6 +4271,52 @@ ToolUp.Platform.Compose.ProvenanceMismatchModule.describe(ToolUp.Platform.Compos
 ToolUp.Platform.Compose.ProviderProfileApiHandler (class)
 ToolUp.Platform.Compose.ProviderProfileApiHandler.providerProfileApi(ToolUp.Platform.Providers+IProviderProfile, Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.IProviderProfileApi
 ToolUp.Platform.Compose.ProviderProfileApiHandler.routeHandlers(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Providers+IProviderProfile]) : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]]
+ToolUp.Platform.Compose.ReferenceCell (class)
+ToolUp.Platform.Compose.ReferenceCell.IsDate : System.Boolean { get }
+ToolUp.Platform.Compose.ReferenceCell.IsInteger : System.Boolean { get }
+ToolUp.Platform.Compose.ReferenceCell.IsText : System.Boolean { get }
+ToolUp.Platform.Compose.ReferenceCell.Tag : System.Int32 { get }
+ToolUp.Platform.Compose.ReferenceCell+Date (class)
+ToolUp.Platform.Compose.ReferenceCell+Date.Item : System.DateOnly { get }
+ToolUp.Platform.Compose.ReferenceCell+Integer (class)
+ToolUp.Platform.Compose.ReferenceCell+Integer.Item : System.Int64 { get }
+ToolUp.Platform.Compose.ReferenceCell+Tags (class)
+ToolUp.Platform.Compose.ReferenceCell+Tags.Date : System.Int32 (literal)
+ToolUp.Platform.Compose.ReferenceCell+Tags.Integer : System.Int32 (literal)
+ToolUp.Platform.Compose.ReferenceCell+Tags.Text : System.Int32 (literal)
+ToolUp.Platform.Compose.ReferenceCell+Text (class)
+ToolUp.Platform.Compose.ReferenceCell+Text.Item : System.String { get }
+ToolUp.Platform.Compose.ReferenceColumn (class)
+ToolUp.Platform.Compose.ReferenceColumn..ctor(System.String, ToolUp.Platform.Compose.ReferenceColumnType)
+ToolUp.Platform.Compose.ReferenceColumn.Name : System.String { get }
+ToolUp.Platform.Compose.ReferenceColumn.Type : ToolUp.Platform.Compose.ReferenceColumnType { get }
+ToolUp.Platform.Compose.ReferenceColumnType (class)
+ToolUp.Platform.Compose.ReferenceColumnType.Date : ToolUp.Platform.Compose.ReferenceColumnType { get }
+ToolUp.Platform.Compose.ReferenceColumnType.Integer : ToolUp.Platform.Compose.ReferenceColumnType { get }
+ToolUp.Platform.Compose.ReferenceColumnType.IsDate : System.Boolean { get }
+ToolUp.Platform.Compose.ReferenceColumnType.IsInteger : System.Boolean { get }
+ToolUp.Platform.Compose.ReferenceColumnType.IsText : System.Boolean { get }
+ToolUp.Platform.Compose.ReferenceColumnType.Tag : System.Int32 { get }
+ToolUp.Platform.Compose.ReferenceColumnType.Text : ToolUp.Platform.Compose.ReferenceColumnType { get }
+ToolUp.Platform.Compose.ReferenceColumnType+Tags (class)
+ToolUp.Platform.Compose.ReferenceColumnType+Tags.Date : System.Int32 (literal)
+ToolUp.Platform.Compose.ReferenceColumnType+Tags.Integer : System.Int32 (literal)
+ToolUp.Platform.Compose.ReferenceColumnType+Tags.Text : System.Int32 (literal)
+ToolUp.Platform.Compose.ReferenceData (class)
+ToolUp.Platform.Compose.ReferenceData.hashOf(System.Byte[]) : System.String
+ToolUp.Platform.Compose.ReferenceData.ofDatasets(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.VerifiedReferenceDataset]) : ToolUp.Platform.Compose.IReferenceData
+ToolUp.Platform.Compose.ReferenceData.read(ToolUp.Platform.Compose.ReferenceDataset, System.Byte[]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Compose.VerifiedReferenceDataset, System.String]
+ToolUp.Platform.Compose.ReferenceData.register(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.ReferenceDataset]) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.Extensions.DependencyInjection.IServiceCollection, Microsoft.Extensions.DependencyInjection.IServiceCollection]
+ToolUp.Platform.Compose.ReferenceData.verifyAll(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.ReferenceDataset]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.VerifiedReferenceDataset]
+ToolUp.Platform.Compose.ReferenceDataRefusedException (class)
+ToolUp.Platform.Compose.ReferenceDataRefusedException..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Platform.Compose.ReferenceDataRefusedException.Refusals : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.Compose.ReferenceDataset (class)
+ToolUp.Platform.Compose.ReferenceDataset..ctor(System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.ReferenceColumn])
+ToolUp.Platform.Compose.ReferenceDataset.Columns : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.ReferenceColumn] { get }
+ToolUp.Platform.Compose.ReferenceDataset.ContentHash : System.String { get }
+ToolUp.Platform.Compose.ReferenceDataset.Id : System.String { get }
+ToolUp.Platform.Compose.ReferenceDataset.Source : System.String { get }
 ToolUp.Platform.Compose.ReflectionTools (class)
 ToolUp.Platform.Compose.ReflectionTools.AuditKind : System.String (literal)
 ToolUp.Platform.Compose.ReflectionTools.CompositionDocument : System.String (literal)
@@ -4843,6 +4922,7 @@ ToolUp.Platform.Compose.ServerAppModule.withCspContributor(ToolUp.Platform.Scope
 ToolUp.Platform.Compose.ServerAppModule.withCspSourceMode(ToolUp.Platform.Scope.SecurityHardening+CspSourceMode, ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.Platform.Compose.ServerAppModule.withDataExporter(ToolUp.Platform.Audit.IDataExporter+IDataExporter, ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.Platform.Compose.ServerAppModule.withDataObjectOrphanSweep(ToolUp.Platform.Audit.DataObjectOrphanSweep+DataObjectOrphanSweepPolicy, ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
+ToolUp.Platform.Compose.ServerAppModule.withDeclaredDataSources(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.DataSourceFromSettings], ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.Platform.Compose.ServerAppModule.withDeliveryCompleted(System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.IServiceProvider, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.Jobs.DeliveryCompleted+Delivery, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]]], ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.Platform.Compose.ServerAppModule.withDeploymentReadiness(ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.Platform.Compose.ServerAppModule.withDeploymentVerification(ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
@@ -4877,6 +4957,7 @@ ToolUp.Platform.Compose.ServerAppModule.withPreMiddleware(Microsoft.FSharp.Core.
 ToolUp.Platform.Compose.ServerAppModule.withProviderProfile(ToolUp.Platform.Providers+IProviderProfile, ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.Platform.Compose.ServerAppModule.withQuotaPolicy(ToolUp.Platform.Infra.Usage.ITeamQuotaPolicy, ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.Platform.Compose.ServerAppModule.withRateLimitDescriptor(ToolUp.Platform.RateLimitDescriptor, ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
+ToolUp.Platform.Compose.ServerAppModule.withReferenceData(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.ReferenceDataset], ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.Platform.Compose.ServerAppModule.withRegisteredPurposes(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.RegisteredPurpose], ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.Platform.Compose.ServerAppModule.withRemotingBatching(ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.Platform.Compose.ServerAppModule.withScheduledJob(ToolUp.Platform.Jobs.ScheduledJobDeclaration, ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
@@ -5348,6 +5429,10 @@ ToolUp.Platform.Compose.VerifiedCompositionProfile.resolveGate(ToolUp.Platform.C
 ToolUp.Platform.Compose.VerifiedCompositionProfile.resolveSeamGate(ToolUp.Platform.Compose.CompositionProfile, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.Compose.CapabilityDenial, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.CompanionCapability]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.SeamGrant]]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Compose.ISeamAuthorityGate, ToolUp.Platform.Compose.CompositionProfileRefusal]
 ToolUp.Platform.Compose.VerifiedCompositionProfile.undeclaredSeamComponents(Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.CompanionCapability], Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.SeamGrant]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Platform.Compose.VerifiedCompositionProfile.verifyIsolation(ToolUp.Platform.Compose.CompositionProfile, System.String, ToolUp.Platform.ExecutionProfile, ToolUp.Platform.IsolationPosture) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.Compose.CompositionProfileRefusal]
+ToolUp.Platform.Compose.VerifiedReferenceDataset (class)
+ToolUp.Platform.Compose.VerifiedReferenceDataset..ctor(ToolUp.Platform.Compose.ReferenceDataset, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.ReferenceCell]])
+ToolUp.Platform.Compose.VerifiedReferenceDataset.Declaration : ToolUp.Platform.Compose.ReferenceDataset { get }
+ToolUp.Platform.Compose.VerifiedReferenceDataset.Rows : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.ReferenceCell]] { get }
 ToolUp.Platform.Compose.VersionedBuildError (class)
 ToolUp.Platform.Compose.VersionedBuildError.IsBuildFailed : System.Boolean { get }
 ToolUp.Platform.Compose.VersionedBuildError.IsMigrationFailed : System.Boolean { get }
