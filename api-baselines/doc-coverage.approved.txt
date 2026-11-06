@@ -95,7 +95,7 @@ ToolUp.Facts.Client 51/118
 ToolUp.Facts.Core 696/1290
 ToolUp.Facts.Presentation 159/257
 ToolUp.Facts.Presentation.Server 199/362
-ToolUp.Facts.Server 1132/1784
+ToolUp.Facts.Server 1155/1822
 ToolUp.Facts.Shared 270/302
 ToolUp.FeatureFlagProviders.OpenFeature 5/9
 ToolUp.Forms.Client 4/19
@@ -143,7 +143,7 @@ ToolUp.Platform.Server 3078/5530
 ToolUp.Platform.Server.Audit 373/694
 ToolUp.Platform.Server.Config 388/658
 ToolUp.Platform.Server.Infra 2092/3573
-ToolUp.Platform.Server.Jobs 903/1662
+ToolUp.Platform.Server.Jobs 905/1664
 ToolUp.Platform.Server.Remoting 279/863
 ToolUp.Platform.Server.Scope 435/778
 ToolUp.Platform.Testing 118/264

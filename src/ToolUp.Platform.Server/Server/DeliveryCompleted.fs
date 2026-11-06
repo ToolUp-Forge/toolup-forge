@@ -27,6 +27,10 @@
 ///
 /// A deployment that registers no hook composes byte-for-byte as before: the
 /// ingestor is not decorated and no middleware is mounted (GP 11 / GP 13).
+///
+/// A seam that counts its own events over the same unit of work holds its state
+/// on the unit (`tryDeliveryState`), and its work runs when the unit completes,
+/// after the hooks, whether or not the unit recorded an ingestion run.
 module ToolUp.Platform.Jobs.DeliveryCompleted
 
 open System
@@ -139,8 +143,34 @@ type internal DeliveryCollector(origin: DeliveryOrigin) =
     let runs = ResizeArray<string * DeliveredRun>()
     let mutable sink: DeliverySink option = None
     let mutable closed = false
+    let states = Collections.Generic.Dictionary<obj, obj>(HashIdentity.Reference)
+    let completions = ResizeArray<ILogger * (ResolvedScope -> Async<unit>)>()
 
     member _.Origin = origin
+
+    /// The state a seam holds on this unit under `key`, created with its
+    /// completion work the first time. `None` once the unit has closed.
+    member _.State<'T when 'T: not struct>
+        (key: obj, logger: ILogger, create: unit -> 'T * (ResolvedScope -> Async<unit>))
+        : 'T option =
+        lock gate (fun () ->
+            if closed then
+                None
+            else
+                match states.TryGetValue key with
+                | true, state -> Some(unbox<'T> state)
+                | _ ->
+                    let state, completion = create ()
+                    states[key] <- box state
+                    completions.Add((logger, completion))
+                    Some state)
+
+    /// The completion work held on this unit, handed over once.
+    member _.TakeCompletions() =
+        lock gate (fun () ->
+            let taken = List.ofSeq completions
+            completions.Clear()
+            taken)
 
     member _.Record(scopeId: string, run: DeliveredRun, by: DeliverySink) =
         lock gate (fun () ->
@@ -288,7 +318,38 @@ let internal complete (collector: DeliveryCollector) (scope: ResolvedScope) : As
                     match! Async.Catch(async { return! hook.Callback sink.Services delivery }) with
                     | Choice1Of2() -> ()
                     | Choice2Of2 ex -> do! callbackFailed sink delivery hook ex
+
+    for logger, completion in collector.TakeCompletions() do
+        match! Async.Catch(async { return! completion scope }) with
+        | Choice1Of2() -> ()
+        | Choice2Of2 ex ->
+            let cause = ProviderExceptions.unwrap ex
+
+            warn
+                logger
+                (sprintf
+                    "[DeliveryCompleted] completion work for a delivery from %s failed (%s: %s); the delivery is unaffected."
+                    (originText collector.Origin)
+                    (cause.GetType().Name)
+                    cause.Message)
 }
+
+/// The state a seam holds on the delivery in progress, or `None` when no
+/// delivery is in progress: off every request and job attempt, on a request
+/// where no hook mounted the delivery seam, or once the delivery has closed.
+/// `create` makes the state and the work to run when the delivery completes,
+/// once per delivery per `key` (compared by reference). That work runs after the
+/// hooks, whether or not the delivery recorded an ingestion run, and is handed
+/// the scope the platform resolved for the delivery, which is the anonymous scope
+/// when it resolved none, so it decides for itself what that means. A failure of
+/// the work is logged to `logger` and never reaches the delivery.
+let tryDeliveryState<'T when 'T: not struct>
+    (key: obj)
+    (logger: ILogger)
+    (create: unit -> 'T * (ResolvedScope -> Async<unit>))
+    : 'T option =
+    DeliveryScope.current ()
+    |> Option.bind (fun collector -> collector.State<'T>(key, logger, create))
 
 // ─── The two seams that open and record a delivery ─────────────────────
 

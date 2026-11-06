@@ -2058,3 +2058,328 @@ module DefaultFactTableWriter =
         (clock: unit -> DateTime)
         : IFactTableWriter =
         DefaultFactTableWriter(facts, storage, events, tables, registry, clock, Destination) :> IFactTableWriter
+
+
+// ─── The once-per-delivery narrative trigger ───────────────────────────
+//
+// A narrative that reads a daily table is regenerated once per delivery, over
+// the newest period, however many tables that delivery carries. A delivery is
+// the runs one unit of work opens naming the same inputs. The rule is pure
+// (`firing`), and `decorate` holds each commit of a watched table until the unit
+// completes, when every table of the delivery has landed.
+//
+// The unit is the platform's delivery (`DeliveryCompleted`) where one is in
+// progress: every ingestion job attempt, and a request where a completed-delivery
+// hook mounted the seam. Otherwise it is the request itself. Off both there is no
+// scope the platform resolved, so nothing fires and the log says why.
+
+/// The firing rule of `FactsCompose.withDeliveryTrigger`, and the decoration.
+module DeliveryTrigger =
+
+    /// One commit of a watched table, under what its run declared.
+    type DeliveredCommit = {
+        /// What the run declared when it was opened.
+        Options: FactTableRunOptions
+        /// What the commit recorded.
+        Commit: FactTableCommit
+        /// The newest period an earlier committed run of the table stated, as
+        /// `period` orders them. `None` when no earlier run stated one: a
+        /// whole-table run's record says nothing of the periods it held.
+        Standing: (DateTime * DateTime) option
+    }
+
+    /// A delivery's identity: its declared inputs, each once, in ordinal order.
+    let key (options: FactTableRunOptions) : string =
+        options.Inputs
+        |> List.distinct
+        |> List.sortWith (fun a b -> String.CompareOrdinal(a, b))
+        |> String.concat ","
+
+    /// The period a run states, ordered newest-last: a whole-table run states
+    /// every period.
+    let period (options: FactTableRunOptions) : DateTime * DateTime =
+        match options.Slice with
+        | Some slice -> slice.To, slice.From
+        | None -> DateTime.MaxValue, DateTime.MinValue
+
+    /// Whether a commit brought its period to the table or changed it.
+    let moved (commit: FactTableCommit) : bool =
+        commit.Change.New + commit.Change.Changed + commit.Change.Removed > 0
+
+    /// Of one delivery's commits of a run's tables, those of the newest period
+    /// when the run fires: that period is not older than one the tables already
+    /// held, and one of its commits moved. So a re-delivery that changed nothing
+    /// fires nothing, a correction of the newest period fires, and a restatement of
+    /// an earlier period fires nothing, whether it arrives alone or beside a newer
+    /// period that did not move.
+    let firing (commits: DeliveredCommit list) : DeliveredCommit list =
+        match commits with
+        | [] -> []
+        | _ ->
+            let newest = commits |> List.map (_.Options >> period) |> List.max
+
+            let superseded =
+                commits |> List.choose _.Standing |> List.exists (fun held -> held > newest)
+
+            let ofNewest = commits |> List.filter (fun c -> period c.Options = newest)
+
+            if not superseded && ofNewest |> List.exists (_.Commit >> moved) then
+                ofNewest
+            else
+                []
+
+    /// The change a firing is enqueued over, which the job's idempotency keys on:
+    /// the delivery and its period, and what else tells one delivery of them from
+    /// another. Two runs over the same inputs differ only by method. A delivery
+    /// that declared no inputs has only its content to tell a correction from the
+    /// delivery it corrects, and would otherwise coalesce onto that job.
+    let change (firing: DeliveredCommit list) : Set<string> =
+        let options = firing |> List.map _.Options
+
+        let stated =
+            match (List.head options).Slice with
+            | Some slice -> sprintf "%s..%s" (slice.From.ToString "o") (slice.To.ToString "o")
+            | None -> "whole-table"
+
+        let methods =
+            options
+            |> List.choose _.Method
+            |> List.map (fun m -> "method:" + DeclaredMethod.token m)
+
+        let content =
+            if options |> List.forall (_.Inputs >> List.isEmpty) then
+                firing |> List.map (fun c -> "content:" + c.Commit.Watermark.ContentDigest)
+            else
+                []
+
+        Set.ofList (
+            ("delivery:" + key (List.head options)) :: ("period:" + stated) :: methods
+            @ content
+        )
+
+    /// The change a run with no options is enqueued over: its own commit.
+    let private commitChange (commit: FactTableCommit) : Set<string> =
+        Set.singleton (sprintf "fact-table:%s@%d" commit.Watermark.TableId commit.Watermark.Sequence)
+
+    /// What one unit of work has committed of the watched tables.
+    type private Pending() =
+        let gate = obj ()
+        let commits = ResizeArray<string * DeliveredCommit>()
+
+        member _.Add(scopeId: string, commit: DeliveredCommit) =
+            lock gate (fun () -> commits.Add((scopeId, commit)))
+
+        member _.Commits() =
+            lock gate (fun () -> List.ofSeq commits)
+
+    /// `inner`, enqueueing the runs `runsFor` names for a committed table. A run
+    /// opened with options fires once per delivery, per `firing`, when its unit
+    /// completes; one opened with none fires per commit. Every refusal on the
+    /// path is logged at Warning with the run key and the table, and none of them
+    /// reaches the commit, whose result is `inner`'s.
+    let decorate
+        (runsFor: string -> string list)
+        (scheduler: unit -> ToolUp.Platform.Jobs.IJobScheduler option)
+        (accessor: unit -> Microsoft.AspNetCore.Http.IHttpContextAccessor option)
+        (logger: ILogger)
+        (inner: IFactTableWriter)
+        : IFactTableWriter =
+
+        let refused (runKey: string) (table: string) (reason: string) =
+            logger.Warn(sprintf "[DeliveryTrigger] run '%s' on a commit of table '%s': %s" runKey table reason)
+
+        let enqueue (resolved: ResolvedScope) (runKey: string) (table: string) (change: Set<string>) = async {
+            match scheduler () with
+            | None -> refused runKey table "no IJobScheduler is composed, so the run was not enqueued"
+            | Some jobs ->
+                match! Async.Catch(GroundedNarrativeTrigger.enqueueChange jobs resolved runKey change) with
+                | Choice1Of2 GroundedNarrativeTrigger.EnqueueOutcome.Started
+                | Choice1Of2 GroundedNarrativeTrigger.EnqueueOutcome.Coalesced -> ()
+                | Choice1Of2(GroundedNarrativeTrigger.EnqueueOutcome.ScheduleRefused reason) ->
+                    refused runKey table (sprintf "the scheduler refused the job (%s)" reason)
+                | Choice1Of2(GroundedNarrativeTrigger.EnqueueOutcome.TriggerRefused(jobId, reason)) ->
+                    refused runKey table (sprintf "job %O was scheduled and its trigger refused (%s)" jobId reason)
+                | Choice2Of2 ex -> refused runKey table (sprintf "scheduling threw (%s)" ex.Message)
+        }
+
+        /// The unit of work has completed, under the scope the platform resolved
+        /// for it: each run fires at most once per delivery.
+        let flush (pending: Pending) (resolved: ResolvedScope) = async {
+            let mine, foreign =
+                pending.Commits()
+                |> List.partition (fun (scopeId, _) -> not resolved.IsAnonymous && scopeId = resolved.ScopeId)
+
+            for scopeId, commit in foreign do
+                let table = commit.Commit.Watermark.TableId
+
+                for runKey in runsFor table do
+                    refused
+                        runKey
+                        table
+                        (if resolved.IsAnonymous then
+                             sprintf
+                                 "the delivery resolved no scope, so the commit in scope '%s' enqueued nothing"
+                                 scopeId
+                         else
+                             sprintf
+                                 "the commit is in scope '%s' and the delivery resolved '%s', so it enqueued nothing"
+                                 scopeId
+                                 resolved.ScopeId)
+
+            for _, delivered in mine |> List.map snd |> List.groupBy (_.Options >> key) do
+                let runs =
+                    delivered
+                    |> List.collect (fun c -> runsFor c.Commit.Watermark.TableId)
+                    |> List.distinct
+
+                for runKey in runs do
+                    let firingCommits =
+                        delivered
+                        |> List.filter (fun c -> List.contains runKey (runsFor c.Commit.Watermark.TableId))
+                        |> firing
+
+                    match firingCommits with
+                    | [] -> ()
+                    | first :: _ -> do! enqueue resolved runKey first.Commit.Watermark.TableId (change firingCommits)
+        }
+
+        let stateKey = obj ()
+
+        let httpContext () =
+            accessor () |> Option.bind (fun a -> Option.ofObj a.HttpContext)
+
+        /// The unit of work's pending commits: the platform's delivery in
+        /// progress, else the request. `None` off both.
+        let pendingOfUnit () : Pending option =
+            let create () =
+                let pending = Pending()
+                pending, flush pending
+
+            match ToolUp.Platform.Jobs.DeliveryCompleted.tryDeliveryState stateKey logger create with
+            | Some pending -> Some pending
+            | None ->
+                match httpContext () with
+                | None -> None
+                | Some ctx ->
+                    match ctx.Items.TryGetValue stateKey with
+                    | true, (:? Pending as pending) -> Some pending
+                    | _ ->
+                        let pending = Pending()
+                        ctx.Items[stateKey] <- box pending
+
+                        ctx.Response.OnCompleted(fun () ->
+                            Async.StartAsTask(
+                                flush
+                                    pending
+                                    (ToolUp.Platform.Scope.StorageScopeResolver.ScopeResolution.forRequest ctx)
+                            )
+                            :> System.Threading.Tasks.Task)
+
+                        Some pending
+
+        /// What a commit means for its runs. Everything the trigger reads is read
+        /// here, on the run's own record: its options, and the newest period an
+        /// earlier run of the table stated.
+        let observe (scope: ResolvedScope) (runId: string) (commit: FactTableCommit) (runs: string list) = async {
+            let table = commit.Watermark.TableId
+
+            let refusedAll (reason: string) =
+                for runKey in runs do
+                    refused runKey table reason
+
+            match! inner.Runs(scope, table) with
+            | Error error ->
+                refusedAll (
+                    sprintf "its run could not be read (%s), so nothing fired" (FactTableWriteError.describe error)
+                )
+            | Ok records ->
+                match records |> List.tryFind (fun r -> r.RunId = runId) with
+                | None -> refusedAll (sprintf "run '%s' is not on the table's record, so nothing fired" runId)
+                | Some record ->
+                    let options = FactTableRunOptions.ofRun record.Options
+
+                    if FactTableRunOptions.isNone options then
+                        match
+                            httpContext ()
+                            |> Option.map ToolUp.Platform.Scope.StorageScopeResolver.ScopeResolution.forRequest
+                        with
+                        | Some resolved when not resolved.IsAnonymous && resolved.ScopeId = scope.ScopeId ->
+                            for runKey in runs do
+                                do! enqueue resolved runKey table (commitChange commit)
+                        | Some _ ->
+                            refusedAll (
+                                sprintf
+                                    "the request did not resolve the commit's scope '%s', so nothing fired"
+                                    scope.ScopeId
+                            )
+                        | None ->
+                            refusedAll "the commit is off the request path, so no resolved scope can carry the run"
+                    else
+                        let standing =
+                            records
+                            |> List.filter (fun r -> r.RunId <> runId)
+                            |> List.choose (fun r ->
+                                match r.Status, r.Options.Slice with
+                                | FactTableRunStatus.Committed _, Some slice -> Some(slice.To, slice.From)
+                                | _ -> None)
+                            |> function
+                                | [] -> None
+                                | held -> Some(List.max held)
+
+                        match pendingOfUnit () with
+                        | Some pending ->
+                            pending.Add(
+                                scope.ScopeId,
+                                {
+                                    Options = options
+                                    Commit = commit
+                                    Standing = standing
+                                }
+                            )
+                        | None ->
+                            refusedAll
+                                "the commit is off the request path and outside any delivery, so no resolved scope can carry the run"
+        }
+
+        { new IFactTableWriter with
+            member _.OpenRun(scope, tableId, ?provenance, ?options) =
+                inner.OpenRun(scope, tableId, ?provenance = provenance, ?options = options)
+
+            member _.WriteRows(scope, runId, rows) = inner.WriteRows(scope, runId, rows)
+
+            member _.Commit(scope, runId) = async {
+                let! result = inner.Commit(scope, runId)
+
+                match result with
+                | Error _ -> ()
+                | Ok commit ->
+                    let table = commit.Watermark.TableId
+
+                    match!
+                        Async.Catch(
+                            async {
+                                match runsFor table with
+                                | [] -> ()
+                                | runs -> do! observe scope runId commit runs
+                            }
+                        )
+                    with
+                    | Choice1Of2() -> ()
+                    | Choice2Of2 ex ->
+                        logger.Warn(
+                            sprintf
+                                "[DeliveryTrigger] a commit of table '%s' enqueued nothing: %s: %s"
+                                table
+                                (ex.GetType().Name)
+                                ex.Message
+                        )
+
+                return result
+            }
+
+            member _.Abandon(scope, runId, reason) = inner.Abandon(scope, runId, reason)
+            member _.Runs(scope, tableId) = inner.Runs(scope, tableId)
+            member _.Status(scope, tableId) = inner.Status(scope, tableId)
+          interface IFactTableOrphanSweep with
+              member _.SweepOrphans(scope) = FactTableOrphanSweep.sweep inner scope
+        }

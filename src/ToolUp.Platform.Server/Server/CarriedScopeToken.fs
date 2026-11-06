@@ -394,3 +394,19 @@ module DeclaredPrincipal =
         | NoActiveTeam -> "an active team"
         | NotTeamMember teamId -> $"membership of team '{teamId}'"
         | ScopeResolutionFailed message -> $"a resolution (the scope resolver failed: {message})"
+
+    /// The scope `userId` resolves to when that is `scopeId`, which is how a
+    /// publication's declared principal reads its publishing scope. Otherwise
+    /// the refusal, in words a log line can carry: the principal resolves to
+    /// another scope, or lacks a grant.
+    let resolveInScope
+        (resolver: DeclaredPrincipalResolver)
+        (scopeId: string)
+        (userId: string)
+        : Async<Result<ResolvedScope, string>> =
+        async {
+            match! resolver.Resolve(userOf userId userId) with
+            | Ok scope when scope.ScopeId = scopeId -> return Ok scope
+            | Ok scope -> return Error $"its principal resolves to scope '{scope.ScopeId}'"
+            | Error error -> return Error $"its principal lacks {missingGrant error}"
+        }
