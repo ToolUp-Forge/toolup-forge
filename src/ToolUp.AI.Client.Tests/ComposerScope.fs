@@ -262,7 +262,7 @@ let run (route: Route) (report: Run -> unit) : unit =
         let store = ModelStore.create<Client.Model, Client.Msg> ()
 
         let messages = [|
-            Client.ModuleMsg(box Increment)
+            Client.ModuleMsg(ModuleId, box Increment)
             Client.CommandPaletteOpened
             Client.CommandPaletteDismissed
         |]
@@ -278,7 +278,7 @@ let run (route: Route) (report: Run -> unit) : unit =
     | Route.ComposerWholeTree
     | Route.ComposerStore ->
         let messages = [|
-            AIClientConfig.ShellMsg(Client.ModuleMsg(box Increment))
+            AIClientConfig.ShellMsg(Client.ModuleMsg(ModuleId, box Increment))
             AIClientConfig.ShellMsg Client.CommandPaletteOpened
             AIClientConfig.SidePanelMsg AIClientConfig.Toggle
         |]

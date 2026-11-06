@@ -250,7 +250,7 @@ let private hydrate (sliced: bool) (report: Hydrated -> unit) : unit =
                 obj.ReferenceEquals(document?getElementById "composer-module", serverModule)
 
             let adoptedRoot = obj.ReferenceEquals(host?firstChild, serverFirst)
-            dispatch.Value(Client.ModuleMsg(ComposerScope.moduleIncrement ()))
+            dispatch.Value(Client.ModuleMsg(ComposerScope.ModuleId, ComposerScope.moduleIncrement ()))
 
             JS.setTimeout
                 (fun () ->
@@ -360,7 +360,10 @@ let private composerTests =
             Expect.isTrue (obj.ReferenceEquals(first.SidePanel, again.SidePanel)) "the side-panel dispatch is stable"
 
             Expect.isTrue
-                (obj.ReferenceEquals(Client.moduleDispatchFor first.Shell, Client.moduleDispatchFor again.Shell))
+                (obj.ReferenceEquals(
+                    Client.moduleDispatchFor ComposerScope.ModuleId first.Shell,
+                    Client.moduleDispatchFor ComposerScope.ModuleId again.Shell
+                ))
                 "so the shell's module-dispatch cache hits"
 
             Expect.isTrue

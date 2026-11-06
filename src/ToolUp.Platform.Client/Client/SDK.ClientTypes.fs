@@ -429,8 +429,8 @@ type ErasedModule = {
     /// targeting this module. Receives `(actionKey, payloadJson)` and
     /// returns the module's `Msg` to dispatch, or `None` to reject the
     /// action (unknown key, bad payload). The shell looks the decoder up
-    /// by module Id, calls it, and routes the boxed result through the
-    /// existing `ModuleMsg` pathway — no module knows about any other
+    /// by module Id, calls it, and runs the boxed result through that module's
+    /// `Update`, active or not — no module knows about any other
     /// module's decoder. Modules without a decoder silently ignore
     /// targeted actions.
     ActionDecoder: (string * string -> obj option) option
@@ -2910,7 +2910,7 @@ module ClientModule =
     /// erasure. The decoder receives `(actionKey, payloadJson)` for every
     /// `Notification.ModuleAction` targeted at this module's `Definition.Id`
     /// and returns the `Msg` to dispatch (or `None` to reject). The shell
-    /// routes the result through its existing `ModuleMsg` pathway — the
+    /// runs the result through the module's `Update`, active or not — the
     /// decoded message lands in the module's `update` exactly as if the
     /// user had triggered it from a UI event.
     let withActionDecoder

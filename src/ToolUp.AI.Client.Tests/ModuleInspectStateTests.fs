@@ -107,7 +107,7 @@ let tests =
 
             Expect.isTrue (ModuleStateObserver.tryInspect id).IsNone "nothing is reported before the first update"
 
-            let afterOne, _ = update [ erased ] (Client.ModuleMsg(box Increment)) initial
+            let afterOne, _ = update [ erased ] (Client.ModuleMsg(id, box Increment)) initial
             let report1 = ModuleStateObserver.tryInspect id
 
             Expect.equal
@@ -120,7 +120,7 @@ let tests =
                 (Some [ "reset", true ])
                 "the action state follows the model"
 
-            let _, _ = update [ erased ] (Client.ModuleMsg(box Increment)) afterOne
+            let _, _ = update [ erased ] (Client.ModuleMsg(id, box Increment)) afterOne
 
             Expect.equal
                 (ModuleStateObserver.tryInspect id |> Option.map (_.Fields >> Map.toList))
@@ -152,7 +152,7 @@ let tests =
             Expect.isTrue erased.InspectState.IsNone "the default registration declares no projector"
 
             let initial = shellModel id (box { Count = 0; Selected = None })
-            let _, _ = update [ erased ] (Client.ModuleMsg(box Increment)) initial
+            let _, _ = update [ erased ] (Client.ModuleMsg(id, box Increment)) initial
 
             Expect.isTrue
                 (ModuleStateObserver.tryInspect id).IsNone
@@ -167,7 +167,7 @@ let tests =
                 |> ClientModule.register
 
             let initial = shellModel id (box { Count = 0; Selected = None })
-            let next, _ = update [ erased ] (Client.ModuleMsg(box Increment)) initial
+            let next, _ = update [ erased ] (Client.ModuleMsg(id, box Increment)) initial
 
             Expect.equal
                 (next.ModuleStates |> Map.find id |> unbox<CounterModel> |> _.Count)

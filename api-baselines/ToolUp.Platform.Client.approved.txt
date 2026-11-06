@@ -3525,7 +3525,8 @@ ToolUp.Platform.Client+Msg+ModuleEventPublished (class)
 ToolUp.Platform.Client+Msg+ModuleEventPublished.payload : System.String { get }
 ToolUp.Platform.Client+Msg+ModuleEventPublished.topic : System.String { get }
 ToolUp.Platform.Client+Msg+ModuleMsg (class)
-ToolUp.Platform.Client+Msg+ModuleMsg.Item : System.Object { get }
+ToolUp.Platform.Client+Msg+ModuleMsg.message : System.Object { get }
+ToolUp.Platform.Client+Msg+ModuleMsg.moduleId : System.String { get }
 ToolUp.Platform.Client+Msg+ModuleSelected (class)
 ToolUp.Platform.Client+Msg+ModuleSelected.Item : System.String { get }
 ToolUp.Platform.Client+Msg+MyTeamsLoaded (class)

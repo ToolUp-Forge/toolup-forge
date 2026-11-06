@@ -247,7 +247,12 @@ module Client =
     }
 
     type Msg =
-        | ModuleMsg of obj
+        /// A message for the named module, from its own view or from a
+        /// command its `Init` or `Update` returned. It goes to that module
+        /// whichever module is active. With no state for that module (a
+        /// team switch or a reset cleared it) there is nothing to land on,
+        /// and it is dropped.
+        | ModuleMsg of moduleId: string * message: obj
         | ModuleSelected of string
         | AccessibleModulesLoaded of AccessibleModulesResponse option
         /// Phase 245 — re-fetch `AccessibleModules` after a module's
@@ -867,6 +872,11 @@ module Client =
                 |> Map.tryFind model.ActiveModuleId
                 |> Option.bind (fun state -> extract state model.ActivePageRoute)))
 
+    /// A command the named module's `Init` or `Update` returned, its messages
+    /// addressed back to that module.
+    let private moduleCmd (moduleId: string) (cmd: Cmd<obj>) : Cmd<Msg> =
+        Cmd.map (fun message -> ModuleMsg(moduleId, message)) cmd
+
     let private tryFind (modules: ErasedModule list) id =
         modules |> List.tryFind (fun m -> m.Definition.Id = id)
 
@@ -1186,7 +1196,7 @@ module Client =
                         reset with
                             ModuleStates = Map.ofList [ activeId, state ]
                     },
-                    Cmd.map ModuleMsg cmd
+                    moduleCmd activeId cmd
                 else
                     reset, Cmd.none
             | None ->
@@ -1251,7 +1261,7 @@ module Client =
                         ModuleStates = Map.ofList [ activeId, state ]
                         InitPhase = Ready
                 },
-                Cmd.map ModuleMsg cmd
+                moduleCmd activeId cmd
             else
                 { resolved with InitPhase = Ready }, Cmd.none
         | None ->
@@ -1299,8 +1309,36 @@ module Client =
                     model with
                         ModuleStates = model.ModuleStates |> Map.add model.ActiveModuleId state
                 },
-                Cmd.map ModuleMsg cmd
+                moduleCmd model.ActiveModuleId cmd
             | _ -> model, Cmd.none
+
+    /// Run one message through a module's `Update`, with its `Init` first if
+    /// it has no state yet, for a message the module's own view did not send:
+    /// a decoded action or a subscribed event. Both commands come back to the
+    /// module, active or not.
+    let private deliverToModule
+        (config: ClientConfig)
+        (queryBus: IModuleQueryBus)
+        (model: Model)
+        (moduleImpl: ErasedModule)
+        (message: obj)
+        : Model * Cmd<Msg> =
+        let moduleId = moduleImpl.Definition.Id
+
+        let state, initCmd =
+            match model.ModuleStates |> Map.tryFind moduleId with
+            | Some existing -> existing, Cmd.none
+            | None ->
+                let initial, cmd = moduleImpl.Init(buildContext config queryBus model moduleId)
+                initial, moduleCmd moduleId cmd
+
+        let newState, updateCmd = moduleImpl.Update message state
+
+        {
+            model with
+                ModuleStates = model.ModuleStates |> Map.add moduleId newState
+        },
+        Cmd.batch [ initCmd; moduleCmd moduleId updateCmd ]
 
     /// Aggregate processed data from every module that exposes it.
     /// Pure — callers store the result in `Model.ProcessedData` and the
@@ -1529,7 +1567,7 @@ module Client =
                 }
 
                 let state, cmd = moduleImpl.Init seedCtx
-                Ready, Map.ofList [ moduleImpl.Definition.Id, state ], Cmd.map ModuleMsg cmd
+                Ready, Map.ofList [ moduleImpl.Definition.Id, state ], moduleCmd moduleImpl.Definition.Id cmd
 
         let processed = resolveProcessedData _config modules moduleStates []
 
@@ -1699,18 +1737,17 @@ module Client =
     let private updateShell (_config: ClientConfig) (queryBus: IModuleQueryBus) (modules: ErasedModule list) msg model =
         let newModel, cmd =
             match msg with
-            | ModuleMsg moduleMsg ->
-                match tryFind modules model.ActiveModuleId with
-                | Some moduleImpl ->
-                    let currentState = model.ModuleStates |> Map.find model.ActiveModuleId
-                    let newState, cmd = moduleImpl.Update moduleMsg currentState
+            | ModuleMsg(moduleId, message) ->
+                match tryFind modules moduleId, model.ModuleStates |> Map.tryFind moduleId with
+                | Some moduleImpl, Some currentState ->
+                    let newState, cmd = moduleImpl.Update message currentState
 
                     {
                         model with
-                            ModuleStates = model.ModuleStates |> Map.add model.ActiveModuleId newState
+                            ModuleStates = model.ModuleStates |> Map.add moduleId newState
                     },
-                    Cmd.map ModuleMsg cmd
-                | None -> model, Cmd.none
+                    moduleCmd moduleId cmd
+                | _ -> model, Cmd.none
 
             | SessionStoreReset notice ->
                 // Drain the shell's half of the file-derived state. The
@@ -1898,7 +1935,7 @@ module Client =
                             | None ->
                                 let ctx = buildContext _config queryBus model moduleId
                                 let s, c = moduleImpl.Init ctx
-                                s, Cmd.map ModuleMsg c
+                                s, moduleCmd moduleId c
 
                         {
                             model with
@@ -2363,7 +2400,7 @@ module Client =
                             cleared with
                                 ModuleStates = cleared.ModuleStates |> Map.add moduleId state
                         },
-                        Cmd.map ModuleMsg cmd
+                        moduleCmd moduleId cmd
                     with ex ->
                         let stack = ex.StackTrace |> Option.ofObj |> Option.defaultValue ""
 
@@ -2417,22 +2454,14 @@ module Client =
                 match tryFind modules moduleId with
                 | None -> model, Cmd.none
                 | Some moduleImpl ->
-                    // Gate 2: caller accessible? RBAC-managed modules
-                    // that the caller can't see filter out here. Un-managed
-                    // modules (SDK built-ins, modules with no permission
-                    // entry) pass through — same semantics as the sidebar
-                    // filter. `None` (pre-load) is permissive.
-                    let accessible =
-                        match model.AccessibleModules with
-                        | Some resp ->
-                            let managed = Set.ofList resp.Managed
-                            let okSet = Set.ofList resp.Accessible
-                            not (managed.Contains moduleId) || okSet.Contains moduleId
-                        | None -> true
-
+                    // Gate 2: may the caller open it? A module the route
+                    // guard refuses gets no `Init`, so none of its boot
+                    // calls go out to come back as 403s. The same decision
+                    // as the sidebar and the router.
+                    //
                     // Gate 3: module has a decoder for this action?
                     let decoded =
-                        if accessible then
+                        if canNavigateToModule _config model moduleImpl then
                             moduleImpl.ActionDecoder
                             |> Option.bind (fun decoder -> decoder (actionKey, payloadJson))
                         else
@@ -2441,62 +2470,15 @@ module Client =
                     match decoded with
                     | None -> model, Cmd.none
                     | Some decodedMsg ->
-                        // Init the target module if its state hasn't been
-                        // materialised yet (user has never navigated to
-                        // it this session). The init cmd stays scoped to
-                        // the target module Id via a wrapper that routes
-                        // its internal messages through `ModuleActionReceived`
-                        // paths… actually, we route init Cmds through
-                        // `ModuleMsg` which targets `ActiveModuleId`, so
-                        // we only honour init-time Cmds when the target
-                        // module is already active. For inactive targets
-                        // we discard the init Cmd (it's an acceptable
-                        // trade for Phase 6c — most `Init` implementations
-                        // return `Cmd.none`; any that don't run on next
-                        // navigation).
-                        let existingState = model.ModuleStates |> Map.tryFind moduleId
+                        let updatedModel, routedCmd =
+                            deliverToModule _config queryBus model moduleImpl decodedMsg
 
-                        let state, preCmd =
-                            match existingState with
-                            | Some s -> s, Cmd.none
-                            | None ->
-                                let ctx = buildContext _config queryBus model moduleId
-                                let s, c = moduleImpl.Init ctx
-
-                                if moduleId = model.ActiveModuleId then
-                                    s, Cmd.map ModuleMsg c
-                                else
-                                    s, Cmd.none
-
-                        // Apply the decoded Msg against the target state.
-                        let newState, updateCmd = moduleImpl.Update decodedMsg state
-
-                        let updatedModel = {
-                            model with
-                                ModuleStates = model.ModuleStates |> Map.add moduleId newState
-                        }
-
-                        // Route the module's post-update Cmd through
-                        // `ModuleMsg` only when the target is active —
-                        // `ModuleMsg` targets `ActiveModuleId`. For
-                        // inactive targets we discard the Cmd; a later
-                        // follow-up can add a targeted-module Cmd path
-                        // if real usage needs it.
-                        let routedCmd =
-                            if moduleId = model.ActiveModuleId then
-                                Cmd.batch [ preCmd; Cmd.map ModuleMsg updateCmd ]
-                            else
-                                preCmd
-
-                        // Background UX: emit a local `SystemMessage` toast
-                        // when the target is inactive. Routes through
-                        // `NotificationClient.publishLocal` so the existing
-                        // `ToastCentre` picks it up without any additional
-                        // plumbing. Kept conservative: no toast when the
-                        // target is active (the user is already looking
-                        // at the result). Phase 1069 — the toast is a
-                        // `Cmd`, not an inline publish: the envelope (user
-                        // id, id, timestamp) is built when the effect runs.
+                        // Background UX: a local `SystemMessage` toast when
+                        // the target is inactive; the reader looking at the
+                        // target needs none. Any read the action started now
+                        // completes, so opening the module does show the
+                        // results. A `Cmd`, because the envelope (user id,
+                        // id, timestamp) is built when the effect runs.
                         let toastCmd =
                             if moduleId <> model.ActiveModuleId then
                                 let text =
@@ -2524,59 +2506,21 @@ module Client =
                 // session. Mirrors the `ModuleActionReceived` routing but
                 // multi-target and identity-free — delivery is purely by
                 // topic, so a publisher self-receives only when it also
-                // subscribes. No RBAC gate here (unlike the server-driven
-                // action path): the publisher already runs in this user's
-                // client, so every subscriber is code the same client
-                // loaded — there is no cross-tenant trust boundary to
-                // enforce.
-                let subscribers =
-                    modules
-                    |> List.choose (fun m ->
-                        m.EventSubscriptions
-                        |> Map.tryFind topic
-                        |> Option.map (fun mapMsg -> m, mapMsg))
+                // subscribes. A subscriber the route guard refuses gets
+                // nothing, so its `Init` sends no boot calls to come back
+                // as 403s. That is not a trust boundary: the publisher runs
+                // in this user's client, and the server enforces access.
+                let folder (accModel, accCmds) (moduleImpl: ErasedModule) =
+                    match moduleImpl.EventSubscriptions |> Map.tryFind topic with
+                    | Some mapMsg when canNavigateToModule _config accModel moduleImpl ->
+                        let next, cmd =
+                            deliverToModule _config queryBus accModel moduleImpl (mapMsg payload)
 
-                if List.isEmpty subscribers then
-                    model, Cmd.none
-                else
-                    let folder (accModel, accCmds) (moduleImpl: ErasedModule, mapMsg) =
-                        let moduleId = moduleImpl.Definition.Id
-                        let decodedMsg = mapMsg payload
+                        next, cmd :: accCmds
+                    | _ -> accModel, accCmds
 
-                        // Init the target module if it has no state yet.
-                        // Its init Cmd is only honoured when the module is
-                        // active (it routes through `ModuleMsg`, which
-                        // targets `ActiveModuleId`); inactive targets
-                        // discard it — same trade-off the
-                        // `ModuleActionReceived` branch documents.
-                        let state, preCmd =
-                            match accModel.ModuleStates |> Map.tryFind moduleId with
-                            | Some s -> s, Cmd.none
-                            | None ->
-                                let ctx = buildContext _config queryBus accModel moduleId
-                                let s, c = moduleImpl.Init ctx
-
-                                if moduleId = accModel.ActiveModuleId then
-                                    s, Cmd.map ModuleMsg c
-                                else
-                                    s, Cmd.none
-
-                        let newState, updateCmd = moduleImpl.Update decodedMsg state
-
-                        let routedCmd =
-                            if moduleId = accModel.ActiveModuleId then
-                                Cmd.batch [ preCmd; Cmd.map ModuleMsg updateCmd ]
-                            else
-                                preCmd
-
-                        {
-                            accModel with
-                                ModuleStates = accModel.ModuleStates |> Map.add moduleId newState
-                        },
-                        routedCmd :: accCmds
-
-                    let finalModel, cmds = subscribers |> List.fold folder (model, [])
-                    finalModel, Cmd.batch cmds
+                let finalModel, cmds = modules |> List.fold folder (model, [])
+                finalModel, Cmd.batch cmds
 
         // Phase 852 — return the same list when nothing changed. The
         // aggregation re-runs on every message and always allocates, so
@@ -2682,7 +2626,7 @@ module Client =
     /// Phase 1069 — the module-state observer publish (Phase 6g.A, 536),
     /// moved out of `update` so the shell's `update` performs no side
     /// effect. Called AFTER an update with the module states the model held
-    /// before it: a module the message could have moved — the active module
+    /// before it: a module the message could have moved — the named module
     /// on `ModuleMsg`, the target of `ModuleActionReceived`, each subscriber
     /// of a `ModuleEventPublished` topic — is published when its state
     /// object changed. A message whose gates dropped it (an unregistered or
@@ -2696,7 +2640,7 @@ module Client =
         : unit =
         let candidates =
             match msg with
-            | ModuleMsg _ -> [ next.ActiveModuleId ]
+            | ModuleMsg(moduleId, _) -> [ moduleId ]
             | ModuleActionReceived(moduleId, _, _) -> [ moduleId ]
             | ModuleEventPublished(topic, _) ->
                 modules
@@ -2958,34 +2902,40 @@ module Client =
             ]
         ]
 
-    // ─── Phase 851.D — one module dispatcher per loop ───────────────────
+    // ─── One dispatcher per module per loop ─────────────────────────────
     //
-    // The module view receives `dispatch` wrapped in `ModuleMsg`. Built
-    // inline in `view` — `ModuleMsg >> dispatch` — that wrapper was a FRESH
-    // closure on every render, so the one prop every module view receives
-    // changed identity every time the shell re-rendered, and any memo
-    // boundary a module put around its view (`React.memo`, a
-    // `[<ReactComponent>]` keyed on props) re-rendered regardless. The
-    // loop's own `dispatch'` is created once per `Program.runWithDispatch`
-    // and handed to every render unchanged, so the wrapper can be too: one
-    // per loop, cached against the `dispatch` it wraps by reference, and
-    // rebuilt only when a different loop is rendering (HMR re-runs the
-    // program; the cache follows). The key is REFERENCE identity because
-    // that is the property the module's memo boundary keys on.
-    let mutable private moduleDispatchCache: ((Msg -> unit) * (obj -> unit)) option =
+    // A module view receives `dispatch` wrapped in `ModuleMsg` with its own
+    // id. Built inline in `view`, that wrapper is a FRESH closure on every
+    // render, so the one prop every module view receives changes identity
+    // every time the shell re-renders, and any memo boundary a module puts
+    // around its view (`React.memo`, a `[<ReactComponent>]` keyed on props)
+    // re-renders regardless. The loop's own `dispatch'` is created once per
+    // `Program.runWithDispatch` and handed to every render unchanged, so the
+    // wrappers can be too: one per module, cached against the `dispatch` they
+    // wrap by reference, and rebuilt only when a different loop is rendering
+    // (HMR re-runs the program; the cache follows). The key is REFERENCE
+    // identity because that is the property the module's memo boundary keys
+    // on.
+    let mutable private moduleDispatchCache: ((Msg -> unit) * Map<string, obj -> unit>) option =
         None
 
-    /// The module-facing dispatcher for the shell's `dispatch`: the same
-    /// function every render, for as long as the same loop is running.
+    /// The dispatcher for one module's view: the same function every render,
+    /// for as long as the same loop is running, and bound to that module.
     /// Internal so the Fable pack can pin the identity
     /// (`ModuleDispatchStabilityTests`).
-    let internal moduleDispatchFor (dispatch: Msg -> unit) : obj -> unit =
-        match moduleDispatchCache with
-        | Some(cached, forModules) when obj.ReferenceEquals(cached, dispatch) -> forModules
-        | _ ->
-            let forModules: obj -> unit = ModuleMsg >> dispatch
-            moduleDispatchCache <- Some(dispatch, forModules)
-            forModules
+    let internal moduleDispatchFor (moduleId: string) (dispatch: Msg -> unit) : obj -> unit =
+        let thisLoop =
+            match moduleDispatchCache with
+            | Some(cached, byModule) when obj.ReferenceEquals(cached, dispatch) -> byModule
+            | _ -> Map.empty
+
+        match thisLoop |> Map.tryFind moduleId with
+        | Some forModule -> forModule
+        | None ->
+            let forModule: obj -> unit = fun message -> dispatch (ModuleMsg(moduleId, message))
+
+            moduleDispatchCache <- Some(dispatch, thisLoop |> Map.add moduleId forModule)
+            forModule
 
     // ─── Phase 883 — one set of sidebar callbacks per loop ──────────────
     //
@@ -3126,9 +3076,8 @@ module Client =
         (dispatch: Msg -> unit)
         (currentState: obj)
         : ReactElement =
-        // Phase 851.D — referentially stable across renders
-        // (see `moduleDispatchFor`).
-        let dispatchMsg = moduleDispatchFor dispatch
+        // Referentially stable across renders (see `moduleDispatchFor`).
+        let dispatchMsg = moduleDispatchFor moduleId dispatch
 
         let renderInner () : PageContent =
             match moduleImpl.PageViews, pageRoute with

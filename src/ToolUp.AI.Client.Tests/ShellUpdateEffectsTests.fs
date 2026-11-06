@@ -158,6 +158,126 @@ let private permissionsModel: PermissionsAdminUI.Model = {
     OnAccessibleModulesChanged = None
 }
 
+// ─── A module's commands reach that module ───────────────────────────
+
+/// A module whose messages start a read and take its answer, the shape of
+/// the fact browse module's `OpenTable`. `TableAnswered` has the same tag and
+/// field as `HomeRenamed`, which is what a misdelivered message is read as
+/// under Fable: a tag and fields, never a type.
+type private ReadMsg =
+    | OpenTable of string
+    | TableAnswered of string
+
+type private ReadModel = { Detail: string }
+
+type private HomeMsg =
+    | HomeRefreshed
+    | HomeRenamed of string
+
+type private HomeModel = { Title: string; Updates: int }
+
+/// Every read a module started, oldest first: the table it asked for and the
+/// `dispatch` its answer comes back on. Unanswered until a test answers it.
+type private ReadsInFlight = ResizeArray<string * (ReadMsg -> unit)>
+
+let private readTopic = "test1250.open-table"
+let private readId = "_test1250.reads"
+let private homeId = "_test1250.home"
+
+let private readingModuleWith
+    (configure: ClientModule<ReadModel, ReadMsg> -> ClientModule<ReadModel, ReadMsg>)
+    (bootRead: bool)
+    (inFlight: ReadsInFlight)
+    =
+    let read table : Cmd<ReadMsg> =
+        Cmd.ofEffect (fun dispatch -> inFlight.Add(table, dispatch))
+
+    ClientModule.create {
+        Init = fun () -> { Detail = "none" }, (if bootRead then read "boot" else Cmd.none)
+        Update =
+            fun msg m ->
+                match msg with
+                | OpenTable table -> { Detail = "Loading" }, read table
+                | TableAnswered table -> { Detail = table }, Cmd.none
+        Name = readId
+        Icon = Html.none
+    }
+    |> ClientModule.withView (fun _ _ -> Html.none, Html.none)
+    |> ClientModule.withId readId
+    |> ClientModule.withActionDecoder (fun (key, payload) ->
+        match key with
+        | "open" -> Some(OpenTable payload)
+        | _ -> None)
+    |> ClientModule.withEventSubscription readTopic OpenTable
+    |> configure
+    |> ClientModule.register
+
+let private readingModule bootRead inFlight = readingModuleWith id bootRead inFlight
+
+let private homeModule () =
+    ClientModule.create {
+        Init = fun () -> { Title = "home"; Updates = 0 }, Cmd.none
+        Update =
+            fun msg m ->
+                match msg with
+                | HomeRefreshed -> { m with Updates = m.Updates + 1 }, Cmd.none
+                | HomeRenamed title ->
+                    {
+                        Title = title
+                        Updates = m.Updates + 1
+                    },
+                    Cmd.none
+        Name = homeId
+        Icon = Html.none
+    }
+    |> ClientModule.withView (fun _ _ -> Html.none, Html.none)
+    |> ClientModule.withId homeId
+    |> ClientModule.register
+
+let private homeState = box { Title = "home"; Updates = 0 }
+let private readState = box { Detail = "none" }
+
+/// Drives `Client.update` the way the Elmish loop does: every message goes
+/// through `update`, its command's effects run against one queue, and the
+/// queue drains. A test names no shell message for a module's command, so it
+/// reads the same on any route the shell gives one.
+type private ShellLoop(modules: ErasedModule list, start: Client.Model) =
+    let queue = System.Collections.Generic.Queue<Client.Msg>()
+    let mutable model = start
+
+    member _.Model = model
+
+    member _.Drain() =
+        while queue.Count > 0 do
+            let next, cmd = update modules (queue.Dequeue()) model
+            model <- next
+
+            for effect in cmd do
+                effect queue.Enqueue
+
+    member this.Send(msg: Client.Msg) =
+        queue.Enqueue msg
+        this.Drain()
+
+    /// Run a read's `dispatch`, as its response arriving would.
+    member this.Answer(dispatch: ReadMsg -> unit, table: string) =
+        dispatch (TableAnswered table)
+        this.Drain()
+
+let private detailOf (loop: ShellLoop) =
+    loop.Model.ModuleStates
+    |> Map.tryFind readId
+    |> Option.map (fun s -> (unbox<ReadModel> s).Detail)
+
+let private homeOf (loop: ShellLoop) =
+    loop.Model.ModuleStates |> Map.find homeId |> unbox<HomeModel>
+
+let private tablesAsked (inFlight: ReadsInFlight) =
+    inFlight |> Seq.map fst |> Seq.sort |> List.ofSeq
+
+let private answerFor (table: string) (inFlight: ReadsInFlight) =
+    inFlight |> Seq.find (fun (asked, _) -> asked = table) |> snd
+
 let tests =
     testList "Shell update effects (Phase 1069)" [
         testList "sidebar preferences (B13)" [
@@ -213,10 +333,10 @@ let tests =
                 let published = recordPublishes ()
                 let before = shellModel id [ id, box { Count = 0 } ]
 
-                let after, _ = update [ erased ] (Client.ModuleMsg(box Increment)) before
+                let after, _ = update [ erased ] (Client.ModuleMsg(id, box Increment)) before
                 Expect.equal (List.ofSeq published) [] "update itself publishes nothing"
 
-                Client.observeModuleStates [ erased ] (Client.ModuleMsg(box Increment)) before.ModuleStates after
+                Client.observeModuleStates [ erased ] (Client.ModuleMsg(id, box Increment)) before.ModuleStates after
                 Expect.equal (List.ofSeq published) [ id ] "the hook publishes the changed module once")
 
             testCase
@@ -299,6 +419,164 @@ let tests =
                     Expect.equal seen.Count 1 "the Cmd publishes the results-available toast"
                 finally
                     unsubscribe ())
+        ]
+
+        testList "a module's commands reach that module" [
+            testCase "an event on an inactive module with state runs its read, and the answer lands" (fun () ->
+                let inFlight = ReadsInFlight()
+                let modules = [ readingModule false inFlight; homeModule () ]
+
+                let loop =
+                    ShellLoop(modules, shellModel homeId [ homeId, homeState; readId, readState ])
+
+                loop.Send(Client.ModuleEventPublished(readTopic, "sales"))
+                Expect.equal (detailOf loop) (Some "Loading") "the subscriber took the event"
+                Expect.equal (tablesAsked inFlight) [ "sales" ] "the read went out"
+
+                loop.Answer(answerFor "sales" inFlight, "sales")
+                Expect.equal (detailOf loop) (Some "sales") "the answer reached the subscriber"
+                Expect.equal (homeOf loop).Updates 0 "the active module's Update did not run")
+
+            testCase "an event on an inactive module with no state runs its Init and Update commands" (fun () ->
+                let inFlight = ReadsInFlight()
+                let modules = [ readingModule true inFlight; homeModule () ]
+                let loop = ShellLoop(modules, shellModel homeId [ homeId, homeState ])
+
+                loop.Send(Client.ModuleEventPublished(readTopic, "sales"))
+                Expect.equal (tablesAsked inFlight) [ "boot"; "sales" ] "both reads went out"
+
+                loop.Answer(answerFor "sales" inFlight, "sales")
+                Expect.equal (detailOf loop) (Some "sales") "the answer reached the subscriber"
+                Expect.equal (homeOf loop).Updates 0 "the active module's Update did not run")
+
+            testCase "an action on an inactive module with state runs its read, and the answer lands" (fun () ->
+                ensureEventSource ()
+                let inFlight = ReadsInFlight()
+                let modules = [ readingModule false inFlight; homeModule () ]
+
+                let loop =
+                    ShellLoop(modules, shellModel homeId [ homeId, homeState; readId, readState ])
+
+                loop.Send(Client.ModuleActionReceived(readId, "open", "sales"))
+                Expect.equal (tablesAsked inFlight) [ "sales" ] "the read went out"
+
+                loop.Answer(answerFor "sales" inFlight, "sales")
+                Expect.equal (detailOf loop) (Some "sales") "the answer reached the target"
+                Expect.equal (homeOf loop).Updates 0 "the active module's Update did not run")
+
+            testCase "an action on an inactive module with no state runs its Init and Update commands" (fun () ->
+                ensureEventSource ()
+                let inFlight = ReadsInFlight()
+                let modules = [ readingModule true inFlight; homeModule () ]
+                let loop = ShellLoop(modules, shellModel homeId [ homeId, homeState ])
+
+                loop.Send(Client.ModuleActionReceived(readId, "open", "sales"))
+                Expect.equal (tablesAsked inFlight) [ "boot"; "sales" ] "both reads went out")
+
+            testCase "a read answered after its module is left updates that module and no other" (fun () ->
+                let inFlight = ReadsInFlight()
+                let modules = [ readingModule false inFlight; homeModule () ]
+
+                let loop =
+                    ShellLoop(modules, shellModel readId [ homeId, homeState; readId, readState ])
+
+                loop.Send(Client.ModuleEventPublished(readTopic, "sales"))
+                Expect.equal inFlight.Count 1 "the read is in flight while its module is active"
+
+                loop.Send(Client.ModuleSelected homeId)
+                Expect.equal loop.Model.ActiveModuleId homeId "the reader left"
+
+                loop.Answer(answerFor "sales" inFlight, "sales")
+
+                // Delivered by the active module alone, this message reaches
+                // Home's `Update` as `HomeRenamed "sales"`, and Data tables
+                // stays on Loading with nothing left to end it.
+                Expect.equal (homeOf loop) { Title = "home"; Updates = 0 } "Home's Update did not receive the answer"
+                Expect.equal (detailOf loop) (Some "sales") "the module that asked took the answer"
+
+                loop.Send(Client.ModuleSelected readId)
+                Expect.equal (detailOf loop) (Some "sales") "going back finds the answer, not Loading")
+
+            testCase "an answer for a module with no state changes nothing, whichever module is active" (fun () ->
+                let inFlight = ReadsInFlight()
+                let modules = [ readingModule false inFlight; homeModule () ]
+
+                // The message the answer becomes, whatever route the shell gives it.
+                let answer = ResizeArray<Client.Msg>()
+
+                let _, routed =
+                    update
+                        modules
+                        (Client.ModuleEventPublished(readTopic, "sales"))
+                        (shellModel readId [ homeId, homeState; readId, readState ])
+
+                for effect in routed do
+                    effect answer.Add
+
+                (answerFor "sales" inFlight) (TableAnswered "sales")
+                let answerMsg = Seq.exactlyOne answer
+
+                // What a re-initialisation leaves (a team switch): another
+                // module active, the asker's state gone.
+                let cleared = ShellLoop(modules, shellModel homeId [ homeId, homeState ])
+                cleared.Send answerMsg
+                Expect.isNone (detailOf cleared) "no state appears for the answer"
+                Expect.equal (homeOf cleared).Updates 0 "the active module's Update did not run"
+
+                // What a denied route leaves: the module active, with no state.
+                let denied = ShellLoop(modules, shellModel readId [])
+                denied.Send answerMsg
+                Expect.isTrue denied.Model.ModuleStates.IsEmpty "a message with no state to land on changes nothing")
+
+            testCase "a publish then a navigate opens the table, from a module never opened" (fun () ->
+                let inFlight = ReadsInFlight()
+                let modules = [ readingModule true inFlight; homeModule () ]
+                let loop = ShellLoop(modules, shellModel homeId [ homeId, homeState ])
+
+                loop.Send(Client.ModuleEventPublished(readTopic, "sales"))
+                loop.Send(Client.ModuleSelected readId)
+
+                loop.Answer(answerFor "sales" inFlight, "sales")
+                Expect.equal (detailOf loop) (Some "sales") "the table opens")
+
+            testCase "a publish then a navigate opens the table, from a module opened before" (fun () ->
+                let inFlight = ReadsInFlight()
+                let modules = [ readingModule false inFlight; homeModule () ]
+
+                let loop =
+                    ShellLoop(modules, shellModel homeId [ homeId, homeState; readId, readState ])
+
+                loop.Send(Client.ModuleEventPublished(readTopic, "sales"))
+                loop.Send(Client.ModuleSelected readId)
+
+                loop.Answer(answerFor "sales" inFlight, "sales")
+                Expect.equal (detailOf loop) (Some "sales") "the table opens")
+
+            testCase "a navigate then a publish still opens the table" (fun () ->
+                let inFlight = ReadsInFlight()
+                let modules = [ readingModule false inFlight; homeModule () ]
+                let loop = ShellLoop(modules, shellModel homeId [ homeId, homeState ])
+
+                loop.Send(Client.ModuleSelected readId)
+                loop.Send(Client.ModuleEventPublished(readTopic, "sales"))
+
+                loop.Answer(answerFor "sales" inFlight, "sales")
+                Expect.equal (detailOf loop) (Some "sales") "the table opens")
+
+            testCase "a module the reader may not open gets no Init and no read from an event or an action" (fun () ->
+                let inFlight = ReadsInFlight()
+
+                let refused =
+                    readingModuleWith (ClientModule.withNavRole NavRole.PlatformAdminOnly) true inFlight
+
+                let loop =
+                    ShellLoop([ refused; homeModule () ], shellModel homeId [ homeId, homeState ])
+
+                loop.Send(Client.ModuleEventPublished(readTopic, "sales"))
+                loop.Send(Client.ModuleActionReceived(readId, "open", "sales"))
+
+                Expect.equal inFlight.Count 0 "no read goes out to come back as a 403"
+                Expect.isNone (detailOf loop) "no state for a module the route guard refuses")
         ]
 
         testList "permissions-admin banner polarity" [

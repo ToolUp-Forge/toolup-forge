@@ -268,7 +268,7 @@ let run (sliced: bool) (report: ScopeRun -> unit) : unit =
     after
         (fun () ->
             let mounted = counts ()
-            dispatch.Value(Client.ModuleMsg(box Increment))
+            dispatch.Value(Client.ModuleMsg(ModuleId, box Increment))
 
             after
                 (fun () ->

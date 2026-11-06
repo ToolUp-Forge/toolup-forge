@@ -653,10 +653,10 @@ Every AI tool runs server-side and returns a JSON string to the agent loop. That
 
 **Foreground vs background routing.** The shell inspects `ActiveModuleId` when the envelope arrives:
 
-- **Active target.** The decoded `Msg` dispatches through the existing `ModuleMsg` pathway. The module's `update` runs, its view re-renders, the user sees the change. The tool's JSON also arrives in the chat.
+- **Active target.** The decoded `Msg` runs through the module's `update`. The module's `update` runs, its view re-renders, the user sees the change. The tool's JSON also arrives in the chat.
 - **Inactive but loaded target** (user has visited the module this session, so its `Model` lives in `ModuleStates`). The `Msg` still dispatches — against the inactive module's state directly — and the shell synthesises a `SystemMessage(Info, "Results available in {module}")` via `NotificationClient.publishLocal`, which the `ToastCentre` picks up on the same subscription. Switching to the module shows the populated panel.
-- **Inactive and not loaded** (user has never visited the module this session). The shell init-s the module, applies the `Msg`, synthesises the toast. Init-time Cmds are discarded for inactive targets — `ModuleMsg` targets `ActiveModuleId` and rerouting a Cmd to a non-active module isn't a wire the shell provides today. Most `Init` implementations return `Cmd.none`; any that don't run on next navigation.
-- **Not registered** (filtered out of the deployment, not in `AccessibleModules.Accessible` for this user, `DebugOnly` in Release). The action silently drops. The chat JSON is the only surface. The server-side tool guard is the real authorisation boundary — the client-side drop is defense-in-depth.
+- **Inactive and not loaded** (user has never visited the module this session). The shell init-s the module, applies the `Msg`, synthesises the toast. Commands from the module's `Init` and `update` run and come back to that module, active or not, so a read the action starts has landed or is on its way when the user opens it.
+- **Not registered, or not one this user may open** (filtered out of the deployment, not in `AccessibleModules.Accessible` for this user, refused by its `NavRole`, `DebugOnly` in Release). The action silently drops. The chat JSON is the only surface. The server-side tool guard is the real authorisation boundary — the client-side drop is defense-in-depth.
 
 **Worked example: `media_optimisation.apply_optimised_budget`.**
 

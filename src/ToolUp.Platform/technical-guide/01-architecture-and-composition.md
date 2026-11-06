@@ -185,7 +185,7 @@ type private Model = {
 }
 
 type private Msg =
-    | ModuleMsg of obj               // Forwarded to the active module
+    | ModuleMsg of string * obj      // Delivered to the named module, active or not
     | ModuleSelected of string       // User clicked a different module in the sidebar
 ```
 
