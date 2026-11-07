@@ -5,7 +5,7 @@
 
 **What changes:** `FactsCompose.withToleranceTriggers` takes the standing question as data. A unit of work that moved
 the table asks it, and the run is enqueued when a selected subject moved beyond the tolerance. `groundedNarrative` gains
-the optional `trigger` member at `server-app-host` 7.3, so the composition's record shows the trigger. The change set
+the optional `triggers` member at `server-app-host` 7.3, so the composition's record shows each trigger. The change set
 names each move and its two facts, and the run records its trigger as `tolerance`.
 
 ## The composition
@@ -14,21 +14,24 @@ Add the member to the narrative (§P3.4 of the profile). A 7.2 composition witho
 
 ```diff
    "onCommit": [],
-+  "trigger": {
-+    "table": "sensor.reading",
-+    "metric": "temperature",
-+    "comparison": "previousDelivery",
-+    "tolerance": "relative:0.1"
-+  },
++  "triggers": [
++    {
++      "table": "sensor.reading",
++      "metric": "temperature",
++      "comparison": "previousDelivery",
++      "tolerance": "relative:0.1"
++    }
++  ],
    "id": "reading-change",
 ```
 
-A `trigger` written wrongly, or naming a table or metric the composition does not declare, is `narrative-malformed`
-(§P4.24).
+A trigger written wrongly, or naming a table or metric the composition does not declare, is `narrative-malformed`
+(§P4.24), and so is an empty list or one trigger written twice. A unit of work enqueues the run at most once, however
+many of its triggers fire.
 
 ## The composition root
 
-An evaluator reduces each member to one `ToleranceTrigger`. Written by hand, it is one line after the writer:
+An evaluator reduces each entry to one `ToleranceTrigger`. Written by hand, it is one line after the writer:
 
 ```diff
  app

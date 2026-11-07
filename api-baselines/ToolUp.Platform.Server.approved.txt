@@ -4922,7 +4922,7 @@ ToolUp.Platform.Compose.ServerAppModule.withCspContributor(ToolUp.Platform.Scope
 ToolUp.Platform.Compose.ServerAppModule.withCspSourceMode(ToolUp.Platform.Scope.SecurityHardening+CspSourceMode, ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.Platform.Compose.ServerAppModule.withDataExporter(ToolUp.Platform.Audit.IDataExporter+IDataExporter, ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.Platform.Compose.ServerAppModule.withDataObjectOrphanSweep(ToolUp.Platform.Audit.DataObjectOrphanSweep+DataObjectOrphanSweepPolicy, ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
-ToolUp.Platform.Compose.ServerAppModule.withDeclaredDataSources(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.DataSourceFromSettings], ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
+ToolUp.Platform.Compose.ServerAppModule.withDataSourcesFromSettings(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.DataSourceFromSettings], ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.Platform.Compose.ServerAppModule.withDeliveryCompleted(System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.IServiceProvider, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.Jobs.DeliveryCompleted+Delivery, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]]], ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.Platform.Compose.ServerAppModule.withDeploymentReadiness(ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.Platform.Compose.ServerAppModule.withDeploymentVerification(ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp

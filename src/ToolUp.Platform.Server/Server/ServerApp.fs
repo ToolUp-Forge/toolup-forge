@@ -1749,7 +1749,7 @@ module ServerApp =
     }
 
     /// **Adds** data sources read from their named settings at start and seeded into the config store (`DataSourceFromSettings`).
-    let withDeclaredDataSources (sources: DataSourceFromSettings list) (app: ServerApp) : ServerApp =
+    let withDataSourcesFromSettings (sources: DataSourceFromSettings list) (app: ServerApp) : ServerApp =
         addServiceConfig (DataSourceFromSettings.register sources) app
 
     /// **Adds** reference datasets declared as data, verified now and readable through `IReferenceData` (`ReferenceData`).

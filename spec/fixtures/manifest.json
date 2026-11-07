@@ -2058,8 +2058,8 @@
       "home": "server-app-host",
       "kind": "round-trip",
       "file": "profile-server-app-host/tolerance-trigger.json",
-      "sha256": "3283e0a717105af18af730d5e2c37e63fc4d26d94af2f62570d05b43e9324edb",
-      "description": "Two grounded narratives each carrying a tolerance trigger (7.3, section P3.4): one over every subject, a relative tolerance against the previous delivery; one over two subjects, an absolute tolerance seven days back. The vector pins the member's place after runsAs and the order within it. The table and metric are declared."
+      "sha256": "53c46a6e537e2742f76d625a2d167a395a75847662b4367784d41d153af486f7",
+      "description": "Two grounded narratives carrying tolerance triggers (7.3, section P3.4): the first asks two questions, one over every subject with a relative tolerance against the previous delivery and one over two subjects with an absolute tolerance seven days back; the second asks only the latter. The vector pins the member's place after runsAs, that it is an array whose order is kept, and the order within a trigger. The table and metric are declared."
     },
     {
       "id": "profile-server-app-host/reject-tolerance-trigger-undeclared-table",
@@ -2068,10 +2068,34 @@
       "home": "server-app-host",
       "kind": "reject",
       "file": "profile-server-app-host/reject-tolerance-trigger-undeclared-table.json",
-      "sha256": "5fe9e63492b19f8e3bee834d069df93d23512501a97dc00243220064d0e855b0",
+      "sha256": "f276ada230936db0e779f0b2fd8a0da9b7f8e40b78a752c78781cd547f905d66",
       "reject": "narrative-malformed",
       "detect": "profile",
       "description": "A tolerance trigger naming a fact table the composition does not declare (section P4.24, widened at 7.3). Every other member is in its grammar: a question about a table that is not there never fires."
+    },
+    {
+      "id": "profile-server-app-host/reject-tolerance-triggers-empty",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-tolerance-triggers-empty.json",
+      "sha256": "212c56634b06acd73ccf65bed389b75550e8a56a43f2a2060fea6784901ca7c0",
+      "reject": "narrative-malformed",
+      "detect": "profile",
+      "description": "An empty triggers list (section P4.24, widened at 7.3). No trigger is spelled by the absent member, so an empty array is a second spelling of nothing."
+    },
+    {
+      "id": "profile-server-app-host/reject-tolerance-trigger-written-twice",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-tolerance-trigger-written-twice.json",
+      "sha256": "28f59d6ffe9520e198e015503b28d915a6771ef73137adbccfcf28889aaca5ea",
+      "reject": "narrative-malformed",
+      "detect": "profile",
+      "description": "One trigger written twice (section P4.24, widened at 7.3). Each is in its grammar and names a declared table and metric; the second asks nothing the first did not."
     }
   ]
 }

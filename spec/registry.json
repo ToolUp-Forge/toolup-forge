@@ -246,7 +246,7 @@
         { "name": "page", "type": "string", "presence": "optional" },
         { "name": "cadence", "type": "string", "presence": "optional" },
         { "name": "runsAs", "type": "string", "presence": "optional" },
-        { "name": "trigger", "type": "trigger object", "presence": "optional; absent when no tolerance enqueues the run" }
+        { "name": "triggers", "type": "array of trigger objects", "presence": "optional; absent when no tolerance enqueues the run, never empty" }
       ],
       "leaf": false
     },

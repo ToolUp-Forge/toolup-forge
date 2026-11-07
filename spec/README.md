@@ -30,7 +30,7 @@ conformance statement is [`docs/platform/composition-profile.md`](../docs/platfo
 The profile version moves independently of forge's package versions and of the specification's format version: it
 moves when the vocabulary moves (§P1). Pin a profile version, not a forge commit. 7.0 is the version at which the
 profile moved here; nothing normative changed with the move. 7.1 added declared content on pages and layouts.
-7.2 added browser history on the client shell. 7.3 added the tolerance trigger on a grounded narrative.
+7.2 added browser history on the client shell. 7.3 added tolerance triggers on a grounded narrative.
 
 ## Licence
 

@@ -756,7 +756,7 @@ is never read as nothing having moved.
 
 It is not raised through `IFactTableChangeSignal`. A listener on that signal hears table ids in a scope it already
 named, on every replica the channel reaches, and a run needs the resolved scope of the one write. The composed member
-is `groundedNarrative.trigger` in the [composition profile](composition-profile.md).
+is `groundedNarrative.triggers` in the [composition profile](composition-profile.md).
 
 **The publication's reading principal.** A publication read re-checks disclosure in the publishing scope, so it
 needs a principal to resolve that scope. A read a deployment writes itself binds one per publishing scope, naming

@@ -355,7 +355,7 @@
              (it serves both) and BEFORE ServerApp.fs (run registers the
              renderer beside the inspector snapshot). -->
         <Compile Include="Server\ReflectionTools.fs" />
-        <!-- Declared data sources and reference data: what ServerApp.withDeclaredDataSources
+        <!-- Declared data sources and reference data: what ServerApp.withDataSourcesFromSettings
              and withReferenceData register. Before ServerApp.fs. -->
         <Compile Include="Server\DeclaredDataSources.fs" />
         <Compile Include="Server\ReferenceData.fs" />

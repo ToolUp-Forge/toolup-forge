@@ -1128,6 +1128,7 @@ ToolUp.Experiments Draft
 ToolUp.Experiments Running
 ToolUp.Experiments Stopped
 ToolUp.Facts Absent
+ToolUp.Facts Absolute
 ToolUp.Facts Accessed
 ToolUp.Facts AddressMismatch
 ToolUp.Facts AdmittedNarrativeCertificate
@@ -1173,6 +1174,7 @@ ToolUp.Facts CertificateIncluded
 ToolUp.Facts CertificateNotIssued
 ToolUp.Facts ChargedEpsilon
 ToolUp.Facts ChildTotals
+ToolUp.Facts Compared
 ToolUp.Facts CompetingMethods
 ToolUp.Facts Complete
 ToolUp.Facts ComputeFact
@@ -1184,6 +1186,7 @@ ToolUp.Facts CrossingsHeld
 ToolUp.Facts CrossingsRefused
 ToolUp.Facts Currency
 ToolUp.Facts CurrencyUncheckable
+ToolUp.Facts DaysBefore
 ToolUp.Facts Declassified
 ToolUp.Facts DeferredToQuery
 ToolUp.Facts DelegateTable
@@ -1273,6 +1276,7 @@ ToolUp.Facts NotAdditive
 ToolUp.Facts NotConsulted
 ToolUp.Facts NotOnePrefix
 ToolUp.Facts NothingDisclosable
+ToolUp.Facts NothingToCompare
 ToolUp.Facts Number
 ToolUp.Facts OneMethod
 ToolUp.Facts OpenSchema
@@ -1284,6 +1288,7 @@ ToolUp.Facts Plain
 ToolUp.Facts Point
 ToolUp.Facts PopulationNotOrderable
 ToolUp.Facts PopulationTruncated
+ToolUp.Facts PreviousDelivery
 ToolUp.Facts PublicationGrantNotInForce
 ToolUp.Facts PublicationGrantRevoked
 ToolUp.Facts PublicationGrantUnknown
@@ -1306,6 +1311,7 @@ ToolUp.Facts Refuse
 ToolUp.Facts Refused
 ToolUp.Facts RegistryDirection
 ToolUp.Facts Reissued
+ToolUp.Facts Relative
 ToolUp.Facts RemovedQuote
 ToolUp.Facts RequestData
 ToolUp.Facts Restricted
@@ -6072,7 +6078,7 @@ ToolUp.Platform.Compose.ServerApp withCspContributor
 ToolUp.Platform.Compose.ServerApp withCspSourceMode
 ToolUp.Platform.Compose.ServerApp withDataExporter
 ToolUp.Platform.Compose.ServerApp withDataObjectOrphanSweep
-ToolUp.Platform.Compose.ServerApp withDeclaredDataSources
+ToolUp.Platform.Compose.ServerApp withDataSourcesFromSettings
 ToolUp.Platform.Compose.ServerApp withDeliveryCompleted
 ToolUp.Platform.Compose.ServerApp withDeploymentReadiness
 ToolUp.Platform.Compose.ServerApp withDeploymentVerification

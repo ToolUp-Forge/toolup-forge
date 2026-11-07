@@ -1171,10 +1171,10 @@ let surfaceFindings (p: Profile) (surface: Surface) : string list = [
     | Some policy -> yield! resolveTarget "declared content's content-policy admission" policy
     | None -> "declared content: the surface binding names no route by which an inline element is admitted"
 
-    // The tolerance trigger: the member reduces to a builder that resolves.
-    match prop "groundedNarrative" b |> Option.bind (prop "trigger") with
-    | Some target -> yield! resolveTarget "groundedNarrative.trigger" target
-    | None -> "groundedNarrative.trigger: the surface binding names no builder"
+    // The tolerance triggers: the member reduces to a builder that resolves.
+    match prop "groundedNarrative" b |> Option.bind (prop "triggers") with
+    | Some target -> yield! resolveTarget "groundedNarrative.triggers" target
+    | None -> "groundedNarrative.triggers: the surface binding names no builder"
 
     // Browser history: each token reduces to a case of the client's field, and every case is a token or the absent member.
     let history = prop "clientShell" b |> Option.bind (prop "browserHistory")

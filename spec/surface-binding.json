@@ -123,8 +123,8 @@
     }
   },
   "groundedNarrative": {
-    "trigger": {
-      "reducesTo": "One ToleranceTrigger in the list the reduction hands the builder. A trigger's table and metric are not a ServerConfig setting, so the member is bound here and not under settings.",
+    "triggers": {
+      "reducesTo": "One ToleranceTrigger per entry, in the list the reduction hands the builder. A trigger's table and metric are not a ServerConfig setting, so the member is bound here and not under settings.",
       "assembly": "ToolUp.Facts.Server",
       "type": "ToolUp.Facts.FactsCompose",
       "member": "withToleranceTriggers"

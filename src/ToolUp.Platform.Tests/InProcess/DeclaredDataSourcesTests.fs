@@ -190,7 +190,7 @@ let tests =
             Expect.throwsT<DataSourceSettingsRefusedException>
                 (fun () ->
                     ServerApp.empty
-                    |> ServerApp.withDeclaredDataSources [ source; source ]
+                    |> ServerApp.withDataSourcesFromSettings [ source; source ]
                     |> ignore)
                 "refused"
 
@@ -209,7 +209,7 @@ let tests =
                         CredentialKeySetting = None
                 }
 
-                let app = ServerApp.empty |> ServerApp.withDeclaredDataSources [ declared ]
+                let app = ServerApp.empty |> ServerApp.withDataSourcesFromSettings [ declared ]
                 let services = ServiceCollection()
                 services.AddSingleton<IDataSourceConfigStore>(store) |> ignore
 
@@ -233,7 +233,7 @@ let tests =
 
         testCase "with no config store composed the seeder refuses the start, naming the remedy"
         <| fun _ ->
-            let app = ServerApp.empty |> ServerApp.withDeclaredDataSources [ source ]
+            let app = ServerApp.empty |> ServerApp.withDataSourcesFromSettings [ source ]
             let services = ServiceCollection()
             (ServerApp.serviceConfig app).Value services |> ignore
             use provider = services.BuildServiceProvider()

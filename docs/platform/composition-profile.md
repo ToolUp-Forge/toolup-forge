@@ -22,7 +22,7 @@ is valid at 7.1 with the same verdict. What it asks of a composition, and of an 
 browser history (§P3.1, §P2.23): the optional `browserHistory` member, whose one token `hash` reduces to
 `ClientConfig.BrowserHistory = HashHistory`. It is additive too: a composition without the member encodes byte for byte
 as before, and an evaluator that reduces one with it writes the setting into the client entry it generates. 7.3 lets a
-grounded narrative be triggered by a fact moving beyond a tolerance (§P3.4, §P4.24): the optional `trigger` member,
+grounded narrative be triggered by a fact moving beyond a tolerance (§P3.4, §P4.24): the optional `triggers` member,
 which reduces to `FactsCompose.withToleranceTriggers`. It is additive as well: a composition without the member encodes
 byte for byte as before. What it asks of a composition, and of an evaluator that reduces one:
 [`docs/migrations/1255-tolerance-trigger.md`](../migrations/1255-tolerance-trigger.md).
@@ -66,7 +66,7 @@ prefix must be the registry's, and the route by which a content security policy 
 `ClientConfig.BrowserHistory`, and the binding names the case an absent member means. Every case of that union must be
 one of the two, so a new mode fails the check until the profile registers it.
 
-**The tolerance trigger.** `groundedNarrative.trigger` is bound to the builder it reduces to, and the builder must
+**The tolerance triggers.** `groundedNarrative.triggers` is bound to the builder it reduces to, and the builder must
 resolve.
 
 So a forge change that adds a companion slot, a composition-mode setting or a mode value fails the check until the

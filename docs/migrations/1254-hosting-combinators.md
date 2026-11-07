@@ -1,7 +1,7 @@
 # forge#1254: declared pages, settings-read data sources, reference data and OIDC admission are combinators
 
 **Ships in:** ToolUp.PublicRendering (`DeclaredPage`, `ServedNarrative`, `DeclaredPages`,
-`PublicRenderingCompose.withDeclaredPages`), ToolUp.Platform.Server (`ServerApp.withDeclaredDataSources`,
+`PublicRenderingCompose.withDeclaredPages`), ToolUp.Platform.Server (`ServerApp.withDataSourcesFromSettings`,
 `DataSourceFromSettings`, `ServerApp.withReferenceData`, `ReferenceDataset`, `IReferenceData`) and
 ToolUp.AuthProviders.Oidc (`OidcAdmission.layered`, `AdmissionSettings`; auth-providers line 0.39.2).
 
@@ -28,7 +28,7 @@ Delete the four files or functions that carry that runtime. Keep the declaration
 
  ServerApp.empty
 +|> ServerApp.withReferenceData datasets
-+|> ServerApp.withDeclaredDataSources sources
++|> ServerApp.withDataSourcesFromSettings sources
  |> PublicRenderingCompose.withPublicRendering (
      PublicRenderingOptions.create ()
      |> PublicRenderingOptions.withLayout (LayoutName "report") reportLayout
@@ -56,7 +56,7 @@ copy looked it up itself. Read a verified dataset through `IReferenceData.Datase
   alias, and an unset reader-group or required setting.
 
 `DeclaredDelivery.withDeclaredDataSources` (ToolUp.DataSources.Common) is unchanged and is a different thing: a config
-known in code, whose delivery forge schedules under a principal. `ServerApp.withDeclaredDataSources` reads the config
+known in code, whose delivery forge schedules under a principal. `ServerApp.withDataSourcesFromSettings` reads the config
 from settings, seeds it, and schedules nothing.
 
 ## Verify and roll back
