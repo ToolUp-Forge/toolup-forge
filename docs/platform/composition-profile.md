@@ -9,7 +9,7 @@ layers, companion slots and settings forge composes, registered as found on forg
 
 ## Which profile version this release satisfies
 
-**This release of forge satisfies `server-app-host` 7.3**, the version in `spec/composition-profile.md`, its
+**This release of forge satisfies `server-app-host` 7.4**, the version in `spec/composition-profile.md`, its
 registry and its fixture manifest. The profile is versioned with the surface it describes, so the version a forge
 release satisfies is the one in that release's own `spec/` folder. Pin a profile version, not a forge commit; a
 profile version moves only when its vocabulary does (§P1 of the profile).
@@ -25,12 +25,17 @@ as before, and an evaluator that reduces one with it writes the setting into the
 grounded narrative be triggered by a fact moving beyond a tolerance (§P3.4, §P4.24): the optional `triggers` member,
 which reduces to `FactsCompose.withToleranceTriggers`. It is additive as well: a composition without the member encodes
 byte for byte as before. What it asks of a composition, and of an evaluator that reduces one:
-[`docs/migrations/1255-tolerance-trigger.md`](../migrations/1255-tolerance-trigger.md).
+[`docs/migrations/1255-tolerance-trigger.md`](../migrations/1255-tolerance-trigger.md). 7.4 lets a subscription principal
+name its user from a deployment setting (§P3.13, §P4.82, §P4.83): the `userIdSetting` member, the alternative to `userId`,
+which reduces to the `DeclaredPrincipal` a literal reduces to, with the setting's value as its `UserId`. It is additive:
+a composition with a literal encodes byte for byte as before and means what it did. An evaluator that reduces the new
+form declares the setting in its environment contract and refuses the start when the setting gives no user that
+resolves. It is distinct from a publication's reading principal, as §P3.13 states.
 
 ## How the check works
 
 `CompositionProfileSurfaceTests`, in the Platform test pack that `verify.ps1` runs, is the profile's §P7 gate. It is
-seven checks, each a pure function that returns the disagreements it finds:
+eight checks, each a pure function that returns the disagreements it finds:
 
 | Check | What fails it |
 |---|---|
@@ -38,6 +43,7 @@ seven checks, each a pure function that returns the disagreements it finds:
 | Document and registry | A token, argument-taking case, citation-bearing view, registered setting, value grammar, profile-only node kind, member of a node kind (in order), declared-content entry member, inline form, serve prefix, refusal class or facet value that one rendering states and the other does not. Both directions. |
 | Setting grammars | A vector that must be accepted carrying a registered setting its grammar does not admit, a `knob-value-unregistered` vector carrying none, or a grammar no vector refuses under. |
 | Declared content | A vector that declares content and names no `contentRoot`, a declared file under its `contentRoot` that is absent or does not hash to its `contentHash`, or a `content-hash-mismatch` vector whose files all match (so §P4.81 would test nothing). |
+| Principals | A vector §P4.82 would refuse that does not say so, a `principal-user-malformed` vector whose principals each name one user, a `principal-setting-unresolved` vector whose environment gives work every user it reads (or that states none, or is not detected at the `runtime` layer), an accepted vector whose principal names a setting with no environment supplying it, or a way of failing either rule that no vector refuses. Forge executes these two rules over the vectors, as it does the setting grammars and declared content; the other §P4 rules are an evaluator's to run. |
 | Facet declaration | A §P8 value no pinned specification vector for this profile demonstrates, or a pinned vector demonstrating a value §P8 does not honour (core §11.3), or a declaration missing an axis or a note (core §11.4). The vectors are the specification's own facet-family vectors, copied to `spec/fixtures/core/` and held to the digests the specification's manifest records at the pinned commit. Whether each vector's content exhibits what it claims is checked by the specification's own suite, where the vectors live. |
 | Root bases | A duplicated `appRoot.base` token, or a pinned `vocabulary-unresolved` vector whose root names a base this profile registers (it would then resolve, and falsify nothing). The specification checks base ownership only where a vocabulary registry is published, which is here. |
 | Composable surface | See below. |

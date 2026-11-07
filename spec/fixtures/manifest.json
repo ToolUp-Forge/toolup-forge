@@ -3,7 +3,7 @@
   "formatVersion": 1,
   "profile": "server-app-host",
   "profileKind": "vocabulary",
-  "profileVersion": "7.3",
+  "profileVersion": "7.4",
   "registry": "../registry.json",
   "conformanceFamilies": [
     "document",
@@ -2096,6 +2096,123 @@
       "reject": "narrative-malformed",
       "detect": "profile",
       "description": "One trigger written twice (section P4.24, widened at 7.3). Each is in its grammar and names a declared table and metric; the second asks nothing the first did not."
+    },
+    {
+      "id": "profile-server-app-host/principal-user-forms",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "round-trip",
+      "file": "profile-server-app-host/principal-user-forms.json",
+      "sha256": "ef5a29a8881b79002f814ab7f6db6c8b152a45a26235a3c7df906596638b9f53",
+      "environment": {
+        "BRIEFING_USER_ID": "user-briefing"
+      },
+      "description": "Both forms of a subscription principal (7.4, section P3.13): one scheduled narrative runs as a principal naming the setting BRIEFING_USER_ID, which the environment supplies, and another as a principal with a literal userId. A third principal names a setting the environment does not supply and nothing runs as it, so the host never reads it and starts. The member order is section P3.13's, userIdSetting after displayName, and the absent userId is omitted. An evaluator that refuses a principal nothing names, or writes userId as empty, fails it."
+    },
+    {
+      "id": "profile-server-app-host/delivery-principal-setting",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "round-trip",
+      "file": "profile-server-app-host/delivery-principal-setting.json",
+      "sha256": "66da7a0aad50c0c0607d296fbbf5c623002bd717effcfef15e52f24894d4fe56",
+      "environment": {
+        "LOADER_USER_ID": "user-loader"
+      },
+      "description": "A scheduled pull and a watched delivery run as one principal naming a setting (7.4, sections P3.13 and P4.58 widened), which the environment supplies. A delivery principal with no userId is not delivery-principal-unresolvable."
+    },
+    {
+      "id": "profile-server-app-host/reject-principal-user-both",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-principal-user-both.json",
+      "sha256": "314c2b171b76260fab5061779e9ffc893cc469ba4c19d6a37efdf4a5a254b8a0",
+      "reject": "principal-user-malformed",
+      "detect": "profile",
+      "description": "A subscription principal carrying both a literal userId and a userIdSetting (section P4.82). A host would run the work as whichever it read first."
+    },
+    {
+      "id": "profile-server-app-host/reject-principal-user-blank-beside-setting",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-principal-user-blank-beside-setting.json",
+      "sha256": "2c02ce76042c5096cfb734f05943f0008fca889b4a561adfc9ee11e8bb144631",
+      "reject": "principal-user-malformed",
+      "detect": "profile",
+      "description": "An empty userId beside a userIdSetting (section P4.82). Presence decides and absent has one spelling, so this is both: an emitter that writes the unused member as an empty string fails here, and a reader treating blank as absent would accept it."
+    },
+    {
+      "id": "profile-server-app-host/reject-principal-user-neither",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-principal-user-neither.json",
+      "sha256": "80ed01191f6ff2a966bcfaff731a772517627bf7aaa1e66ef695ed5dd2d1a1fb",
+      "reject": "principal-user-malformed",
+      "detect": "profile",
+      "description": "A subscription principal carrying neither userId nor userIdSetting (section P4.82). The work would run as nobody."
+    },
+    {
+      "id": "profile-server-app-host/reject-principal-user-setting-invalid",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-principal-user-setting-invalid.json",
+      "sha256": "37cca24a52d83ba3e8169c5f7755cd10b505d8ea8024913784807ede8fe893fd",
+      "reject": "principal-user-malformed",
+      "detect": "profile",
+      "description": "A userIdSetting that is not a name in section P4.26's grammar: it carries hyphens, so no environment can hold it and no deployment could supply it (section P4.82)."
+    },
+    {
+      "id": "profile-server-app-host/reject-principal-setting-unsupplied",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-principal-setting-unsupplied.json",
+      "sha256": "c4a189c01f5663477252a60f027b2e6657d91173d764418b35cbaeb9f52af095",
+      "reject": "principal-setting-unresolved",
+      "detect": "runtime",
+      "environment": {},
+      "description": "A scheduled narrative runs as a principal naming a setting the environment does not supply (section P4.83). The composition is well formed; only the start refuses it, by this class, the principal and the setting, and the host does not start with the narrative left out."
+    },
+    {
+      "id": "profile-server-app-host/reject-principal-setting-blank",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-principal-setting-blank.json",
+      "sha256": "05d292b1d8d4b32029cc4966d56915907b5dab1ca6211ace47608e00bbc5ed67",
+      "reject": "principal-setting-unresolved",
+      "detect": "runtime",
+      "environment": {
+        "BRIEFING_USER_ID": "   "
+      },
+      "description": "The same principal, with the setting supplied and holding only spaces (section P4.83). Surrounding whitespace is not part of the value, so this is no user, as a blank literal is."
+    },
+    {
+      "id": "profile-server-app-host/reject-principal-setting-unsupplied-delivery",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-principal-setting-unsupplied-delivery.json",
+      "sha256": "32337deeb8a119629b1dc74824e278ecda86725fc5d64e37420498019d821acf",
+      "reject": "principal-setting-unresolved",
+      "detect": "runtime",
+      "environment": {
+        "OTHER_USER_ID": "user-other"
+      },
+      "description": "A pull and a watch run as a principal whose setting the environment does not supply, though it supplies another (section P4.83). The rule reads the setting the work names, and it is not only a narrative's."
     }
   ]
 }

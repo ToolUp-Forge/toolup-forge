@@ -1,6 +1,6 @@
 # forge composition profile — `server-app-host`
 
-**Profile version 7.3.** forge's evaluator profile of the **App-composition wire specification, format version 1**
+**Profile version 7.4.** forge's evaluator profile of the **App-composition wire specification, format version 1**
 (<https://github.com/Fuaran-Build/fuaran-app-composition-specification>, cited throughout as *core*). Sections §P1–§P8 are **normative** within this profile. §P0 and Appendix P-A
 are not.
 
@@ -47,7 +47,7 @@ Each shape this profile fills in is the core's, cited by its section: the root (
 | | |
 |---|---|
 | Profile identifier | `server-app-host` |
-| Profile version | 7.3 |
+| Profile version | 7.4 |
 | Profile kind | vocabulary (core §8.6) |
 | Core | App-composition wire specification, format version 1 — <https://github.com/Fuaran-Build/fuaran-app-composition-specification> |
 | Core version | 1 |
@@ -399,6 +399,18 @@ and a tolerance, each held to its grammar. No refusal class is added: §P4.24 wi
 naming a table or metric its composition does not declare is `narrative-malformed`, as is an empty list or one trigger
 written twice. Every 7.2 composition carries no `triggers`, so it encodes byte for byte as before and meets the widened
 rule vacuously.
+
+**7.3 → 7.4 lets a subscription principal name its user from a deployment setting, additively.** Until 7.4 a
+`subscriptionPrincipal` carried only a literal `userId`. A composition is carried across environments, so one literal
+had to be a real user in every environment that starts it, or a deployment's identity had to be committed to the
+composition. 7.4 gives `subscriptionPrincipal` the `userIdSetting` member (§P3.13), the alternative to `userId`,
+exactly one of the two, naming a setting the deployment supplies and its environment contract declares. What a consumer
+gains is a composition that says which principal its work runs as and leaves which user that is, in this deployment,
+to the deployment. Two refusal classes are added: `principal-user-malformed` (§P4.82) for a composition carrying both
+members, neither, or a name a setting cannot have, and `principal-setting-unresolved` (§P4.83) for a start whose
+deployment does not supply a user. §P4.58 and §P4.63 widen to the new form, and §P6 gives a vector the `environment` it
+runs under. Every 7.3 composition carries `userId` and no `userIdSetting`, so it encodes byte for byte as before and is
+valid at 7.4 with the same verdict; a literal means what it did.
 
 ## §P2. Token vocabularies
 
@@ -1337,14 +1349,42 @@ placeholder of that template the narrative fills (§P4.46, §P4.47).
 
 | Member | Type | Presence |
 |---|---|---|
-| `userId` | string | REQUIRED |
+| `userId` | string | exactly one of `userId` and `userIdSetting` (§P4.82) |
 | `displayName` | string | REQUIRED |
+| `userIdSetting` | string | exactly one of `userId` and `userIdSetting` (§P4.82; 7.4) |
 
 A **subscription principal**: an identity declared work runs as — a standing subscription, a pull or a watch
 (§P3.8), or a scheduled grounded narrative (§P3.4, 6.3). The node's `id` is the
 principal's name. It is a leaf. `userId` is the identity a host's resolver maps to a scope; whether it
 resolves, and to what, is the deployment's question, which a host answers at startup and not the
 composition's.
+
+`userIdSetting` names the **setting** that identity is read from when the host starts, for a composition carried across
+environments that have no user in common (7.4). It names a place, never a value, as `keyEnv` does (§P3.5): a deployment's
+environment contract declares the entry, and no user id is carried by the composition. A host:
+
+- reads the setting once, when it starts, and a change takes effect at the next start. Surrounding whitespace is not
+  part of the value;
+- then treats the principal exactly as it treats one whose `userId` is that value: the same resolver, the same scope,
+  the same work. A literal and a setting holding the same user id are one user;
+- refuses to start when the setting gives it no user that resolves (§P4.83), and never runs the work as nobody, under a
+  default, or with the work left out;
+- declares the setting in its environment contract for every principal a standing subscription, a delivery or a
+  narrative's `runsAs` names. A principal nothing names runs nothing, and its setting is not read.
+
+Two principals may name one setting; they are then one user under two names.
+
+**It is not the publication principal.** A `subscriptionPrincipal` says who declared work **runs as**. A publication's
+reading principal (`FactPublication.withPublicationPrincipals`, `FactPublication.declaredPrincipal`) says who a
+publishing scope's disclosure re-check **reads as**. They share a mechanism and nothing else: each is a setting read
+through forge's configuration resolution, with surrounding whitespace dropped, and resolved through
+`DeclaredPrincipalResolver`. The reading principal is keyed by publishing scope, is bound where the application is
+composed and is declared by no node here; a publication triggered by a commit needs it and has no `runsAs` to borrow
+(§P4.24); it is resolved per read and must resolve into that scope; and forge's answer to its failure is to withhold a
+narrative citing a fact, at the read, where this principal's is to refuse the start. So neither substitutes for the
+other and neither is inferred from the other. A `userIdSetting` declares no reading principal, a reading principal
+declares no `subscriptionPrincipal`, and a deployment wanting one user in both roles supplies that user to both, which
+it may do with one setting.
 
 ### §P3.14 `standingSubscription`
 
@@ -2030,10 +2070,10 @@ would have to ignore it, and a member a host ignores is one the author believes 
 
 ### §P4.58 A delivery runs as a principal a host can resolve — `delivery-principal-unresolvable`
 
-The `subscriptionPrincipal` a pull or a watch names carries a `userId` that is not blank. A host resolves a
-principal as it resolves a request signed in as its `userId`; a blank one resolves to nothing, at every host.
-Whether a non-blank one resolves, and to a scope whose data persists, is the deployment's question, which a host
-answers at startup (§P3.13).
+The `subscriptionPrincipal` a pull or a watch names carries a `userId` that is not blank, or a `userIdSetting` (7.4). A
+host resolves a principal as it resolves a request signed in as its `userId`; a blank one resolves to nothing, at every
+host. Whether a non-blank one resolves, and to a scope whose data persists, is the deployment's question, which a host
+answers at startup (§P3.13); so is what a setting holds (§P4.83).
 
 ### §P4.59 A pull's cadence is a cron expression in the registered grammar — `delivery-cadence-invalid`
 
@@ -2059,11 +2099,11 @@ scheduler to run it on — is the evaluator's completeness question, as it is fo
 
 ### §P4.63 A scheduled narrative runs as a principal a host can resolve — `narrative-principal-unresolvable`
 
-The `subscriptionPrincipal` a `groundedNarrative`'s `runsAs` names carries a `userId` that is not blank (6.3). A
-host resolves the principal as it resolves a request signed in as its `userId`, and a blank one resolves to
-nothing at every host. Whether a non-blank one resolves, and to which scope, is the deployment's question, which a
-host answers at startup (§P3.13). (A `runsAs` naming no `subscriptionPrincipal` is §P4.22's, and is not also
-refused here.)
+The `subscriptionPrincipal` a `groundedNarrative`'s `runsAs` names carries a `userId` that is not blank (6.3), or a
+`userIdSetting` (7.4). A host resolves the principal as it resolves a request signed in as its `userId`, and a blank one
+resolves to nothing at every host. Whether a non-blank one resolves, and to which scope, is the deployment's question,
+which a host answers at startup (§P3.13); so is what a setting holds (§P4.83). (A `runsAs` naming no
+`subscriptionPrincipal` is §P4.22's, and is not also refused here.)
 
 ### §P4.64 A fact browse needs a fact tier — `fact-browse-without-tier`
 
@@ -2194,6 +2234,26 @@ refuses to reduce when the file is absent or the SHA-256 of its raw bytes is not
 composition alone cannot answer this rule, because it does not carry the bytes; the reduction answers it, before it
 writes anything (§P3.18). A vector of this rule names the directory its sources resolve against (§P6).
 
+### §P4.82 A principal names its user one way — `principal-user-malformed`
+
+A `subscriptionPrincipal` carries exactly one of `userId` and `userIdSetting`, whether or not any work names it (7.4).
+Presence decides, not content: a blank `userId` beside a `userIdSetting` is both, because absent has one spelling, the
+absent member. A `userIdSetting` is a name in §P4.26's grammar for `keyEnv`, a letter or `_`, then letters, digits and
+`_`, so that an environment can carry it. A principal with two users would run as whichever a host read first, one with
+none as nobody, and a name no environment can hold is a setting no deployment could supply. Refused once per principal.
+(A `userId` alone that is blank is not refused here: it is §P4.58's and §P4.63's where work names the principal.)
+
+### §P4.83 A principal's setting gives a host a user — `principal-setting-unresolved`
+
+When it starts, a host reads the `userIdSetting` of each `subscriptionPrincipal` a standing subscription, a delivery or a
+narrative's `runsAs` names, and refuses to start when the setting has no value, when its value is blank, or when the
+value resolves to nobody: on a team deployment, to no member with an active team (7.4). The refusal is the host's
+start failing, not a warning and not the work skipped, and it says this class, the principal and the setting. It does
+not print the value. The composition alone cannot answer this rule, because it does not carry the deployment: the rule
+is detected at the `runtime` layer (core §12.4), and a vector of it states the environment it runs under (§P6). Whether a
+value resolves depends on the deployment's users, which no vector carries, so the vectors pin the absent and the blank
+setting, and the rule binds the third case all the same.
+
 ## §P5. Extension
 
 This profile registers no extension declaration of its own. The core registry (core §7.4) applies
@@ -2214,7 +2274,7 @@ the profile by name. It carries every `core` obligation (core §2.1) and additio
   `referenceData`, `dataDelivery`, `entityReads`, `reportTemplate`, `reportProducer`,
   `subscriptionPrincipal`, `standingSubscription`, `factBrowse`, `theme` and `uiControl` (§P3), and the
   `content` member of `layoutRef` and `pageRef` (§P3.18);
-- enforces §P4.1–§P4.3, §P4.5, §P4.7–§P4.55 and §P4.57–§P4.81, builds each project the root declares as §P4.56 obliges,
+- enforces §P4.1–§P4.3, §P4.5, §P4.7–§P4.55 and §P4.57–§P4.83, builds each project the root declares as §P4.56 obliges,
   serves a page as §P3.3 obliges, a fact browse as §P3.15 obliges and a client shell's home entries and browser history as §P3.1 obliges,
   applies a declared theme as §P3.16 obliges, inlines and serves declared content as §P3.18 obliges, enforces a
   declared allowlist as §P3.17 obliges, verifies every reference dataset as §P3.6 obliges and every binary template
@@ -2227,6 +2287,12 @@ that stands for the application's root, and every `source` in the vector resolve
 reads the declared files there when it runs the vector, as it reads them under an application's root when it
 reduces. The round-trip vectors that declare content carry a `contentRoot` too, and each of their hashes is the hash
 of the file it names there, so the one vector whose bytes do not match is the reject.
+
+**A vector that states its environment.** §P4.83 is answered by a start, not by the composition, so its vector states
+the deployment it starts under: its manifest entry's `environment` is an object from setting name to value, and a setting
+it does not list has no value. A claim to this profile reads a principal's setting from there when it runs the vector.
+The round-trip vectors whose principals name a setting carry an `environment` too, and it supplies every setting work
+reads, so the ones that do not are the rejects. Each value in a vector is synthetic.
 
 An implementation that reads compositions written for this profile but implements none of the above
 claims `core`, not this profile, and that claim is both honest and useful (core Appendix B.4).

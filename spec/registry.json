@@ -2,7 +2,7 @@
   "specification": "app-composition-wire",
   "coreVersion": 1,
   "profile": "server-app-host",
-  "profileVersion": "7.3",
+  "profileVersion": "7.4",
   "note": "The machine-readable rendering of composition-profile.md sections P2, P3 and P8. Normative; the composition-profile surface check in this repository compares the two renderings and fails when they disagree. Counts appear nowhere: this file is the enumeration.",
   "tokens": {
     "appRoot.base": {
@@ -307,8 +307,9 @@
     },
     "subscriptionPrincipal": {
       "members": [
-        { "name": "userId", "type": "string", "presence": "required" },
-        { "name": "displayName", "type": "string", "presence": "required" }
+        { "name": "userId", "type": "string", "presence": "exactly one of userId and userIdSetting" },
+        { "name": "displayName", "type": "string", "presence": "required" },
+        { "name": "userIdSetting", "type": "string", "presence": "exactly one of userId and userIdSetting" }
       ],
       "leaf": true
     },
@@ -489,6 +490,8 @@
     "content-inline-unsupported",
     "content-duplicate",
     "content-path-collision",
-    "content-hash-mismatch"
+    "content-hash-mismatch",
+    "principal-user-malformed",
+    "principal-setting-unresolved"
   ]
 }

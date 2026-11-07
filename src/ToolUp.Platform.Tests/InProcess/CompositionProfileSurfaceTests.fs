@@ -32,7 +32,8 @@ open ToolUp.Platform.Compose
 //      each node kind's member table in the registry's order;
 //   3. the registered setting grammars against the vectors that must
 //      admit, or refuse, a setting value, and the content a vector
-//      declares against the files it carries under its contentRoot;
+//      declares against the files it carries under its contentRoot, and
+//      a principal's user against the rule and the environment that refuse it;
 //   4. §P8's facet declaration against the core's facet-family vectors for
 //      this profile, pinned by digest in `spec/fixtures/core/`;
 //   5. base-token ownership: the registry's root bases are distinct, and a
@@ -798,6 +799,138 @@ let contentFindings (p: Profile) (read: string -> string -> byte array option) :
         "no content-hash-mismatch vector carries its files, so §P4.81 went untested"
 ]
 
+// ── 3b. a principal's user, and the deployment a vector starts under ─
+
+let private nodesOfKind (kind: string) (doc: JsonElement) : JsonElement list =
+    let rec walk (n: JsonElement) = [
+        if str "kind" n = Some kind then
+            n
+
+        match prop "children" n with
+        | Some children when children.ValueKind = JsonValueKind.Array ->
+            for child in children.EnumerateArray() do
+                yield! walk child
+        | _ -> ()
+    ]
+
+    walk doc
+
+/// §P4.82, as (fault, principal id). The fault names which way the principal fails the rule.
+let private principalUserFaults (doc: JsonElement) : (string * string) list = [
+    for n in nodesOfKind "subscriptionPrincipal" doc do
+        let id = str "id" n |> Option.defaultValue "?"
+
+        match prop "userId" n, prop "userIdSetting" n with
+        | Some _, Some _ -> "both", id
+        | None, None -> "neither", id
+        | None, Some setting when not (Regex.IsMatch(setting.GetString(), @"\A[A-Za-z_][A-Za-z0-9_]*\z")) ->
+            "setting-name", id
+        | _ -> ()
+]
+
+/// §P4.83, as (fault, principal id): what a start under `environment` refuses. Only a principal
+/// some work names is read, and `principal` on a narrative is not one: its `runsAs` is.
+let private principalStartFaults (doc: JsonElement) (environment: Map<string, string>) : (string * string) list =
+    let named =
+        Set.ofList [
+            yield! nodesOfKind "groundedNarrative" doc |> List.choose (str "runsAs")
+            yield! nodesOfKind "standingSubscription" doc |> List.choose (str "principal")
+            yield! nodesOfKind "dataDelivery" doc |> List.choose (str "principal")
+        ]
+
+    [
+        for n in nodesOfKind "subscriptionPrincipal" doc do
+            let id = str "id" n |> Option.defaultValue "?"
+
+            match str "userIdSetting" n with
+            | Some setting when named.Contains id ->
+                match environment.TryFind setting with
+                | None -> "unsupplied", id
+                | Some value when String.IsNullOrWhiteSpace value -> "blank", id
+                | Some _ -> ()
+            | _ -> ()
+    ]
+
+let private vectorEnvironment (entry: JsonElement) : Map<string, string> option =
+    prop "environment" entry
+    |> Option.map (fun e -> members (Some e) |> List.map (fun (k, v) -> k, v.GetString()) |> Map.ofList)
+
+/// The two rules forge's gate can answer from a vector alone, with `read` supplying each vector's
+/// composition. Each refused vector must fail its rule the way it is refused for, and every other
+/// vector must pass both, so a vector accepted or refused for the wrong reason goes red here.
+let principalFindings (p: Profile) (read: string -> JsonElement) : string list = [
+    let userFaults = Collections.Generic.HashSet<string>()
+    let startFaults = Collections.Generic.HashSet<string>()
+    let mutable settingAccepted = 0
+
+    for e in vectorEntries p do
+        let id = str "id" e |> Option.defaultValue "?"
+        let doc = read (str "file" e |> Option.defaultValue "")
+        let faults = principalUserFaults doc
+        let environment = vectorEnvironment e
+
+        match str "reject" e with
+        | Some "principal-user-malformed" ->
+            for fault, _ in faults do
+                userFaults.Add fault |> ignore
+
+            if faults.IsEmpty then
+                sprintf "%s: refused as principal-user-malformed, and every principal names one user" id
+        | Some "principal-setting-unresolved" ->
+            if not faults.IsEmpty then
+                sprintf "%s: the start is what refuses it, and the composition already fails §P4.82: %A" id faults
+
+            if str "detect" e <> Some "runtime" then
+                sprintf "%s: §P4.83 is answered by a start, so it is detected at the runtime layer" id
+
+            match environment with
+            | None -> sprintf "%s: refused by a start and states no environment to start under" id
+            | Some env ->
+                let refused = principalStartFaults doc env
+
+                for fault, _ in refused do
+                    startFaults.Add fault |> ignore
+
+                if refused.IsEmpty then
+                    sprintf "%s: refused as principal-setting-unresolved, and work reads no setting without a user" id
+        | _ ->
+            if not faults.IsEmpty then
+                sprintf "%s: §P4.82 refuses it, and the vector does not say so: %A" id faults
+
+            let carriesSetting =
+                nodesOfKind "subscriptionPrincipal" doc
+                |> List.exists (prop "userIdSetting" >> Option.isSome)
+
+            let mustStart = str "kind" e = Some "round-trip" || str "kind" e = Some "accept"
+
+            match environment with
+            | Some env ->
+                let refused = principalStartFaults doc env
+
+                if not refused.IsEmpty then
+                    sprintf "%s: its environment leaves a setting work reads without a user: %A" id refused
+
+                if mustStart && carriesSetting then
+                    settingAccepted <- settingAccepted + 1
+            | None when mustStart && carriesSetting ->
+                sprintf "%s: a principal names a setting and the vector states no environment" id
+            | None -> ()
+
+    for fault in [ "both"; "neither"; "setting-name" ] do
+        if not (userFaults.Contains fault) then
+            sprintf "no principal-user-malformed vector refuses %s, so that half of §P4.82 went untested" fault
+
+    for fault in [ "unsupplied"; "blank" ] do
+        if not (startFaults.Contains fault) then
+            sprintf "no principal-setting-unresolved vector refuses %s, so that half of §P4.83 went untested" fault
+
+    if settingAccepted = 0 then
+        "no accepted vector names its user from a setting, so §P3.13's second form went untested"
+]
+
+let private readVector (p: Profile) (file: string) =
+    readJson (Path.Combine(p.Dir, "fixtures", file))
+
 // ── 4. §P8 certified against the core's facet-family vectors ─────────
 
 let facetFindings (p: Profile) : string list = [
@@ -1229,6 +1362,11 @@ let tests =
             expectNone (contentFindings (load ()) readContent)
         }
 
+        test "a principal names one user, and a start refuses a setting that gives it none" {
+            let p = load ()
+            expectNone (principalFindings p (readVector p))
+        }
+
         test "§P8's facet declaration is certified against the core's facet-family vectors" {
             expectNone (facetFindings (load ()))
         }
@@ -1253,7 +1391,66 @@ let tests =
                         Binding = JsonDocument.Parse(edit (File.ReadAllText path)).RootElement
                 }
 
+            // One vector's composition, edited as text; the edit must land or the plant proves nothing.
+            let principalWith (vector: string) (from: string) (into: string) =
+                principalFindings p (fun file ->
+                    let source = (readVector p file).GetRawText()
+
+                    if file.EndsWith(vector + ".json") then
+                        Expect.stringContains source from (sprintf "the plant must land in %s" vector)
+                        JsonDocument.Parse(source.Replace(from, into)).RootElement
+                    else
+                        JsonDocument.Parse(source).RootElement)
+
+            // One vector's environment, edited as the manifest's text.
+            let environmentWith (from: string) (into: string) =
+                let manifest =
+                    File.ReadAllText(Path.Combine(p.Dir, "fixtures", "manifest.json")).Replace("\r\n", "\n")
+
+                Expect.stringContains manifest from "the plant must land in the manifest"
+
+                principalFindings
+                    {
+                        p with
+                            Manifest = JsonDocument.Parse(manifest.Replace(from, into)).RootElement
+                    }
+                    (readVector p)
+
             let planted = [
+                // a refused vector names one user after all.
+                "a both-forms vector with one form dropped",
+                principalWith "reject-principal-user-both" "\"userId\":\"svc-briefer\"," ""
+                // presence decides: a blank userId is still a userId.
+                "a blank-beside-a-setting vector with the blank dropped",
+                principalWith "reject-principal-user-blank-beside-setting" "\"userId\":\"\"," ""
+                "a neither vector naming a user",
+                principalWith
+                    "reject-principal-user-neither"
+                    "\"displayName\":\"Briefing writer\""
+                    "\"userId\":\"svc-briefer\",\"displayName\":\"Briefing writer\""
+                "a setting name corrected into the grammar",
+                principalWith "reject-principal-user-setting-invalid" "briefing-user-id" "BRIEFING_USER_ID"
+                // an accepted vector carrying both forms.
+                "an accepted principal with both forms",
+                principalWith
+                    "principal-user-forms"
+                    "\"displayName\":\"Briefing writer\""
+                    "\"userId\":\"svc-briefer\",\"displayName\":\"Briefing writer\""
+                // a principal nothing names is not read; named, its unsupplied setting refuses the start.
+                "work naming the principal whose setting nothing supplies",
+                principalWith "principal-user-forms" "\"runsAs\":\"digester\"" "\"runsAs\":\"standby\""
+                // a refused start whose deployment now supplies a user.
+                "a supplied setting in the unsupplied vector",
+                environmentWith "\"environment\": {}," "\"environment\": { \"BRIEFING_USER_ID\": \"user-briefing\" },"
+                "a real value in the blank vector",
+                environmentWith "\"BRIEFING_USER_ID\": \"   \"" "\"BRIEFING_USER_ID\": \"user-briefing\""
+                "the setting the delivery vector's work reads supplied",
+                environmentWith "\"OTHER_USER_ID\": \"user-other\"" "\"LOADER_USER_ID\": \"user-loader\""
+                // an accepted start whose deployment no longer supplies a user.
+                "an accepted vector's setting unsupplied",
+                environmentWith "\"BRIEFING_USER_ID\": \"user-briefing\"" "\"OTHER_USER_ID\": \"user-briefing\""
+                "an accepted vector's setting blank",
+                environmentWith "\"LOADER_USER_ID\": \"user-loader\"" "\"LOADER_USER_ID\": \"  \""
                 // forge grows a companion slot nobody registered or declined.
                 "a new reflected slot",
                 surfaceFindings p {
