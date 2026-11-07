@@ -9,7 +9,7 @@
     <!-- 0.2.0: rides the Webhook 0.2.0 bump (SecretMissing → 500 mapping landed
          here in the same Phase 332 commit; the nupkg's Webhook dependency floor
          moves with the project reference). -alpha dropped with the family. -->
-    <Version>0.2.2</Version>
+    <Version>0.2.3</Version>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="StripeConfig.fs" />

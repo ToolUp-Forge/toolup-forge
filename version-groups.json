@@ -52,7 +52,7 @@
     {
       "id": "algorithm-providers",
       "property": "ToolUpAlgorithmProvidersVersion",
-      "version": "0.39.1",
+      "version": "0.39.2",
       "projects": [
         "src/AlgorithmProviders/**"
       ]
@@ -60,7 +60,7 @@
     {
       "id": "artefact-signing",
       "property": "ToolUpArtefactSigningVersion",
-      "version": "0.39.1",
+      "version": "0.39.2",
       "projects": [
         "src/ArtefactSigning/**"
       ]
@@ -68,7 +68,7 @@
     {
       "id": "audit-sinks",
       "property": "ToolUpAuditSinksVersion",
-      "version": "0.39.1",
+      "version": "0.39.2",
       "projects": [
         "src/AuditSinks/**"
       ]
@@ -85,7 +85,7 @@
     {
       "id": "calendar",
       "property": "ToolUpCalendarVersion",
-      "version": "0.39.1",
+      "version": "0.39.2",
       "projects": [
         "src/Calendar/**"
       ]
@@ -101,7 +101,7 @@
     {
       "id": "container-schedulers",
       "property": "ToolUpContainerSchedulersVersion",
-      "version": "0.39.1",
+      "version": "0.39.2",
       "projects": [
         "src/ContainerSchedulers/**"
       ]
@@ -109,7 +109,7 @@
     {
       "id": "content-scanners",
       "property": "ToolUpContentScannersVersion",
-      "version": "0.39.1",
+      "version": "0.39.2",
       "projects": [
         "src/ContentScanners/**"
       ]
@@ -117,7 +117,7 @@
     {
       "id": "data-sources",
       "property": "ToolUpDataSourcesVersion",
-      "version": "0.39.1",
+      "version": "0.39.2",
       "projects": [
         "src/DataSources/**"
       ]
@@ -125,7 +125,7 @@
     {
       "id": "embedding-caches",
       "property": "ToolUpEmbeddingCachesVersion",
-      "version": "0.39.1",
+      "version": "0.39.2",
       "projects": [
         "src/EmbeddingCaches/**"
       ]
@@ -133,7 +133,7 @@
     {
       "id": "embedding-providers",
       "property": "ToolUpEmbeddingProvidersVersion",
-      "version": "0.39.1",
+      "version": "0.39.2",
       "projects": [
         "src/EmbeddingProviders/**"
       ]
@@ -141,7 +141,7 @@
     {
       "id": "encryption",
       "property": "ToolUpEncryptionVersion",
-      "version": "0.39.1",
+      "version": "0.39.2",
       "projects": [
         "src/Encryption/**"
       ]
@@ -149,7 +149,7 @@
     {
       "id": "entity-stores",
       "property": "ToolUpEntityStoresVersion",
-      "version": "0.39.1",
+      "version": "0.39.2",
       "projects": [
         "src/EntityStores/**"
       ]
@@ -157,7 +157,7 @@
     {
       "id": "fact-stores",
       "property": "ToolUpFactStoresVersion",
-      "version": "0.39.1",
+      "version": "0.39.2",
       "projects": [
         "src/FactStores/**"
       ]
@@ -165,7 +165,7 @@
     {
       "id": "feature-flag-providers",
       "property": "ToolUpFeatureFlagProvidersVersion",
-      "version": "0.1.2-alpha",
+      "version": "0.1.3-alpha",
       "projects": [
         "src/FeatureFlagProviders/**"
       ]
@@ -173,7 +173,7 @@
     {
       "id": "hosts",
       "property": "ToolUpHostsVersion",
-      "version": "0.39.1",
+      "version": "0.39.2",
       "projects": [
         "src/Hosts/**"
       ]
@@ -181,7 +181,7 @@
     {
       "id": "ingestion-queues",
       "property": "ToolUpIngestionQueuesVersion",
-      "version": "0.39.1",
+      "version": "0.39.2",
       "projects": [
         "src/IngestionQueues/**"
       ]
@@ -189,7 +189,7 @@
     {
       "id": "job-schedulers",
       "property": "ToolUpJobSchedulersVersion",
-      "version": "0.39.1",
+      "version": "0.39.2",
       "projects": [
         "src/JobSchedulers/**"
       ]
@@ -197,7 +197,7 @@
     {
       "id": "media",
       "property": "ToolUpMediaVersion",
-      "version": "0.39.1",
+      "version": "0.39.2",
       "projects": [
         "src/Media/**"
       ]
@@ -205,7 +205,7 @@
     {
       "id": "metrics",
       "property": "ToolUpMetricsVersion",
-      "version": "0.39.1",
+      "version": "0.39.2",
       "projects": [
         "src/Metrics/**"
       ]
@@ -213,7 +213,7 @@
     {
       "id": "model-providers",
       "property": "ToolUpModelProvidersVersion",
-      "version": "0.39.1",
+      "version": "0.39.2",
       "projects": [
         "src/ModelProviders/**"
       ]
@@ -221,7 +221,7 @@
     {
       "id": "notification-channels",
       "property": "ToolUpNotificationChannelsVersion",
-      "version": "0.39.1",
+      "version": "0.39.2",
       "projects": [
         "src/NotificationChannels/**"
       ]
@@ -229,7 +229,7 @@
     {
       "id": "observability",
       "property": "ToolUpObservabilityVersion",
-      "version": "0.39.1",
+      "version": "0.39.2",
       "projects": [
         "src/Observability/**"
       ]
@@ -237,7 +237,7 @@
     {
       "id": "ocr-providers",
       "property": "ToolUpOcrProvidersVersion",
-      "version": "0.39.1",
+      "version": "0.39.2",
       "projects": [
         "src/OcrProviders/**"
       ]
@@ -245,7 +245,7 @@
     {
       "id": "rate-limit",
       "property": "ToolUpRateLimitVersion",
-      "version": "0.39.1",
+      "version": "0.39.2",
       "projects": [
         "src/RateLimit/**"
       ]
@@ -253,7 +253,7 @@
     {
       "id": "report-renderers",
       "property": "ToolUpReportRenderersVersion",
-      "version": "0.39.1",
+      "version": "0.39.2",
       "projects": [
         "src/Reporting/**"
       ]
@@ -261,7 +261,7 @@
     {
       "id": "rerankers",
       "property": "ToolUpRerankersVersion",
-      "version": "0.39.1",
+      "version": "0.39.2",
       "projects": [
         "src/Rerankers/**"
       ]
@@ -269,7 +269,7 @@
     {
       "id": "secrets",
       "property": "ToolUpSecretsVersion",
-      "version": "0.39.1",
+      "version": "0.39.2",
       "projects": [
         "src/Secrets/**"
       ]
@@ -277,7 +277,7 @@
     {
       "id": "share-token-store-decorators",
       "property": "ToolUpShareTokenStoreDecoratorsVersion",
-      "version": "0.39.1",
+      "version": "0.39.2",
       "projects": [
         "src/ShareTokenStoreDecorators/**"
       ]
@@ -285,7 +285,7 @@
     {
       "id": "sparse-indices",
       "property": "ToolUpSparseIndicesVersion",
-      "version": "0.39.1",
+      "version": "0.39.2",
       "projects": [
         "src/SparseIndices/**"
       ]
@@ -293,7 +293,7 @@
     {
       "id": "storage",
       "property": "ToolUpStorageVersion",
-      "version": "0.39.1",
+      "version": "0.39.2",
       "projects": [
         "src/Storage/**"
       ]
@@ -301,7 +301,7 @@
     {
       "id": "svg-rasterizers",
       "property": "ToolUpSvgRasterizersVersion",
-      "version": "0.39.1",
+      "version": "0.39.2",
       "projects": [
         "src/SvgRasterizers/**"
       ]
@@ -309,7 +309,7 @@
     {
       "id": "telemetry-sinks",
       "property": "ToolUpTelemetrySinksVersion",
-      "version": "0.39.1",
+      "version": "0.39.2",
       "projects": [
         "src/TelemetrySinks/**"
       ]
@@ -317,7 +317,7 @@
     {
       "id": "time-series-stores",
       "property": "ToolUpTimeSeriesStoresVersion",
-      "version": "0.39.1",
+      "version": "0.39.2",
       "projects": [
         "src/TimeSeriesStores/**"
       ]
@@ -325,7 +325,7 @@
     {
       "id": "vector-stores",
       "property": "ToolUpVectorStoresVersion",
-      "version": "0.39.1",
+      "version": "0.39.2",
       "projects": [
         "src/VectorStores/**"
       ]
@@ -333,7 +333,7 @@
     {
       "id": "voice-providers",
       "property": "ToolUpVoiceProvidersVersion",
-      "version": "0.39.1",
+      "version": "0.39.2",
       "projects": [
         "src/VoiceProviders/**"
       ]
@@ -349,7 +349,7 @@
     {
       "id": "stripe",
       "property": "ToolUpStripeVersion",
-      "version": "0.2.2",
+      "version": "0.2.3",
       "projects": [
         "src/ToolUp.Stripe.*/**"
       ]
