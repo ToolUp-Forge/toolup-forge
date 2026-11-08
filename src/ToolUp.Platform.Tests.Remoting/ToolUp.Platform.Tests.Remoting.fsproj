@@ -36,6 +36,7 @@
         <Compile Include="..\ToolUp.Platform.Tests\Remoting\StjRoundTripTests.fs" Link="Remoting\StjRoundTripTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Remoting\JsonClientDecodeFixture.fs" Link="Remoting\JsonClientDecodeFixture.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Remoting\JsonTextTests.fs" Link="Remoting\JsonTextTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Remoting\SseGrammarTests.fs" Link="Remoting\SseGrammarTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Remoting\JsonWideValueTests.fs" Link="Remoting\JsonWideValueTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Remoting\ReadPolicyFixture.fs" Link="Remoting\ReadPolicyFixture.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Remoting\ReadPolicyAttributeTests.fs" Link="Remoting\ReadPolicyAttributeTests.fs" />

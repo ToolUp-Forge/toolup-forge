@@ -133,6 +133,7 @@ let private registeredTests =
         MsgPackRoundTripTests.tests
         StjRoundTripTests.tests
         JsonTextTests.tests
+        SseGrammarTests.tests
         JsonWideValueTests.tests
         ReadPolicyAttributeTests.tests
         RemotingBatchTests.tests
