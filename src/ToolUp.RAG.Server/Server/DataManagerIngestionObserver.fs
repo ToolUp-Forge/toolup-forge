@@ -54,7 +54,7 @@ let create
     (logger: ILogger)
     : IIngestionStatusObserver =
 
-    let jsonOptions = FableConverters.create ()
+    let jsonOptions = PlatformJson.options
 
     // Per-document progress for the life of the job. The first callback
     // for a document reads the store once to learn whether it is a Data

@@ -321,7 +321,7 @@ let internal makeVectorisationHook
     (logger: ILogger)
     : ProcessedData * ProcessedFileEntry * StorageScope * string -> Async<unit> =
 
-    let jsonOptions = ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()
+    let jsonOptions = ToolUp.Remoting.Json.SystemTextJson.PlatformJson.options
 
     // Write the per-file ingestion status alongside the
     // `DocumentVectorisation{Skipped,Rejected,Dropped}` events these arms

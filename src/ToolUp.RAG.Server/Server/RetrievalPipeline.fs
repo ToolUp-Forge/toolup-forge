@@ -53,7 +53,7 @@ type KnowledgeQueryTooLargeException(queryChars: int, maxQueryChars: int) =
 /// level (the payload is a plain anonymous record, but Option / list
 /// fields still need the converters).
 let private queryRejectedJsonOptions =
-    ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()
+    ToolUp.Remoting.Json.SystemTextJson.PlatformJson.options
 
 // ─── Access validation ────────────────────────────────────────────
 

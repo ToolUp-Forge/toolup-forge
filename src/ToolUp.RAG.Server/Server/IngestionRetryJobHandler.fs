@@ -44,7 +44,7 @@ open ToolUp.Platform.Compose
 // between dispatches. A malformed payload is `PermanentFailure` (it
 // will not parse on retry).
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 let private tryDeserialize (payload: string) : IngestionRetryPayload option =
     try
