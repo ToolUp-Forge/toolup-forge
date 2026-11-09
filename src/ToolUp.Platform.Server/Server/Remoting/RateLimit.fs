@@ -49,6 +49,11 @@ module RateLimitWindow =
     [<Literal>]
     let perDay = 86400
 
+/// One `[<RateLimit>]` budget as an API record's contract carries it: `Count`
+/// calls per `WindowSeconds` window per subject.
+[<RequireQualifiedAccess>]
+type RateBudget = { Count: int; WindowSeconds: int }
+
 // -----------------------------------------------------------------------------
 
 /// Default in-memory implementation of `IRateLimitStore`.
@@ -150,15 +155,6 @@ type InMemoryRateLimitStore(?maxBuckets: int) =
 
 module internal RateLimit =
 
-    // Reflect over both public AND non-public
-    // record types so internal / private API records arm the rate-limit
-    // classifier exactly like public ones. A bare `FSharpType.IsRecord`
-    // reports false for a non-public record and would silently skip
-    // budget enforcement (the same fail-open hole the auth classifier closes).
-    let private reflectionFlags =
-        System.Reflection.BindingFlags.Public
-        ||| System.Reflection.BindingFlags.NonPublic
-
     // ── Severity assessment — the rate-limit family ─────────
     //
     // What a forgery buys, in each direction:
@@ -210,26 +206,35 @@ module internal RateLimit =
                     | (:? int as c), (:? int as w) -> Some(RateLimitAttribute(c, w))
                     | _ -> None
 
+    /// One field's budgets, in declaration order.
+    let budgetsOf (field: System.Reflection.PropertyInfo) : RateBudget list =
+        field.GetCustomAttributes(true)
+        |> Array.choose tryBudget
+        |> Array.map (fun rl -> {
+            RateBudget.Count = rl.Count
+            RateBudget.WindowSeconds = rl.WindowSeconds
+        })
+        |> Array.toList
+
+    /// The evaluator's view of a contract budget.
+    let ofBudget (budget: RateBudget) : RateLimitAttribute =
+        RateLimitAttribute(budget.Count, budget.WindowSeconds)
+
+    /// The rate-limit marker collisions one field contributes.
+    let foreignMarkersOf (field: System.Reflection.PropertyInfo) : (string * string * string) list =
+        markers.CollisionsOf field
+        |> List.map (fun rendered -> "rate limiting", field.Name, rendered)
+
     /// Marker-name collisions on the API record, for the
     /// dispatcher's startup refusal.
     let foreignMarkers (apiType: Type) : (string * string * string) list =
-        markers.Collisions(apiType, reflectionFlags)
-        |> List.map (fun (field, rendered) -> "rate limiting", field, rendered)
+        ApiRecord.fields apiType |> Array.toList |> List.collect foreignMarkersOf
 
     /// Cache `[<RateLimit>]` attributes per API record field at startup.
     let classify (apiType: Type) : Map<string, RateLimitAttribute list> =
-        if not (Microsoft.FSharp.Reflection.FSharpType.IsRecord(apiType, reflectionFlags)) then
-            Map.empty
-        else
-            let fields =
-                Microsoft.FSharp.Reflection.FSharpType.GetRecordFields(apiType, reflectionFlags)
-
-            fields
-            |> Array.map (fun pi ->
-                let attrs = pi.GetCustomAttributes(true) |> Array.choose tryBudget |> Array.toList
-
-                pi.Name, attrs)
-            |> Map.ofArray
+        ApiRecord.fields apiType
+        |> Array.map (fun pi -> pi.Name, budgetsOf pi |> List.map ofBudget)
+        |> Map.ofArray
 
     /// Evaluate every budget for a method against the store, return the
     /// first denial (if any). All budgets must pass for the call to
