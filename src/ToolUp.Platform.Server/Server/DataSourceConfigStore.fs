@@ -39,12 +39,6 @@ module private Json =
     let serialize (value: 'T) : byte[] =
         JsonSerializer.Serialize(value, options) |> Encoding.UTF8.GetBytes
 
-    let tryDeserialize<'T> (bytes: byte[]) : 'T option =
-        try
-            let json = Encoding.UTF8.GetString bytes
-            Some(JsonSerializer.Deserialize<'T>(json, options))
-        with _ ->
-            None
 
 let private logger = lazy (JsonConsoleLogger.JsonConsoleLogger() :> ILogger)
 

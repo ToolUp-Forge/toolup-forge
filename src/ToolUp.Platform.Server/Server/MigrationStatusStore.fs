@@ -88,11 +88,6 @@ module MigrationStatusStore =
         let serialize (value: 'T) : byte[] =
             JsonSerializer.Serialize(value, options) |> Encoding.UTF8.GetBytes
 
-        let tryDeserialize<'T> (bytes: byte[]) : 'T option =
-            try
-                Some(JsonSerializer.Deserialize<'T>(Encoding.UTF8.GetString bytes, options))
-            with _ ->
-                None
 
     /// Blob-backed default. Every read is prefix-scoped to one team;
     /// the store never widens a prefix during a scoped operation, so a
