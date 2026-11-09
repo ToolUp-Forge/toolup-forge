@@ -22,7 +22,4 @@
     <ProjectReference Include="..\..\ToolUp.AI.Server\ToolUp.AI.Server.fsproj" />
   </ItemGroup>
   <!-- FSharp.Core is implicit via the .NET SDK. -->
-  <ItemGroup>
-    <InternalsVisibleTo Include="ToolUp.AIProviders.Tests" />
-  </ItemGroup>
 </Project>

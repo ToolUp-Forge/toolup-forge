@@ -232,3 +232,20 @@ let buildRequestBody
 
     jobj (contents @ systemInstruction @ toolMembers @ generationConfig)
     |> JsonHost.serialize
+
+/// The body of one connector call. A structured call's schema must parse as
+/// JSON: a malformed one is the caller's defect, refused as `PermanentClient`
+/// before anything is sent. A streaming call posts the buffered body to the
+/// streaming route.
+let callBody
+    (messages: AIProviderMessage list)
+    (tools: AIProviderToolDef list)
+    (systemPrompt: string option)
+    (schema: string option)
+    : Result<string, AIProviderError> =
+    match schema with
+    | None -> Ok(buildRequestBody messages tools systemPrompt None)
+    | Some schema ->
+        match JsonHost.parse schema with
+        | Some value -> Ok(buildRequestBody messages tools systemPrompt (Some value))
+        | None -> Error(PermanentClient(0, "structuredOutputSchema is not valid JSON"))

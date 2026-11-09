@@ -142,7 +142,7 @@ let private gemini (shape: string) =
         client (Some "https://generativelanguage.googleapis.com") (fun _ -> "")
 
     let provider =
-        GeminiAIProvider.GeminiAIProvider("test-key", ConnectorFixtures.geminiModel, http) :> IAIProvider
+        ConnectorProvider(GeminiAIProvider.connector http testKey, ConnectorFixtures.geminiModel) :> IAIProvider
 
     drive provider shape |> ignore
     handler.Sent

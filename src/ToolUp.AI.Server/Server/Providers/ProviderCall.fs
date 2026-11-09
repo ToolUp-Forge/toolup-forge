@@ -25,7 +25,6 @@ open ToolUp.Platform.Transport
 open ToolUp.Platform.Infra.Transport
 open ToolUp.Platform.ProviderExceptions
 open ToolUp.AI.Wire
-open ToolUp.Remoting.Json
 
 /// One call as a connector sees it: the model that serves it, the options
 /// the caller passed, and the turn.
@@ -110,12 +109,6 @@ module Connector =
             | Some secret when not (String.IsNullOrWhiteSpace secret) -> return Ok(header secret)
             | _ -> return Error(PermanentClient(0, missing))
         }
-
-    /// A schema that must parse as JSON before a native structured call.
-    let parseSchema (schema: string) : Result<JsonValue, AIProviderError> =
-        match JsonHost.parse schema with
-        | Some value -> Ok value
-        | None -> Error(PermanentClient(0, "structuredOutputSchema is not valid JSON"))
 
 module ProviderCall =
 

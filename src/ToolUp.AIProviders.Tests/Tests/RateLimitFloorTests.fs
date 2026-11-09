@@ -83,6 +83,15 @@ let private connectors: (string * (HttpClient -> (TimeSpan -> Async<unit>) -> IA
             },
             OpenAIProvider.DefaultModel
         )
+    "Gemini",
+    fun client pause ->
+        ConnectorProvider(
+            {
+                GeminiAIProvider.connector client testKey with
+                    Pause = pause
+            },
+            GeminiAIProvider.DefaultModel
+        )
 ]
 
 let private oneMessage = [ AIProviderMessage.text "user" "hello" ]
