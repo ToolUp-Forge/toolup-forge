@@ -4459,7 +4459,6 @@ let main args =
         "BudgetLedger.fs"
         "ComputeBudgetStore.fs"
         "ConfigDriftDetector.fs"
-        "DataIngestor.fs"
         // Excluded from the move by Phase 1061's own rule until 976 and 979 ship.
         "EntityOutbox.fs"
         "ILifecycleLedger.fs"
