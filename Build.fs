@@ -4463,7 +4463,6 @@ let main args =
         "EntityOutbox.fs"
         "ILifecycleLedger.fs"
         "ILifecycleSummaryStore.fs"
-        "Infra/PersistentNarrativeStore.fs"
         "JobStore.fs"
         "JobTriggerWatermark.fs"
         "NotificationAddressBook.fs"
