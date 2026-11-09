@@ -7,6 +7,7 @@ open System
 open ToolUp.Elmish
 open Feliz
 open ToolUp.Platform
+open Toolup.UIToolkit
 
 // ─── Phase 10b — built-in data-ingestion admin ──────────────────────
 //
@@ -25,15 +26,9 @@ open ToolUp.Platform
 
 // ─── Model ──────────────────────────────────────────────────────────
 
-type LoadState<'T> =
-    | NotLoaded
-    | Loading
-    | Loaded of 'T
-    | LoadError of string
-
 type Model = {
     /// Configured data sources for the caller's scope.
-    Sources: LoadState<DataSourceConfig list>
+    Sources: Remote<DataSourceConfig list, string>
     /// Credential status per data source. Loaded in parallel after
     /// the source list arrives. Missing entries render as "checking…"
     /// in the table.
@@ -52,7 +47,7 @@ type Model = {
     /// row twice collapses it.
     Expanded: DataSourceId option
     /// Transient error surfaced from Connect / Disconnect failures.
-    LastError: string option
+    LastError: Notice option
     /// Set of source ids currently mid-Disconnect — used to disable
     /// the button while the call is in flight.
     Disconnecting: Set<DataSourceId>
@@ -108,7 +103,7 @@ let private loadTokenStatusCmd (id: DataSourceId) =
 
 let init () =
     let model = {
-        Sources = Loading
+        Sources = Remote.Loading
         Statuses = Map.empty
         TokenStatuses = Map.empty
         Expanded = None
@@ -124,7 +119,7 @@ let update (msg: Msg) (model: Model) =
     | RefreshSources ->
         {
             model with
-                Sources = Loading
+                Sources = Remote.Loading
                 Statuses = Map.empty
                 TokenStatuses = Map.empty
                 // Close the create panel after a successful save (the
@@ -140,9 +135,18 @@ let update (msg: Msg) (model: Model) =
             |> List.collect (fun s -> [ loadStatusCmd s.Id; loadTokenStatusCmd s.Id ])
             |> Cmd.batch
 
-        { model with Sources = Loaded sources }, statusCmds
+        {
+            model with
+                Sources = Remote.Loaded sources
+        },
+        statusCmds
 
-    | SourcesLoaded(Error msg) -> { model with Sources = LoadError msg }, Cmd.none
+    | SourcesLoaded(Error msg) ->
+        {
+            model with
+                Sources = Remote.Failed msg
+        },
+        Cmd.none
 
     | StatusLoaded(id, status) ->
         {
@@ -183,7 +187,12 @@ let update (msg: Msg) (model: Model) =
         // a Cmd so `update` stays pure (effect runs after the model commits).
         model, Cmd.ofEffect (fun _ -> Browser.Dom.window.location.assign url)
 
-    | ConnectUrlReady(_, Error msg) -> { model with LastError = Some msg }, Cmd.none
+    | ConnectUrlReady(_, Error msg) ->
+        {
+            model with
+                LastError = Some(Notice.Problem msg)
+        },
+        Cmd.none
 
     | DisconnectClicked id ->
         let cmd =
@@ -213,7 +222,7 @@ let update (msg: Msg) (model: Model) =
         {
             model with
                 Disconnecting = model.Disconnecting |> Set.remove id
-                LastError = Some msg
+                LastError = Some(Notice.Problem msg)
         },
         Cmd.none
 
@@ -656,20 +665,6 @@ let private sourcesTable
             ]
         ]
 
-let private errorBanner (msgs: DataIngestionMessages) (msg: string) (dispatch: Msg -> unit) =
-    Html.div [
-        prop.className
-            "flex items-center justify-between p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm"
-        prop.children [
-            Html.span [ prop.text msg ]
-            Html.button [
-                prop.className "text-red-700 hover:underline text-xs"
-                prop.text msgs.DismissError
-                prop.onClick (fun _ -> dispatch DismissError)
-            ]
-        ]
-    ]
-
 let private refreshButton (msgs: DataIngestionMessages) (loading: bool) (dispatch: Msg -> unit) =
     Html.button [
         prop.className [
@@ -685,10 +680,8 @@ let private refreshButton (msgs: DataIngestionMessages) (loading: bool) (dispatc
     ]
 
 let private bodyView (msgs: DataIngestionMessages) (model: Model) (dispatch: Msg -> unit) =
-    let loading =
-        match model.Sources with
-        | Loading -> true
-        | _ -> false
+    let loading = Remote.isLoading model.Sources
+    let noticeMsgs = { Dismiss = msgs.DismissError }
 
     Html.div [
         prop.className "flex-1 p-6 overflow-y-auto"
@@ -706,13 +699,21 @@ let private bodyView (msgs: DataIngestionMessages) (model: Model) (dispatch: Msg
                 ]
             ]
             match model.LastError with
-            | Some msg -> Html.div [ prop.className "mb-4"; prop.children [ errorBanner msgs msg dispatch ] ]
+            | Some _ ->
+                Html.div [
+                    prop.className "mb-4"
+                    prop.children [
+                        StateViews.notice noticeMsgs model.LastError (fun () -> dispatch DismissError)
+                    ]
+                ]
             | None -> Html.none
             match model.Sources with
-            | NotLoaded
-            | Loading -> Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.Loading ]
-            | LoadError msg -> errorBanner msgs msg dispatch
-            | Loaded sources -> sourcesTable msgs model dispatch sources
+            | Remote.NotAsked
+            | Remote.Loading
+            | Remote.Reloading _ -> Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.Loading ]
+            | Remote.Failed msg ->
+                StateViews.notice noticeMsgs (Some(Notice.Problem msg)) (fun () -> dispatch DismissError)
+            | Remote.Loaded sources -> sourcesTable msgs model dispatch sources
         ]
     ]
 
