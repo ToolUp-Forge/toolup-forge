@@ -284,30 +284,30 @@ type IAuthContext =
     /// starve other subjects' budgets.
     abstract SubjectId: string
 
-/// Outcome of a rate-limit acquisition attempt against an
-/// `IRateLimitStore`. `Denied` carries the wall-clock time the caller
-/// should wait before retrying (mapped to the HTTP `Retry-After` header
-/// + the categorised envelope's `retryAfterSeconds` payload).
-type RateLimitDecision =
-    | RateLimitAllowed
-    | RateLimitDenied of retryAfter: System.TimeSpan
-
-/// Rate-limit substrate. Per-method `[<RateLimit>]`
-/// attributes resolve to budget triples (key, count, window); the store
-/// tracks consumption across calls and returns a decision per
-/// acquisition.
+/// Rate-limit substrate for per-method `[<RateLimit>]` budgets. Each
+/// budget resolves to a triple (key, count, window); the store tracks
+/// consumption across calls and answers an `Admission` per acquisition:
+/// `Admit remaining`, or `Deny retryAfter` (mapped to the HTTP
+/// `Retry-After` header and the categorised envelope's
+/// `retryAfterSeconds` payload).
+///
+/// Named `IRemotingRateLimitStore` since Phase 1068, to tell it apart from
+/// the Phase 56 inbound `ToolUp.Platform.Infra.IRateLimitStore`; the two
+/// answer the same `Admission` and the in-memory default is one store
+/// behind both. Unifying the two interfaces is the 1.0 batch.
 ///
 /// The interface is async-shaped to honour the [six portability rules](../../../toolup-forge/CLAUDE.md):
 /// stateless between calls, identity-by-value (string keys), retry as
-/// data (Denied carries TimeSpan, not a callback). The default
-/// `InMemoryRateLimitStore` ships in-process; forge / other consumers
-/// can wire Redis / DynamoDB / etc. against the same contract.
+/// data (`Deny` carries a TimeSpan, not a callback). The default
+/// `InMemoryRateLimitStore` ships in-process; distributed deployments wire
+/// Redis / DynamoDB / etc. against the same contract, held by the
+/// `IRemotingRateLimitStoreContract` pack.
 ///
 /// Default: not composed; methods with `[<RateLimit>]` attributes
 /// silently pass (zero-cost) until a store is registered. With a
 /// store registered, the dispatcher enforces budgets against it.
-type IRateLimitStore =
-    abstract TryAcquire: key: string * count: int * window: System.TimeSpan -> Async<RateLimitDecision>
+type IRemotingRateLimitStore =
+    abstract TryAcquire: key: string * count: int * window: System.TimeSpan -> Async<ToolUp.Platform.Admission>
 
 /// Well-known audit-event kinds. Open via `Custom` for
 /// consumer-domain kinds the standard set doesn't anticipate.
@@ -684,7 +684,7 @@ type RemotingOptions<'context, 'serverImpl> = {
     /// Compose via `Remoting.withTelemetryGate`.
     TelemetryGate: (unit -> bool) option
     AuthContextResolver: ('context -> Async<IAuthContext>) option
-    RateLimitStore: IRateLimitStore option
+    RateLimitStore: IRemotingRateLimitStore option
     AuditEmitter: IAuditEmitter option
     /// Admin-must-be-audited startup gate. When `true`,
     /// the dispatcher refuses to start if any method classified with a

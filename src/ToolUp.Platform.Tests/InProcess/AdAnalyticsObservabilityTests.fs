@@ -89,7 +89,7 @@ type private CapturingLogger() =
 /// An `IRateLimitStore` whose write side answers with a scripted
 /// result. The faulting form is the double the acceptance criterion
 /// calls for; the allowing form is its control.
-type private ScriptedRateLimitStore(answer: Result<InboundRateLimitDecision, RateLimitStoreError>) =
+type private ScriptedRateLimitStore(answer: Result<Admission, RateLimitStoreError>) =
     interface IRateLimitStore with
         member _.GetCurrent(_key, _window) = async { return 0 }
         member _.IncrementAndCheck(_key, _window, _threshold) = async { return answer }
@@ -99,7 +99,7 @@ let private failingStore () =
     ScriptedRateLimitStore(Error(StoreUnavailable "simulated rate-limit store outage")) :> IRateLimitStore
 
 let private allowingStore () =
-    ScriptedRateLimitStore(Ok(AllowWithRemaining 119)) :> IRateLimitStore
+    ScriptedRateLimitStore(Ok(Admission.Admit 119)) :> IRateLimitStore
 
 type private Harness = {
     Client: HttpClient

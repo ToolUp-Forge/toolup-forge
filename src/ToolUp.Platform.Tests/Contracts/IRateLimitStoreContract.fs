@@ -21,8 +21,8 @@ open ToolUp.Platform.Infra
 /// 3. **Window-boundary semantics.** A `PerSecond` window resets at
 ///    each calendar-second boundary; the count on either side of the
 ///    boundary is independent.
-/// 4. **Threshold respected.** Calls beyond `threshold` emit
-///    `DenyWithError` with a positive `RetryAfterSeconds`.
+/// 4. **Threshold respected.** Calls beyond `threshold` answer
+///    `Admission.Deny` with a positive retry-after no longer than the window.
 /// 5. **GetCurrent observation.** `GetCurrent` reports the count
 ///    visible after the last write; reads on a fresh key return 0.
 /// 6. **Recent-decisions buffer.** `GetRecentDecisions` returns the
@@ -89,16 +89,16 @@ let tests (name: string) (factory: unit -> IRateLimitStore) =
             Expect.equal count 0 "Fresh key must report count 0"
         }
 
-        testCaseAsync "IncrementAndCheck under threshold returns AllowWithRemaining"
+        testCaseAsync "IncrementAndCheck under threshold admits with the remaining count"
         <| async {
             let store = factory ()
             let k = key ()
             let! result = store.IncrementAndCheck(k, PerMinute, threshold = 5)
 
             match result with
-            | Ok(AllowWithRemaining remaining) ->
+            | Ok(Admission.Admit remaining) ->
                 Expect.equal remaining 4 "First call below threshold 5 must report 4 remaining"
-            | Ok(DenyWithError _) -> failtest "First call must not deny"
+            | Ok(Admission.Deny _) -> failtest "First call must not deny"
             | Error err -> failtestf "Store failed: %A" err
         }
 
@@ -116,12 +116,10 @@ let tests (name: string) (factory: unit -> IRateLimitStore) =
             let! result = store.IncrementAndCheck(k, PerMinute, threshold = 5)
 
             match result with
-            | Ok(DenyWithError rle) ->
-                Expect.equal rle.Limit 5 "Deny payload carries the threshold"
-                Expect.isGreaterThan rle.RetryAfterSeconds 0 "RetryAfter must be positive"
-
-                Expect.equal rle.Window PerMinute "Deny payload carries the window"
-            | Ok(AllowWithRemaining _) -> failtest "6th call beyond threshold must deny"
+            | Ok(Admission.Deny retryAfter) ->
+                Expect.isGreaterThan retryAfter TimeSpan.Zero "RetryAfter must be positive"
+                Expect.isLessThanOrEqual retryAfter (TimeSpan.FromMinutes 1.0) "RetryAfter never exceeds the window"
+            | Ok(Admission.Admit _) -> failtest "6th call beyond threshold must deny"
             | Error err -> failtestf "Store failed: %A" err
         }
 
@@ -171,7 +169,7 @@ let tests (name: string) (factory: unit -> IRateLimitStore) =
             // ADMISSIONS, which is what a burst against an auth-adjacent
             // budget is about. With `threshold - 1` already spent, N
             // callers released together must see exactly one
-            // `AllowWithRemaining` — a store that reads the count and
+            // `Admission.Admit` — a store that reads the count and
             // writes it back as two steps lets several through. PerHour
             // so no round can straddle a window reset; five rounds of 32
             // on fresh keys so an implementation that is atomic only by
@@ -204,7 +202,7 @@ let tests (name: string) (factory: unit -> IRateLimitStore) =
                 let admitted =
                     results
                     |> Array.filter (function
-                        | Ok(AllowWithRemaining _) -> true
+                        | Ok(Admission.Admit _) -> true
                         | _ -> false)
                     |> Array.length
 
@@ -288,9 +286,9 @@ let tests (name: string) (factory: unit -> IRateLimitStore) =
             let! result = store.IncrementAndCheck(k, PerSecond, threshold = 5)
 
             match result with
-            | Ok(AllowWithRemaining remaining) ->
+            | Ok(Admission.Admit remaining) ->
                 Expect.equal remaining 4 "Post-boundary call sees fresh window (remaining = threshold - 1)"
-            | Ok(DenyWithError _) -> failtest "Post-boundary call must NOT deny — window reset"
+            | Ok(Admission.Deny _) -> failtest "Post-boundary call must NOT deny — window reset"
             | Error err -> failtestf "Store failed: %A" err
         }
     ]

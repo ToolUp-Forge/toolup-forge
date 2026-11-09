@@ -50,14 +50,14 @@ type IRateLimitReader =
 /// increment-and-check-against-threshold — load-bearing for
 /// serverless correctness under concurrent invocations.
 type IRateLimitWriter =
-    /// Atomically increment the count for `key` in `window`, compare
-    /// against `threshold`, and emit a decision. Always
-    /// allow-on-store-failure: the middleware degrades open rather
-    /// than denying every request when the store is down (see
-    /// `RateLimitMiddleware` for the fail-open contract).
+    /// Atomically count one call for `key` in `window` against
+    /// `threshold` and answer the `Admission`. A store that cannot answer
+    /// returns `Error`; what the caller then sees is the route's declared
+    /// `StorePosture`, decided once by `RateLimitVerdict.ofResult`, never
+    /// by the store.
     abstract IncrementAndCheck:
         key: InboundRateLimitKey * window: RateLimitWindow * threshold: int ->
-            Async<Result<InboundRateLimitDecision, RateLimitStoreError>>
+            Async<Result<Admission, RateLimitStoreError>>
 
 // `RateLimitDecisionEvent` (the operator-facing wire payload returned
 // by `GetRecentDecisions`) lives in `Platform.Core/Shared/Config/InboundRateLimitTypes.fs`
@@ -78,3 +78,57 @@ type IRateLimitStore =
     /// last N events; the in-memory default keeps the last 1000.
     abstract GetRecentDecisions:
         keyFilter: InboundRateLimitKey option * count: int -> Async<RateLimitDecisionEvent list>
+
+/// What a consumer acts on after one `IncrementAndCheck` (Phase 1068): the
+/// store's answer, or — when the store failed — what the route's declared
+/// `StorePosture` decided. The fail-open/fail-closed decision is taken
+/// here, once, not re-decided by each consumer.
+[<RequireQualifiedAccess>]
+type RateLimitVerdict =
+    /// The store answered.
+    | Answered of Admission
+    /// The store failed under `StorePosture.FailOpen`: admit, and log why.
+    | AdmittedOnStoreFailure of reason: string
+    /// The store failed under `StorePosture.FailClosed`: refuse, and audit why.
+    | RefusedOnStoreFailure of reason: string
+
+module RateLimitVerdict =
+    /// Decide one `IncrementAndCheck` result under `posture`.
+    let ofResult (posture: StorePosture) (result: Result<Admission, RateLimitStoreError>) : RateLimitVerdict =
+        match result with
+        | Ok admission -> RateLimitVerdict.Answered admission
+        | Error(StoreUnavailable reason)
+        | Error(StoreContractViolation reason) ->
+            match posture with
+            | StorePosture.FailOpen -> RateLimitVerdict.AdmittedOnStoreFailure reason
+            | StorePosture.FailClosed -> RateLimitVerdict.RefusedOnStoreFailure reason
+
+    /// Record a `StorePosture.FailClosed` refusal as a `RateLimitRefused`
+    /// audit row under `scopeId`, through the composed `IAuditLog` (none
+    /// composed, nothing written — GP 13). `limiter` names the budget that
+    /// could not be counted (a route prefix, a budget name); the row carries
+    /// no caller key, so no address or user id reaches the trail. Best-effort
+    /// like every audit write: a failing log never changes the response.
+    let auditRefusal (services: IServiceProvider) (scopeId: string) (limiter: string) (reason: string) : Async<unit> = async {
+        match
+            (if isNull services then
+                 null
+             else
+                 services.GetService typeof<IAuditLog>)
+        with
+        | :? IAuditLog as log ->
+            try
+                do!
+                    log.Record(
+                        scopeId,
+                        AuditEvent.RateLimitRefused {
+                            ScopeId = scopeId
+                            Provider = limiter
+                            SubKey = None
+                            Reason = sprintf "rate-limit store failed under StorePosture.FailClosed: %s" reason
+                        }
+                    )
+            with _ ->
+                ()
+        | _ -> ()
+    }

@@ -31,8 +31,10 @@ open Microsoft.Extensions.DependencyInjection
 // **Rate limiting.** When an `IRateLimitStore` is registered (the
 // Phase 56 substrate) and the options set a budget, each subscribe is
 // counted per-scope per-minute; over-budget requests get the standard
-// 429 + `Retry-After`. No store registered → no limiting (the same
-// posture as the general inbound rate-limit middleware).
+// 429 + `Retry-After`. No store registered → no limiting. A store that
+// fails is decided by `SubscribeStorePosture` (Phase 1068): `FailOpen`
+// (the default) admits the subscribe, `FailClosed` refuses it with 503
+// and a `RateLimitRefused` audit row under the caller's scope.
 //
 // **Security headers.** The Phase 9j `SecurityHeadersMiddleware` is
 // global (`OnStarting` fires for every response), so the live-session
@@ -50,6 +52,10 @@ type LiveSessionOptions = {
     /// Per-scope subscribe budget per minute, enforced via the
     /// registered `IRateLimitStore`. `None` = no budget.
     SubscribesPerMinutePerScope: int option
+    /// What a subscribe does when the `IRateLimitStore` counting
+    /// `SubscribesPerMinutePerScope` fails. `StorePosture.FailOpen` by
+    /// default (scope isolation is unaffected either way).
+    SubscribeStorePosture: StorePosture
     /// Override the host implementation (a distributed companion).
     /// `None` → `InMemoryLiveSessionHost` (single-instance default).
     Host: ILiveSessionHost option
@@ -60,6 +66,7 @@ module LiveSessionOptions =
         Route = "/api/live-sessions"
         MaxSessionsPerScope = None
         SubscribesPerMinutePerScope = None
+        SubscribeStorePosture = StorePosture.FailOpen
         Host = None
     }
 
@@ -125,32 +132,48 @@ module LiveSessionHandler =
                         // Per-scope subscribe budget via the Phase 56
                         // substrate, when both the store and a budget are
                         // present.
-                        let! rateDecision = task {
+                        let! verdict = task {
                             match options.SubscribesPerMinutePerScope with
-                            | None -> return Ok()
+                            | None -> return None
                             | Some budget ->
                                 match ctx.RequestServices.GetService(typeof<IRateLimitStore>) with
                                 | :? IRateLimitStore as store ->
                                     let key = InboundComposite $"live-sessions:%s{scopeId}"
-                                    let! decision = store.IncrementAndCheck(key, PerMinute, budget)
+                                    let! result = store.IncrementAndCheck(key, PerMinute, budget)
+                                    let verdict = RateLimitVerdict.ofResult options.SubscribeStorePosture result
 
-                                    match decision with
-                                    | Ok(AllowWithRemaining _) -> return Ok()
-                                    | Ok(DenyWithError err) -> return Error err.RetryAfterSeconds
-                                    | Error _ ->
-                                        // Store blip: fail open for the
-                                        // subscribe path (matching the
-                                        // inbound middleware posture) —
-                                        // scope isolation is unaffected.
-                                        return Ok()
-                                | _ -> return Ok()
+                                    match verdict, ctx.RequestServices.GetService(typeof<ILogger>) with
+                                    | RateLimitVerdict.AdmittedOnStoreFailure reason, (:? ILogger as l) ->
+                                        l.Warn
+                                            $"Live-session subscribe budget store failed for scope %s{scopeId}; admitting (StorePosture.FailOpen): %s{reason}"
+                                    | _ -> ()
+
+                                    return Some verdict
+                                | _ -> return None
                         }
 
-                        match rateDecision with
-                        | Error retryAfter ->
+                        match verdict with
+                        | Some(RateLimitVerdict.Answered(Admission.Deny retryAfter)) ->
                             return!
-                                write429 ctx retryAfter $"Live-session subscribe budget exceeded for scope %s{scopeId}."
-                        | Ok() ->
+                                write429
+                                    ctx
+                                    (RateLimitedError.retryAfterSeconds retryAfter)
+                                    $"Live-session subscribe budget exceeded for scope %s{scopeId}."
+                        | Some(RateLimitVerdict.RefusedOnStoreFailure reason) ->
+                            do!
+                                RateLimitVerdict.auditRefusal
+                                    ctx.RequestServices
+                                    scopeId
+                                    "live-sessions:subscribe"
+                                    reason
+
+                            ctx.Response.StatusCode <- 503
+                            ctx.Response.ContentType <- "text/plain; charset=utf-8"
+                            do! ctx.Response.WriteAsync "Live-session subscribe budget unavailable."
+                            return Some ctx
+                        | None
+                        | Some(RateLimitVerdict.Answered(Admission.Admit _))
+                        | Some(RateLimitVerdict.AdmittedOnStoreFailure _) ->
                             // Phase 870 — every byte after the headers goes
                             // through ONE writer: a bounded single-reader
                             // queue drained by a loop that awaits each write

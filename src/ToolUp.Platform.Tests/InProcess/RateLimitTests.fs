@@ -4,6 +4,7 @@ open System
 open System.IO
 open System.Threading
 open Expecto
+open ToolUp.Platform
 open ToolUp.Remoting.Server
 
 // ─── Phase 69g.tail — per-method `[<RateLimit>]` attribution, telemetry
@@ -133,24 +134,27 @@ let tests =
 
         // ── Enforcement semantics ──
         test "budget allows under the cap and denies over it" {
-            let store = InMemoryRateLimitStore() :> ToolUp.Remoting.Server.IRateLimitStore
+            let store =
+                InMemoryRateLimitStore() :> ToolUp.Remoting.Server.IRemotingRateLimitStore
+
             let budgets = [ RateLimitAttribute(2, RateLimitWindow.perMinute) ]
 
             let d1 = run (RateLimit.evaluate store "subject:a" "Capped" budgets)
             let d2 = run (RateLimit.evaluate store "subject:a" "Capped" budgets)
             let d3 = run (RateLimit.evaluate store "subject:a" "Capped" budgets)
 
-            Expect.equal d1 RateLimitAllowed "first call within budget"
-            Expect.equal d2 RateLimitAllowed "second call within budget"
+            Expect.equal d1 (Admission.Admit 1) "first call within budget, one left"
+            Expect.equal d2 (Admission.Admit 0) "second call within budget, none left"
 
             match d3 with
-            | RateLimitDenied retryAfter ->
+            | Admission.Deny retryAfter ->
                 Expect.isGreaterThan retryAfter TimeSpan.Zero "denial carries a positive RetryAfter"
-            | RateLimitAllowed -> failtest "third call should exceed the budget of 2"
+            | Admission.Admit _ -> failtest "third call should exceed the budget of 2"
         }
 
         test "multi-budget AND: the tightest budget denies even when a wider one has room" {
-            let store = InMemoryRateLimitStore() :> ToolUp.Remoting.Server.IRateLimitStore
+            let store =
+                InMemoryRateLimitStore() :> ToolUp.Remoting.Server.IRemotingRateLimitStore
             // 1 call/second AND 100 calls/hour. The per-second cap bites
             // on the second call within the same second; the hourly cap
             // (99 remaining) is irrelevant — AND semantics.
@@ -162,15 +166,17 @@ let tests =
             let d1 = run (RateLimit.evaluate store "subject:a" "Burst" budgets)
             let d2 = run (RateLimit.evaluate store "subject:a" "Burst" budgets)
 
-            Expect.equal d1 RateLimitAllowed "first call passes both budgets"
+            Expect.equal d1 (Admission.Admit 0) "first call passes both budgets; the tightest has none left"
 
             match d2 with
-            | RateLimitDenied _ -> ()
-            | RateLimitAllowed -> failtest "second call must be denied by the per-second budget despite hourly room"
+            | Admission.Deny _ -> ()
+            | Admission.Admit _ -> failtest "second call must be denied by the per-second budget despite hourly room"
         }
 
         test "per-subject isolation: one subject's exhaustion does not affect another" {
-            let store = InMemoryRateLimitStore() :> ToolUp.Remoting.Server.IRateLimitStore
+            let store =
+                InMemoryRateLimitStore() :> ToolUp.Remoting.Server.IRemotingRateLimitStore
+
             let budgets = [ RateLimitAttribute(1, RateLimitWindow.perMinute) ]
 
             run (RateLimit.evaluate store "subject:a" "Capped" budgets) |> ignore
@@ -178,12 +184,12 @@ let tests =
             let bFirst = run (RateLimit.evaluate store "subject:b" "Capped" budgets)
 
             match aSecond with
-            | RateLimitDenied _ -> ()
-            | RateLimitAllowed -> failtest "subject:a's second call should be denied"
+            | Admission.Deny _ -> ()
+            | Admission.Admit _ -> failtest "subject:a's second call should be denied"
 
             Expect.equal
                 bFirst
-                RateLimitAllowed
+                (Admission.Admit 0)
                 "subject:b's first call must be unaffected by subject:a (security boundary)"
         }
 
@@ -271,7 +277,7 @@ let tests =
         test "the rate-limit denial branch settles RateLimited telemetry and a RateLimitExceeded audit row" {
             let stage = serverSource [ "Remoting"; "Stages"; "RateLimit.fs" ]
 
-            let deniedIdx = stage.IndexOf "| RateLimitDenied retryAfter ->"
+            let deniedIdx = stage.IndexOf "| ToolUp.Platform.Admission.Deny retryAfter ->"
             let telemetryIdx = stage.IndexOf "MethodOutcome.RateLimited retryAfter"
             let auditIdx = stage.IndexOf "Kind = AuditKind.RateLimitExceeded"
 
@@ -307,7 +313,8 @@ let tests =
 
             let stores =
                 Array.init rounds (fun _ ->
-                    let store = InMemoryRateLimitStore() :> ToolUp.Remoting.Server.IRateLimitStore
+                    let store =
+                        InMemoryRateLimitStore() :> ToolUp.Remoting.Server.IRemotingRateLimitStore
 
                     for _ in 1 .. budget - 1 do
                         run (store.TryAcquire(key, budget, window)) |> ignore
@@ -322,8 +329,8 @@ let tests =
                     gate.SignalAndWait()
 
                     match run (stores[round].TryAcquire(key, budget, window)) with
-                    | RateLimitAllowed -> Interlocked.Increment(&admitted[round]) |> ignore
-                    | RateLimitDenied _ -> ()
+                    | Admission.Admit _ -> Interlocked.Increment(&admitted[round]) |> ignore
+                    | Admission.Deny _ -> ()
 
             let threads = Array.init callers (fun _ -> Thread(caller))
             threads |> Array.iter _.Start()
@@ -376,9 +383,98 @@ let private invokeMiddleware
     middleware.InvokeAsync(ctx, config).GetAwaiter().GetResult()
     ctx.Response, reached
 
+/// A Phase 56 store whose write side always fails.
+type private FailingInboundStore() =
+    interface ToolUp.Platform.Infra.IRateLimitStore with
+        member _.GetCurrent(_, _) = async { return 0 }
+
+        member _.IncrementAndCheck(_, _, _) = async {
+            return Error(ToolUp.Platform.Infra.StoreUnavailable "simulated outage")
+        }
+
+        member _.GetRecentDecisions(_, _) = async { return [] }
+
+/// An `IAuditLog` that keeps what it is handed, as a service provider.
+type private RecordingAudit() =
+    let rows =
+        System.Collections.Concurrent.ConcurrentQueue<string * ToolUp.Platform.AuditEvent>()
+
+    member _.Rows = rows |> Seq.toList
+
+    member this.Services =
+        let services = Microsoft.Extensions.DependencyInjection.ServiceCollection()
+
+        Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.AddSingleton<IAuditLog>(
+            services,
+            this :> IAuditLog
+        )
+        |> ignore
+
+        Microsoft.Extensions.DependencyInjection.ServiceCollectionContainerBuilderExtensions.BuildServiceProvider
+            services
+        :> IServiceProvider
+
+    interface IAuditLog with
+        member _.Record(scopeId, audit) = async { rows.Enqueue(scopeId, audit) }
+        member _.GetAuditTrail(_, _, _) = async { return [] }
+
 [<Tests>]
 let middlewareTests =
     testList "Phase 1068 — inbound rate-limit middleware" [
+        test "a route declares FailOpen unless it says otherwise" {
+            Expect.equal
+                (RouteLimit.perIpPerMinute "/limited" 1).StorePosture
+                StorePosture.FailOpen
+                "a deployment that declares nothing keeps today's behaviour (GP 11)"
+        }
+
+        test "FailOpen: a failing store admits the request and writes no audit row" {
+            let audit = RecordingAudit()
+            let policy = RouteLimit.perIpPerMinute "/limited" 1
+
+            let response, reached =
+                invokeMiddleware (FailingInboundStore()) policy (Some audit.Services)
+
+            Expect.isTrue reached "the request reaches the handler"
+            Expect.equal response.StatusCode 200 "the response is the handler's"
+            Expect.isEmpty audit.Rows "an admission is not audited"
+        }
+
+        test "FailClosed: a failing store refuses the request with 503 and a RateLimitRefused audit row" {
+            let audit = RecordingAudit()
+
+            let policy = {
+                RouteLimit.perIpPerMinute "/limited" 1 with
+                    StorePosture = StorePosture.FailClosed
+            }
+
+            let response, reached =
+                invokeMiddleware (FailingInboundStore()) policy (Some audit.Services)
+
+            Expect.isFalse reached "the request does not reach the handler"
+            Expect.equal response.StatusCode 503 "a store that cannot count refuses under FailClosed"
+
+            match audit.Rows with
+            | [ scopeId, ToolUp.Platform.AuditEvent.RateLimitRefused row ] ->
+                Expect.equal scopeId "_platform" "an inbound policy resolves no caller scope"
+                Expect.equal row.Provider "inbound:/limited" "names the route whose budget could not be counted"
+                Expect.isNone row.SubKey "no caller key reaches the trail"
+                Expect.stringContains row.Reason "simulated outage" "carries the store's reason"
+            | other -> failtestf "expected one RateLimitRefused row, got %A" other
+        }
+
+        test "a Return429 refusal still carries its RateLimit-* and Retry-After headers" {
+            let store = ToolUp.Platform.Infra.InMemoryRateLimitStore.create ()
+            let policy = RouteLimit.perIpPerMinute "/limited" 1
+            invokeMiddleware store policy None |> ignore
+            let response, reached = invokeMiddleware store policy None
+
+            Expect.isFalse reached "the over-budget call does not reach the handler"
+            Expect.equal response.StatusCode 429 "Return429 answers 429"
+            Expect.isTrue (response.Headers.ContainsKey "Retry-After") "the caller is told when to come back"
+            Expect.equal (string response.Headers["RateLimit-Remaining"]) "0" "and that nothing is left"
+        }
+
         test "a DenySilently refusal is a bare 204 — no RateLimit-* and no Retry-After header" {
             // The DU says the caller "should not be told they hit the cap";
             // until 1068 the middleware stamped `RateLimit-Remaining: 0` and

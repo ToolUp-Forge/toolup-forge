@@ -56,14 +56,47 @@ type RateLimitedError = {
     Window: RateLimitWindow
 }
 
-/// Outcome of an atomic `IncrementAndCheck` call on
-/// `IRateLimitStore`. `AllowWithRemaining` carries the remaining
-/// count so the middleware can stamp `RateLimit-Remaining`.
-/// `DenyWithError` carries the typed error. Distinct from
-/// `IRateLimiter`'s outbound `RateLimitDecision`.
+module RateLimitedError =
+    /// A retry-after as the whole seconds a `Retry-After` header carries:
+    /// rounded up, and at least 1.
+    let retryAfterSeconds (retryAfter: TimeSpan) : int =
+        max 1 (int (Math.Ceiling retryAfter.TotalSeconds))
+
+    /// The typed 429 payload for a refusal of `limit` calls per `window`,
+    /// retryable after `retryAfter`.
+    let ofDenial (limit: int) (window: RateLimitWindow) (retryAfter: TimeSpan) : RateLimitedError = {
+        RetryAfterSeconds = retryAfterSeconds retryAfter
+        Limit = limit
+        Window = window
+    }
+
+/// The one admission decision every rate-limit store answers — the
+/// Phase 56 `IRateLimitStore.IncrementAndCheck` and the remoting
+/// `IRemotingRateLimitStore.TryAcquire` alike (Phase 1068). `Admit`
+/// carries the calls left in the window (what `RateLimit-Remaining`
+/// reports); `Deny` carries how long until the next call can be admitted
+/// (what `Retry-After` reports). What a refusal LOOKS like to the caller is
+/// the consumer's policy (`RateLimitOnExceeded`), never the store's.
+[<RequireQualifiedAccess>]
+type Admission =
+    | Admit of remaining: int
+    | Deny of retryAfter: TimeSpan
+
+/// The decision a store records in the operator's rate-limit event log
+/// (`RateLimitDecisionEvent.Decision`, a wire payload the admin widget
+/// reads). A store's ANSWER is an `Admission`; a store that computes this
+/// richer shape first answers `InboundRateLimitDecision.toAdmission` of it.
+/// Distinct from `IRateLimiter`'s outbound `RateLimitDecision`.
 type InboundRateLimitDecision =
     | AllowWithRemaining of remaining: int
     | DenyWithError of RateLimitedError
+
+module InboundRateLimitDecision =
+    /// The `Admission` a decision answers.
+    let toAdmission (decision: InboundRateLimitDecision) : Admission =
+        match decision with
+        | AllowWithRemaining remaining -> Admission.Admit remaining
+        | DenyWithError error -> Admission.Deny(TimeSpan.FromSeconds(float error.RetryAfterSeconds))
 
 /// What to do when a policy's threshold is exceeded. `Return429` is
 /// the canonical case (HTTP 429 with typed payload). `DelayAndAllow`
@@ -75,6 +108,20 @@ type RateLimitOnExceeded =
     | Return429
     | DelayAndAllow of maxDelay: TimeSpan
     | DenySilently
+
+/// What a route does when its rate-limit store cannot answer — the
+/// decision declared on the policy rather than re-decided by each
+/// consumer (Phase 1068). `FailOpen` (the default, and the behaviour
+/// before the posture existed) admits the request and logs the failure:
+/// a store outage is the operator's problem, and refusing every caller
+/// during a store flap is worse than over-admitting briefly. `FailClosed`
+/// refuses the request and writes a `RateLimitRefused` audit row — for a
+/// route whose budget is a security control (a credential endpoint, an
+/// anti-abuse gate) that must not switch itself off with its store.
+[<RequireQualifiedAccess>]
+type StorePosture =
+    | FailOpen
+    | FailClosed
 
 /// Selector for `RouteLimit.Key` — which axis the middleware reads.
 type RateLimitKeyKind =
@@ -95,6 +142,9 @@ type RouteLimit = {
     Window: RateLimitWindow
     Threshold: int
     OnExceeded: RateLimitOnExceeded
+    /// What the route does when the store fails. `StorePosture.FailOpen`
+    /// unless the route declares otherwise.
+    StorePosture: StorePosture
 }
 
 /// Audit-event shape recorded when `IRateLimitStore.IncrementAndCheck`
@@ -122,4 +172,5 @@ module RouteLimit =
         Window = PerMinute
         Threshold = threshold
         OnExceeded = Return429
+        StorePosture = StorePosture.FailOpen
     }

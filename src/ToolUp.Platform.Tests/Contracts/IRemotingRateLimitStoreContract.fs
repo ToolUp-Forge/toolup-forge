@@ -4,6 +4,7 @@ open System
 open System.Threading
 open System.Threading.Tasks
 open Expecto
+open ToolUp.Platform
 open ToolUp.Remoting.Server
 
 /// Phase 1068 — contract assertions every remoting rate-limit store
@@ -25,7 +26,7 @@ open ToolUp.Remoting.Server
 /// Every case runs on the real clock, because a distributed store has
 /// no clock this pack can inject; the sliding case keeps ~800 ms of
 /// headroom either side of each expiry.
-let tests (name: string) (factory: unit -> IRateLimitStore) =
+let tests (name: string) (factory: unit -> IRemotingRateLimitStore) =
     let key () =
         sprintf "pack-%s" (Guid.NewGuid().ToString "N")
 
@@ -33,8 +34,8 @@ let tests (name: string) (factory: unit -> IRateLimitStore) =
 
     let admitted =
         function
-        | RateLimitAllowed -> true
-        | RateLimitDenied _ -> false
+        | Admission.Admit _ -> true
+        | Admission.Deny _ -> false
 
     testList $"{name} — IRemotingRateLimitStore contract" [
         testCaseAsync "admits up to the budget and denies past it"
@@ -57,10 +58,10 @@ let tests (name: string) (factory: unit -> IRateLimitStore) =
             let! denied = store.TryAcquire(k, 1, minute)
 
             match denied with
-            | RateLimitDenied retryAfter ->
+            | Admission.Deny retryAfter ->
                 Expect.isGreaterThan retryAfter TimeSpan.Zero "retry-after is positive"
                 Expect.isLessThanOrEqual retryAfter minute "retry-after never exceeds the window"
-            | RateLimitAllowed -> failtest "a budget of 1 admits once"
+            | Admission.Admit _ -> failtest "a budget of 1 admits once"
         }
 
         testCaseAsync "key isolation — one key's admissions never spend another's"

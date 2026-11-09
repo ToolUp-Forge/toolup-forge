@@ -27,11 +27,12 @@ open Microsoft.Extensions.Primitives
 // middleware applies identically on either host without further
 // wiring.
 //
-// **Fail-open semantics.** When `IRateLimitStore.IncrementAndCheck`
-// returns `Error`, the middleware logs at `Warn` and admits the
-// request rather than blanket-denying every caller during a store
-// outage. Operators get a metric on the failure; the deployment stays
-// up.
+// **Store failure is the route's declared posture** (Phase 1068). When
+// `IRateLimitStore.IncrementAndCheck` returns `Error`, the policy's
+// `StorePosture` decides (`RateLimitVerdict.ofResult`): `FailOpen` — the
+// default — logs at `Warn` and admits, rather than blanket-denying every
+// caller during a store outage; `FailClosed` refuses with 503 (a bare 204
+// on a `DenySilently` route) and writes a `RateLimitRefused` audit row.
 
 module RateLimitMiddleware =
 
@@ -78,6 +79,20 @@ module RateLimitMiddleware =
         ctx.Response.Headers["RateLimit-Limit"] <- StringValues(string policy.Threshold)
         ctx.Response.Headers["RateLimit-Remaining"] <- StringValues(string (max 0 remaining))
         ctx.Response.Headers["RateLimit-Reset"] <- StringValues(string resetSeconds)
+
+    /// Refuse a request whose store failed under `StorePosture.FailClosed`:
+    /// 503 with a `rate_limit_unavailable` body, or — on a `DenySilently`
+    /// route, whose callers are never told about the limiter — a bare 204.
+    let internal refuseUnavailable (ctx: HttpContext) (policy: RouteLimit) : Task = task {
+        match policy.OnExceeded with
+        | DenySilently -> ctx.Response.StatusCode <- 204
+        | Return429
+        | DelayAndAllow _ ->
+            ctx.Response.StatusCode <- 503
+            ctx.Response.ContentType <- "application/json"
+            let body = Encoding.UTF8.GetBytes """{"error":"rate_limit_unavailable"}"""
+            do! ctx.Response.Body.WriteAsync(body, 0, body.Length)
+    }
 
     let internal stampDenyHeaders (ctx: HttpContext) (rle: RateLimitedError) : unit =
         ctx.Response.Headers["RateLimit-Limit"] <- StringValues(string rle.Limit)
@@ -136,61 +151,68 @@ module RateLimitMiddleware =
     /// `compose` gates the call. The class is unconditional in DI
     /// only so `app.UseMiddleware<...>()` resolves cleanly.
     type InboundRateLimitMiddleware(next: RequestDelegate, store: IRateLimitStore, logger: ILogger) =
-        member _.InvokeAsync(ctx: HttpContext, config: ServerConfig) : Task =
-            task {
-                let path =
-                    if isNull ctx.Request.Path.Value then
-                        "/"
-                    else
-                        ctx.Request.Path.Value
+        member _.InvokeAsync(ctx: HttpContext, config: ServerConfig) : Task = task {
+            let path =
+                if isNull ctx.Request.Path.Value then
+                    "/"
+                else
+                    ctx.Request.Path.Value
 
-                match matchPolicy config.RateLimits path with
-                | None -> do! next.Invoke ctx
-                | Some policy ->
-                    let key = extractKey ctx policy
+            match matchPolicy config.RateLimits path with
+            | None -> do! next.Invoke ctx
+            | Some policy ->
+                let key = extractKey ctx policy
 
-                    let! result = store.IncrementAndCheck(key, policy.Window, policy.Threshold)
+                let! result = store.IncrementAndCheck(key, policy.Window, policy.Threshold)
 
-                    match result with
-                    | Error err ->
-                        // Fail-open — log + admit. The store outage
-                        // is the operator's problem, not the
-                        // caller's; refusing every request during a
-                        // Redis flap is worse than over-admitting
-                        // briefly.
-                        let reason =
-                            match err with
-                            | StoreUnavailable r -> r
-                            | StoreContractViolation r -> r
+                match RateLimitVerdict.ofResult policy.StorePosture result with
+                | RateLimitVerdict.AdmittedOnStoreFailure reason ->
+                    logger.Warn(
+                        sprintf
+                            "[RateLimitMiddleware] IRateLimitStore failed; admitting request (StorePosture.FailOpen on %s): %s"
+                            policy.Route
+                            reason
+                    )
 
-                        logger.Warn(
-                            sprintf "[RateLimitMiddleware] IRateLimitStore failed; admitting request (%s)" reason
-                        )
+                    do! next.Invoke ctx
 
+                | RateLimitVerdict.RefusedOnStoreFailure reason ->
+                    logger.Warn(
+                        sprintf
+                            "[RateLimitMiddleware] IRateLimitStore failed; refusing request (StorePosture.FailClosed on %s): %s"
+                            policy.Route
+                            reason
+                    )
+
+                    // No caller scope is resolved for an inbound policy:
+                    // the row is written under `_platform`.
+                    do! RateLimitVerdict.auditRefusal ctx.RequestServices "_platform" ("inbound:" + policy.Route) reason
+                    do! refuseUnavailable ctx policy
+
+                | RateLimitVerdict.Answered(Admission.Admit remaining) ->
+                    stampAllowHeaders ctx policy remaining (secondsUntilWindowEnd policy.Window)
+                    do! next.Invoke ctx
+
+                | RateLimitVerdict.Answered(Admission.Deny retryAfter) ->
+                    let rle = RateLimitedError.ofDenial policy.Threshold policy.Window retryAfter
+
+                    match policy.OnExceeded with
+                    | Return429 ->
+                        stampDenyHeaders ctx rle
+                        ctx.Response.StatusCode <- 429
+                        ctx.Response.ContentType <- "application/json"
+                        let body = renderDenyBody rle
+                        do! ctx.Response.Body.WriteAsync(body, 0, body.Length)
+
+                    | DelayAndAllow maxDelay ->
+                        let delayMs = min (int maxDelay.TotalMilliseconds) (rle.RetryAfterSeconds * 1000)
+
+                        do! Task.Delay(delayMs)
+                        stampAllowHeaders ctx policy 0 (secondsUntilWindowEnd policy.Window)
                         do! next.Invoke ctx
 
-                    | Ok(AllowWithRemaining remaining) ->
-                        stampAllowHeaders ctx policy remaining (secondsUntilWindowEnd policy.Window)
-                        do! next.Invoke ctx
-
-                    | Ok(DenyWithError rle) ->
-                        match policy.OnExceeded with
-                        | Return429 ->
-                            stampDenyHeaders ctx rle
-                            ctx.Response.StatusCode <- 429
-                            ctx.Response.ContentType <- "application/json"
-                            let body = renderDenyBody rle
-                            do! ctx.Response.Body.WriteAsync(body, 0, body.Length)
-
-                        | DelayAndAllow maxDelay ->
-                            let delayMs = min (int maxDelay.TotalMilliseconds) (rle.RetryAfterSeconds * 1000)
-
-                            do! Task.Delay(delayMs)
-                            stampAllowHeaders ctx policy 0 (secondsUntilWindowEnd policy.Window)
-                            do! next.Invoke ctx
-
-                        | DenySilently ->
-                            stampDenyHeaders ctx rle
-                            ctx.Response.StatusCode <- 204
-            }
-            :> Task
+                    | DenySilently ->
+                        // Silent: the caller is not told it hit the cap, so
+                        // no `RateLimit-*` or `Retry-After` header.
+                        ctx.Response.StatusCode <- 204
+        }
