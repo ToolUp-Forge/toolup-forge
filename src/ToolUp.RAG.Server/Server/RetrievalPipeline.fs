@@ -232,6 +232,7 @@ type BoundedFault =
     /// The stage raised.
     | Failed
 
+/// Naming a `BoundedFault`.
 module BoundedFault =
     /// The fault's name, as it appears in a `…Degraded:<fault>` mark.
     let label (fault: BoundedFault) : string =
@@ -252,12 +253,21 @@ type BoostKind =
 /// The step that ordered the pool, named on the trace as `FinalOrder:<step>`.
 [<RequireQualifiedAccess>]
 type OrderingStep =
+    /// The dense store's ranking (no keyword index composed).
     | Dense
+    /// The fused dense and keyword ranking.
     | RRF
+    /// The reranker's ranking.
     | Rerank
-    | Boost of BoostKind
+    /// A boost's re-sort.
+    | Boost of
+        /// The boost that re-sorted.
+        kind: BoostKind
+    /// MMR's diversity order.
     | MMR
+    /// The `Interleaved` merge's re-sort by score.
     | Interleaved
+    /// The `Separate` merge's grouping by scope.
     | Separate
 
 /// One mark a retrieval stage records on `RetrievalTrace.Stages`. The
@@ -265,35 +275,78 @@ type OrderingStep =
 /// are a shipped grammar, so a case is added rather than a string renamed.
 [<RequireQualifiedAccess>]
 type RetrievalStage =
+    /// The requested scopes were narrowed to the readable ones.
     | AuthoriseScopes
+    /// The request's fact clause was resolved.
     | FactResolve
     /// The disclosure gate withheld at least one resolved fact.
     | DisclosureFilter
-    | FactsDegraded of BoundedFault
+    /// The fact stage ended without its result; no fact is admitted.
+    | FactsDegraded of
+        /// How it ended.
+        fault: BoundedFault
+    /// The query was resolved against the conversation's history.
     | QueryRewrite
+    /// The dense candidates were retrieved.
     | Dense
-    /// The bounded query embed produced no vector (never `Embedded`).
-    | DenseDegraded of QueryEmbedOutcome
+    /// The bounded query embed produced no vector, so the dense branch is empty.
+    | DenseDegraded of
+        /// What the embed answered (never `Embedded`).
+        outcome: QueryEmbedOutcome
+    /// The keyword candidates were retrieved.
     | Sparse
+    /// The dense and keyword rankings were fused.
     | RRF
+    /// The request's metadata filter was applied.
     | MetadataFilter
+    /// The request's origin filter was applied.
     | OriginFilter
-    | DerivedDisclosureDegraded of BoundedFault
+    /// The derived-disclosure check ended without its result; every chunk citing facts is dropped.
+    | DerivedDisclosureDegraded of
+        /// How it ended.
+        fault: BoundedFault
+    /// The derived-disclosure check dropped at least one chunk.
     | DerivedDisclosure
-    | DerivedDisclosureDropped of dropped: int * pool: int
+    /// How many chunks the derived-disclosure check dropped.
+    | DerivedDisclosureDropped of
+        /// The chunks dropped.
+        dropped: int *
+        /// The pool it read.
+        pool: int
+    /// The fused pool was normalised onto `[0, 1]`.
     | Normalise
+    /// The reranker scored the pool.
     | Rerank
     /// The pool was larger than the reranker's batch and was capped at it.
-    | RerankCapped of reranked: int * pool: int
-    | Boost of BoostKind
+    | RerankCapped of
+        /// The candidates the reranker scored.
+        reranked: int *
+        /// The pool it was handed.
+        pool: int
+    /// A boost was applied.
+    | Boost of
+        /// Which boost.
+        kind: BoostKind
+    /// MMR reordered the pool.
     | MMR
+    /// The request's adaptive-K hint truncated the pool.
     | AdaptiveK
+    /// The request's `TopK` truncated the pool.
     | TopK
-    /// The merge; `ordered` names the step when the merge itself ordered the pool.
-    | Merge of ordered: OrderingStep option
-    | FinalOrder of OrderingStep
-    | ScoreSpace of RetrievalScoreSpace
+    /// The merge bounded the result.
+    | Merge of
+        /// The step, when the merge itself ordered the pool.
+        ordered: OrderingStep option
+    /// The step whose order the caller receives.
+    | FinalOrder of
+        /// The step.
+        step: OrderingStep
+    /// The space the returned scores are in.
+    | ScoreSpace of
+        /// The space.
+        space: RetrievalScoreSpace
 
+/// Rendering a `RetrievalStage`, and the order it leaves.
 module RetrievalStage =
     let private boostMark (kind: BoostKind) =
         match kind with

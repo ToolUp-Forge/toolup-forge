@@ -1864,7 +1864,8 @@ ToolUp.Platform.Infra.IRetrievalPipeline+RetrievalScoreSpace+Tags.Reranked : Sys
 ToolUp.Platform.Infra.IRetrievalPipeline+RetrievalScoreSpaceModule (class)
 ToolUp.Platform.Infra.IRetrievalPipeline+RetrievalScoreSpaceModule.admits(ToolUp.Platform.Infra.IRetrievalPipeline+RetrievalScoreSpace, Microsoft.FSharp.Core.FSharpOption`1[System.Double], System.Double) : System.Boolean
 ToolUp.Platform.Infra.IRetrievalPipeline+ScoredPool (class)
-ToolUp.Platform.Infra.IRetrievalPipeline+ScoredPool..ctor(ToolUp.Platform.Infra.IRetrievalPipeline+RetrievalScoreSpace, System.Double, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+VectorMatch], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+VectorMatch]])
+ToolUp.Platform.Infra.IRetrievalPipeline+ScoredPool..ctor(ToolUp.Platform.Infra.IRetrievalPipeline+RetrievalScoreSpace, System.Double, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+VectorMatch], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+VectorMatch]], Microsoft.FSharp.Core.FSharpOption`1[System.Double])
+ToolUp.Platform.Infra.IRetrievalPipeline+ScoredPool.DenseSimilarity : Microsoft.FSharp.Core.FSharpOption`1[System.Double] { get }
 ToolUp.Platform.Infra.IRetrievalPipeline+ScoredPool.Matches : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+VectorMatch] { get }
 ToolUp.Platform.Infra.IRetrievalPipeline+ScoredPool.Relevance : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+VectorMatch]] { get }
 ToolUp.Platform.Infra.IRetrievalPipeline+ScoredPool.Space : ToolUp.Platform.Infra.IRetrievalPipeline+RetrievalScoreSpace { get }

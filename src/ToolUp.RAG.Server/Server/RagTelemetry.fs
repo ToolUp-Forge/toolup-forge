@@ -111,7 +111,9 @@ let DefaultDenseMissFloor = 0.25
 /// (e.g. for slow-burst dashboards) can extend it without forking. Default
 /// is 60 s — short enough to surface a live spike, long enough to absorb
 /// per-second jitter.
-type RollingRagTelemetry(windowSeconds: int, denseMissFloor: float) =
+type RollingRagTelemetry
+    /// A window of `windowSeconds`, reading a fused pool's miss against `denseMissFloor`.
+    (windowSeconds: int, denseMissFloor: float) =
     let window = windowSeconds |> max 1 |> float |> TimeSpan.FromSeconds
 
     let embeddingSamples = ConcurrentQueue<TimedSample>()
