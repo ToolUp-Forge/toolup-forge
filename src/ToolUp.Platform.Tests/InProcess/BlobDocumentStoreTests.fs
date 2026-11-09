@@ -263,6 +263,58 @@ let tests =
 
             Expect.equal (DocPath.value (DocPath.ofString "a/b.json")) "a/b.json" "a well-formed path renders as given"
         }
+
+        test "UpdateOrRestart sets undecodable bytes aside and starts the document again" {
+            let storage = InMemoryBlobStorage() :> IBlobStorage
+            let corrupt = Encoding.UTF8.GetBytes "{ not json"
+            put storage "a" corrupt
+            let docs = storeOver storage
+
+            Expect.equal (docs.UpdateOrRestart(scope, path "a", increment) |> run) (Ok()) "the restart writes"
+
+            Expect.equal
+                (docs.Read(scope, path "a") |> run)
+                (Ok(Some { Name = "fresh"; Count = 1 }))
+                "the transform ran over None"
+
+            let copies = storage.List(container, "docs/a.json.corrupt-") |> run
+
+            Expect.equal copies.Length 1 "the bytes it set aside are kept"
+            Expect.equal (storage.Download(container, copies.Head) |> run) (Ok corrupt) "byte for byte"
+        }
+
+        test "UpdateOrRestart over a document it cannot read writes nothing" {
+            let backing = InMemoryBlobStorage()
+            let storage = backing :> IBlobStorage
+            let before = BlobCodec.json<Doc>.Encode { Name = "kept"; Count = 7 }
+            put storage "a" before
+
+            let docs =
+                storeOver (InstrumentedStorage(backing, (fun name -> name = "docs/a.json"), false))
+
+            match docs.UpdateOrRestart(scope, path "a", increment) |> run with
+            | Error(BlobMapStoreError.Unreadable _) -> ()
+            | other -> failtest $"expected Unreadable, got %A{other}"
+
+            Expect.equal (bytesOf storage "a") before "a read failure is never a restart"
+        }
+
+        test "Replace writes the whole document over a good one, an absent one and an undecodable one" {
+            let storage = InMemoryBlobStorage() :> IBlobStorage
+            let docs = storeOver storage
+            let value = { Name = "replaced"; Count = 42 }
+            put storage "good" (BlobCodec.json<Doc>.Encode { Name = "old"; Count = 1 })
+            put storage "bad" (Encoding.UTF8.GetBytes "{ not json")
+
+            for name in [ "good"; "absent"; "bad" ] do
+                Expect.equal (docs.Replace(scope, path name, value) |> run) (Ok()) $"{name} is replaced"
+                Expect.equal (docs.Read(scope, path name) |> run) (Ok(Some value)) $"{name} reads the new value"
+
+            Expect.equal
+                (storage.List(container, "docs/bad.json.corrupt-") |> run).Length
+                1
+                "the bad bytes were kept aside"
+        }
     ]
 
 /// Raises from `Download`; `Exists` answers from `inner`, so the blob may be
