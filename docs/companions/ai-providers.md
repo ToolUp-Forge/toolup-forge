@@ -11,8 +11,9 @@ For full details on the `IAIProvider` contract, agent loop, system-prompt compos
 | `ToolUp.AIProviders.Claude` | Anthropic | `claude-opus-4-1-20250109` (configurable) |
 | `ToolUp.AIProviders.OpenAI` | OpenAI | `gpt-4o` (configurable) |
 | `ToolUp.AIProviders.Gemini` | Google | `models/gemini-2.5-flash` (configurable) |
+| `ToolUp.AIProviders.Microsoft365Copilot` | Microsoft 365 Copilot (Work IQ Chat API) | none — Copilot chooses its own model |
 
-All three are BYOK-capable — API keys resolved per call from `ISecretStore`, never hardcoded.
+Claude, OpenAI and Gemini are BYOK-capable — API keys resolved per call from `ISecretStore`, never hardcoded. Microsoft 365 Copilot takes no key: it acts as the signed-in user (see [its section](#toolupaiprovidersmicrosoft365copilot-microsoft-365-copilot)).
 
 ## Picking a provider
 
@@ -165,6 +166,47 @@ let geminiBuilder: AIProviderBuilder = {
 ```
 
 Store API key under `_platform` scope, key name `GEMINI_API_KEY`. Endpoint targets `generativelanguage.googleapis.com` (v1beta); Vertex AI managed endpoints are out of scope for this package — see `ToolUp.AIProviders.GoogleVertex` (when shipped) for that path.
+
+### `ToolUp.AIProviders.Microsoft365Copilot` (Microsoft 365 Copilot)
+
+Puts the assistant's turns to Microsoft 365 Copilot through the Work IQ Chat API. Copilot answers from the signed-in user's Microsoft 365 data (mail, calendar, chats, OneDrive and SharePoint files) under the organisation's own access controls. This is not the same service as `ToolUp.AIProviders.Copilot`, which targets Azure OpenAI deployments.
+
+Use when:
+- The assistant's job is to answer questions about the user's own work data, and the organisation already licenses Microsoft 365 Copilot.
+- Answers must respect the tenant's permissions, sensitivity labels and retention without the deployment indexing that data itself.
+
+Prerequisites:
+- Each user holds a Microsoft 365 Copilot licence.
+- A tenant administrator has enabled Work IQ and granted admin consent for the delegated scope `api://workiq.svc.cloud.microsoft/WorkIQAgent.Ask`. There is no application permission, so the provider always acts as a user.
+
+Capabilities:
+- `Streaming = true` — `chatOverStream` events carry the whole reply so far; the provider turns them into deltas for the stream callback.
+- `ToolUse = false`, `Vision = false`, `SupportsPromptCaching = false`, `SupportsTriage = false` — the Chat API offers none of them. A turn with an image is refused with `UnsupportedCapability`. Structured output uses the schema-as-instruction fallback.
+- Token usage is not reported, so `Usage` is `None`.
+
+How a turn is sent: the API keeps conversations on the server, but `IAIProvider` is stateless. Each call opens a fresh conversation, sends the last user message as the question, and sends the system prompt and the earlier transcript as `additionalContext` grounding. Holding no conversation id between calls keeps the provider distributed-ready.
+
+Setup on a server, acting on behalf of the requesting user:
+
+```fsharp skip=fragment
+open Azure.Identity
+open Microsoft365CopilotAIProvider
+
+// The user's Work IQ token, read from the request (for example exchanged
+// on behalf of the user from the token your API received).
+let userToken () : Async<string option> = async { return currentUserWorkIqToken () }
+
+let options =
+    Microsoft365CopilotOptions.defaults
+    |> Microsoft365CopilotOptions.withTimeZone "Europe/London"
+    |> Microsoft365CopilotOptions.withWebSearch false   // enterprise grounding only
+
+let copilot = createWithTokenSource userToken options
+```
+
+With an `Azure.Core` credential that yields a user token, such as `OnBehalfOfCredential`, use `createWithOptions credential options` instead. The provider requests `WorkIQAskScope` from it. For the BYOK factory, `createWithAccessTokenAndModel` fits the `apiKey -> model -> IAIProvider` builder shape; a Work IQ token expires after about an hour, so prefer a credential or a token source in a deployment. `descriptor` is the provider's `AIProviderDescriptor`.
+
+Options: `withBaseUrl` selects the `/beta` route, `withTimeZone` sets the required `locationHint`, `withWebSearch` toggles web grounding, and `withFiles` adds OneDrive or SharePoint file URIs as context on every call.
 
 ## Using multiple providers
 

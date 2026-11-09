@@ -8,6 +8,7 @@
 |---|---|---|
 | [`ToolUp.AIProviders.Claude`](Claude/) | Anthropic Claude | Messages endpoint, prompt caching, multi-turn tool calling, SSE streaming. Client-side glyph ships separately as `ToolUp.AIProviders.Claude.Client`. |
 | [`ToolUp.AIProviders.OpenAI`](OpenAI/) | OpenAI | `chat.completions`, multi-turn tool calling, SSE streaming with `stream_options.include_usage = true` for accurate token reporting. |
+| [`ToolUp.AIProviders.Microsoft365Copilot`](Microsoft365Copilot/) | Microsoft 365 Copilot | Work IQ Chat API, grounded in the signed-in user's Microsoft 365 data. Delegated user token only (no API key); streaming; no tool calling or vision. |
 
 Each subfolder packs a `Server` package and (where applicable) a separate `Client` package. The full provider-authoring contract lives in [`docs/ai/extending.md`](../../docs/ai/extending.md); use this directory as the example for new providers.
 

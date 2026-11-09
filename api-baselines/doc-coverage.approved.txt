@@ -25,6 +25,7 @@ ToolUp.AIProviders.Claude 23/29
 ToolUp.AIProviders.Claude.Client 0/2
 ToolUp.AIProviders.Copilot 19/25
 ToolUp.AIProviders.Gemini 12/18
+ToolUp.AIProviders.Microsoft365Copilot 44/70
 ToolUp.AIProviders.OpenAI 16/23
 ToolUp.AlgorithmProviders.MathNet 22/31
 ToolUp.Algorithms.Client 4/5
