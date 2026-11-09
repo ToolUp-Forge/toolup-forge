@@ -1,7 +1,7 @@
 namespace ToolUp.Remoting.Analyzers
 
 // =============================================================================
-// Phase 776 — the rule set's metadata, and the document generated from it
+// The rule set's metadata, and the document generated from it
 // =============================================================================
 //
 // One record per diagnostic the package can raise. The rule reference
@@ -47,6 +47,18 @@ module Rules =
                 "Classify the method: `[<RequiresRole>]`, `[<RequiresClaim>]`, `[<TenantScoped>]`, `[<AllowAnonymous>]` or `[<PublicEndpoint>]`. The codefix inserts the fail-closed placeholder `[<AllowAnonymous>]`, which must be replaced deliberately."
             RuntimeHalf = "The dispatcher's startup authorisation classifier."
             Since = "0.7.0"
+        }
+        {
+            Id = "TUR0003"
+            Title = "Remoting API method carrying a foreign-named authorisation marker"
+            Severity = "Error"
+            OptIn = false
+            Rationale =
+                "The dispatcher matches an authorisation marker by type identity, not by name, and refuses to start when a method carries an attribute named like one (`RequiresRole`, `AllowAnonymous`, …) that is not the SDK's: a name collision must never decide a method's classification. TUR0001 reads such a method as classified, so this rule reports what TUR0001 cannot. It fires where the file shows the marker is not the SDK's: qualified by a path that reaches neither `ToolUp.Platform` nor `ToolUp.Remoting.Server` through the file's opens, or unqualified while the file declares a type of that name."
+            Sanctioned =
+                "Use the SDK's attribute — `ToolUp.Platform.*` (or `ToolUp.Remoting.Server.*` in a server-only record) — qualified where a local type of the same name would shadow it, and remove or rename the foreign one. No codefix is offered: the foreign marker has to go."
+            RuntimeHalf = "The dispatcher's startup marker-collision refusal."
+            Since = "0.42.0"
         }
         {
             Id = "TUR0002"
