@@ -17,35 +17,29 @@ type Tab =
     | LiveHealthTab
     | PreflightTab
 
-type LoadState<'T> =
-    | NotLoaded
-    | Loading
-    | Loaded of 'T
-    | LoadError of string
-
 type Model = {
     /// Currently rendered section.
     ActiveTab: Tab
     /// Live snapshot from `GetCurrentHealth`. Refreshed on click.
-    Live: LoadState<HealthSnapshot>
+    Live: Remote<HealthSnapshot, string>
     /// Preflight snapshot from `GetPreflightSnapshot`.
-    Preflight: LoadState<PreflightSnapshotView>
+    Preflight: Remote<PreflightSnapshotView, string>
     /// Phase 9b.A — most recent job-scheduler missed-tick telemetry.
     /// Loaded alongside `Live` so the operator sees both on the Live
     /// tab without a second click. `HasScheduler = false` (carried
     /// inside the view) suppresses the inline card.
-    SchedulerTelemetry: LoadState<JobSchedulerTelemetryView>
+    SchedulerTelemetry: Remote<JobSchedulerTelemetryView, string>
     /// Phase 118 — degraded-capability set from `GetDegradedCapabilities`.
     /// Loaded alongside `Live`; empty on a healthy deployment, in which
     /// case the card is suppressed entirely (GP 13).
-    Degraded: LoadState<DegradedCapability list>
+    Degraded: Remote<DegradedCapability list, string>
     /// Phase 47 — rolling AI action-denial rollup from
     /// `GetAIDenialRollup`. Loaded alongside `Live`. `Loaded None` means
     /// no AI companion is composed (the `IAIDenialRollupProbe` seam is
     /// absent from DI) and the card is suppressed — distinct from
     /// `Loaded (Some rollup)` with a zero count, which is a real
     /// "nothing is being refused" reading and worth showing.
-    AIDenials: LoadState<AIDenialRollup option>
+    AIDenials: Remote<AIDenialRollup option, string>
     /// Names of probes whose status changed between the prior and
     /// most recent live snapshot — surfaced via Tailwind
     /// `animate-pulse` for ~1.5s so an admin spotting a freshly-flipped
@@ -94,11 +88,11 @@ let private loadAIDenialsCmd () =
 let init () =
     let model = {
         ActiveTab = LiveHealthTab
-        Live = Loading
-        Preflight = Loading
-        SchedulerTelemetry = Loading
-        Degraded = Loading
-        AIDenials = Loading
+        Live = Remote.Loading
+        Preflight = Remote.Loading
+        SchedulerTelemetry = Remote.Loading
+        Degraded = Remote.Loading
+        AIDenials = Remote.Loading
         RecentlyFlipped = Set.empty
     }
 
@@ -130,11 +124,6 @@ let private flippedNames (prev: HealthSnapshot option) (next: HealthSnapshot) : 
             | _ -> Some row.Name)
         |> Set.ofList
 
-let private currentLiveOpt (model: Model) =
-    match model.Live with
-    | Loaded snap -> Some snap
-    | _ -> None
-
 // ─── Update ──────────────────────────────────────────────────────────
 
 let update (msg: Msg) (model: Model) =
@@ -147,10 +136,10 @@ let update (msg: Msg) (model: Model) =
         // re-fetching alongside the probe sweep is free.
         {
             model with
-                Live = Loading
-                SchedulerTelemetry = Loading
-                Degraded = Loading
-                AIDenials = Loading
+                Live = Remote.Loading
+                SchedulerTelemetry = Remote.Loading
+                Degraded = Remote.Loading
+                AIDenials = Remote.Loading
         },
         Cmd.batch [
             loadLiveCmd ()
@@ -160,49 +149,51 @@ let update (msg: Msg) (model: Model) =
         ]
 
     | LiveLoaded(Ok snapshot) ->
-        let flipped = flippedNames (currentLiveOpt model) snapshot
+        let flipped = flippedNames (Remote.toOption model.Live) snapshot
 
         {
             model with
-                Live = Loaded snapshot
+                Live = Remote.Loaded snapshot
                 RecentlyFlipped = flipped
         },
         Cmd.none
 
-    | LiveLoaded(Error msg) -> { model with Live = LoadError msg }, Cmd.none
+    | LiveLoaded(Error msg) -> { model with Live = Remote.Failed msg }, Cmd.none
 
-    | RefreshPreflight -> { model with Preflight = Loading }, loadPreflightCmd ()
-
-    | PreflightLoaded(Ok snapshot) ->
+    | RefreshPreflight ->
         {
             model with
-                Preflight = Loaded snapshot
+                Preflight = Remote.Loading
+        },
+        loadPreflightCmd ()
+
+    | PreflightLoaded result ->
+        {
+            model with
+                Preflight = Remote.ofResult result
         },
         Cmd.none
 
-    | PreflightLoaded(Error msg) -> { model with Preflight = LoadError msg }, Cmd.none
-
-    | SchedulerTelemetryLoaded(Ok view) ->
+    | SchedulerTelemetryLoaded result ->
         {
             model with
-                SchedulerTelemetry = Loaded view
+                SchedulerTelemetry = Remote.ofResult result
         },
         Cmd.none
 
-    | SchedulerTelemetryLoaded(Error msg) ->
+    | DegradedLoaded result ->
         {
             model with
-                SchedulerTelemetry = LoadError msg
+                Degraded = Remote.ofResult result
         },
         Cmd.none
 
-    | DegradedLoaded(Ok entries) -> { model with Degraded = Loaded entries }, Cmd.none
-
-    | DegradedLoaded(Error msg) -> { model with Degraded = LoadError msg }, Cmd.none
-
-    | AIDenialsLoaded(Ok rollup) -> { model with AIDenials = Loaded rollup }, Cmd.none
-
-    | AIDenialsLoaded(Error msg) -> { model with AIDenials = LoadError msg }, Cmd.none
+    | AIDenialsLoaded result ->
+        {
+            model with
+                AIDenials = Remote.ofResult result
+        },
+        Cmd.none
 
 // ─── Status-pill renderers ───────────────────────────────────────────
 
@@ -239,12 +230,6 @@ let private refreshButton (msgs: HealthMonitorMessages) (label: string) (onClick
         prop.disabled loading
         prop.text (if loading then msgs.Refreshing else label)
         prop.onClick (fun _ -> onClick ())
-    ]
-
-let private errorBanner (msg: string) =
-    Html.div [
-        prop.className "p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm"
-        prop.text msg
     ]
 
 // ─── Live health tab ─────────────────────────────────────────────────
@@ -608,10 +593,7 @@ let private probesTable (msgs: HealthMonitorMessages) (recentlyFlipped: Set<stri
         ]
 
 let private liveHealthTabView (msgs: HealthMonitorMessages) (model: Model) (dispatch: Msg -> unit) =
-    let isLoading =
-        match model.Live with
-        | Loading -> true
-        | _ -> false
+    let isLoading = Remote.isLoading model.Live
 
     Html.div [
         prop.className "flex-1 p-6 overflow-y-auto"
@@ -632,7 +614,7 @@ let private liveHealthTabView (msgs: HealthMonitorMessages) (model: Model) (disp
             // capability is down). Suppressed when the set is empty or
             // the load is in flight.
             match model.Degraded with
-            | Loaded entries -> degradedCapabilitiesCard msgs entries
+            | Remote.Loaded entries -> degradedCapabilitiesCard msgs entries
             | _ -> Html.none
 
             // Phase 47 — AI action denials. `Loaded None` means no AI
@@ -640,7 +622,7 @@ let private liveHealthTabView (msgs: HealthMonitorMessages) (model: Model) (disp
             // `Some` rollup suppresses itself when the deployment has
             // never recorded a denial.
             match model.AIDenials with
-            | Loaded(Some rollup) -> aiDenialCard msgs rollup
+            | Remote.Loaded(Some rollup) -> aiDenialCard msgs rollup
             | _ -> Html.none
 
             // Phase 9b.A — surface scheduler drift above the probe
@@ -648,14 +630,15 @@ let private liveHealthTabView (msgs: HealthMonitorMessages) (model: Model) (disp
             // when the load is in flight (no point flashing "Loading..."
             // for a side-counter).
             match model.SchedulerTelemetry with
-            | Loaded view -> schedulerTelemetryCard msgs view
+            | Remote.Loaded view -> schedulerTelemetryCard msgs view
             | _ -> Html.none
 
             match model.Live with
-            | NotLoaded
-            | Loading -> Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.Loading ]
-            | LoadError msg -> errorBanner msg
-            | Loaded snapshot ->
+            | Remote.NotAsked
+            | Remote.Loading
+            | Remote.Reloading _ -> Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.Loading ]
+            | Remote.Failed msg -> StateViews.noticeStatic (Notice.Problem msg)
+            | Remote.Loaded snapshot ->
                 Html.div [
                     prop.children [
                         liveHealthHeader msgs snapshot
@@ -726,10 +709,7 @@ let private outcomesTable (msgs: HealthMonitorMessages) (outcomes: PreflightOutc
         ]
 
 let private preflightTabView (msgs: HealthMonitorMessages) (model: Model) (dispatch: Msg -> unit) =
-    let isLoading =
-        match model.Preflight with
-        | Loading -> true
-        | _ -> false
+    let isLoading = Remote.isLoading model.Preflight
 
     Html.div [
         prop.className "flex-1 p-6 overflow-y-auto"
@@ -747,10 +727,11 @@ let private preflightTabView (msgs: HealthMonitorMessages) (model: Model) (dispa
                 ]
             ]
             match model.Preflight with
-            | NotLoaded
-            | Loading -> Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.Loading ]
-            | LoadError msg -> errorBanner msg
-            | Loaded snapshot ->
+            | Remote.NotAsked
+            | Remote.Loading
+            | Remote.Reloading _ -> Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.Loading ]
+            | Remote.Failed msg -> StateViews.noticeStatic (Notice.Problem msg)
+            | Remote.Loaded snapshot ->
                 if not snapshot.HasSnapshot then
                     Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.PreflightUnavailable ]
                 else
