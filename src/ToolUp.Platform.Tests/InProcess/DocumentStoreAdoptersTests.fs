@@ -283,4 +283,34 @@ let tests =
 
             expectSetAside storage platform name
         }
+
+        test
+            "LifecycleLedger — an undecodable ledger re-runs every hook, and the next record starts it again, same bytes" {
+            let name = "_tenant-lifecycle-ledger/t1/Deprovisioning.json"
+            let storage = planted platform name
+
+            let ledger = ToolUp.Platform.Compose.BlobBackedLifecycleLedger.create storage
+
+            Expect.isEmpty
+                (ledger.GetCompleted("t1", TenantLifecyclePhase.Deprovisioning) |> run)
+                "nothing is vouched for: a full, idempotent re-run"
+
+            ledger.Record("t1", TenantLifecyclePhase.Deprovisioning, "erase", ToolUp.Platform.Compose.Completed)
+            |> run
+
+            ledger.Record("t1", TenantLifecyclePhase.Deprovisioning, "cancel-jobs", ToolUp.Platform.Compose.Skipped)
+            |> run
+
+            Expect.equal
+                (ledger.GetCompleted("t1", TenantLifecyclePhase.Deprovisioning) |> run)
+                (set [ "cancel-jobs"; "erase" ])
+                "both hooks are recorded"
+
+            Expect.equal
+                (storage.Download(platform, name) |> run)
+                (Ok(Encoding.UTF8.GetBytes "[\"cancel-jobs\",\"erase\"]"))
+                "the ledger's bytes at rest are the flat array it has always written"
+
+            expectSetAside storage platform name
+        }
     ]
