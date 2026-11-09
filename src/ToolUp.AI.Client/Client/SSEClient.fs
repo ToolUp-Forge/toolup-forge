@@ -11,12 +11,10 @@ open ToolUp.AI
 
 let private log = Logger.forCategory "ai.sse"
 
-// Sanctioned module-level mutable: per-tab one-shot warn-once latch.
-// Phase 117 parity — one-shot guard for the "authenticated session fell
-// back to query-param identity" AuthDiagnostics warn (mirrors the
-// `QueryParamFallbackWarned` field on `NotificationClient`'s state
-// record). Module-scoped so the per-tab AI stream logs it once rather
-// than on every identity re-key.
+// Sanctioned module-level mutable: per-tab one-shot guard for the
+// "authenticated session fell back to query-param identity" AuthDiagnostics
+// warn (mirrors the `QueryParamFallbackWarned` field on `NotificationClient`'s
+// state record), so the tab logs it once rather than on every identity re-key.
 let mutable private queryParamFallbackWarned = false
 
 // ─── EventSource interop ─────────────────────────────────────────
@@ -68,42 +66,22 @@ let private parseEvent (json: string) : ParseOutcome =
     with _ ->
         ParseFailure(truncatePreview json)
 
-// ─── Elmish subscription ─────────────────────────────────────────
+// ─── The tab's connection ────────────────────────────────────────
 
-/// Create an Elmish subscription that connects to the SSE endpoint
-/// and dispatches AIStreamEvent messages. Returns a dispose function.
-/// The user ID is passed as a query parameter because EventSource
-/// does not support custom headers.
+/// Open one EventSource under the current identity and hand every parsed
+/// event to `deliver`. A frame that does not parse is delivered as a
+/// `StreamError`, so the reader sees the failure rather than the watchdog.
 ///
-/// Phase 6g.A: `ClientToolInvoke` events bypass the Elmish dispatch
-/// and route into `ClientToolRuntime.handleInvoke`. The agent-loop
-/// suspend/resume mechanism is a transport concern, not a UI-state
-/// concern — Elmish handlers see the preceding `ToolCallStarted` and
-/// the subsequent `ToolCallCompleted` events for chat-UI rendering.
-///
-/// Phase 6h follow-up: parse failures and connection errors now
-/// dispatch a `StreamError` event instead of silently swallowing.
-/// The chat surface (with `StreamError` ungated from `DebugMode`)
-/// renders the failure inline so the user can act on it before the
-/// 60-second watchdog fires.
-/// Open one EventSource under the current identity and wire the message
-/// + error handlers. Factored out of `subscribe` so the re-keying path
-/// (below) can reopen the stream under a fresh identity with identical
-/// wiring.
-///
-/// Phase 117 parity with `NotificationClient.openConnection` — the
-/// connect handshake prefers cookie auth: when an auth token is present
-/// the URL carries no `?userId=` at all (the JWT cookie authenticates
-/// the handshake and the server's middleware-resolved principal becomes
-/// the scope — a query param would at best be redundant and at worst be
-/// audited as a mismatch under `CookieRequired`). `?userId=` is the
-/// anonymous-session marker only. An authenticated-kind session with no
-/// token yet (the documented dev escape hatch where no `IAuthBridge` is
-/// wired) still falls back to the param so dev deployments keep working,
-/// but the degradation surfaces once per tab through `AuthDiagnostics`
-/// instead of silently. EventSource sends same-origin cookies on the
-/// handshake by default, so the cookie path needs no `withCredentials`.
-let private openStream (userId: string) (dispatch: AIStreamEvent -> unit) : EventSource =
+/// The connect handshake prefers cookie auth: when an auth token is present
+/// the URL carries no `?userId=` at all (the JWT cookie authenticates the
+/// handshake and the server's middleware-resolved principal becomes the
+/// scope). `?userId=` is the anonymous-session marker only. An
+/// authenticated-kind session with no token yet (the dev escape hatch where
+/// no `IAuthBridge` is wired) still falls back to the param, and the
+/// degradation surfaces once per tab through `AuthDiagnostics`. EventSource
+/// sends same-origin cookies on the handshake by default, so the cookie path
+/// needs no `withCredentials`.
+let private openStream (userId: string) (deliver: AIStreamEvent -> unit) : EventSource =
     let url =
         match UserSession.getAuthToken () with
         | Some _ -> "/api/ai/events"
@@ -130,57 +108,11 @@ let private openStream (userId: string) (dispatch: AIStreamEvent -> unit) : Even
     let es = createEventSource url
 
     onMessage es (fun event ->
-        let data = getData event
-
-        match parseEvent data with
-        | Parsed(ClientToolInvoke(taskId, toolCallId, toolName, argsJson, activeModule, activePage)) ->
-            ToolUp.AI.Client.ClientToolRuntime.handleInvoke taskId toolCallId toolName argsJson activeModule activePage
-            |> Async.StartImmediate
-        // Phase 36.D: same out-of-band routing as `ClientToolInvoke`, for
-        // the same reason — a suspended server-side read waiting on the
-        // user is a transport concern, and routing it through one surface's
-        // Elmish model would tie the question to whichever surface happens
-        // to be mounted. `ConsentDialog` holds it in a per-tab bridge and
-        // whichever surface mounted the modal renders it.
-        | Parsed(AIConsentRequired(taskId,
-                                   consentId,
-                                   conversationId,
-                                   toolName,
-                                   targetModule,
-                                   intendedQueryKey,
-                                   redactedPayloadPreview)) ->
-            ToolUp.AI.Client.ConsentDialog.handleRequired
-                taskId
-                consentId
-                conversationId
-                toolName
-                targetModule
-                intendedQueryKey
-                redactedPayloadPreview
-        // Phase 503: same out-of-band routing, for the same reason — a
-        // held server-side invocation waiting on the user belongs to the
-        // tab, not to one surface's Elmish model.
-        | Parsed(ToolApprovalRequired(taskId,
-                                      approvalId,
-                                      conversationId,
-                                      toolName,
-                                      sourceModule,
-                                      summary,
-                                      detail,
-                                      redactedArgumentsPreview)) ->
-            ToolUp.AI.Client.ToolApprovalDialog.handleRequired
-                taskId
-                approvalId
-                conversationId
-                toolName
-                sourceModule
-                summary
-                detail
-                redactedArgumentsPreview
-        | Parsed evt -> dispatch evt
+        match parseEvent (getData event) with
+        | Parsed evt -> deliver evt
         | ParseFailure preview ->
             log.Warn $"SSE parse failure: {preview}"
-            dispatch (StreamError $"Malformed SSE event: {preview}"))
+            deliver (StreamError $"Malformed SSE event: {preview}"))
 
     // EventSource fires `onerror` on every transient reconnect — HMR
     // drops in dev, brief network blips, server restarts. The browser
@@ -197,13 +129,17 @@ let private openStream (userId: string) (dispatch: AIStreamEvent -> unit) : Even
 
         if state = ReadyStateClosed then
             log.Warn "SSE connection closed — no further retries"
-            dispatch (StreamError "Stream connection closed — refresh the page or check the server")
+            deliver (StreamError "Stream connection closed — refresh the page or check the server")
         else
             log.Warn "SSE connection error — auto-reconnecting")
 
     es
 
-let subscribe (dispatch: AIStreamEvent -> unit) =
+/// Open the tab's stream and deliver every event to `deliver`; the returned
+/// function closes it. Internal: `AIStream` is its one caller, so a tab holds
+/// one connection whatever surfaces are mounted, and the out-of-band cases
+/// are routed once.
+let internal subscribe (deliver: AIStreamEvent -> unit) : unit -> unit =
     // The stream URL pins `?userId=` at open time. Binding it once and
     // never re-keying leaves the stream stuck on whatever subject was
     // resolved at subscribe — so a sign-in that completes after the page
@@ -214,7 +150,7 @@ let subscribe (dispatch: AIStreamEvent -> unit) =
     // comparing the connected id so a same-user token refresh doesn't
     // needlessly cycle the connection.
     let mutable connectedUserId = UserSession.getUserId ()
-    let mutable es = openStream connectedUserId dispatch
+    let mutable es = openStream connectedUserId deliver
 
     // `onAuthTokenChange` is the canonical sign-in / sign-out / token-identity
     // signal (a short poll under the hood). On each transition, re-read the
@@ -227,10 +163,9 @@ let subscribe (dispatch: AIStreamEvent -> unit) =
                 log.Warn $"SSE re-keying stream from '{connectedUserId}' to '{fresh}' after an identity change"
                 es.close ()
                 connectedUserId <- fresh
-                es <- openStream fresh dispatch)
+                es <- openStream fresh deliver)
 
-    // Return dispose function — stop the identity watcher, then close the
-    // currently-open stream.
+    // Stop the identity watcher, then close the currently-open stream.
     fun () ->
         stopWatcher ()
         es.close ()

@@ -6,16 +6,20 @@ module ToolUp.AI.Client.FastPathBridge
 open System
 open ToolUp.AI
 
-// ─── Phase 6j.A — chat-send fast-path bridge ────────────────────
+// ─── Chat-send fast-path bridge ──────────────────────────────────
 //
-// The chat-send paths in `AIAssistantUI` and `AIClientConfig` need
-// to ask "is this a trivial instruction that resolves without an
-// LLM round-trip?" This module exposes a registration seam for any
-// downstream resolver to plug in via `setResolver`; if no resolver
-// registers, every chat message goes straight to the existing API
-// call path. forge ships no resolver out of the box; consumers
-// register their own (typically a companion that drives AI tool
-// dispatch). forge stays free of orchestration imports.
+// Both chat surfaces ask "is this a trivial instruction that resolves
+// without an LLM round-trip?" before a message leaves the page. This module
+// is the registration seam a downstream resolver plugs into; with none
+// registered every chat message goes straight to the API call. forge ships
+// no resolver; consumers register their own (typically a companion that
+// drives AI tool dispatch), so forge stays free of orchestration imports.
+//
+// A resolver may answer synchronously (`setResolver`) or asynchronously
+// (`setAsyncResolver`), for a tier whose answer needs I/O such as an
+// embedding lookup — under Fable a synchronous function cannot wait on an
+// `Async`. The surfaces consult `resolve`, which awaits either shape without
+// blocking the UI and gives up after `ResolveTimeoutMs`.
 //
 // Sanctioned mutable global — same precedent as
 // `ClientToolRuntime.registry` and `NotificationClient.state`.
@@ -39,33 +43,40 @@ type FastPathRequest = {
     ActivePage: string option
 }
 
-// Per-tab resolver cache, populated once at boot by
-// `AIClientConfig.run` (and by extension `Client.run` via the AI
-// wrapper) through `FastPathBridge.setResolver`. A downstream
-// fast-path companion exports a `FastPathRequest -> ResolveOutcome`
-// value; consumers install it with `FastPathBridge.setResolver` to
-// enable fast-path resolution. `None` = no resolver wired (the
-// agent loop runs unchanged). Sole writer is the AI-tier boot path;
-// downstream companions never touch this directly.
-let mutable private resolver: (FastPathRequest -> ResolveOutcome) option = None
+/// How long the surfaces wait for a resolver before the message takes the
+/// model path. A resolver that answers later is ignored: the turn has
+/// already gone to the agent.
+[<Literal>]
+let ResolveTimeoutMs = 2_000
 
-/// Called once by `AIClientConfig.run` with the resolver value a
-/// consumer supplied. Idempotent re-installs are
-/// supported but in practice only happen if a test harness re-runs
-/// the boot sequence.
-let setResolver (r: (FastPathRequest -> ResolveOutcome) option) : unit = resolver <- r
+// Per-tab resolver, installed once at boot by the composition that
+// registers a fast-path companion. `None` = no resolver wired (the agent
+// loop runs unchanged). Held in its asynchronous form; a synchronous
+// resolver is lifted on the way in.
+let mutable private resolver: (FastPathRequest -> Async<ResolveOutcome>) option =
+    None
 
-/// Chat-send call sites invoke this. Returns `NoResolution` when no
-/// companion has registered a resolver, OR when the registered
-/// resolver returns `NoResolution` (no pattern match, ambiguous,
-/// paused).
-let tryResolve (request: FastPathRequest) : ResolveOutcome =
+/// Install a synchronous resolver (or `None` to remove it). Idempotent
+/// re-installs are supported but in practice only happen if a test
+/// harness re-runs the boot sequence.
+let setResolver (r: (FastPathRequest -> ResolveOutcome) option) : unit =
+    resolver <- r |> Option.map (fun sync -> fun request -> async { return sync request })
+
+/// Install an asynchronous resolver (or `None` to remove it): one whose
+/// answer needs I/O. It replaces any resolver installed before it.
+let setAsyncResolver (r: (FastPathRequest -> Async<ResolveOutcome>) option) : unit = resolver <- r
+
+/// The chat surfaces consult this before submitting. `NoResolution` when no
+/// resolver is installed, when the resolver declines, when it fails (a
+/// resolver failure must not break the chat flow), or when it has not
+/// answered within `ResolveTimeoutMs`.
+let resolve (request: FastPathRequest) : Async<ResolveOutcome> = async {
     match resolver with
+    | None -> return NoResolution
     | Some r ->
         try
-            r request
+            let! answer = Async.StartChild(r request, ResolveTimeoutMs)
+            return! answer
         with _ ->
-            // Resolver failure must not break the chat flow. Fall
-            // through to the existing API call.
-            NoResolution
-    | None -> NoResolution
+            return NoResolution
+}

@@ -30,24 +30,28 @@ type Model = {
     /// Accumulates streaming content from SSE MessageDelta events
     StreamingContent: string
     ErrorMessage: string option
-    /// When true, tool invocations, tool results, and agent-loop task
-    /// failures are surfaced inline in the conversation as synthetic
-    /// assistant messages prefixed with `[debug]`. Toggled by the user
-    /// typing `Debug on` / `Debug off` in the chat (intercepted
-    /// client-side — these commands are never sent to the provider).
-    /// Always starts false; session-scoped (not persisted).
+    /// When true, tool invocations and results are surfaced inline in the
+    /// conversation as synthetic assistant messages prefixed with `[debug]`.
+    /// Toggled by the user typing `Debug on` / `Debug off` in the chat
+    /// (intercepted client-side — never sent to the provider). Always starts
+    /// false; session-scoped (not persisted).
     DebugMode: bool
-    /// Watchdog token — see the matching field on SidePanelModel in
-    /// AIClientConfig.fs for the full contract. Catches silent failures
-    /// where the server never produces a final `MessageComplete`.
+    /// The idle watchdog's live token — `Some` while a turn is in flight
+    /// (`ChatStream.fire`). Catches silent failures where the server never
+    /// produces a final `MessageComplete`.
     WatchdogToken: Guid option
-    /// Phase 516.C — the search the conversation list is filtered by;
+    /// The tool the live turn is running, between its start and completion.
+    RunningTool: string option
+    /// Parts a tool attached to the reply streaming in; they ride it into
+    /// the committed message.
+    InFlightParts: ToolUp.Platform.AI.AIContentPart list
+    /// The search the conversation list is filtered by;
     /// `""` lists everything.
     ConversationSearch: string
-    /// Phase 516.C — the cursor for the next page of the list; `None`
+    /// The cursor for the next page of the list; `None`
     /// when every matching conversation is loaded.
     ConversationsCursor: string option
-    /// Phase 516.C — how many conversations match the current search
+    /// How many conversations match the current search
     /// across all pages.
     ConversationTotal: int
 }
@@ -81,6 +85,9 @@ type Msg =
     /// Second leg of `SubmitMessage`: the `Cmd` layer generated the
     /// ids/timestamp; this folds the prepared submission into state.
     | SubmitMessagePrepared of PreparedSubmission
+    /// The fast-path resolver's answer for a submitted message: either the
+    /// turn is answered on the client, or `request` goes to the server.
+    | FastPathAnswered of request: AIMessageRequest * outcome: FastPathBridge.ResolveOutcome
     | MessageSubmitted of ApiCall<Guid * string, AITask>
     | NewConversation
     | DeleteConversation of ApiCall<Guid, Result<unit, string>>
@@ -92,22 +99,21 @@ type Msg =
     | ApiError of string
     | DismissError
     | WatchdogFired of token: Guid
-    /// Phase 6h: user clicked Cancel on the in-flight task. Fires
-    /// a fetch POST to /api/ai/cancel/{taskId}; the server flips
-    /// the matching CancellationToken; the agent loop bails at the
-    /// next turn boundary with a StreamCancelled SSE event.
+    /// User clicked Cancel on the in-flight task (`AIStream.cancel`); the
+    /// agent loop bails at the next turn boundary with a StreamCancelled
+    /// event.
     | CancelTask of taskId: Guid
-    /// Phase 516.C — fetch a page of the conversation list. A query with
+    /// Fetch a page of the conversation list. A query with
     /// no cursor replaces the list; one with a cursor appends to it.
     | LoadConversationPage of ConversationListQuery
-    /// Phase 516.C — a page arrived for `search`. Ignored when the user
+    /// A page arrived for `search`. Ignored when the user
     /// has since searched for something else.
     | ConversationPageLoaded of search: string * append: bool * page: ConversationPage
-    /// Phase 516.C — the user submitted a search (`""` clears it).
+    /// The user submitted a search (`""` clears it).
     | SearchConversations of string
-    /// Phase 516.C — the user asked for the next page.
+    /// The user asked for the next page.
     | LoadMoreConversations
-    /// Phase 516.D — the answer to a `GetTaskStatus` poll made when the
+    /// The answer to a `GetTaskStatus` poll made when the
     /// stream went quiet. `None` when the server no longer knows the task
     /// or the poll failed.
     | TaskStatusPolled of token: Guid * status: AITask option
@@ -120,110 +126,77 @@ let private aiSettingsApi =
 
 // ─── Init ─────────────────────────────────────────────────────────
 
-// ─── Debug-mode helpers ──────────────────────────────────────────
-//
-// `Debug on` / `Debug off` are intercepted client-side and never sent to
-// the provider. When debug mode is on, SSE events for tool calls, tool
-// results, and task failures surface inline as synthetic assistant
-// messages with a `[debug]` prefix. Mirrors the side-panel helpers in
-// AIClientConfig.fs — kept local here so each module page owns its
-// own debug surface without cross-module coupling.
+// ─── The stream ───────────────────────────────────────────────────
 
-let private tryDebugCommand (content: string) =
-    match content.Trim().ToLowerInvariant() with
-    | "debug on" -> Some true
-    | "debug off" -> Some false
-    | _ -> None
-
-let private debugAck (conversationId: Guid) (enabled: bool) : ConversationMessage =
-    let body =
-        if enabled then
-            "[debug] Debug mode enabled. Tool invocations, results, and agent-loop failures will appear inline in this chat. Type `Debug off` to disable."
-        else
-            "[debug] Debug mode disabled."
-
-    {
-        Id = Guid.NewGuid()
-        ConversationId = conversationId
-        Participant = AIAssistant
-        Content = body
-        Timestamp = DateTime.UtcNow
-        ToolCalls = []
-        RetrievedSources = []
-        Parts = []
-        CreatedBy = ""
-        BeaconId = ""
-        Verification = None
-    }
-
-let private debugNote (conversationId: Guid) (body: string) : ConversationMessage = {
-    Id = Guid.NewGuid()
-    ConversationId = conversationId
-    Participant = AIAssistant
-    Content = $"[debug] {body}"
-    Timestamp = DateTime.UtcNow
-    ToolCalls = []
-    RetrievedSources = []
-    Parts = []
-    CreatedBy = ""
-    BeaconId = ""
-    Verification = None
+let private streamOf (model: Model) : ChatStream.ChatStreamState = {
+    Conversation = model.ActiveConversation
+    Streaming = model.StreamingContent
+    Parts = model.InFlightParts
+    Task = model.CurrentTask
+    RunningTool = model.RunningTool
+    Watchdog = model.WatchdogToken
+    Debug = model.DebugMode
 }
 
-let private truncateForDebug (limit: int) (s: string) =
-    if isNull s then ""
-    elif s.Length <= limit then s
-    else s.Substring(0, limit) + "… (truncated)"
+/// Write the reduced stream state back and apply its effects the full
+/// page's way (a fault in the error banner). An unchanged state with nothing
+/// to do leaves the model as it was, by reference.
+let private reduceStream
+    (step: ChatStream.ChatStreamState -> ChatStream.ChatStreamState * ChatStream.StreamEffect list)
+    (model: Model)
+    : Model * Cmd<Msg> =
+    let before = streamOf model
+    let after, effects = step before
 
-// ─── Stream-idle watchdog ────────────────────────────────────────
-// Mirrors the side-panel watchdog in AIClientConfig.fs: it measures
-// idleness from the last event of the live turn, not time since submit.
-// See that file's comment for the token-based-invalidation rationale.
-
-let private watchdogTimeoutMs = 60_000
-
-let private scheduleWatchdog (token: Guid) : Cmd<Msg> =
-    Cmd.OfAsync.perform
-        (fun () -> async {
-            do! Async.Sleep watchdogTimeoutMs
-            return token
-        })
-        ()
-        WatchdogFired
-
-/// A live turn's event restarts the idle clock: a fresh token replaces the
-/// live one and a firing is scheduled for it, so the firing the previous
-/// token had pending is ignored. With no live token there is nothing to
-/// restart.
-let private rearmWatchdog (model: Model) : Model * Cmd<Msg> =
-    match model.WatchdogToken with
-    | Some _ ->
-        let token = Guid.NewGuid()
-
-        {
+    if obj.ReferenceEquals(before, after) && List.isEmpty effects then
+        model, Cmd.none
+    else
+        let written = {
             model with
-                WatchdogToken = Some token
-        },
-        scheduleWatchdog token
-    | None -> model, Cmd.none
+                StreamingContent = after.Streaming
+                InFlightParts = after.Parts
+                CurrentTask = after.Task
+                RunningTool = after.RunningTool
+                WatchdogToken = after.Watchdog
+                DebugMode = after.Debug
+        }
 
-let private watchdogNote (conversationId: Guid) : ConversationMessage = {
-    Id = Guid.NewGuid()
-    ConversationId = conversationId
-    Participant = AIAssistant
-    Content =
-        $"[No response after {watchdogTimeoutMs / 1000} seconds] The connection to the AI service may have dropped. "
-        + "Try resending your message. If this keeps happening, check the server logs or restart the dev server."
-    Timestamp = DateTime.UtcNow
-    ToolCalls = []
-    RetrievedSources = []
-    Parts = []
-    CreatedBy = ""
-    BeaconId = ""
-    Verification = None
-}
+        effects
+        |> List.fold
+            (fun (m: Model, cmds) effect ->
+                match effect with
+                | ChatStream.Commit message
+                | ChatStream.Note message ->
+                    {
+                        m with
+                            Messages = m.Messages @ [ message ]
+                    },
+                    cmds
+                | ChatStream.Fault message -> { m with ErrorMessage = Some message }, cmds
+                | ChatStream.RefreshList -> m, cmds @ [ Cmd.ofMsg (LoadConversations(Start())) ]
+                | ChatStream.Arm token ->
+                    m, cmds @ [ Cmd.OfAsync.perform ChatStream.watchdogDelay token WatchdogFired ]
+                | ChatStream.Poll(token, taskId) ->
+                    m,
+                    cmds
+                    @ [
+                        Cmd.OfRemoting.call
+                            aiApi.GetTaskStatus
+                            taskId
+                            (fun status -> TaskStatusPolled(token, status))
+                            (fun _ -> TaskStatusPolled(token, None))
+                    ]
+                | ChatStream.Reload conversationId ->
+                    m,
+                    cmds
+                    @ [
+                        Cmd.OfRemoting.call aiApi.GetConversation conversationId (Finished >> LoadMessages) (fun ex ->
+                            ApiError ex.Message)
+                    ])
+            (written, [])
+        |> fun (m, cmds) -> m, Cmd.batch cmds
 
-/// The first-page query for `search` (Phase 516.C).
+/// The first-page query for `search`.
 let private firstPageFor (search: string) : ConversationListQuery = {
     ConversationListQuery.firstPage with
         Search =
@@ -255,6 +228,8 @@ let init () =
         ErrorMessage = None
         DebugMode = false
         WatchdogToken = None
+        RunningTool = None
+        InFlightParts = []
         ConversationSearch = ""
         ConversationsCursor = None
         ConversationTotal = 0
@@ -277,7 +252,7 @@ let update msg model =
     match msg with
     | LoadConversations action ->
         match action with
-        // Phase 516.C — a refresh reloads the first page of the current
+        // A refresh reloads the first page of the current
         // search rather than every conversation in the scope.
         | Start() -> model, loadPage (firstPageFor model.ConversationSearch)
         | Finished convos -> { model with Conversations = convos }, Cmd.none
@@ -377,45 +352,24 @@ let update msg model =
         let content = prepared.Content
         let conversationId = prepared.ConversationId
 
-        let userMsg: ConversationMessage = {
-            Id = prepared.MessageId
-            ConversationId = conversationId
-            Participant = User
-            Content = content
-            Timestamp = prepared.Timestamp
-            ToolCalls = []
-            RetrievedSources = []
-            Parts = []
-            CreatedBy = ""
-            BeaconId = ""
-            Verification = None
+        let userMsg = {
+            ConversationMessage.note User conversationId content with
+                Id = prepared.MessageId
+                Timestamp = prepared.Timestamp
         }
 
-        // Debug-mode toggles are intercepted client-side and never reach
-        // the provider. Surface an ack in the chat so the user can see
-        // the state change inline.
-        match tryDebugCommand content with
+        match ChatStream.debugCommand content with
         | Some enabled ->
-            let ack = debugAck conversationId enabled
-
             {
                 model with
                     ActiveConversation = Some conversationId
-                    Messages = model.Messages @ [ userMsg; ack ]
+                    Messages = model.Messages @ [ userMsg; ChatStream.debugAck conversationId enabled ]
                     DebugMode = enabled
             },
             Cmd.none
         | None ->
-            // Phase 6j.A: client-side fast-path resolver. Trivial UI
-            // instructions ("go to sales analysis") resolve here
-            // before the chat request leaves the page. Full-page
-            // assistant has ActiveModule = None, so only
-            // module-switch patterns can match — field patterns
-            // require an active analytical module (side-panel
-            // surface). A companion that ships a fast-path resolver
-            // registers it into FastPathBridge at module load; when
-            // no resolver is registered the bridge returns
-            // `NoResolution` and the existing path runs.
+            // The full page has no active analytical module, so a fast-path
+            // resolver can match only module-switch patterns here.
             let fastPathRequest: FastPathBridge.FastPathRequest = {
                 ConversationId = conversationId
                 Instruction = content
@@ -423,68 +377,61 @@ let update msg model =
                 ActivePage = None
             }
 
-            match FastPathBridge.tryResolve fastPathRequest with
-            | FastPathBridge.Resolved(synthAssist, dispatchAction, sendBeacon) ->
-                let dispatchCmd = Cmd.ofEffect (fun _ -> dispatchAction ())
-                let beaconCmd = Cmd.ofEffect (fun _ -> sendBeacon ())
+            // The per-conversation provider override is read from the local
+            // conversations list (kept in sync with the persisted metadata);
+            // the server re-reads it on submit, so a dropdown change racing
+            // the first message is harmless.
+            let storedOverride =
+                model.Conversations
+                |> List.tryFind (fun c -> c.Id = conversationId)
+                |> Option.bind _.OverrideProviderLabel
 
-                {
-                    model with
-                        ActiveConversation = Some conversationId
-                        Messages = model.Messages @ [ userMsg; synthAssist ]
-                        StreamingContent = ""
-                        WatchdogToken = None
-                },
-                Cmd.batch [ dispatchCmd; beaconCmd ]
-            | FastPathBridge.NoResolution ->
-                let watchdogId = prepared.WatchdogId
+            // Full-page assistant — Mode 1 + Mode 2, so client-resident
+            // `_platform.ui.*` tools are visible when a companion registers
+            // them. The built-in panel does not scope its own retrieval.
+            let request: AIMessageRequest = {
+                ConversationId = conversationId
+                Content = content
+                ActiveModule = None
+                ActivePage = None
+                ActivePageNarrative = None
+                OverrideProviderLabel = storedOverride
+                Surface = FullPage
+                RetrievalFilters = None
+            }
 
+            let sent, armCmd =
                 {
                     model with
                         ActiveConversation = Some conversationId
                         Messages = model.Messages @ [ userMsg ]
-                        StreamingContent = ""
-                        WatchdogToken = Some watchdogId
-                },
-                // ActiveModule = None: the user is currently viewing the AI
-                // assistant's own module page, not an analytical module. The
-                // shell's side panel handles the active-module case separately.
-                //
-                // Per-conversation provider override: pull the stored
-                // `OverrideProviderLabel` from the local conversations list
-                // (kept in sync with the persisted server-side metadata).
-                // Server defensively re-reads on submit, so no UI race
-                // around dropdown change → first message.
-                let storedOverride =
-                    model.Conversations
-                    |> List.tryFind (fun c -> c.Id = conversationId)
-                    |> Option.bind _.OverrideProviderLabel
-
-                let request: AIMessageRequest = {
-                    ConversationId = conversationId
-                    Content = content
-                    ActiveModule = None
-                    ActivePage = None
-                    ActivePageNarrative = None
-                    OverrideProviderLabel = storedOverride
-                    // Full-page AI assistant module — Mode 1 + Mode 2.
-                    // Client-resident `_platform.ui.*` tools are visible
-                    // here when a companion that registers them is wired in.
-                    Surface = FullPage
-                    // Phase 502.D — the built-in panel does not scope its own
-                    // retrieval; `None` keeps the request byte-identical to
-                    // its pre-502.D shape. A deployment wanting "answer from
-                    // this document only" sets it from its own submit path,
-                    // or sets a deployment-wide bound with
-                    // `RagOptions.withRetrievalFilters`.
-                    RetrievalFilters = None
                 }
+                |> reduceStream (ChatStream.start prepared.WatchdogId)
 
-                Cmd.batch [
-                    Cmd.OfRemoting.call aiApi.SubmitMessage request (Finished >> MessageSubmitted) (fun ex ->
-                        ApiError ex.Message)
-                    scheduleWatchdog watchdogId
-                ]
+            sent,
+            Cmd.batch [
+                armCmd
+                Cmd.OfAsync.perform FastPathBridge.resolve fastPathRequest (fun outcome ->
+                    FastPathAnswered(request, outcome))
+            ]
+
+    | FastPathAnswered(request, _) when model.ActiveConversation <> Some request.ConversationId -> model, Cmd.none
+
+    | FastPathAnswered(_, FastPathBridge.Resolved(synthAssist, dispatchAction, sendBeacon)) ->
+        let settled, _ = model |> reduceStream (fun s -> ChatStream.settle s, [])
+
+        {
+            settled with
+                Messages = settled.Messages @ [ synthAssist ]
+        },
+        Cmd.batch [
+            Cmd.ofEffect (fun _ -> dispatchAction ())
+            Cmd.ofEffect (fun _ -> sendBeacon ())
+        ]
+
+    | FastPathAnswered(request, FastPathBridge.NoResolution) ->
+        model,
+        Cmd.OfRemoting.call aiApi.SubmitMessage request (Finished >> MessageSubmitted) (fun ex -> ApiError ex.Message)
 
     | MessageSubmitted action ->
         match action with
@@ -551,214 +498,7 @@ let update msg model =
             // server view so the dropdown re-syncs.
             { model with ErrorMessage = Some err }, Cmd.ofMsg (LoadConversations(Start()))
 
-    | SSEEvent event ->
-        match event with
-        | MessageDelta(convId, content) ->
-            match model.ActiveConversation with
-            | Some activeId when activeId = convId ->
-                rearmWatchdog {
-                    model with
-                        StreamingContent = model.StreamingContent + content
-                }
-            | _ -> model, Cmd.none
-
-        | MessageComplete(convId, _msgId) ->
-            match model.ActiveConversation with
-            | Some activeId when activeId = convId ->
-                let assistantMsg: ConversationMessage = {
-                    Id = Guid.NewGuid()
-                    ConversationId = convId
-                    Participant = AIAssistant
-                    Content = model.StreamingContent
-                    Timestamp = DateTime.UtcNow
-                    ToolCalls = []
-                    RetrievedSources = []
-                    Parts = []
-                    CreatedBy = ""
-                    BeaconId = ""
-                    Verification = None
-                }
-
-                // Clear the watchdog — the response arrived within the
-                // timeout. A stale `WatchdogFired` scheduled earlier
-                // will see `WatchdogToken = None` and no-op.
-                {
-                    model with
-                        Messages = model.Messages @ [ assistantMsg ]
-                        StreamingContent = ""
-                        WatchdogToken = None
-                        // Terminal: clear the running task so the "Running…" badge
-                        // + Cancel button don't hang against a finished task when
-                        // the server emits no closing status event.
-                        CurrentTask = None
-                },
-                Cmd.none
-            | _ -> model, Cmd.none
-
-        | TaskStatusChanged(taskId, status) ->
-            let taskUpdate =
-                match model.CurrentTask with
-                | Some task ->
-                    Some {
-                        task with
-                            Status = status
-                            CompletedAt =
-                                match status with
-                                | AITaskCompleted
-                                | AITaskFailed _ -> Some DateTime.UtcNow
-                                | _ -> task.CompletedAt
-                    }
-                | None -> None
-
-            // In debug mode, surface task failures inline so the chat
-            // shows why an agent loop bailed (rate-limit, max turns
-            // exceeded, malformed provider response, etc.) without the
-            // operator having to consult the server log.
-            // Phase 516.A — a finished turn changes the list: a new
-            // conversation appears, and the active one moves to the top
-            // with a new count and timestamp.
-            let refresh =
-                match status with
-                | AITaskCompleted -> Cmd.ofMsg (LoadConversations(Start()))
-                | _ -> Cmd.none
-
-            match status, model.DebugMode, model.ActiveConversation with
-            | AITaskFailed reason, true, Some convId ->
-                let note = debugNote convId $"⚠️ Agent-loop failure: {reason}"
-
-                {
-                    model with
-                        CurrentTask = taskUpdate
-                        Messages = model.Messages @ [ note ]
-                        StreamingContent = ""
-                },
-                refresh
-            | Queued, _, _
-            | InProgress, _, _ when model.CurrentTask |> Option.forall (fun task -> task.TaskId = taskId) ->
-                // A non-terminal status of the live task is a sign of life.
-                rearmWatchdog { model with CurrentTask = taskUpdate }
-            | _ -> { model with CurrentTask = taskUpdate }, refresh
-
-        | ToolCallStarted(convId, toolName, toolCallId) ->
-            match model.ActiveConversation with
-            | Some activeId when activeId = convId ->
-                if model.DebugMode then
-                    let note = debugNote convId $"🔧 Calling tool `{toolName}` (id {toolCallId})"
-
-                    rearmWatchdog {
-                        model with
-                            Messages = model.Messages @ [ note ]
-                    }
-                else
-                    // Non-debug view — keep the inline ephemeral marker
-                    // in the streaming buffer so the user sees the tool
-                    // is running.
-                    rearmWatchdog {
-                        model with
-                            StreamingContent = model.StreamingContent + $"\n[Calling {toolName}...]"
-                    }
-            | _ -> model, Cmd.none
-
-        | ToolCallCompleted(convId, _toolCallId, content) ->
-            match model.ActiveConversation with
-            | Some activeId when activeId = convId ->
-                // The debug note is gated on `DebugMode`; the re-arm is not.
-                if model.DebugMode then
-                    let note = debugNote convId $"↳ Tool result: {truncateForDebug 500 content}"
-
-                    rearmWatchdog {
-                        model with
-                            Messages = model.Messages @ [ note ]
-                    }
-                else
-                    rearmWatchdog model
-            | _ -> model, Cmd.none
-
-        | StreamError errorMsg ->
-            let withNote =
-                match model.DebugMode, model.ActiveConversation with
-                | true, Some convId ->
-                    let note = debugNote convId $"⚠️ Stream error: {errorMsg}"
-
-                    {
-                        model with
-                            Messages = model.Messages @ [ note ]
-                    }
-                | _ -> model
-
-            {
-                withNote with
-                    ErrorMessage = Some errorMsg
-                    // Terminal: don't leave the task "Running…" after a stream error.
-                    CurrentTask = None
-            },
-            Cmd.none
-
-        // Phase 6g.A: ClientToolInvoke is intercepted by SSEClient and
-        // routed into ClientToolRuntime — never reaches the Elmish
-        // dispatch. Match arm exists only to satisfy exhaustiveness.
-        | ClientToolInvoke(_, _, _, _, _, _) -> model, Cmd.none
-
-        // Phase 36.D: likewise intercepted by SSEClient and routed into
-        // `ConsentDialog`'s per-tab bridge — a suspended read waiting on
-        // the user belongs to the tab, not to one surface's model. Match
-        // arm exists only to satisfy exhaustiveness.
-        | AIConsentRequired(_, _, _, _, _, _, _) -> model, Cmd.none
-
-        // Phase 503: likewise intercepted by SSEClient and routed into
-        // `ToolApprovalDialog`'s per-tab bridge — a held invocation
-        // waiting on the user belongs to the tab, not to one surface's
-        // model. Match arm exists only to satisfy exhaustiveness.
-        | ToolApprovalRequired(_, _, _, _, _, _, _, _) -> model, Cmd.none
-
-        // Phase 523 — numeric-fidelity verdict. The full-page module does
-        // not yet render verification badges; ignored for now (a later
-        // client phase surfaces it). The verdict is already persisted on the
-        // `ConversationMessage` and re-read on history load.
-        | AnswerVerified(convId, _) when model.ActiveConversation = Some convId -> rearmWatchdog model
-        | AnswerVerified(_, _) -> model, Cmd.none
-
-        // Phase 1131 — a part a server-resident tool attached. The reloaded
-        // conversation carries it on the final message; appending it to the
-        // in-flight message is the client reducer's (Phase 1080).
-        | BlockAttached(convId, _) when model.ActiveConversation = Some convId -> rearmWatchdog model
-        | BlockAttached(_, _) -> model, Cmd.none
-
-        // Phase 6h: user clicked Cancel and the server has confirmed
-        // the agent loop is bailing. Commit whatever was streaming
-        // (so the user keeps the partial response) and clear the
-        // watchdog so it doesn't fire stale.
-        | StreamCancelled convId ->
-            match model.ActiveConversation with
-            | Some activeId when activeId = convId ->
-                let committed =
-                    if model.StreamingContent <> "" then
-                        let assistantMsg: ConversationMessage = {
-                            Id = Guid.NewGuid()
-                            ConversationId = convId
-                            Participant = AIAssistant
-                            Content = model.StreamingContent + "\n\n*[Cancelled by user]*"
-                            Timestamp = DateTime.UtcNow
-                            ToolCalls = []
-                            RetrievedSources = []
-                            Parts = []
-                            CreatedBy = ""
-                            BeaconId = ""
-                            Verification = None
-                        }
-
-                        model.Messages @ [ assistantMsg ]
-                    else
-                        model.Messages
-
-                {
-                    model with
-                        Messages = committed
-                        StreamingContent = ""
-                        WatchdogToken = None
-                },
-                Cmd.none
-            | _ -> model, Cmd.none
+    | SSEEvent event -> model |> reduceStream (fun s -> ChatStream.reduce s event)
 
     | ApiError errorMsg ->
         // Clear the watchdog so a stale timer doesn't fire after the
@@ -773,97 +513,15 @@ let update msg model =
         Cmd.none
     | DismissError -> { model with ErrorMessage = None }, Cmd.none
 
-    | CancelTask taskId ->
-        // Fire-and-forget POST to /api/ai/cancel/{taskId}. The server
-        // confirms cancellation by emitting StreamCancelled on the
-        // SSE stream; the matching arm above commits the streaming
-        // buffer and clears state. Failures (404 task already done)
-        // are silent — the user's intent is already satisfied.
-        let postCancel =
-            Cmd.ofEffect (fun _ ->
-                let userId = UserSession.getUserId ()
+    | CancelTask taskId -> model, Cmd.ofEffect (fun _ -> ChatStream.AIStream.cancel taskId)
 
-                let opts =
-                    createObj [ "method" ==> "POST"; "headers" ==> createObj [ "X-User-Id" ==> userId ] ]
+    | WatchdogFired token -> model |> reduceStream (ChatStream.fire token)
 
-                Browser.Dom.window?fetch ($"/api/ai/cancel/{taskId}", opts) |> ignore)
-
-        model, postCancel
-
-    | WatchdogFired token ->
-        // Token-based invalidation: only fire when the live token still
-        // matches. `None` (response arrived) and mismatched Guid (newer
-        // stream has started) both collapse to "stale — ignore".
-        //
-        // Phase 516.D — before declaring the stream dead, ask the server
-        // where the task got to: a client that merely missed the terminal
-        // SSE event recovers the reply instead of showing the note.
-        match model.WatchdogToken, model.ActiveConversation, model.CurrentTask with
-        | Some liveToken, Some _, Some task when liveToken = token ->
-            model,
-            Cmd.OfRemoting.call
-                aiApi.GetTaskStatus
-                task.TaskId
-                (fun status -> TaskStatusPolled(token, status))
-                (fun _ -> TaskStatusPolled(token, None))
-        | Some liveToken, Some convId, None when liveToken = token ->
-            let note = watchdogNote convId
-
-            {
-                model with
-                    Messages = model.Messages @ [ note ]
-                    StreamingContent = ""
-                    WatchdogToken = None
-            },
-            Cmd.none
-        | _ -> model, Cmd.none
-
-    | TaskStatusPolled(token, polled) ->
-        match model.WatchdogToken, model.ActiveConversation with
-        | Some liveToken, Some convId when liveToken = token ->
-            match polled |> Option.map (fun t -> t, t.Status) with
-            | Some(_, AITaskCompleted) ->
-                // Finished while the stream was silent: the persisted
-                // conversation holds the reply.
-                {
-                    model with
-                        StreamingContent = ""
-                        WatchdogToken = None
-                        CurrentTask = None
-                },
-                Cmd.batch [
-                    Cmd.OfRemoting.call aiApi.GetConversation convId (Finished >> LoadMessages) (fun ex ->
-                        ApiError ex.Message)
-                    Cmd.ofMsg (LoadConversations(Start()))
-                ]
-            | Some(_, AITaskFailed reason) ->
-                {
-                    model with
-                        StreamingContent = ""
-                        WatchdogToken = None
-                        CurrentTask = None
-                        ErrorMessage = Some reason
-                },
-                Cmd.none
-            | Some(task, _) ->
-                // Still queued or running server-side: keep waiting, and
-                // ask again at the next watchdog interval.
-                { model with CurrentTask = Some task }, scheduleWatchdog token
-            | None ->
-                let note = watchdogNote convId
-
-                {
-                    model with
-                        Messages = model.Messages @ [ note ]
-                        StreamingContent = ""
-                        WatchdogToken = None
-                },
-                Cmd.none
-        | _ -> model, Cmd.none
+    | TaskStatusPolled(token, status) -> model |> reduceStream (ChatStream.polled token status)
 
 // ─── View ─────────────────────────────────────────────────────────
 
-/// Phase 516.C — the conversation search box. Local state holds the
+/// The conversation search box. Local state holds the
 /// draft; the search runs on Enter (or when the box is cleared), so a
 /// scan of the scope is not issued per keystroke.
 [<ReactComponent>]
@@ -1160,19 +818,16 @@ let private MessageInput (messages: ConversationMessage list) (onSubmit: string 
         ]
     ]
 
+/// The full page's subscription to the tab's AI stream.
+let internal streamSubscription (dispatch: Msg -> unit) : IDisposable =
+    ChatStream.AIStream.subscribe (SSEEvent >> dispatch)
+
 [<ReactComponent>]
 let private SseSubscription (dispatch: Msg -> unit) =
-    // The full-page AI module owns its own SSE stream lifecycle. A
-    // `useEffectOnce` subscribe/dispose pair closes the EventSource on
-    // unmount (navigation away / HMR), so the stream never orphans the
-    // way a boot-time `Cmd.ofEffect` would — that discarded the
-    // unsubscribe handle `SSEClient.subscribe` returns. Mirrors the
-    // shell side panel's lifetime-aware `EffectHandle` in
-    // `AIClientConfig.fs`, expressed module-side as a React hook.
+    // The subscription lives as long as the page is mounted: the
+    // `useEffectOnce` disposer ends it on unmount (navigation away / HMR).
     // Renders nothing — it exists purely for the lifecycle binding.
-    React.useEffectOnce (fun () ->
-        let unsubscribe = SSEClient.subscribe (SSEEvent >> dispatch)
-        FsReact.createDisposable (fun () -> unsubscribe ()))
+    React.useEffectOnce (fun () -> streamSubscription dispatch)
 
     Html.none
 
@@ -1230,7 +885,7 @@ let private view model dispatch =
             ]
         | _ -> Html.none
 
-    // Phase 6h: export the active conversation as Markdown / JSON.
+    // Export the active conversation as Markdown / JSON.
     // Always rendered when a conversation is active (button auto-
     // disables when there are no messages yet); positioned to the
     // right of the provider picker with `ml-auto`.
@@ -1276,6 +931,15 @@ let private view model dispatch =
                         for msg in model.Messages do
                             messageView msg
 
+                        match ChatStream.turnStatus (streamOf model) with
+                        | Some status ->
+                            Html.div [
+                                prop.role "status"
+                                prop.className "mr-auto text-sm text-gray-500 italic"
+                                prop.text status
+                            ]
+                        | None -> ()
+
                         // Streaming content
                         if model.StreamingContent <> "" then
                             Html.div [
@@ -1289,7 +953,7 @@ let private view model dispatch =
                 ]
             ]
 
-            // Task status + Phase 6h cancel button (only while running)
+            // Task status + cancel button (only while running)
             match model.CurrentTask with
             | Some task ->
                 Html.div [
@@ -1320,7 +984,7 @@ let private view model dispatch =
             // conversation (shell-history style).
             MessageInput model.Messages (fun content -> dispatch (SubmitMessage content))
 
-            // Phase 859.H — who can see what is typed above.
+            // Who can see what is typed above.
             ConversationPanel.ConversationVisibilityNotice()
 
             // Error display

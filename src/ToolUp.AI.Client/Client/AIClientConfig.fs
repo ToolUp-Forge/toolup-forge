@@ -42,40 +42,33 @@ open ToolUp.AI
 // ToolUp.AI stopped carrying compile-time `#if DEBUG` gates.
 open ToolUp.Elmish.HMR
 
-// ─── Side-panel MVU ───────────────────────────────────────────────
-// (Previously lived in Client.Model / Client.Msg in the shell.)
+/// ─── Side-panel MVU ───────────────────────────────────────────────
 
 type SidePanelModel = {
     Open: bool
     Messages: ConversationMessage list
     Streaming: string
     ConversationId: Guid
-    /// When true, tool invocations, tool results, and agent-loop task
-    /// failures are surfaced inline in the conversation as synthetic
-    /// assistant messages prefixed with `[debug]`. Toggled by the user
-    /// typing `Debug on` / `Debug off` in the chat (intercepted
-    /// client-side — these commands are never sent to the provider).
-    /// Always starts false; session-scoped (not persisted).
+    /// When true, tool invocations and results are surfaced inline in the
+    /// conversation as synthetic assistant messages prefixed with `[debug]`.
+    /// Toggled by the user typing `Debug on` / `Debug off` in the chat
+    /// (intercepted client-side — never sent to the provider). Always starts
+    /// false; session-scoped (not persisted).
     DebugMode: bool
-    /// Watchdog token — set to `Some guid` when a submission is in
-    /// flight, back to `None` when the final `MessageComplete` arrives.
-    /// A `WatchdogFired` message scheduled for the token carries it, and
-    /// every stream event of the live turn replaces the token with a
-    /// fresh one; if the token still matches when it fires, the stream
-    /// has been idle for the full timeout and the client surfaces a
-    /// "no response" error rather than leaving the user staring at a
-    /// perpetually-streaming spinner (network disconnect, SSE drop,
-    /// server crash mid-agent-loop all surface here).
+    /// The idle watchdog's live token — `Some` while a turn is in flight.
+    /// Every stream event of the live turn replaces it, and a firing whose
+    /// token no longer matches is ignored, so the watchdog measures idleness
+    /// (`ChatStream.fire`).
     WatchdogToken: Guid option
-    /// In-flight task Id captured from the `Submitted`
-    /// event. `Some` while the agent loop is running; `None` after
-    /// `MessageComplete` / `StreamCancelled` / `TaskStatusChanged
-    /// AITaskFailed`. Drives the Cancel button (which shows only
-    /// when this is `Some`) and seeds the `CancelTask` POST.
-    CurrentTaskId: Guid option
+    /// The in-flight task, from `Submitted` until the turn ends. Drives the
+    /// Cancel button and the watchdog's status poll.
+    CurrentTask: AITask option
     /// The tool the live turn is running, from `ToolCallStarted`
     /// until its `ToolCallCompleted`. Names what the wait line says.
     RunningTool: string option
+    /// Parts a tool attached to the reply streaming in; they ride it into
+    /// the committed message.
+    InFlightParts: ToolUp.Platform.AI.AIContentPart list
 }
 
 type SidePanelMsg =
@@ -86,9 +79,18 @@ type SidePanelMsg =
         activePage: string option *
         activeNarrative: ToolUp.Platform.Narrative.NarrativeDocument option *
         content: string
+    /// The fast-path resolver's answer for a sent message: either the turn is
+    /// answered on the client, or `request` goes to the server.
+    | FastPathAnswered of request: AIMessageRequest * outcome: FastPathBridge.ResolveOutcome
     | Submitted of AITask
     | ApiError of exn
     | WatchdogFired of token: Guid
+    /// The answer to a `GetTaskStatus` poll made when the stream went quiet.
+    /// `None` when the server no longer knows the task or the poll failed.
+    | TaskStatusPolled of token: Guid * status: AITask option
+    /// The conversation re-read after its task finished while the stream was
+    /// silent.
+    | ConversationReloaded of ConversationMessage list
     /// Emitted by the KB inventory badge in the side-panel header.
     /// `outerUpdate` translates it to `Client.ModuleSelected
     /// "KnowledgeBase"` so the user lands on the KB module's default
@@ -101,10 +103,9 @@ type SidePanelMsg =
     /// `Send` opens a new server-side conversation. Use to purge
     /// in-conversation references to deleted KB files or to start over.
     | ClearSession
-    /// User clicked Cancel on the in-flight task. Fires
-    /// a fetch POST to /api/ai/cancel/{taskId}; the server flips
-    /// the matching CancellationToken; the agent loop bails at the
-    /// next turn boundary with a StreamCancelled SSE event.
+    /// User clicked Cancel on the in-flight task (`AIStream.cancel`); the
+    /// agent loop bails at the next turn boundary with a StreamCancelled
+    /// event.
     | CancelTask of taskId: Guid
 
 // ─── Outer Program model/msg ─────────────────────────────────────
@@ -133,354 +134,119 @@ let private sidePanelInit () : SidePanelModel = {
     ConversationId = Guid.NewGuid()
     DebugMode = false
     WatchdogToken = None
-    CurrentTaskId = None
+    CurrentTask = None
     RunningTool = None
+    InFlightParts = []
 }
 
-/// What the panel says while a turn runs with no text to show. The
-/// watchdog token is the in-flight flag (set at `Send`, kept by every event of
-/// the live turn, cleared by every way a turn ends), so the line is up from the
-/// moment of sending until the first text arrives or the turn ends.
-let internal turnStatus (model: SidePanelModel) : string option =
-    match model.WatchdogToken, model.Streaming, model.RunningTool with
-    | Some _, "", Some tool -> Some $"Calling {tool}…"
-    | Some _, "", None -> Some "Working…"
-    | _ -> None
+let private streamOf (model: SidePanelModel) : ChatStream.ChatStreamState = {
+    Conversation = Some model.ConversationId
+    Streaming = model.Streaming
+    Parts = model.InFlightParts
+    Task = model.CurrentTask
+    RunningTool = model.RunningTool
+    Watchdog = model.WatchdogToken
+    Debug = model.DebugMode
+}
 
-// ─── Stream-idle watchdog ────────────────────────────────────────
-//
-// Server-side hardening (max-turns bound, 429 backoff, confusion and
-// consecutive-error early stops, empty-response placeholder) covers the
-// common "loop went sideways" cases. The client watchdog is the last
-// line of defence: it catches the situations where the server fails
-// silently from the client's point of view — SSE connection dropped,
-// server process crashed mid-agent-loop, network hung between chunks
-// — and surfaces a clear timeout message instead of leaving the user
-// watching a permanent "working" spinner.
-//
-// It measures IDLENESS, not elapsed time: the timeout runs from the last
-// event of the live turn, so an answer that streams (or works through
-// tool calls) for longer than the timeout is never reported as dropped,
-// and a stream that goes silent for the timeout still is.
-//
-// Token-based invalidation: each `Send` stamps a fresh Guid on the
-// model and schedules a `WatchdogFired` with the same Guid after the
-// timeout. Every stream event of the live turn (`rearmWatchdog`)
-// replaces that token with a fresh one and schedules a new firing for
-// it, which discards the firing the previous token had pending. When
-// `MessageComplete` arrives, the token is cleared to `None`. If the
-// watchdog fires but the token has since changed (a later event, or a
-// new stream) or been cleared (response already committed), it's
-// ignored. This avoids the "false timeout after a legitimately slow
-// response" failure mode a bare sleep-then-check would have.
+/// What the panel says while a turn runs with no text to show.
+let internal turnStatus (model: SidePanelModel) : string option = ChatStream.turnStatus (streamOf model)
 
-let private watchdogTimeoutMs = 60_000
+// Inline error renderer for the side panel. The full-page module renders
+// errors in a dedicated `ErrorMessage` banner; the side panel has no such
+// surface, so a failure appears inline as an assistant-styled note with a
+// ⚠️ prefix, whatever the debug display.
+let private errorNote (conversationId: Guid) (body: string) : ConversationMessage =
+    ConversationMessage.note AIAssistant conversationId $"⚠️ {body}"
 
-let private scheduleWatchdog (token: Guid) : Cmd<SidePanelMsg> =
-    Cmd.OfAsync.perform
-        (fun () -> async {
-            do! Async.Sleep watchdogTimeoutMs
-            return token
-        })
-        ()
-        WatchdogFired
-
-/// A live turn's event restarts the idle clock. With no live token (the
-/// turn already ended, or none is in flight) there is nothing to restart.
-let private rearmWatchdog (model: SidePanelModel) : SidePanelModel * Cmd<SidePanelMsg> =
-    match model.WatchdogToken with
-    | Some _ ->
-        let token = Guid.NewGuid()
-
-        {
+/// Write the reduced stream state back and apply its effects the side
+/// panel's way. An unchanged state with nothing to do leaves the model as it
+/// was, by reference.
+let private applyStream
+    (model: SidePanelModel)
+    (before: ChatStream.ChatStreamState)
+    (after: ChatStream.ChatStreamState, effects: ChatStream.StreamEffect list)
+    : SidePanelModel * Cmd<SidePanelMsg> =
+    if obj.ReferenceEquals(before, after) && List.isEmpty effects then
+        model, Cmd.none
+    else
+        let written = {
             model with
-                WatchdogToken = Some token
-        },
-        scheduleWatchdog token
-    | None -> model, Cmd.none
+                Streaming = after.Streaming
+                InFlightParts = after.Parts
+                CurrentTask = after.Task
+                RunningTool = after.RunningTool
+                WatchdogToken = after.Watchdog
+                DebugMode = after.Debug
+        }
 
-let private watchdogNote (conversationId: Guid) : ConversationMessage = {
-    Id = Guid.NewGuid()
-    ConversationId = conversationId
-    Participant = AIAssistant
-    Content =
-        $"⚠️ No response after {watchdogTimeoutMs / 1000} seconds — the connection may have dropped. "
-        + "Try again, or check the server logs. (If a more specific error appeared above, that's the real cause.)"
-    Timestamp = DateTime.UtcNow
-    ToolCalls = []
-    RetrievedSources = []
-    Parts = []
-    CreatedBy = ""
-    BeaconId = ""
-    Verification = None
-}
+        effects
+        |> List.fold
+            (fun (m: SidePanelModel, cmds) effect ->
+                match effect with
+                | ChatStream.Commit message
+                | ChatStream.Note message ->
+                    {
+                        m with
+                            Messages = m.Messages @ [ message ]
+                    },
+                    cmds
+                | ChatStream.Fault message ->
+                    {
+                        m with
+                            Messages = m.Messages @ [ errorNote m.ConversationId message ]
+                    },
+                    cmds
+                | ChatStream.RefreshList -> m, cmds
+                | ChatStream.Arm token ->
+                    m, cmds @ [ Cmd.OfAsync.perform ChatStream.watchdogDelay token WatchdogFired ]
+                | ChatStream.Poll(token, taskId) ->
+                    m,
+                    cmds
+                    @ [
+                        Cmd.OfRemoting.call
+                            aiApi.GetTaskStatus
+                            taskId
+                            (fun status -> TaskStatusPolled(token, status))
+                            (fun _ -> TaskStatusPolled(token, None))
+                    ]
+                | ChatStream.Reload conversationId ->
+                    m,
+                    cmds
+                    @ [
+                        Cmd.OfRemoting.call aiApi.GetConversation conversationId ConversationReloaded ApiError
+                    ])
+            (written, [])
+        |> fun (m, cmds) -> m, Cmd.batch cmds
 
-// ─── Debug-mode helpers ──────────────────────────────────────────
-//
-// `Debug on` / `Debug off` are intercepted client-side and never sent to
-// the provider. When debug mode is on, SSE events for tool calls,
-// tool results, and task failures surface inline as synthetic assistant
-// messages with a `[debug]` prefix — so an operator can see in the chat
-// itself why a tool is failing, looping, or returning unexpected output,
-// without tailing the server console. The helpers below recognise the
-// commands case-insensitively and trim surrounding whitespace so
-// "Debug on", "debug on", "  DEBUG ON  " all work.
-
-let private tryDebugCommand (content: string) =
-    match content.Trim().ToLowerInvariant() with
-    | "debug on" -> Some true
-    | "debug off" -> Some false
-    | _ -> None
-
-let private debugAck (conversationId: Guid) (enabled: bool) : ConversationMessage =
-    let body =
-        if enabled then
-            "[debug] Debug mode enabled. Tool invocations, results, and agent-loop failures will appear inline in this chat. Type `Debug off` to disable."
-        else
-            "[debug] Debug mode disabled."
-
-    {
-        Id = Guid.NewGuid()
-        ConversationId = conversationId
-        Participant = AIAssistant
-        Content = body
-        Timestamp = DateTime.UtcNow
-        ToolCalls = []
-        RetrievedSources = []
-        Parts = []
-        CreatedBy = ""
-        BeaconId = ""
-        Verification = None
-    }
-
-let private debugNote (conversationId: Guid) (body: string) : ConversationMessage = {
-    Id = Guid.NewGuid()
-    ConversationId = conversationId
-    Participant = AIAssistant
-    Content = $"[debug] {body}"
-    Timestamp = DateTime.UtcNow
-    ToolCalls = []
-    RetrievedSources = []
-    Parts = []
-    CreatedBy = ""
-    BeaconId = ""
-    Verification = None
-}
-
-// Inline error renderer for the side panel. The full-page module
-// renders errors in a dedicated `ErrorMessage` banner; the side panel
-// has no such surface, so failures appear inline as an assistant-styled
-// note with a ⚠️ prefix. Ungated by `DebugMode` — without this, any
-// environmental failure (provider down, agent-loop exception, SSE
-// stream error) is silently swallowed and presents as a 60-second
-// watchdog timeout with no diagnostic detail.
-let private errorNote (conversationId: Guid) (body: string) : ConversationMessage = {
-    Id = Guid.NewGuid()
-    ConversationId = conversationId
-    Participant = AIAssistant
-    Content = $"⚠️ {body}"
-    Timestamp = DateTime.UtcNow
-    ToolCalls = []
-    RetrievedSources = []
-    Parts = []
-    CreatedBy = ""
-    BeaconId = ""
-    Verification = None
-}
-
-let private truncateForDebug (limit: int) (s: string) =
-    if isNull s then ""
-    elif s.Length <= limit then s
-    else s.Substring(0, limit) + "… (truncated)"
+let private reduceStream
+    (step: ChatStream.ChatStreamState -> ChatStream.ChatStreamState * ChatStream.StreamEffect list)
+    (model: SidePanelModel)
+    =
+    let before = streamOf model
+    applyStream model before (step before)
 
 let private sidePanelUpdate (msg: SidePanelMsg) (model: SidePanelModel) : SidePanelModel * Cmd<SidePanelMsg> =
     match msg with
     | Toggle -> { model with Open = not model.Open }, Cmd.none
 
-    | SSEEvent event ->
-        match event with
-        | MessageDelta(convId, content) when convId = model.ConversationId ->
-            rearmWatchdog {
-                model with
-                    Streaming = model.Streaming + content
-            }
-
-        | MessageComplete(convId, _) when convId = model.ConversationId ->
-            let assistantMsg: ConversationMessage = {
-                Id = Guid.NewGuid()
-                ConversationId = convId
-                Participant = AIAssistant
-                Content = model.Streaming
-                Timestamp = DateTime.UtcNow
-                ToolCalls = []
-                RetrievedSources = []
-                Parts = []
-                CreatedBy = ""
-                BeaconId = ""
-                Verification = None
-            }
-
-            // Clear the watchdog token — response arrived before the
-            // timeout. The scheduled `WatchdogFired` may still fire
-            // later; it'll see `WatchdogToken = None` (or a newer
-            // token, if a subsequent Send happened) and be ignored.
-            // Also clear `CurrentTaskId` — task is done,
-            // cancel button hides.
-            {
-                model with
-                    Messages = model.Messages @ [ assistantMsg ]
-                    Streaming = ""
-                    WatchdogToken = None
-                    CurrentTaskId = None
-            },
-            Cmd.none
-
-        // User clicked Cancel and the server confirmed the
-        // agent loop is bailing. Commit whatever was streaming with a
-        // cancelled footer so the user keeps the partial response;
-        // clear watchdog + task id.
-        | StreamCancelled convId when convId = model.ConversationId ->
-            let committed =
-                if model.Streaming <> "" then
-                    let msg: ConversationMessage = {
-                        Id = Guid.NewGuid()
-                        ConversationId = convId
-                        Participant = AIAssistant
-                        Content = model.Streaming + "\n\n*[Cancelled by user]*"
-                        Timestamp = DateTime.UtcNow
-                        ToolCalls = []
-                        RetrievedSources = []
-                        Parts = []
-                        CreatedBy = ""
-                        BeaconId = ""
-                        Verification = None
-                    }
-
-                    model.Messages @ [ msg ]
-                else
-                    model.Messages
-
-            {
-                model with
-                    Messages = committed
-                    Streaming = ""
-                    WatchdogToken = None
-                    CurrentTaskId = None
-            },
-            Cmd.none
-
-        // A tool call is part of the live turn whether or not it is
-        // displayed: the debug note is gated on `DebugMode`, the watchdog
-        // re-arm is not.
-        | ToolCallStarted(convId, toolName, toolCallId) when convId = model.ConversationId ->
-            let model = {
-                model with
-                    RunningTool = Some toolName
-            }
-
-            if model.DebugMode then
-                let note = debugNote convId $"🔧 Calling tool `{toolName}` (id {toolCallId})"
-
-                rearmWatchdog {
-                    model with
-                        Messages = model.Messages @ [ note ]
-                }
-            else
-                rearmWatchdog model
-
-        | ToolCallCompleted(convId, _toolCallId, content) when convId = model.ConversationId ->
-            let model = { model with RunningTool = None }
-
-            if model.DebugMode then
-                let note = debugNote convId $"↳ Tool result: {truncateForDebug 500 content}"
-
-                rearmWatchdog {
-                    model with
-                        Messages = model.Messages @ [ note ]
-                }
-            else
-                rearmWatchdog model
-
-        | TaskStatusChanged(_taskId, AITaskFailed reason) ->
-            // Ungated: server-emitted agent-loop failures must surface
-            // to the user. Clearing watchdog + task id stops the 60-second
-            // safety-net note from also firing on top of the real error.
-            let note = errorNote model.ConversationId $"The agent failed: {reason}"
-
-            {
-                model with
-                    Messages = model.Messages @ [ note ]
-                    Streaming = ""
-                    WatchdogToken = None
-                    CurrentTaskId = None
-            },
-            Cmd.none
-
-        | StreamError reason ->
-            // Ungated: SSE stream errors must surface inline. The watchdog
-            // is left running — a stream error often precedes a fatal
-            // timeout, and the watchdog's note is harmless if the request
-            // does eventually complete.
-            let note = errorNote model.ConversationId $"Stream error: {reason}"
-
-            {
-                model with
-                    Messages = model.Messages @ [ note ]
-            },
-            Cmd.none
-
-        | _ -> model, Cmd.none
+    | SSEEvent event -> model |> reduceStream (fun s -> ChatStream.reduce s event)
 
     | Send(activeModule, activePage, activeNarrative, content) ->
-        // Debug-mode toggles are intercepted client-side and never reach
-        // the provider. Surface an ack in the chat so the user can see
-        // the state change inline.
-        match tryDebugCommand content with
+        let userMsg = ConversationMessage.note User model.ConversationId content
+
+        match ChatStream.debugCommand content with
         | Some enabled ->
-            let userMsg: ConversationMessage = {
-                Id = Guid.NewGuid()
-                ConversationId = model.ConversationId
-                Participant = User
-                Content = content
-                Timestamp = DateTime.UtcNow
-                ToolCalls = []
-                RetrievedSources = []
-                Parts = []
-                CreatedBy = ""
-                BeaconId = ""
-                Verification = None
-            }
-
-            let ack = debugAck model.ConversationId enabled
-
             {
                 model with
-                    Messages = model.Messages @ [ userMsg; ack ]
+                    Messages = model.Messages @ [ userMsg; ChatStream.debugAck model.ConversationId enabled ]
                     DebugMode = enabled
             },
             Cmd.none
         | None ->
-            let userMsg: ConversationMessage = {
-                Id = Guid.NewGuid()
-                ConversationId = model.ConversationId
-                Participant = User
-                Content = content
-                Timestamp = DateTime.UtcNow
-                ToolCalls = []
-                RetrievedSources = []
-                Parts = []
-                CreatedBy = ""
-                BeaconId = ""
-                Verification = None
-            }
-
-            // Client-side fast-path resolver. Trivial UI
-            // instructions ("set country to UK") resolve here before
-            // the chat request leaves the page. Side-panel surface
-            // carries the active analytical module so field patterns
-            // can match in addition to navigation patterns.
-            // A companion that ships a fast-path resolver registers
-            // it into FastPathBridge at module load.
+            // The side panel carries the active analytical module, so a
+            // fast-path resolver can match field patterns as well as
+            // navigation patterns.
             let fastPathRequest: FastPathBridge.FastPathRequest = {
                 ConversationId = model.ConversationId
                 Instruction = content
@@ -488,123 +254,81 @@ let private sidePanelUpdate (msg: SidePanelMsg) (model: SidePanelModel) : SidePa
                 ActivePage = activePage
             }
 
-            match FastPathBridge.tryResolve fastPathRequest with
-            | FastPathBridge.Resolved(synthAssist, dispatchAction, sendBeacon) ->
-                let dispatchCmd = Cmd.ofEffect (fun _ -> dispatchAction ())
-                let beaconCmd = Cmd.ofEffect (fun _ -> sendBeacon ())
+            // The user's active module rides the request so the agent can
+            // pull in that module's domain context. Side-panel chat is Mode 1
+            // only: tools declared FullPageOnly are filtered out for it.
+            let request: AIMessageRequest = {
+                ConversationId = model.ConversationId
+                Content = content
+                ActiveModule = Some activeModule
+                ActivePage = activePage
+                ActivePageNarrative = activeNarrative
+                OverrideProviderLabel = None
+                Surface = SidePanel
+                RetrievalFilters = None
+            }
 
-                {
-                    model with
-                        Messages = model.Messages @ [ userMsg; synthAssist ]
-                        Streaming = ""
-                        WatchdogToken = None
-                },
-                Cmd.batch [ dispatchCmd; beaconCmd ]
-            | FastPathBridge.NoResolution ->
-                // Attach the user's currently active module so the agent can
-                // pull in that module's domain context and tailor its response.
-                // Module contexts are registered at compose time on the server;
-                // the client only reports the name.
-                let request: AIMessageRequest = {
-                    ConversationId = model.ConversationId
-                    Content = content
-                    ActiveModule = Some activeModule
-                    ActivePage = activePage
-                    ActivePageNarrative = activeNarrative
-                    // Per-conversation provider override — wired in a
-                    // follow-up commit; for now always None so the factory
-                    // resolves via the user's active label.
-                    OverrideProviderLabel = None
-                    // Side-panel chat — Mode 1 only. Tools declared as
-                    // FullPageOnly are filtered out for this request.
-                    Surface = SidePanel
-                    // See the full-page site in AIAssistantUI:
-                    // the built-in side panel does not scope its own
-                    // retrieval, so `None` leaves the request unchanged.
-                    RetrievalFilters = None
-                }
-
-                let watchdogId = Guid.NewGuid()
-
+            let sent, armCmd =
                 {
                     model with
                         Messages = model.Messages @ [ userMsg ]
-                        Streaming = ""
-                        WatchdogToken = Some watchdogId
-                        RunningTool = None
-                },
-                Cmd.batch [
-                    Cmd.OfRemoting.call aiApi.SubmitMessage request Submitted ApiError
-                    scheduleWatchdog watchdogId
-                ]
+                }
+                |> reduceStream (ChatStream.start (Guid.NewGuid()))
 
-    | Submitted task ->
-        // Capture the in-flight taskId so the Cancel
-        // button can target /api/ai/cancel/{taskId}. Cleared on
-        // MessageComplete / StreamCancelled / TaskStatusChanged
-        // failure.
+            sent,
+            Cmd.batch [
+                armCmd
+                Cmd.OfAsync.perform FastPathBridge.resolve fastPathRequest (fun outcome ->
+                    FastPathAnswered(request, outcome))
+            ]
+
+    | FastPathAnswered(request, _) when request.ConversationId <> model.ConversationId -> model, Cmd.none
+
+    | FastPathAnswered(_, FastPathBridge.Resolved(synthAssist, dispatchAction, sendBeacon)) ->
+        let settled, _ = model |> reduceStream (fun s -> ChatStream.settle s, [])
+
         {
-            model with
-                CurrentTaskId = Some task.TaskId
+            settled with
+                Messages = settled.Messages @ [ synthAssist ]
         },
-        Cmd.none
+        Cmd.batch [
+            Cmd.ofEffect (fun _ -> dispatchAction ())
+            Cmd.ofEffect (fun _ -> sendBeacon ())
+        ]
 
-    | CancelTask taskId ->
-        // Fire-and-forget POST. The server confirms via the
-        // StreamCancelled SSE event handled above; failures (404 task
-        // already done) are silent — the user's intent is already
-        // satisfied.
-        let postCancel =
-            Cmd.ofEffect (fun _ ->
-                let userId = UserSession.getUserId ()
+    | FastPathAnswered(request, FastPathBridge.NoResolution) ->
+        model, Cmd.OfRemoting.call aiApi.SubmitMessage request Submitted ApiError
 
-                let opts =
-                    createObj [ "method" ==> "POST"; "headers" ==> createObj [ "X-User-Id" ==> userId ] ]
+    | Submitted task -> { model with CurrentTask = Some task }, Cmd.none
 
-                Browser.Dom.window?fetch ($"/api/ai/cancel/{taskId}", opts) |> ignore)
-
-        model, postCancel
+    | CancelTask taskId -> model, Cmd.ofEffect (fun _ -> ChatStream.AIStream.cancel taskId)
 
     | ApiError ex ->
-        // Submit itself failed (e.g. network error before the server ever
-        // saw the request, or a 500 from the Remoting handler). Surface
-        // inline so the user sees what went wrong instead of waiting for
-        // the 60-second watchdog. Mirrors the full-page module's
-        // ErrorMessage banner — the side panel has no banner surface so
-        // the error renders as an assistant note.
+        // Submit itself failed (a network error before the server saw the
+        // request, or a 500 from the Remoting handler): surface it inline
+        // rather than waiting for the watchdog.
         let reason =
             if isNull ex || isNull ex.Message then
                 "unknown error"
             else
                 ex.Message
 
-        let note = errorNote model.ConversationId $"Couldn't reach the AI service: {reason}"
+        let ended, _ =
+            model |> reduceStream (fun s -> { ChatStream.settle s with Task = None }, [])
 
         {
-            model with
-                Messages = model.Messages @ [ note ]
-                Streaming = ""
-                WatchdogToken = None
-                CurrentTaskId = None
+            ended with
+                Messages =
+                    ended.Messages
+                    @ [ errorNote model.ConversationId $"Couldn't reach the AI service: {reason}" ]
         },
         Cmd.none
 
-    | WatchdogFired token ->
-        // Token-based invalidation: only fire when the live token still
-        // matches. `None` (response arrived) and mismatched Guid (newer
-        // stream has started) both collapse to "stale — ignore".
-        match model.WatchdogToken with
-        | Some liveToken when liveToken = token ->
-            let note = watchdogNote model.ConversationId
+    | WatchdogFired token -> model |> reduceStream (ChatStream.fire token)
 
-            {
-                model with
-                    Messages = model.Messages @ [ note ]
-                    Streaming = ""
-                    WatchdogToken = None
-            },
-            Cmd.none
-        | _ -> model, Cmd.none
+    | TaskStatusPolled(token, status) -> model |> reduceStream (ChatStream.polled token status)
+
+    | ConversationReloaded messages -> { model with Messages = messages }, Cmd.none
 
     // Intercepted by `outerUpdate` and translated to a shell Msg before
     // it reaches here; this branch is only present to keep the match
@@ -612,18 +336,18 @@ let private sidePanelUpdate (msg: SidePanelMsg) (model: SidePanelModel) : SidePa
     | NavigateToKnowledgeBase -> model, Cmd.none
 
     | ClearSession ->
-        // Reset to a fresh conversation. The server-side conversation
-        // history isn't actively deleted — the user simply starts a new
-        // one — but from the user's perspective the chat is wiped and
-        // any in-conversation references to deleted KB files are gone.
-        // Watchdog token is cleared so a stale timer from the previous
-        // conversation can't surface a misleading "no response" note.
+        // A fresh conversation. The server-side history is not deleted — the
+        // user simply starts a new one. Clearing the watchdog token stops a
+        // stale timer from the previous conversation surfacing a note.
         {
             model with
                 Messages = []
                 Streaming = ""
+                InFlightParts = []
                 ConversationId = Guid.NewGuid()
                 WatchdogToken = None
+                CurrentTask = None
+                RunningTool = None
         },
         Cmd.none
 
@@ -644,12 +368,11 @@ let private sidePanelView
     (dispatch: SidePanelMsg -> unit)
     : ReactElement option =
     if isAiEnabled mode && model.Open then
-        // Capture the in-flight taskId in the cancel
-        // closure so the component can fire the cancel without
-        // knowing about Guid types.
+        // Capture the in-flight task in the cancel closure so the component
+        // can fire the cancel without knowing about Guid types.
         let onCancel =
-            model.CurrentTaskId
-            |> Option.map (fun tid -> fun () -> dispatch (CancelTask tid))
+            model.CurrentTask
+            |> Option.map (fun task -> fun () -> dispatch (CancelTask task.TaskId))
 
         Some(
             ConversationPanel.ViewWithStatus
@@ -860,6 +583,10 @@ let internal composerSidePanelInit () : SidePanelModel = sidePanelInit ()
 
 // ─── Outer Program construction ──────────────────────────────────
 
+/// The side panel's subscription to the tab's AI stream.
+let internal streamSubscription (dispatch: OuterMsg -> unit) : IDisposable =
+    ChatStream.AIStream.subscribe (SSEEvent >> SidePanelMsg >> dispatch)
+
 // The composer's Program over a shell view (whole-tree or store-bound).
 // It builds an outer Program from the shell's init/update/view directly
 // rather than composing over an already-built Program: Elmish does not
@@ -884,25 +611,14 @@ let private composerProgram
     let allModules = Client.prepareModules config modules
     let queryBus = Client.buildQueryBus allModules
 
-    // 0.4.1 — the SSE subscription registers as a lifetime-aware
-    // `EffectHandle` instead of a boot-time `Cmd.ofEffect`. The runtime
-    // disposes it on `IDispatcher.Terminate()` (React's `beforeunload`
-    // hook + HMR's hot-reload terminator), so the EventSource is
-    // explicitly closed across page-navigation and hot-reload rather
-    // than leaking into the next page / next build. The previous
-    // pattern (`Cmd.ofEffect (fun dispatch -> SSEClient.subscribe ... |> ignore)`)
-    // discarded the unsubscribe handle, which is exactly the leak
-    // 0.4.0's README says the fork addresses.
+    // The stream subscription is a lifetime-aware `EffectHandle`: the
+    // runtime disposes it on `IDispatcher.Terminate()` (React's
+    // `beforeunload` hook + HMR's hot-reload terminator), so the panel's
+    // subscription ends across page-navigation and hot-reload rather than
+    // leaking into the next page / next build.
     let sseEffect: EffectHandle<OuterMsg> option =
         if isAiEnabled mode then
-            Some(
-                EffectHandle.programLifetime "ai-sse-events" (fun dispatch ->
-                    let unsubscribe = SSEClient.subscribe (SSEEvent >> SidePanelMsg >> dispatch)
-
-                    { new System.IDisposable with
-                        member _.Dispose() = unsubscribe ()
-                    })
-            )
+            Some(EffectHandle.programLifetime "ai-sse-events" streamSubscription)
         else
             None
 

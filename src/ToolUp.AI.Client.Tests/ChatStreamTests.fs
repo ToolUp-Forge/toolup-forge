@@ -79,8 +79,8 @@ let private oneStreamTests =
 
             // The two subscriptions the two surfaces open: the side panel's
             // program-lifetime effect and the full page's mounted component.
-            let sidePanel = SSEClient.subscribe ignore
-            let fullPage = SSEClient.subscribe ignore
+            let sidePanel = AIClientConfig.streamSubscription ignore
+            let fullPage = AIAssistantUI.streamSubscription ignore
 
             let invoke =
                 ClientToolInvoke(Guid.NewGuid(), Guid.NewGuid(), probeTool, "{}", None, None)
@@ -90,9 +90,13 @@ let private oneStreamTests =
             fun () ->
                 let streams = openStreams ()
                 let posts = postsTo "/api/ai/tool-result"
-                sidePanel ()
-                fullPage ()
+                sidePanel.Dispose()
+                let openWithOneSurface = openStreams ()
+                fullPage.Dispose()
+                let openWithNone = openStreams ()
                 restoreSubstrate ()
+                Expect.equal openWithOneSurface 1 "the stream outlives one surface unmounting"
+                Expect.equal openWithNone 0 "and closes when the last one goes"
                 Expect.equal runs 1 "the tool ran once"
                 Expect.equal streams 1 "one EventSource is open for the tab"
                 Expect.equal posts 1 "and its result was posted once")
@@ -157,7 +161,8 @@ let private pageSent () =
 let private panelEvent e = panel (AIClientConfig.SSEEvent e)
 let private pageEvent e = page (AIAssistantUI.SSEEvent e)
 
-let private panelTask (m: AIClientConfig.OuterModel) = m.SidePanel.CurrentTaskId
+let private panelTask (m: AIClientConfig.OuterModel) =
+    m.SidePanel.CurrentTask |> Option.map _.TaskId
 
 let private pageTask (m: AIAssistantUI.Model) = m.CurrentTask |> Option.map _.TaskId
 
@@ -319,5 +324,83 @@ let private divergenceTests =
             Expect.equal (f1.Messages |> List.last |> _.Parts) [ part ] "full page")
     ]
 
+// ─── An async fast-path resolver (the seam 1003 asked for) ───────────
+
+let private request: FastPathBridge.FastPathRequest = {
+    ConversationId = Guid.NewGuid()
+    Instruction = "go to sales"
+    ActiveModule = None
+    ActivePage = None
+}
+
+let private answered =
+    FastPathBridge.Resolved(ConversationMessage.note AIAssistant request.ConversationId "Done.", ignore, ignore)
+
+let private isResolved =
+    function
+    | FastPathBridge.Resolved _ -> true
+    | FastPathBridge.NoResolution -> false
+
+/// Resolve once under `install`, and assert on the outcome `delayMs` later.
+let private resolvedAfter (delayMs: int) (install: unit -> unit) (check: FastPathBridge.ResolveOutcome option -> unit) =
+    testCaseDeferred "" delayMs (fun () ->
+        install ()
+        let mutable outcome = None
+
+        Async.StartImmediate(
+            async {
+                let! o = FastPathBridge.resolve request
+                outcome <- Some o
+            }
+        )
+
+        fun () ->
+            FastPathBridge.setResolver None
+            check outcome)
+
+let private named (name: string) (item: TestItem) =
+    match item with
+    | DeferredCase(_, delayMs, setup) -> DeferredCase(name, delayMs, setup)
+    | other -> other
+
+let private resolverTests =
+    testList "the fast-path bridge awaits an async resolver" [
+        resolvedAfter
+            50
+            (fun () ->
+                FastPathBridge.setAsyncResolver (
+                    Some(fun _ -> async {
+                        do! Async.Sleep 10
+                        return answered
+                    })
+                ))
+            (fun outcome -> Expect.isTrue (outcome |> Option.exists isResolved) "the async answer is taken")
+        |> named "an async resolver's answer is awaited without blocking"
+
+        resolvedAfter 50 (fun () -> FastPathBridge.setResolver (Some(fun _ -> answered))) (fun outcome ->
+            Expect.isTrue (outcome |> Option.exists isResolved) "the sync answer is taken")
+        |> named "a synchronous resolver keeps working through the same seam"
+
+        resolvedAfter
+            50
+            (fun () -> FastPathBridge.setAsyncResolver (Some(fun _ -> async { return failwith "resolver down" })))
+            (fun outcome ->
+                Expect.isTrue (outcome |> Option.exists (isResolved >> not)) "a failing resolver falls through")
+        |> named "a resolver that fails falls through to the model path"
+
+        resolvedAfter
+            (FastPathBridge.ResolveTimeoutMs + 200)
+            (fun () ->
+                FastPathBridge.setAsyncResolver (
+                    Some(fun _ -> async {
+                        do! Async.Sleep(FastPathBridge.ResolveTimeoutMs * 3)
+                        return answered
+                    })
+                ))
+            (fun outcome ->
+                Expect.isTrue (outcome |> Option.exists (isResolved >> not)) "a slow resolver falls through")
+        |> named "a resolver slower than the stated timeout falls through to the model path"
+    ]
+
 let tests =
-    testList "Phase 1080 — the chat stream" [ oneStreamTests; divergenceTests ]
+    testList "Phase 1080 — the chat stream" [ oneStreamTests; divergenceTests; resolverTests ]
