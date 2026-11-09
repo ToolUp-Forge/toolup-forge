@@ -18,15 +18,14 @@
 module ToolUp.Platform.Scope.TeamPolicyStore
 
 open System
-open System.Collections.Concurrent
 open System.Text
 open System.Text.Json
-open System.Threading
 open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.Infra
 open ToolUp.Platform.Config.TeamManagement
 
 // ─── The deployment declarations, as DI holds them ───────────────
@@ -62,7 +61,7 @@ module TeamPolicySettings =
 /// container, the same Fable-compatible JSON, and — with no output change
 /// — exactly the bytes the conversation part alone serialises to.
 module TeamPolicyRecordCodec =
-    let private jsonOptions = FableConverters.create ()
+    let private jsonOptions = PlatformJson.options
 
     let private serialiseConversation (record: TeamConversationPolicyRecord) : byte[] =
         Encoding.UTF8.GetBytes(JsonSerializer.Serialize(record, jsonOptions))
@@ -126,136 +125,110 @@ module TeamPolicyRecordCodec =
 
 // ─── The store ───────────────────────────────────────────────────
 
-/// Reads and guarded writes of a team's record. The write is a
-/// read-modify-write guarded twice: an ETag compare-and-swap when the
-/// backend implements `IConditionalBlobStorage` (retried a bounded number of
-/// times on a lost race), and a per-container gate in this process so two
-/// requests here never interleave even on a backend without conditional
-/// writes — the same interim guard the other blob-backed ledgers use.
+/// One team's record: both parts, through the record's own codec (its bytes
+/// do not move).
+type private TeamPolicyDocument = TeamConversationPolicyRecord * TeamOutputPolicyRecord
+
+/// Reads and guarded writes of a team's record, a codec and a path over the
+/// platform's durable document store (`BlobDocumentStore`): an absent record
+/// is a team that never chose; a record that exists but cannot be read is an
+/// `Error`, and one that does not decode is quarantined and an `Error`, so a
+/// caller fails closed rather than falling back to the default. A write is
+/// one guarded read-modify-write, conditional where the backend has the ETag
+/// seam (confirmed by probe) and retried a bounded number of times on a lost
+/// race.
 type TeamPolicyStore(storage: IBlobStorage) =
-    static let gates = ConcurrentDictionary<string, SemaphoreSlim>()
+    static let stores =
+        System.Runtime.CompilerServices.ConditionalWeakTable<IBlobStorage, BlobDocumentStore<TeamPolicyDocument>>()
 
-    let conditional =
-        match box storage with
-        | :? IConditionalBlobStorage as c -> Some c
-        | _ -> None
+    static let codec: BlobCodec<TeamPolicyDocument> = {
+        Encode = fun (conversation, output) -> TeamPolicyRecordCodec.serialise conversation output
+        Decode =
+            fun bytes ->
+                match TeamPolicyRecordCodec.conversationOf bytes, TeamPolicyRecordCodec.outputOf bytes with
+                | Some record, Some output -> Ok(record, output)
+                | None, _ -> Error "the team's conversation-visibility entries are unparseable"
+                | Some _, None -> Error "the team's output-visibility entries are unparseable"
+    }
 
-    let maxAttempts = 5
+    static let path = DocPath.ofString TeamConversationPolicyRecord.BlobName
 
-    /// Absent vs unreadable: an absent record is a team that never chose;
-    /// a record that exists but cannot be read is an `Error`, so a caller
-    /// fails closed rather than silently falling back to the default.
-    let absentOrError
-        (container: string)
-        (message: string)
-        : Async<Result<TeamConversationPolicyRecord * TeamOutputPolicyRecord, string>> =
-        async {
-            let! exists = async {
-                try
-                    return! storage.Exists(container, TeamConversationPolicyRecord.BlobName)
-                with _ ->
-                    return true
-            }
+    // One document store per backend, so the capability probe's answer is
+    // cached across the per-call `TeamPolicyStore(storage)` constructions.
+    let docs =
+        stores.GetValue(
+            storage,
+            fun s -> BlobDocumentStore<TeamPolicyDocument>(s, codec, Config.ConsoleLogger.ConsoleLogger() :> ILogger)
+        )
 
-            if exists then
-                return Error $"the team's visibility policy record could not be read: {message}"
-            else
-                return Ok(TeamConversationPolicyRecord.empty, TeamOutputPolicyRecord.empty)
-        }
+    let scopeOf (container: string) : Result<ScopeKey, string> =
+        match ScopeKey.tryParseContainer container with
+        | Some scope -> Ok scope
+        | None -> Error $"'{container}' is not a scope's container"
 
-    let parse (bytes: byte[]) =
-        match TeamPolicyRecordCodec.conversationOf bytes, TeamPolicyRecordCodec.outputOf bytes with
-        | Some record, Some output -> Ok(record, output)
-        | None, _ -> Error "the team's conversation-visibility entries are unparseable"
-        | Some _, None -> Error "the team's output-visibility entries are unparseable"
-
-    let readWithETag
-        (container: string)
-        : Async<Result<(TeamConversationPolicyRecord * TeamOutputPolicyRecord) * string option, string>> =
-        async {
-            match conditional with
-            | Some cas ->
-                match! cas.DownloadWithETag(container, TeamConversationPolicyRecord.BlobName) with
-                | Ok(bytes, etag) -> return parse bytes |> Result.map (fun r -> r, Some etag)
-                | Error message ->
-                    let! fallback = absentOrError container message
-                    return fallback |> Result.map (fun r -> r, None)
-            | None ->
-                match! storage.Download(container, TeamConversationPolicyRecord.BlobName) with
-                | Ok bytes -> return parse bytes |> Result.map (fun r -> r, None)
-                | Error message ->
-                    let! fallback = absentOrError container message
-                    return fallback |> Result.map (fun r -> r, None)
-        }
+    let read (container: string) : Async<Result<TeamPolicyDocument, string>> = async {
+        match scopeOf container with
+        | Error e -> return Error e
+        | Ok scope ->
+            match! docs.Read(scope, path) with
+            | Ok(Some document) -> return Ok document
+            | Ok None -> return Ok(TeamConversationPolicyRecord.empty, TeamOutputPolicyRecord.empty)
+            | Error e ->
+                return Error $"the team's visibility policy record could not be read: {BlobMapStoreError.describe e}"
+    }
 
     // The guarded read-modify-write over both parts of the record. `what`
     // names the setting in a refusal ("conversation visibility").
     let changeBoth
         (container: string)
         (what: string)
-        (decide:
-            TeamConversationPolicyRecord * TeamOutputPolicyRecord
-                -> Result<TeamConversationPolicyRecord * TeamOutputPolicyRecord, string>)
-        =
+        (decide: TeamPolicyDocument -> Result<TeamPolicyDocument, string>)
+        : Async<Result<TeamPolicyDocument * TeamPolicyDocument, string>> =
         async {
-            let gate = gates.GetOrAdd(container, fun _ -> new SemaphoreSlim(1, 1))
-            do! gate.WaitAsync() |> Async.AwaitTask
+            match scopeOf container with
+            | Error e -> return Error e
+            | Ok scope ->
+                let! outcome =
+                    docs.Update(
+                        scope,
+                        path,
+                        fun current ->
+                            let before =
+                                current
+                                |> Option.defaultValue (
+                                    TeamConversationPolicyRecord.empty,
+                                    TeamOutputPolicyRecord.empty
+                                )
 
-            try
-                let rec attempt n = async {
-                    match! readWithETag container with
-                    | Error e -> return Error e
-                    | Ok(before, etag) ->
-                        match decide before with
-                        | Error refusal -> return Error refusal
-                        | Ok after when after = before -> return Ok(before, after)
-                        | Ok after ->
-                            let bytes = TeamPolicyRecordCodec.serialise (fst after) (snd after)
+                            match decide before with
+                            | Error refusal -> BlobUpdate.Keep(Error refusal)
+                            | Ok after when after = before -> BlobUpdate.Keep(Ok(before, after))
+                            | Ok after -> BlobUpdate.Write(after, Ok(before, after))
+                    )
 
-                            match conditional with
-                            | Some cas ->
-                                let condition =
-                                    match etag with
-                                    | Some e -> IfMatch e
-                                    | None -> IfAbsent
-
-                                match!
-                                    cas.UploadWithETag(
-                                        container,
-                                        TeamConversationPolicyRecord.BlobName,
-                                        bytes,
-                                        condition
-                                    )
-                                with
-                                | Ok _ -> return Ok(before, after)
-                                | Error(ETagMismatch _) when n < maxAttempts -> return! attempt (n + 1)
-                                | Error(ETagMismatch _) ->
-                                    return Error $"the team's {what} was changed concurrently; try again."
-                                | Error(ConditionalWriteFailure message) ->
-                                    return Error $"the team's {what} could not be saved: {message}"
-                            | None ->
-                                match! storage.Upload(container, TeamConversationPolicyRecord.BlobName, bytes) with
-                                | Ok _ -> return Ok(before, after)
-                                | Error message -> return Error $"the team's {what} could not be saved: {message}"
-                }
-
-                return! attempt 1
-            finally
-                gate.Release() |> ignore
+                match outcome with
+                | Ok decided -> return decided
+                | Error(BlobMapStoreError.Contended _) ->
+                    return Error $"the team's {what} was changed concurrently; try again."
+                | Error(BlobMapStoreError.WriteFailed(_, message)) ->
+                    return Error $"the team's {what} could not be saved: {message}"
+                | Error e ->
+                    return
+                        Error $"the team's visibility policy record could not be read: {BlobMapStoreError.describe e}"
         }
 
     /// The conversation part of the team's record. `Ok empty` when the team
     /// never chose; `Error` when a record exists but cannot be read.
     member _.Read(container: string) : Async<Result<TeamConversationPolicyRecord, string>> = async {
-        let! read = readWithETag container
-        return read |> Result.map (fst >> fst)
+        let! document = read container
+        return document |> Result.map fst
     }
 
     /// The output part of the team's record. `Ok empty` when the team never
     /// chose; `Error` when the record exists but cannot be read.
     member _.ReadOutput(container: string) : Async<Result<TeamOutputPolicyRecord, string>> = async {
-        let! read = readWithETag container
-        return read |> Result.map (fst >> snd)
+        let! document = read container
+        return document |> Result.map snd
     }
 
     /// Guarded read-modify-write of the conversation part. `decide` sees the
