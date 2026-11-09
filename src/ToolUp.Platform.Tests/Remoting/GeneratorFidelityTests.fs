@@ -1049,12 +1049,14 @@ let tests =
 
                 Expect.stringContains
                     source
-                    (sprintf "JsonDecoders.registerFor<%s> \"IProbeApi\" jsonShapeArgument" shape)
-                    "registrations are scoped to their record (Phase 839)"
+                    (sprintf
+                        "Codecs.register<%s> (Scope.ForRecord \"IProbeApi\") (Codec.jsonDecoder jsonShapeArgument)"
+                        shape)
+                    "registrations are scoped to their record"
 
                 Expect.stringContains
                     source
-                    "JsonDecoders.registerFor<string> \"IProbeApi\" JsonDecode.asString"
+                    "Codecs.register<string> (Scope.ForRecord \"IProbeApi\") (Codec.jsonDecoder JsonDecode.asString)"
                     "a bare argument type is registered for its record alone"
 
                 Expect.stringContains

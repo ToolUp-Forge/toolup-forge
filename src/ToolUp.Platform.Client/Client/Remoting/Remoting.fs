@@ -43,7 +43,7 @@ module Remoting =
     /// guard doesn't own.
     let withCustomHeader headers (options: RemoteBuilderOptions) = { options with CustomHeaders = headers }
 
-    /// Phase 69j — pin the wire-schema version this proxy expects, sending
+    /// Pin the wire-schema version this proxy expects, sending
     /// it as `X-Remoting-Schema: <version>` on every request.
     ///
     /// **Opt-in, and deliberately not a default.** Sending the header on
@@ -91,16 +91,16 @@ module Remoting =
 
     /// Specifies that the API uses binary serialization for responses
     let withBinarySerialization (options: RemoteBuilderOptions) =
-        // Phase 785 — the algebra path's opt-in registrations. Made here
-        // because this function is the ONE production consumer of the
-        // MsgPack reader in the tree, so "the binary wire is in use" and
-        // "the platform's decoders are available" become the same event.
-        // Idempotent, and a proxy that never opts into binary
-        // serialization registers nothing and pays nothing (GP 13).
+        // The algebra path's opt-in registrations. Made here because this
+        // function is the ONE production consumer of the MsgPack reader in
+        // the tree, so "the binary wire is in use" and "the platform's
+        // decoders are available" become the same event. Idempotent, and a
+        // proxy that never opts into binary serialization registers nothing
+        // and pays nothing (GP 13).
         PlatformDecoders.registerAll ()
 
         let serializer response returnType =
-            // Phase 783 — read through the refusing entry. A malformed
+            // Read through the refusing entry. A malformed
             // reply raises `DecodeException` carrying a named
             // `DecodeError`; `Proxy.proxyFetch`'s 200 arm converts it into
             // a `ProxyRequestException` whose `DecodeError` is `Some`, so
@@ -112,21 +112,17 @@ module Remoting =
             // public seam every consumer implements, to say something the
             // exception already says at the one call site that can act on
             // it.
-            // Phase 785 — the opt-in branch. A return type with a
-            // registered algebra decoder is read ONCE into the closed
-            // value model and then decoded by total combinators; a type
-            // without one takes the reflection path byte-for-byte as
-            // before (GP 11). The two produce the same value on every
-            // Phase 784 corpus shape — `DecoderAlgebraTests` runs both
-            // and compares, accept path and refuse path.
             //
-            // A registry MISS is the reflection path, never an error:
-            // the lookup is by `Type.FullName`, and a generic
-            // instantiation this host renders differently costs the
-            // algebra rather than the decode.
+            // The one seam: a return type with a registered algebra decoder
+            // is read ONCE into the closed value model and then decoded by
+            // total combinators; a type without one takes the reflection
+            // path byte-for-byte as before (GP 11). The two produce the same
+            // value on every corpus shape — `DecoderAlgebraTests` runs both
+            // and compares, accept path and refuse path.
             let decoded =
-                match RemotingDecoders.tryGet returnType with
-                | Some decoder -> MsgPack.Read.Reader(response).TryReadValue() |> Result.bind decoder
+                match Codecs.resolveMsgPack DecodePolicy.ReflectionFallback Scope.Unscoped returnType with
+                | Some(Ok decoder) -> MsgPack.Read.Reader(response).TryReadValue() |> Result.bind decoder
+                | Some(Error refusal) -> Error refusal
                 | None -> MsgPack.Read.Reader(response).TryRead returnType
 
             match decoded with
@@ -166,7 +162,7 @@ type Remoting() =
                             fieldTypes
                             |> Array.pick (fun (name, typ) -> if name = field.FieldName then Some typ else None)
 
-                        // Phase 854 — keyed by the record's FullName, the
+                        // Keyed by the record's FullName, the
                         // key `ReadPolicies.register` declarations use.
                         let fn =
                             Proxy.proxyFetchWithPolicies
@@ -212,7 +208,7 @@ type Remoting() =
                         | TypeInfo.Func getArgs -> Array.length (getArgs ()) - 1
                         | _ -> 0
 
-                    // Phase 69c.D — a streaming field gets the cold-stream
+                    // A streaming field gets the cold-stream
                     // proxy instead of the request/response one.
                     match Proxy.tryStreamingElementType field.FieldType with
                     | Some elementType -> box (Proxy.proxyStream options recordType.Name field elementType)
@@ -226,7 +222,7 @@ type Remoting() =
                 "Cannot build proxy. Exepected type %s to be a valid protocol definition which is a record of functions"
                 resolvedType.FullName
 
-    /// Phase 853 — a proxy for the API record `resolvedType` whose real
+    /// A proxy for the API record `resolvedType` whose real
     /// proxy is built on its FIRST CALL, by `resolve`, rather than here.
     ///
     /// `buildProxy` walks the record's whole type graph (`createTypeInfo`)
@@ -236,7 +232,7 @@ type Remoting() =
     /// arity — no type graph — and gives each field a forwarding closure
     /// of the same arity that forces `resolve ()` once and calls the real
     /// proxy's field. A call returns exactly what the real field returns
-    /// (the same `Async` object, so the Phase 854 read table recognises a
+    /// (the same `Async` object, so the read-policy table recognises a
     /// declared read's call as it always has). A field that is an
     /// `Async<_>` value rather than a function is forwarded as an `Async`
     /// that runs the real one.

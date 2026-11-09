@@ -779,24 +779,21 @@
              it. -->
         <Compile Include="Shared\Remoting\MsgPack\Value.fs" />
         <Compile Include="Shared\Remoting\MsgPack\Read.fs" />
-        <!-- The total combinators over that model, the
-             opt-in registry, and the platform's own hand-written
-             decoders. LAST in Core: PlatformDecoders.fs composes
-             decoders for wire records declared throughout the tier
-             above, so it must see all of them. -->
+        <!-- The total combinators over both value models (the
+             lexical JSON model, `JsonEncode` and `DecodeError` live in
+             ToolUp.AI.Wire, referenced below), the one codec table and its
+             seam, the two registry files (gate vocabularies and the
+             forwarding modules), then the platform's generated codecs.
+             LAST in Core: the generated files compose codecs for wire
+             records declared throughout the tier above. -->
         <Compile Include="Shared\Remoting\Decode.fs" />
-        <Compile Include="Shared\Remoting\DecoderRegistry.fs" />
-        <!-- The JSON wire joins the algebra: the combinators over the
-             lexical value model, the argument-seam registry, and (after
-             PlatformDecoders, beside it) the platform's own hand-written
-             argument decoders. The model itself (`JsonValue`, `JsonText`),
-             its one writer and the encoders (`JsonEncode`), and the
-             `DecodeError` vocabulary live in ToolUp.AI.Wire (referenced
-             below), namespaces preserved (Phase 881). -->
         <Compile Include="Shared\Remoting\Json\JsonDecode.fs" />
+        <Compile Include="Shared\Remoting\Codecs.fs" />
+        <Compile Include="Shared\Remoting\DecoderRegistry.fs" />
         <Compile Include="Shared\Remoting\Json\JsonDecoderRegistry.fs" />
         <Compile Include="Shared\Remoting\PlatformDecoders.fs" />
         <Compile Include="Shared\Remoting\Json\PlatformJsonDecoders.fs" />
+        <Compile Include="Shared\Remoting\Json\PlatformJsonEncoders.fs" />
     </ItemGroup>
     <!-- The connector contract value types (AIProviderMessage,
          AIProviderError, AIContentPart, …) relocated to the Fable-safe

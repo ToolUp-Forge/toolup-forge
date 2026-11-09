@@ -1731,76 +1731,66 @@ module FableConverters =
         Found = sprintf "%s (%s)" (string element.ValueKind) ex.Message
     }
 
-    /// The algebra arm of the seam. A type with a registered
-    /// JSON decoder (`JsonDecoders`) decodes through it: the element is
-    /// built into the closed value model in one bounded pass and the
-    /// decoder — total, pure, reflection-free — accepts the declared
-    /// type or refuses by name. A miss is `None`, which means the STJ
-    /// path below, exactly as before; nothing about a type the algebra
-    /// has not been asked about changes.
-    ///
-    /// `recordName` narrows the registry lookup to a
-    /// decoder scoped to that API record, falling back to an unscoped
-    /// registration (`JsonDecoders.tryGet`). `None` here is exactly the
-    /// pre-839 lookup.
-    let private tryDecodeThroughAlgebraFor
-        (recordName: string option)
-        (element: JsonElement)
-        (targetType: Type)
-        : Result<obj, DecodeError> option =
-        match ToolUp.Remoting.Json.JsonDecoders.tryGet recordName targetType with
-        | None -> None
-        | Some decoder -> Some(ToolUp.Remoting.Json.JsonRead.tryRead element |> Result.bind decoder)
-
-    /// The erased seam, scoped to the API record
-    /// `recordName` names. `None` is a caller with no record to name (a
-    /// test, a non-dispatch path), which gets exactly the bare-type
-    /// behaviour this seam always had.
-    let tryDeserialiseElement
+    /// THE argument decode seam, record-scoped and under `policy`. One match
+    /// on `Codecs.resolveJson`: a registered decoder (record-scoped first,
+    /// then unscoped) reads the element through the closed value model in one
+    /// bounded pass; a miss under `ReflectionFallback` is System.Text.Json's
+    /// typed deserialise, exactly as before; a miss under `VerifiedOnly` is
+    /// refused naming the type. `recordName = None` is a caller with no record
+    /// to name, which gets the bare-type lookup.
+    let tryDeserialiseElementWith
+        (policy: DecodePolicy)
         (recordName: string option)
         (element: JsonElement)
         (targetType: Type)
         (options: JsonSerializerOptions)
         : Result<obj, DecodeError> =
-        match tryDecodeThroughAlgebraFor recordName element targetType with
-        | Some decoded -> decoded
+        let scope =
+            match recordName with
+            | Some name -> Scope.ForRecord name
+            | None -> Scope.Unscoped
+
+        match Codecs.resolveJson policy scope targetType with
+        | Some(Ok decoder) -> ToolUp.Remoting.Json.JsonRead.tryRead element |> Result.bind decoder
+        | Some(Error refusal) -> Error refusal
         | None ->
             try
                 Ok(element.Deserialize(targetType, options))
             with ex ->
                 Error(refusalOf element targetType ex)
 
-    /// The statically-typed twin of `tryDeserialiseElement`,
-    /// for the dispatcher's argument-parse stage where the target type is
-    /// a type parameter. Same seam, same refusal mapping; the generic
-    /// `Deserialize<'T>` overload is kept on the happy path so
-    /// well-formed traffic is byte-identical to the pre-phase behaviour
-    /// rather than routed through a boxing `unbox`.
-    ///
-    /// Consults the JSON algebra first (see
-    /// `tryDecodeThroughAlgebraFor`); the `unbox` on that arm is the same
-    /// erased-decoder cast `RemotingDecoders` makes on the binary wire.
-    ///
-    /// `tryDeserialiseFor` is the record-scoped form: the
-    /// server's reflection dispatch proxy (`Proxy.fs`) passes
-    /// `makeProps.RecordName` here for every argument it parses.
-    /// `tryDeserialise` stays the bare two-argument seam the source
-    /// generator's emitted fast-path code calls (`ToolUp.Remoting.Generator`
-    /// has no per-request record name to plumb through at codegen time) —
-    /// unchanged, and now a thin `None`-scoped call onto the same seam.
+    /// The erased seam under the default posture.
+    let tryDeserialiseElement
+        (recordName: string option)
+        (element: JsonElement)
+        (targetType: Type)
+        (options: JsonSerializerOptions)
+        : Result<obj, DecodeError> =
+        tryDeserialiseElementWith DecodePolicy.ReflectionFallback recordName element targetType options
+
+    /// The statically-typed form of `tryDeserialiseElementWith`, for the
+    /// dispatcher's argument parse, where the target type is a type parameter:
+    /// the same seam, its value unboxed at `'T`.
+    let tryDeserialiseWith<'T>
+        (policy: DecodePolicy)
+        (recordName: string option)
+        (element: JsonElement)
+        (options: JsonSerializerOptions)
+        : Result<'T, DecodeError> =
+        tryDeserialiseElementWith policy recordName element typeof<'T> options
+        |> Result.map unbox<'T>
+
+    /// `tryDeserialiseWith` under the default posture, record-scoped: the
+    /// form the source generator's dispatch tables and the long-running
+    /// companions call.
     let tryDeserialiseFor<'T>
         (recordName: string option)
         (element: JsonElement)
         (options: JsonSerializerOptions)
         : Result<'T, DecodeError> =
-        match tryDecodeThroughAlgebraFor recordName element typeof<'T> with
-        | Some decoded -> decoded |> Result.map unbox<'T>
-        | None ->
-            try
-                Ok(element.Deserialize<'T>(options))
-            with ex ->
-                Error(refusalOf element typeof<'T> ex)
+        tryDeserialiseWith<'T> DecodePolicy.ReflectionFallback recordName element options
 
+    /// `tryDeserialiseFor` with no record to name.
     let tryDeserialise<'T> (element: JsonElement) (options: JsonSerializerOptions) : Result<'T, DecodeError> =
         tryDeserialiseFor<'T> None element options
 
