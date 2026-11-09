@@ -10,6 +10,7 @@ open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.Infra
 open ToolUp.Platform.Scope.PermissionStore
 
 // ─── Dual control for sensitive admin mutations (Phase 555) ──────────
@@ -76,7 +77,7 @@ open ToolUp.Platform.Scope.PermissionStore
 
 // ─── Canonical form + fingerprint ────────────────────────────────────
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 /// Deterministic textual rendering of a captured mutation.
 ///
@@ -221,101 +222,100 @@ type BlobAdminMutationApprovalStore(storage: IBlobStorage, ?logger: ILogger) =
         | Some(l: ILogger) -> l.Error(msg, None)
         | None -> ()
 
-    let deserialise (bytes: byte[]) =
-        try
-            let pending =
-                JsonSerializer.Deserialize<PendingAdminMutation>(Encoding.UTF8.GetString bytes, jsonOptions)
+    // A proposal parked before the permission document carried page grants
+    // reads that field back as null; it proposed none.
+    let codec: BlobCodec<PendingAdminMutation> = {
+        Encode = fun pending -> JsonSerializer.SerializeToUtf8Bytes(pending, jsonOptions)
+        Decode =
+            fun bytes ->
+                try
+                    let pending = JsonSerializer.Deserialize<PendingAdminMutation>(bytes, jsonOptions)
 
-            // A proposal parked before the permission document carried
-            // page grants reads that field back as null; it proposed none.
-            match pending.Mutation with
-            | AdminMutation.SetTeamPermissions p when isNull (box p.Pages) ->
-                Some {
-                    pending with
-                        Mutation = AdminMutation.SetTeamPermissions { p with Pages = Map.empty }
-                }
-            | _ -> Some pending
-        with _ ->
-            None
+                    match pending.Mutation with
+                    | AdminMutation.SetTeamPermissions p when isNull (box p.Pages) ->
+                        Ok {
+                            pending with
+                                Mutation = AdminMutation.SetTeamPermissions { p with Pages = Map.empty }
+                        }
+                    | _ -> Ok pending
+                with ex ->
+                    Error ex.Message
+    }
+
+    let docs =
+        BlobDocumentStore<PendingAdminMutation>(
+            storage,
+            codec,
+            defaultArg logger (Config.ConsoleLogger.ConsoleLogger() :> ILogger)
+        )
+
+    let pendingPath (teamId: TeamId) (requestId: string) =
+        DocPath.ofString (pendingBlobName teamId.Value requestId)
 
     interface IAdminMutationApprovalStore with
         member _.Propose pending = async {
-            try
-                let bytes = JsonSerializer.Serialize(pending, jsonOptions) |> Encoding.UTF8.GetBytes
+            let! written =
+                docs.Update(
+                    ScopeKey.platform,
+                    pendingPath pending.TeamId pending.RequestId,
+                    fun _ -> BlobUpdate.Write(pending, ())
+                )
 
-                let! result =
-                    storage.Upload(PlatformContainer, pendingBlobName pending.TeamId.Value pending.RequestId, bytes)
+            match written with
+            | Ok() -> return Ok()
+            | Error e ->
+                let reason = BlobMapStoreError.describe e
 
-                return
-                    match result with
-                    | Ok _ -> Ok()
-                    | Error e -> Error e
-            with ex ->
-                logError
-                    $"AdminMutationApproval: could not persist pending mutation '{pending.RequestId}': {ex.Message}"
+                logError $"AdminMutationApproval: could not persist pending mutation '{pending.RequestId}': {reason}"
 
-                return Error ex.Message
+                return Error reason
         }
 
+        /// A proposal that exists but cannot be read or decoded is `Error`:
+        /// reported as absence, a storage blip would turn "awaiting
+        /// approval" into "no such proposal", which the caller renders as an
+        /// ordinary refusal — the failure mode dual control exists to remove.
         member _.TryGet(teamId, requestId) = async {
-            let blobName = pendingBlobName teamId.Value requestId
-            let! exists = storage.Exists(PlatformContainer, blobName)
+            match! docs.Read(ScopeKey.platform, pendingPath teamId requestId) with
+            | Ok found -> return Ok found
+            | Error e ->
+                let reason = BlobMapStoreError.describe e
 
-            if not exists then
-                return Ok None
-            else
-                let! result = storage.Download(PlatformContainer, blobName)
+                logError $"AdminMutationApproval: pending mutation '{requestId}' for team '{teamId}': {reason}"
 
-                match result with
-                | Error e ->
-                    // Present but unreadable. Reporting this as absence
-                    // would let a storage blip turn "awaiting approval"
-                    // into "no such proposal", which the caller renders as
-                    // an ordinary refusal — the failure mode dual control
-                    // exists to remove.
-                    logError
-                        $"AdminMutationApproval: pending mutation '{requestId}' for team '{teamId}' exists but could not be read ({e})."
-
-                    return Error e
-                | Ok bytes ->
-                    match deserialise bytes with
-                    | Some pending -> return Ok(Some pending)
-                    | None ->
-                        logError
-                            $"AdminMutationApproval: pending mutation '{requestId}' for team '{teamId}' is present but unparseable."
-
-                        return Error "pending record is present but unparseable"
+                return Error reason
         }
 
+        /// Every open proposal for the team, newest first. One that cannot be
+        /// read or decoded refuses the listing rather than dropping out of it:
+        /// an approver must not see a shorter queue than the one at rest.
         member _.List teamId = async {
-            try
-                let! names = storage.List(PlatformContainer, pendingPrefix teamId.Value)
+            let! rows =
+                docs.List(ScopeKey.platform, pendingPrefix teamId.Value, BlobDocumentStoreLimits.DefaultListDegree)
 
-                let! records =
-                    names
-                    |> List.map (fun name -> async {
-                        let! result = storage.Download(PlatformContainer, name)
+            match
+                rows
+                |> List.tryPick (fun (path, verdict) ->
+                    match verdict with
+                    | Error e -> Some(path, e)
+                    | Ok _ -> None)
+            with
+            | Some(path, e) ->
+                logError
+                    $"AdminMutationApproval: the pending mutations for team '{teamId}' could not all be read ({DocPath.value path}: {BlobMapStoreError.describe e})."
 
-                        return
-                            match result with
-                            | Ok bytes -> deserialise bytes
-                            | Error _ -> None
-                    })
-                    |> Async.Sequential
-
+                return Error(BlobMapStoreError.describe e)
+            | None ->
                 return
-                    records
-                    |> Array.toList
-                    |> List.choose id
+                    rows
+                    |> List.choose (fun (_, verdict) -> Result.toOption verdict)
                     |> List.sortByDescending _.ProposedAtUtc
                     |> Ok
-            with ex ->
-                return Error ex.Message
         }
 
         member _.Remove(teamId, requestId) = async {
-            let! result = storage.Delete(PlatformContainer, pendingBlobName teamId.Value requestId)
-            return result
+            let! removed = docs.Delete(ScopeKey.platform, pendingPath teamId requestId)
+            return removed |> Result.mapError BlobMapStoreError.describe
         }
 
 // ─── Gating decision (555.A / 555.B) ─────────────────────────────────
