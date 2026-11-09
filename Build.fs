@@ -4483,7 +4483,6 @@ let main args =
         "UsageLog.fs"
         "WebhookRegistry.fs"
         "WhatsAppTemplateRegistry.fs"
-        "WorkerKeyRegistry.fs"
     ]
 
     let runVerifyBlobDownloads (root: string) : int =

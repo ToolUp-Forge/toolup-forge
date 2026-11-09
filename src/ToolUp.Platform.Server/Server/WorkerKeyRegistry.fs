@@ -8,9 +8,6 @@ open ToolUp.Platform
 open System
 open System.Collections.Concurrent
 open System.Security.Cryptography
-open System.Text
-open System.Text.Json
-open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform.BlobStorage
 
 // ─── Phase 486 — the worker key registry ─────────────────────────────
@@ -575,30 +572,31 @@ type InMemoryWorkerKeyRegistry() =
 /// loudly at compose time rather than at the first race, on the
 /// `BlobExternalHandleStore` precedent.
 type BlobWorkerKeyRegistry(blobs: IBlobStorage, now: unit -> DateTime) =
-    let container = ScopeKey.PlatformContainer
     let prefix = "external-compute/worker-keys/"
 
-    let cas =
+    do
         match box blobs with
-        | :? IConditionalBlobStorage as c -> c
+        | :? IConditionalBlobStorage -> ()
         | _ ->
             invalidArg
                 "blobs"
                 "BlobWorkerKeyRegistry requires an IBlobStorage that also implements IConditionalBlobStorage (conditional writes). Every mutation is a read-decide-write whose decision is a security decision — is this key revoked, does this material match — and a download-modify-upload fallback lets a concurrent first-contact enrolment overwrite a revocation and re-open a compromised key. Use InMemoryWorkerKeyRegistry for a single-instance deployment, or a blob backend with conditional-write support."
 
-    let json = PlatformJson.options
+    // Eight attempts against concurrent writers, without pausing: the
+    // decision is cheap and the contention is a handful of enrolments.
+    let docs =
+        BlobDocumentStore<WorkerSigningKey>(
+            blobs,
+            BlobCodec.json<WorkerSigningKey>,
+            JsonConsoleLogger.JsonConsoleLogger(),
+            {
+                MaxRetries = 7
+                InitialBackoff = TimeSpan.Zero
+            }
+        )
 
-    let keyName (workerId: string) (keyId: string) =
-        $"%s{prefix}%s{workerId}/%s{keyId}.json"
-
-    let tryDecode (bytes: byte[]) : WorkerSigningKey option =
-        try
-            Some(JsonSerializer.Deserialize<WorkerSigningKey>(Encoding.UTF8.GetString bytes, json))
-        with _ ->
-            None
-
-    let encode (key: WorkerSigningKey) =
-        JsonSerializer.Serialize(key, json) |> Encoding.UTF8.GetBytes
+    let keyPath (workerId: string) (keyId: string) =
+        DocPath.ofString $"%s{prefix}%s{workerId}/%s{keyId}.json"
 
     new(blobs: IBlobStorage) = BlobWorkerKeyRegistry(blobs, (fun () -> DateTime.UtcNow))
 
@@ -610,62 +608,45 @@ type BlobWorkerKeyRegistry(blobs: IBlobStorage, now: unit -> DateTime) =
         | :? IConditionalBlobStorage -> Some(BlobWorkerKeyRegistry blobs :> IWorkerKeyRegistry)
         | _ -> None
 
-    /// Read-decide-CAS, retried on a genuine concurrent write. Bounded, so
-    /// a pathological caller cannot spin a request thread indefinitely.
+    /// Read-decide-write as one guarded update of the key's document,
+    /// replayed on a genuine concurrent write and bounded, so a
+    /// pathological caller cannot spin a request thread indefinitely. A
+    /// record that does not decode is quarantined and REFUSED, never
+    /// replaced: a damaged record surfaces as a refusal an operator can see
+    /// instead of being silently overwritten with caller-supplied material.
     member private _.Apply
         (workerId: string, keyId: string, propose: WorkerSigningKey option -> WorkerSigningKey option)
         : Async<Result<WorkerSigningKey, WorkerKeyError>> =
         async {
-            let name = keyName workerId keyId
-            let mutable attempts = 0
-            let mutable result = ValueNone
-
-            while result.IsNone && attempts < 8 do
-                attempts <- attempts + 1
-
-                let! current = cas.DownloadWithETag(container, name)
-
-                let existing, condition =
-                    match current with
-                    | Ok(bytes, etag) -> tryDecode bytes, IfMatch etag
-                    // An absent blob and an UNDECODABLE one both take the
-                    // create path. That is deliberate: `IfAbsent` then
-                    // fails against the corrupt blob rather than
-                    // overwriting it, so a damaged record surfaces as a
-                    // refusal an operator can see instead of being
-                    // silently replaced with attacker-supplied material.
-                    | Error _ -> None, IfAbsent
-
-                match propose existing with
-                | None ->
-                    result <-
-                        ValueSome(
-                            Error(
-                                match existing with
-                                | Some key -> WorkerKeyError.UnknownKey(key.WorkerId, key.KeyId)
-                                | None -> WorkerKeyError.UnknownKey(workerId, keyId)
+            let! outcome =
+                docs.Update(
+                    ScopeKey.platform,
+                    keyPath workerId keyId,
+                    fun existing ->
+                        match propose existing with
+                        | None ->
+                            BlobUpdate.Keep(
+                                Error(
+                                    match existing with
+                                    | Some key -> WorkerKeyError.UnknownKey(key.WorkerId, key.KeyId)
+                                    | None -> WorkerKeyError.UnknownKey(workerId, keyId)
+                                )
                             )
-                        )
-                | Some proposed ->
-                    match WorkerKeyRegistry.decide existing proposed with
-                    | Error e -> result <- ValueSome(Error e)
-                    | Ok next ->
-                        let! written = cas.UploadWithETag(container, name, encode next, condition)
-
-                        match written with
-                        | Ok _ -> result <- ValueSome(Ok next)
-                        | Error(ETagMismatch _) -> () // lost the race; re-read and re-decide
-                        | Error(ConditionalWriteFailure message) ->
-                            result <- ValueSome(Error(WorkerKeyError.StoreFailure message))
+                        | Some proposed ->
+                            match WorkerKeyRegistry.decide existing proposed with
+                            | Error e -> BlobUpdate.Keep(Error e)
+                            | Ok next -> BlobUpdate.Write(next, Ok next)
+                )
 
             return
-                result
-                |> ValueOption.defaultValue (
+                match outcome with
+                | Ok decided -> decided
+                | Error(BlobMapStoreError.Contended(_, attempts)) ->
                     Error(
                         WorkerKeyError.StoreFailure
-                            $"could not apply the change to worker '%s{workerId}' key '%s{keyId}' after 8 attempts against concurrent writers"
+                            $"could not apply the change to worker '%s{workerId}' key '%s{keyId}' after %d{attempts} attempts against concurrent writers"
                     )
-                )
+                | Error e -> Error(WorkerKeyError.StoreFailure(BlobMapStoreError.describe e))
         }
 
     interface IWorkerKeyRegistry with
@@ -735,9 +716,11 @@ type BlobWorkerKeyRegistry(blobs: IBlobStorage, now: unit -> DateTime) =
             )
 
         member _.Resolve(workerId, keyId) = async {
-            let! stored = blobs.Download(container, keyName workerId keyId)
+            let! stored = docs.Read(ScopeKey.platform, keyPath workerId keyId)
 
-            match stored |> Result.toOption |> Option.bind tryDecode with
+            // A key that cannot be read or decoded REFUSES the resolve
+            // (`DocumentUnavailableException`) rather than reading as unknown.
+            match DocumentUnavailable.orRaise stored with
             | None -> return None
             | Some key ->
                 // Cross-check: the record must be the one asked for. A
@@ -751,15 +734,7 @@ type BlobWorkerKeyRegistry(blobs: IBlobStorage, now: unit -> DateTime) =
         }
 
         member _.List() = async {
-            let! names = blobs.List(container, prefix)
+            let! rows = docs.List(ScopeKey.platform, prefix, BlobDocumentStoreLimits.DefaultListDegree)
 
-            let! keys =
-                names
-                |> List.map (fun name -> async {
-                    let! stored = blobs.Download(container, name)
-                    return stored |> Result.toOption |> Option.bind tryDecode
-                })
-                |> Async.Sequential
-
-            return keys |> Array.toList |> List.choose id
+            return rows |> List.map (snd >> DocumentUnavailable.orRaise)
         }
