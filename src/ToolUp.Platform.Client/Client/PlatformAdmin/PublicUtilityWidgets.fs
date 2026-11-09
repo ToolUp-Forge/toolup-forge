@@ -8,6 +8,7 @@ open Fable.Core
 open Fable.SimpleHttp
 open Fable.SimpleJson
 open Feliz
+open Toolup.UIToolkit
 open ToolUp.Platform
 
 // ─── Phase 61 — public-utility PlatformAdmin widgets ──────────────
@@ -46,12 +47,6 @@ let private widgetCard (title: string) (subtitle: string) (body: ReactElement) :
 let private substrateStub (reason: string) : ReactElement =
     Html.div [ prop.className "text-sm text-slate-600 italic"; prop.text reason ]
 
-let private errorBanner (msg: string) : ReactElement =
-    Html.div [
-        prop.className "p-2 bg-red-50 border border-red-200 rounded text-red-700 text-xs"
-        prop.text msg
-    ]
-
 let private smallButton (label: string) (onClick: unit -> unit) (disabled: bool) : ReactElement =
     Html.button [
         prop.className [
@@ -65,11 +60,6 @@ let private smallButton (label: string) (onClick: unit -> unit) (disabled: bool)
         prop.text label
         prop.onClick (fun _ -> onClick ())
     ]
-
-type private LoadState<'T> =
-    | Loading
-    | Loaded of 'T
-    | LoadError of string
 
 [<Emit("URL.createObjectURL($0)")>]
 let private createObjectUrl (blob: obj) : string = jsNative
@@ -97,7 +87,7 @@ let private csvEscape (s: string) : string =
 
 // ─── Generic fetch helper ──────────────────────────────────────────
 // Returns `Loaded payload` on 2xx, `Loaded fallback` on documented
-// substrate-missing statuses (503), and `LoadError` on anything else
+// substrate-missing statuses (503), and `Failed` on anything else
 // or on parse failure. Callers pass a `fallbackOn503` so each widget
 // chooses between "empty-state render" and "explicit
 // substrate-disabled banner".
@@ -106,7 +96,7 @@ let inline private fetchJson<'T>
     (fetchMsgs: PublicUtilityFetchMessages)
     (url: string)
     (fallbackOn503: 'T option)
-    : Async<LoadState<'T>> =
+    : Async<Remote<'T, string>> =
     async {
         try
             let! response = Http.request url |> Http.method GET |> Http.send
@@ -114,14 +104,14 @@ let inline private fetchJson<'T>
             match response.statusCode, fallbackOn503 with
             | 200, _ ->
                 try
-                    return Loaded(Json.parseAs<'T> response.responseText)
+                    return Remote.Loaded(Json.parseAs<'T> response.responseText)
                 with ex ->
-                    return LoadError(fetchMsgs.ParseError ex.Message)
-            | 503, Some fallback -> return Loaded fallback
-            | 403, _ -> return LoadError fetchMsgs.AccessDenied
-            | code, _ -> return LoadError(fetchMsgs.RequestFailed code)
+                    return Remote.Failed(fetchMsgs.ParseError ex.Message)
+            | 503, Some fallback -> return Remote.Loaded fallback
+            | 403, _ -> return Remote.Failed fetchMsgs.AccessDenied
+            | code, _ -> return Remote.Failed(fetchMsgs.RequestFailed code)
         with ex ->
-            return LoadError(fetchMsgs.NetworkError ex.Message)
+            return Remote.Failed(fetchMsgs.NetworkError ex.Message)
     }
 
 // ─── Widget 1 — Traffic dashboard ─────────────────────────────────
@@ -280,10 +270,10 @@ let RateLimitEventLogBody () : ReactElement =
     let fetchMsgs = allMsgs.Fetch
 
     let state, setState =
-        React.useState (Loading: LoadState<RateLimitDecisionEvent list>)
+        React.useState (Remote.Loading: Remote<RateLimitDecisionEvent list, string>)
 
     let load () =
-        setState Loading
+        setState Remote.Loading
 
         async {
             let! result = fetchJson<RateLimitDecisionEvent list> fetchMsgs rateLimitsUrl (Some [])
@@ -293,10 +283,7 @@ let RateLimitEventLogBody () : ReactElement =
 
     React.useEffectOnce (fun () -> load ())
 
-    let isLoading =
-        match state with
-        | Loading -> true
-        | _ -> false
+    let isLoading = Remote.isLoading state
 
     let controls =
         Html.div [
@@ -304,7 +291,7 @@ let RateLimitEventLogBody () : ReactElement =
             prop.children [
                 smallButton (if isLoading then msgs.Refreshing else msgs.Refresh) load isLoading
                 match state with
-                | Loaded events when not (List.isEmpty events) ->
+                | Remote.Loaded events when not (List.isEmpty events) ->
                     smallButton
                         msgs.ExportCsv
                         (fun () -> downloadCsv "rate-limit-events.csv" (rateLimitsToCsv events))
@@ -315,10 +302,13 @@ let RateLimitEventLogBody () : ReactElement =
 
     let body =
         match state with
-        | Loading -> Html.p [ prop.className "text-xs text-slate-500"; prop.text msgs.Loading ]
-        | LoadError msg -> errorBanner msg
-        | Loaded [] -> substrateStub msgs.EmptyState
-        | Loaded events -> rateLimitsTable msgs events
+        | Remote.NotAsked
+        | Remote.Loading -> Html.p [ prop.className "text-xs text-slate-500"; prop.text msgs.Loading ]
+        | Remote.Failed msg -> StateViews.noticeStatic (Notice.Problem msg)
+        | Remote.Reloading []
+        | Remote.Loaded [] -> substrateStub msgs.EmptyState
+        | Remote.Reloading events
+        | Remote.Loaded events -> rateLimitsTable msgs events
 
     Html.div [ prop.children [ controls; body ] ]
 
@@ -430,14 +420,16 @@ let AdUnitConfigBody (defaultAdClientId: string) : ReactElement =
     let msgs = allMsgs.AdUnits
     let fetchMsgs = allMsgs.Fetch
 
-    let state, setState = React.useState (Loading: LoadState<AdSlotConfig list>)
+    let state, setState =
+        React.useState (Remote.Loading: Remote<AdSlotConfig list, string>)
+
     let draft, setDraft = React.useState (emptyDraft defaultAdClientId)
     let editingSlot, setEditingSlot = React.useState (None: string option)
     let writeError, setWriteError = React.useState (None: string option)
     let saving, setSaving = React.useState false
 
     let load () =
-        setState Loading
+        setState Remote.Loading
 
         async {
             let! result = fetchJson<AdSlotConfig list> fetchMsgs adUnitsUrl (Some [])
@@ -499,10 +491,13 @@ let AdUnitConfigBody (defaultAdClientId: string) : ReactElement =
 
     let listSection =
         match state with
-        | Loading -> Html.p [ prop.className "text-xs text-slate-500"; prop.text msgs.Loading ]
-        | LoadError msg -> errorBanner msg
-        | Loaded [] -> substrateStub msgs.EmptyState
-        | Loaded configs ->
+        | Remote.NotAsked
+        | Remote.Loading -> Html.p [ prop.className "text-xs text-slate-500"; prop.text msgs.Loading ]
+        | Remote.Failed msg -> StateViews.noticeStatic (Notice.Problem msg)
+        | Remote.Reloading []
+        | Remote.Loaded [] -> substrateStub msgs.EmptyState
+        | Remote.Reloading configs
+        | Remote.Loaded configs ->
             Html.div [
                 prop.className "border border-slate-200 rounded overflow-hidden mb-3"
                 prop.children [
@@ -669,17 +664,15 @@ let AdUnitConfigBody (defaultAdClientId: string) : ReactElement =
                                  (if editingSlot.IsSome then msgs.Update else msgs.Create))
                             save
                             saving
-                        smallButton
-                            msgs.Refresh
-                            load
-                            (saving
-                             || (match state with
-                                 | Loading -> true
-                                 | _ -> false))
+                        smallButton msgs.Refresh load (saving || Remote.isLoading state)
                     ]
                 ]
                 match writeError with
-                | Some msg -> Html.div [ prop.className "mt-2"; prop.children [ errorBanner msg ] ]
+                | Some msg ->
+                    Html.div [
+                        prop.className "mt-2"
+                        prop.children [ StateViews.noticeStatic (Notice.Problem msg) ]
+                    ]
                 | None -> Html.none
             ]
         ]
@@ -769,10 +762,10 @@ let PremiumUserListBody () : ReactElement =
     let fetchMsgs = allMsgs.Fetch
 
     let state, setState =
-        React.useState (Loading: LoadState<(string * PremiumStatus) list>)
+        React.useState (Remote.Loading: Remote<(string * PremiumStatus) list, string>)
 
     let load () =
-        setState Loading
+        setState Remote.Loading
 
         async {
             let! result = fetchJson<(string * PremiumStatus) list> fetchMsgs premiumUsersUrl (Some [])
@@ -782,10 +775,7 @@ let PremiumUserListBody () : ReactElement =
 
     React.useEffectOnce (fun () -> load ())
 
-    let isLoading =
-        match state with
-        | Loading -> true
-        | _ -> false
+    let isLoading = Remote.isLoading state
 
     let controls =
         Html.div [
@@ -797,10 +787,13 @@ let PremiumUserListBody () : ReactElement =
 
     let body =
         match state with
-        | Loading -> Html.p [ prop.className "text-xs text-slate-500"; prop.text msgs.Loading ]
-        | LoadError msg -> errorBanner msg
-        | Loaded [] -> substrateStub msgs.EmptyState
-        | Loaded users -> premiumUsersTable msgs users
+        | Remote.NotAsked
+        | Remote.Loading -> Html.p [ prop.className "text-xs text-slate-500"; prop.text msgs.Loading ]
+        | Remote.Failed msg -> StateViews.noticeStatic (Notice.Problem msg)
+        | Remote.Reloading []
+        | Remote.Loaded [] -> substrateStub msgs.EmptyState
+        | Remote.Reloading users
+        | Remote.Loaded users -> premiumUsersTable msgs users
 
     Html.div [ prop.children [ controls; body ] ]
 
