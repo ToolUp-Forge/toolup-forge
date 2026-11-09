@@ -269,33 +269,29 @@ let tests =
         }
 
         // ── Idempotency-replay suppression (structural pin) ──
-        test "idempotency replay path precedes invocation; audit emission rides the Success branch" {
-            let adapter = serverSource [ "Remoting"; "Giraffe"; "GiraffeAdapter.fs" ]
+        test "idempotency replay path precedes invocation; audit emission rides a successful answer" {
+            // The replay is answered by the idempotency stage, which runs
+            // before `invoke` and `audit`, so a replayed call never reaches
+            // the method's audit row (it writes its own `IdempotencyReplay`
+            // row instead). The audit stage emits only for an answer the call
+            // produced.
+            let pipeline = serverSource [ "Remoting"; "Stages"; "Pipeline.fs" ]
+            let audit = serverSource [ "Remoting"; "Stages"; "Audit.fs" ]
 
-            // The replay branch replays the memoised response and never
-            // reaches the proxy invocation. Audit emission is keyed off
-            // the AuditEmitter + audits map inside the Success branch of
-            // the invocation result — so a replayed call cannot emit a
-            // fresh audit row (69f.E semantics). The replay branch's
-            // adapter-side marker is the `x-idempotency-replay` response
-            // header (the `MemoisedResponse` type itself lives in
-            // Idempotency.fs, not the adapter).
-            let replayIdx = adapter.IndexOf "x-idempotency-replay"
-            let auditEmissionIdx = adapter.IndexOf "options.AuditEmitter, audits |> Map.tryFind"
+            let idempotencyIdx = pipeline.IndexOf "Idempotency.stage"
+            let auditIdx = pipeline.IndexOf "Audit.stage"
 
-            Expect.isGreaterThan replayIdx -1 "the idempotency replay path must exist"
-            Expect.isGreaterThan auditEmissionIdx -1 "the audit emission block must exist"
+            Expect.isGreaterThan idempotencyIdx -1 "the idempotency stage must be in the pipeline"
+            Expect.isGreaterThan auditIdx -1 "the audit stage must be in the pipeline"
 
             Expect.isLessThan
-                replayIdx
-                auditEmissionIdx
-                "the replay early-return must precede the audit-emission block — a replayed \
-                 call short-circuits before the Success branch and cannot double-audit"
+                idempotencyIdx
+                auditIdx
+                "the replay answers before the audit stage — a replayed call cannot double-audit"
 
             Expect.stringContains
-                adapter
-                "Audit emission after successful invocation"
-                "audit emission must stay anchored to the successful-invocation branch; \
-                 moving it upstream would make idempotency replays double-audit"
+                audit
+                "Some(Response.Bytes _ | Response.Stream _)"
+                "audit emission is keyed to an answer the call produced, never a replay"
         }
     ]

@@ -160,9 +160,8 @@ module AuthClassifierAttributeIdentityTests =
             test "a foreign PublicEndpointAttribute does not classify a method Public" {
                 let cls = AuthClassifier.classify typeof<ForeignPublicApi>
 
-                Expect.equal
-                    cls["LooksOpen"]
-                    Unclassified
+                Expect.isFalse
+                    (cls.ContainsKey "LooksOpen")
                     "a consumer attribute named PublicEndpointAttribute must not open a method — \
                      pre-335 this classified Public and evaluate returned Allow for every caller"
             }
@@ -172,16 +171,26 @@ module AuthClassifierAttributeIdentityTests =
                 // `evaluate` the dispatcher calls per request: whatever the
                 // foreign marker was meant to say, an anonymous caller is
                 // denied. This is the assertion the defect was about.
-                let cls = AuthClassifier.classify typeof<ForeignPublicApi>
+                let flags = {
+                    ContractFlags.defaults with
+                        AuthResolverComposed = true
+                        RecordSeamsComposed = true
+                }
 
-                match AuthClassifier.evaluate cls["LooksOpen"] (Some anonymousContext) with
-                | Deny _ -> ()
-                | Allow -> failtest "a foreign 'PublicEndpoint' must not admit an anonymous caller"
+                match Contract.ofType flags typeof<ForeignPublicApi> with
+                | Error refusals ->
+                    Expect.isTrue
+                        (refusals
+                         |> List.exists (function
+                             | ContractRefusal.ForeignMarker _ -> true
+                             | _ -> false))
+                        "the record is refused at compose, naming the foreign marker"
+                | Ok _ -> failtest "a foreign 'PublicEndpoint' must not admit an anonymous caller"
             }
 
             test "a foreign AllowAnonymousAttribute does not classify a method Anonymous" {
                 let cls = AuthClassifier.classify typeof<ForeignAnonymousApi>
-                Expect.equal cls["LooksAnonymous"] Unclassified "a foreign AllowAnonymous must not open a method"
+                Expect.isFalse (cls.ContainsKey "LooksAnonymous") "a foreign AllowAnonymous must not open a method"
             }
 
             test "a foreign RequiresRoleAttribute produces no requirement" {
@@ -189,7 +198,7 @@ module AuthClassifierAttributeIdentityTests =
                 // not honoured either, so the method reads as unclassified
                 // rather than as a gate a foreign type defined.
                 let cls = AuthClassifier.classify typeof<ForeignRoleApi>
-                Expect.equal cls["LooksGated"] Unclassified "a foreign RequiresRole must not be honoured as a gate"
+                Expect.isFalse (cls.ContainsKey "LooksGated") "a foreign RequiresRole must not be honoured as a gate"
             }
 
             // ── The collision is reported, not merely ignored ──
@@ -279,19 +288,26 @@ module AuthClassifierAttributeIdentityTests =
                 Expect.equal mirror server "both sanctioned families still classify identically"
 
                 match server["AdminOnly"] with
-                | RequiresAuth [ RoleRequired "PlatformAdmin" ] -> ()
+                | MethodClassification.RequiresAuth [ RoleRequired "PlatformAdmin" ] -> ()
                 | other -> failtestf "AdminOnly: unexpected classification %A" other
 
                 match server["NeedsScope"] with
-                | RequiresAuth [ ClaimRequired("scope", None) ] -> ()
+                | MethodClassification.RequiresAuth [ ClaimRequired("scope", None) ] -> ()
                 | other -> failtestf "NeedsScope: unexpected classification %A" other
 
                 match server["TenantOnly"] with
-                | RequiresAuth [ TenantRequired ] -> ()
+                | MethodClassification.RequiresAuth [ TenantRequired ] -> ()
                 | other -> failtestf "TenantOnly: unexpected classification %A" other
 
-                Expect.equal server["OpenToAll"] Anonymous "AllowAnonymous still classifies Anonymous"
-                Expect.equal server["PublicSurface"] Public "PublicEndpoint still classifies Public"
+                Expect.equal
+                    server["OpenToAll"]
+                    MethodClassification.Anonymous
+                    "AllowAnonymous still classifies Anonymous"
+
+                Expect.equal
+                    server["PublicSurface"]
+                    MethodClassification.Public
+                    "PublicEndpoint still classifies Public"
             }
 
             test "both sanctioned families still compose cleanly through Api.make (GP 11)" {

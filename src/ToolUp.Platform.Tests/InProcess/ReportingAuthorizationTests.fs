@@ -127,13 +127,13 @@ let private classificationOf (apiType: Type) (methodName: string) =
 
 let private expectDeny (decision: AuthDecision) (label: string) =
     match decision with
-    | Deny _ -> ()
+    | AuthDecision.Deny _ -> ()
     | AuthDecision.Allow -> failtestf "%s: expected Deny, got Allow" label
 
 let private expectAllow (decision: AuthDecision) (label: string) =
     match decision with
     | AuthDecision.Allow -> ()
-    | Deny reason -> failtestf "%s: expected Allow, got Deny (%s)" label reason
+    | AuthDecision.Deny reason -> failtestf "%s: expected Allow, got Deny (%s)" label reason
 
 // ── section F fixtures ──────────────────────────────────────────────
 
@@ -187,10 +187,13 @@ let tests =
                     |> Map.toList
                     |> List.choose (fun (name, cls) ->
                         match cls with
-                        | Anonymous -> Some(name + " (AllowAnonymous)")
-                        | Public -> Some(name + " (PublicEndpoint)")
-                        | Unclassified -> Some(name + " (unclassified)")
-                        | RequiresAuth _ -> None)
+                        | MethodClassification.Anonymous -> Some(name + " (AllowAnonymous)")
+                        | MethodClassification.Public -> Some(name + " (PublicEndpoint)")
+                        | MethodClassification.RequiresAuth _ -> None)
+                    |> List.append (
+                        AuthClassifier.unclassified reportApiType
+                        |> List.map (fun name -> name + " (unclassified)")
+                    )
 
                 Expect.isEmpty
                     reachableAnonymously
@@ -200,7 +203,7 @@ let tests =
             test "every method requires the 'scope' claim" {
                 for methodName in reportApiMethods do
                     match classificationOf reportApiType methodName with
-                    | RequiresAuth requirements ->
+                    | MethodClassification.RequiresAuth requirements ->
                         Expect.equal
                             requirements
                             [ ClaimRequired("scope", None) ]
@@ -212,7 +215,9 @@ let tests =
 
             test "the classifier sees all four methods and no others" {
                 let classified =
-                    AuthClassifier.classify reportApiType |> Map.toList |> List.map fst |> List.sort
+                    (AuthClassifier.classify reportApiType |> Map.toList |> List.map fst)
+                    @ AuthClassifier.unclassified reportApiType
+                    |> List.sort
 
                 Expect.equal classified (List.sort reportApiMethods) "IReportApi's classified field set"
             }

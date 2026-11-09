@@ -167,20 +167,16 @@ module AttributeRecognitionSweepTests =
 
     // ── Fixtures: streaming diagnostic ──────────────────────────────
 
-    /// A streaming method carrying a FORGED auth marker. Pre-727 the
-    /// diagnostic reported it as `RequiresRole("Admin")` — a guard this
-    /// SDK would never have honoured — while the classifier (post-335)
-    /// treated it as foreign. Two matchers, two verdicts.
+    /// A streaming method carrying a FORGED auth marker. A streaming method
+    /// is read like any other, so the one matcher decides it: not ours.
     type private ForgedGuardStreamApi = {
         [<Contoso.Consumer.Preflight.RequiresRole "Admin">]
         Tail: string -> IAsyncEnumerable<string>
     }
 
-    /// The tier-shared rate-limit mirror on a streaming method — the real
-    /// defect the alignment fixed. Pre-727 the matcher tested only the
-    /// server-tier type and had no `RateLimitAttribute` name arm, so this
-    /// was recognised by NEITHER path: the adapter started and the SSE
-    /// short-circuit silently dropped the declared budget.
+    /// The tier-shared rate-limit mirror on a streaming method: the budget is
+    /// read onto the method's contract like any other method's, and the
+    /// pipeline charges it for the stream.
     type private MirrorRateLimitStreamApi = {
         [<AllowAnonymous>]
         [<ToolUp.Platform.RateLimit(5, ToolUp.Platform.RateLimitSeconds.perMinute)>]
@@ -441,48 +437,32 @@ module AttributeRecognitionSweepTests =
                 ToolUp.Platform.Config.Api.make idBuilder |> ignore
             }
 
-            // ══ The streaming diagnostic ══════════════════════════════
-            test "a forged auth marker gets the SAME verdict from the classifier and the streaming diagnostic" {
-                // The alignment this phase is named for. Both matchers now
-                // say "not one of ours"; pre-727 the classifier said that
-                // and the diagnostic said "the consumer declared
-                // RequiresRole(\"Admin\")".
+            // ══ Streaming methods are read like any other ══════════════
+            test "a forged auth marker on a streaming method is refused like any other method's" {
                 let cls = AuthClassifier.classify typeof<ForgedGuardStreamApi>
-                Expect.equal cls["Tail"] Unclassified "the classifier does not honour the forged marker"
+                Expect.isFalse (cls.ContainsKey "Tail") "the classifier does not honour the forged marker"
 
                 Expect.hasLength
                     (AuthClassifier.foreignMarkers typeof<ForgedGuardStreamApi>)
                     1
                     "the classifier reports it as a collision"
 
-                match Streaming.streamingMethodsCarryingUnenforceableAttributes typeof<ForgedGuardStreamApi> with
-                | [ (name, attrs) ] ->
-                    Expect.equal name "Tail" "the streaming method is still flagged — the refusal is never weakened"
-
-                    Expect.isFalse
-                        (attrs |> List.exists _.StartsWith("RequiresRole("))
-                        "the diagnostic no longer asserts the consumer declared a guard this SDK would honour"
-
-                    Expect.isTrue
-                        (attrs
-                         |> List.exists (fun a ->
-                             a.Contains "foreign"
-                             && a.Contains "Contoso.Consumer.Preflight.RequiresRoleAttribute"))
-                        "it is rendered as a name collision, naming the offending type"
-                | other -> failtestf "expected the forged marker to still flag the method, got %A" other
+                Expect.isTrue
+                    ((Contract.read typeof<ForgedGuardStreamApi>).Findings
+                     |> List.exists (function
+                         | ContractRefusal.ForeignMarker _ -> true
+                         | _ -> false))
+                    "the contract carries the collision, refused under a resolver"
             }
 
-            test "a tier-shared RateLimit mirror on a streaming method is flagged" {
-                // The one genuine hole behind the alignment: pre-727 this
-                // matched NEITHER the server-tier type test nor any name
-                // arm, so the adapter started and the SSE short-circuit
-                // dropped the budget silently — on exactly the record
-                // family (Fable-compiled Core) that carries the mirror.
-                match Streaming.streamingMethodsCarryingUnenforceableAttributes typeof<MirrorRateLimitStreamApi> with
-                | [ (name, attrs) ] ->
-                    Expect.equal name "Tail" "the streaming method is named"
-                    Expect.contains attrs "RateLimit(5, 60s)" "the mirror budget is recognised and rendered"
-                | other -> failtestf "expected the mirror budget to flag the method, got %A" other
+            test "a tier-shared RateLimit mirror on a streaming method is a budget the pipeline charges" {
+                let contract = Contract.read typeof<MirrorRateLimitStreamApi>
+
+                match contract.Methods with
+                | [ tail ] ->
+                    Expect.equal tail.Budgets.Length 1 "the mirror budget is read onto the streaming method's contract"
+                    Expect.equal tail.Budgets.Head.Count 5 "five calls"
+                | other -> failtestf "expected one method, got %A" other
             }
 
             // ══ Validation — the family that KEEPS simple-name matching ══

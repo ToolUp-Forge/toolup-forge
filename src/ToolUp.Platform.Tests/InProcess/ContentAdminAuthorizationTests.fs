@@ -189,13 +189,13 @@ let private classificationOf (apiType: Type) (methodName: string) =
 
 let private expectDeny (decision: AuthDecision) (label: string) =
     match decision with
-    | Deny _ -> ()
+    | AuthDecision.Deny _ -> ()
     | AuthDecision.Allow -> failtestf "%s: expected Deny, got Allow" label
 
 let private expectAllow (decision: AuthDecision) (label: string) =
     match decision with
     | AuthDecision.Allow -> ()
-    | Deny reason -> failtestf "%s: expected Allow, got Deny (%s)" label reason
+    | AuthDecision.Deny reason -> failtestf "%s: expected Allow, got Deny (%s)" label reason
 
 let private componentId = ComponentId.create "toolup.contentauthoring"
 
@@ -284,10 +284,13 @@ let tests =
                     |> Map.toList
                     |> List.choose (fun (name, cls) ->
                         match cls with
-                        | Anonymous -> Some(name + " (AllowAnonymous)")
-                        | Public -> Some(name + " (PublicEndpoint)")
-                        | Unclassified -> Some(name + " (unclassified)")
-                        | RequiresAuth _ -> None)
+                        | MethodClassification.Anonymous -> Some(name + " (AllowAnonymous)")
+                        | MethodClassification.Public -> Some(name + " (PublicEndpoint)")
+                        | MethodClassification.RequiresAuth _ -> None)
+                    |> List.append (
+                        AuthClassifier.unclassified contentAdminApiType
+                        |> List.map (fun name -> name + " (unclassified)")
+                    )
 
                 Expect.isEmpty
                     reachableAnonymously
@@ -297,7 +300,7 @@ let tests =
             test "every method requires the PlatformAdmin role" {
                 for methodName in contentAdminMethods do
                     match classificationOf contentAdminApiType methodName with
-                    | RequiresAuth requirements ->
+                    | MethodClassification.RequiresAuth requirements ->
                         Expect.equal
                             requirements
                             [ RoleRequired "PlatformAdmin" ]
@@ -311,6 +314,10 @@ let tests =
                 let classified =
                     AuthClassifier.classify contentAdminApiType
                     |> Map.toList
+                    |> List.append (
+                        AuthClassifier.unclassified contentAdminApiType
+                        |> List.map (fun name -> name, MethodClassification.Public)
+                    )
                     |> List.map fst
                     |> List.sort
 

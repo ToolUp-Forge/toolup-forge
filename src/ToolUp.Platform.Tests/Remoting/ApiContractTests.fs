@@ -9,6 +9,7 @@ open Expecto
 open Microsoft.AspNetCore.Http
 open ToolUp.Remoting.Server
 open ToolUp.Remoting.Giraffe
+open ToolUp.Remoting.Server.Stages
 
 // ─── Phase 1055 — the compose-time refusals, pinned word for word ──────
 //
@@ -66,6 +67,11 @@ type StreamingGuardedApi = {
 
 type VersionedStreamingApi = {
     Ticks_V2: int -> IAsyncEnumerable<int>
+}
+
+type IdempotentStreamingApi = {
+    [<Idempotent>]
+    Ticks: int -> IAsyncEnumerable<int>
 }
 
 type NotAValidatorInput = {
@@ -239,36 +245,32 @@ let private refusalPins =
                     rendered)
                 "the marker-collision sentence")
 
-        testCase "I07 — a streaming method carrying a pre-flight attribute" (fun () ->
+        testCase "a streaming method carrying a pre-flight attribute composes: the pipeline enforces it" (fun () ->
+            Remoting.createApi ()
+            |> Remoting.fromValue { StreamingGuardedApi.Ticks = ticks }
+            |> compose
+            |> fun build -> build () |> ignore)
+
+        testCase "a versioned streaming method composes: negotiation runs before the call" (fun () ->
+            Remoting.createApi ()
+            |> Remoting.fromValue {
+                VersionedStreamingApi.Ticks_V2 = ticks
+            }
+            |> compose
+            |> fun build -> build () |> ignore)
+
+        testCase "a streaming method carrying [<Idempotent>]" (fun () ->
             let message =
                 refusalOf (
                     Remoting.createApi ()
-                    |> Remoting.fromValue { StreamingGuardedApi.Ticks = ticks }
+                    |> Remoting.fromValue { IdempotentStreamingApi.Ticks = ticks }
                     |> compose
                 )
 
             Expect.equal
                 message
-                (sprintf
-                    "ToolUp.Remoting refused to start: API record 'StreamingGuardedApi' has streaming method(s) carrying pre-flight attributes the SSE dispatch path does not enforce today. Silently honouring them would route around the declared guard.%s  'Ticks' carries: [RateLimit(5, 60s)]%sFix: either remove the attribute, or convert the method off the IAsyncEnumerable<'T> return shape until per-frame seam composition lands."
-                    nl
-                    nl)
-                "the streaming-preflight sentence")
-
-        testCase "I08 — a versioned streaming method" (fun () ->
-            let message =
-                refusalOf (
-                    Remoting.createApi ()
-                    |> Remoting.fromValue {
-                        VersionedStreamingApi.Ticks_V2 = ticks
-                    }
-                    |> compose
-                )
-
-            Expect.equal
-                message
-                "ToolUp.Remoting refused to start: API record 'VersionedStreamingApi' has streaming method(s) carrying wire-schema versioning the SSE dispatch path does not honour: [Ticks]. The SSE short-circuit resolves its handler before the negotiated version is applied, so the declared versions would be silently ignored. Fix: drop the [<SupportsSchema>] / [<DeprecatedSchema>] annotation, or move the method off the IAsyncEnumerable<'T> return shape."
-                "the versioned-streaming sentence")
+                "ToolUp.Remoting refused to start: API record 'IdempotentStreamingApi' has streaming method(s) carrying [<Idempotent>]: [Ticks]. A stream has no single response to memoise, so a retry with the same X-Idempotency-Key would run the producer again rather than replay it. Fix: drop [<Idempotent>], or move the method off the IAsyncEnumerable<'T> return shape."
+                "the idempotent-streaming sentence")
 
         testCase "I10 — a declared validator that cannot be built" (fun () ->
             let message =
@@ -328,12 +330,6 @@ let private refusalPins =
                 message
                 "ToolUp.Remoting refused to start: API record 'DuplicateSchemaApi' declares an invalid wire-schema versioning. Method 'Get' has two handlers for wire-schema version 1 ('Get' and 'Get_V1'). One version, one handler. Fix the annotation, or drop it — a method with neither a [<SupportsSchema>] attribute nor a _V<n> field-name suffix serves the composed default version only."
                 "the duplicate-version sentence")
-
-        testCase "I77 — the evaluator still denies the legacy unclassified case" (fun () ->
-            Expect.equal
-                (AuthClassifier.evaluate MethodClassification.Unclassified None)
-                (Deny "unclassified-method")
-                "the defensive arm denies, by its reason")
     ]
 
 let private model =

@@ -11,21 +11,14 @@ open ToolUp.Remoting.Server
 // substrate (`Server/Remoting/Streaming.fs`):
 //   * classification recognises `'arg -> IAsyncEnumerable<'T>` methods
 //     and reports the (arg, element) shape; non-streaming methods are
-//     absent;
-//   * the pre-flight-attribute refusal — a streaming method carrying
-//     `[<RequiresRole>]` / `[<RateLimit>]` / `[<Audit>]` / `[<Idempotent>]`
-//     is flagged (the SSE short-circuit can't enforce them), recognised
-//     across BOTH the server-tier family and the `ToolUp.Platform.*`
-//     mirrors;
+//     not streams;
+//   * a streaming method's markers are read onto its contract like any
+//     other method's (the pipeline enforces them), across BOTH the
+//     server-tier family and the `ToolUp.Platform.*` mirrors;
 //   * SSE frame formatting (`chunk` / `complete` / `error`), including
 //     the SSE-spec multiline `data:` framing and JSON-escaped error
 //     messages;
-//   * first-argument parsing from the request body.
-//
-// The wire-divergent live-path migration (AIAssistantHandler SSE →
-// typed stream) + the Fable Cmd.OfRemoting.callStreaming client helper
-// remain consumer-trigger-gated; these tests
-// harden the substrate those tasks build on.
+//   * a typed source encodes each element at its declared type.
 
 // ── Fixtures ────────────────────────────────────────────────────────
 
@@ -36,8 +29,8 @@ type private StreamApi = {
     GetOne: string -> Async<string>
 }
 
-/// A streaming method carrying pre-flight attributes the SSE short-
-/// circuit can't honour — the adapter must refuse to start.
+/// A streaming method carrying pre-flight attributes, which the pipeline
+/// enforces for it as for any method.
 type private GuardedStreamApi = {
     [<RequiresRole "Admin">]
     [<RateLimit(10, RateLimitWindow.perMinute)>]
@@ -56,16 +49,23 @@ let private utf8 (b: byte[]) = System.Text.Encoding.UTF8.GetString b
 let tests =
     testList "Phase 69c.tail — streaming substrate" [
 
-        test "classify recognises IAsyncEnumerable methods and reports the (arg, element) shape" {
-            let cls = Streaming.classify typeof<StreamApi>
+        test "shapeOf recognises IAsyncEnumerable methods and reports the (arg, element) shape" {
+            let field (name: string) =
+                typeof<StreamApi>
+                    .GetProperty(
+                        name,
+                        System.Reflection.BindingFlags.Instance
+                        ||| System.Reflection.BindingFlags.Public
+                        ||| System.Reflection.BindingFlags.NonPublic
+                    )
 
-            match cls |> Map.tryFind "Tail" with
+            match Streaming.shapeOf (field "Tail") with
             | Some(argT, elemT) ->
                 Expect.equal argT typeof<string> "arg type is string"
                 Expect.equal elemT typeof<string> "element type is string"
             | None -> failtest "Tail must classify as a streaming method"
 
-            Expect.isFalse (cls.ContainsKey "GetOne") "a non-streaming Async method is absent"
+            Expect.isNone (Streaming.shapeOf (field "GetOne")) "a non-streaming Async method is not a stream"
         }
 
         test "isAsyncEnumerable identifies the closed generic" {
@@ -76,35 +76,24 @@ let tests =
             Expect.isFalse (Streaming.isAsyncEnumerable typeof<string>) "string is not"
         }
 
-        test "a streaming method carrying unenforceable attributes is flagged (both families)" {
-            let server =
-                Streaming.streamingMethodsCarryingUnenforceableAttributes typeof<GuardedStreamApi>
+        test "a streaming method's markers are read onto its contract (both families)" {
+            match (Contract.read typeof<GuardedStreamApi>).Methods with
+            | [ tail ] ->
+                Expect.equal
+                    tail.Classification
+                    (Some(Classified.Requires [ RoleRequired "Admin" ]))
+                    "the role requirement is the method's classification"
 
-            match server with
-            | [ (name, attrs) ] ->
-                Expect.equal name "Tail" "the guarded streaming method is named"
-                Expect.contains attrs "RequiresRole(\"Admin\")" "the role requirement is listed"
-                Expect.contains attrs "RateLimit(10, 60s)" "the rate-limit budget is listed"
-            | other -> failtestf "expected exactly one flagged method, got %A" other
+                Expect.equal tail.Budgets [ { Count = 10; WindowSeconds = 60 } ] "the rate-limit budget is read"
+            | other -> failtestf "expected one method, got %A" other
 
-            let mirror =
-                Streaming.streamingMethodsCarryingUnenforceableAttributes typeof<MirrorGuardedStreamApi>
-
-            match mirror with
-            | [ (name, attrs) ] ->
-                Expect.equal name "Tail" "mirror-family guarded method is named"
-
-                Expect.contains
-                    attrs
-                    "RequiresRole(\"Admin\")"
-                    "the mirror role requirement is recognised by simple name"
-            | other -> failtestf "expected one flagged mirror method, got %A" other
-        }
-
-        test "a clean streaming method (AllowAnonymous only) is not flagged" {
-            Expect.isEmpty
-                (Streaming.streamingMethodsCarryingUnenforceableAttributes typeof<StreamApi>)
-                "[<AllowAnonymous>] is an explicit no-auth marker — not an unenforceable requirement"
+            match (Contract.read typeof<MirrorGuardedStreamApi>).Methods with
+            | [ tail ] ->
+                Expect.equal
+                    tail.Classification
+                    (Some(Classified.Requires [ RoleRequired "Admin" ]))
+                    "the mirror role requirement is recognised"
+            | other -> failtestf "expected one mirror method, got %A" other
         }
 
         test "SSE frame formatting: chunk / complete / error" {
@@ -193,14 +182,17 @@ let tests =
                 "each source line is a data: line; the event ends with a blank line"
         }
 
-        test "parseFirstArg deserialises the first body-array element" {
-            let opts = System.Text.Json.JsonSerializerOptions()
+        test "a typed source encodes each element at its declared type, a None included" {
+            let options = ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()
 
-            match Streaming.parseFirstArg "[\"hello\"]" typeof<string> opts with
-            | Some(:? string as s) -> Expect.equal s "hello" "first arg parsed"
-            | other -> failtestf "expected Some \"hello\", got %A" other
+            let values: IAsyncEnumerable<string option> =
+                { new IAsyncEnumerable<string option> with
+                    member _.GetAsyncEnumerator _ = failwith "never enumerated"
+                }
 
-            Expect.isNone (Streaming.parseFirstArg "not-json" typeof<string> opts) "unparseable body is None"
-            Expect.isNone (Streaming.parseFirstArg "[]" typeof<string> opts) "empty array is None"
+            let source = Streaming.sourceOf options values
+            Expect.equal source.Element typeof<string option> "the element type"
+            Expect.equal (source.Encode(box (Some "a"))) "\"a\"" "Some encodes as its value"
+            Expect.equal (source.Encode null) "null" "None encodes as null rather than faulting"
         }
     ]

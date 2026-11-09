@@ -170,126 +170,109 @@ let tests =
                  would fail to type-match the Choice2Of2 arm."
         }
 
-        test "GiraffeAdapter populates InputBytes from cached body cell" {
-            let adapterPath =
-                Path.Combine(
-                    repoRoot (),
-                    "src",
-                    "ToolUp.Platform.Server",
-                    "Server",
-                    "Remoting",
-                    "Giraffe",
-                    "GiraffeAdapter.fs"
+        test "the invoke stage hands the body's read bytes to the proxy" {
+            let contents =
+                File.ReadAllText(
+                    Path.Combine(
+                        repoRoot (),
+                        "src",
+                        "ToolUp.Platform.Server",
+                        "Server",
+                        "Remoting",
+                        "Stages",
+                        "Invoke.fs"
+                    )
                 )
-
-            let contents = File.ReadAllText adapterPath
 
             Expect.stringContains
                 contents
-                "InputBytes = cachedBodyBytesCell.Value"
-                "Giraffe adapter must populate InputBytes from the lazy body cache so the \
-                 proxy reads from cached bytes when an upstream stage forced the cache."
+                "ctx.Dispatch.Invoke ctx.Endpoint ctx.Parsed ctx.Body.Cached output"
+                "the invoke stage must hand the body a stage already read (and the arguments a \
+                 stage already parsed) to the proxy, so it neither re-reads the request body \
+                 nor re-parses it."
         }
 
-        test "GiraffeAdapter declares InputBytes = None in initial props" {
-            let adapterPath =
-                Path.Combine(
-                    repoRoot (),
-                    "src",
-                    "ToolUp.Platform.Server",
-                    "Server",
-                    "Remoting",
-                    "Giraffe",
-                    "GiraffeAdapter.fs"
+        test "both adapters reach the proxy through one dispatch" {
+            let contents =
+                File.ReadAllText(
+                    Path.Combine(
+                        repoRoot (),
+                        "src",
+                        "ToolUp.Platform.Server",
+                        "Server",
+                        "Remoting",
+                        "Stages",
+                        "Pipeline.fs"
+                    )
                 )
 
-            let contents = File.ReadAllText adapterPath
-
-            // The initial construction defaults to None; the cache-aware
-            // version is built later as `propsWithCache`.
             Expect.stringContains
                 contents
-                "InputBytes = None"
-                "Initial props record must declare InputBytes = None. The cache-populated \
-                 version is built just before `apiProxy.Invoke propsWithCache` is invoked."
+                "InputBytes = bytes"
+                "the one `Dispatch` both adapters build carries the bytes the pipeline read; \
+                 a second construction of the proxy's props would be a second place to forget them."
         }
 
-        test "AspNetCore middleware adapter defaults InputBytes to None" {
-            let middlewarePath =
-                Path.Combine(
-                    repoRoot (),
-                    "src",
-                    "ToolUp.Platform.Server",
-                    "Server",
-                    "Remoting",
-                    "AspNetCore",
-                    "Middleware.fs"
+        test "audit emission reuses the argument a stage already parsed" {
+            let audit =
+                File.ReadAllText(
+                    Path.Combine(
+                        repoRoot (),
+                        "src",
+                        "ToolUp.Platform.Server",
+                        "Server",
+                        "Remoting",
+                        "Stages",
+                        "Audit.fs"
+                    )
                 )
 
-            let contents = File.ReadAllText middlewarePath
+            let invoke =
+                File.ReadAllText(
+                    Path.Combine(
+                        repoRoot (),
+                        "src",
+                        "ToolUp.Platform.Server",
+                        "Server",
+                        "Remoting",
+                        "Stages",
+                        "Invoke.fs"
+                    )
+                )
 
             Expect.stringContains
-                contents
-                "InputBytes = None"
-                "AspNetCore middleware adapter must construct props with InputBytes = None \
-                 (it has no lazy body cache). Omitting the field would fail to compile \
-                 against the new record shape."
+                audit
+                "ctx.Parsed with"
+                "the audit payload must read the argument dispatch decoded, never parse it again"
+
+            Expect.stringContains
+                invoke
+                "match ctx.Parsed, mount.AuditEmitter, RequestContext.methodOf ctx with"
+                "an audited method's argument is parsed ahead only when no stage has parsed it"
         }
 
-        test "Audit emission reuses validation-parsed first-arg cache" {
-            let adapterPath =
-                Path.Combine(
-                    repoRoot (),
-                    "src",
-                    "ToolUp.Platform.Server",
-                    "Server",
-                    "Remoting",
-                    "Giraffe",
-                    "GiraffeAdapter.fs"
+        test "a validated method's parsed arguments are handed to dispatch" {
+            let contents =
+                File.ReadAllText(
+                    Path.Combine(
+                        repoRoot (),
+                        "src",
+                        "ToolUp.Platform.Server",
+                        "Server",
+                        "Remoting",
+                        "Stages",
+                        "Validate.fs"
+                    )
                 )
 
-            let contents = File.ReadAllText adapterPath
-
             Expect.stringContains
                 contents
-                "validationParsedFirstArg"
-                "GiraffeAdapter must declare a `validationParsedFirstArg` cache so the \
-                 audit emission below can reuse what validation already parsed."
-
-            Expect.stringContains
-                contents
-                "match validationParsedFirstArg.Value with"
-                "Audit emission must consult the cache before calling parseFirstArgFromBody \
-                 a second time. Without this the regression is silent — audit-and-validate \
-                 armed methods do the same parse twice per request."
-        }
-
-        // Phase 856.B — the fastpath extended to a VALIDATED method: the
-        // arguments the validation stage parsed (through the proxy's own
-        // decode) are what dispatch runs on. The behavioural pin — one
-        // decode per request, counted — is `ServerRemotingTailTests`.
-        test "a validated method's parsed arguments are handed to dispatch (Phase 856.B)" {
-            let adapterPath =
-                Path.Combine(
-                    repoRoot (),
-                    "src",
-                    "ToolUp.Platform.Server",
-                    "Server",
-                    "Remoting",
-                    "Giraffe",
-                    "GiraffeAdapter.fs"
-                )
-
-            let contents = File.ReadAllText adapterPath
-
-            Expect.stringContains
-                contents
-                "apiProxy.ParseFirst endpointName bodyBytes"
+                "ctx.Dispatch.ParseFirst ctx.Endpoint bytes"
                 "the validation stage must decode through the proxy's own argument path"
 
             Expect.stringContains
                 contents
-                "apiProxy.Invoke propsWithCache validationParsedArguments.Value"
+                "{ ctx with Parsed = ValueSome parsed }"
                 "dispatch must receive what validation parsed, or the body is deserialised twice"
         }
 
@@ -301,9 +284,8 @@ let tests =
 
             Expect.stringContains
                 contents
-                "resolvedBodyText"
-                "Exception path must materialise text from cached bytes when the happy \
-                 path took the bytes-direct fastpath (otherwise `requestBodyText` would \
-                 be None and error reporting would lose the request-body context)."
+                "Some(Encoding.UTF8.GetString bytes)"
+                "the fault path must materialise text from the body's bytes, so error \
+                 reporting keeps the request-body context."
         }
     ]

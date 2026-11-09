@@ -12,11 +12,12 @@ open Microsoft.AspNetCore.Hosting
 open Microsoft.AspNetCore.Http
 open Microsoft.AspNetCore.TestHost
 open Microsoft.Extensions.Hosting
+// Before Giraffe: its `HttpHandler` is the one this file means.
+open ToolUp.Remoting.AspNetCore
 open Giraffe
 open ToolUp.Remoting
 open ToolUp.Remoting.Server
 open ToolUp.Remoting.Giraffe
-open ToolUp.Remoting.AspNetCore
 
 // ─── A streaming call is a call ──────────────────────────────────────────
 //
@@ -197,5 +198,106 @@ let private pins =
         })
     ]
 
+// ─── The shared seam pack: both adapters run the same stages ─────────────
+
+type SeamInput = {
+    [<MinLength 3>]
+    Name: string
+}
+
+type SeamApi = {
+    [<RequiresRole "Admin">]
+    Gated: int -> Async<int>
+    [<AllowAnonymous>]
+    Validated: SeamInput -> Async<int>
+    [<AllowAnonymous; RateLimit(1, 3600)>]
+    Limited: int -> Async<int>
+    [<AllowAnonymous; Idempotent>]
+    Once: int -> Async<int>
+    [<AllowAnonymous>]
+    Count: StreamRequest -> IAsyncEnumerable<int>
+}
+
+let private seamImpl: SeamApi = {
+    Gated = fun n -> async { return n }
+    Validated = fun input -> async { return input.Name.Length }
+    Limited = fun n -> async { return n }
+    Once = fun n -> async { return n + 1 }
+    Count =
+        fun request ->
+            AsyncStream.fromCallback (fun n -> n >= request.Upto) (fun emit -> async {
+                for i in 1 .. request.Upto do
+                    emit i
+            })
+}
+
+/// One composition, every seam armed, as each adapter mounts it.
+let private seamOptions () =
+    Remoting.createApi ()
+    |> Remoting.fromValue seamImpl
+    |> Remoting.withAuthContext (fun (_: HttpContext) -> async { return Caller [] :> IAuthContext })
+    |> Remoting.withRateLimitStore (InMemoryRateLimitStore())
+    |> Remoting.withIdempotencyStore (InMemoryIdempotencyStore())
+
+let private adapters: (string * (unit -> IHost)) list = [
+    "Giraffe", (fun () -> giraffeHost (seamOptions () |> Remoting.buildHttpHandler))
+    "AspNetCore",
+    (fun () ->
+        Host
+            .CreateDefaultBuilder()
+            .ConfigureWebHostDefaults(fun webHost ->
+                webHost.UseTestServer().Configure(fun (app: IApplicationBuilder) -> app.UseRemoting(seamOptions ()))
+                |> ignore)
+            .Build())
+]
+
+/// The answers one host gives to the pack's requests, in order.
+let private seamAnswers (host: IHost) = task {
+    do! host.StartAsync()
+    use client = host.GetTestClient()
+    let! gated = post client "/SeamApi/Gated" "[1]"
+    let! invalid = post client "/SeamApi/Validated" """[{"Name":"ab"}]"""
+    let! malformed = post client "/SeamApi/Validated" """[{"Name":42}]"""
+    let! firstLimited = post client "/SeamApi/Limited" "[1]"
+    let! secondLimited = post client "/SeamApi/Limited" "[1]"
+    let! keyless = post client "/SeamApi/Once" "[1]"
+    let! stream = post client "/SeamApi/Count" """[{"Upto":2}]"""
+    do! host.StopAsync()
+    return [ gated; invalid; malformed; firstLimited; secondLimited; keyless; stream ]
+}
+
+let private adapterParity =
+    testList "both adapters run every seam" [
+        for name, build in adapters do
+            testT name (fun () -> task {
+                use host = build ()
+                let! answers = seamAnswers host
+
+                match answers with
+                | [ gated; invalid; malformed; firstLimited; secondLimited; keyless; stream ] ->
+                    Expect.equal (fst gated) 401 "authorisation refuses a caller without the role"
+                    Expect.equal (fst invalid) 400 "validation refuses a short name"
+                    Expect.stringContains (snd invalid) "violations" "with its violations"
+                    Expect.equal (fst malformed) 400 "a body that does not decode is refused"
+                    Expect.stringContains (snd malformed) "decodeError" "naming the decode error"
+                    Expect.equal (fst firstLimited) 200 "the first call is within its budget"
+                    Expect.equal (fst secondLimited) 429 "the second is over it"
+                    Expect.equal (fst keyless) 400 "an idempotent method requires its key"
+                    Expect.equal (fst stream) 200 "a stream is served"
+                    Expect.stringContains (snd stream) "event: complete" "to its terminal frame"
+                | other -> failtestf "expected seven answers, got %d" other.Length
+            })
+        testT "the two adapters answer byte for byte alike" (fun () -> task {
+            let! giraffe = seamAnswers ((snd adapters[0]) ())
+            let! aspNetCore = seamAnswers ((snd adapters[1]) ())
+
+            // A stream's chunk ids carry each call's own correlation id.
+            let comparable answers = answers |> List.take 6
+
+            Expect.equal (comparable aspNetCore) (comparable giraffe) "the same status and body for every seam"
+        })
+    ]
+
 [<Tests>]
-let tests = testList "Phase 1056 — streaming inside the request pipeline" [ pins ]
+let tests =
+    testList "Phase 1056 — streaming inside the request pipeline" [ pins; adapterParity ]
