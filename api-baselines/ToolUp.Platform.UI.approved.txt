@@ -54,6 +54,51 @@ ToolUp.Platform.Icons.upload : Fable.React.ReactElement { get }
 ToolUp.Platform.Icons.usage : Fable.React.ReactElement { get }
 ToolUp.Platform.Icons.users : Fable.React.ReactElement { get }
 ToolUp.Platform.Icons.webhook : Fable.React.ReactElement { get }
+ToolUp.Platform.Notice (class)
+ToolUp.Platform.Notice.IsInfo : System.Boolean { get }
+ToolUp.Platform.Notice.IsProblem : System.Boolean { get }
+ToolUp.Platform.Notice.Tag : System.Int32 { get }
+ToolUp.Platform.Notice+Info (class)
+ToolUp.Platform.Notice+Info.Item : System.String { get }
+ToolUp.Platform.Notice+Problem (class)
+ToolUp.Platform.Notice+Problem.Item : System.String { get }
+ToolUp.Platform.Notice+Tags (class)
+ToolUp.Platform.Notice+Tags.Info : System.Int32 (literal)
+ToolUp.Platform.Notice+Tags.Problem : System.Int32 (literal)
+ToolUp.Platform.NoticeMessages (class)
+ToolUp.Platform.NoticeMessages..ctor(System.String)
+ToolUp.Platform.NoticeMessages.Dismiss : System.String { get }
+ToolUp.Platform.Remote (class)
+ToolUp.Platform.Remote.bind`3(Microsoft.FSharp.Core.FSharpFunc`2[T, ToolUp.Platform.Remote`2[U, E]], ToolUp.Platform.Remote`2[T, E]) : ToolUp.Platform.Remote`2[U, E]
+ToolUp.Platform.Remote.isLoading`2(ToolUp.Platform.Remote`2[T, E]) : System.Boolean
+ToolUp.Platform.Remote.isSettled`2(ToolUp.Platform.Remote`2[T, E]) : System.Boolean
+ToolUp.Platform.Remote.mapError`3(Microsoft.FSharp.Core.FSharpFunc`2[E, F], ToolUp.Platform.Remote`2[T, E]) : ToolUp.Platform.Remote`2[T, F]
+ToolUp.Platform.Remote.map`3(Microsoft.FSharp.Core.FSharpFunc`2[T, U], ToolUp.Platform.Remote`2[T, E]) : ToolUp.Platform.Remote`2[U, E]
+ToolUp.Platform.Remote.ofResult`2(Microsoft.FSharp.Core.FSharpResult`2[T, E]) : ToolUp.Platform.Remote`2[T, E]
+ToolUp.Platform.Remote.reload`2(ToolUp.Platform.Remote`2[T, E]) : ToolUp.Platform.Remote`2[T, E]
+ToolUp.Platform.Remote.toOption`2(ToolUp.Platform.Remote`2[T, E]) : Microsoft.FSharp.Core.FSharpOption`1[T]
+ToolUp.Platform.Remote.withDefault`2(T, ToolUp.Platform.Remote`2[T, E]) : T
+ToolUp.Platform.Remote`2 (class)
+ToolUp.Platform.Remote`2.IsFailed : System.Boolean { get }
+ToolUp.Platform.Remote`2.IsLoaded : System.Boolean { get }
+ToolUp.Platform.Remote`2.IsLoading : System.Boolean { get }
+ToolUp.Platform.Remote`2.IsNotAsked : System.Boolean { get }
+ToolUp.Platform.Remote`2.IsReloading : System.Boolean { get }
+ToolUp.Platform.Remote`2.Loading : ToolUp.Platform.Remote`2[T, E] { get }
+ToolUp.Platform.Remote`2.NotAsked : ToolUp.Platform.Remote`2[T, E] { get }
+ToolUp.Platform.Remote`2.Tag : System.Int32 { get }
+ToolUp.Platform.Remote`2+Failed (class)
+ToolUp.Platform.Remote`2+Failed.Item : E { get }
+ToolUp.Platform.Remote`2+Loaded (class)
+ToolUp.Platform.Remote`2+Loaded.Item : T { get }
+ToolUp.Platform.Remote`2+Reloading (class)
+ToolUp.Platform.Remote`2+Reloading.Item : T { get }
+ToolUp.Platform.Remote`2+Tags (class)
+ToolUp.Platform.Remote`2+Tags.Failed : System.Int32 (literal)
+ToolUp.Platform.Remote`2+Tags.Loaded : System.Int32 (literal)
+ToolUp.Platform.Remote`2+Tags.Loading : System.Int32 (literal)
+ToolUp.Platform.Remote`2+Tags.NotAsked : System.Int32 (literal)
+ToolUp.Platform.Remote`2+Tags.Reloading : System.Int32 (literal)
 ToolUp.Platform.SvgProp (class)
 ToolUp.Platform.SvgProp+svgProp (class)
 ToolUp.Platform.SvgProp+svgProp.alignmentBaseline(System.String) : Feliz.IReactProperty
@@ -146,9 +191,11 @@ Toolup.UIToolkit.OutputFormatting.formatPercentage(System.Decimal) : System.Stri
 Toolup.UIToolkit.OutputFormatting.phiChar : System.String { get }
 Toolup.UIToolkit.StateViews (class)
 Toolup.UIToolkit.StateViews.emptyState(Fable.React.ReactElement, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[Toolup.UIToolkit.StateViews+EmptyStateAction]) : Fable.React.ReactElement
-Toolup.UIToolkit.StateViews.errorBanner(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]]) : Fable.React.ReactElement
 Toolup.UIToolkit.StateViews.inlineLoading(System.String) : Fable.React.ReactElement
 Toolup.UIToolkit.StateViews.noData(System.String) : Fable.React.ReactElement
+Toolup.UIToolkit.StateViews.notice(ToolUp.Platform.NoticeMessages, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Notice], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]) : Fable.React.ReactElement
+Toolup.UIToolkit.StateViews.noticeStatic(ToolUp.Platform.Notice) : Fable.React.ReactElement
+Toolup.UIToolkit.StateViews.remote`2(ToolUp.Platform.Remote`2[T, E], Microsoft.FSharp.Core.FSharpFunc`2[E, System.String], System.String, Microsoft.FSharp.Core.FSharpFunc`2[T, Fable.React.ReactElement]) : Fable.React.ReactElement
 Toolup.UIToolkit.StateViews+EmptyStateAction (class)
 Toolup.UIToolkit.StateViews+EmptyStateAction..ctor(System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit])
 Toolup.UIToolkit.StateViews+EmptyStateAction.Label : System.String { get }
