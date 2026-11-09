@@ -39,8 +39,7 @@ let private settings: ChainedLedgerSettings = {
     PathPrefix = Some "test"
 }
 
-let private jsonOptions =
-    ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()
+let private jsonOptions = ToolUp.Remoting.Json.SystemTextJson.PlatformJson.options
 
 /// Parse and re-render a stored line. Probes mutate records THROUGH
 /// these rather than by string-replacing inside the JSON, so a probe

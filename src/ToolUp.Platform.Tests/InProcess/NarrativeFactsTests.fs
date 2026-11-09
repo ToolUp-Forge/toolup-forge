@@ -38,7 +38,7 @@ let private docOf (elements: NarrativeElement list) : NarrativeDocument = {
     CanonicalUrl = None
 }
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 /// Seed a narrative into a store under scope `s1`, returning its id.
 let private seed (store: INarrativeStore) (moduleId: string) (doc: NarrativeDocument) : NarrativeId =

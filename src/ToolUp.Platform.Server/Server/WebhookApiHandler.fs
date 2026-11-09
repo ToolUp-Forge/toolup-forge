@@ -17,7 +17,7 @@ open ToolUp.Platform.Config
 // keep both sides consistent so admin tooling can render any
 // payload uniformly.
 
-let private auditJsonOptions = FableConverters.create ()
+let private auditJsonOptions = PlatformJson.options
 
 let private toAuditJson (value: 'T) =
     JsonSerializer.Serialize(value, auditJsonOptions)

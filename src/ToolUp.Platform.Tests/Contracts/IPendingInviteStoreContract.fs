@@ -1,9 +1,11 @@
 module ToolUp.Platform.Tests.Contracts.IPendingInviteStoreContract
 
 open System
+open System.Text
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Infra
+open ToolUp.Platform.BlobStorage
 
 // ─── IPendingInviteStore contract pack ──────────────────────────────
 //
@@ -251,5 +253,105 @@ let tests (name: string) (factory: unit -> IPendingInviteStore) =
 
             let! second = store.SweepExpired()
             Expect.equal (okOrFail "second SweepExpired" second) 0 "still nothing"
+        }
+    ]
+
+/// `storage` with its reads failing (the blob still exists): both seams,
+/// writes forwarded.
+let private unreadable (storage: IBlobStorage) =
+    let cas = storage :?> IConditionalBlobStorage
+
+    { new IBlobStorage with
+        member _.CanComposeFrom = storage.CanComposeFrom
+        member _.ComposeFrom(c, t, s) = storage.ComposeFrom(c, t, s)
+        member _.Erase(c, p, policy, dryRun) = storage.Erase(c, p, policy, dryRun)
+        member _.Upload(c, b, content) = storage.Upload(c, b, content)
+        member _.Download(_, _) = async { return Error "backend 503" }
+        member _.DownloadRange(c, b, o, l) = storage.DownloadRange(c, b, o, l)
+        member _.Delete(c, b) = storage.Delete(c, b)
+        member _.List(c, p) = storage.List(c, p)
+        member _.Exists(c, b) = storage.Exists(c, b)
+        member _.GetMetadata(c, b) = storage.GetMetadata(c, b)
+      interface IConditionalBlobStorage with
+          member _.DownloadWithETag(_, _) = async { return Error "backend 503" }
+
+          member _.UploadWithETag(c, b, content, condition) =
+              cas.UploadWithETag(c, b, content, condition)
+    }
+
+let private storageFailed label result =
+    match result with
+    | Error(PendingInviteStoreError.StorageFailed _) -> ()
+    | other -> failtestf "%s: expected StorageFailed, got %A" label other
+
+/// The document's observable behaviour over a backend, pinned for every
+/// SDK store: `freshStorage` supplies an empty backend implementing both
+/// `IBlobStorage` and `IConditionalBlobStorage`, `factory` builds the store
+/// over it.
+let documentTests (name: string) (freshStorage: unit -> IBlobStorage) (factory: IBlobStorage -> IPendingInviteStore) =
+
+    let canonical = "pending-invites.json"
+
+    testList $"{name} — the pending-invites document" [
+
+        testCaseAsync "the bytes at rest for a populated map"
+        <| async {
+            let storage = freshStorage ()
+            let store = factory storage
+
+            let entry: PendingInviteByEmail = {
+                TeamId = "team-a+b"
+                Role = Admin
+                ExpiresAt = DateTime(2099, 1, 2, 3, 4, 5, DateTimeKind.Utc)
+                InviterUserId = "alice@example.com"
+                IssuedAt = DateTime(2026, 11, 9, 8, 0, 0, DateTimeKind.Utc)
+            }
+
+            do! upsertOrFail "Upsert" store "Bob@Example.com" entry
+            let! bytes = storage.Download(ScopeKey.PlatformContainer, canonical)
+
+            Expect.equal
+                (okOrFail "download" bytes |> Encoding.UTF8.GetString)
+                """{"bob@example.com":{"TeamId":"team-a+b","Role":"Admin","ExpiresAt":"2099-01-02T03:04:05.0000000Z","InviterUserId":"alice@example.com","IssuedAt":"2026-11-09T08:00:00.0000000Z"}}"""
+                "today's bytes"
+        }
+
+        testCaseAsync "a document that cannot be read is a refusal, never the empty map, and nothing is written"
+        <| async {
+            let storage = freshStorage ()
+            do! upsertOrFail "seed" (factory storage) "seed@example.com" (freshPending "team-seed")
+            let! before = storage.Download(ScopeKey.PlatformContainer, canonical)
+            let store = factory (unreadable storage)
+
+            let! listed = store.ListAll()
+            storageFailed "ListAll" listed
+            let! upserted = store.Upsert("new@example.com", freshPending "team-new")
+            storageFailed "Upsert" upserted
+
+            let! after = storage.Download(ScopeKey.PlatformContainer, canonical)
+            Expect.equal (okOrFail "after" after) (okOrFail "before" before) "the document is unchanged"
+        }
+
+        testCaseAsync "an undecodable document is quarantined, left in place, and every operation refused"
+        <| async {
+            let storage = freshStorage ()
+            let store = factory storage
+            let! _ = storage.Upload(ScopeKey.PlatformContainer, canonical, Encoding.UTF8.GetBytes "{ not json")
+
+            let! upserted = store.Upsert("victim@example.com", freshPending "team-corrupt")
+            storageFailed "Upsert" upserted
+            let! consumed = store.TryConsumeForEmail "victim@example.com"
+            storageFailed "TryConsumeForEmail" consumed
+            let! listed = store.ListAll()
+            storageFailed "ListAll" listed
+
+            let! names = storage.List(ScopeKey.PlatformContainer, canonical)
+            Expect.isTrue (names |> List.exists (fun n -> n.Contains ".corrupt-")) "the bytes were copied aside"
+            let! kept = storage.Download(ScopeKey.PlatformContainer, canonical)
+
+            Expect.equal
+                (okOrFail "canonical" kept |> Encoding.UTF8.GetString)
+                "{ not json"
+                "not healed to empty: the canonical document is untouched"
         }
     ]

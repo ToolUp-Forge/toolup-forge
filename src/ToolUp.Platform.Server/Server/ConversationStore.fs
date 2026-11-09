@@ -39,7 +39,7 @@ open ToolUp.Platform.Infra
 // `AIContentPart`, the per-image variants) round-trip cleanly. Same
 // pattern as `ResultStore.fs` / `AIAssistantHandler.fs`.
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 let private toJsonBytes (value: 'T) : byte[] =
     JsonSerializer.Serialize(value, jsonOptions) |> Encoding.UTF8.GetBytes

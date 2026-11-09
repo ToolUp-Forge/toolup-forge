@@ -35,7 +35,7 @@ module private EvidencePackInternals =
     /// F#-aware STJ options (Option / DU / record / list / Map). Property
     /// order is reflection-stable, so a fixed manifest value serialises to
     /// fixed bytes — the determinism the signature relies on.
-    let jsonOptions = FableConverters.create ()
+    let jsonOptions = PlatformJson.options
 
     let serialize (value: 'T) : byte[] =
         JsonSerializer.SerializeToUtf8Bytes(value, jsonOptions)

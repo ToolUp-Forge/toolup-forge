@@ -39,7 +39,7 @@ open ToolUp.PublicRendering
 /// wire shape every other non-Remoting JSON seam in the SDK uses, so a
 /// payload produced by a module's `DataType.Process` round-trips
 /// faithfully here.
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 /// The empty projector registry — no data types projected. The starting
 /// point for `register` / `registerTyped` chains.

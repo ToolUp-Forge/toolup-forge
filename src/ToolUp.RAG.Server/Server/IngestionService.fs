@@ -236,7 +236,7 @@ type IngestionRetryDeps = {
 /// the background service and the retry job handler so the two paths
 /// can never drift in how they record a chunk outcome.
 module Outcome =
-    let private jsonOptions = FableConverters.create ()
+    let private jsonOptions = PlatformJson.options
 
     let toJson (o: 'T) =
         JsonSerializer.Serialize(o, jsonOptions)
@@ -489,7 +489,7 @@ type IngestionBackgroundService
 
     let sem = new SemaphoreSlim(maxConcurrency, maxConcurrency)
 
-    let jsonOptions = FableConverters.create ()
+    let jsonOptions = PlatformJson.options
 
     let toJson o =
         JsonSerializer.Serialize(o, jsonOptions)

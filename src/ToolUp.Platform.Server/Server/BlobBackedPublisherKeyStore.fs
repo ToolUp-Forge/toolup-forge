@@ -8,6 +8,7 @@ open ToolUp.Platform.Jobs
 
 open System
 open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.Infra
 
 // Phase 30a — default `IPublisherKeyStore` for edge instances. Writes
 // trusted public-key bytes to `_platform/trusted-publishers/{keyId}.pub`
@@ -58,6 +59,14 @@ module private BlobBackedPublisherKeyStoreInternal =
 /// Phase 30a — `IPublisherKeyStore` backed by `IBlobStorage`. Each
 /// trusted key lives at `_platform/trusted-publishers/{keyId}.pub`.
 type BlobBackedPublisherKeyStore(blobs: IBlobStorage) =
+    // The key is stored as its raw bytes.
+    let keys =
+        BlobMapStore<byte[]>(
+            blobs,
+            { Encode = id; Decode = Result.Ok },
+            ToolUp.Platform.Config.ConsoleLogger.ConsoleLogger() :> ILogger
+        )
+
     interface IPublisherKeyStore with
         member _.AddTrustedKey(keyId: PublisherKeyId, publicKey: byte[]) : Async<unit> = async {
             if isNull (box publicKey) then
@@ -85,18 +94,12 @@ type BlobBackedPublisherKeyStore(blobs: IBlobStorage) =
                 return raise (InvalidOperationException(sprintf "Failed to remove trusted publisher key: %s" err))
         }
 
+        // A trusted key that exists and cannot be read REFUSES the lookup
+        // (`DocumentUnavailableException`) rather than reading as "not
+        // trusted": the answer is the store's, not a guess.
         member _.TryGetPublicKey(keyId: PublisherKeyId) : Async<byte[] option> = async {
-            let name = blobNameForKeyId keyId
-            let! exists = blobs.Exists(trustedPublishersContainer, name)
-
-            if not exists then
-                return None
-            else
-                let! result = blobs.Download(trustedPublishersContainer, name)
-
-                match result with
-                | Result.Ok bytes -> return Some bytes
-                | Result.Error _ -> return None
+            let! read = keys.Read(trustedPublishersContainer, blobNameForKeyId keyId)
+            return DocumentUnavailable.orRaise read
         }
 
         member _.ListTrustedKeyIds() : Async<PublisherKeyId list> = async {

@@ -73,7 +73,7 @@ let private blobName (scope: VectorScope) = $"_rag/{scopeToKey scope}/index.json
 
 // ─── JSON helpers ─────────────────────────────────────────────────
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 let private toJson o =
     JsonSerializer.Serialize(o, jsonOptions)

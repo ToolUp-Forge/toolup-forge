@@ -533,7 +533,7 @@ type IDeclassificationAmendmentAudit =
 /// reserved `_facts` source module and the composition-declared scope.
 type EventStoreAmendmentAudit(events: IEventStore, scopeId: string) =
 
-    static let jsonOptions = FableConverters.create ()
+    static let jsonOptions = PlatformJson.options
 
     interface IDeclassificationAmendmentAudit with
         member _.Record(resolution: DeclassificationAmendmentResolution) = async {

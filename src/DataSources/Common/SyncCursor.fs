@@ -286,7 +286,7 @@ type IncrementalSyncError =
 [<RequireQualifiedAccess>]
 module IncrementalSync =
 
-    let private jsonOptions = FableConverters.create ()
+    let private jsonOptions = PlatformJson.options
 
     /// The payload string for a `JobRegistration`.
     let payload (request: IncrementalSyncRequest) : string =

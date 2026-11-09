@@ -55,7 +55,7 @@ open ToolUp.Platform.Infra.Metrics
 // `SourceModule` lands in the same blob layout, the same retention
 // policy and the same `ReadBySource` query surface, and breaks nothing.
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 let private resolveAccessContext (ctx: HttpContext) : AccessContext =
     match ctx.RequestServices.GetService(typeof<AccessContext>) with

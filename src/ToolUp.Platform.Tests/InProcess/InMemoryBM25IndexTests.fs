@@ -45,7 +45,7 @@ type private PrivateDocEntry = {
 [<CLIMutable>]
 type private PrivateSnapshot = { Docs: PrivateDocEntry array }
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 /// ILogger double that records Warn / Error lines for assertion.
 type private CapturingLogger() =

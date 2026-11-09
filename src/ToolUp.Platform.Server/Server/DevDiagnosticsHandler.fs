@@ -600,7 +600,7 @@ let private buildContributors (ctx: HttpContext) : Async<Map<string, string>> = 
                 if winner = (workTask :> System.Threading.Tasks.Task) then
                     let! (name, payload) = workTask |> Async.AwaitTask
 
-                    let json = JsonSerializer.Serialize(payload, FableConverters.create ())
+                    let json = JsonSerializer.Serialize(payload, PlatformJson.options)
 
                     return Some(name, json)
                 else

@@ -37,7 +37,7 @@ open ToolUp.Platform.Compose
 //
 // No live provider: every provider here is a fake.
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 let private container = "team-listing"
 let private t0 = DateTime(2026, 9, 26, 12, 0, 0, DateTimeKind.Utc)

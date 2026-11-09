@@ -135,7 +135,7 @@ module ReportSubscriptionJobHandler =
     /// "waiting will not help" — before the attempt count is consulted.
     type private RunFailure = { Terminal: bool; Reason: string }
 
-    let private jsonOptions = FableConverters.create ()
+    let private jsonOptions = PlatformJson.options
 
     /// Serialise the payload for `JobRegistration.Payload`. Exposed so
     /// the API handler's schedule path and this module's parse path

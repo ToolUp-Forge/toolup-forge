@@ -332,30 +332,56 @@ type BlobExternalHandleStore(blobs: IBlobStorage, now: unit -> DateTime) =
     let recordPrefix = "external-compute/handles/"
     let indexPrefix = "external-compute/handle-index/"
 
-    let cas =
+    do
         match box blobs with
-        | :? IConditionalBlobStorage as c -> c
+        | :? IConditionalBlobStorage -> ()
         | _ ->
             invalidArg
                 "blobs"
                 "BlobExternalHandleStore requires an IBlobStorage that also implements IConditionalBlobStorage (conditional writes). The MarkTerminal compare-and-set is the entire exactly-once guarantee — a download-modify-upload fallback races exactly where a completion callback and the reconciliation poll meet, and losing that race resolves one unit of work twice. Use InMemoryExternalHandleStore for a single-instance deployment, or a backend with conditional-write support."
 
-    let json = FableConverters.create ()
+    let json = PlatformJson.options
 
     let recordName (scopeId: string) (handleId: Guid) =
         $"%s{recordPrefix}%s{scopeId}/%O{handleId}.json"
 
     let indexName (handleId: Guid) = $"%s{indexPrefix}%O{handleId}"
 
-    /// Decode a record, or `None` for anything that does not
-    /// round-trip. A record that cannot be read is treated exactly as an
-    /// absent one: the callback is refused and the poll loop resolves
-    /// the run, which is strictly better than throwing out of an
-    /// unauthenticated ingress path.
-    let tryDecode (bytes: byte[]) : ExternalHandleRecord option =
-        try
-            Some(JsonSerializer.Deserialize<ExternalHandleRecord>(Encoding.UTF8.GetString bytes, json))
-        with _ ->
+    let logger = JsonConsoleLogger.JsonConsoleLogger() :> ILogger
+
+    // Eight attempts against concurrent writers, without pausing, for the
+    // MarkTerminal claim.
+    let records =
+        BlobDocumentStore<ExternalHandleRecord>(
+            blobs,
+            BlobCodec.json<ExternalHandleRecord>,
+            logger,
+            {
+                MaxRetries = 7
+                InitialBackoff = TimeSpan.Zero
+            }
+        )
+
+    let pointers =
+        BlobDocumentStore<string>(
+            blobs,
+            {
+                Encode = Encoding.UTF8.GetBytes
+                Decode = fun bytes -> Ok(Encoding.UTF8.GetString bytes)
+            },
+            logger
+        )
+
+    /// A record or pointer that cannot be read or decoded is treated as an
+    /// absent one — the callback is refused and the poll loop resolves the
+    /// run, which is strictly better than throwing out of an unauthenticated
+    /// ingress path — but never silently: the document store quarantines
+    /// undecodable bytes, and the refusal is logged here.
+    let absentIfUnavailable (what: string) (read: Result<'T option, BlobMapStoreError>) : 'T option =
+        match read with
+        | Ok value -> value
+        | Error e ->
+            logger.Warn($"[BlobExternalHandleStore] {what} treated as absent: {BlobMapStoreError.describe e}")
             None
 
     let encode (record: ExternalHandleRecord) =
@@ -417,15 +443,14 @@ type BlobExternalHandleStore(blobs: IBlobStorage, now: unit -> DateTime) =
         }
 
         member _.Resolve(handleId: Guid) = async {
-            let! pointer = blobs.Download(container, indexName handleId)
+            let! pointer = pointers.Read(ScopeKey.platform, DocPath.ofString (indexName handleId))
 
-            match pointer with
-            | Error _ -> return None
-            | Ok scopeBytes ->
-                let scopeId = Encoding.UTF8.GetString scopeBytes
-                let! stored = blobs.Download(container, recordName scopeId handleId)
+            match absentIfUnavailable "handle id index" pointer with
+            | None -> return None
+            | Some scopeId ->
+                let! stored = records.Read(ScopeKey.platform, DocPath.ofString (recordName scopeId handleId))
 
-                match stored |> Result.toOption |> Option.bind tryDecode with
+                match absentIfUnavailable "handle record" stored with
                 | None -> return None
                 | Some record ->
                     // Cross-check: the record's own `ScopeId` must equal
@@ -445,47 +470,33 @@ type BlobExternalHandleStore(blobs: IBlobStorage, now: unit -> DateTime) =
         member this.MarkTerminal(handleId: Guid) = async {
             let store = this :> IExternalHandleStore
 
-            // Read-check-CAS, retried on a genuine concurrent write.
-            // `ETagMismatch` means somebody else wrote the record
-            // between the read and the write; the re-read then either
-            // finds it terminal (they won — return `false`) or finds it
-            // still open (their write was a re-registration) and tries
-            // again. Bounded, so a pathological backend cannot spin a
-            // request thread indefinitely.
-            let mutable attempts = 0
-            let mutable result = ValueNone
+            // One guarded update of the record: a concurrent write replays
+            // the decision over the fresh read, which either finds it
+            // terminal (they won — `false`) or still open (their write was a
+            // re-registration) and claims it.
+            match! store.Resolve handleId with
+            | None -> return false
+            | Some record when record.Terminal -> return false
+            | Some record ->
+                let! claimed =
+                    records.Update(
+                        ScopeKey.platform,
+                        DocPath.ofString (recordName record.Handle.ScopeId handleId),
+                        fun current ->
+                            match current with
+                            | Some latest when not latest.Terminal ->
+                                BlobUpdate.Write(
+                                    {
+                                        latest with
+                                            Terminal = true
+                                            TerminalAt = Some(now ())
+                                    },
+                                    true
+                                )
+                            | _ -> BlobUpdate.Keep false
+                    )
 
-            while result.IsNone && attempts < 8 do
-                attempts <- attempts + 1
-
-                let! resolved = store.Resolve handleId
-
-                match resolved with
-                | None -> result <- ValueSome false
-                | Some record when record.Terminal -> result <- ValueSome false
-                | Some record ->
-                    let name = recordName record.Handle.ScopeId handleId
-                    let! current = cas.DownloadWithETag(container, name)
-
-                    match current with
-                    | Error _ -> result <- ValueSome false
-                    | Ok(bytes, etag) ->
-                        match tryDecode bytes with
-                        | None -> result <- ValueSome false
-                        | Some latest when latest.Terminal -> result <- ValueSome false
-                        | Some latest ->
-                            let claimed = {
-                                latest with
-                                    Terminal = true
-                                    TerminalAt = Some(now ())
-                            }
-
-                            let! written = cas.UploadWithETag(container, name, encode claimed, IfMatch etag)
-
-                            match written with
-                            | Ok _ -> result <- ValueSome true
-                            | Error(ETagMismatch _) -> () // lost the race; re-read and re-decide
-                            | Error(ConditionalWriteFailure _) -> result <- ValueSome false
-
-            return result |> ValueOption.defaultValue false
+                return
+                    absentIfUnavailable "handle record claim" (claimed |> Result.map Some)
+                    |> Option.defaultValue false
         }

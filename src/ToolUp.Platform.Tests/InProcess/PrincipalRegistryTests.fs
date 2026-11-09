@@ -24,7 +24,7 @@ open ToolUp.Platform.Compose
 // joined), the merged-all-three case, the look-back bound, and the
 // admin / substrate fail-closed gates.
 
-let private auditJson = FableConverters.create ()
+let private auditJson = PlatformJson.options
 
 /// A stored membership blob in `TeamManagement`'s wire shape.
 let private membershipBlob (rows: (string * string) list) : byte[] =

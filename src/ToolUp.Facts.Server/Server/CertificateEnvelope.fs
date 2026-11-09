@@ -75,7 +75,7 @@ let ContentAddressedDigestKey = "sha256"
 [<Literal>]
 let OpaqueIdDigestKey = "toolupContentId"
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 /// `true` when `id` has the shape of a lowercase SHA-256 hex digest — the
 /// discriminator between the two digest keys above. A shape test, not a

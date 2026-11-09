@@ -3,13 +3,10 @@ module ToolUp.Platform.Infra.UsageLog
 open System
 open System.Collections.Concurrent
 open System.Collections.Generic
-open System.Text
 open System.Threading
 open System.Threading.Channels
 open System.Threading.Tasks
 open Microsoft.Extensions.Hosting
-open System.Text.Json
-open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Usage
@@ -28,10 +25,21 @@ open ToolUp.Platform.Infra.Usage
 //
 // On flush, the daemon groups the drained batch by `(ScopeId,
 // Timestamp.Date)`, dispatches per-bucket flushes in parallel via
-// `Async.Parallel`, and serialises read-modify-write on each rollup
-// file with a per-(scope, day) `SemaphoreSlim`. Cross-scope flushes
-// run concurrently — no head-of-line blocking; same-bucket flushes
-// queue.
+// `Async.Parallel`, and merges each into its rollup with one guarded
+// update through `BlobDocumentStore` (its write stripes queue same-bucket
+// flushes in this process; a conditional backend's CAS orders them across
+// processes). Cross-scope flushes run concurrently — no head-of-line
+// blocking.
+//
+// **A rollup that cannot be read is never merged into.** A transient read
+// failure used to read as an empty day and write the batch over every
+// record the day held — billing data erased by a blip. Now the flush
+// writes nothing and logs, and the records are dropped as a failed write's
+// are. A rollup whose bytes do not decode is set aside (copied beside
+// itself, for an operator to repair) and the day starts again, so new
+// records keep landing. A query over a rollup that cannot be read or
+// decoded REFUSES (`DocumentUnavailableException`) rather than answering a
+// usage total that silently omits a day.
 //
 // **Idempotency under retry.** Flush merges incoming records into
 // the existing array de-duped by `RecordId` so a crash-mid-write
@@ -55,16 +63,11 @@ let private rollupBlobName (scopeId: string) (date: DateTime) =
 let private dateKey (timestamp: DateTime) = timestamp.ToUniversalTime().Date
 
 let private extractDateFromBlobName (blobName: string) (scopeId: string) : DateTime option =
-    // LocalFileStorage on Windows returns names with `\` separators
-    // (Path.GetRelativePath uses the OS-native separator). Cloud
-    // stores return `/`. Normalise to `/` before comparing against
-    // our forward-slash prefix.
-    let normalised = blobName.Replace('\\', '/')
     let prefix = scopePrefix scopeId
 
-    if normalised.StartsWith prefix && normalised.EndsWith ".json" then
+    if blobName.StartsWith prefix && blobName.EndsWith ".json" then
         let middle =
-            normalised.Substring(prefix.Length, normalised.Length - prefix.Length - ".json".Length)
+            blobName.Substring(prefix.Length, blobName.Length - prefix.Length - ".json".Length)
 
         match
             DateTime.TryParseExact(
@@ -82,37 +85,27 @@ let private extractDateFromBlobName (blobName: string) (scopeId: string) : DateT
 
 // ─── Serialisation ───────────────────────────────────────────────
 //
-// `FableConverters` mirrors `AuditLog.fs`. The options
-// instance is reused across calls — STJ's JsonSerializerOptions is
-// thread-safe once it has been used for a serialise call (it
-// freezes on first use).
+// `BlobCodec.json` over `PlatformJson`, the bytes the rollups have always
+// carried. An empty blob, and a `null` document, are an empty day.
 
-let private jsonOptions = FableConverters.create ()
+let private rollupCodec: BlobCodec<UsageRecord list> = {
+    Encode = BlobCodec.json<UsageRecord list>.Encode
+    Decode =
+        fun bytes ->
+            if bytes.Length = 0 then
+                Ok []
+            else
+                // `Option.ofObj` requires `'T : null`, which F# lists do
+                // not satisfy: box, then null-check.
+                BlobCodec.json<UsageRecord list>.Decode bytes
+                |> Result.map (fun records ->
+                    match box records with
+                    | null -> []
+                    | _ -> records)
+}
 
-let private toJson (records: UsageRecord list) : byte[] =
-    let json = JsonSerializer.Serialize(records, jsonOptions)
-    Encoding.UTF8.GetBytes json
-
-let private fromJson (bytes: byte[]) : UsageRecord list =
-    if bytes.Length = 0 then
-        []
-    else
-        let json = Encoding.UTF8.GetString bytes
-
-        try
-            // 0.4.4 — `Option.ofObj` requires `'T : null`, which F# lists
-            // don't satisfy. Box then null-check, which keeps the
-            // "deserialiser returned null -> []" defensive shape without
-            // tripping the type-constraint check.
-            match JsonSerializer.Deserialize<UsageRecord list>(json, jsonOptions) |> box with
-            | null -> []
-            | _ as o -> o :?> UsageRecord list
-        with _ ->
-            // Defensive: a single corrupt rollup must not break the
-            // whole query. Return empty for this bucket and let the
-            // ops surface (logged when the store is constructed with
-            // a logger).
-            []
+let private rollupStore (blobStorage: IBlobStorage) (logger: ILogger) =
+    BlobDocumentStore<UsageRecord list>(blobStorage, rollupCodec, logger)
 
 // ─── Default in-memory implementation (tests / dev) ──────────────
 //
@@ -216,49 +209,39 @@ type UsageBatchFlusher
 
     let dropCounter = DropCounter()
 
-    // Per-(scope, day) write serialisation. SemaphoreSlim per bucket;
-    // cross-bucket flushes run in parallel.
-    let bucketLocks = ConcurrentDictionary<string * DateTime, SemaphoreSlim>()
+    let rollups = rollupStore blobStorage logger
 
-    let getLock key =
-        bucketLocks.GetOrAdd(key, fun _ -> new SemaphoreSlim(1, 1))
-
-    /// Read existing rollup, merge by `RecordId`, write back.
+    /// Merge `incoming` into the day's rollup by `RecordId`, in one guarded
+    /// update.
     let flushBucket (scopeId: string) (date: DateTime) (incoming: UsageRecord list) = async {
-        let lock = getLock (scopeId, date)
-        do! lock.WaitAsync() |> Async.AwaitTask
+        let path = DocPath.ofString (rollupBlobName scopeId date)
 
-        try
-            let blobName = rollupBlobName scopeId date
-            let! existing = blobStorage.Download(platformContainer, blobName)
+        let! result =
+            rollups.UpdateOrRestart(
+                ScopeKey.platform,
+                path,
+                fun stored ->
+                    let existingList = Option.defaultValue [] stored
+                    let existingIds = existingList |> List.map _.RecordId |> Set.ofList
 
-            let existingList =
-                match existing with
-                | Ok bytes -> fromJson bytes
-                | Error _ -> []
+                    let merged =
+                        existingList
+                        @ (incoming |> List.filter (fun r -> not (Set.contains r.RecordId existingIds)))
 
-            let existingIds = existingList |> List.map _.RecordId |> Set.ofList
+                    BlobUpdate.Write(merged, ())
+            )
 
-            let merged =
-                existingList
-                @ (incoming |> List.filter (fun r -> not (Set.contains r.RecordId existingIds)))
-
-            let bytes = toJson merged
-            let! result = blobStorage.Upload(platformContainer, blobName, bytes)
-
-            match result with
-            | Ok _ -> ()
-            | Error err ->
-                logger.Warn(
-                    sprintf
-                        "[UsageLog] flush failed scope=%s date=%s records=%d err=%s"
-                        scopeId
-                        (date.ToString "yyyy-MM-dd")
-                        incoming.Length
-                        err
-                )
-        finally
-            lock.Release() |> ignore
+        match result with
+        | Ok() -> ()
+        | Error e ->
+            logger.Warn(
+                sprintf
+                    "[UsageLog] flush failed scope=%s date=%s records=%d err=%s"
+                    scopeId
+                    (date.ToString "yyyy-MM-dd")
+                    incoming.Length
+                    (BlobMapStoreError.describe e)
+            )
     }
 
     /// Group the drained batch by (ScopeId, Date) and dispatch in
@@ -383,13 +366,8 @@ type UsageBatchFlusher
 /// write-side concern only).
 type BlobUsageLog(blobStorage: IBlobStorage, flusher: UsageBatchFlusher) =
 
-    let downloadOne (scopeId: string) (blobName: string) = async {
-        let! result = blobStorage.Download(platformContainer, blobName)
-
-        match result with
-        | Ok bytes -> return fromJson bytes
-        | Error _ -> return []
-    }
+    let rollups =
+        rollupStore blobStorage (JsonConsoleLogger.JsonConsoleLogger() :> ILogger)
 
     let listScopeBlobs (scopeId: string) = async {
         let! names = blobStorage.List(platformContainer, scopePrefix scopeId)
@@ -415,12 +393,20 @@ type BlobUsageLog(blobStorage: IBlobStorage, flusher: UsageBatchFlusher) =
                     | None -> false)
     }
 
+    /// Every record in the scope's rollups for `range`. A rollup that
+    /// cannot be read or decoded refuses the query: a usage total is a
+    /// bill, and one that silently omits a day is wrong.
     let readAllRecords (scopeId: string) (range: (DateTime * DateTime) option) = async {
         let! blobs = blobsInRange scopeId range
 
-        let! contents = blobs |> List.map (downloadOne scopeId) |> Async.Parallel
+        let! rows =
+            rollups.ReadMany(
+                ScopeKey.platform,
+                blobs |> List.map DocPath.ofString,
+                BlobDocumentStoreLimits.DefaultListDegree
+            )
 
-        return contents |> Array.toList |> List.collect id
+        return rows |> List.collect (snd >> DocumentUnavailable.orRaise)
     }
 
     interface IUsageLog with

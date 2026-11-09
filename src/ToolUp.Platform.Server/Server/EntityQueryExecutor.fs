@@ -40,7 +40,7 @@ open ToolUp.Platform.EntityQueryTypes
 // so a stale ref never puts an entity into an `Eq`/`In`/range answer and
 // never takes one out of a `Ne`/`Not` complement.
 
-let private fableJsonOptions = FableConverters.create ()
+let private fableJsonOptions = PlatformJson.options
 
 let private deserialise<'T> (json: string) : 'T =
     JsonSerializer.Deserialize<'T>(json, fableJsonOptions)

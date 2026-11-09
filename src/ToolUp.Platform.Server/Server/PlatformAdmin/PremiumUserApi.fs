@@ -25,7 +25,7 @@ open ToolUp.Platform.Config
 // the existing endpoint family rather than duplicating it here.
 // This handler covers only the missing piece — the list read.
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 let private resolveAccessContext (ctx: HttpContext) : AccessContext =
     match ctx.RequestServices.GetService(typeof<AccessContext>) with

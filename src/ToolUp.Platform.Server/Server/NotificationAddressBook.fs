@@ -1,11 +1,9 @@
 module ToolUp.Platform.Jobs.NotificationAddressBook
 
 open System
-open System.Text
-open System.Text.Json
-open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.Infra
 
 // ─── SDK-default implementations ─────────────────────────────────
 //
@@ -40,20 +38,12 @@ open ToolUp.Platform.BlobStorage
 // `INotificationAddressBook` against DI — same pattern as
 // substituting `IBlobStorage` for cloud storage.
 
-/// Reserved container name for SDK-platform blobs (membership data,
-/// permissions, contact records). Same constant the rest of the SDK
-/// reaches for via `BlobStorage` hard-coded paths; literalised here
-/// to keep the file self-contained.
-[<Literal>]
-let private PlatformContainer = ScopeKey.PlatformContainer
-
-let private contactJsonOptions = FableConverters.create ()
-
 /// Reserved blob name for a user's persisted contact record. The
 /// container is `_platform`; this nested path keeps each scope's
 /// contacts in their own logical folder so admin tooling (future) can
 /// list-by-prefix.
-let private contactBlobName (scopeId: string) (userId: string) = $"contacts/{scopeId}/{userId}.json"
+let private contactPath (scopeId: string) (userId: string) =
+    DocPath.ofString $"contacts/{scopeId}/{userId}.json"
 
 /// `INotificationAddressBook` that knows about no contacts. The
 /// SDK's safe default — registered automatically when the deployment
@@ -71,9 +61,12 @@ type NoOpNotificationAddressBook() =
 /// `INotificationAddressBook` backed by `IBlobStorage`. Reads
 /// `_platform/contacts/{scopeId}/{userId}.json` per lookup. Missing
 /// blobs return the empty contact (which surfaces as `None` /
-/// `[]` from `Resolve*`); decode failures return the empty contact
-/// AND log at `Warn` so a corrupt record doesn't masquerade as a
-/// "no address" miss.
+/// `[]` from `Resolve*`). A record that cannot be read or decoded
+/// ALSO returns the empty contact — by decision: a lookup is not
+/// authority, and an unresolvable address skips that one send rather
+/// than failing the dispatch — but it is logged at `Warn` (and an
+/// undecodable one set aside by the store) so it never masquerades as
+/// a "no address" miss.
 ///
 /// Stateless across calls (Phase 9c rule 4). A future caching layer
 /// would wrap this rather than mutate it. Async at every boundary
@@ -86,41 +79,21 @@ type BlobBackedNotificationAddressBook
         | Some l -> l.Warn message
         | None -> ()
 
+    let docs =
+        let storeLogger =
+            logger
+            |> Option.defaultWith (fun () -> ToolUp.Platform.Config.ConsoleLogger.ConsoleLogger() :> ILogger)
+
+        BlobDocumentStore<UserContact>(storage, BlobCodec.json<UserContact>, storeLogger)
+
     let readContact (scopeId: string) (userId: string) : Async<UserContact> = async {
-        let blobName = contactBlobName scopeId userId
-
-        try
-            let! payload = storage.Download(PlatformContainer, blobName)
-
-            match payload with
-            | Error _ ->
-                // `Error` here covers both "not found" (the typical
-                // case for a user with no registered contact) and
-                // genuine storage failures. The default impl treats
-                // them the same — empty contact, no exception. Real
-                // deployments using a directory backend can
-                // distinguish in their own implementation.
-                return UserContact.empty userId
-            | Ok bytes ->
-                try
-                    let json = Encoding.UTF8.GetString bytes
-                    let contact = JsonSerializer.Deserialize<UserContact>(json, contactJsonOptions)
-
-                    // Defensive null-check in case a corrupt JSON literal
-                    // round-trips to a `null` reference (STJ will
-                    // happily produce one for `"null"` payloads).
-                    if isNull (box contact) then
-                        return UserContact.empty userId
-                    else
-                        return contact
-                with ex ->
-                    logWarn
-                        $"[NotificationAddressBook] decode failed scope=%s{scopeId} user=%s{userId}: %s{ex.GetType().Name}: %s{ex.Message}"
-
-                    return UserContact.empty userId
-        with ex ->
+        match! docs.Read(ScopeKey.platform, contactPath scopeId userId) with
+        // A `"null"` payload decodes to a null reference: no contact.
+        | Ok(Some contact) when not (isNull (box contact)) -> return contact
+        | Ok _ -> return UserContact.empty userId
+        | Error e ->
             logWarn
-                $"[NotificationAddressBook] storage read failed scope=%s{scopeId} user=%s{userId}: %s{ex.GetType().Name}: %s{ex.Message}"
+                $"[NotificationAddressBook] contact unavailable scope=%s{scopeId} user=%s{userId}: {BlobMapStoreError.describe e}"
 
             return UserContact.empty userId
     }
@@ -247,10 +220,10 @@ type BlobBackedNotificationAddressBook
 /// address book do so server-side from their own user-profile flow.
 /// Future phases may add an `IConfigStore`-style write API.
 let saveContact (storage: IBlobStorage) (scopeId: string) (contact: UserContact) : Async<Result<unit, string>> = async {
-    let json = JsonSerializer.Serialize(contact, contactJsonOptions)
-    let bytes = Encoding.UTF8.GetBytes json
-    let blobName = contactBlobName scopeId contact.UserId.Value
-    let! result = storage.Upload(PlatformContainer, blobName, bytes)
+    let path = contactPath scopeId contact.UserId.Value
+
+    let! result =
+        storage.Upload(ScopeKey.PlatformContainer, DocPath.value path, BlobCodec.json<UserContact>.Encode contact)
 
     return
         match result with

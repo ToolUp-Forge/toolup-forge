@@ -289,7 +289,7 @@ let private serialiseOutbound (payload: WebhookDeliveryPayload) : byte[] =
 
 /// Persisted audit-event payloads use `FableConverters` because the
 /// admin UI deserialises them via ToolUp.Remoting/SimpleJson.
-let private auditJsonOptions = FableConverters.create ()
+let private auditJsonOptions = PlatformJson.options
 
 let private toAuditJson (value: 'T) =
     JsonSerializer.Serialize(value, auditJsonOptions)

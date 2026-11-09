@@ -71,7 +71,7 @@ sequenced group is one entry per pack), with what placed it. Paths are under `sr
 | Platform.Remoting | `CellProvenanceTests.tests` | `InProcess/CellProvenanceTests.fs` | reaches no server part |
 | Platform.Remoting | `AgChartExportTests.tests` | `InProcess/AgChartExportTests.fs` | reaches no server part |
 | Platform.Remoting | `ValidationTests.tests` | `InProcess/ValidationTests.fs` | uses `ToolUp.Platform.Server.Remoting` |
-| Platform.Remoting | `IdempotencyReplayAuditTests.tests` | `InProcess/IdempotencyReplayAuditTests.fs` | uses `ToolUp.Platform.Server.Remoting` |
+| Platform.Infra | `IdempotencyReplayAuditTests.tests` | `InProcess/IdempotencyReplayAuditTests.fs` | uses `BlobIdempotencyStore` (`ToolUp.Platform.Server.Infra`, since Phase 1061) |
 | Platform.Remoting | `IdempotencyStoreEvictionTests.tests` | `InProcess/IdempotencyStoreEvictionTests.fs` | uses `ToolUp.Platform.Server.Remoting` |
 | Platform.Remoting | `InMemoryJobDispatcherTests.tests` | `InProcess/InMemoryJobDispatcherTests.fs` | uses `ToolUp.Platform.Server.Remoting` |
 | Platform.Remoting | `AuditBodyDisposalTests.tests` | `InProcess/AuditBodyDisposalTests.fs` | uses `ToolUp.Platform.Server.Remoting` |

@@ -48,7 +48,7 @@ open ToolUp.Platform.Compose
 
 // ─── Host ─────────────────────────────────────────────────────────────
 
-let private json = FableConverters.create ()
+let private json = PlatformJson.options
 
 let private buildHost (registrations: IServiceCollection -> unit) (routes: HttpHandler list) : IHost =
     Host

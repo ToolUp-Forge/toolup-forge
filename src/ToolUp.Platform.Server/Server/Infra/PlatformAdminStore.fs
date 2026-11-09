@@ -16,29 +16,17 @@ open ToolUp.Platform.Config
 // `PlatformAdminRevoked` audit events under `_platform` scope on every
 // successful mutation.
 //
-// **Concurrency (Phase 9i).** Reads are lock-free — a single blob fetch
-// + parse. Writes serialise through a single lease on `IDistributedLock`
-// because the assign / revoke operations are read-modify-write: load
-// list, mutate, save. Without the lock, two concurrent assignments would
-// each load the same baseline, append their target, and the second write
-// would clobber the first — and a concurrent last-admin revoke can brick
-// the platform, which is why `MultiInstanceAdminCoherenceValidator`
-// refuses `ReplicaCount > 1` for this store.
-//
-// One global lock id (`toolup:platform-admin:write`), not one per admin:
-// admin operations are rare and the blob is a single list, so global
-// write serialisation is right — per-key locking would be
-// over-engineering and would not prevent the lost update anyway (both
-// writers rewrite the whole document).
-//
-// This replaced a process-wide `SemaphoreSlim(1, 1)`. Under the
-// in-process default the serialisation is identical; a deployment that
-// composes a store-backed lock and passes it here gets the same
-// serialisation across instances, which is what lifts the
-// single-instance restriction. A CAS-based blob update
-// (`IConditionalBlobStorage.UploadWithETag`) is the complementary defence — the lock
-// serialises intent, the ETag refuses a lost update even if the lease
-// lapsed — and remains the Phase 9c follow-on.
+// **Concurrency.** The list is one document in the platform's durable
+// document store (`BlobDocumentStore`): a read that fails is a refusal, never
+// an empty list, and assign / revoke are one guarded read-modify-write — a
+// conditional write on a backend with the ETag seam, so a lost update is
+// refused and replayed. Writes also serialise on one lease on
+// `IDistributedLock` (`toolup:platform-admin:write`): on a backend WITHOUT
+// conditional writes the lease is the only cross-instance guard, and it keeps
+// the audit emission in the order of the writes. A concurrent last-admin
+// revoke can brick the platform, which is why
+// `MultiInstanceAdminCoherenceValidator` refuses `ReplicaCount > 1` for this
+// store unless the lock is store-backed.
 //
 // **Bootstrap.** The `bootstrap` function reads
 // `TOOLUP_INITIAL_PLATFORM_ADMIN` and assigns the named user as the
@@ -48,10 +36,10 @@ open ToolUp.Platform.Config
 // Wipe + re-bootstrap is the documented disaster-recovery path.
 
 let private platformContainer = ScopeKey.PlatformContainer
-let private blobName = "platform-admins.json"
+let private adminsPath = DocPath.ofString "platform-admins.json"
 let private bootstrapActor = "_bootstrap"
 
-/// Phase 9i — the single lock id every admin write serialises on.
+/// The single lock id every admin write serialises on.
 /// Namespaced so it cannot collide with another subsystem's ids in a
 /// shared store.
 let private writeLockId = "toolup:platform-admin:write"
@@ -76,115 +64,99 @@ let private initialAdminEnvVar = ConfigKeys.Names.initialPlatformAdmin
 [<Literal>]
 let allowDevAdminBootstrapEnvVar = ConfigKeys.Names.allowDevAdminBootstrap
 
-module private Json =
-    let private options =
+/// The admin list is a JSON array of user ids. It keeps the serializer's
+/// default encoder, not `PlatformJson`'s relaxed one: the two escape a `+` or
+/// `<` in an id differently, and a persisted document keeps its bytes. A list
+/// that does not decode is an error the store quarantines, never `[]`.
+let private adminsCodec: BlobCodec<string list> =
+    let options =
         JsonSerializerOptions(PropertyNamingPolicy = JsonNamingPolicy.CamelCase)
 
-    let serialize (admins: string list) : byte[] =
-        admins
-        |> List.toArray
-        |> fun arr -> JsonSerializer.Serialize(arr, options)
-        |> Encoding.UTF8.GetBytes
-
-    let deserialize (bytes: byte[]) : string list =
-        try
-            let json = Encoding.UTF8.GetString bytes
-
-            JsonSerializer.Deserialize<string array>(json, options) |> Array.toList
-        with _ -> []
+    {
+        Encode = fun admins -> JsonSerializer.SerializeToUtf8Bytes(List.toArray admins, options)
+        Decode =
+            fun content ->
+                try
+                    match JsonSerializer.Deserialize<string array>(content, options) with
+                    | null -> Error "the admin list is the JSON literal null"
+                    | admins -> Ok(Array.toList admins)
+                with ex ->
+                    Error ex.Message
+    }
 
 /// Default `IPlatformAdminStore` impl. Persists to `_platform/platform-
 /// admins.json` via the injected `IBlobStorage`; emits audit events via
 /// the injected `IAuditLog` after every successful mutation.
 type BlobBackedPlatformAdminStore(storage: IBlobStorage, auditLog: IAuditLog, ?distributedLock: IDistributedLock) =
-    /// Phase 9i — defaults to the process-wide in-process lock (the same
-    /// instance `compose` registers), so every admin writer in the process
-    /// serialises on one table exactly as the previous `SemaphoreSlim`
-    /// did.
+    /// Defaults to the process-wide in-process lock (the same instance
+    /// `compose` registers), so every admin writer in the process serialises
+    /// on one lease.
     let writeLock = defaultArg distributedLock InProcessDistributedLock.shared
 
+    let docs =
+        BlobDocumentStore<string list>(storage, adminsCodec, Config.ConsoleLogger.ConsoleLogger() :> ILogger)
+
+    /// The admin list; an absent document is no admins. One that cannot be
+    /// read or decoded raises `DocumentUnavailableException`: an unreadable
+    /// list is never "no admins".
     let load () = async {
-        let! result = storage.Download(platformContainer, blobName)
-
-        match result with
-        | Ok bytes -> return Json.deserialize bytes
-        | Error _ -> return []
+        let! read = docs.Read(ScopeKey.platform, adminsPath)
+        return read |> DocumentUnavailable.orRaise |> Option.defaultValue []
     }
 
-    let save (admins: string list) = async {
-        let bytes = Json.serialize admins
-        let! result = storage.Upload(platformContainer, blobName, bytes)
+    /// One guarded read-modify-write of the list under the write lease, then
+    /// the audit event when the transform wrote.
+    let change (transform: string list -> BlobUpdate<string list, Result<bool, string>>) (audit: AuditEvent) =
+        // `withLease` waits for the lease, releases it on every exit path
+        // and re-raises an exception with its stack intact.
+        DistributedLock.withLease writeLock writeLockId writeLeaseTtl (fun _lease -> async {
+            let! outcome =
+                docs.Update(ScopeKey.platform, adminsPath, fun current -> transform (Option.defaultValue [] current))
 
-        match result with
-        | Ok _ -> return Ok()
-        | Error e -> return Error e
-    }
-
-    let withWriteLock (op: unit -> Async<'T>) =
-        // `withLease` waits for the lease, releases on every exit path
-        // including exceptions, and re-raises the original exception with
-        // its stack intact — the `try/finally` this replaced, expressed
-        // once over the seam instead of per call site.
-        DistributedLock.withLease writeLock writeLockId writeLeaseTtl (fun _lease -> op ())
+            match outcome with
+            | Error e -> return Error(BlobMapStoreError.describe e)
+            | Ok(Error refusal) -> return Error refusal
+            | Ok(Ok false) -> return Ok()
+            | Ok(Ok true) ->
+                do! auditLog.Record(platformContainer, audit)
+                return Ok()
+        })
 
     interface IPlatformAdminStore with
+        /// Raises `DocumentUnavailableException` on an unreadable list: the
+        /// question is refused, not answered "no".
         member _.IsPlatformAdmin userId = async {
             let! admins = load ()
-            return List.contains userId (List.map UserId admins)
+            return List.contains userId.Value admins
         }
 
         member _.AssignPlatformAdmin(actorUserId, targetUserId) =
-            withWriteLock (fun () -> async {
-                let! existing = load ()
-
-                if List.contains targetUserId.Value existing then
-                    return Ok() // idempotent — no audit re-emission
-                else
-                    let updated = targetUserId.Value :: existing
-                    let! result = save updated
-
-                    match result with
-                    | Ok() ->
-                        do!
-                            auditLog.Record(
-                                platformContainer,
-                                PlatformAdminAssigned {
-                                    Actor = actorUserId.Value
-                                    TargetUserId = targetUserId
-                                }
-                            )
-
-                        return Ok()
-                    | Error e -> return Error e
-            })
+            change
+                (fun existing ->
+                    if List.contains targetUserId.Value existing then
+                        BlobUpdate.Keep(Ok false) // idempotent — no audit re-emission
+                    else
+                        BlobUpdate.Write(targetUserId.Value :: existing, Ok true))
+                (PlatformAdminAssigned {
+                    Actor = actorUserId.Value
+                    TargetUserId = targetUserId
+                })
 
         member _.RevokePlatformAdmin(actorUserId, targetUserId) =
-            withWriteLock (fun () -> async {
-                let! existing = load ()
+            change
+                (fun existing ->
+                    if not (List.contains targetUserId.Value existing) then
+                        BlobUpdate.Keep(Ok false) // idempotent — no audit re-emission
+                    elif existing.Length <= 1 then
+                        BlobUpdate.Keep(Error "cannot revoke the last remaining Platform Admin")
+                    else
+                        BlobUpdate.Write(existing |> List.filter (fun id -> id <> targetUserId.Value), Ok true))
+                (PlatformAdminRevoked {
+                    Actor = actorUserId.Value
+                    TargetUserId = targetUserId
+                })
 
-                if not (List.contains targetUserId (List.map UserId existing)) then
-                    return Ok() // idempotent — no audit re-emission
-                elif existing.Length <= 1 then
-                    return Error "cannot revoke the last remaining Platform Admin"
-                else
-                    let updated = existing |> List.filter (fun id -> id <> targetUserId.Value)
-                    let! result = save updated
-
-                    match result with
-                    | Ok() ->
-                        do!
-                            auditLog.Record(
-                                platformContainer,
-                                PlatformAdminRevoked {
-                                    Actor = actorUserId.Value
-                                    TargetUserId = targetUserId
-                                }
-                            )
-
-                        return Ok()
-                    | Error e -> return Error e
-            })
-
+        /// Raises `DocumentUnavailableException` on an unreadable list.
         member _.ListPlatformAdmins() = load ()
 
 /// Bootstrap the initial Platform Admin. Wired into `compose` (Phase 4b
@@ -275,12 +247,18 @@ let bootstrap
         match target with
         | None -> ()
         | Some(trimmed, source, isDevFallback) ->
+            // An unreadable list raises `DocumentUnavailableException` here
+            // rather than reading as empty: bootstrapping over it would
+            // replace every admin with the target, so the fault refuses the
+            // boot (the composition root turns a raised bootstrap into a
+            // preflight refusal).
             let! existing = store.ListPlatformAdmins()
 
-            if not (List.isEmpty existing) then
+            match existing with
+            | existing when not (List.isEmpty existing) ->
                 // Already-populated — bootstrap is one-shot. No-op.
                 ()
-            else
+            | _ ->
                 let! result = store.AssignPlatformAdmin(UserId bootstrapActor, UserId trimmed)
 
                 match result with

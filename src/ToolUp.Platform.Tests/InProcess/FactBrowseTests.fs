@@ -307,8 +307,7 @@ let private series (metric: string) (from: DateTime) (``to``: DateTime) : FactSe
     MaxPoints = FactBrowseApi.MaxSeriesPoints
 }
 
-let private jsonOptions =
-    ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()
+let private jsonOptions = ToolUp.Remoting.Json.SystemTextJson.PlatformJson.options
 
 let private wire (value: 'T) =
     JsonSerializer.Serialize(value, jsonOptions)

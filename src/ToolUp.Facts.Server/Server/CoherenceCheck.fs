@@ -189,7 +189,7 @@ type CoherenceFindingEvent = {
 /// run (task 563.C).
 module CoherenceCheck =
 
-    let private jsonOptions = FableConverters.create ()
+    let private jsonOptions = PlatformJson.options
 
     let private scalarOf (v: FactValue) : decimal option =
         match v with

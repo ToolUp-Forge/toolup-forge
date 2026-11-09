@@ -399,7 +399,7 @@ type BlobFactStore
         logger: ILogger option
     ) =
 
-    static let jsonOptions = FableConverters.create ()
+    static let jsonOptions = PlatformJson.options
 
     // Every fact read that met a fault, counted and logged before the
     // read fails with it.

@@ -47,7 +47,7 @@ let private rollingWindow = AIDiagnosticsWindow.rollingWindow
 //     AIAgentEngine.fs — both rely on `FableConverters` to
 //     round-trip `option` and DUs). ─────────────────────────────
 
-let private payloadJsonOptions = FableConverters.create ()
+let private payloadJsonOptions = PlatformJson.options
 
 let private indentedJsonOptions =
     let o = FableConverters.create ()

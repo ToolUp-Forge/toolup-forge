@@ -49,7 +49,7 @@ let BuildScopeId = ScopeKey.PlatformContainer
 // ─── JSON helper ─────────────────────────────────────────────────
 
 module private Json =
-    let private options = FableConverters.create ()
+    let private options = PlatformJson.options
 
     let serialize (value: 'T) : string =
         JsonSerializer.Serialize(value, options)

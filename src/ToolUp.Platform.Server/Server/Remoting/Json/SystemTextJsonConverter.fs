@@ -1642,7 +1642,10 @@ module FableConverters =
         options.Converters.Add(DataSetConverter())
 
     /// Create a fresh JsonSerializerOptions with the full ToolUp.Remoting STJ
-    /// converter set registered.
+    /// converter set registered. A call site that does not change the
+    /// options after creating them uses `PlatformJson.options` instead; a
+    /// fresh instance is for a site that adds a converter or overrides a
+    /// default before first use.
     let create () : JsonSerializerOptions =
         let opts = JsonSerializerOptions()
         addTo opts
@@ -1888,3 +1891,38 @@ module FableConverters =
         (decoder: ToolUp.Remoting.Json.JsonDecoder<'T>)
         : Result<ToolUp.Remoting.Json.JsonDecoderVerification, DecoderRefusal> =
         ToolUp.Remoting.Json.JsonDecoders.registerVerifiedForWith<'T> decoderOracle recordName decoder
+
+/// The platform's one JSON options instance: `FableConverters.shared`, the full
+/// F# converter set (Option, unions, records, lists, maps, dates, byte arrays)
+/// with the wire's relaxed escaping. Durable documents, SSE payloads and every
+/// other non-remoting JSON in the server tier serialise through it, so one
+/// reflection cache warms once per process and two stores cannot disagree on
+/// how a type is written. A site that needs different options creates its own
+/// with `FableConverters.create ()` and says why.
+module PlatformJson =
+
+    /// The shared options. Read-only once first used.
+    let options: JsonSerializerOptions = FableConverters.shared
+
+    /// `value` as UTF-8 JSON bytes.
+    let serialize<'T> (value: 'T) : byte[] =
+        JsonSerializer.SerializeToUtf8Bytes<'T>(value, options)
+
+    // `None` and the unit value are null at runtime and are legitimate reads
+    // of the JSON literal null; every other reference type read as null is a
+    // document that holds no value.
+    let private nullIsAValue (t: Type) =
+        t.IsValueType
+        || t = typeof<unit>
+        || (t.IsGenericType && t.GetGenericTypeDefinition() = typedefof<option<_>>)
+
+    /// UTF-8 JSON bytes as a `'T`; a malformed or mistyped document is
+    /// `Error` with the serializer's reason, never an exception.
+    let deserialize<'T> (bytes: byte[]) : Result<'T, string> =
+        try
+            match JsonSerializer.Deserialize<'T>(ReadOnlySpan<byte>(bytes), options) with
+            | value when isNull (box value) && not (nullIsAValue typeof<'T>) ->
+                Error "the document is the JSON literal null"
+            | value -> Ok value
+        with ex ->
+            Error ex.Message

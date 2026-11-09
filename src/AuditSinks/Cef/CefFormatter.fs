@@ -399,7 +399,7 @@ let sanitiseExtensionKey (key: string) : string =
 
         sb.ToString()
 
-let private cefJsonOptions = FableConverters.create ()
+let private cefJsonOptions = PlatformJson.options
 
 let private epoch = DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc)
 

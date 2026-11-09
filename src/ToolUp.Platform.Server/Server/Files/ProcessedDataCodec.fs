@@ -29,7 +29,7 @@ open ToolUp.Remoting.Json.SystemTextJson
 [<RequireQualifiedAccess>]
 module ProcessedDataCodec =
 
-    let private options = FableConverters.create ()
+    let private options = PlatformJson.options
 
     /// The envelope for a summary value.
     let encode<'T> (summary: 'T) : ProcessedData = {

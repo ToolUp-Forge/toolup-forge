@@ -1,30 +1,9 @@
 module ToolUp.Platform.Config.FeatureFlagStore
 
-open System.Text
-open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-
-// ─── JSON helpers ────────────────────────────────────────────────
-
-/// Shared `FableConverters` setup — same pattern as `ConfigStore`
-/// and `BlobProviderProfile`. The converter handles F# records,
-/// DUs, and `option` types losslessly, which matters here because
-/// `FlagValue` is a DU that must round-trip through `Fable.SimpleJson`
-/// on the client (the platform's non-Remoting serialisation rule).
-module private Json =
-    let private options = FableConverters.create ()
-
-    let serialize (m: Map<string, FlagValue>) : byte[] =
-        JsonSerializer.Serialize(m, options) |> Encoding.UTF8.GetBytes
-
-    let tryDeserialize (bytes: byte[]) : Map<string, FlagValue> option =
-        try
-            let json = Encoding.UTF8.GetString(bytes)
-            Some(JsonSerializer.Deserialize<Map<string, FlagValue>>(json, options))
-        with _ ->
-            None
+open ToolUp.Platform.Infra
 
 // ─── Blob layout ─────────────────────────────────────────────────
 
@@ -39,8 +18,11 @@ let private blobName (scope: FlagScope) = $"flags/{FlagScope.slug scope}.json"
 
 // ─── IFeatureFlagStore — blob-backed implementation ─────────────
 
-/// Blob-backed `IFeatureFlagStore`. Thread-safe via the underlying
-/// storage — no caching layer. Callers that hot-read the same flag on
+/// Blob-backed `IFeatureFlagStore`: one document per scope over the
+/// document store, so a flag document that cannot be read or decoded
+/// REFUSES the read (`DocumentUnavailableException`) and the write
+/// (`Error`) rather than reading as "no flags" and writing that back over
+/// every other flag in the scope. No caching layer. Callers that hot-read the same flag on
 /// every request should wrap this behind a short-TTL cache (and
 /// usually will: `FlagEvaluator` runs per request).
 ///
@@ -49,18 +31,29 @@ let private blobName (scope: FlagScope) = $"flags/{FlagScope.slug scope}.json"
 /// matching the store family's shape keeps the copy-paste cost of the
 /// next implementation low.
 type BlobFeatureFlagStore(storage: IBlobStorage) =
+    let docs =
+        BlobDocumentStore<Map<string, FlagValue>>(
+            storage,
+            BlobCodec.json<Map<string, FlagValue>>,
+            ConsoleLogger.ConsoleLogger() :> ILogger
+        )
+
+    let read (path: string) = async {
+        let! loaded = docs.Read(ScopeKey.platform, DocPath.ofString path)
+        return loaded |> Result.map (Option.defaultValue Map.empty)
+    }
+
     let load (scope: FlagScope) = async {
-        let! result = storage.Download(platformContainer, blobName scope)
-
-        match result with
-        | Ok bytes -> return Json.tryDeserialize bytes |> Option.defaultValue Map.empty
-        | Error _ -> return Map.empty
+        let! loaded = read (blobName scope)
+        return DocumentUnavailable.orRaise loaded
     }
 
-    let save (scope: FlagScope) (m: Map<string, FlagValue>) = async {
-        let! result = storage.Upload(platformContainer, blobName scope, Json.serialize m)
-        return result |> Result.map (fun _ -> ())
-    }
+    let update (scope: FlagScope) (change: Map<string, FlagValue> -> BlobUpdate<Map<string, FlagValue>, unit>) =
+        docs.Update(
+            ScopeKey.platform,
+            DocPath.ofString (blobName scope),
+            (fun current -> change (defaultArg current Map.empty))
+        )
 
     interface IFeatureFlagStore with
         member _.GetFlag(scope, key) = async {
@@ -71,16 +64,19 @@ type BlobFeatureFlagStore(storage: IBlobStorage) =
         member _.ListFlags scope = load scope
 
         member _.SetFlag(scope, key, value) = async {
-            let! m = load scope
-            return! save scope (Map.add key value m)
+            let! written = update scope (fun m -> BlobUpdate.Write(Map.add key value m, ()))
+            return written |> Result.mapError BlobMapStoreError.describe
         }
 
         member _.ClearFlag(scope, key) = async {
-            let! m = load scope
+            let! cleared =
+                update scope (fun m ->
+                    if Map.containsKey key m then
+                        BlobUpdate.Write(Map.remove key m, ())
+                    else
+                        BlobUpdate.Keep())
 
-            if Map.containsKey key m then
-                let! _ = save scope (Map.remove key m)
-                return ()
+            return DocumentUnavailable.orRaise cleared
         }
 
         member _.Erase(scopeId, subjectUserId, policy, dryRun) = async {
@@ -93,79 +89,32 @@ type BlobFeatureFlagStore(storage: IBlobStorage) =
                     }
             else
                 let docBlob = $"flags/{scopeId}.json"
-                let! result = storage.Download(platformContainer, docBlob)
+                let! loaded = read docBlob
 
-                let flags =
-                    match result with
-                    | Ok bytes -> Json.tryDeserialize bytes |> Option.defaultValue Map.empty
-                    | Error _ -> Map.empty
-
-                let namesSubject (v: FlagValue) =
-                    match v with
-                    | FlagValue.Bool _ -> false
-                    | FlagValue.Variant(options, value) ->
-                        value.Contains subjectUserId.Value
-                        || (options |> List.exists (fun o -> o.Contains subjectUserId.Value))
-
-                let matchedKeys =
-                    flags
-                    |> Map.toList
-                    |> List.choose (fun (k, v) -> if namesSubject v then Some k else None)
-
-                if dryRun || List.isEmpty matchedKeys then
-                    let verb =
-                        match policy with
-                        | ErasurePolicy.HardDelete -> "removed"
-                        | _ -> "redacted"
-
+                match loaded with
+                | Error e ->
                     return
-                        Result.Ok {
-                            HandlerName = "feature-flags"
-                            RecordsAffected = matchedKeys.Length
-                            Note = Some(sprintf "%d flag(s) would be %s in scope %s" matchedKeys.Length verb scopeId)
-                        }
-                else
-                    let matchedSet = Set.ofList matchedKeys
-
-                    let updated =
-                        match policy with
-                        | ErasurePolicy.HardDelete -> flags |> Map.filter (fun k _ -> not (matchedSet.Contains k))
-                        | ErasurePolicy.Tombstone
-                        | ErasurePolicy.RetainPerCompliance ->
-                            flags
-                            |> Map.map (fun k v ->
-                                if matchedSet.Contains k then
-                                    FlagValue.Variant([], Erasure.TombstoneMarker)
-                                else
-                                    v)
-
-                    // Phase 863 — an erasure that did not land is not
-                    // reported as one: a refused rewrite fails the handler.
-                    // Phase 971 — so is a refused delete of a document every
-                    // flag of which named the subject.
-                    let! written =
-                        if Map.isEmpty updated then
-                            storage.Delete(platformContainer, docBlob)
-                        else
-                            async {
-                                match! storage.Upload(platformContainer, docBlob, Json.serialize updated) with
-                                | Ok _ -> return Ok()
-                                | Error storageError -> return Error storageError
-                            }
-
-                    match written with
-                    | Error storageError ->
-                        return
-                            Result.Error(
-                                ErasureError.StoreUnreachable(
-                                    "feature-flags",
-                                    sprintf
-                                        "flag document %s could not be rewritten or removed: %s"
-                                        docBlob
-                                        storageError
-                                )
+                        Result.Error(
+                            ErasureError.StoreUnreachable(
+                                "feature-flags",
+                                sprintf "flag document %s could not be read: %s" docBlob (BlobMapStoreError.describe e)
                             )
-                    | Ok() ->
+                        )
+                | Ok flags ->
+
+                    let namesSubject (v: FlagValue) =
+                        match v with
+                        | FlagValue.Bool _ -> false
+                        | FlagValue.Variant(options, value) ->
+                            value.Contains subjectUserId.Value
+                            || (options |> List.exists (fun o -> o.Contains subjectUserId.Value))
+
+                    let matchedKeys =
+                        flags
+                        |> Map.toList
+                        |> List.choose (fun (k, v) -> if namesSubject v then Some k else None)
+
+                    if dryRun || List.isEmpty matchedKeys then
                         let verb =
                             match policy with
                             | ErasurePolicy.HardDelete -> "removed"
@@ -175,8 +124,64 @@ type BlobFeatureFlagStore(storage: IBlobStorage) =
                             Result.Ok {
                                 HandlerName = "feature-flags"
                                 RecordsAffected = matchedKeys.Length
-                                Note = Some(sprintf "%d flag(s) %s in scope %s" matchedKeys.Length verb scopeId)
+                                Note =
+                                    Some(sprintf "%d flag(s) would be %s in scope %s" matchedKeys.Length verb scopeId)
                             }
+                    else
+                        let matchedSet = Set.ofList matchedKeys
+
+                        let updated =
+                            match policy with
+                            | ErasurePolicy.HardDelete -> flags |> Map.filter (fun k _ -> not (matchedSet.Contains k))
+                            | ErasurePolicy.Tombstone
+                            | ErasurePolicy.RetainPerCompliance ->
+                                flags
+                                |> Map.map (fun k v ->
+                                    if matchedSet.Contains k then
+                                        FlagValue.Variant([], Erasure.TombstoneMarker)
+                                    else
+                                        v)
+
+                        // Phase 863 — an erasure that did not land is not
+                        // reported as one: a refused rewrite fails the handler.
+                        // Phase 971 — so is a refused delete of a document every
+                        // flag of which named the subject.
+                        let! written =
+                            if Map.isEmpty updated then
+                                storage.Delete(platformContainer, docBlob)
+                            else
+                                async {
+                                    match!
+                                        storage.Upload(platformContainer, docBlob, PlatformJson.serialize updated)
+                                    with
+                                    | Ok _ -> return Ok()
+                                    | Error storageError -> return Error storageError
+                                }
+
+                        match written with
+                        | Error storageError ->
+                            return
+                                Result.Error(
+                                    ErasureError.StoreUnreachable(
+                                        "feature-flags",
+                                        sprintf
+                                            "flag document %s could not be rewritten or removed: %s"
+                                            docBlob
+                                            storageError
+                                    )
+                                )
+                        | Ok() ->
+                            let verb =
+                                match policy with
+                                | ErasurePolicy.HardDelete -> "removed"
+                                | _ -> "redacted"
+
+                            return
+                                Result.Ok {
+                                    HandlerName = "feature-flags"
+                                    RecordsAffected = matchedKeys.Length
+                                    Note = Some(sprintf "%d flag(s) %s in scope %s" matchedKeys.Length verb scopeId)
+                                }
         }
 
 /// Convenience factory — construct and upcast. Mirrors the `create`

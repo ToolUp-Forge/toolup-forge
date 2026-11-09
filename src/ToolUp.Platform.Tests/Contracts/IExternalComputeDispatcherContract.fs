@@ -48,7 +48,7 @@ open ToolUp.Platform.Compose
 // parameterised conformance pack" section at the foot of this file; that is
 // what Phase 322 (HTTP stub server) and Phase 323 (kind cluster) bind.
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 /// Round-trip `value` through the STJ + `FableConverters` wire the SDK uses
 /// for every non-Remoting JSON payload, and return what came back.

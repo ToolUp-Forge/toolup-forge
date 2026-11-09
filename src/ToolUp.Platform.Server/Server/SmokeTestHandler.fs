@@ -110,7 +110,7 @@ type private SmokeAuditPayload = {
     Tests: SmokeAuditEntry list
 }
 
-let private auditJsonOptions = FableConverters.create ()
+let private auditJsonOptions = PlatformJson.options
 
 let private responseJsonOptions =
     let o = FableConverters.create ()

@@ -38,7 +38,7 @@ open ToolUp.Platform.Compose
 // 504.D — erasure (`DeleteConversation`) and the purge share ONE
 //         sibling set, which names the consent sidecar.
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 let private silentLogger =
     { new ILogger with

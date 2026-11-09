@@ -18,7 +18,7 @@ open ToolUp.Platform.Jobs
 // lazily on the next observation; renew extends; locks are scope-isolated
 // (GP 4). Any external implementation can run the same bar.
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 type private RecordingChannel() =
     let published = ConcurrentQueue<string * Notification>()

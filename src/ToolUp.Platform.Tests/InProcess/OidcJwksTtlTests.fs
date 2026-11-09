@@ -396,7 +396,7 @@ let private evictionSignalTests =
             let decoded =
                 JsonSerializer.Deserialize<JwksFetchFailedEnvelope>(
                     payload,
-                    ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()
+                    ToolUp.Remoting.Json.SystemTextJson.PlatformJson.options
                 )
 
             Expect.equal decoded.JwksUrl key.JwksUrl "the envelope names the URL siblings must evict"

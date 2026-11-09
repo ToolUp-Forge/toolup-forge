@@ -518,7 +518,7 @@ let planTests (name: string) (binding: DeployPlanBinding) =
             let! result = pipeline.PlanDeploy(scheduler, tenant, [ specFor "img/a:1"; specFor "img/new:1" ])
             let plan = planOrFail "PlanDeploy" result
 
-            let options = ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()
+            let options = ToolUp.Remoting.Json.SystemTextJson.PlatformJson.options
             let json = System.Text.Json.JsonSerializer.Serialize(plan, options)
 
             let restored =

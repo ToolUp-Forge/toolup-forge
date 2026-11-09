@@ -57,6 +57,8 @@ let private registeredTests =
         GrantNotificationTests.tests
         JobProgressTests.tests
         StoreFireAndForgetTests.tests
+        TeamStoreReadPathTests.tests
+        TeamStoreReadPathTests.fixtureTests
     ]
 
 let private deliberatelyUnregistered: TestRegistrationGuard.Exemption list = []

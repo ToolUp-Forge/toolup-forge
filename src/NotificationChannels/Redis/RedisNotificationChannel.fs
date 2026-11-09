@@ -62,7 +62,7 @@ type RedisNotificationChannel(multiplexer: IConnectionMultiplexer, logger: ILogg
     /// reflection cost. `FableConverters.create ()` returns a fully-
     /// configured options instance; behaviour is byte-equal to the
     /// pre-migration converter pipeline.
-    let jsonOptions = FableConverters.create ()
+    let jsonOptions = PlatformJson.options
 
     let subscriptions =
         ConcurrentDictionary<NotificationSubscriptionId, string * (NotificationEnvelope -> unit) * ChannelMessageQueue>()

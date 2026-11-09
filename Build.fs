@@ -4406,6 +4406,131 @@ let main args =
         | 0 -> ()
         | code -> failwithf "VerifyServiceConfigFold: exited %d; the sites are printed above." code)
 
+    // The download allow-list: `BlobDocumentStore` is the one read-modify-write
+    // policy in the server tier.
+    //
+    // A file under `src/ToolUp.Platform.Server/Server/` that calls
+    // `IBlobStorage.Download` decides for itself what an absent blob, an
+    // unreadable one and an undecodable one mean, which is the defect class the
+    // document store exists to end (a fault read as "empty", then written back).
+    // Every such file is either a named home below, with its reason, or on the
+    // allow-list of files not yet moved onto the store. The lists only shrink:
+    // a file that calls `Download` and is on neither list is red, and so is a
+    // file on either list that no longer calls it, so moving a store means
+    // deleting its line in the same commit.
+    //
+    // The scan is textual (`.Download(` or `.Download (`), over the server
+    // tier's own sources; companions are outside it. A member DEFINITION
+    // named `Download` (`member _.Download(`, a store's own verb) is not a
+    // call and does not count.
+    //
+    // Usage: `dotnet run --project Build.fsproj -- VerifyBlobDownloads`
+    //        `… -- VerifyBlobDownloads --root <dir>` scans that tree instead.
+    //        Also run by the `ScopeLiterals` leg of `VerifyAll`, in every lane
+    //        that runs it.
+    let blobDownloadHomes = [
+        "BlobMapStore.fs",
+        "the document store itself: the one place absence, decode failure and the ETag probe are decided"
+        "DataObjectStore.fs",
+        "the append-only slot claim over versioned objects, kept by design beside the document store"
+        "EncryptedBlobStorage.fs", "an IBlobStorage decorator: it implements Download, it does not read documents"
+        "Infra/ResilientBlobStorage.fs", "an IBlobStorage decorator"
+        "BackupCoordinator.fs",
+        "the backup plane copies and hashes opaque bytes (and decorates IBlobStorage); its one document, the manifest, already answers absent, unreadable and undecodable with typed BackupError cases"
+        "RestoreDrillVerifier.fs",
+        "hashes restored opaque bytes against the manifest; an unreadable blob is a recorded mismatch, never absence"
+        "ConfigValidator.fs", "a backend round-trip probe: it reads back the sentinel it just wrote"
+        "DataProtectionBackendValidator.fs", "a backend round-trip probe: it reads back the sentinel it just wrote"
+        "SmokeTests.fs", "a backend round-trip probe: it reads back the sentinel it just wrote"
+        "MemoizedComputeDispatcher.fs",
+        "a memo cache: an unreadable entry is a miss, and a miss recomputes the deterministic result it would have served"
+        "SecondaryIndex.fs",
+        "index refs are hints whose canonical document lives elsewhere; a lost ref is drift that IndexConsistencyCheck reports, never authority"
+        "BlobXmlRepository.fs",
+        "the ASP.NET Core IXmlRepository adapter: it hands the framework's opaque key XML to the key manager, which owns the policy for an unreadable key"
+        "IdempotencySweepJob.fs",
+        "a maintenance sweep that deletes only what it read and proved expired; an unreadable entry is left for the next pass"
+        "ResultStore.fs",
+        "the lineage outbox is a queue, not a document store: a relay pass reads each staged intent once, leaves an unreadable one in place for the next pass, and MOVES a poison one out of the queue (lineage-outbox-poison/) so the relay drains; the document store's leave-in-place quarantine would wedge it"
+    ]
+
+    let blobDownloadAllowList = [
+        // Excluded from the move by Phase 1061's own rule until 976 and 979 ship.
+        "EntityOutbox.fs"
+    ]
+
+    let runVerifyBlobDownloads (root: string) : int =
+        let serverDir = Path.Combine(root, "src", "ToolUp.Platform.Server", "Server")
+
+        if not (Directory.Exists serverDir) then
+            Trace.traceError (
+                sprintf
+                    "VerifyBlobDownloads: no `src/ToolUp.Platform.Server/Server` under %s — nothing to scan is not a pass."
+                    root
+            )
+
+            1
+        else
+            let download =
+                System.Text.RegularExpressions.Regex(@"(?<!\bmember\s+\w+)\.Download\s*\(")
+
+            let callers =
+                Directory.EnumerateFiles(serverDir, "*.fs", SearchOption.AllDirectories)
+                |> Seq.filter (fun file -> download.IsMatch(File.ReadAllText file))
+                |> Seq.map (fun file -> Path.GetRelativePath(serverDir, file).Replace('\\', '/'))
+                |> Set.ofSeq
+
+            let homes = blobDownloadHomes |> List.map fst |> Set.ofList
+            let allowed = Set.ofList blobDownloadAllowList
+            let unlisted = Set.difference callers (Set.union homes allowed)
+            let stale = Set.difference (Set.union homes allowed) callers
+            let listedTwice = Set.intersect homes allowed
+
+            Trace.tracefn ""
+            Trace.tracefn "VerifyBlobDownloads summary:"
+            Trace.tracefn "  files calling IBlobStorage.Download : %d" callers.Count
+            Trace.tracefn "  named homes                         : %d" homes.Count
+            Trace.tracefn "  still to move onto the store        : %d" (Set.intersect allowed callers).Count
+
+            if unlisted.IsEmpty && stale.IsEmpty && listedTwice.IsEmpty then
+                Trace.tracefn ""
+
+                Trace.tracefn
+                    "VerifyBlobDownloads: OK — every Download caller is a named home or on the shrinking allow-list."
+
+                0
+            else
+                Trace.tracefn ""
+
+                for file in unlisted do
+                    Trace.traceError (
+                        sprintf
+                            "  %s calls IBlobStorage.Download. Read and write its documents through BlobDocumentStore<'T> (BlobMapStore.fs) instead; the allow-list only shrinks."
+                            file
+                    )
+
+                for file in stale do
+                    Trace.traceError (
+                        sprintf
+                            "  %s is listed but no longer calls Download: delete its line from blobDownloadAllowList or blobDownloadHomes."
+                            file
+                    )
+
+                for file in listedTwice do
+                    Trace.traceError (sprintf "  %s is both a named home and on the allow-list." file)
+
+                1
+
+    Target.create "VerifyBlobDownloads" (fun _ ->
+        let root =
+            match Flags.value "--root" flags with
+            | Some r -> Path.GetFullPath r
+            | None -> __SOURCE_DIRECTORY__
+
+        match runVerifyBlobDownloads root with
+        | 0 -> ()
+        | code -> failwithf "VerifyBlobDownloads: exited %d; the files are printed above." code)
+
     // GenerateConfigReference — regenerate every projection of the config-key
     // registry (`ConfigKeys.keys`): `docs/reference/config-reference.md`,
     // `docs/reference/toolup.config.schema.json`, the Description column of
@@ -6832,8 +6957,12 @@ let main args =
                 Gate.verdictOfExit (runVerifyAnalyzers ())
         ScopeLiterals =
             fun () ->
-                Trace.tracefn "▶ VerifyAll: ScopeLiterals (the scope grammar's one home, via VerifyScopeLiterals)"
-                Gate.verdictOfExit (runVerifyScopeLiterals __SOURCE_DIRECTORY__)
+                Trace.tracefn
+                    "▶ VerifyAll: ScopeLiterals (the scope grammar's one home, via VerifyScopeLiterals; the document store's, via VerifyBlobDownloads)"
+
+                let scopeLiterals = runVerifyScopeLiterals __SOURCE_DIRECTORY__
+                let blobDownloads = runVerifyBlobDownloads __SOURCE_DIRECTORY__
+                Gate.verdictOfExit (max scopeLiterals blobDownloads)
         ServiceConfigFold =
             fun () ->
                 Trace.tracefn

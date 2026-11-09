@@ -18,6 +18,32 @@ let internal teamBlobName (teamId: TeamId) = $"teams/{teamId.Value}.json"
 let internal membershipBlobName (userId: UserId) = $"memberships/{userId.Value}.json"
 let internal activeTeamBlobName (userId: UserId) = $"active-team/{userId.Value}.txt"
 
+[<Literal>]
+let internal MembershipPrefix = "memberships/"
+
+/// The layout: where each document lives inside the `_platform` container.
+let internal platformScope = ScopeKey.platform
+let internal teamPath (teamId: TeamId) = DocPath.ofString (teamBlobName teamId)
+
+let internal membershipPath (userId: UserId) =
+    DocPath.ofString (membershipBlobName userId)
+
+let internal activeTeamPath (userId: UserId) =
+    DocPath.ofString (activeTeamBlobName userId)
+
+/// The user id a membership document's path names.
+let internal userIdOfMembershipPath (path: string) =
+    let tail =
+        if path.StartsWith MembershipPrefix then
+            path.Substring MembershipPrefix.Length
+        else
+            path
+
+    if tail.EndsWith ".json" then
+        tail.Substring(0, tail.Length - ".json".Length)
+    else
+        tail
+
 // ─── User membership record (stored per user) ───────────────────
 
 type StoredMembership = {
@@ -97,6 +123,37 @@ module internal Json =
                     JoinedAt = DateTime.Parse(elem.GetProperty("joinedAt").GetString())
                 }
         ]
+
+// ─── Document codecs ─────────────────────────────────────────────
+// `internal` — `MembershipDoctor` reads the same documents.
+// A read or decode failure is an error, never an empty list (GP 9).
+
+let internal membershipCodec: BlobCodec<StoredMembership list> = {
+    Encode = Json.serializeMemberships
+    Decode =
+        fun content ->
+            try
+                Ok(Json.deserializeMemberships content)
+            with ex ->
+                Error ex.Message
+}
+
+let internal teamCodec: BlobCodec<TeamInfo> = {
+    Encode = Json.serializeTeam
+    Decode =
+        fun content ->
+            try
+                Ok(Json.deserializeTeam content)
+            with ex ->
+                Error ex.Message
+}
+
+// The active-team pointer is the team id as plain text.
+let internal activeTeamCodec: BlobCodec<string> = {
+    Encode = Encoding.UTF8.GetBytes
+    Decode = fun content -> Ok(Encoding.UTF8.GetString(content).Trim())
+}
+
 
 // ─── ITeamStore ──────────────────────────────────────────────────
 
@@ -214,30 +271,12 @@ type TeamStore(storage: IBlobStorage, notifications: INotificationChannel, logge
     // Guarded read-modify-write of one user's membership list, and of a
     // team record at creation. A read failure or a decode failure is an
     // error, never an empty list (GP 9).
-    let membershipCodec: BlobCodec<StoredMembership list> = {
-        Encode = Json.serializeMemberships
-        Decode =
-            fun content ->
-                try
-                    Ok(Json.deserializeMemberships content)
-                with ex ->
-                    Error ex.Message
-    }
-
-    let teamCodec: BlobCodec<TeamInfo> = {
-        Encode = Json.serializeTeam
-        Decode =
-            fun content ->
-                try
-                    Ok(Json.deserializeTeam content)
-                with ex ->
-                    Error ex.Message
-    }
-
     let membershipDocs =
-        BlobMapStore<StoredMembership list>(storage, membershipCodec, logger)
+        BlobDocumentStore<StoredMembership list>(storage, membershipCodec, logger)
 
-    let teamDocs = BlobMapStore<TeamInfo>(storage, teamCodec, logger)
+    let teamDocs = BlobDocumentStore<TeamInfo>(storage, teamCodec, logger)
+
+    let activeTeamDocs = BlobDocumentStore<string>(storage, activeTeamCodec, logger)
 
     /// Read-modify-write `userId`'s memberships (absent = no memberships).
     /// A storage-level failure surfaces as `Error`; nothing is written.
@@ -248,8 +287,8 @@ type TeamStore(storage: IBlobStorage, notifications: INotificationChannel, logge
         async {
             let! result =
                 membershipDocs.Update(
-                    platformContainer,
-                    membershipBlobName userId,
+                    platformScope,
+                    membershipPath userId,
                     fun current -> transform (Option.defaultValue [] current)
                 )
 
@@ -308,8 +347,8 @@ type TeamStore(storage: IBlobStorage, notifications: INotificationChannel, logge
 
         let! result =
             teamDocs.Update(
-                platformContainer,
-                teamBlobName teamId,
+                platformScope,
+                teamPath teamId,
                 function
                 | Some _ -> BlobUpdate.Keep(Error $"Team '{teamId}' already exists")
                 | None -> BlobUpdate.Write(team, Ok team)
@@ -325,46 +364,28 @@ type TeamStore(storage: IBlobStorage, notifications: INotificationChannel, logge
     /// team record (a half-created team has no members to clean up).
     member _.DeleteTeam(teamId: TeamId) = async { return! storage.Delete(platformContainer, teamBlobName teamId) }
 
+    /// `None` when the team does not exist. A team record that cannot be
+    /// read or decoded raises `DocumentUnavailableException`: it is not
+    /// "no such team".
     member _.GetTeam(teamId: TeamId) = async {
-        let! result = storage.Download(platformContainer, teamBlobName teamId)
-
-        return
-            match result with
-            | Ok bytes -> Some(Json.deserializeTeam bytes)
-            | Error _ -> None
+        let! read = teamDocs.Read(platformScope, teamPath teamId)
+        return DocumentUnavailable.orRaise read
     }
 
+    /// Every team. One unreadable team record refuses the listing
+    /// (`DocumentUnavailableException`) rather than dropping the team.
     member _.ListTeams() = async {
-        let! blobNames = storage.List(platformContainer, "teams/")
-
-        let! teams =
-            blobNames
-            |> List.map (fun name -> async {
-                let! result = storage.Download(platformContainer, name)
-
-                return
-                    match result with
-                    | Ok bytes -> Some(Json.deserializeTeam bytes)
-                    | Error _ -> None
-            })
-            // Bounded parallelism (cap = 32) keeps a 1000-blob List from
-            // saturating the cloud backend's connection pool while still
-            // collapsing 32x of the per-blob round-trip latency. Sequential
-            // was visibly slow even on a 100-user platform.
-            |> fun comps -> Async.Parallel(comps, maxDegreeOfParallelism = 32)
-
-        return teams |> Array.choose id |> Array.toList
+        let! rows = teamDocs.List(platformScope, "teams/", BlobDocumentStoreLimits.MaxListDegree)
+        return rows |> List.map (snd >> DocumentUnavailable.orRaise)
     }
 
     // ── Membership ───────────────────────────────────────────
 
+    /// The user's memberships; an absent document is none. One that cannot
+    /// be read or decoded raises `DocumentUnavailableException`, never `[]`.
     member private _.LoadMemberships(userId: UserId) = async {
-        let! result = storage.Download(platformContainer, membershipBlobName userId)
-
-        return
-            match result with
-            | Ok bytes -> Json.deserializeMemberships bytes
-            | Error _ -> []
+        let! read = membershipDocs.Read(platformScope, membershipPath userId)
+        return read |> DocumentUnavailable.orRaise |> Option.defaultValue []
     }
 
     member _.AddMember(teamId: TeamId, userId: UserId, role: TeamRole) =
@@ -405,7 +426,8 @@ type TeamStore(storage: IBlobStorage, notifications: INotificationChannel, logge
     }
 
     member this.RemoveMember(teamId: TeamId, userId: UserId) =
-        withUserLock
+        DocumentUnavailable.asError
+        <| withUserLock
             userId
             (async {
                 // IsLastOwner reads other users' membership blobs (cross-user
@@ -427,7 +449,7 @@ type TeamStore(storage: IBlobStorage, notifications: INotificationChannel, logge
                     // refusal answers Error with the row untouched, and a
                     // plain retry re-runs both. Only a member's pointer is
                     // cleared; a non-member keeps the "not a member" answer.
-                    let! read = membershipDocs.Read(platformContainer, membershipBlobName userId)
+                    let! read = membershipDocs.Read(platformScope, membershipPath userId)
 
                     let! pointerCleared = async {
                         match read |> Result.map (Option.defaultValue []) with
@@ -478,10 +500,11 @@ type TeamStore(storage: IBlobStorage, notifications: INotificationChannel, logge
     /// change would leave the team with no Owners (demoting the last
     /// Owner).
     member this.ChangeMemberRole(teamId: TeamId, userId: UserId, newRole: TeamRole) =
-        withUserLock
+        DocumentUnavailable.asError
+        <| withUserLock
             userId
             (async {
-                let! read = membershipDocs.Read(platformContainer, membershipBlobName userId)
+                let! read = membershipDocs.Read(platformScope, membershipPath userId)
 
                 match read |> Result.map (Option.defaultValue []) with
                 | Error e -> return Error(BlobMapStoreError.describe e)
@@ -540,36 +563,26 @@ type TeamStore(storage: IBlobStorage, notifications: INotificationChannel, logge
         return teams |> Array.choose id |> Array.toList
     }
 
+    /// Every member of the team, read across every user's membership
+    /// document. One document that cannot be read or decoded refuses the
+    /// listing (`DocumentUnavailableException`): a dropped row would let the
+    /// last-Owner guard count too few Owners.
     member this.GetTeamMembers(teamId: TeamId) = async {
-        let! blobNames = storage.List(platformContainer, "memberships/")
+        let! rows = membershipDocs.List(platformScope, MembershipPrefix, BlobDocumentStoreLimits.MaxListDegree)
 
-        let! allMemberships =
-            blobNames
-            |> List.map (fun name -> async {
-                let! result = storage.Download(platformContainer, name)
+        return
+            rows
+            |> List.collect (fun (path, verdict) ->
+                let userId = userIdOfMembershipPath (DocPath.value path)
 
-                return
-                    match result with
-                    | Ok bytes ->
-                        let userId = name.Replace("memberships/", "").Replace(".json", "")
-
-                        Json.deserializeMemberships bytes
-                        |> List.filter (fun m -> m.TeamId = teamId)
-                        |> List.map (fun m -> {
-                            TeamId = m.TeamId.Value
-                            UserId = userId
-                            Role = m.Role
-                            JoinedAt = m.JoinedAt
-                        })
-                    | Error _ -> []
-            })
-            // Bounded parallelism (cap = 32) keeps a 1000-blob List from
-            // saturating the cloud backend's connection pool while still
-            // collapsing 32x of the per-blob round-trip latency. Sequential
-            // was visibly slow even on a 100-user platform.
-            |> fun comps -> Async.Parallel(comps, maxDegreeOfParallelism = 32)
-
-        return allMemberships |> Array.toList |> List.collect id
+                DocumentUnavailable.orRaise verdict
+                |> List.filter (fun m -> m.TeamId = teamId)
+                |> List.map (fun m -> {
+                    TeamId = m.TeamId.Value
+                    UserId = userId
+                    Role = m.Role
+                    JoinedAt = m.JoinedAt
+                }))
     }
 
     member this.GetMemberRole(teamId: TeamId, userId: UserId) = async {
@@ -580,37 +593,35 @@ type TeamStore(storage: IBlobStorage, notifications: INotificationChannel, logge
 
     // ── Active team ──────────────────────────────────────────
 
+    /// `None` when no active team is set. A pointer that cannot be read
+    /// raises `DocumentUnavailableException`.
     member _.GetActiveTeam(userId: UserId) = async {
-        let! result = storage.Download(platformContainer, activeTeamBlobName userId)
+        let! read = activeTeamDocs.Read(platformScope, activeTeamPath userId)
 
         return
-            match result with
-            | Ok bytes ->
-                let teamId = Encoding.UTF8.GetString(bytes).Trim()
-
-                if String.IsNullOrEmpty(teamId) then
-                    None
-                else
-                    Some(TeamId teamId)
-            | Error _ -> None
+            match DocumentUnavailable.orRaise read with
+            | Some teamId when not (String.IsNullOrEmpty teamId) -> Some(TeamId teamId)
+            | _ -> None
     }
 
-    member this.SetActiveTeam(userId: UserId, teamId: TeamId) = async {
-        let! memberships = this.LoadMemberships(userId)
+    member this.SetActiveTeam(userId: UserId, teamId: TeamId) =
+        DocumentUnavailable.asError
+        <| async {
+            let! memberships = this.LoadMemberships(userId)
 
-        if memberships |> List.exists (fun m -> m.TeamId = teamId) then
-            // Phase 863 — a refused write is the caller's failure, and
-            // nothing is published for a change that did not happen.
-            match!
-                storage.Upload(platformContainer, activeTeamBlobName userId, Encoding.UTF8.GetBytes(teamId.Value))
-            with
-            | Ok _ ->
-                do! publishChange teamId userId MembershipChangeKind.ActiveTeamSet
-                return Ok()
-            | Error storageError -> return Error(sprintf "The active team could not be saved: %s" storageError)
-        else
-            return Error "User is not a member of this team"
-    }
+            if memberships |> List.exists (fun m -> m.TeamId = teamId) then
+                // Phase 863 — a refused write is the caller's failure, and
+                // nothing is published for a change that did not happen.
+                match!
+                    storage.Upload(platformContainer, activeTeamBlobName userId, Encoding.UTF8.GetBytes(teamId.Value))
+                with
+                | Ok _ ->
+                    do! publishChange teamId userId MembershipChangeKind.ActiveTeamSet
+                    return Ok()
+                | Error storageError -> return Error(sprintf "The active team could not be saved: %s" storageError)
+            else
+                return Error "User is not a member of this team"
+        }
 
     // ── Archive / purge (Platform-Admin team lifecycle) ──────
 
@@ -622,10 +633,19 @@ type TeamStore(storage: IBlobStorage, notifications: INotificationChannel, logge
     /// still at rest (both callers have a `Result` to carry it), and
     /// nothing is published for a clear that did not happen.
     member private _.ClearActiveTeamIfMatches(userId: UserId, teamId: TeamId) : Async<Result<unit, string>> = async {
-        let! result = storage.Download(platformContainer, activeTeamBlobName userId)
+        let! read = activeTeamDocs.Read(platformScope, activeTeamPath userId)
 
-        match result with
-        | Ok bytes when Encoding.UTF8.GetString(bytes).Trim() = teamId.Value ->
+        match read with
+        | Error e ->
+            return
+                Error(
+                    sprintf
+                        "user '%s': active-team pointer %s could not be read: %s"
+                        userId.Value
+                        (activeTeamBlobName userId)
+                        (BlobMapStoreError.describe e)
+                )
+        | Ok(Some current) when current = teamId.Value ->
             match! storage.Delete(platformContainer, activeTeamBlobName userId) with
             | Ok() ->
                 do! publishChange teamId userId MembershipChangeKind.ActiveTeamSet
@@ -642,213 +662,219 @@ type TeamStore(storage: IBlobStorage, notifications: INotificationChannel, logge
         | _ -> return Ok()
     }
 
-    member this.SetArchived(teamId: TeamId, archived: bool) = async {
-        let! existing = this.GetTeam(teamId)
+    member this.SetArchived(teamId: TeamId, archived: bool) =
+        DocumentUnavailable.asError
+        <| async {
+            let! existing = this.GetTeam(teamId)
 
-        match existing with
-        | None -> return Error $"Team '{teamId}' not found"
-        | Some team ->
-            let updated = { team with Archived = archived }
-            let! result = storage.Upload(platformContainer, teamBlobName teamId, Json.serializeTeam updated)
+            match existing with
+            | None -> return Error $"Team '{teamId}' not found"
+            | Some team ->
+                let updated = { team with Archived = archived }
+                let! result = storage.Upload(platformContainer, teamBlobName teamId, Json.serializeTeam updated)
 
-            match result with
-            | Error e -> return Error e
-            | Ok _ ->
-                // On archive, bump every member whose active team is this
-                // one — an archived team must not remain a member's active
-                // scope. Restore (archived = false) leaves pointers alone;
-                // the team is simply un-hidden and members re-select it.
-                //
-                // Phase 971 — every member is attempted and every refused
-                // pointer clear collected; any refusal answers Error naming
-                // the pointers still at rest. The team stays archived, and a
-                // re-run of SetArchived(teamId, true) re-reads the members and
-                // retries exactly those pointers (an idempotent re-upload of
-                // the same record, then a no-op for every cleared pointer).
-                if archived then
-                    let! members = this.GetTeamMembers(teamId)
+                match result with
+                | Error e -> return Error e
+                | Ok _ ->
+                    // On archive, bump every member whose active team is this
+                    // one — an archived team must not remain a member's active
+                    // scope. Restore (archived = false) leaves pointers alone;
+                    // the team is simply un-hidden and members re-select it.
+                    //
+                    // Phase 971 — every member is attempted and every refused
+                    // pointer clear collected; any refusal answers Error naming
+                    // the pointers still at rest. The team stays archived, and a
+                    // re-run of SetArchived(teamId, true) re-reads the members and
+                    // retries exactly those pointers (an idempotent re-upload of
+                    // the same record, then a no-op for every cleared pointer).
+                    if archived then
+                        let! members = this.GetTeamMembers(teamId)
 
-                    let! cleared =
-                        members
-                        |> List.map (fun m -> this.ClearActiveTeamIfMatches(UserId m.UserId, teamId))
-                        |> Async.Sequential
+                        let! cleared =
+                            members
+                            |> List.map (fun m -> this.ClearActiveTeamIfMatches(UserId m.UserId, teamId))
+                            |> Async.Sequential
 
-                    let failures =
-                        cleared
-                        |> Array.choose (function
-                            | Ok() -> None
-                            | Error e -> Some e)
-                        |> Array.toList
+                        let failures =
+                            cleared
+                            |> Array.choose (function
+                                | Ok() -> None
+                                | Error e -> Some e)
+                            |> Array.toList
 
-                    match failures with
-                    | [] -> return Ok()
-                    | failures ->
-                        return
-                            Error(
-                                sprintf
-                                    "Team '%s' was archived, but %d member(s) still have it as their active team — %s"
-                                    teamId.Value
-                                    failures.Length
-                                    (String.concat "; " failures)
-                            )
-                else
-                    return Ok()
-    }
-
-    member this.PurgeTeam(teamId: TeamId) = async {
-        let! existing = this.GetTeam(teamId)
-
-        match existing with
-        | None -> return Error $"Team '{teamId}' not found"
-        | Some _ ->
-            // Strip the team from every member's membership rows + clear
-            // active-team pointers. Each per-user membership edit is a
-            // guarded read-modify-write under the per-user lock, so a
-            // concurrent AddMember/RemoveMember for the same user can't lose
-            // the strip.
-            let! members = this.GetTeamMembers(teamId)
-
-            let! stripped =
-                members
-                |> List.map (fun m ->
-                    withUserLock
-                        (UserId m.UserId)
-                        (async {
-                            // Phase 971 — the pointer goes BEFORE the row: the
-                            // row is what lists this user as a member, so a
-                            // refused pointer delete keeps it and the re-run
-                            // (which re-reads the members) revisits the pointer.
-                            match! this.ClearActiveTeamIfMatches(UserId m.UserId, teamId) with
-                            | Error e -> return Error e
-                            | Ok() ->
-                                let! outcome =
-                                    updateMemberships (UserId m.UserId) (fun current ->
-                                        let remaining = current |> List.filter (fun x -> x.TeamId <> teamId)
-
-                                        if remaining.Length <> current.Length then
-                                            BlobUpdate.Write(remaining, ())
-                                        else
-                                            BlobUpdate.Keep())
-
-                                match outcome with
-                                | Error e -> return Error $"user '{m.UserId}': {e}"
-                                | Ok() ->
-                                    do! publishChange teamId (UserId m.UserId) MembershipChangeKind.Removed
-                                    return Ok()
-                        }))
-                |> Async.Sequential
-
-            let failures =
-                stripped
-                |> Array.choose (function
-                    | Ok() -> None
-                    | Error e -> Some e)
-                |> Array.toList
-
-            match failures with
-            | [] ->
-                // Delete the team record last — once it's gone, GetTeam returns
-                // None and the team is fully purged.
-                return! storage.Delete(platformContainer, teamBlobName teamId)
-            | failures ->
-                // Fail closed: the team record stays, so the purge can be
-                // re-run and finish once the membership blobs are readable and
-                // every member's pointer could be cleared.
-                return
-                    Error(
-                        sprintf
-                            "Team '%s' was not purged: %d member(s) could not be detached — %s"
-                            teamId.Value
-                            failures.Length
-                            (String.concat "; " failures)
-                    )
-    }
-
-    member this.PurgeUser(userId: UserId) = async {
-        // Last-Owner safeguard: purging the sole Owner of a team would
-        // leave it unmanageable — the operator must transfer ownership
-        // or purge that team first. `IsLastOwner` is a cross-user scan,
-        // so (like `RemoveMember`) it runs OUTSIDE the per-user lock;
-        // the same accepted concurrent-Owner-removal race applies (a
-        // Phase 9c concern requiring distributed primitives).
-        let! memberships = this.LoadMemberships(userId)
-
-        let! lastOwnerChecks =
-            memberships
-            |> List.map (fun m -> async {
-                let! isLast = this.IsLastOwner(m.TeamId, userId)
-                return if isLast then Some m.TeamId else None
-            })
-            |> Async.Sequential
-
-        let blocking = lastOwnerChecks |> Array.choose id |> Array.toList
-
-        if not (List.isEmpty blocking) then
-            let teams =
-                blocking
-                |> List.map (fun (t: TeamId) -> sprintf "'%s'" t.Value)
-                |> String.concat ", "
-
-            return
-                Error(
-                    sprintf
-                        "Cannot purge user '%s' — they are the last Owner of team(s) %s. Transfer ownership or purge the team first."
-                        userId.Value
-                        teams
-                )
-        else
-            return!
-                withUserLock
-                    userId
-                    (async {
-                        // Re-read under the lock so a concurrent membership
-                        // write for this user can't be lost by the purge.
-                        let! current = this.LoadMemberships(userId)
-
-                        // Phase 971 — a refused delete answers Error naming
-                        // what is still at rest, and the membership record
-                        // goes LAST: it is what a re-run (and the offboard
-                        // hook's pre-purge team snapshot) finds the user's
-                        // teams by, so it stays until the pointer went.
-                        //
-                        // Unconditional pointer delete — `IBlobStorage.Delete`
-                        // is idempotent (Ok on a missing blob), which is what
-                        // makes a re-purge of an already-purged user succeed.
-                        match! storage.Delete(platformContainer, activeTeamBlobName userId) with
-                        | Error storageError ->
+                        match failures with
+                        | [] -> return Ok()
+                        | failures ->
                             return
                                 Error(
                                     sprintf
-                                        "User '%s' was not purged: the active-team pointer %s could not be deleted (%s); the membership record %s was left in place so a re-run re-finds it"
-                                        userId.Value
-                                        (activeTeamBlobName userId)
-                                        storageError
-                                        (membershipBlobName userId)
+                                        "Team '%s' was archived, but %d member(s) still have it as their active team — %s"
+                                        teamId.Value
+                                        failures.Length
+                                        (String.concat "; " failures)
                                 )
-                        | Ok() ->
-                            let! membershipDeleted =
-                                if current.IsEmpty then
-                                    async { return Ok() }
-                                else
-                                    storage.Delete(platformContainer, membershipBlobName userId)
+                    else
+                        return Ok()
+        }
 
-                            match membershipDeleted with
+    member this.PurgeTeam(teamId: TeamId) =
+        DocumentUnavailable.asError
+        <| async {
+            let! existing = this.GetTeam(teamId)
+
+            match existing with
+            | None -> return Error $"Team '{teamId}' not found"
+            | Some _ ->
+                // Strip the team from every member's membership rows + clear
+                // active-team pointers. Each per-user membership edit is a
+                // guarded read-modify-write under the per-user lock, so a
+                // concurrent AddMember/RemoveMember for the same user can't lose
+                // the strip.
+                let! members = this.GetTeamMembers(teamId)
+
+                let! stripped =
+                    members
+                    |> List.map (fun m ->
+                        withUserLock
+                            (UserId m.UserId)
+                            (async {
+                                // Phase 971 — the pointer goes BEFORE the row: the
+                                // row is what lists this user as a member, so a
+                                // refused pointer delete keeps it and the re-run
+                                // (which re-reads the members) revisits the pointer.
+                                match! this.ClearActiveTeamIfMatches(UserId m.UserId, teamId) with
+                                | Error e -> return Error e
+                                | Ok() ->
+                                    let! outcome =
+                                        updateMemberships (UserId m.UserId) (fun current ->
+                                            let remaining = current |> List.filter (fun x -> x.TeamId <> teamId)
+
+                                            if remaining.Length <> current.Length then
+                                                BlobUpdate.Write(remaining, ())
+                                            else
+                                                BlobUpdate.Keep())
+
+                                    match outcome with
+                                    | Error e -> return Error $"user '{m.UserId}': {e}"
+                                    | Ok() ->
+                                        do! publishChange teamId (UserId m.UserId) MembershipChangeKind.Removed
+                                        return Ok()
+                            }))
+                    |> Async.Sequential
+
+                let failures =
+                    stripped
+                    |> Array.choose (function
+                        | Ok() -> None
+                        | Error e -> Some e)
+                    |> Array.toList
+
+                match failures with
+                | [] ->
+                    // Delete the team record last — once it's gone, GetTeam returns
+                    // None and the team is fully purged.
+                    return! storage.Delete(platformContainer, teamBlobName teamId)
+                | failures ->
+                    // Fail closed: the team record stays, so the purge can be
+                    // re-run and finish once the membership blobs are readable and
+                    // every member's pointer could be cleared.
+                    return
+                        Error(
+                            sprintf
+                                "Team '%s' was not purged: %d member(s) could not be detached — %s"
+                                teamId.Value
+                                failures.Length
+                                (String.concat "; " failures)
+                        )
+        }
+
+    member this.PurgeUser(userId: UserId) =
+        DocumentUnavailable.asError
+        <| async {
+            // Last-Owner safeguard: purging the sole Owner of a team would
+            // leave it unmanageable — the operator must transfer ownership
+            // or purge that team first. `IsLastOwner` is a cross-user scan,
+            // so (like `RemoveMember`) it runs OUTSIDE the per-user lock;
+            // the same accepted concurrent-Owner-removal race applies (a
+            // Phase 9c concern requiring distributed primitives).
+            let! memberships = this.LoadMemberships(userId)
+
+            let! lastOwnerChecks =
+                memberships
+                |> List.map (fun m -> async {
+                    let! isLast = this.IsLastOwner(m.TeamId, userId)
+                    return if isLast then Some m.TeamId else None
+                })
+                |> Async.Sequential
+
+            let blocking = lastOwnerChecks |> Array.choose id |> Array.toList
+
+            if not (List.isEmpty blocking) then
+                let teams =
+                    blocking
+                    |> List.map (fun (t: TeamId) -> sprintf "'%s'" t.Value)
+                    |> String.concat ", "
+
+                return
+                    Error(
+                        sprintf
+                            "Cannot purge user '%s' — they are the last Owner of team(s) %s. Transfer ownership or purge the team first."
+                            userId.Value
+                            teams
+                    )
+            else
+                return!
+                    withUserLock
+                        userId
+                        (async {
+                            // Re-read under the lock so a concurrent membership
+                            // write for this user can't be lost by the purge.
+                            let! current = this.LoadMemberships(userId)
+
+                            // Phase 971 — a refused delete answers Error naming
+                            // what is still at rest, and the membership record
+                            // goes LAST: it is what a re-run (and the offboard
+                            // hook's pre-purge team snapshot) finds the user's
+                            // teams by, so it stays until the pointer went.
+                            //
+                            // Unconditional pointer delete — `IBlobStorage.Delete`
+                            // is idempotent (Ok on a missing blob), which is what
+                            // makes a re-purge of an already-purged user succeed.
+                            match! storage.Delete(platformContainer, activeTeamBlobName userId) with
                             | Error storageError ->
                                 return
                                     Error(
                                         sprintf
-                                            "User '%s' was not purged: the membership record %s could not be deleted (%s)"
+                                            "User '%s' was not purged: the active-team pointer %s could not be deleted (%s); the membership record %s was left in place so a re-run re-finds it"
                                             userId.Value
-                                            (membershipBlobName userId)
+                                            (activeTeamBlobName userId)
                                             storageError
+                                            (membershipBlobName userId)
                                     )
                             | Ok() ->
-                                for m in current do
-                                    do! publishChange m.TeamId userId MembershipChangeKind.Removed
+                                let! membershipDeleted =
+                                    if current.IsEmpty then
+                                        async { return Ok() }
+                                    else
+                                        storage.Delete(platformContainer, membershipBlobName userId)
 
-                                return Ok()
-                    })
-    }
+                                match membershipDeleted with
+                                | Error storageError ->
+                                    return
+                                        Error(
+                                            sprintf
+                                                "User '%s' was not purged: the membership record %s could not be deleted (%s)"
+                                                userId.Value
+                                                (membershipBlobName userId)
+                                                storageError
+                                        )
+                                | Ok() ->
+                                    for m in current do
+                                        do! publishChange m.TeamId userId MembershipChangeKind.Removed
+
+                                    return Ok()
+                        })
+        }
 
     // ── ITeamStore routing ───────────────────────────────────
     // Public members above are the implementation; the interface

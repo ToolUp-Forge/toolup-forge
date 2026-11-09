@@ -105,7 +105,7 @@ let private componentValues (steps: UpgradePlanStep list) =
 
 // ── Phase 287 golden baseline ─────────────────────────────────────────
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 /// Repo root (toolup-forge), derived the same way the Phase 175 / 287
 /// guards derive it: bin/<Config>/net10.0/…Tests.dll → up 5.

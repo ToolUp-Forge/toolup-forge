@@ -59,7 +59,7 @@ open ToolUp.Platform.Infra.ISparseIndex
 // with a character outside `[A-Za-z0-9_-]` is compared, and looked up, as
 // the value it is rather than as its path segment.
 
-let private auditJsonOptions = FableConverters.create ()
+let private auditJsonOptions = PlatformJson.options
 
 let private serialise (value: 'T) =
     JsonSerializer.Serialize(value, auditJsonOptions)

@@ -9,6 +9,7 @@ open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Secrets
 open ToolUp.Platform.Config
+open ToolUp.Platform.Infra
 
 // ─── Storage layout ──────────────────────────────────────────────
 //
@@ -52,17 +53,10 @@ let private allDeliveriesRoot = "webhooks/"
 // `Fable.SimpleJson` on the client). Same pattern as `BlobConfigStore`.
 
 module private Json =
-    let private options = FableConverters.create ()
+    let private options = PlatformJson.options
 
     let serialize (value: 'T) : byte[] =
         JsonSerializer.Serialize(value, options) |> Encoding.UTF8.GetBytes
-
-    let tryDeserialize<'T> (bytes: byte[]) : 'T option =
-        try
-            let json = Encoding.UTF8.GetString bytes
-            Some(JsonSerializer.Deserialize<'T>(json, options))
-        with _ ->
-            None
 
 // ─── Phase 464 — cross-instance rotation broadcast plumbing ──────
 
@@ -80,7 +74,7 @@ let private SecretRotatedNotificationKey =
 /// `Json` module above deliberately — that one is the Fable-shaped
 /// PERSISTENCE codec for subscription blobs, and coupling a wire format
 /// to a storage format is how one of them ends up unable to change.
-let private envelopeJson = FableConverters.create ()
+let private envelopeJson = PlatformJson.options
 
 /// Phase 464 — this process's instance identity, stamped onto every
 /// published envelope so a receiving instance can tell a sibling's
@@ -137,25 +131,16 @@ let secretCacheInvalidator (secretStore: ISecretStore) : WebhookSecretRotatedEnv
 
 // ─── Concurrency helper ──────────────────────────────────────────
 
-/// Download many blobs in parallel, tolerating individual
-/// deserialisation failures by skipping them. Mirrors
-/// `PersistentEventStore.downloadAll` — a partial result is preferable
-/// to a total failure for the dispatcher's hot path.
-let private downloadAll<'T> (blobStorage: IBlobStorage) (blobNames: string list) : Async<'T list> = async {
-    let! results =
+let private defaultLogger =
+    lazy (ToolUp.Platform.Config.ConsoleLogger.ConsoleLogger() :> ILogger)
+
+let private readAll<'T> (blobStorage: IBlobStorage) (blobNames: string list) : Async<'T list> =
+    BlobDocuments.readAvailable
+        (BlobDocumentStore<'T>(blobStorage, BlobCodec.json<'T>, defaultLogger.Value))
+        defaultLogger.Value
+        "WebhookRegistry"
+        ScopeKey.platform
         blobNames
-        |> List.map (fun name -> async {
-            let! result = blobStorage.Download(platformContainer, name)
-
-            return
-                match result with
-                | Ok bytes -> Json.tryDeserialize<'T> bytes
-                | Error _ -> None
-        })
-        |> Async.Parallel
-
-    return results |> Array.choose id |> Array.toList
-}
 
 // ─── IWebhookRegistry — blob-backed ──────────────────────────────
 
@@ -235,12 +220,18 @@ type BlobWebhookRegistry(storage: IBlobStorage, logger: ILogger option) =
     /// which is what makes it usable as fanout evidence.
     let mutable observedRotationCount = 0
 
-    let load (scopeId: string) (subscriptionId: Guid) = async {
-        let! result = storage.Download(platformContainer, subscriptionBlob scopeId subscriptionId)
+    let subscriptions =
+        BlobDocumentStore<WebhookSubscription>(
+            storage,
+            BlobCodec.json<WebhookSubscription>,
+            defaultArg logger defaultLogger.Value
+        )
 
-        match result with
-        | Ok bytes -> return Json.tryDeserialize<WebhookSubscription> bytes
-        | Error _ -> return None
+    // A subscription that cannot be read or decoded REFUSES the operation
+    // (`DocumentUnavailableException`) rather than reading as absent.
+    let load (scopeId: string) (subscriptionId: Guid) = async {
+        let! read = subscriptions.Read(ScopeKey.platform, DocPath.ofString (subscriptionBlob scopeId subscriptionId))
+        return DocumentUnavailable.orRaise read
     }
 
     let save (sub: WebhookSubscription) = async {
@@ -257,7 +248,7 @@ type BlobWebhookRegistry(storage: IBlobStorage, logger: ILogger option) =
 
         member _.ListSubscriptions(scopeId) = async {
             let! names = storage.List(platformContainer, subscriptionsPrefix scopeId)
-            return! downloadAll<WebhookSubscription> storage names
+            return! readAll<WebhookSubscription> storage names
         }
 
         member _.GetSubscription(scopeId, subscriptionId) = load scopeId subscriptionId
@@ -391,7 +382,7 @@ type BlobWebhookRegistry(storage: IBlobStorage, logger: ILogger option) =
                 names
                 |> List.filter (fun n -> n.Contains "/subscriptions/" && n.EndsWith ".json")
 
-            let! all = downloadAll<WebhookSubscription> storage subscriptionNames
+            let! all = readAll<WebhookSubscription> storage subscriptionNames
             return all |> List.filter (fun s -> s.Status = WebhookStatus.Active)
         }
 
@@ -530,7 +521,7 @@ let listAllSubscriptions (storage: IBlobStorage) : Async<WebhookSubscription lis
         names
         |> List.filter (fun n -> n.Contains "/subscriptions/" && n.EndsWith ".json")
 
-    return! downloadAll<WebhookSubscription> storage subscriptionNames
+    return! readAll<WebhookSubscription> storage subscriptionNames
 }
 
 /// Re-persist a subscription record at its canonical blob path. Used by
@@ -617,7 +608,7 @@ type BlobWebhookDeliveryLog(storage: IBlobStorage) =
             // bounded.
             let trimmed = names |> List.sortByDescending id |> List.truncate (max 0 limit)
 
-            let! rows = downloadAll<WebhookDelivery> storage trimmed
+            let! rows = readAll<WebhookDelivery> storage trimmed
             return rows |> List.sortByDescending _.AttemptedAt
         }
 

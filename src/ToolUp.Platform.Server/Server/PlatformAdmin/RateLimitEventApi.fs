@@ -45,7 +45,7 @@ open ToolUp.Platform
 //   6. Precision at the lower bound — n/a; the read returns timestamps
 //                              the writer set, no scheduling semantics.
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 let private resolveAccessContext (ctx: HttpContext) : AccessContext =
     match ctx.RequestServices.GetService(typeof<AccessContext>) with

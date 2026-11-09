@@ -67,7 +67,7 @@ type RunJob<'Req> = {
 [<RequireQualifiedAccess>]
 module JobPayload =
 
-    let private options = FableConverters.create ()
+    let private options = PlatformJson.options
 
     /// The persisted payload string for a request.
     let serialise<'T> (request: 'T) : string =

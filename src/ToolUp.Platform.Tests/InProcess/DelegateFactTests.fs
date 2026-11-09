@@ -1834,10 +1834,7 @@ let private runOptionsTests =
                 scope,
                 sprintf "_delegate-tables/methods/%s.json" id,
                 Text.Encoding.UTF8.GetBytes(
-                    Text.Json.JsonSerializer.Serialize(
-                        method,
-                        ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()
-                    )
+                    Text.Json.JsonSerializer.Serialize(method, ToolUp.Remoting.Json.SystemTextJson.PlatformJson.options)
                 )
             )
             |> Async.RunSynchronously

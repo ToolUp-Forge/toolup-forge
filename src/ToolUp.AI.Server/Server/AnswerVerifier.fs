@@ -633,7 +633,7 @@ type AnswerGate = {
     Verifier: IAnswerVerifier
 }
 
-let private auditJsonOptions = FableConverters.create ()
+let private auditJsonOptions = PlatformJson.options
 
 // ─── The provenance join (Phase 680) ─────────────────────────────────
 //

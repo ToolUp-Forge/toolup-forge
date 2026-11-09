@@ -28,7 +28,7 @@ open ToolUp.Platform.Config
 
 let private PlatformScope = ScopeKey.PlatformContainer
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 let private consentHandler: HttpHandler =
     fun next (ctx: HttpContext) -> task {

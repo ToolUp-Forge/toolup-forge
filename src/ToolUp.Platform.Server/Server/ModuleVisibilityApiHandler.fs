@@ -11,7 +11,7 @@ open ToolUp.Platform.Infra
 /// because it carries `FlagScope` / `ModuleVisibilityChangeAction` /
 /// `ModuleVisibilityRule` DUs — the bare-STJ default contract emits a
 /// shape Fable cannot parse. Same pattern as `FeatureFlagHandler`.
-let private eventJsonOptions = FableConverters.create ()
+let private eventJsonOptions = PlatformJson.options
 
 /// Build the `IModuleVisibilityApi` ToolUp.Remoting handler (Phase 637).
 /// Resolves `IModuleVisibilityStore` and `AccessContext` lazily from DI

@@ -12,6 +12,7 @@ open System.Text
 open System.Text.Json
 open System.Threading
 open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.Infra
 
 // ─── Durable co-editing store — Phase 756 ────────────────────────────
 //
@@ -168,14 +169,14 @@ module internal BlobCrdtLayout =
 
     /// The sequence a loose log blob's name encodes, or `None` for a
     /// name that is not one of ours. Tolerant by design: a foreign blob
-    /// under the prefix is skipped rather than failing the read.
+    /// under the prefix is skipped rather than failing the read, and so is
+    /// the document store's copy of an update it set aside
+    /// (`….json.corrupt-…`), which is evidence, not an update.
     let sequenceOfLogName (name: string) : int64 option =
-        if isNull name then
+        if isNull name || not (name.EndsWith ".json") then
             None
         else
-            let leaf =
-                let cut = name.LastIndexOfAny [| '/'; '\\' |]
-                if cut < 0 then name else name.Substring(cut + 1)
+            let leaf = name.Substring(name.LastIndexOf '/' + 1)
 
             let digits =
                 match leaf.IndexOf '-' with
@@ -195,32 +196,44 @@ module internal BlobCrdtLayout =
 /// deliberately ABSENT so a blob cannot assert a scope.
 module internal BlobCrdtCodec =
 
+    /// One update as stored: everything but its ref, which the reader
+    /// supplies from the ref it was asked about.
+    type StoredUpdate = {
+        Payload: byte[]
+        OriginSession: string
+        Sequence: int64
+        AppendedAt: DateTime
+    }
+
+    let stored (update: CrdtUpdate) : StoredUpdate = {
+        Payload = update.Payload
+        OriginSession = update.OriginSession
+        Sequence = update.Sequence
+        AppendedAt = update.AppendedAt
+    }
+
+    let ofStored (ref: CrdtDocRef) (update: StoredUpdate) : CrdtUpdate = {
+        Ref = ref
+        Payload = update.Payload
+        OriginSession = update.OriginSession
+        Sequence = update.Sequence
+        AppendedAt = update.AppendedAt
+    }
+
     let private base64Of (payload: byte[]) =
         if isNull (box payload) then
             ""
         else
             Convert.ToBase64String payload
 
-    let private updateDto (update: CrdtUpdate) = {|
+    let private updateDto (update: StoredUpdate) = {|
         payload = base64Of update.Payload
         originSession = update.OriginSession
         sequence = update.Sequence
         appendedAt = update.AppendedAt.ToUniversalTime().ToString("o")
     |}
 
-    let serializeUpdate (update: CrdtUpdate) : byte[] =
-        JsonSerializer.Serialize(updateDto update) |> Encoding.UTF8.GetBytes
-
-    let serializeSnapshot (upTo: int64) (updates: CrdtUpdate list) : byte[] =
-        let dto = {|
-            upTo = upTo
-            updates = updates |> List.map updateDto
-        |}
-
-        JsonSerializer.Serialize dto |> Encoding.UTF8.GetBytes
-
-    let private readUpdate (ref: CrdtDocRef) (element: JsonElement) : CrdtUpdate = {
-        Ref = ref
+    let private readUpdate (element: JsonElement) : StoredUpdate = {
         Payload =
             match element.GetProperty("payload").GetString() with
             | null
@@ -236,37 +249,40 @@ module internal BlobCrdtCodec =
             )
     }
 
-    /// Parse one loose update blob. `None` on anything unreadable —
-    /// a partially-written or foreign blob is skipped, never fatal.
-    let tryParseUpdate (ref: CrdtDocRef) (bytes: byte[]) : CrdtUpdate option =
+    let private parsed (read: JsonElement -> 'T) (bytes: byte[]) : Result<'T, string> =
         try
             use doc = JsonDocument.Parse(Encoding.UTF8.GetString bytes)
-            Some(readUpdate ref doc.RootElement)
-        with _ ->
-            None
+            Ok(read doc.RootElement)
+        with ex ->
+            Error ex.Message
 
-    /// Parse the snapshot blob into `(upTo, updates)`. `None` on
-    /// anything unreadable, which degrades the document to "the loose
-    /// log is all there is" rather than failing the read.
-    let tryParseSnapshot (ref: CrdtDocRef) (bytes: byte[]) : (int64 * CrdtUpdate list) option =
-        try
-            use doc = JsonDocument.Parse(Encoding.UTF8.GetString bytes)
-            let root = doc.RootElement
-            let upTo = root.GetProperty("upTo").GetInt64()
+    /// One loose update blob.
+    let update: BlobCodec<StoredUpdate> = {
+        Encode = fun update -> JsonSerializer.Serialize(updateDto update) |> Encoding.UTF8.GetBytes
+        Decode = parsed readUpdate
+    }
 
-            let updates =
-                root.GetProperty("updates").EnumerateArray()
-                |> Seq.map (readUpdate ref)
-                |> List.ofSeq
-
-            Some(upTo, updates)
-        with _ ->
-            None
+    /// The snapshot blob: `(upTo, updates)`.
+    let snapshot: BlobCodec<int64 * StoredUpdate list> = {
+        Encode =
+            fun (upTo, updates) ->
+                JsonSerializer.Serialize {|
+                    upTo = upTo
+                    updates = updates |> List.map updateDto
+                |}
+                |> Encoding.UTF8.GetBytes
+        Decode =
+            parsed (fun root ->
+                root.GetProperty("upTo").GetInt64(),
+                root.GetProperty("updates").EnumerateArray() |> Seq.map readUpdate |> List.ofSeq)
+    }
 
 /// Storage-failure surfacing. A module-level function because the seam
 /// returns `Async<CrdtUpdate>` / `Async<CrdtSnapshot>` with no error
 /// channel, so an infrastructure failure can only be raised — the same
-/// posture `Compact`'s `invalidArg` refusals already take.
+/// posture `Compact`'s `invalidArg` refusals already take. A read that
+/// could not establish the snapshot or a loose update raises the
+/// store's `DocumentUnavailableException` instead.
 module internal BlobCrdtErrors =
     let storage (operation: string) (ref: CrdtDocRef) (message: string) : 'T =
         failwith $"BlobCrdtDocumentStore.%s{operation} failed for document '%s{CrdtDocRef.toKey ref}': %s{message}"
@@ -302,6 +318,13 @@ type internal BlobCrdtDocumentState = {
 /// never observe a fold half-applied.
 type BlobCrdtDocumentStore(blobStorage: IBlobStorage, policy: CrdtSnapshotPolicy, ?now: unit -> DateTime) =
     let clock = defaultArg now (fun () -> DateTime.UtcNow)
+    let logger = JsonConsoleLogger.JsonConsoleLogger() :> ILogger
+
+    let snapshots =
+        BlobDocumentStore<int64 * BlobCrdtCodec.StoredUpdate list>(blobStorage, BlobCrdtCodec.snapshot, logger)
+
+    let updates =
+        BlobDocumentStore<BlobCrdtCodec.StoredUpdate>(blobStorage, BlobCrdtCodec.update, logger)
 
     /// One gate per document. The ref is the shard key, so two documents
     /// never contend and no gate is ever held across a `Compact` of
@@ -362,17 +385,19 @@ type BlobCrdtDocumentStore(blobStorage: IBlobStorage, policy: CrdtSnapshotPolicy
     /// The dedup rule is the crash-safety half of the fold: a loose blob
     /// whose sequence is `<= upTo` is already inside the snapshot, so it
     /// is dropped whether the fold's delete pass completed or not.
+    ///
+    /// A snapshot or a loose update that cannot be read or decoded REFUSES
+    /// the operation (`DocumentUnavailableException`; undecodable bytes are
+    /// set aside by the store). Read as "no snapshot" or skipped, it used to
+    /// hand a joiner a document missing its folded prefix — and the next
+    /// fold would write that shortened document over the snapshot and
+    /// prune the loose blobs, losing the updates for good.
     let readDocument (ref: CrdtDocRef) = async {
-        let! snapshotBytes = blobStorage.Download(BlobCrdtLayout.PlatformContainer, BlobCrdtLayout.snapshotName ref)
-
-        let snapshot =
-            match snapshotBytes with
-            | Ok bytes -> BlobCrdtCodec.tryParseSnapshot ref bytes
-            | Error _ -> None
+        let! snapshot = snapshots.Read(ScopeKey.platform, DocPath.ofString (BlobCrdtLayout.snapshotName ref))
 
         let upTo, folded =
-            match snapshot with
-            | Some(upTo, updates) -> upTo, updates
+            match DocumentUnavailable.orRaise snapshot with
+            | Some(upTo, stored) -> upTo, stored |> List.map (BlobCrdtCodec.ofStored ref)
             | None -> 0L, []
 
         let! names = blobStorage.List(BlobCrdtLayout.PlatformContainer, BlobCrdtLayout.logPrefix ref)
@@ -383,21 +408,24 @@ type BlobCrdtDocumentStore(blobStorage: IBlobStorage, policy: CrdtSnapshotPolicy
 
         let loose = sequenced |> List.filter (fun (sequence, _) -> sequence > upTo)
 
-        let! downloaded =
+        let! rows =
+            updates.ReadMany(
+                ScopeKey.platform,
+                loose |> List.map (snd >> DocPath.ofString),
+                BlobDocumentStoreLimits.DefaultListDegree
+            )
+
+        // A loose blob that vanished between the listing and its read was
+        // folded by a peer and pruned; it is in the snapshot the next read
+        // sees, and absent here.
+        let read =
+            rows |> List.map (fun (path, row) -> DocPath.value path, row) |> Map.ofList
+
+        let tail =
             loose
-            |> List.map (fun (sequence, name) -> async {
-                let! content = blobStorage.Download(BlobCrdtLayout.PlatformContainer, name)
-
-                return
-                    match content with
-                    | Ok bytes ->
-                        BlobCrdtCodec.tryParseUpdate ref bytes
-                        |> Option.map (fun u -> sequence, name, u)
-                    | Error _ -> None
-            })
-            |> Async.Parallel
-
-        let tail = downloaded |> Array.choose id |> List.ofArray
+            |> List.choose (fun (sequence, name) ->
+                Map.tryFind name read
+                |> Option.map (fun row -> sequence, name, BlobCrdtCodec.ofStored ref (DocumentUnavailable.orRaise row)))
 
         // Sorted by (sequence, blob name): the name breaks a tie that a
         // cross-process race could produce, so every reader orders an
@@ -425,15 +453,15 @@ type BlobCrdtDocumentStore(blobStorage: IBlobStorage, policy: CrdtSnapshotPolicy
         let upTo = updates |> List.fold (fun acc u -> max acc u.Sequence) 0L
 
         let! written =
-            blobStorage.Upload(
-                BlobCrdtLayout.PlatformContainer,
-                BlobCrdtLayout.snapshotName ref,
-                BlobCrdtCodec.serializeSnapshot upTo updates
+            snapshots.Update(
+                ScopeKey.platform,
+                DocPath.ofString (BlobCrdtLayout.snapshotName ref),
+                fun _ -> BlobUpdate.Write((upTo, updates |> List.map BlobCrdtCodec.stored), ())
             )
 
         match written with
-        | Error message -> return BlobCrdtErrors.storage operation ref message
-        | Ok _ ->
+        | Error e -> return BlobCrdtErrors.storage operation ref (BlobMapStoreError.describe e)
+        | Ok() ->
             let! names = blobStorage.List(BlobCrdtLayout.PlatformContainer, BlobCrdtLayout.logPrefix ref)
 
             let superseded =
@@ -465,11 +493,13 @@ type BlobCrdtDocumentStore(blobStorage: IBlobStorage, policy: CrdtSnapshotPolicy
                     AppendedAt = clock ()
                 }
 
+                // A fresh, uniquely named blob: an append is a create, so it
+                // writes without reading.
                 let! written =
                     blobStorage.Upload(
                         BlobCrdtLayout.PlatformContainer,
                         BlobCrdtLayout.logName ref update.Sequence (Guid.NewGuid()),
-                        BlobCrdtCodec.serializeUpdate update
+                        BlobCrdtCodec.update.Encode(BlobCrdtCodec.stored update)
                     )
 
                 match written with

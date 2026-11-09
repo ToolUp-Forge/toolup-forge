@@ -326,7 +326,7 @@ let main argv =
                         | Some path ->
                             let json = File.ReadAllText path
 
-                            let options = FableConverters.create ()
+                            let options = PlatformJson.options
 
                             let baseline = JsonSerializer.Deserialize<EvalReport>(json, options)
 

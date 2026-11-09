@@ -839,7 +839,7 @@ let signingTests =
                     "the chain reaches the calculation's inputs"
 
                 let sealedCert =
-                    JsonSerializer.Deserialize<GroundingCertificate>(issued.CertificateJson, FableConverters.create ())
+                    JsonSerializer.Deserialize<GroundingCertificate>(issued.CertificateJson, PlatformJson.options)
 
                 let admission =
                     match sealedCert.Body.Admissions with

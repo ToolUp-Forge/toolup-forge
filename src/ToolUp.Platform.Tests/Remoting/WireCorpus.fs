@@ -308,7 +308,7 @@ type WireCase = {
 /// not be able to perturb the process-wide options, and STJ freezes an
 /// options object on first use anyway.
 let jsonOptions: JsonSerializerOptions =
-    ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()
+    ToolUp.Remoting.Json.SystemTextJson.PlatformJson.options
 #endif
 
 /// Did the decoded value land on a type other than the declared one?

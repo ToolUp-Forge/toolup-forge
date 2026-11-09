@@ -75,7 +75,7 @@ module EvidenceBundleExport =
     [<Literal>]
     let PredicateType = "https://toolup-forge.io/attestations/evidence-chain-bundle/v1"
 
-    let private jsonOptions = FableConverters.create ()
+    let private jsonOptions = PlatformJson.options
 
     /// Lowercase-hex SHA-256 over a canonical form's UTF-8 bytes.
     ///

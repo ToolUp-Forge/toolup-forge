@@ -88,7 +88,7 @@ module ConversationMeta =
 
 // Same settings as every other persisted AI blob, so the bytes match what
 // the Fable client and the listing / retention readers expect.
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 let conversationBlobName (conversationId: Guid) =
     $"ai-conversations/{conversationId}.json"

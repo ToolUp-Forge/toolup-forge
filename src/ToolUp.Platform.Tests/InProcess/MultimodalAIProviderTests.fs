@@ -159,7 +159,7 @@ let private errorTests =
 // `ai-conversations/{id}.json` blob. Plain-text turns continue to
 // round-trip with `Parts = []` byte-for-byte.
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 let private roundTrip (msg: ConversationMessage) : ConversationMessage =
     let json = JsonSerializer.Serialize(msg, jsonOptions)

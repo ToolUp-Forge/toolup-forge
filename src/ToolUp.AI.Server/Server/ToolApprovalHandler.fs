@@ -30,7 +30,7 @@ open ToolUp.Platform.Compose
 /// and answer an unknown id with a quiet 404 rather than an error the
 /// user sees.
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 let private noOpLogger =
     { new ILogger with

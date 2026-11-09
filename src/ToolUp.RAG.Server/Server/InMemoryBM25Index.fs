@@ -71,7 +71,7 @@ let private scopeToKey (scope: VectorScope) =
 
 let private blobName (scope: VectorScope) = $"_rag/{scopeToKey scope}/bm25.json"
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 let private toJson o =
     JsonSerializer.Serialize(o, jsonOptions)

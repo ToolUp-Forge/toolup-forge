@@ -134,7 +134,7 @@ let private storedV1Verifier () : Async<IArtefactVerifier> = async {
 let private readCertificate (json: string) : GroundingCertificate =
     System.Text.Json.JsonSerializer.Deserialize<GroundingCertificate>(
         json,
-        ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()
+        ToolUp.Remoting.Json.SystemTextJson.PlatformJson.options
     )
 
 let private instructionEcho: CertificateAdmission =

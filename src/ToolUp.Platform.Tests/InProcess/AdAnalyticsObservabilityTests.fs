@@ -49,7 +49,7 @@ open ToolUp.Platform.Audit.Metrics
 //   * fail-open is asserted as a STATUS CODE, not inferred — the phase
 //     changes what is recorded, and must not change what is answered.
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 /// Records every `Increment(name, tags)`. Mirrors the Phase 114
 /// audit-write-failure pack's sink double.

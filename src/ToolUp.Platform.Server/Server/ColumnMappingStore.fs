@@ -35,7 +35,7 @@ let RecipeDataType = "_conversion"
 [<Literal>]
 let RecordDataType = "_conversionrecord"
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 let private sha (material: string) : string =
     use h = SHA256.Create()

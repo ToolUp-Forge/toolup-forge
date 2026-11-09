@@ -33,7 +33,7 @@ open ToolUp.Platform.Infra
 
 // STJ options mirroring the SDK wire (same converter set the
 // production entity stores serialise with).
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 let private wireRoundTrip (submission: Submission) : Submission =
     let json = JsonSerializer.Serialize(submission, jsonOptions)

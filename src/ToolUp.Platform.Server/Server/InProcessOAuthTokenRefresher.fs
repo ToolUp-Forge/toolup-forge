@@ -160,7 +160,7 @@ module InProcessOAuthTokenRefresher =
     /// `FableConverters` so the payload shape matches the SDK
     /// convention everywhere else. Options are private; the
     /// helpers below are the public surface.
-    let private jsonOptions = FableConverters.create ()
+    let private jsonOptions = PlatformJson.options
 
     /// Serialise a descriptor to a JSON string (for
     /// `JobRegistration.Payload`).

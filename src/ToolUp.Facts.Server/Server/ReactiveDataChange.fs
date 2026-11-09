@@ -420,7 +420,7 @@ module GroundedNarrativeTrigger =
         InvalidatedInputs: string list
     }
 
-    let private jsonOptions = FableConverters.create ()
+    let private jsonOptions = PlatformJson.options
 
     let payloadFor (runKey: string) (invalidated: Set<string>) : string =
         JsonSerializer.Serialize(

@@ -20,7 +20,7 @@ open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform.Jobs
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 let private serializeEvent (event: AIStreamEvent) =
     JsonSerializer.Serialize(event, jsonOptions)

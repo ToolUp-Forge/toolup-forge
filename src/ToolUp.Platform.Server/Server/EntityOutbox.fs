@@ -72,7 +72,7 @@ let private intentPrefix = "entity-outbox/"
 let private intentBlobName (intent: OutboxIntent) =
     $"{intentPrefix}{intent.ScopeId}/{intent.CreatedAt.Ticks:D19}-{intent.IntentId:N}.json"
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 /// Default relay cadence support windows. `settle` keeps the relay
 /// off intents whose save+publish may still be in flight; `abandon`

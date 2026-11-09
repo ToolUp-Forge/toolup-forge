@@ -102,7 +102,7 @@ let private capturingLogger () =
     }
 
 let private scopeId = "team-1027"
-let private json = FableConverters.create ()
+let private json = PlatformJson.options
 
 let private policy (maxAttempts: int) : RetryPolicy = {
     MaxAttempts = maxAttempts

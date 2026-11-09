@@ -163,7 +163,7 @@ type AnswerPlanner
         clock: unit -> DateTime
     ) =
 
-    static let jsonOptions = FableConverters.create ()
+    static let jsonOptions = PlatformJson.options
 
     // ── The store and the gate, under the plan's one scope ───────
 
@@ -581,7 +581,7 @@ type AnswerPlanner
 /// Construction + the compiler implementations for `AnswerPlanner`.
 module AnswerPlanner =
 
-    let private jsonOptions = FableConverters.create ()
+    let private jsonOptions = PlatformJson.options
 
     // ── Compilers (560.B) ─────────────────────────────────────────
 
@@ -1119,7 +1119,7 @@ module AnswerPlanner =
 /// lineage.
 module AnswerPlanProvenance =
 
-    let private jsonOptions = FableConverters.create ()
+    let private jsonOptions = PlatformJson.options
 
     /// Every plan recorded against `messageId` in scope, oldest first.
     /// Reads the `_facts` audit trail (`AnswerPlanRecorded`); a payload

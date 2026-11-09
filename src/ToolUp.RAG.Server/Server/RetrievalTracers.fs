@@ -120,7 +120,7 @@ let private scopeToString (scope: VectorKnowledgeTypes.VectorScope) =
     | VectorKnowledgeTypes.Team teamId -> sprintf "team:%s" teamId
     | VectorKnowledgeTypes.User userId -> sprintf "user:%s" userId
 
-let private traceJsonOptions = FableConverters.create ()
+let private traceJsonOptions = PlatformJson.options
 
 let private toTraceJson (value: 'T) =
     JsonSerializer.Serialize(value, traceJsonOptions)

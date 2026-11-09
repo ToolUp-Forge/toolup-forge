@@ -7,13 +7,13 @@ open System.Threading
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 
-// ─── Phase 4b deferred follow-up — runtime config store ───────────────
+// ─── The runtime config store ─────────────────────────────────────────
 //
 // `BlobBackedPlatformRuntimeConfigStore` persists the runtime override
 // for `ServerConfig.PlatformKnowledgeBase` at `_platform/runtime-config.json`
-// and exposes synchronous `Snapshot` reads from an in-memory cell
-// initialised at startup. Set calls persist + update the cell
-// atomically (write-through cache).
+// through the document store, and exposes synchronous `Snapshot` reads from
+// an in-memory cell initialised at startup. Set calls persist + update the
+// cell atomically (write-through cache).
 //
 // **Wire format:**
 //   { "platformKnowledgeBase": "Enabled" | "Disabled" }
@@ -21,9 +21,15 @@ open ToolUp.Platform.BlobStorage
 // String form rather than DU JSON because the persisted blob may
 // outlive the SDK version that wrote it; round-tripping through
 // strings is more robust than DU case-name reflection.
+//
+// Until Phase 1061 the document was written as `{}`: its DTO was a
+// private record, whose properties F# emits as internal, so the serializer
+// saw no members and the override never survived a restart (the read of
+// `{}` threw and fell back to the default). The codec now writes the
+// format above by hand and reads a `{}` already at rest as the default,
+// which is what it has always meant.
 
-let private platformContainer = ScopeKey.PlatformContainer
-let private blobName = "runtime-config.json"
+let private blobName = DocPath.ofString "runtime-config.json"
 
 [<Literal>]
 let private enabledLiteral = "Enabled"
@@ -31,52 +37,51 @@ let private enabledLiteral = "Enabled"
 [<Literal>]
 let private disabledLiteral = "Disabled"
 
-module private Json =
-    let private options =
-        JsonSerializerOptions(PropertyNamingPolicy = JsonNamingPolicy.CamelCase)
+[<Literal>]
+let private property = "platformKnowledgeBase"
 
-    type private Dto = { PlatformKnowledgeBase: string }
+/// The document's codec. No property (the `{}` written before Phase 1061)
+/// and a mode this SDK does not know (written by a later one) both read as
+/// `defaultMode`; bytes that are not a JSON object are `Error`, which the
+/// store quarantines.
+let internal codec (defaultMode: FeatureMode) : BlobCodec<FeatureMode> = {
+    Encode =
+        fun mode ->
+            let value =
+                match mode with
+                | FeatureMode.Enabled -> enabledLiteral
+                | FeatureMode.Disabled -> disabledLiteral
 
-    let serialize (mode: FeatureMode) : byte[] =
-        let value =
-            match mode with
-            | FeatureMode.Enabled -> enabledLiteral
-            | FeatureMode.Disabled -> disabledLiteral
+            Encoding.UTF8.GetBytes $"{{\"{property}\":\"{value}\"}}"
+    Decode =
+        fun bytes ->
+            try
+                use doc = JsonDocument.Parse(bytes: byte[])
+                let root = doc.RootElement
 
-        JsonSerializer.Serialize({ PlatformKnowledgeBase = value }, options)
-        |> Encoding.UTF8.GetBytes
-
-    let deserialize (defaultMode: FeatureMode) (bytes: byte[]) : FeatureMode =
-        try
-            let json = Encoding.UTF8.GetString bytes
-            let dto = JsonSerializer.Deserialize<Dto>(json, options)
-
-            match dto.PlatformKnowledgeBase with
-            | s when s = enabledLiteral -> FeatureMode.Enabled
-            | s when s = disabledLiteral -> FeatureMode.Disabled
-            | _ -> defaultMode
-        with _ ->
-            defaultMode
+                if root.ValueKind <> JsonValueKind.Object then
+                    Error $"the runtime config document is a JSON {root.ValueKind}, not an object"
+                else
+                    match root.TryGetProperty property with
+                    | true, value when value.ValueKind = JsonValueKind.String ->
+                        match value.GetString() with
+                        | s when s = enabledLiteral -> Ok FeatureMode.Enabled
+                        | s when s = disabledLiteral -> Ok FeatureMode.Disabled
+                        | _ -> Ok defaultMode
+                    | _ -> Ok defaultMode
+            with ex ->
+                Error ex.Message
+}
 
 /// Default `IPlatformRuntimeConfigStore` impl. Persists overrides to
-/// `_platform/runtime-config.json` via the injected `IBlobStorage`;
+/// `_platform/runtime-config.json` through the document store; the
 /// in-memory cell holds the current value for hot-path `Snapshot`
 /// reads. Constructed via the `create` factory below — the factory
 /// loads the persisted value at startup so the cell starts in the
 /// right state without an extra request-time read.
-type private BlobBackedPlatformRuntimeConfigStore
-    (storage: IBlobStorage, defaultMode: FeatureMode, initialValue: FeatureMode) =
+type private BlobBackedPlatformRuntimeConfigStore(docs: BlobDocumentStore<FeatureMode>, initialValue: FeatureMode) =
     let mutable cell = initialValue
     let writeLock = new SemaphoreSlim(1, 1)
-
-    let save (mode: FeatureMode) = async {
-        let bytes = Json.serialize mode
-        let! result = storage.Upload(platformContainer, blobName, bytes)
-
-        match result with
-        | Ok _ -> return Ok()
-        | Error e -> return Error e
-    }
 
     interface IPlatformRuntimeConfigStore with
         member _.Snapshot() = cell
@@ -86,29 +91,30 @@ type private BlobBackedPlatformRuntimeConfigStore
             do! writeLock.WaitAsync() |> Async.AwaitTask
 
             try
-                let! result = save mode
-
-                match result with
+                match! docs.Update(ScopeKey.platform, blobName, (fun _ -> BlobUpdate.Write(mode, ()))) with
                 | Ok() ->
                     cell <- mode
                     return Ok()
-                | Error e -> return Error e
+                | Error e -> return Error(BlobMapStoreError.describe e)
             finally
                 writeLock.Release() |> ignore
         }
 
 /// Construct a runtime config store, loading the persisted override
-/// (if any) from blob. Falls back to `defaultMode` when no blob exists
-/// or the blob is unreadable. Async because the load happens at
-/// startup — `compose` calls this once via `Async.RunSynchronously`
-/// before the request pipeline starts.
+/// (if any) at startup — `compose` calls this once via
+/// `Async.RunSynchronously` before the request pipeline starts. No
+/// document is `defaultMode`; a document that cannot be read or does not
+/// decode RAISES `DocumentUnavailableException`, which composition turns
+/// into a refusal at preflight: an override the operator set is never
+/// silently replaced by the static default.
 let create (storage: IBlobStorage) (defaultMode: FeatureMode) : Async<IPlatformRuntimeConfigStore> = async {
-    let! result = storage.Download(platformContainer, blobName)
+    let docs =
+        BlobDocumentStore<FeatureMode>(storage, codec defaultMode, JsonConsoleLogger.JsonConsoleLogger())
+
+    let! loaded = docs.Read(ScopeKey.platform, blobName)
 
     let initial =
-        match result with
-        | Ok bytes -> Json.deserialize defaultMode bytes
-        | Error _ -> defaultMode
+        loaded |> DocumentUnavailable.orRaise |> Option.defaultValue defaultMode
 
-    return BlobBackedPlatformRuntimeConfigStore(storage, defaultMode, initial) :> IPlatformRuntimeConfigStore
+    return BlobBackedPlatformRuntimeConfigStore(docs, initial) :> IPlatformRuntimeConfigStore
 }

@@ -57,7 +57,7 @@ type private SeedMarker = {
     Notes: string list
 }
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 let private tryResolve<'T> (services: IServiceProvider) : 'T option =
     match services.GetService(typeof<'T>) with

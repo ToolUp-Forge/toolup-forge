@@ -8,7 +8,6 @@ open ToolUp.Platform
 open System
 open System.Collections.Concurrent
 open System.Text.Json
-open System.Threading
 open ToolUp.Platform.BlobStorage
 
 // ─── Phase 689 — the shipped budget ledgers ──────────────────────────────
@@ -22,12 +21,12 @@ open ToolUp.Platform.BlobStorage
 // **Two tiers of atomicity, and the difference is honest rather than
 // hidden.** `Reserve` must make read → decide → reserve indivisible, or a
 // concurrency ceiling does not bound a burst (see `IBudgetLedger`'s
-// header). `BlobBudgetLedger` gets there in two steps:
+// header). `BlobBudgetLedger` gets there through `BlobDocumentStore`'s
+// guarded update, in two steps:
 //
-//   1. A per-key `SemaphoreSlim` serialises writers **within this
-//      process**. On a single-instance deployment that is complete, and it
-//      is the same mechanism `UsageBatchFlusher` uses for its per-bucket
-//      read-modify-write.
+//   1. The document store's write stripes serialise writers to one row
+//      **within this process**. On a single-instance deployment that is
+//      complete.
 //   2. When the composed blob storage also implements
 //      `IConditionalBlobStorage`, the write is an ETag compare-and-swap
 //      with bounded retries, which extends the guarantee **across
@@ -48,10 +47,17 @@ open ToolUp.Platform.BlobStorage
 //
 // **`Utf8JsonWriter` / `JsonDocument` rather than reflection over the F#
 // records**, exactly as `BlobIdempotencyStore` does: the round-trip is then
-// independent of STJ's F#-record handling, a corrupt or foreign blob is a
-// parse failure we turn into the zero row rather than an exception out of
-// an admission check, and the on-disk shape is one an operator can read
-// and edit.
+// independent of STJ's F#-record handling, and the on-disk shape is one an
+// operator can read and edit.
+//
+// **What an unusable row means.** A row whose bytes do not decode is set
+// aside by the document store (copied beside itself) and the period starts
+// again from zero consumption — the row is a running tally, so its loss
+// costs an over-admission, never a wedged scope. A row that decodes but
+// belongs to another scope or period (a mis-derived path) reads as zero and
+// is rewritten. A row that cannot be READ, and a write that fails for a
+// reason other than contention, admit without durable accounting, logged:
+// the fail-open direction in `IBudgetLedger`'s header.
 
 /// Phase 689 — JSON codec for a stored usage row. Separated from the
 /// ledger so a test can pin the wire form without a blob backend, and so a
@@ -87,35 +93,46 @@ module BudgetUsageJson =
 
         ms.ToArray()
 
-    /// Parse a usage row, refusing one that is not for `key`.
+    /// Parse a stored row as it stands, before any key cross-check. The
+    /// domain is in the path, not the row, so the result carries an empty
+    /// `Domain`. `Error` for bytes that are not a row of this schema.
+    let internal decodeRow (bytes: byte[]) : Result<BudgetUsage, string> =
+        try
+            use doc = JsonDocument.Parse(ReadOnlyMemory<byte> bytes)
+            let root = doc.RootElement
+            let version = root.GetProperty("SchemaVersion").GetInt32()
+
+            if version <> SchemaVersion then
+                Error $"usage row schema version {version}, expected {SchemaVersion}"
+            else
+                Ok {
+                    Domain = ""
+                    ScopeId = root.GetProperty("ScopeId").GetString()
+                    PeriodKey = root.GetProperty("PeriodKey").GetString()
+                    InFlight = root.GetProperty("InFlight").GetInt32()
+                    Spent = root.GetProperty("Spent").GetDecimal()
+                    UpdatedAt = DateTime(root.GetProperty("UpdatedAtTicks").GetInt64(), DateTimeKind.Utc)
+                }
+        with ex ->
+            Error ex.Message
+
+    /// The decoded row, if it is `key`'s.
     ///
     /// The key cross-check is the second half of the GP 4 guarantee: the
     /// blob path already partitions by scope, and this makes a mis-derived
     /// path degrade to "no consumption recorded" rather than to one tenant
     /// spending another's allowance.
-    let deserialise (key: BudgetLedgerKey) (bytes: byte[]) : BudgetUsage option =
-        try
-            use doc = JsonDocument.Parse(ReadOnlyMemory<byte> bytes)
-            let root = doc.RootElement
-
-            let matches =
-                root.GetProperty("SchemaVersion").GetInt32() = SchemaVersion
-                && root.GetProperty("ScopeId").GetString() = key.ScopeId
-                && root.GetProperty("PeriodKey").GetString() = key.PeriodKey
-
-            if not matches then
-                None
-            else
-                Some {
-                    Domain = key.Domain
-                    ScopeId = key.ScopeId
-                    PeriodKey = key.PeriodKey
-                    InFlight = root.GetProperty("InFlight").GetInt32()
-                    Spent = root.GetProperty("Spent").GetDecimal()
-                    UpdatedAt = DateTime(root.GetProperty("UpdatedAtTicks").GetInt64(), DateTimeKind.Utc)
-                }
-        with _ ->
+    let internal forKey (key: BudgetLedgerKey) (row: BudgetUsage) : BudgetUsage option =
+        if row.ScopeId = key.ScopeId && row.PeriodKey = key.PeriodKey then
+            Some { row with Domain = key.Domain }
+        else
             None
+
+    /// Parse a usage row, refusing one that is not for `key`.
+    let deserialise (key: BudgetLedgerKey) (bytes: byte[]) : BudgetUsage option =
+        match decodeRow bytes with
+        | Ok row -> forKey key row
+        | Error _ -> None
 
 /// Phase 689 — the refusal a ledger produces when it cannot make a
 /// decision stick, distinct from one the policy produced.
@@ -164,152 +181,112 @@ type BlobBudgetLedger
     let now = defaultArg clock (fun () -> DateTime.UtcNow)
     let contention = defaultArg onContention BudgetContention.denial
 
-    let conditional =
-        match box blobs with
-        | :? IConditionalBlobStorage as c -> Some c
-        | _ -> None
-
-    /// Bounded CAS retries. Small on purpose: contention on ONE key is the
-    /// burst this ledger exists to bound, and a caller who loses five
-    /// races in a row is, in practice, a caller whose scope is saturated —
-    /// which is the answer the budget was going to give anyway. An
-    /// unbounded retry here would turn a saturated scope into an unbounded
-    /// write amplification against the blob backend.
-    let maxCasAttempts = 5
-
-    /// Per-key write gate. Bounded by the number of keys this process has
-    /// touched; entries are cheap (one semaphore) and a period key stops
-    /// being written to when the period rolls, so the natural bound is
-    /// "active scopes", not "requests".
-    let gates = ConcurrentDictionary<string, SemaphoreSlim>()
-
-    let gateFor (key: BudgetLedgerKey) =
-        gates.GetOrAdd(BudgetLedgerKey.cacheKey key, fun _ -> new SemaphoreSlim(1, 1))
+    /// The key whose container is `container`: `_platform` by default, a
+    /// deployment's own container read back to its key otherwise.
+    let scope =
+        ScopeKey.tryParseContainer container
+        |> Option.defaultValue (ScopeKey.Claim container)
 
     let warn (message: string) =
         match logger with
         | Some log -> log.Warn message
         | None -> ()
 
-    /// The stored row plus its ETag, or the zero row plus `None`.
-    let readUsageWithETag (key: BudgetLedgerKey) : Async<BudgetUsage * string option> = async {
-        let name = BudgetLedgerLayout.usageBlob key
+    /// Bounded CAS attempts (five, with no pause between them). Small on
+    /// purpose: contention on ONE key is the burst this ledger exists to
+    /// bound, and a caller who loses five races in a row is, in practice, a
+    /// caller whose scope is saturated — which is the answer the budget was
+    /// going to give anyway. An unbounded retry here would turn a saturated
+    /// scope into an unbounded write amplification against the blob backend.
+    let rows =
+        BlobDocumentStore<BudgetUsage>(
+            blobs,
+            {
+                Encode = BudgetUsageJson.serialise
+                Decode = BudgetUsageJson.decodeRow
+            },
+            (logger
+             |> Option.defaultWith (fun () -> JsonConsoleLogger.JsonConsoleLogger() :> ILogger)),
+            {
+                MaxRetries = 4
+                InitialBackoff = TimeSpan.Zero
+            }
+        )
 
-        let unreadable () =
-            warn
-                $"BlobBudgetLedger: unreadable usage row for domain '{key.Domain}' scope '{key.ScopeId}' period '{key.PeriodKey}' — treating as zero consumption and rewriting."
+    let pathOf (key: BudgetLedgerKey) =
+        DocPath.ofString (BudgetLedgerLayout.usageBlob key)
 
-            BudgetLedgerKey.emptyUsage key
-
-        match conditional with
-        | Some cond ->
-            match! cond.DownloadWithETag(container, name) with
-            | Ok(bytes, etag) ->
-                match BudgetUsageJson.deserialise key bytes with
-                | Some usage -> return usage, Some etag
-                // Corrupt or foreign: treat as no consumption, but keep
-                // the etag so the repairing write still CASes against what
-                // we read rather than blind-overwriting a row another
-                // writer may have just fixed.
-                | None -> return unreadable (), Some etag
-            | Error _ -> return BudgetLedgerKey.emptyUsage key, None
-        | None ->
-            match! blobs.Download(container, name) with
-            | Ok bytes ->
-                match BudgetUsageJson.deserialise key bytes with
-                | Some usage -> return usage, None
-                | None -> return unreadable (), None
-            | Error _ -> return BudgetLedgerKey.emptyUsage key, None
-    }
-
-    /// Write `usage`, CASing against `expected` when the backend supports
-    /// it. `false` means the CAS was refused and the caller should re-read
-    /// and re-decide.
-    let writeUsage (key: BudgetLedgerKey) (expected: string option) (usage: BudgetUsage) : Async<bool> = async {
-        let name = BudgetLedgerLayout.usageBlob key
-        let bytes = BudgetUsageJson.serialise usage
-
-        match conditional with
-        | Some cond ->
-            let condition =
-                match expected with
-                | Some etag -> IfMatch etag
-                | None -> IfAbsent
-
-            match! cond.UploadWithETag(container, name, bytes, condition) with
-            | Ok _ -> return true
-            | Error(ETagMismatch _) -> return false
-            | Error(ConditionalWriteFailure message) ->
-                // Infrastructure, not contention. Do not re-decide in a
-                // loop against a backend that is failing — report and let
-                // the caller proceed, for the fail-open reason in the
-                // `IBudgetLedger` header.
+    /// The live row for `key` from what the store read: zero consumption
+    /// for an absent row, and for one that belongs to another scope or
+    /// period (rewritten by the next write).
+    let rowFor (key: BudgetLedgerKey) (stored: BudgetUsage option) : BudgetUsage =
+        match stored with
+        | None -> BudgetLedgerKey.emptyUsage key
+        | Some row ->
+            match BudgetUsageJson.forKey key row with
+            | Some usage -> usage
+            | None ->
                 warn
-                    $"BlobBudgetLedger: conditional write failed for domain '{key.Domain}' scope '{key.ScopeId}' period '{key.PeriodKey}': {message}. Budget accounting for this request is not durable."
+                    $"BlobBudgetLedger: the usage row for domain '{key.Domain}' scope '{key.ScopeId}' period '{key.PeriodKey}' belongs to scope '{row.ScopeId}' period '{row.PeriodKey}' — treating as zero consumption and rewriting."
 
-                return true
-        | None ->
-            match! blobs.Upload(container, name, bytes) with
-            | Ok _ -> return true
-            | Error message ->
-                warn
-                    $"BlobBudgetLedger: usage write failed for domain '{key.Domain}' scope '{key.ScopeId}' period '{key.PeriodKey}': {message}. Budget accounting for this request is not durable."
+                BudgetLedgerKey.emptyUsage key
 
-                return true
-    }
-
-    /// Run `mutate` against the live row and persist the result, retrying
-    /// the whole decision on a lost CAS. `mutate` returns `Error` to
-    /// abandon the write (a refusal), `Ok` to persist.
+    /// Run `mutate` against the live row and persist the result in one
+    /// guarded update, the whole decision re-run on a lost CAS. `mutate`
+    /// returns `Error` to abandon the write (a refusal), `Ok` to persist.
     let mutateUsage
         (key: BudgetLedgerKey)
         (mutate: BudgetUsage -> Result<BudgetUsage, BudgetDenial>)
         : Async<Result<BudgetUsage, BudgetDenial>> =
         async {
-            let gate = gateFor key
-            do! gate.WaitAsync() |> Async.AwaitTask
+            // The row the last decision ran over: the contention refusal
+            // names it, and an infrastructure failure re-decides over it.
+            let lastSeen = ref (BudgetLedgerKey.emptyUsage key)
 
-            try
-                let mutable attempt = 0
-                let mutable result = Unchecked.defaultof<Result<BudgetUsage, BudgetDenial>>
-                let mutable settled = false
+            let! outcome =
+                rows.UpdateOrRestart(
+                    scope,
+                    pathOf key,
+                    fun stored ->
+                        let current = rowFor key stored
+                        lastSeen.Value <- current
 
-                while not settled do
-                    attempt <- attempt + 1
-                    let! current, etag = readUsageWithETag key
+                        match mutate current with
+                        // Refused: nothing is written, so a denial costs one
+                        // read and never a blob write.
+                        | Error denial -> BlobUpdate.Keep(Error denial)
+                        | Ok updated -> BlobUpdate.Write(updated, Ok updated)
+                )
 
-                    match mutate current with
-                    | Error denial ->
-                        // Refused: nothing is written, so a denial costs
-                        // one read and never a blob write.
-                        result <- Error denial
-                        settled <- true
-                    | Ok updated ->
-                        let! written = writeUsage key etag updated
+            match outcome with
+            | Ok result -> return result
+            | Error(BlobMapStoreError.Contended _) ->
+                // Lost the CAS on every attempt: the row is hot. Admitting
+                // here would be the one failure direction a budget may not
+                // have on its *contended* path — that is precisely the burst
+                // being bounded — so this refuses, and says why in the
+                // denial rather than in a log line the caller never sees.
+                return Error(contention lastSeen.Value)
+            | Error e ->
+                // Infrastructure, not contention. Do not re-decide in a loop
+                // against a backend that is failing — report and let the
+                // caller proceed, for the fail-open reason in the
+                // `IBudgetLedger` header.
+                warn
+                    $"BlobBudgetLedger: domain '{key.Domain}' scope '{key.ScopeId}' period '{key.PeriodKey}': {BlobMapStoreError.describe e}. Budget accounting for this request is not durable."
 
-                        if written then
-                            result <- Ok updated
-                            settled <- true
-                        elif attempt >= maxCasAttempts then
-                            // Lost the CAS `maxCasAttempts` times: the row
-                            // is hot. Admitting here would be the one
-                            // failure direction a budget may not have on
-                            // its *contended* path — that is precisely the
-                            // burst being bounded — so this refuses, and
-                            // says why in the denial rather than in a log
-                            // line the caller never sees.
-                            result <- Error(contention current)
-                            settled <- true
-
-                return result
-            finally
-                gate.Release() |> ignore
+                return mutate lastSeen.Value
         }
 
     interface IBudgetLedger with
         member _.ReadUsage(key: BudgetLedgerKey) = async {
-            let! usage, _ = readUsageWithETag key
-            return usage
+            match! rows.Read(scope, pathOf key) with
+            | Ok stored -> return rowFor key stored
+            | Error e ->
+                warn
+                    $"BlobBudgetLedger: domain '{key.Domain}' scope '{key.ScopeId}' period '{key.PeriodKey}': {BlobMapStoreError.describe e} — reading as zero consumption."
+
+                return BudgetLedgerKey.emptyUsage key
         }
 
         member _.Reserve(key, cost, decide) =

@@ -164,7 +164,7 @@ let private MaxBeaconIdLen = 128
 //     conversation blob format so the LLM sees the synthetic turns
 //     in the right shape). ────────────────────────────────────────
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 let private toJson obj =
     JsonSerializer.Serialize(obj, jsonOptions)

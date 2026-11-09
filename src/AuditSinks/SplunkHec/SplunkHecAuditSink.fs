@@ -79,7 +79,7 @@ module SplunkHecSettings =
         Host = None
     }
 
-let private hecJsonOptions = FableConverters.create ()
+let private hecJsonOptions = PlatformJson.options
 
 /// Convert one `AuditEnvelope` into the wire-format JSON line Splunk
 /// expects. The audit event itself goes into `event`; bookkeeping

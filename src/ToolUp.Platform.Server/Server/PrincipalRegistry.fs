@@ -6,6 +6,8 @@ open System.Text.Json
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Remoting.Json.SystemTextJson
+open ToolUp.Platform.Config
+open ToolUp.Platform.Infra
 
 // ─── Phase 543 — derived principal enumeration (aggregation) ─────────
 //
@@ -56,27 +58,7 @@ let defaultAuditLookBack = TimeSpan.FromDays 90.0
 
 // Same converter set as the audit write path (`EventStoreAuditLog`),
 // so the payload decode here tracks the persisted wire shape.
-let private auditJsonOptions = FableConverters.create ()
-
-/// Parse one stored membership blob (TeamManagement's wire shape) to
-/// `(teamId, role)` rows. A malformed / tombstoned blob degrades to
-/// `[]` — the blob still evidences the principal, but contributes no
-/// membership row; a single corrupt blob never fails the sweep.
-let private parseMemberships (bytes: byte[]) : (string * TeamRole) list =
-    try
-        let doc = JsonDocument.Parse(Encoding.UTF8.GetString bytes)
-
-        [
-            for elem in doc.RootElement.EnumerateArray() do
-                let role =
-                    match elem.GetProperty("role").GetString() with
-                    | "Owner" -> Owner
-                    | "Admin" -> Admin
-                    | _ -> Member
-
-                elem.GetProperty("teamId").GetString(), role
-        ]
-    with _ -> []
+let private auditJsonOptions = PlatformJson.options
 
 let private bounded (comps: Async<'a> list) : Async<'a[]> =
     Async.Parallel(comps, maxDegreeOfParallelism = 32)
@@ -93,23 +75,35 @@ let listPrincipalsWith
     async {
         let cutoff = DateTime.UtcNow - auditLookBack
 
-        // (a) membership blob owners → per-user (teamId, role) rows.
-        let! membershipBlobs = storage.List(platformContainer, membershipsPrefix)
+        // (a) membership document owners → per-user (teamId, role) rows,
+        // read through TeamManagement's own codec so the shapes cannot
+        // drift. A document that cannot be read or decoded still evidences
+        // its principal but contributes no membership row, logged (and
+        // quarantined by the store): a single bad document never fails the
+        // sweep, and never hides who holds an account.
+        let docs =
+            BlobDocumentStore<TeamManagement.StoredMembership list>(
+                storage,
+                TeamManagement.membershipCodec,
+                ConsoleLogger.ConsoleLogger() :> ILogger
+            )
 
-        let! membershipPairs =
-            membershipBlobs
-            |> List.map (fun name -> async {
-                let userId = name.Replace(membershipsPrefix, "").Replace(".json", "")
-                let! result = storage.Download(platformContainer, name)
+        let! membershipRows = docs.List(ScopeKey.platform, membershipsPrefix, 32)
 
-                return
-                    match result with
-                    | Ok bytes -> Some(userId, parseMemberships bytes)
-                    | Error _ -> None
-            })
-            |> bounded
+        let memberships =
+            membershipRows
+            |> List.map (fun (path, row) ->
+                let userId =
+                    (DocPath.value path).Replace(membershipsPrefix, "").Replace(".json", "")
 
-        let memberships = membershipPairs |> Array.choose id |> Map.ofArray
+                match row with
+                | Ok rows -> userId, rows |> List.map (fun m -> m.TeamId.Value, m.Role)
+                | Error e ->
+                    (ConsoleLogger.ConsoleLogger() :> ILogger)
+                        .Warn($"[PrincipalRegistry] memberships of {userId} left out: {BlobMapStoreError.describe e}")
+
+                    userId, [])
+            |> Map.ofList
 
         // (b) user-scope event evidence + the scope list the audit
         // sweep fans out over.

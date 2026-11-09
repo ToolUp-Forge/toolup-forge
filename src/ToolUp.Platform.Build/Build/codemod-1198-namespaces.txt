@@ -712,9 +712,13 @@ type ToolUp.Platform BlobCrdtDocumentStore ToolUp.Platform.Jobs
 type ToolUp.Platform BlobCrdtErrors ToolUp.Platform.Jobs
 type ToolUp.Platform BlobCrdtLayout ToolUp.Platform.Jobs
 type ToolUp.Platform BlobDatasetStore ToolUp.Platform.Infra
+type ToolUp.Platform BlobDocumentStore ToolUp.Platform.Infra
+type ToolUp.Platform BlobDocumentStoreLimits ToolUp.Platform.Infra
+type ToolUp.Platform BlobDocuments ToolUp.Platform.Infra
 type ToolUp.Platform BlobDpKeyRing ToolUp.Platform.Infra
 type ToolUp.Platform BlobEncryption ToolUp.Platform.Infra
 type ToolUp.Platform BlobExternalHandleStore ToolUp.Platform.Infra
+type ToolUp.Platform BlobIdempotencyStore ToolUp.Platform.Infra
 type ToolUp.Platform BlobMapStore ToolUp.Platform.Infra
 type ToolUp.Platform BlobMapStoreError ToolUp.Platform.Infra
 type ToolUp.Platform BlobMapStoreOptions ToolUp.Platform.Infra
@@ -1012,6 +1016,9 @@ type ToolUp.Platform DirectAddIdentityProofValidator ToolUp.Platform.Scope
 type ToolUp.Platform DistributedLock ToolUp.Platform.Jobs
 type ToolUp.Platform DistributedLockResolver ToolUp.Platform.Jobs
 type ToolUp.Platform DistributedLockSelection ToolUp.Platform.Jobs
+type ToolUp.Platform DocPath ToolUp.Platform.Infra
+type ToolUp.Platform DocumentUnavailable ToolUp.Platform.Infra
+type ToolUp.Platform DocumentUnavailableException ToolUp.Platform.Infra
 type ToolUp.Platform DryRun ToolUp.Platform.Compose
 type ToolUp.Platform DsseEnvelope ToolUp.Platform.Audit
 type ToolUp.Platform DsseSignature ToolUp.Platform.Audit
@@ -1390,6 +1397,7 @@ type ToolUp.Platform IWhatsAppTemplateRegistry ToolUp.Platform.Jobs
 type ToolUp.Platform IWorkProvenanceSource ToolUp.Platform.Infra
 type ToolUp.Platform IWorkerKeyRegistry ToolUp.Platform.Infra
 type ToolUp.Platform IdempotencyStoreInstanceValidator ToolUp.Platform.Config
+type ToolUp.Platform IdempotencyStoreWriteException ToolUp.Platform.Infra
 type ToolUp.Platform IdempotencySweep ToolUp.Platform.Jobs
 type ToolUp.Platform IdempotencySweepJob ToolUp.Platform.Jobs
 type ToolUp.Platform InHandlerGateDeclaration ToolUp.Platform.Compose
@@ -1997,7 +2005,6 @@ type ToolUp.Platform.Teams InMemoryPendingInviteStore ToolUp.Platform.Scope.Team
 type ToolUp.Platform.Teams PendingInviteExpiryHook ToolUp.Platform.Scope.Teams
 type ToolUp.Platform.Teams PendingInviteStore ToolUp.Platform.Scope.Teams
 type ToolUp.Platform.Teams PendingInviteStoreInstanceValidator ToolUp.Platform.Scope.Teams
-type ToolUp.Platform.Teams PendingInvitesBlobCorrupt ToolUp.Platform.Scope.Teams
 type ToolUp.Platform.Teams TeamInvitationHandler ToolUp.Platform.Scope.Teams
 type ToolUp.Platform.Tracing ActivityContextHelpers ToolUp.Platform.Infra.Tracing
 type ToolUp.Platform.Tracing IActivitySink ToolUp.Platform.Infra.Tracing

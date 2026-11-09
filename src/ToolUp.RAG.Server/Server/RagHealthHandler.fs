@@ -9,7 +9,7 @@ open ToolUp.Platform.Infra.IRagTelemetry
 open ToolUp.RAG.IngestionTypes
 open ToolUp.Platform.Infra
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 /// `/health/rag` route: returns the current `RagTelemetrySnapshot` as JSON,
 /// with the ingestion queue's drop counters (Phase 303) merged on under

@@ -86,7 +86,7 @@ type ReembeddingBackgroundService
 
     let sem = new SemaphoreSlim(maxConcurrency, maxConcurrency)
 
-    let jsonOptions = FableConverters.create ()
+    let jsonOptions = PlatformJson.options
 
     let toJson o =
         JsonSerializer.Serialize(o, jsonOptions)

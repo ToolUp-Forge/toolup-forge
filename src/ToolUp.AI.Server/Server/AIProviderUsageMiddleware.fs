@@ -700,7 +700,7 @@ type SpendEnforcingProviderFactory(inner: IAIProviderFactory, enforcer: AIBudget
 /// `AIAgentEngine`'s latency serialiser — `FableConverters`
 /// round-trips F# records / `option` losslessly, so a reader gets back
 /// the shape that was written.
-let private failoverJsonOptions = FableConverters.create ()
+let private failoverJsonOptions = PlatformJson.options
 
 /// Cap on the audit write. A wedged event store must not hold up a
 /// conversation that has just survived a provider outage — the whole

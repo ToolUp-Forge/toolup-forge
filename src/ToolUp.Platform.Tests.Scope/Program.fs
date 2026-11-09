@@ -19,6 +19,7 @@ let private registeredTests =
         ShareTokenSigningKeyProvenanceValidatorTests.tests
         ShareTokenSigningKeyGovernanceTests.tests
         PermissionStoreTests.tests
+        PermissionStoreTests.documentTests
         StorageScopeResolverTests.tests
         AuthorizationTests.tests
         GoogleIdentityCompanionTests.tests

@@ -68,6 +68,8 @@
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\MemoizedComputeDispatcherTests.fs" Link="InProcess\MemoizedComputeDispatcherTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\BudgetSeamTests.fs" Link="InProcess\BudgetSeamTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\SignedWorkerOutcomeTests.fs" Link="InProcess\SignedWorkerOutcomeTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\BlobDocumentStoreTests.fs" Link="InProcess\BlobDocumentStoreTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\IdempotencyReplayAuditTests.fs" Link="InProcess\IdempotencyReplayAuditTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

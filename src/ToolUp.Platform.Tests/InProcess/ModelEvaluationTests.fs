@@ -1824,7 +1824,7 @@ let tests =
             // field, so this round-trips through the real wire options with
             // the new properties physically removed, rather than asserting
             // the intent.
-            let options = FableConverters.create ()
+            let options = PlatformJson.options
 
             let strip (property: string) (value: 'T) : string =
                 let node = JsonNode.Parse(JsonSerializer.Serialize(value, options))

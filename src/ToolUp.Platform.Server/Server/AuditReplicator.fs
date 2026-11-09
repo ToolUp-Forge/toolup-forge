@@ -5,10 +5,9 @@ open System
 open System.Threading
 open System.Threading.Channels
 open Microsoft.Extensions.Hosting
-open System.Text.Json
-open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.Infra
 
 // ─── Phase 9g — Audit replicator ────────────────────────────────────
 //
@@ -44,18 +43,8 @@ open ToolUp.Platform.BlobStorage
 // distributed deployments. Phase 9c half 2's distributed lock will
 // promote one replicator to leader.
 
-let private cursorContainer = ScopeKey.PlatformContainer
-
-let private cursorJsonOptions = FableConverters.create ()
-
-let private toCursorJson (cursor: AuditReplicatorCursor) =
-    JsonSerializer.Serialize(cursor, cursorJsonOptions)
-
-let private fromCursorJson (json: string) =
-    JsonSerializer.Deserialize<AuditReplicatorCursor>(json, cursorJsonOptions)
-
-let private cursorBlobName (sinkName: string) (scopeId: string) =
-    $"audit-replicator/{sinkName}/{scopeId}.cursor"
+let private cursorPath (sinkName: string) (scopeId: string) =
+    DocPath.ofString $"audit-replicator/{sinkName}/{scopeId}.cursor"
 
 /// Predicate matching the three replicator-emitted audit event types.
 /// The hook decorator filters these out so the replicator does not
@@ -74,9 +63,9 @@ let shouldReplicate (evt: ModuleEvent) : bool =
 
 // ─── Cursor store ───────────────────────────────────────────────────
 
-/// Cursor persistence over `IBlobStorage`. Cursors are tiny JSON blobs;
+/// Cursor persistence over `IBlobStorage`. Cursors are tiny JSON documents;
 /// reads on missing cursors return `AuditReplicatorCursor.empty` (the
-/// "no events delivered yet" state). Writes overwrite — the cursor is
+/// "no events delivered yet" state). Writes replace — the cursor is
 /// monotonic so concurrent writers either land on the same value or the
 /// later writer wins, which is correct.
 type IAuditReplicatorCursorStore =
@@ -84,39 +73,32 @@ type IAuditReplicatorCursorStore =
     abstract Save: sinkName: string * scopeId: string * cursor: AuditReplicatorCursor -> Async<unit>
 
 type BlobAuditReplicatorCursorStore(blobStorage: IBlobStorage, logger: ILogger) =
+    let docs =
+        BlobDocumentStore<AuditReplicatorCursor>(blobStorage, BlobCodec.json<AuditReplicatorCursor>, logger)
+
     interface IAuditReplicatorCursorStore with
         member _.Load(sinkName, scopeId) = async {
-            let blobName = cursorBlobName sinkName scopeId
-
-            try
-                let! result = blobStorage.Download(cursorContainer, blobName)
-
-                match result with
-                | Ok bytes ->
-                    let json = System.Text.Encoding.UTF8.GetString bytes
-                    return fromCursorJson json
-                | Error _ ->
-                    // First-time cursor read or transient blob error —
-                    // both treated as "no events delivered yet" so the
-                    // catch-up sweep delivers the full audit history.
-                    return AuditReplicatorCursor.empty
-            with ex ->
+            match! docs.Read(ScopeKey.platform, cursorPath sinkName scopeId) with
+            | Ok(Some cursor) -> return cursor
+            | Ok None -> return AuditReplicatorCursor.empty
+            | Error e ->
+                // Delivery is at-least-once and every sink is idempotent by
+                // contract, so a cursor that cannot be read re-delivers the
+                // scope's history rather than stalling it — said here, not
+                // silently as a first-time read (an undecodable cursor is
+                // also set aside by the store, and the next save replaces it).
                 logger.Warn(
                     sprintf
                         "[AuditReplicator] cursor load failed sink=%s scope=%s: %s — defaulting to empty"
                         sinkName
                         scopeId
-                        ex.Message
+                        (BlobMapStoreError.describe e)
                 )
 
                 return AuditReplicatorCursor.empty
         }
 
         member _.Save(sinkName, scopeId, cursor) = async {
-            let blobName = cursorBlobName sinkName scopeId
-            let json = toCursorJson cursor
-            let bytes = System.Text.Encoding.UTF8.GetBytes json
-
             // Best-effort by design (Phase 863): cursor write failures are
             // visible at the next sweep — we'll re-deliver the batch (sink
             // is idempotent). Log at Warn so operators see drift but don't
@@ -131,12 +113,9 @@ type BlobAuditReplicatorCursorStore(blobStorage: IBlobStorage, logger: ILogger) 
                         detail
                 )
 
-            try
-                match! blobStorage.Upload(cursorContainer, blobName, bytes) with
-                | Ok _ -> return ()
-                | Error storageError -> warn storageError
-            with ex ->
-                warn ex.Message
+            match! docs.Replace(ScopeKey.platform, cursorPath sinkName scopeId, cursor) with
+            | Ok() -> return ()
+            | Error e -> warn (BlobMapStoreError.describe e)
         }
 
 // ─── Hook decorator ─────────────────────────────────────────────────

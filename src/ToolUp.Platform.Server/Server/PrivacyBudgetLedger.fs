@@ -566,7 +566,7 @@ type BlobPrivacyBudgetLedger(blobs: IBlobStorage, now: unit -> DateTimeOffset) =
     /// converter set the federation tier's serialiser used before Phase
     /// 675 moved this file, so an existing deployment's accounting
     /// documents are read back byte-for-byte.
-    static let jsonOptions = FableConverters.create ()
+    static let jsonOptions = PlatformJson.options
 
     let container = ScopeKey.PlatformContainer
 

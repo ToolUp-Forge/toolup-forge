@@ -251,7 +251,7 @@ let private withReminder () =
 let private whatsAppWire =
     NotificationKind.SinkKind.toWireString NotificationKind.SinkKind.WhatsApp
 
-let private templateJson = FableConverters.create ()
+let private templateJson = PlatformJson.options
 
 let private seedBlob (storage: IBlobStorage) (name: string) (json: string) = async {
     match! storage.Upload("_platform", WhatsAppTemplateRegistry.blobName name, Encoding.UTF8.GetBytes json) with

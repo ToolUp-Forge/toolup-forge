@@ -5,7 +5,7 @@ open ToolUp.Remoting.Json.SystemTextJson
 
 // ─── JSON helpers ─────────────────────────────────────────────────
 
-let jsonOptions = FableConverters.create ()
+let jsonOptions = PlatformJson.options
 
 let toJson o =
     JsonSerializer.Serialize(o, jsonOptions)

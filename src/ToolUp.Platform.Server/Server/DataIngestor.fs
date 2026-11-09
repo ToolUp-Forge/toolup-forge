@@ -6,6 +6,7 @@ open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.Infra
 open ToolUp.Platform.Secrets
 
 // ─── Constants ────────────────────────────────────────────────────
@@ -41,7 +42,7 @@ let private runsPrefix (scopeId: string) (sourceId: DataSourceId) =
 // ─── JSON helpers ─────────────────────────────────────────────────
 
 module private Json =
-    let private options = FableConverters.create ()
+    let private options = PlatformJson.options
 
     let serialize (value: 'T) : byte[] =
         JsonSerializer.Serialize(value, options) |> Encoding.UTF8.GetBytes
@@ -49,28 +50,18 @@ module private Json =
     let serializeStr (value: 'T) : string =
         JsonSerializer.Serialize(value, options)
 
-    let tryDeserialize<'T> (bytes: byte[]) : 'T option =
-        try
-            let json = Encoding.UTF8.GetString bytes
-            Some(JsonSerializer.Deserialize<'T>(json, options))
-        with _ ->
-            None
 
-let private downloadAll<'T> (storage: IBlobStorage) (blobNames: string list) : Async<'T list> = async {
-    let! results =
+let private logger = lazy (JsonConsoleLogger.JsonConsoleLogger() :> ILogger)
+
+/// Run history is a view: a run that cannot be read is left out, logged
+/// and (when undecodable) quarantined by the document store.
+let private downloadAll<'T> (storage: IBlobStorage) (blobNames: string list) : Async<'T list> =
+    BlobDocuments.readAvailable
+        (BlobDocumentStore<'T>(storage, BlobCodec.json<'T>, logger.Value))
+        logger.Value
+        "DataIngestor"
+        ScopeKey.platform
         blobNames
-        |> List.map (fun name -> async {
-            let! result = storage.Download(platformContainer, name)
-
-            return
-                match result with
-                | Ok bytes -> Json.tryDeserialize<'T> bytes
-                | Error _ -> None
-        })
-        |> Async.Parallel
-
-    return results |> Array.choose id |> Array.toList
-}
 
 // ─── Object id derivation ─────────────────────────────────────────
 

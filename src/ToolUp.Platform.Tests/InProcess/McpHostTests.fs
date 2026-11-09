@@ -755,7 +755,7 @@ let tests =
             let payload =
                 JsonSerializer.Deserialize<AIAllowlistDiagnosticsHandler.DenialEventPayload>(
                     allowlist.Head.Payload,
-                    ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()
+                    ToolUp.Remoting.Json.SystemTextJson.PlatformJson.options
                 )
 
             Expect.equal

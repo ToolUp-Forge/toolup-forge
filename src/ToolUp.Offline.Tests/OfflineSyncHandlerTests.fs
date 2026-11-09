@@ -58,7 +58,7 @@ type Inspection = {
     Notes: string
 }
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 let private serialise (value: 'T) =
     JsonSerializer.Serialize(value, jsonOptions)
