@@ -32,7 +32,7 @@ open ToolUp.Platform.Compose
 // entry and no-ops (stateless + idempotent, GP 12 rule 4).
 
 module private DerivativeJobsJson =
-    let private options = FableConverters.create ()
+    let private options = PlatformJson.options
     let toJson (v: 'T) = JsonSerializer.Serialize(v, options)
 
     let tryFromJson<'T> (s: string) : 'T option =
