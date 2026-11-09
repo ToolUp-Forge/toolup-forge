@@ -37,25 +37,10 @@ let private serializeEvent (event: AIStreamEvent) =
 /// so that a future change to AI serialisation (different converter,
 /// different framing) is localised here.
 let sendEvent (manager: SSEConnectionManager) (scopeId: string) (event: AIStreamEvent) =
-    // Phase 6h follow-up — Workstream B. Pass the event's discriminated
-    // case name as the trace `kind` so the SseTraceContributor on
-    // `/dev/inspect` can render meaningful labels per entry instead of
-    // just "data". The DU case-name string is debug-only — the wire
-    // payload (the JSON below) is unchanged.
-    let kind =
-        match event with
-        | MessageDelta _ -> "MessageDelta"
-        | MessageComplete _ -> "MessageComplete"
-        | TaskStatusChanged _ -> "TaskStatusChanged"
-        | StreamError _ -> "StreamError"
-        | StreamCancelled _ -> "StreamCancelled"
-        | ToolCallStarted _ -> "ToolCallStarted"
-        | ToolCallCompleted _ -> "ToolCallCompleted"
-        | ClientToolInvoke _ -> "ClientToolInvoke"
-        | AnswerVerified _ -> "AnswerVerified"
-        | AIConsentRequired _ -> "AIConsentRequired"
-        | ToolApprovalRequired _ -> "ToolApprovalRequired"
-        | BlockAttached _ -> "BlockAttached"
+    // The event's case name is the trace `kind` the SseTraceContributor on
+    // `/dev/inspect` labels each entry with. Debug-only: the wire payload
+    // (the JSON below) does not carry it.
+    let kind = AIStreamEvent.kind event
 
     let json = serializeEvent event
     manager.BroadcastWithKind(scopeId, SSE.dataFrame json, kind)
@@ -71,7 +56,7 @@ let sendEvent (manager: SSEConnectionManager) (scopeId: string) (event: AIStream
 /// **Scope resolution** is the shared
 /// `ToolUp.Platform.SseScopeResolution.resolve` — the same code path
 /// `ToolUp.Platform.NotificationHandler` calls, so the two SSE
-/// endpoints cannot drift (Phase 117). Middleware-resolved identity
+/// endpoints cannot drift. Middleware-resolved identity
 /// always wins and a mismatching `?userId=` is audited; the
 /// `?userId=` / `X-User-Id` fallback (EventSource cannot set custom
 /// headers) is honoured ONLY under `QueryParamFallback` (the
@@ -81,12 +66,12 @@ let sendEvent (manager: SSEConnectionManager) (scopeId: string) (event: AIStream
 /// missing / `"anonymous"` resolved identity is refused with 401
 /// rather than trusting a client-supplied `userId`, which would let
 /// any client subscribe as an arbitrary user and receive their stream.
-// ─── Phase 69c.tail E — the legacy channel's deprecation window ──
+// ─── The legacy channel's deprecation window ──
 //
 // `/api/ai/events` + `AIAssistantApi.SubmitMessage` are the PRE-69c way
 // to drive a chat turn: a POST that returns nothing, and a separate,
 // long-lived, per-user SSE broadcast the client had already subscribed
-// to. Since Phase 69c.F the typed `AIStreamingApi.StreamChatV2` is the
+// to. The typed `AIStreamingApi.StreamChatV2` is the
 // same turn over the same implementation, with the turn's events on the
 // caller's OWN connection — correlated per chunk, categorised on error,
 // and closed when the turn ends.
@@ -136,7 +121,7 @@ let writeDeprecationHeaders (response: HttpResponse) =
 
 let sseHandler (manager: SSEConnectionManager) (sseAuthMode: SseAuthMode) : HttpHandler =
     fun (_next: HttpFunc) (ctx: HttpContext) -> task {
-        // Phase 6l.D — resolve scope + attempt registration BEFORE
+        // Resolve scope + attempt registration BEFORE
         // writeReadyResponse so a refusal (scope-at-capacity) can
         // return HTTP 429 cleanly. Once writeReadyResponse runs the
         // headers are committed to text/event-stream and an explicit
@@ -172,7 +157,7 @@ let sseHandler (manager: SSEConnectionManager) (sseAuthMode: SseAuthMode) : Http
 
                 return Some ctx
             | Result.Ok() ->
-                // Phase 69c.tail E — announce the deprecation while headers
+                // Announce the deprecation while headers
                 // are still mutable; `writeReadyResponse` commits them.
                 writeDeprecationHeaders ctx.Response
                 do! SSE.writeReadyResponse ctx.Response

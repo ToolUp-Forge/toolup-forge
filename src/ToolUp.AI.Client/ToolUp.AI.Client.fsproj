@@ -44,6 +44,7 @@
              and mounted by ConversationPanel, so it must precede both. -->
         <Compile Include="Client\ToolApprovalDialog.fs" />
         <Compile Include="Client\SSEClient.fs" />
+        <Compile Include="Client\ChatStream.fs" />
         <Compile Include="Client\SidePanelExtensions.fs" />
         <!-- Phase 1130 — a block part, re-read through the registered series
              resolver and drawn through the Fuaran-UI renderer, with its

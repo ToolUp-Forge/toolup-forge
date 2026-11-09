@@ -286,6 +286,8 @@ ToolUp.AI.AIStreamEvent+ToolCallStarted (class)
 ToolUp.AI.AIStreamEvent+ToolCallStarted.conversationId : System.Guid { get }
 ToolUp.AI.AIStreamEvent+ToolCallStarted.toolCallId : System.Guid { get }
 ToolUp.AI.AIStreamEvent+ToolCallStarted.toolName : System.String { get }
+ToolUp.AI.AIStreamEventModule (class)
+ToolUp.AI.AIStreamEventModule.kind(ToolUp.AI.AIStreamEvent) : System.String
 ToolUp.AI.AISurface (class)
 ToolUp.AI.AISurface.FullPage : ToolUp.AI.AISurface { get }
 ToolUp.AI.AISurface.IsFullPage : System.Boolean { get }
@@ -444,6 +446,8 @@ ToolUp.AI.ConversationMessage.RetrievedSources : Microsoft.FSharp.Collections.FS
 ToolUp.AI.ConversationMessage.Timestamp : System.DateTime { get }
 ToolUp.AI.ConversationMessage.ToolCalls : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ToolCallRecord] { get }
 ToolUp.AI.ConversationMessage.Verification : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AnswerVerification] { get }
+ToolUp.AI.ConversationMessageModule (class)
+ToolUp.AI.ConversationMessageModule.note(ToolUp.AI.ParticipantType, System.Guid, System.String) : ToolUp.AI.ConversationMessage
 ToolUp.AI.ConversationPage (class)
 ToolUp.AI.ConversationPage..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.Conversation], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Int32)
 ToolUp.AI.ConversationPage.Items : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.Conversation] { get }

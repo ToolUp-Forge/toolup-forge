@@ -538,18 +538,17 @@ ConversationPanel.View
 
 Reusable chat panel. Used internally by the AI assistant module + the side panel. Apps can drop it into their own modules for chat-shaped UI without adopting the full assistant.
 
-### `SSEClient`
+### `ChatStream`
 
 ```fsharp skip=signature
-module SSEClient =
-    val openConnection:
-        baseUrl: string ->
-        scopeId: string ->
-        handler: AIStreamEvent -> unit ->
-        IDisposable
+module ChatStream =
+    val reduce: ChatStreamState -> AIStreamEvent -> ChatStreamState * StreamEffect list
+    module AIStream =
+        val subscribe: (AIStreamEvent -> unit) -> IDisposable
+        val cancel: taskId: Guid -> unit
 ```
 
-EventSource wrapper. Handles reconnect (browser default) + mode-aware query parameter for SSE auth. Dispose to close the connection.
+`AIStream` is the tab's one subscription to the AI stream: the first subscriber opens the `EventSource` (re-keyed on an identity change; cookie handshake, `?userId=` only for an anonymous session), the last one to dispose closes it, and the out-of-band events (`ClientToolInvoke`, `AIConsentRequired`, `ToolApprovalRequired`) are handled once per tab. `reduce` is the one stream semantics every chat surface folds; see `docs/migrations/1080-redesign-f-one-chatstream-one-beacon-typed-triage.md`.
 
 ## Provider companion API surface
 

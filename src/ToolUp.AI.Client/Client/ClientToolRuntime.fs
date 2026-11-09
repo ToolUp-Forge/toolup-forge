@@ -17,9 +17,9 @@ let private log = Logger.forCategory "ai.tool"
 //
 // Client-side registry of `ClientResident` tool
 // executors. Companion packages call `register` at startup to
-// make their tools dispatchable. The SSE handler in `SSEClient`
-// looks up incoming `ClientToolInvoke` events and invokes the
-// matching executor.
+// make their tools dispatchable. `AIStream` routes each incoming
+// `ClientToolInvoke` event here once per tab, and the matching executor
+// runs.
 //
 // Sanctioned mutable global — same precedent as
 // `NotificationClient.state` (per-tab singleton with an
@@ -77,37 +77,47 @@ let register (name: string) (executor: ClientToolExecutor) = registry[name] <- e
 [<Emit("window.fetch($0, $1)")>]
 let private fetch (url: string) (opts: obj) : JS.Promise<obj> = jsNative
 
-/// POST the result of a client-resident tool execution
-/// back to the server's `/api/ai/tool-result` endpoint. The handler
-/// looks up the matching `TaskCompletionSource` in the dispatch
-/// registry and completes the suspended agent loop. Failure to POST
-/// (network, server gone) leaves the agent loop awaiting until its
-/// own 90 s timeout fires; we log to console rather than retry.
-let private postResult (taskId: Guid) (toolCallId: Guid) (resultJson: string) : Async<unit> = async {
+/// POST `body` (JSON, when given) to `url` under the caller's identity.
+/// Failure (network, server gone) is logged, never raised: every caller is a
+/// fire-and-forget notice to the server (a tool result, a cancel), and the
+/// server side has its own timeout for a notice that never arrives.
+let internal post (url: string) (body: string option) : Async<unit> = async {
+    let headers =
+        createObj [
+            match body with
+            | Some _ -> "Content-Type" ==> "application/json"
+            | None -> ()
+            "X-User-Id" ==> UserSession.getUserId ()
+        ]
+
+    let opts =
+        createObj [
+            "method" ==> "POST"
+            "headers" ==> headers
+            match body with
+            | Some b -> "body" ==> b
+            | None -> ()
+        ]
+
+    try
+        do! fetch url opts |> Async.AwaitPromise |> Async.Ignore
+    with ex ->
+        log.Error($"POST {url} failed", Some ex)
+}
+
+/// POST the result of a client-resident tool execution back to the server's
+/// `/api/ai/tool-result` endpoint. The handler looks up the matching
+/// `TaskCompletionSource` in the dispatch registry and completes the
+/// suspended agent loop; a POST that never arrives leaves the agent loop
+/// awaiting until its own 90 s timeout fires.
+let private postResult (taskId: Guid) (toolCallId: Guid) (resultJson: string) : Async<unit> =
     let request: ClientToolResultRequest = {
         TaskId = taskId
         ToolCallId = toolCallId
         ResultJson = resultJson
     }
 
-    let body = Json.serialize request
-
-    let opts =
-        createObj [
-            "method" ==> "POST"
-            "headers"
-            ==> createObj [
-                "Content-Type" ==> "application/json"
-                "X-User-Id" ==> UserSession.getUserId ()
-            ]
-            "body" ==> body
-        ]
-
-    try
-        do! fetch "/api/ai/tool-result" opts |> Async.AwaitPromise |> Async.Ignore
-    with ex ->
-        log.Error("Failed to POST client tool result", Some ex)
-}
+    post "/api/ai/tool-result" (Some(Json.serialize request))
 
 // ─── Invocation entry point ──────────────────────────────────────
 
@@ -157,7 +167,7 @@ let private runWithWatchdog
 /// the matching registered executor (or returns an unknown-tool
 /// error envelope) and POSTs the result back to the server.
 ///
-/// Called by `SSEClient.subscribe` rather than dispatched into the
+/// Called once per tab by `AIStream` rather than dispatched into a surface's
 /// Elmish loop — the agent-loop suspend/resume is a transport
 /// concern, not a UI-state concern. The Elmish handlers see the
 /// preceding `ToolCallStarted` and the subsequent `ToolCallCompleted`
