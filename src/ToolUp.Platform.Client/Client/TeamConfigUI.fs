@@ -45,9 +45,9 @@ type Model = {
     /// selection is made or `Modules` lands (we auto-pick the first
     /// entry so admins don't stare at an empty page).
     Selected: string option
-    /// Banner shown at the top of the page for list-level failures
-    /// (e.g. ListModules rejected in Anonymous mode).
-    Error: string option
+    /// Notice shown at the top of the page for list-level failures
+    /// (e.g. ListModules rejected in Anonymous mode), as a `Notice.Problem`.
+    Error: Notice option
     /// Per-module status indicator; cleared by `DismissStatus` or on
     /// the next successful reload.
     Status: Map<string, FormStatus>
@@ -64,8 +64,9 @@ type Model = {
     FlagOverrides: Map<string, FlagValue>
     /// Per-flag save/clear status. Keyed by flag key.
     FlagStatus: Map<string, FormStatus>
-    /// List-level error (e.g. Anonymous mode rejecting GetOverrides).
-    FlagsError: string option
+    /// List-level error (e.g. Anonymous mode rejecting GetOverrides), as a
+    /// `Notice.Problem`.
+    FlagsError: Notice option
     /// True once the initial flags fetch has completed, regardless of
     /// payload. Distinguishes "loading" from "deployment declared no
     /// flags".
@@ -186,7 +187,7 @@ let update (msg: Msg) (model: Model) =
     | ListFailed err ->
         {
             model with
-                Error = Some err
+                Error = Some(Notice.Problem err)
                 Loaded = true
         },
         Cmd.none
@@ -290,7 +291,7 @@ let update (msg: Msg) (model: Model) =
         {
             model with
                 FlagsLoaded = true
-                FlagsError = Some err
+                FlagsError = Some(Notice.Problem err)
         },
         Cmd.none
 
@@ -410,6 +411,21 @@ let private jsonFromDisplay (kind: ConfigFieldKind) (display: string) : string =
 /// `onSave` and `onClear` fire only on explicit button clicks.
 /// PascalCase name follows React component conventions so react-refresh
 /// can pick up edits during dev without a full reload.
+/// The status under a module form or a flag row: a working line while the
+/// save is in flight, then the outcome as a dismissible notice.
+let private formStatusView (msgs: TeamConfigMessages) (status: FormStatus) (onDismiss: unit -> unit) =
+    let settled (notice: Notice) =
+        Html.div [
+            prop.className "mt-3"
+            prop.children [ StateViews.notice { Dismiss = msgs.Dismiss } (Some notice) onDismiss ]
+        ]
+
+    match status with
+    | Idle -> Html.none
+    | Saving -> Html.div [ prop.className "mt-3 text-sm text-gray-500"; prop.text msgs.Saving ]
+    | Saved -> settled (Notice.Info msgs.Saved)
+    | Failed err -> settled (Notice.Problem err)
+
 [<ReactComponent>]
 let private ModuleForm
     (entry: ModuleConfigEntry)
@@ -525,37 +541,6 @@ let private ModuleForm
             ]
         ]
 
-    let statusBanner =
-        match status with
-        | Idle -> Html.none
-        | Saving -> Html.div [ prop.className "mt-3 text-sm text-gray-500"; prop.text msgs.Saving ]
-        | Saved ->
-            Html.div [
-                prop.className
-                    "mt-3 p-2 bg-green-50 border border-green-200 rounded text-green-700 text-sm flex items-center justify-between"
-                prop.children [
-                    Html.span [ prop.text msgs.Saved ]
-                    Html.button [
-                        prop.className "text-xs text-green-700 hover:underline"
-                        prop.text msgs.Dismiss
-                        prop.onClick (fun _ -> onDismissStatus ())
-                    ]
-                ]
-            ]
-        | Failed err ->
-            Html.div [
-                prop.className
-                    "mt-3 p-2 bg-red-50 border border-red-200 rounded text-red-700 text-sm flex items-center justify-between"
-                prop.children [
-                    Html.span [ prop.text err ]
-                    Html.button [
-                        prop.className "text-xs text-red-700 hover:underline"
-                        prop.text msgs.Dismiss
-                        prop.onClick (fun _ -> onDismissStatus ())
-                    ]
-                ]
-            ]
-
     let onSaveClick () =
         let encoded =
             entry.Schema.Fields
@@ -595,7 +580,7 @@ let private ModuleForm
                     ]
                 ]
 
-                statusBanner
+                formStatusView msgs status onDismissStatus
         ]
     ]
 
@@ -661,37 +646,6 @@ let private FlagRow
                 prop.children [ for o in options -> Html.option [ prop.value o; prop.text o ] ]
             ]
 
-    let statusBanner =
-        match status with
-        | Idle -> Html.none
-        | Saving -> Html.div [ prop.className "mt-3 text-sm text-gray-500"; prop.text msgs.Saving ]
-        | Saved ->
-            Html.div [
-                prop.className
-                    "mt-3 p-2 bg-green-50 border border-green-200 rounded text-green-700 text-sm flex items-center justify-between"
-                prop.children [
-                    Html.span [ prop.text msgs.Saved ]
-                    Html.button [
-                        prop.className "text-xs text-green-700 hover:underline"
-                        prop.text msgs.Dismiss
-                        prop.onClick (fun _ -> onDismissStatus ())
-                    ]
-                ]
-            ]
-        | Failed err ->
-            Html.div [
-                prop.className
-                    "mt-3 p-2 bg-red-50 border border-red-200 rounded text-red-700 text-sm flex items-center justify-between"
-                prop.children [
-                    Html.span [ prop.text err ]
-                    Html.button [
-                        prop.className "text-xs text-red-700 hover:underline"
-                        prop.text msgs.Dismiss
-                        prop.onClick (fun _ -> onDismissStatus ())
-                    ]
-                ]
-            ]
-
     let defaultDisplay =
         match flag.DefaultValue with
         | FlagValue.Bool b -> if b then "true" else "false"
@@ -748,7 +702,7 @@ let private FlagRow
                             onClear ())
                 ]
             ]
-            statusBanner
+            formStatusView msgs status onDismissStatus
         ]
     ]
 
@@ -761,21 +715,7 @@ let private flagsTabView (msgs: TeamConfigMessages) (model: Model) (dispatch: Ms
                 prop.text msgs.FeatureFlagsHeading
             ]
             Html.p [ prop.className "text-xs text-gray-500 mb-4"; prop.text msgs.FeatureFlagsHelp ]
-            match model.FlagsError with
-            | Some msg ->
-                Html.div [
-                    prop.className
-                        "mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm flex items-center justify-between"
-                    prop.children [
-                        Html.span [ prop.text msg ]
-                        Html.button [
-                            prop.className "text-xs text-red-600 hover:underline"
-                            prop.text msgs.Dismiss
-                            prop.onClick (fun _ -> dispatch DismissFlagsError)
-                        ]
-                    ]
-                ]
-            | None -> Html.none
+            StateViews.notice { Dismiss = msgs.Dismiss } model.FlagsError (fun () -> dispatch DismissFlagsError)
             if not model.FlagsLoaded then
                 Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.LoadingFlags ]
             elif List.isEmpty model.DeclaredFlags then
@@ -841,19 +781,12 @@ let outputVisibilityView
         Html.p [ prop.className "text-sm text-gray-500"; prop.text text ]
 
     let statusLine =
+        let settled (notice: Notice) =
+            Html.div [ prop.className "mb-3"; prop.children [ StateViews.noticeStatic notice ] ]
+
         match status with
-        | Saved ->
-            Html.p [
-                prop.className "text-sm text-green-700 mb-3"
-                prop.role "status"
-                prop.text msgs.OutputVisibilityUpdated
-            ]
-        | Failed refusal ->
-            Html.p [
-                prop.className "text-sm text-red-700 mb-3"
-                prop.role "alert"
-                prop.text refusal
-            ]
+        | Saved -> settled (Notice.Info msgs.OutputVisibilityUpdated)
+        | Failed refusal -> settled (Notice.Problem refusal)
         | Saving -> Html.p [ prop.className "text-sm text-gray-500 mb-3"; prop.text msgs.Saving ]
         | Idle -> Html.none
 
@@ -1123,23 +1056,6 @@ let private tabBar (msgs: TeamConfigMessages) (model: Model) (dispatch: Msg -> u
 let private TeamConfigBody (model: Model) (dispatch: Msg -> unit) =
     let msgs = (MessageCatalogProvider.useMessages ()).TeamConfig
 
-    let errorBanner =
-        match model.Error with
-        | Some msg ->
-            Html.div [
-                prop.className
-                    "mt-3 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm flex items-center justify-between"
-                prop.children [
-                    Html.span [ prop.text msg ]
-                    Html.button [
-                        prop.className "text-xs text-red-600 hover:underline"
-                        prop.text msgs.Dismiss
-                        prop.onClick (fun _ -> dispatch DismissError)
-                    ]
-                ]
-            ]
-        | None -> Html.none
-
     let content =
         match model.ActiveTab with
         | ConfigTab ->
@@ -1156,10 +1072,13 @@ let private TeamConfigBody (model: Model) (dispatch: Msg -> unit) =
             prop.children [ tabBar msgs model dispatch; content ]
         ]
 
-    // 0.5.6 — FullWidth render. Error banner stacks above the body.
+    // 0.5.6 — FullWidth render. The error notice stacks above the body.
     Html.div [
         prop.className "flex flex-col gap-3 h-full"
-        prop.children [ errorBanner; body ]
+        prop.children [
+            StateViews.notice { Dismiss = msgs.Dismiss } model.Error (fun () -> dispatch DismissError)
+            body
+        ]
     ]
 
 let private view (model: Model) (dispatch: Msg -> unit) : ReactElement = TeamConfigBody model dispatch
