@@ -449,6 +449,237 @@ type private TableReranker(maxBatch: int, scores: Map<string, float>) =
 
 let private withContent (content: string) (m: VectorMatch) = { m with Content = content }
 
+// ─── The stage marks: one fixture for every composition ─────────────
+
+let private markFixturePath =
+    IO.Path.Combine(__SOURCE_DIRECTORY__, "..", "fixtures", "retrieval", "mark-sequences.txt")
+
+/// The fixture's `<composition>: <marks>` lines, keyed by composition.
+let private markFixture () =
+    IO.File.ReadAllLines markFixturePath
+    |> Array.filter (fun line -> not (line.StartsWith "#") && not (line.StartsWith "mark ") && line.Contains ": ")
+    |> Array.map (fun line ->
+        let colon = line.IndexOf ": "
+        line.Substring(0, colon), line.Substring(colon + 2))
+    |> Map.ofArray
+
+/// The fixture's `mark <template>` lines: every mark the pipeline can emit.
+let private markVocabulary () =
+    IO.File.ReadAllLines markFixturePath
+    |> Array.filter _.StartsWith("mark ")
+    |> Array.map _.Substring(5)
+    |> List.ofArray
+
+let private stagesOf (request: RetrievalRequest) (build: CapturingTracer -> IRetrievalPipeline) = async {
+    let tracer = CapturingTracer()
+    let! _ = (build tracer).Retrieve request teamAccess
+
+    return
+        match tracer.Last with
+        | Some trace -> trace.Stages
+        | None -> failtest "a trace is emitted"
+}
+
+/// A composition with every optional collaborator wired: a fact resolver,
+/// a disclosure gate, a query rewriter and the per-turn budgets. `faulty`
+/// makes each of them fail the way its bound degrades: the embed raises,
+/// the resolver overruns, the gate raises and the rewriter raises.
+let private fullyWiredStages (faulty: bool) = async {
+    let tracer = CapturingTracer()
+
+    let ranked = [
+        rankedMatch "plain" []
+        rankedMatch "cites-f1" [ ChunkMetadata.FactRefsKey, "f1" ]
+        rankedMatch "cites-f2" [ ChunkMetadata.FactRefsKey, "f2" ]
+    ]
+
+    let inner = externalVectorStore ()
+
+    let store =
+        { new IVectorStore with
+            member _.Upsert s c v t = inner.Upsert s c v t
+            member _.Search _ _ k = async { return ranked |> List.truncate k }
+            member _.ListChunks s d = inner.ListChunks s d
+            member _.DeleteChunk s c = inner.DeleteChunk s c
+            member _.RestoreChunk s c = inner.RestoreChunk s c
+            member _.Vacuum s r = inner.Vacuum s r
+            member _.DeleteByScope s = inner.DeleteByScope s
+            member _.ListScopes() = inner.ListScopes()
+            member _.Erase(s, u, p, d) = inner.Erase(s, u, p, d)
+        }
+
+    let stub = externalIndex ()
+
+    let keyword =
+        { new ISparseIndex with
+            member _.Upsert s c t = stub.Upsert s c t
+            member _.Search _ _ k = async { return List.rev ranked |> List.truncate k }
+            member _.DeleteByScope s = stub.DeleteByScope s
+            member _.DeleteChunk s c = stub.DeleteChunk s c
+            member _.Erase(s, u, p, d) = stub.Erase(s, u, p, d)
+        }
+
+    let embedder =
+        if faulty then
+            { new IEmbeddingProvider with
+                member _.GenerateEmbedding _ = async { return failwith "the embedder is down" }
+                member _.GenerateEmbeddings _ = async { return failwith "the embedder is down" }
+                member _.ProviderId = "stub"
+                member _.ModelId = "down"
+                member _.Dimensions = 64
+            }
+        else
+            lexicalEmbedder
+
+    let fact (id: string) : ResolvedFact = {
+        FactId = id
+        Rendering = "21,800"
+        Freshness = FactFresh
+        SupersededBy = None
+        Metric = "revenue"
+    }
+
+    let resolver =
+        { new IFactResolver with
+            member _.Resolve(_, _) = async {
+                if faulty then
+                    do! Async.Sleep 2_000
+
+                return [ fact "f1"; fact "f2" ]
+            }
+        }
+
+    let gate =
+        { new IFactDisclosureGate with
+            member _.Check(_, _, _, ids) = async {
+                if faulty then
+                    failwith "the gate is down"
+
+                return
+                    ids
+                    |> List.map (fun id ->
+                        id,
+                        (if id = "f2" then
+                             FactNotDisclosable "restricted"
+                         else
+                             FactDisclosable))
+                    |> Map.ofList
+            }
+        }
+
+    let rewriter =
+        { new ToolUp.Platform.Infra.IQueryRewriter.IQueryRewriter with
+            member _.Name = "stub-rewriter"
+
+            member _.Rewrite query _ = async {
+                if faulty then
+                    failwith "the rewriter is down"
+
+                return ToolUp.Platform.Infra.IQueryRewriter.QueryRewritten(query + " acme")
+            }
+        }
+
+    let budgets = {
+        ToolUp.RAG.RetrievalPipeline.RetrievalBudgets.defaults with
+            FactStage = TimeSpan.FromMilliseconds 100.0
+    }
+
+    let pipeline =
+        new ToolUp.RAG.RetrievalPipeline.RetrievalPipeline(
+            store,
+            embedder,
+            sparseIndex = keyword,
+            options = {
+                noBoosts with
+                    FactNarrativeJoinBoost = 0.15
+            },
+            tracer = tracer,
+            factResolver = resolver,
+            disclosureGate = gate,
+            queryRewriter = rewriter,
+            budgets = budgets
+        )
+        :> IRetrievalPipeline
+
+    let clause: FactClause = {
+        SubjectHierarchy = "brand"
+        SubjectPath = [ "acme" ]
+        Metric = "revenue"
+        PeriodFrom = None
+        PeriodTo = None
+        AsOf = None
+    }
+
+    let request = {
+        RetrievalRequest.create "what about revenue" [ teamScope ] 20 Interleaved with
+            FactClause = Some clause
+            History = Some [ "tell me about acme" ]
+    }
+
+    let! _ = pipeline.Retrieve request teamAccess
+
+    return
+        match tracer.Last with
+        | Some trace -> trace.Stages
+        | None -> failtest "a trace is emitted"
+}
+
+/// One request per composition the fixture names, each over fixed rankings.
+let private markScenarios: (string * Async<string list>) list =
+    let ranked = [ for i in 1..6 -> rankedMatch (sprintf "c%d" i) [] ]
+
+    let tagged =
+        ranked
+        |> List.mapi (fun i m -> {
+            m with
+                Metadata =
+                    Map.ofList [
+                        ChunkMetadata.OriginKey, ChunkOrigin.toMetadataValue ChunkOrigin.Document
+                        "dept", "ops"
+                        if i = 1 then
+                            ChunkMetadata.OriginModuleKey, "kb"
+                        if i = 2 then
+                            ChunkMetadata.IsSummaryKey, "true"
+                    ]
+        })
+
+    let plain = RetrievalRequest.create "query" [ teamScope ] 20 Interleaved
+    let scores = Map.ofList [ for i in 1..6 -> sprintf "c%d" i, 1.0 / float i ]
+
+    let reranking (batch: int) = {
+        noBoosts with
+            Reranker = Some(TableReranker(batch, scores) :> ToolUp.Platform.Infra.IReranker.IReranker)
+    }
+
+    let everything = {
+        plain with
+            ActiveModule = Some "kb"
+            Filters = Some(Map.ofList [ "dept", "ops" ])
+            OriginFilter = Some(Set.ofList [ ChunkOrigin.Document ])
+            AdaptiveK = Some { MinK = 1; MaxK = 4; ScoreFloor = 0.5 }
+    }
+
+    let mmr = {
+        ToolUp.RAG.RetrievalPipeline.RetrievalPipelineOptions.defaults with
+            EnableMmr = true
+    }
+
+    [
+        "dense-only", stagesOf plain (fixedRankPipeline ranked None noBoosts)
+        "fused", stagesOf plain (fixedRankPipeline ranked (Some(List.rev ranked)) noBoosts)
+        "reranked", stagesOf plain (fixedRankPipeline ranked (Some ranked) (reranking 32))
+        "reranked-capped", stagesOf plain (fixedRankPipeline ranked (Some ranked) (reranking 2))
+        "fused-boosted-filtered-mmr-adaptive",
+        stagesOf everything (fixedRankPipeline tagged (Some(List.rev tagged)) mmr)
+        "dense-only-boosted-filtered-adaptive",
+        stagesOf
+            everything
+            (fixedRankPipeline tagged None ToolUp.RAG.RetrievalPipeline.RetrievalPipelineOptions.defaults)
+        "fused-separate", stagesOf { plain with Merge = Separate } (fixedRankPipeline ranked (Some ranked) noBoosts)
+        "fused-facts-rewrite-disclosure", fullyWiredStages false
+        "fused-every-bound-degraded", fullyWiredStages true
+    ]
+
 let tests =
     testList "Phase 893 — the keyword index is a composition choice" [
 
@@ -1123,6 +1354,96 @@ let tests =
                 | Some trace ->
                     Expect.contains trace.Stages "FinalOrder:Interleaved" "the merge orders last"
                     Expect.equal (List.last trace.Stages) "ScoreSpace:Fused" "the space mark stays last"
+            }
+        ]
+        testList "Phase 1086 — the stage marks, Separate and adaptive-K over relevance" [
+            testAsync "every composition's mark sequence matches the fixture" {
+                let expected = markFixture ()
+                let actual = ResizeArray<string * string>()
+
+                for name, run in markScenarios do
+                    let! stages = run
+                    actual.Add((name, String.Join(" ", stages)))
+
+                let rendered =
+                    actual
+                    |> Seq.map (fun (name, marks) -> name + ": " + marks)
+                    |> String.concat
+                        "
+"
+
+                Expect.equal
+                    (Map.ofSeq actual)
+                    expected
+                    (sprintf
+                        "every composition's marks, byte for byte; the tree emits:
+%s"
+                        rendered)
+            }
+
+            testAsync "Separate over two scopes returns the scopes grouped in the order the request listed them" {
+                let userScope = User "u1"
+
+                let dense = [
+                    { rankedMatch "a" [] with Score = 0.9 }
+                    {
+                        rankedMatch "b" [] with
+                            Score = 0.8
+                            Scope = userScope
+                    }
+                    { rankedMatch "c" [] with Score = 0.7 }
+                    {
+                        rankedMatch "d" [] with
+                            Score = 0.6
+                            Scope = userScope
+                    }
+                ]
+
+                let pipeline = fixedRankPipeline dense None noBoosts (CapturingTracer())
+
+                let! matches =
+                    pipeline.Retrieve (RetrievalRequest.create "query" [ userScope; teamScope ] 3 Separate) teamAccess
+
+                Expect.equal
+                    (matches |> List.map _.ChunkId)
+                    [ "b"; "a"; "c" ]
+                    "the TopK best, the user scope's group first (it was listed first), each group in rank order"
+            }
+
+            testAsync "with MMR on, adaptive-K cuts on the relevance order's gaps, not MMR's diversity order" {
+                // Relevance: a 0.9, d 0.85, c 0.8, b 0.7. No gap reaches the
+                // 0.15 floor, so the hint keeps MaxK. MMR (lambda 0.5) puts the
+                // distinct `b` second, and in that order a to b is a 0.2 gap.
+                let dense = [
+                    { rankedMatch "a" [] with Score = 0.9 } |> withContent "alpha beta gamma"
+                    { rankedMatch "d" [] with Score = 0.85 } |> withContent "alpha beta gamma"
+                    { rankedMatch "c" [] with Score = 0.8 } |> withContent "alpha beta gamma delta"
+                    { rankedMatch "b" [] with Score = 0.7 } |> withContent "epsilon zeta eta"
+                ]
+
+                let options = {
+                    noBoosts with
+                        EnableMmr = true
+                        MmrLambda = 0.5
+                }
+
+                let request = {
+                    RetrievalRequest.create "query" [ teamScope ] 4 Interleaved with
+                        AdaptiveK =
+                            Some {
+                                MinK = 1
+                                MaxK = 4
+                                ScoreFloor = 0.15
+                            }
+                }
+
+                let pipeline = fixedRankPipeline dense None options (CapturingTracer())
+                let! matches = pipeline.Retrieve request teamAccess
+
+                Expect.equal
+                    (matches |> List.map _.ChunkId)
+                    [ "a"; "b"; "d"; "c" ]
+                    "no relevance cliff, so all four, in MMR's order"
             }
         ]
     ]
