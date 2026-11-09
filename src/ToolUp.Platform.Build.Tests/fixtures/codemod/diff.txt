@@ -283,6 +283,12 @@
 @@ L11 [873-job-store-write]
 -    do! jobStore.Save job
 +    do! JobStoreWrite.orRaise <| jobStore.Save job
+@@ L39 [1062-audit-log-argument]
+-    GrantPolicyGuard.guardDispatch registry Map.empty (Some auditLog) Async.Start "t1" "alice" "Reports"
++    GrantPolicyGuard.guardDispatch registry Map.empty auditLog "t1" "alice" "Reports"
+@@ L43 [1062-record-unit]
+-        member _.Record(scopeId, audit) = async { return () }
++        member _.Record(scopeId, audit) = async { return Ok() }
 --- a/src/Server/Jobs.fs
 +++ b/src/Server/Jobs.fs
 @@ L6 [1066-schedule-result-type]
@@ -395,4 +401,4 @@
 @@ L41 [73-remoting-namespace]
 -let legacyJson = Fable.Remoting.Json.FableJsonConverter()
 +let legacyJson = ToolUp.Remoting.Json.FableJsonConverter()
-Codemod: 99 rewrite(s) across 18 file(s) pending.
+Codemod: 101 rewrite(s) across 18 file(s) pending.

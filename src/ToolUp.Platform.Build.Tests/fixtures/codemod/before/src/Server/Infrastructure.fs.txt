@@ -30,3 +30,19 @@ type Recorder() =
 
 type Retirer() =
     member _.Cancel(scopeId, jobId) = async { return Ok() }
+
+let audited (auditLog: IAuditLog) scopeId event = async {
+    do! auditLog.Record(scopeId, event)
+}
+
+let gate registry (auditLog: IAuditLog) =
+    GrantPolicyGuard.guardDispatch registry Map.empty (Some auditLog) Async.Start "t1" "alice" "Reports"
+
+type QuietLog() =
+    interface IAuditLog with
+        member _.Record(scopeId, audit) = async { return () }
+        member _.GetAuditTrail(_, _, _) = async { return [] }
+
+type FixedPermissions() =
+    interface IPermissionStore with
+        member _.GetTeamPermissions teamId = async { return TeamPermissions.empty }

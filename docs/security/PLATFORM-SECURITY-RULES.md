@@ -1183,12 +1183,26 @@ section eliminates structurally.
 > `DegradeToFile` (write to a local fallback store and replay it when the
 > primary recovers). A regime that requires audit to be a precondition of the
 > action can have exactly that, and can evidence which policy is configured.
-> **Evidence:** `src/ToolUp.Platform.Core/Shared/Config/RuntimeModes.fs`
+> The policy is decided at the seam and stated on the interface:
+> `IAuditLog.Record` answers `Async<Result<unit, AuditWriteError>>` and never
+> raises — `Error` under `RefuseAction` (`StoreUnavailable`, or
+> `ChainHeadConflict` for a permission row), `Ok` under the other two — and
+> every call site says what it does with the answer (`AuditRow.emit` to
+> propagate, `AuditRow.orRefuse` where the site has no error channel,
+> `AuditRow.bestEffort` where the row records a decision already taken), so no
+> site swallows a refusal by accident.
+> **Evidence:** `src/ToolUp.Platform.Core/Shared/Audit/AuditEnvelope.fs`
+> (`IAuditLog`, `AuditWriteError`, `AuditRow`) ·
+> `src/ToolUp.Platform.Server/Server/AuditLog.fs` (`EventStoreAuditLog`, the
+> seam) · `src/ToolUp.Platform.Tests/InProcess/AuditEmitTests.fs` (each mode
+> pinned, and a classified read refused under `RefuseAction`) ·
+> `src/ToolUp.Platform.Core/Shared/Config/RuntimeModes.fs`
 > (`AuditFailurePolicy`) ·
 > `src/ToolUp.Platform.Server/Server/AuditFallbackStore.fs` ·
 > `src/ToolUp.Platform.Server/Server/AuditFallbackReplayService.fs` ·
 > `src/ToolUp.Platform.Server/Server/AuditLogModeValidator.fs` ·
-> `src/ToolUp.Platform.Server/Server/AuditLogHealthCheck.fs` · Phase 9t
+> `src/ToolUp.Platform.Server/Server/AuditLogHealthCheck.fs` · Phase 9t ·
+> Phase 1062
 
 > **AU-5 — Audit can be replicated to external sinks the deploying organisation
 > does not control, with a stated delivery guarantee.**
