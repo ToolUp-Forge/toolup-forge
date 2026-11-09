@@ -62,7 +62,7 @@ let private descriptor (id: string) : AIProviderDescriptor = {
 let private okResponse (content: string) : AIProviderResponse = {
     Content = content
     ToolCalls = []
-    StopReason = "end_turn"
+    StopReason = StopReason.EndTurn
     Usage = None
 }
 

@@ -527,7 +527,7 @@ type private SummingModel() =
                                 Arguments = byCategory
                             }
                         ]
-                        StopReason = "tool_use"
+                        StopReason = StopReason.ToolUse
                         Usage = None
                     }
             | results ->
@@ -539,7 +539,7 @@ type private SummingModel() =
                     Ok {
                         Content = sprintf "Bakery took £%s across both sites." (str bakery "rendering")
                         ToolCalls = []
-                        StopReason = "end_turn"
+                        StopReason = StopReason.EndTurn
                         Usage = None
                     }
         }

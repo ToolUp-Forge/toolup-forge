@@ -1090,7 +1090,7 @@ type private FactTableAskingProvider(argsJson: string) =
                                 Arguments = argsJson
                             }
                         ]
-                        StopReason = "tool_use"
+                        StopReason = StopReason.ToolUse
                         Usage = None
                     }
             else
@@ -1119,7 +1119,7 @@ type private FactTableAskingProvider(argsJson: string) =
                             + (quoted |> List.map snd |> String.concat ", ")
                             + " — each quoted exactly as the ranking returned it."
                         ToolCalls = []
-                        StopReason = "end_turn"
+                        StopReason = StopReason.EndTurn
                         Usage = None
                     }
         }

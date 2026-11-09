@@ -1852,6 +1852,7 @@ module internal NugetPush =
         InitialBackoff = TimeSpan.FromSeconds 15.0
         MaxBackoff = TimeSpan.FromSeconds 120.0
         Timeout = Some(TimeSpan.FromSeconds 900.0)
+        RateLimitFloor = None
     }
 
     let private parseBounded (name: string) (lo: int) (hi: int) (raw: string) : Result<int, string> =

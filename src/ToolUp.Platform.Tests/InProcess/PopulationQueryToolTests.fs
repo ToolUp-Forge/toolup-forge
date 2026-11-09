@@ -1066,7 +1066,7 @@ type private PopulationAskingProvider(argsJson: string) =
                                 Arguments = argsJson
                             }
                         ]
-                        StopReason = "tool_use"
+                        StopReason = StopReason.ToolUse
                         Usage = None
                     }
             else
@@ -1096,7 +1096,7 @@ type private PopulationAskingProvider(argsJson: string) =
                     Ok {
                         Content = answer
                         ToolCalls = []
-                        StopReason = "end_turn"
+                        StopReason = StopReason.EndTurn
                         Usage = None
                     }
         }

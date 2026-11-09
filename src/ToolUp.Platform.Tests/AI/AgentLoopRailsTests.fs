@@ -77,14 +77,14 @@ let private toolCall (content: string) (toolName: string) : AIProviderResponse =
             Arguments = "{}"
         }
     ]
-    StopReason = "tool_use"
+    StopReason = StopReason.ToolUse
     Usage = None
 }
 
 let private finalReply (content: string) : AIProviderResponse = {
     Content = content
     ToolCalls = []
-    StopReason = "end_turn"
+    StopReason = StopReason.EndTurn
     Usage = None
 }
 
@@ -527,7 +527,7 @@ let private toolCalls (content: string) (toolNames: string list) : AIProviderRes
             Name = name
             Arguments = "{}"
         })
-    StopReason = "tool_use"
+    StopReason = StopReason.ToolUse
     Usage = None
 }
 

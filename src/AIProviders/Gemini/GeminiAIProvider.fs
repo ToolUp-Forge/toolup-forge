@@ -1,28 +1,28 @@
 module GeminiAIProvider
 
-open ToolUp.Platform.Transport
 open System
-open System.IO
 open System.Net.Http
-open System.Threading
-open ToolUp.Platform.Infra.Transport
-open ToolUp.Platform // RetryPolicy (Phase 11.C.5 Tier 3 — unified)
+open ToolUp.AI
+open ToolUp.AI.Wire
+open ToolUp.Platform
 open ToolUp.Platform.AI
 open ToolUp.Platform.Secrets
-open ToolUp.AI.Wire // JsonHost (schema parse over the portable JsonValue)
-open ToolUp.Remoting.Json
-open GeminiAIProviderWire
 
-// ─── Provider implementation ─────────────────────────────────────
+// ─── Gemini generateContent as a connector ───────────────────────
+//
+// Everything Gemini-specific is in the `Connector` below: the per-model
+// routes, the `x-goog-api-key` credential, the body
+// (`GeminiAIProviderWire.callBody`), the parse and the stream fold. The call
+// itself is `ProviderCall.send`, so a streaming call is under the same
+// per-call timeout as a buffered one.
 
-/// Default Gemini model. Flash is the lower-cost / lower-latency
-/// tier of the 2.5 family; Pro is the larger sibling. Users
-/// override per-instance via `IProviderProfile`.
+/// Default Gemini model. Flash is the lower-cost, lower-latency tier of the
+/// 2.5 family; Pro is the larger sibling.
 [<Literal>]
 let DefaultModel = "models/gemini-2.5-flash"
 
-/// Known-good model identifiers surfaced by the settings UI. Users
-/// may enter custom strings for models released after the build.
+/// Known-good model identifiers surfaced by the settings UI. Users may enter
+/// custom strings for models released after the build.
 let KnownModels = [
     "models/gemini-2.5-pro"
     "models/gemini-2.5-flash"
@@ -30,37 +30,24 @@ let KnownModels = [
     "models/gemini-1.5-flash"
 ]
 
-/// Stable provider identifier used in user configs and secret-store
-/// key names.
+/// Stable provider identifier used in user configs and secret-store key names.
 [<Literal>]
 let ProviderId = "google-gemini"
 
-/// Secret-store key the secret-store constructor reads from when
-/// resolving the API key on every request.
+/// Secret-store key the secret-store path reads on every call.
 [<Literal>]
 let SecretKeyName = "GEMINI_API_KEY"
 
-/// Normalise the model id into the path segment Gemini's REST API
-/// expects: every endpoint URL is `/v1beta/{model}:generateContent`
-/// where `{model}` is `models/gemini-...`. Accept callers that
-/// supply either form.
+/// The path segment Gemini's REST API expects (`models/gemini-…`), from
+/// either form of the id.
 let private modelPath (model: string) =
     if model.StartsWith("models/") then
         model
     else
         "models/" + model
 
-// Shared per-process HttpClient — see the matching note in
-// `ClaudeAIProvider`. Phase 70's factory builds a fresh `GeminiAIProvider`
-// per `Resolve` call; without sharing, the prior shape opened a new
-// connection pool per request and exhausted ephemeral ports under
-// sustained load. `BaseAddress` and `Timeout` are stable; Gemini's
-// per-request `x-goog-api-key` header rides on the request, never on
-// the client.
-// Phase 772 — built through the platform client factory, so the egress
-// policy handler sits in front of the same `HttpClientHandler` a bare
-// `new HttpClient()` would have used. Byte-identical under the default
-// permit-all policy; a verified composition can now refuse this origin.
+// One shared client per process (see `ClaudeAIProvider`), built through the
+// platform client factory so the egress policy handler sits in front of it.
 let private sharedClient =
     lazy
         (let c =
@@ -70,304 +57,74 @@ let private sharedClient =
          c.Timeout <- TimeSpan.FromMinutes(5.0)
          c)
 
-// ─── Per-call model override (Phase 661) ─────────────────────────
-
-/// Whether this connector can serve `modelId` at all: a Google id (`gemini-…` /
-/// `gemma-…`, with or without the `models/` prefix).
-/// A vocabulary test, not a probe — the vendor's catalogue is still
-/// the authority on whether the id exists.
+/// Whether this connector can serve `modelId` at all: a Google id
+/// (`gemini-…` / `gemma-…`, with or without the `models/` prefix). A
+/// vocabulary test, not a probe.
 let canServeModel (modelId: string) : bool = ModelIdFamily.isGoogle modelId
 
-/// Resolve the model one call runs on. `options.Model = None` ⇒ the
-/// configured model, `ConfiguredModel`; a servable id ⇒ that id,
-/// `OverrideHonoured`; anything else ⇒ the configured model,
-/// `OverrideFellBack` — the call is never failed for an unservable id.
+[<Literal>]
+let private UnservedReason = "not a Google (gemini-*/gemma-*) model id"
+
+/// Resolve the model one call runs on (see `ModelOverrideOutcome.resolve`).
 let resolveCallModel (configured: string) (options: AIProviderCallOptions) : string * ModelOverrideOutcome =
-    ModelOverrideOutcome.resolve canServeModel "not a Google (gemini-*/gemma-*) model id" configured options
+    ModelOverrideOutcome.resolve canServeModel UnservedReason configured options
 
-type GeminiAIProvider private (apiKeyFetcher: unit -> Async<string option>, model: string) =
-    let client = sharedClient.Value
-
-    /// Per-request auth header. Gemini reads the key from
-    /// `x-goog-api-key`; the header rides on the request, never on the
-    /// shared client (the key can rotate / vary per BYOK caller).
-    let authHeaders key = [ "x-goog-api-key", key ]
-
-    /// Build the per-call timeout CTS — byte-identical to the prior
-    /// inline construction: a clamped CTS when a per-call timeout is
-    /// supplied, an untimed one otherwise (deferring to the client's
-    /// instance-wide `Timeout`).
-    let newTimeoutCts (retryPolicy: RetryPolicy) : CancellationTokenSource =
-        match retryPolicy.Timeout with
-        | Some t ->
-            let clampedMs = RetryPolicy.clampTimeoutMs (int t.TotalMilliseconds)
-            new CancellationTokenSource(TimeSpan.FromMilliseconds(float clampedMs))
-        | None -> new CancellationTokenSource()
-
-    /// One buffered (non-streaming) attempt: build the request body,
-    /// post it through the portable transport, classify the result.
-    /// Used by both `SendMessage` (no `onStream`) and
-    /// `SendStructuredMessage` (the `schema` arg differs only in the
-    /// `generationConfig.responseSchema` it injects).
-    let bufferedAttempt
-        key
-        (messages: AIProviderMessage list)
-        (tools: AIProviderToolDef list)
-        (systemPrompt: string option)
-        (schema: JsonValue option)
-        (retryPolicy: RetryPolicy)
-        : Async<Result<AIProviderResponse, AIProviderError>> =
-        async {
-            let body = buildRequestBody messages tools systemPrompt schema
-            let endpoint = sprintf "/v1beta/%s:generateContent" (modelPath model)
-            let request = HttpRequest.post endpoint (authHeaders key) body
-            let transport = HttpClientTransport(client, ?timeout = retryPolicy.Timeout)
-
-            try
-                let! response = (transport :> IHttpTransport).Send(request)
-
-                if HttpResponse.isSuccess response then
-                    match parseResponse response.Body with
-                    | Ok r -> return Ok r
-                    | Error detail -> return Error(MalformedResponse detail)
-                else
-                    return Error(ErrorClassifier.classifyStatus response.StatusCode response.Body)
-            with
-            | :? OperationCanceledException ->
-                return Error(TransientNetwork $"Request timed out after {RetryPolicy.timeoutDescription retryPolicy}")
-            | ex -> return Error(ErrorClassifier.classifyTransportFailure ex.Message)
-        }
-
-    /// One streaming attempt. The egress rides the transport's
-    /// `.NET`-only `SendForStreaming` (`ResponseHeadersRead`); the SSE
-    /// line read + the portable `applyStreamChunk` accumulator stay
-    /// here. A partial-then-failed stream surfaces `StreamingAborted`
-    /// with the text delivered so far.
-    let streamingAttempt
-        key
-        (messages: AIProviderMessage list)
-        (tools: AIProviderToolDef list)
-        (systemPrompt: string option)
-        (onStream: (string -> unit) option)
-        (retryPolicy: RetryPolicy)
-        : Async<Result<AIProviderResponse, AIProviderError>> =
-        async {
-            let body = buildRequestBody messages tools systemPrompt None
-            let endpoint = sprintf "/v1beta/%s:streamGenerateContent?alt=sse" (modelPath model)
-            let request = HttpRequest.post endpoint (authHeaders key) body
-            let transport = HttpClientTransport(client)
-            use cts = newTimeoutCts retryPolicy
-            let state = initialStreamState ()
-
-            try
-                let! response = transport.SendForStreaming(request, cts.Token)
-
-                if not response.IsSuccessStatusCode then
-                    let! errorBody = response.Content.ReadAsStringAsync() |> Async.AwaitTask
-                    return Error(ErrorClassifier.classifyStatus (int response.StatusCode) errorBody)
-                else
-                    let! stream = response.Content.ReadAsStreamAsync() |> Async.AwaitTask
-                    use reader = new StreamReader(stream)
-
-                    let mutable reading = true
-
-                    while reading do
-                        let! line = reader.ReadLineAsync(cts.Token).AsTask() |> Async.AwaitTask
-
-                        if isNull line then
-                            reading <- false
-                        elif line.StartsWith("data: ") then
-                            applyStreamChunk state onStream (line.Substring(6))
-
-                    return
-                        Ok {
-                            Content = state.Content
-                            ToolCalls = state.ToolCalls
-                            StopReason = state.StopReason
-                            Usage = state.Usage
-                        }
-            with
-            | :? OperationCanceledException when cts.IsCancellationRequested ->
-                if state.Content <> "" then
-                    return
-                        Error(
-                            StreamingAborted(
-                                state.Content,
-                                $"Timed out after {RetryPolicy.timeoutDescription retryPolicy} with partial content delivered"
-                            )
-                        )
-                else
-                    return
-                        Error(TransientNetwork $"Request timed out after {RetryPolicy.timeoutDescription retryPolicy}")
-            | ex ->
-                if state.Content <> "" then
-                    return Error(StreamingAborted(state.Content, ex.Message))
-                else
-                    return Error(TransientNetwork ex.Message)
-        }
-
-    /// Construct with an API key provided directly (factory path —
-    /// user-supplied or deployment-resolved key).
-    new(apiKey: string, ?model: string) =
-        GeminiAIProvider((fun () -> async { return Some apiKey }), defaultArg model DefaultModel)
-
-    /// Construct reading the API key from the secret store on every
-    /// request. Reads `GEMINI_API_KEY` from the `_platform` scope.
-    new(secretStore: ISecretStore, ?model: string) =
-        GeminiAIProvider(
-            (fun () -> secretStore.GetSecret(ScopeKey.PlatformContainer, SecretKeyName)),
-            defaultArg model DefaultModel
-        )
-
-    interface IAIProvider with
-        member _.Capabilities = {
-            // Streaming supported via :streamGenerateContent?alt=sse.
+/// The Gemini connector over `client`, credentialled by `apiKey` (read on
+/// every call, so a rotated key flows through).
+let connector (client: HttpClient) (apiKey: unit -> Async<string option>) : Connector<GeminiStreaming.StreamState> = {
+    Capabilities =
+        fun model -> {
             Streaming = true
-            // Function calling supported across 2.5 + 1.5 families.
             ToolUse = true
-            // Vision: multimodal input is core to 1.5 / 2.5 — every
-            // model in `KnownModels` accepts image / audio / video
-            // parts. The per-model `isVisionCapable` check exists for
-            // a future text-only variant.
             Vision = true
-            // Gemini's `cachedContents` API is a separate explicit-
-            // cache resource lifecycle (named caches, TTL, billing).
-            // This provider does not currently create or attach to
-            // those caches — `cachedContentTokenCount` is still
-            // surfaced when present (some accounts get implicit
-            // server-side caching), so we declare the capability
-            // truthfully: counts may flow through but caching is not
-            // request-side controlled here.
             SupportsPromptCaching = true
-            // Phase 6j.B — native `generationConfig.responseSchema`.
             SupportsTriage = true
             TriageModelId = Some "models/gemini-2.5-flash"
-            ProviderName = "google-gemini"
+            ProviderName = ProviderId
             Model = model
         }
-
-        member _.SendMessage(messages, tools, systemPrompt, onStream, retryPolicy) = async {
-            let hasImagePart =
-                messages |> List.exists ToolUp.Platform.AI.AIProviderMessage.isMultimodal
-
-            if hasImagePart && not (GeminiAIProviderWire.isVisionCapable model) then
-                return Error(UnsupportedCapability("vision", sprintf "Model '%s' does not accept image input." model))
+    CanServe = canServeModel
+    UnservedReason = UnservedReason
+    IsVisionCapable = GeminiAIProviderWire.isVisionCapable
+    StructuredOutput = StructuredOutput.Native
+    Client = client
+    Credential =
+        Connector.secretHeader
+            apiKey
+            "GEMINI_API_KEY not configured. Set it as an environment variable or in your secret store."
+            (fun key -> [ "x-goog-api-key", key ])
+    Endpoint =
+        fun call ->
+            if call.Streaming then
+                Endpoint.At(sprintf "/v1beta/%s:streamGenerateContent?alt=sse" (modelPath call.Model))
             else
-                let! apiKey = apiKeyFetcher ()
+                Endpoint.At(sprintf "/v1beta/%s:generateContent" (modelPath call.Model))
+    Body = fun call -> GeminiAIProviderWire.callBody call.Messages call.Tools call.SystemPrompt call.Schema
+    ParseResponse = fun _ body -> GeminiAIProviderWire.parseResponse body
+    Stream = fun _ -> GeminiStreaming.processor
+    RateLimitFloor = None
+    Pause = Connector.sleep
+}
 
-                match apiKey with
-                | None ->
-                    return
-                        Error(
-                            PermanentClient(
-                                0,
-                                "GEMINI_API_KEY not configured. Set it as an environment variable or in your secret store."
-                            )
-                        )
-                | Some key ->
-                    let singleAttempt () =
-                        if onStream.IsSome then
-                            streamingAttempt key messages tools systemPrompt onStream retryPolicy
-                        else
-                            bufferedAttempt key messages tools systemPrompt None retryPolicy
+/// A Gemini provider on `model`, its key read through `apiKey` on every call.
+let createWithKeySource (apiKey: unit -> Async<string option>) (model: string) : IAIProvider =
+    ConnectorProvider(connector sharedClient.Value apiKey, model) :> IAIProvider
 
-                    // Portable retry loop (Phase 251 `RetryRunner`) — same
-                    // exponential-backoff / fail-fast semantics as the prior
-                    // inline loop, lifted to one shared function.
-                    return! RetryRunner.run retryPolicy singleAttempt
-        }
+let private fromSecretStore (secretStore: ISecretStore) =
+    fun () -> secretStore.GetSecret(ScopeKey.PlatformContainer, SecretKeyName)
 
-        // Phase 67b — schema-respecting structured output. Gemini
-        // supports this natively via `generationConfig.responseSchema` +
-        // `responseMimeType = "application/json"` — the wire-side
-        // `buildRequestBody` already accepts a `JsonValue option` for
-        // exactly this. Non-streaming only (Gemini does support
-        // streaming structured output via :streamGenerateContent, but
-        // that's deferred to a follow-on phase).
-        member _.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy) = async {
-            // Vision pre-check mirrors SendMessage — structured output
-            // and multimodal input are independent capabilities; both
-            // can apply to one request.
-            let hasImagePart =
-                messages |> List.exists ToolUp.Platform.AI.AIProviderMessage.isMultimodal
-
-            if hasImagePart && not (GeminiAIProviderWire.isVisionCapable model) then
-                return Error(UnsupportedCapability("vision", sprintf "Model '%s' does not accept image input." model))
-            else
-                // Parse the JSON Schema string into a portable JsonValue.
-                // A malformed schema is a caller defect — surface as
-                // PermanentClient(0) so the agent loop doesn't waste
-                // retry budget. The error class mirrors the
-                // "API_KEY_NOT_CONFIGURED" precedent: synthetic 0-status
-                // for "request never left the process".
-                match JsonHost.parse schema with
-                | None -> return Error(PermanentClient(0, "structuredOutputSchema is not valid JSON"))
-                | Some schemaValue ->
-                    let! apiKey = apiKeyFetcher ()
-
-                    match apiKey with
-                    | None ->
-                        return
-                            Error(
-                                PermanentClient(
-                                    0,
-                                    "GEMINI_API_KEY not configured. Set it as an environment variable or in your secret store."
-                                )
-                            )
-                    | Some key ->
-                        let singleAttempt () =
-                            bufferedAttempt key messages tools systemPrompt (Some schemaValue) retryPolicy
-
-                        return! RetryRunner.run retryPolicy singleAttempt
-        }
-
-
-    // Phase 661 — per-call model override. The provider instance IS the
-    // model binding (every send closes over `model`), so a call on
-    // another model is served by a sibling instance bound to that model
-    // with the same key source: byte-for-byte the request
-    // a second registered instance would have emitted, with no second
-    // instance for a composition root to wire. `options.Model = None`
-    // delegates to this instance's own `SendMessage`, so the request
-    // bytes are unchanged.
-    interface IAIProviderModelOverride with
-        member this.SendMessageWith(options, messages, tools, systemPrompt, onStream, retryPolicy) =
-            let served, outcome = resolveCallModel model options
-
-            let target =
-                if served = model then
-                    this :> IAIProvider
-                else
-                    GeminiAIProvider(apiKeyFetcher, served) :> IAIProvider
-
-            target.SendMessage(messages, tools, systemPrompt, onStream, retryPolicy)
-            |> AIProviderCallResponse.attach outcome
-
-        member this.SendStructuredMessageWith(options, messages, tools, systemPrompt, schema, retryPolicy) =
-            let served, outcome = resolveCallModel model options
-
-            let target =
-                if served = model then
-                    this :> IAIProvider
-                else
-                    GeminiAIProvider(apiKeyFetcher, served) :> IAIProvider
-
-            target.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy)
-            |> AIProviderCallResponse.attach outcome
-
-/// Create using a secret-store read of `GEMINI_API_KEY` on every
-/// request. Legacy single-provider deployment helper.
+/// Read `GEMINI_API_KEY` from the `_platform` scope on every call.
 let create (secretStore: ISecretStore) : IAIProvider =
-    GeminiAIProvider(secretStore) :> IAIProvider
+    createWithKeySource (fromSecretStore secretStore) DefaultModel
 
-/// Create with an explicit model using the secret-store path.
+/// The secret-store path on `model`.
 let createWithModel (secretStore: ISecretStore) (model: string) : IAIProvider =
-    GeminiAIProvider(secretStore, model) :> IAIProvider
+    createWithKeySource (fromSecretStore secretStore) model
 
-/// Create using a directly-supplied API key. Factory path for
-/// user/team-configured BYOK deployments.
-let createWithApiKey (apiKey: string) : IAIProvider = GeminiAIProvider(apiKey) :> IAIProvider
+/// A directly supplied key: the BYOK factory path.
+let createWithApiKey (apiKey: string) : IAIProvider =
+    createWithKeySource (fun () -> async { return Some apiKey }) DefaultModel
 
-/// Create with an explicit API key and model.
+/// A directly supplied key on `model`.
 let createWithApiKeyAndModel (apiKey: string) (model: string) : IAIProvider =
-    GeminiAIProvider(apiKey, model) :> IAIProvider
+    createWithKeySource (fun () -> async { return Some apiKey }) model

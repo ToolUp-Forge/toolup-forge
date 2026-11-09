@@ -4,15 +4,9 @@
 module Microsoft365CopilotAIProvider
 
 open System
-open System.IO
 open System.Net.Http
-open System.Threading
 open Azure.Core
-open ToolUp.Platform
 open ToolUp.Platform.AI
-open ToolUp.Platform.Infra.Transport
-open ToolUp.Platform.ProviderExceptions
-open ToolUp.Platform.Transport
 open ToolUp.AI
 open Microsoft365CopilotWire
 
@@ -167,18 +161,12 @@ let private refusal (refused: TurnRefusal) : AIProviderError =
             "Microsoft 365 Copilot's Chat API accepts text only; the turn carries an image."
         )
 
-type Microsoft365CopilotProvider
-    (tokenSource: Microsoft365CopilotTokenSource, options: Microsoft365CopilotOptions, client: HttpClient) =
-
-    let baseUrl = options.BaseUrl.TrimEnd('/')
-
-    let acquireToken () : Async<Result<string, AIProviderError>> = async {
+let private credential (tokenSource: Microsoft365CopilotTokenSource) =
+    fun () -> async {
         match tokenSource with
         | FromAccessToken fetch ->
-            let! token = fetch ()
-
-            match token with
-            | Some t when not (String.IsNullOrWhiteSpace t) -> return Ok t
+            match! fetch () with
+            | Some t when not (String.IsNullOrWhiteSpace t) -> return Ok [ "Authorization", "Bearer " + t ]
             | _ ->
                 return
                     Error(
@@ -188,12 +176,12 @@ type Microsoft365CopilotProvider
                             + WorkIQAskScope
                         )
                     )
-        | FromCredential credential ->
+        | FromCredential tokenCredential ->
             try
                 let! ct = Async.CancellationToken
                 let request = TokenRequestContext [| WorkIQAskScope |]
-                let! token = credential.GetTokenAsync(request, ct).AsTask() |> Async.AwaitTask
-                return Ok token.Token
+                let! token = tokenCredential.GetTokenAsync(request, ct).AsTask() |> Async.AwaitTask
+                return Ok [ "Authorization", "Bearer " + token.Token ]
             with ex ->
                 return
                     Error(
@@ -203,175 +191,91 @@ type Microsoft365CopilotProvider
                     )
     }
 
-    /// Open a conversation; its id is the path of the chat call.
-    let createConversation (transport: IHttpTransport) headers : Async<Result<string, AIProviderError>> = async {
-        let! response = transport.Send(HttpRequest.post (baseUrl + "/conversations") headers "{}")
+/// The Microsoft 365 Copilot connector over `client`, its delegated token from
+/// `tokenSource`, configured by `options`. A call opens a Work IQ
+/// conversation and asks in it (both requests are one attempt); a
+/// structured call is a chat call carrying the schema instruction.
+let connector
+    (client: HttpClient)
+    (tokenSource: Microsoft365CopilotTokenSource)
+    (options: Microsoft365CopilotOptions)
+    : Connector<Microsoft365CopilotStream> =
+    let baseUrl = options.BaseUrl.TrimEnd('/')
 
-        if not (HttpResponse.isSuccess response) then
-            return Error(ErrorClassifier.classifyStatus response.StatusCode response.Body)
-        else
-            match tryConversationId response.Body with
-            | Some id -> return Ok id
-            | None -> return Error(MalformedResponse "The Work IQ conversation response carried no id.")
-    }
+    let turnOf (call: ProviderRequest) =
+        buildTurn call.SystemPrompt call.Messages
 
-    let chatUrl (conversationId: string) (verb: string) =
+    let chatUrl (verb: string) (conversationId: string) =
         sprintf "%s/conversations/%s/%s" baseUrl (Uri.EscapeDataString conversationId) verb
 
-    let sendSync (transport: HttpClientTransport) headers (turn: CopilotTurn) body = async {
-        try
-            let transport = transport :> IHttpTransport
-            let! conversation = createConversation transport headers
+    {
+        Capabilities = fun _ -> capabilities
+        CanServe = fun _ -> false
+        UnservedReason = "Microsoft 365 Copilot serves one model"
+        IsVisionCapable = fun _ -> false
+        StructuredOutput = StructuredOutput.ViaPrompt
+        Client = client
+        Credential = credential tokenSource
+        Endpoint =
+            fun call ->
+                Endpoint.Opened(
+                    baseUrl + "/conversations",
+                    "{}",
+                    fun body ->
+                        match tryConversationId body with
+                        | Some id -> Ok(chatUrl (if call.Streaming then "chatOverStream" else "chat") id)
+                        | None -> Error(MalformedResponse "The Work IQ conversation response carried no id.")
+                )
+        Body =
+            fun call ->
+                turnOf call
+                |> Result.mapError refusal
+                |> Result.map (chatBody options.TimeZone options.WebSearch options.Files)
+        ParseResponse =
+            fun call body ->
+                match turnOf call with
+                | Error refused -> Error(refusal refused)
+                | Ok turn ->
+                    match tryReplyText turn.Prompt body with
+                    | Some reply -> Ok(toResponse reply)
+                    | None -> Error(MalformedResponse "The Work IQ chat response was not a conversation.")
+        Stream =
+            fun call ->
+                let prompt =
+                    match turnOf call with
+                    | Ok turn -> turn.Prompt
+                    | Error _ -> ""
 
-            match conversation with
-            | Error e -> return Error e
-            | Ok id ->
-                let! response = transport.Send(HttpRequest.post (chatUrl id "chat") headers body)
-
-                if not (HttpResponse.isSuccess response) then
-                    return Error(ErrorClassifier.classifyStatus response.StatusCode response.Body)
-                else
-                    match tryReplyText turn.Prompt response.Body with
-                    | Some reply -> return Ok(toResponse reply)
-                    | None -> return Error(MalformedResponse "The Work IQ chat response was not a conversation.")
-        with
-        | :? OperationCanceledException -> return Error(TransientNetwork "Microsoft 365 Copilot request timed out")
-        | ProviderException(ex: HttpRequestException) ->
-            return Error(ErrorClassifier.classifyTransportFailure ex.Message)
-        | ex -> return Error(ErrorClassifier.classifyTransportFailure ex.Message)
+                Microsoft365CopilotStream.processor prompt
+        RateLimitFloor = None
+        Pause = Connector.sleep
     }
 
-    let sendStreaming
-        (transport: HttpClientTransport)
-        headers
-        (turn: CopilotTurn)
-        body
-        (onStream: string -> unit)
-        (retryPolicy: RetryPolicy)
-        =
-        async {
-            let streamed = ref ""
-            let latest = ref ""
-
-            use cts =
-                match retryPolicy.Timeout with
-                | Some t ->
-                    new CancellationTokenSource(
-                        TimeSpan.FromMilliseconds(float (RetryPolicy.clampTimeoutMs (int t.TotalMilliseconds)))
-                    )
-                | None -> new CancellationTokenSource()
-
-            let accept (data: string) =
-                match tryReplyText turn.Prompt data with
-                | Some reply when reply <> "" ->
-                    latest.Value <- reply
-
-                    match streamDelta streamed.Value reply with
-                    | Some delta ->
-                        streamed.Value <- reply
-                        onStream delta
-                    | None -> ()
-                | _ -> ()
-
-            let failure (detail: string) =
-                if streamed.Value <> "" then
-                    Error(StreamingAborted(streamed.Value, detail))
-                else
-                    Error(TransientNetwork detail)
-
-            try
-                let! conversation = createConversation (transport :> IHttpTransport) headers
-
-                match conversation with
-                | Error e -> return Error e
-                | Ok id ->
-                    let request = HttpRequest.post (chatUrl id "chatOverStream") headers body
-                    let! response = transport.SendForStreaming(request, cts.Token)
-                    use response = response
-
-                    if not response.IsSuccessStatusCode then
-                        let! errorBody = response.Content.ReadAsStringAsync() |> Async.AwaitTask
-                        return Error(ErrorClassifier.classifyStatus (int response.StatusCode) errorBody)
-                    else
-                        let! stream = response.Content.ReadAsStreamAsync() |> Async.AwaitTask
-                        use reader = new StreamReader(stream)
-                        let mutable frame = SseFrame.empty
-                        let mutable reading = true
-
-                        while reading do
-                            let! line = reader.ReadLineAsync(cts.Token).AsTask() |> Async.AwaitTask
-
-                            if isNull line then
-                                reading <- false
-                            else
-                                let next, completed = SseFrame.feed frame line
-                                frame <- next
-                                completed |> Option.iter accept
-
-                        SseFrame.finish frame |> Option.iter accept
-                        return Ok(toResponse latest.Value)
-            with
-            | :? OperationCanceledException when cts.IsCancellationRequested ->
-                return failure $"Timed out after {RetryPolicy.timeoutDescription retryPolicy}"
-            | ProviderException(ex: HttpRequestException) -> return failure ex.Message
-            | ex -> return failure ex.Message
-        }
-
-    /// A provider using the shared platform HTTP client.
-    new(tokenSource: Microsoft365CopilotTokenSource, options: Microsoft365CopilotOptions) =
-        Microsoft365CopilotProvider(tokenSource, options, sharedClient.Value)
-
-    /// A provider with the default options (GA route, UTC).
-    new(tokenSource: Microsoft365CopilotTokenSource) =
-        Microsoft365CopilotProvider(tokenSource, Microsoft365CopilotOptions.defaults)
-
-    interface IAIProvider with
-        member _.Capabilities = capabilities
-
-        // `tools` are not sent: the Chat API cannot call them, and the
-        // capability flag tells the agent loop not to offer any.
-        member _.SendMessage(messages, _tools, systemPrompt, onStream, retryPolicy) = async {
-            match buildTurn systemPrompt messages with
-            | Error refused -> return Error(refusal refused)
-            | Ok turn ->
-                let! token = acquireToken ()
-
-                match token with
-                | Error e -> return Error e
-                | Ok token ->
-                    let headers = [ "Authorization", "Bearer " + token ]
-                    let body = chatBody options.TimeZone options.WebSearch options.Files turn
-                    let transport = HttpClientTransport(client, ?timeout = retryPolicy.Timeout)
-
-                    let attempt () =
-                        match onStream with
-                        | Some callback -> sendStreaming transport headers turn body callback retryPolicy
-                        | None -> sendSync transport headers turn body
-
-                    return! RetryRunner.run retryPolicy attempt
-        }
-
-        // No native structured output: the schema rides as an instruction
-        // and the reply is checked to be JSON.
-        member this.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy) =
-            IAIProviderDefaults.sendStructuredViaFallback this messages tools systemPrompt schema retryPolicy
-
 // ─── Factory helpers ─────────────────────────────────────────────────
+
+/// A provider over a caller-supplied `HttpClient` — a custom handler, a
+/// proxy, or an offline test.
+let createWithHttpClient
+    (tokenSource: Microsoft365CopilotTokenSource)
+    (options: Microsoft365CopilotOptions)
+    (client: HttpClient)
+    : IAIProvider =
+    ConnectorProvider(connector client tokenSource options, DefaultModel) :> IAIProvider
 
 /// A provider over an `Azure.Core` credential that yields a user token
 /// (for example `OnBehalfOfCredential`), with the default options.
 let create (credential: TokenCredential) : IAIProvider =
-    Microsoft365CopilotProvider(FromCredential credential) :> IAIProvider
+    createWithHttpClient (FromCredential credential) Microsoft365CopilotOptions.defaults sharedClient.Value
 
 /// A provider over a user-token credential with explicit options.
 let createWithOptions (credential: TokenCredential) (options: Microsoft365CopilotOptions) : IAIProvider =
-    Microsoft365CopilotProvider(FromCredential credential, options) :> IAIProvider
+    createWithHttpClient (FromCredential credential) options sharedClient.Value
 
 /// A provider whose token comes from a function, called once per send.
 /// The usual server shape: read the requesting user's Work IQ token
 /// from the request context.
 let createWithTokenSource (fetch: unit -> Async<string option>) (options: Microsoft365CopilotOptions) : IAIProvider =
-    Microsoft365CopilotProvider(FromAccessToken fetch, options) :> IAIProvider
+    createWithHttpClient (FromAccessToken fetch) options sharedClient.Value
 
 /// A provider over a fixed access token, for the BYOK factory's
 /// `apiKey -> IAIProvider` builder. A Work IQ token is a short-lived
@@ -384,12 +288,3 @@ let createWithAccessToken (accessToken: string) : IAIProvider =
 /// one model, so `model` is ignored.
 let createWithAccessTokenAndModel (accessToken: string) (_model: string) : IAIProvider =
     createWithAccessToken accessToken
-
-/// A provider over a caller-supplied `HttpClient` — a custom handler, a
-/// proxy, or an offline test.
-let createWithHttpClient
-    (tokenSource: Microsoft365CopilotTokenSource)
-    (options: Microsoft365CopilotOptions)
-    (client: HttpClient)
-    : IAIProvider =
-    Microsoft365CopilotProvider(tokenSource, options, client) :> IAIProvider

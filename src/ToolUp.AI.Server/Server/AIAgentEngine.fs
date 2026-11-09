@@ -661,7 +661,7 @@ module private Telemetry =
                 TtftMs = ttftMs
                 TurnDurationMs = durationMs
                 ToolCalls = timings
-                StopReason = response.StopReason
+                StopReason = response.StopReason.Token
                 PromptTokens = usage |> Option.map _.PromptTokens
                 CachedPromptTokens = usage |> Option.map _.CachedPromptTokens
                 OutputTokens = usage |> Option.map _.OutputTokens
@@ -1111,7 +1111,7 @@ module Loop =
         | calls ->
             match detectConfusion response.Content with
             | Some marker -> Stop(LoopStop.Confusion marker)
-            | None when response.StopReason = "end_turn" ->
+            | None when response.StopReason = StopReason.EndTurn ->
                 Final {
                     state with
                         Messages = state.Messages @ [ assistant response ]

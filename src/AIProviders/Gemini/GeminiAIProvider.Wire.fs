@@ -1,26 +1,21 @@
 module internal GeminiAIProviderWire
 
-// ─── Portable Gemini wire mapping (Wave 32, Phase 253) ───────────
+// ─── Portable Gemini wire mapping ────────────────────────────────
 //
-// The Gemini request-build + response-parse, ported from `System.Text.Json`
-// onto the portable `ToolUp.AI.Wire` `JsonValue` model (Phase 249) under the
-// relocated `ToolUp.Platform.AI` connector contract (Phase 250). This file
-// contains ZERO `System.Text.Json` — it depends only on `ToolUp.AI.Wire`
-// (`JsonValue` / `JsonHost`) + `ToolUp.Platform.AI` (the contract records +
-// `ErrorClassifier`), so the same source compiles to both the .NET server
-// host and a Fable browser host (GP 8 — Fable native; GP 12 — host-portable
-// mapping). The provider `.fs` owns the non-portable egress (the BCL
-// `HttpClient` via the Phase 251 `HttpClientTransport`); this mapper is pure.
+// The Gemini request build + response parse over the portable `JsonValue`
+// model: it depends only on `ToolUp.AI.Wire`, so the same source compiles to
+// the .NET server host and a Fable browser host (GP 8, GP 12).
 //
 // Gemini's wire shape (vs OpenAI's): `contents` carry roles `user` /
 // `model`; tools ride on `tools: [{ functionDeclarations: [...] }]`; a tool
 // CALL is a `functionCall:{name, args}` part, a tool RESULT a
 // `functionResponse:{name, response}` part — both **name-keyed**, never
-// id-keyed. The forge contract requires a non-empty `AIProviderToolCall.Id`,
-// so we synthesise a deterministic id from the call's name + position and
-// strip it back to the name on the response path (see the id-correlation
-// block below). Structured output flips `generationConfig.responseSchema`
-// (Phase 67b). Usage is `usageMetadata.{promptTokenCount, …}`.
+// id-keyed. The SDK contract requires a non-empty `AIProviderToolCall.Id`,
+// so a deterministic id is synthesised from the call's name + position
+// (`GeminiStreaming.syntheticToolCallId`) and stripped back to the name on
+// the request path. Structured output sets
+// `generationConfig.responseSchema`. Usage is `usageMetadata`; the stream
+// assembly is `GeminiStreaming` in `ToolUp.AI.Wire`.
 
 open ToolUp.AI.Wire
 open ToolUp.Remoting.Json
@@ -53,7 +48,6 @@ let isVisionCapable (model: string) =
 // Format: "gemini-fc-<name>-<index>". The index disambiguates two
 // calls to the same tool in one assistant turn (rare but legal).
 // Not `private` so the wire test pack can pin the round-trip directly.
-let syntheticToolCallId (name: string) (index: int) : string = sprintf "gemini-fc-%s-%d" name index
 
 /// Recover the tool name from a synthetic Gemini call id. When the
 /// id was produced upstream by another provider (e.g. a multi-provider
@@ -72,140 +66,27 @@ let toolNameFromSyntheticId (id: string) (fallbackName: string) : string =
 
 // ─── Response parsing ────────────────────────────────────────────
 
-/// Parse Gemini's `usageMetadata` block into the provider-neutral
-/// `TokenUsage` shape. Gemini's vocabulary:
-///   - `promptTokenCount` — total input tokens for this turn
-///     (including any cached portion).
-///   - `cachedContentTokenCount` — portion served from cache. Absent
-///     when no cache hit.
-///   - `candidatesTokenCount` — generated output tokens.
-///
-/// `CacheCreationTokens` is `None` — Gemini's explicit cache API
-/// (cachedContents) is a separate resource lifecycle the provider
-/// doesn't currently manage, and the per-request response doesn't
-/// expose a cache-write count.
-let parseUsage (root: JsonValue) : TokenUsage option =
-    match JsonValue.tryMember "usageMetadata" root with
-    | Some usage ->
-        let getInt (name: string) =
-            usage
-            |> JsonValue.tryMember name
-            |> Option.bind JsonValue.asInt
-            |> Option.defaultValue 0
-
-        Some {
-            PromptTokens = getInt "promptTokenCount"
-            CachedPromptTokens = getInt "cachedContentTokenCount"
-            OutputTokens = getInt "candidatesTokenCount"
-            CacheCreationTokens = None
-        }
-    | None -> None
-
-/// Map Gemini's `finishReason` enum to the provider-neutral
-/// vocabulary the agent loop recognises. Tool calls override this
-/// — when the response carries any `functionCall` parts the stop
-/// reason is `tool_use` regardless of what Gemini said.
-let private mapFinishReason (reason: string) =
-    match reason with
-    | "MAX_TOKENS" -> "max_tokens"
-    | "STOP"
-    | "FINISH_REASON_STOP"
-    | _ -> "end_turn"
-
-/// Walk a parsed Gemini `generateContent` response value into the
-/// provider-neutral `AIProviderResponse`.
-///
-/// Shape: `candidates[0].content.parts[]` carrying `text` and / or
-/// `functionCall` blocks; `candidates[0].finishReason`;
-/// top-level `usageMetadata`.
+/// A `generateContent` response is one chunk carrying the whole turn: fold it
+/// once through the stream assembly. A turn holding a function call is
+/// `ToolUse` whatever `finishReason` said.
 let private parseRoot (root: JsonValue) : AIProviderResponse =
-    let usage = parseUsage root
+    let state, _ = GeminiStreaming.applyChunk GeminiStreaming.initial root
 
-    let firstCandidate =
-        root |> JsonValue.tryMember "candidates" |> Option.bind (JsonValue.tryItem 0)
+    GeminiStreaming.finalize {
+        state with
+            StopReason =
+                if state.ToolCalls.IsEmpty then
+                    state.StopReason
+                else
+                    StopReason.ToolUse
+    }
 
-    match firstCandidate with
-    | None -> {
-        Content = ""
-        ToolCalls = []
-        StopReason = "end_turn"
-        Usage = usage
-      }
-    | Some candidate ->
-        let finishReason =
-            candidate
-            |> JsonValue.tryMember "finishReason"
-            |> Option.bind JsonValue.asString
-            |> Option.defaultValue "STOP"
-
-        let parts =
-            candidate
-            |> JsonValue.tryMember "content"
-            |> Option.bind (JsonValue.tryMember "parts")
-            |> Option.bind JsonValue.asArray
-            |> Option.defaultValue [||]
-
-        let mutable textContent = ""
-        let mutable toolCalls: AIProviderToolCall list = []
-        let mutable toolCallIndex = 0
-
-        for part in parts do
-            match part |> JsonValue.tryMember "text" |> Option.bind JsonValue.asString with
-            | Some t -> textContent <- textContent + t
-            | None ->
-                match part |> JsonValue.tryMember "functionCall" with
-                | Some fc ->
-                    let name =
-                        fc
-                        |> JsonValue.tryMember "name"
-                        |> Option.bind JsonValue.asString
-                        |> Option.defaultValue ""
-
-                    // Re-serialise the args sub-tree canonically. The string
-                    // is round-tripped back through `JsonHost.parse` in
-                    // `toGeminiContent`, so canonical bytes here are
-                    // semantically identical to the raw response bytes.
-                    let argsJson =
-                        fc
-                        |> JsonValue.tryMember "args"
-                        |> Option.map JsonHost.serialize
-                        |> Option.defaultValue "{}"
-
-                    toolCalls <-
-                        toolCalls
-                        @ [
-                            {
-                                AIProviderToolCall.Id = syntheticToolCallId name toolCallIndex
-                                Name = name
-                                Arguments = argsJson
-                            }
-                        ]
-
-                    toolCallIndex <- toolCallIndex + 1
-                | None -> ()
-
-        let stopReason =
-            if not toolCalls.IsEmpty then
-                "tool_use"
-            else
-                mapFinishReason finishReason
-
-        {
-            Content = textContent
-            ToolCalls = toolCalls
-            StopReason = stopReason
-            Usage = usage
-        }
-
-/// Parse a Gemini non-streaming `generateContent` response body.
-/// `Error` carries a human-readable detail the provider surfaces as
-/// `MalformedResponse` — byte-identical in effect to the old
-/// `JsonDocument.Parse` throw caught at the provider boundary, but
-/// without the host-specific exception.
-let parseResponse (json: string) : Result<AIProviderResponse, string> =
+/// Parse a Gemini non-streaming `generateContent` response body. A body
+/// that is not JSON is a `MalformedResponse`.
+let parseResponse (json: string) : Result<AIProviderResponse, AIProviderError> =
     match JsonHost.parse json with
     | Some root -> Ok(parseRoot root)
-    | None -> Error "Gemini response body was not valid JSON"
+    | None -> Error(MalformedResponse "Gemini response body was not valid JSON")
 
 // ─── Request building ────────────────────────────────────────────
 
@@ -230,7 +111,7 @@ let private buildMultipartParts (parts: AIContentPart list) : JsonValue list =
                     ]
                 ]
             | Url u -> jobj [ "fileData", jobj [ "mimeType", jstr payload.MediaType; "fileUri", jstr u ] ]
-        // Phase 1128 — a block reaches the model as its text summary; the
+        // A block reaches the model as its text summary; the
         // node never enters a request body.
         | BlockPart _ -> jobj [ "text", jstr (AIContentPart.redactedSummary part) ])
 
@@ -320,7 +201,7 @@ let private buildFunctionDeclarations (tools: AIProviderToolDef list) : JsonValu
 /// Member order (contents → systemInstruction → tools → toolConfig →
 /// generationConfig) reproduces the old `Dictionary` insertion order,
 /// and `JsonHost.serialize` emits byte-stably, so the wire body is
-/// stable across both hosts (seeds the Phase 255 parity corpus).
+/// stable across both hosts.
 let buildRequestBody
     (messages: AIProviderMessage list)
     (tools: AIProviderToolDef list)
@@ -352,102 +233,19 @@ let buildRequestBody
     jobj (contents @ systemInstruction @ toolMembers @ generationConfig)
     |> JsonHost.serialize
 
-// ─── Streaming accumulator ───────────────────────────────────────
-
-/// Mutable streaming state. Gemini's SSE stream emits one JSON
-/// object per `data:` line whose shape is the same as the
-/// non-streaming response (`candidates[0].content.parts[]` +
-/// optional `finishReason` + optional `usageMetadata`). Each chunk
-/// carries a *partial* set of parts that append to the accumulator;
-/// the final chunk carries `finishReason` and `usageMetadata`. No
-/// `[DONE]` sentinel — the stream just closes.
-type StreamState = {
-    mutable Content: string
-    mutable ToolCalls: AIProviderToolCall list
-    mutable StopReason: string
-    mutable Usage: TokenUsage option
-    mutable ToolCallIndex: int
-}
-
-let initialStreamState () = {
-    Content = ""
-    ToolCalls = []
-    StopReason = "end_turn"
-    Usage = None
-    ToolCallIndex = 0
-}
-
-/// Apply one SSE `data:` payload to the accumulator. An unparseable
-/// chunk is silently ignored (`JsonHost.parse` returns `None`),
-/// matching the old `try … with _ -> ()`.
-let applyStreamChunk (state: StreamState) (onStream: (string -> unit) option) (data: string) =
-    if System.String.IsNullOrWhiteSpace data then
-        ()
-    else
-        match JsonHost.parse data with
-        | None -> ()
-        | Some root ->
-            match parseUsage root with
-            | Some u -> state.Usage <- Some u
-            | None -> ()
-
-            match root |> JsonValue.tryMember "candidates" |> Option.bind (JsonValue.tryItem 0) with
-            | Some candidate ->
-                let parts =
-                    candidate
-                    |> JsonValue.tryMember "content"
-                    |> Option.bind (JsonValue.tryMember "parts")
-                    |> Option.bind JsonValue.asArray
-                    |> Option.defaultValue [||]
-
-                for part in parts do
-                    match part |> JsonValue.tryMember "text" |> Option.bind JsonValue.asString with
-                    | Some text when text <> "" ->
-                        state.Content <- state.Content + text
-                        onStream |> Option.iter (fun cb -> cb text)
-                    | Some _ -> () // empty text delta — no-op
-                    | None ->
-                        match part |> JsonValue.tryMember "functionCall" with
-                        | Some fc ->
-                            let name =
-                                fc
-                                |> JsonValue.tryMember "name"
-                                |> Option.bind JsonValue.asString
-                                |> Option.defaultValue ""
-
-                            let argsJson =
-                                fc
-                                |> JsonValue.tryMember "args"
-                                |> Option.map JsonHost.serialize
-                                |> Option.defaultValue "{}"
-
-                            // Gemini emits function calls as complete
-                            // objects per chunk (unlike OpenAI which streams
-                            // arguments as partial JSON fragments). Append as
-                            // a new tool call entry.
-                            state.ToolCalls <-
-                                state.ToolCalls
-                                @ [
-                                    {
-                                        AIProviderToolCall.Id = syntheticToolCallId name state.ToolCallIndex
-                                        Name = name
-                                        Arguments = argsJson
-                                    }
-                                ]
-
-                            state.ToolCallIndex <- state.ToolCallIndex + 1
-                        | None -> ()
-
-                match
-                    candidate
-                    |> JsonValue.tryMember "finishReason"
-                    |> Option.bind JsonValue.asString
-                with
-                | Some reason ->
-                    state.StopReason <-
-                        if not state.ToolCalls.IsEmpty then
-                            "tool_use"
-                        else
-                            mapFinishReason reason
-                | None -> ()
-            | None -> ()
+/// The body of one connector call. A structured call's schema must parse as
+/// JSON: a malformed one is the caller's defect, refused as `PermanentClient`
+/// before anything is sent. A streaming call posts the buffered body to the
+/// streaming route.
+let callBody
+    (messages: AIProviderMessage list)
+    (tools: AIProviderToolDef list)
+    (systemPrompt: string option)
+    (schema: string option)
+    : Result<string, AIProviderError> =
+    match schema with
+    | None -> Ok(buildRequestBody messages tools systemPrompt None)
+    | Some schema ->
+        match JsonHost.parse schema with
+        | Some value -> Ok(buildRequestBody messages tools systemPrompt (Some value))
+        | None -> Error(PermanentClient(0, "structuredOutputSchema is not valid JSON"))

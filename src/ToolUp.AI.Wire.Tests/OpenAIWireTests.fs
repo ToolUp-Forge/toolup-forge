@@ -8,7 +8,7 @@ open ToolUp.Remoting.Json
 // request bytes + parsed-response shapes from the shared
 // OpenAIWireFixtures.fs (compiled into the Fable smoke too). A green run
 // here + a green Fable run proves cross-host byte-parity for the OpenAI
-// request build (Wave 32, Phase 252).
+// request build.
 
 let tests =
     testList "OpenAI wire mapping (.NET host)" [

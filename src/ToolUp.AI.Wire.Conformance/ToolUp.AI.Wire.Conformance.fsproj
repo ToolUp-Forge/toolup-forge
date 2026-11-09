@@ -1,8 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
     ToolUp.AI.Wire.Conformance (.NET host) — the convergence gate that
-    closes Wave 32. It consolidates the three per-provider wire
-    smokes (seeded by Phases 252 / 253 / 254) into ONE dual-run conformance
+    holds the per-provider wire mappers to ONE dual-run conformance
     pack: the portable ToolUp.AI.Wire layer + all three provider mappers,
     asserted to produce byte-identical request JSON and an identical parsed
     AIProviderResponse across the .NET and Fable backends.
@@ -52,6 +51,7 @@
         <!-- Numbers at the precision boundary, and the writer's string escaping. -->
         <Compile Include="Shared\NumberFixtures.fs" />
         <Compile Include="Shared\StringFixtures.fs" />
+        <Compile Include="Shared\ConnectorFixtures.fs" />
         <Compile Include="Shared\Corpus.fs" />
         <Compile Include="Shared\ConformanceSuite.fs" />
         <Compile Include="ProgramNet.fs" />

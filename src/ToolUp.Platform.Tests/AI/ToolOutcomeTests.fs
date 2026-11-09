@@ -65,7 +65,7 @@ type private InsistentProvider(toolName: string, arguments: string) =
                             Arguments = arguments
                         }
                     ]
-                    StopReason = "tool_use"
+                    StopReason = StopReason.ToolUse
                     Usage = None
                 }
         }

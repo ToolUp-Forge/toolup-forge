@@ -21,8 +21,7 @@ open ToolUp.Platform.Compose
 // `createWithApiKey` / `createWithApiKeyAndModel` helpers, a non-vision
 // model id — so every shipped AIProvider companion (and any future
 // fourth provider) exercises the SAME conformance set against the same
-// canonical inputs, with zero copied assertions. Closes Phase 67's
-// deferred test-shaped tail (wire shape) AND adds Phase 181's
+// canonical inputs, with zero copied assertions: the wire shape and the
 // behavioural-contract bar (structured output + capability gating)
 // without privileging any one provider.
 //
@@ -132,7 +131,7 @@ let private runCanonicalRoundTrip (provider: IAIProvider) = async {
                 "response carries neither text content nor a tool call (Content=%s, ToolCalls=%d, StopReason=%s)"
                 response.Content
                 response.ToolCalls.Length
-                response.StopReason)
+                response.StopReason.Token)
 
         // Streaming MAY emit zero callbacks when the model returns
         // only tool_use blocks (no text deltas). Assert streaming
@@ -147,12 +146,12 @@ let private runCanonicalRoundTrip (provider: IAIProvider) = async {
             "provider should populate AIProviderResponse.Usage on a healthy response (caching-capable providers always do)"
 }
 
-// ─── Behavioural-conformance arms (Phase 181) ──────────────────────
+// ─── Behavioural-conformance arms ──────────────────────
 //
 // The two arms below lift the pack from a *wire-shape* check (request
 // constructed cleanly, response parses) to a *behavioural-contract*
 // check over the interface surface `IAIProvider` documents:
-// structured-output (Phase 67b) and capability-gating (Phase 6o).
+// structured-output and capability-gating.
 // Both are threaded through `ProviderSpec`, so every shipped provider
 // — and any future fourth provider — gets the identical bar with zero
 // copied assertions.
@@ -168,7 +167,7 @@ let private trivialObjectSchema =
 /// The native structured-output modes require an object root, so this
 /// is the "schema the native mode cannot honour" probe. How a provider
 /// rejects it varies — and that variance IS the native-vs-fallback
-/// boundary Phase 67b documents:
+/// boundary:
 ///   • a provider that pre-validates surfaces `SchemaUnsupported`;
 ///   • a provider that ships the schema to the vendor surfaces the
 ///     vendor's HTTP 4xx as `PermanentClient`.
@@ -299,7 +298,7 @@ let private buildFactory (spec: ProviderSpec) (profile: IProviderProfile) (secre
     DefaultAIProviderFactory.create [ builder ] profile secrets StrictBYOK [] None
 
 
-// ─── Phase 508 — the rich-schema tool, offline and live ────────────
+// ─── the rich-schema tool, offline and live ────────────
 //
 // The acceptance has two halves that belong in different places, and
 // putting them in one case is what would make the whole thing worthless
@@ -429,7 +428,7 @@ let private runNestedSchemaConformance (provider: IAIProvider) = async {
         | [] ->
             failtestf
                 "nested-schema tool: the model returned no tool call (StopReason=%s, Content=%s) — the arm exists to exercise structured arguments"
-                response.StopReason
+                response.StopReason.Token
                 response.Content
         | call :: _ ->
             Expect.equal call.Name "analyse_rows" "the model called the declared tool"
@@ -530,14 +529,14 @@ let tests (spec: ProviderSpec) : Test =
                 | Ok provider -> do! runCanonicalRoundTrip provider
             }
 
-            // ── Phase 508 rich-schema arm ──
+            // ── rich-schema arm ──
             testCaseAsync "Conformance — a nested-schema tool is called with correctly-typed structured arguments"
             <| async {
                 let provider = spec.CreateWithApiKey apiKey
                 do! runNestedSchemaConformance provider
             }
 
-            // ── Phase 181 behavioural-conformance arms ──
+            // ── behavioural-conformance arms ──
             testCaseAsync "Conformance — structured output (Ok JSON + non-conformant schema rejected cleanly)"
             <| async {
                 let provider = spec.CreateWithApiKey apiKey

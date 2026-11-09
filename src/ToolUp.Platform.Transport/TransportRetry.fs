@@ -1,15 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-// ─── Retry loop + one-call send (Phase 128) ──────────────────────
+// ─── Retry loop + one-call send ──────────────────────────────────
 //
 // The retry loop, generic in its error type: the caller says how a
 // failure classifies (`RetryClass` — data, not an `OnFailure` callback;
 // GP 12 rule 3) and how the final failure is wrapped, and the loop owns
-// attempts, exponential backoff and exhaustion. Every retrying caller in
-// the SDK runs on it, so the loop exists once.
+// attempts, exponential backoff, the rate-limit floor and exhaustion.
+// Every retrying caller in the SDK runs on it, so the loop exists once.
 //
-// The only effect is `Async.Sleep`, which Fable supports.
+// The only effect is the pause, `Async.Sleep` unless the caller supplies
+// one; Fable supports it.
 
 namespace ToolUp.Platform.Transport
 
@@ -26,6 +27,9 @@ type RetryClass =
     /// A hint longer than the policy's `MaxBackoff` ends the loop instead:
     /// the cap exists so a wedged dependency does not park the caller.
     | TransientAfter of minimumWait: TimeSpan
+    /// The dependency rate-limited the caller: retry after the policy's
+    /// `RateLimitFloor` (scaled by the attempt), or its backoff when longer.
+    | RateLimited
 
 module TransportRetry =
 
@@ -33,10 +37,11 @@ module TransportRetry =
     let classOf (error: TransportError) : RetryClass =
         match error with
         | TransportError.Transient(_, _, Some wait) -> RetryClass.TransientAfter wait
+        | TransportError.Transient(429, _, None) -> RetryClass.RateLimited
         | error when TransportError.isRetryable error -> RetryClass.Transient
         | _ -> RetryClass.Permanent
 
-    /// Run `attempt` under `policy`. Semantics (the Phase 251 contract):
+    /// Run `attempt` under `policy`, pausing through `sleep`. Semantics:
     ///   * `Ok` returns immediately;
     ///   * a `Permanent` failure propagates immediately, unwrapped;
     ///   * once `MaxAttempts` is reached the last failure is wrapped by
@@ -44,9 +49,11 @@ module TransportRetry =
     ///     the raw failure surfaces (1 = no retries);
     ///   * a `TransientAfter` hint beyond `MaxBackoff` is wrapped by
     ///     `exhausted` at once rather than waited out;
+    ///   * a `RateLimited` failure waits `RetryPolicy.rateLimitDelay`;
     ///   * otherwise it waits `RetryPolicy.delayFor policy (n+1)` — or the
     ///     provider's hint, when longer — and tries again.
-    let runWith
+    let runPausing
+        (sleep: TimeSpan -> Async<unit>)
         (classify: 'E -> RetryClass)
         (exhausted: int -> 'E -> 'E)
         (policy: RetryPolicy)
@@ -75,14 +82,23 @@ module TransportRetry =
                     let delay =
                         match retryClass with
                         | RetryClass.TransientAfter wait when wait > backoff -> wait
+                        | RetryClass.RateLimited -> RetryPolicy.rateLimitDelay policy attemptsMade
                         | _ -> backoff
 
-                    // int-ms overload — Fable's Async.Sleep only takes ms.
-                    do! Async.Sleep(int delay.TotalMilliseconds)
+                    do! sleep delay
                     return! loop attemptsMade
         }
 
         loop 0
+
+    /// `runPausing` over `Async.Sleep` (the int-ms overload — Fable's only takes ms).
+    let runWith
+        (classify: 'E -> RetryClass)
+        (exhausted: int -> 'E -> 'E)
+        (policy: RetryPolicy)
+        (attempt: unit -> Async<Result<'T, 'E>>)
+        : Async<Result<'T, 'E>> =
+        runPausing (fun delay -> Async.Sleep(int delay.TotalMilliseconds)) classify exhausted policy attempt
 
     /// `runWith` over `TransportError`, honouring `Retry-After`.
     let run

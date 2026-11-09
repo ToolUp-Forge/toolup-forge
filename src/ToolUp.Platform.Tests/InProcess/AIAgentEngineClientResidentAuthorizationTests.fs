@@ -82,7 +82,7 @@ type private CannedToolCallProvider(toolNameToCall: string) =
                                 Arguments = "{}"
                             }
                         ]
-                        StopReason = "tool_use"
+                        StopReason = StopReason.ToolUse
                         Usage = None
                     }
             else
@@ -90,7 +90,7 @@ type private CannedToolCallProvider(toolNameToCall: string) =
                     Ok {
                         Content = "done"
                         ToolCalls = []
-                        StopReason = "end_turn"
+                        StopReason = StopReason.EndTurn
                         Usage = None
                     }
         }

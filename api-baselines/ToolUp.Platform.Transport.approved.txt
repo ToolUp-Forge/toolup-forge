@@ -26,22 +26,26 @@ ToolUp.Platform.Transport.IHttpTransport (interface)
 ToolUp.Platform.Transport.IHttpTransport.Send(ToolUp.Platform.Transport.HttpRequest) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.Transport.HttpResponse]
 ToolUp.Platform.Transport.RetryClass (class)
 ToolUp.Platform.Transport.RetryClass.IsPermanent : System.Boolean { get }
+ToolUp.Platform.Transport.RetryClass.IsRateLimited : System.Boolean { get }
 ToolUp.Platform.Transport.RetryClass.IsTransient : System.Boolean { get }
 ToolUp.Platform.Transport.RetryClass.IsTransientAfter : System.Boolean { get }
 ToolUp.Platform.Transport.RetryClass.Permanent : ToolUp.Platform.Transport.RetryClass { get }
+ToolUp.Platform.Transport.RetryClass.RateLimited : ToolUp.Platform.Transport.RetryClass { get }
 ToolUp.Platform.Transport.RetryClass.Tag : System.Int32 { get }
 ToolUp.Platform.Transport.RetryClass.Transient : ToolUp.Platform.Transport.RetryClass { get }
 ToolUp.Platform.Transport.RetryClass+Tags (class)
 ToolUp.Platform.Transport.RetryClass+Tags.Permanent : System.Int32 (literal)
+ToolUp.Platform.Transport.RetryClass+Tags.RateLimited : System.Int32 (literal)
 ToolUp.Platform.Transport.RetryClass+Tags.Transient : System.Int32 (literal)
 ToolUp.Platform.Transport.RetryClass+Tags.TransientAfter : System.Int32 (literal)
 ToolUp.Platform.Transport.RetryClass+TransientAfter (class)
 ToolUp.Platform.Transport.RetryClass+TransientAfter.minimumWait : System.TimeSpan { get }
 ToolUp.Platform.Transport.RetryPolicy (class)
-ToolUp.Platform.Transport.RetryPolicy..ctor(System.Int32, System.TimeSpan, System.TimeSpan, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
+ToolUp.Platform.Transport.RetryPolicy..ctor(System.Int32, System.TimeSpan, System.TimeSpan, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan], Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
 ToolUp.Platform.Transport.RetryPolicy.InitialBackoff : System.TimeSpan { get }
 ToolUp.Platform.Transport.RetryPolicy.MaxAttempts : System.Int32 { get }
 ToolUp.Platform.Transport.RetryPolicy.MaxBackoff : System.TimeSpan { get }
+ToolUp.Platform.Transport.RetryPolicy.RateLimitFloor : Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan] { get }
 ToolUp.Platform.Transport.RetryPolicy.Timeout : Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan] { get }
 ToolUp.Platform.Transport.RetryPolicyModule (class)
 ToolUp.Platform.Transport.RetryPolicyModule.MaxTimeoutMs : System.Int32 (literal)
@@ -50,6 +54,7 @@ ToolUp.Platform.Transport.RetryPolicyModule.clampTimeoutMs(System.Int32) : Syste
 ToolUp.Platform.Transport.RetryPolicyModule.defaults : ToolUp.Platform.Transport.RetryPolicy { get }
 ToolUp.Platform.Transport.RetryPolicyModule.delayFor(ToolUp.Platform.Transport.RetryPolicy, System.Int32) : System.TimeSpan
 ToolUp.Platform.Transport.RetryPolicyModule.noRetry : ToolUp.Platform.Transport.RetryPolicy { get }
+ToolUp.Platform.Transport.RetryPolicyModule.rateLimitDelay(ToolUp.Platform.Transport.RetryPolicy, System.Int32) : System.TimeSpan
 ToolUp.Platform.Transport.RetryPolicyModule.timeoutDescription(ToolUp.Platform.Transport.RetryPolicy) : System.String
 ToolUp.Platform.Transport.RetryPolicyModule.validate(ToolUp.Platform.Transport.RetryPolicy) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Transport.RetryPolicy, System.String]
 ToolUp.Platform.Transport.TransportClassifier (class)
@@ -91,5 +96,6 @@ ToolUp.Platform.Transport.TransportErrorModule.statusCode(ToolUp.Platform.Transp
 ToolUp.Platform.Transport.TransportErrorModule.toMessage(ToolUp.Platform.Transport.TransportError) : System.String
 ToolUp.Platform.Transport.TransportRetry (class)
 ToolUp.Platform.Transport.TransportRetry.classOf(ToolUp.Platform.Transport.TransportError) : ToolUp.Platform.Transport.RetryClass
+ToolUp.Platform.Transport.TransportRetry.runPausing`2(Microsoft.FSharp.Core.FSharpFunc`2[System.TimeSpan, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpFunc`2[E, ToolUp.Platform.Transport.RetryClass], Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[E, E]], ToolUp.Platform.Transport.RetryPolicy, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[T, E]]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[T, E]]
 ToolUp.Platform.Transport.TransportRetry.runWith`2(Microsoft.FSharp.Core.FSharpFunc`2[E, ToolUp.Platform.Transport.RetryClass], Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[E, E]], ToolUp.Platform.Transport.RetryPolicy, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[T, E]]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[T, E]]
 ToolUp.Platform.Transport.TransportRetry.run`1(ToolUp.Platform.Transport.RetryPolicy, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Platform.Transport.TransportError]]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Platform.Transport.TransportError]]

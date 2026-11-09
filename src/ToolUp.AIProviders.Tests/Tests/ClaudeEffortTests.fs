@@ -3,7 +3,7 @@
 
 module ToolUp.AIProviders.Tests.Tests.ClaudeEffortTests
 
-// ─── forge#1242 — the effort a Claude call is sent with ─────────────
+// ─── the effort a Claude call is sent with ─────────────
 //
 // What reaches the request body, read from the request itself. Offline: the
 // HTTP client is a stub that records each body and answers with one status.
@@ -16,6 +16,7 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.AI
 open ToolUp.Platform.Transport
+open ToolUp.AI
 
 let private okBody =
     """{"content":[{"type":"text","text":"ok"},{"type":"tool_use","id":"t1","name":"structured_response","input":{}}],"stop_reason":"end_turn"}"""
@@ -42,18 +43,31 @@ let private providerOver (status: HttpStatusCode) (effort: string option) =
     let handler = new RecordingHandler(status)
     let client = new HttpClient(handler, BaseAddress = Uri "https://api.anthropic.com")
 
+    let connector =
+        ClaudeAIProvider.connector
+            client
+            (fun () -> async { return Some "test-key" })
+            ClaudeAIProvider.DefaultMaxTokens
+            effort
+
     let provider =
-        ClaudeAIProvider.ClaudeAIProvider("test-key", configuredModel, effort, client, (fun _ -> async { return () }))
+        ConnectorProvider(
+            {
+                connector with
+                    Pause = fun _ -> async { return () }
+            },
+            configuredModel
+        )
 
     provider, handler
 
 let private oneMessage = [ AIProviderMessage.text "user" "hello" ]
 
-let private send (provider: ClaudeAIProvider.ClaudeAIProvider) =
+let private send (provider: ConnectorProvider<_>) =
     (provider :> IAIProvider).SendMessage(oneMessage, [], None, None, RetryPolicy.defaults)
     |> Async.RunSynchronously
 
-let private sendWith (options: AIProviderCallOptions) (provider: ClaudeAIProvider.ClaudeAIProvider) =
+let private sendWith (options: AIProviderCallOptions) (provider: ConnectorProvider<_>) =
     (provider :> IAIProviderModelOverride).SendMessageWith(options, oneMessage, [], None, None, RetryPolicy.defaults)
     |> Async.RunSynchronously
     |> ignore

@@ -438,7 +438,7 @@ type private Model() =
                 Ok {
                     Content = content
                     ToolCalls = []
-                    StopReason = "end_turn"
+                    StopReason = StopReason.EndTurn
                     Usage = None
                 }
         }

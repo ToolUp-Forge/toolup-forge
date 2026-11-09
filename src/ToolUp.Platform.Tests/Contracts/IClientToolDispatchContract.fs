@@ -193,7 +193,7 @@ let mkToolCallWith (name: string) (argumentsJson: string) : AIProviderToolCall =
 let endTurnResponse: AIProviderResponse = {
     Content = "done"
     ToolCalls = []
-    StopReason = "end_turn"
+    StopReason = StopReason.EndTurn
     Usage = None
 }
 
@@ -201,7 +201,7 @@ let endTurnResponse: AIProviderResponse = {
 let toolUseResponse (toolCalls: AIProviderToolCall list) : AIProviderResponse = {
     Content = ""
     ToolCalls = toolCalls
-    StopReason = "tool_use"
+    StopReason = StopReason.ToolUse
     Usage = None
 }
 

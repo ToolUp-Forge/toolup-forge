@@ -778,14 +778,14 @@ let private scriptedTurn
                                 Arguments = args
                             }
                         ]
-                        StopReason = "tool_use"
+                        StopReason = StopReason.ToolUse
                         Usage = None
                     }
                 else
                     {
                         Content = reply
                         ToolCalls = []
-                        StopReason = "end_turn"
+                        StopReason = StopReason.EndTurn
                         Usage = None
                     })
 

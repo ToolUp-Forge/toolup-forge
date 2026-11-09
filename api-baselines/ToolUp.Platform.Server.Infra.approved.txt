@@ -3497,6 +3497,7 @@ ToolUp.Platform.Infra.TransientFault+TransientFaultRunner.Run`1(Microsoft.FSharp
 ToolUp.Platform.Infra.Transport.HttpClientTransport (class)
 ToolUp.Platform.Infra.Transport.HttpClientTransport..ctor(System.Net.Http.HttpClient, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
 ToolUp.Platform.Infra.Transport.HttpClientTransport.SendForStreaming(ToolUp.Platform.Transport.HttpRequest, System.Threading.CancellationToken) : Microsoft.FSharp.Control.FSharpAsync`1[System.Net.Http.HttpResponseMessage]
+ToolUp.Platform.Infra.Transport.HttpClientTransport.SendWith(ToolUp.Platform.Transport.HttpRequest, System.Threading.CancellationToken) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.Transport.HttpResponse]
 ToolUp.Platform.Infra.Usage.ITeamQuotaPolicy (interface)
 ToolUp.Platform.Infra.Usage.ITeamQuotaPolicy.CheckJobConcurrency(System.String, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.Usage.QuotaBreached]]
 ToolUp.Platform.Infra.Usage.ITeamQuotaPolicy.CheckTokenBudget(System.String, System.String, System.Decimal) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.Usage.QuotaBreached]]

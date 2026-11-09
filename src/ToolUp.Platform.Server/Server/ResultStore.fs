@@ -360,6 +360,7 @@ module LineageOutboxDefaults =
         InitialBackoff = TimeSpan.FromMinutes 1.0
         MaxBackoff = TimeSpan.FromHours 1.0
         Timeout = None
+        RateLimitFloor = None
     }
 
 [<Literal>]

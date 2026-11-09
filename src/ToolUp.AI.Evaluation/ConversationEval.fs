@@ -205,7 +205,9 @@ module FixtureLoader =
         {
             Content = Json.strOr "" "content" e
             ToolCalls = toolCalls
-            StopReason = Json.strOr (if toolCalls.IsEmpty then "end_turn" else "tool_use") "stopReason" e
+            StopReason =
+                Json.strOr (if toolCalls.IsEmpty then "end_turn" else "tool_use") "stopReason" e
+                |> StopReason.ofToken
             Usage = None
         }
 
@@ -1003,9 +1005,9 @@ let caseOfStoredTurns
                 ToolCalls = t.Content.ToolCalls
                 StopReason =
                     if t.Content.ToolCalls.IsEmpty then
-                        "end_turn"
+                        StopReason.EndTurn
                     else
-                        "tool_use"
+                        StopReason.ToolUse
                 Usage = None
             })
 

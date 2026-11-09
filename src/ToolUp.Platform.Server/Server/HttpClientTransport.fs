@@ -11,29 +11,20 @@ open System.Net.Http
 open System.Text
 open System.Threading
 
-// ─── .NET HTTP transport (Wave 32, Phase 251) ────────────────────
+// ─── .NET HTTP transport ─────────────────────────────────────────
 //
 // The non-portable companion to the portable `IHttpTransport` seam: it
 // maps the host-agnostic `HttpRequest` / `HttpResponse` records onto the
-// BCL `HttpClient`, reproducing the egress the AI providers currently
-// inline byte-for-byte — the same per-process shared `HttpClient` (stable
-// `BaseAddress` + instance-wide `Timeout`), the same per-request headers on
-// the `HttpRequestMessage` (never on the client), the same per-call timeout
-// `CancellationTokenSource` derived from `RetryPolicy.Timeout` and clamped
-// via `RetryPolicy.clampTimeoutMs`, and the same `ResponseHeadersRead`
-// completion option for the SSE streaming path.
+// BCL `HttpClient` — a per-process shared client (stable `BaseAddress` +
+// instance-wide `Timeout`), per-request headers on the `HttpRequestMessage`
+// (never on the client), an optional per-call timeout clamped via
+// `RetryPolicy.clampTimeoutMs`, and the `ResponseHeadersRead` completion
+// option for the SSE streaming path.
 //
-// It lives in `ToolUp.Platform.Server` (not the portable
-// `ToolUp.Platform.Transport` tier) because it references `System.Net.Http`
-// — GP 1 keeps the BCL HTTP dependency out of the Fable-safe tier. Phase 128
-// moved it here from `ToolUp.AI.Server` so the AI providers and the
-// data-source connectors share ONE adapter: this is the lowest .NET-only
-// assembly both already reference. The browser `fetch` transport is the
-// consumer-side mirror; it never enters the SDK.
-//
-// Phase 251 is purely additive: the existing providers keep their inline
-// egress until their own migration phases (252–254). This transport is the
-// byte-identical reference target they migrate onto.
+// It lives in the server tier (not the portable `ToolUp.Platform.Transport`
+// tier) because it references `System.Net.Http` — GP 1 keeps the BCL HTTP
+// dependency out of the Fable-safe tier. The AI connectors' kernel
+// (`ProviderCall`) and the data-source connectors share this one adapter.
 
 /// `IHttpTransport` over a BCL `HttpClient`. Construct with the provider's
 /// shared client (its `BaseAddress` / instance `Timeout` already set) and
@@ -44,13 +35,10 @@ open System.Threading
 /// Each `Send` issues one request lifecycle — fresh `HttpRequestMessage`
 /// (they cannot be reused after sending), per-call `CancellationTokenSource`,
 /// buffered response read. Transport-level failures propagate as exceptions
-/// for the caller's `catch` arm to classify via
-/// `ErrorClassifier.classifyTransportFailure` (the retry runner sits above
-/// the transport, exactly as the inline loop does today).
+/// for the caller to classify; the retry loop sits above the transport.
 type HttpClientTransport(client: HttpClient, ?timeout: TimeSpan) =
 
-    /// Build the per-call timeout CTS — byte-identical to the providers'
-    /// inline construction: a clamped `CancellationTokenSource` when a
+    /// Build the per-call timeout CTS: a clamped `CancellationTokenSource` when a
     /// per-call timeout is supplied, an untimed one otherwise (deferring
     /// to the client's instance-wide `Timeout`).
     let newTimeoutCts () : CancellationTokenSource =
@@ -62,9 +50,8 @@ type HttpClientTransport(client: HttpClient, ?timeout: TimeSpan) =
 
     /// Map the portable `HttpRequest` onto a fresh `HttpRequestMessage`:
     /// verb + relative URL, request-level headers added to `.Headers`
-    /// (matching the providers' `request.Headers.Add`), and a UTF-8 JSON
-    /// `StringContent` body when present (the content-type rides with the
-    /// body, exactly as today).
+    /// and a UTF-8 JSON `StringContent` body when present (the content-type
+    /// rides with the body).
     let toRequestMessage (request: HttpRequest) : HttpRequestMessage =
         let message = new HttpRequestMessage(HttpMethod(request.Method), request.Url)
 
@@ -93,10 +80,7 @@ type HttpClientTransport(client: HttpClient, ?timeout: TimeSpan) =
     /// The streaming-friendly send: read only the response headers, leaving
     /// the body stream open for an SSE reader. .NET-only (returns the raw
     /// `HttpResponseMessage`), so it is NOT on the portable `IHttpTransport`
-    /// interface — it is the byte-identical reproduction of the providers'
-    /// `client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead,
-    /// cts.Token)` streaming path, exposed for the per-provider migrations
-    /// (252–254). The caller owns reading + disposing the response.
+    /// interface. The caller owns reading + disposing the response.
     member _.SendForStreaming(request: HttpRequest, cancellationToken: CancellationToken) : Async<HttpResponseMessage> = async {
         let message = toRequestMessage request
 
@@ -107,22 +91,26 @@ type HttpClientTransport(client: HttpClient, ?timeout: TimeSpan) =
         return response
     }
 
+    /// The buffered send under the caller's `cancellationToken` alone (no
+    /// per-call timeout of this transport's own): a caller that owns the
+    /// timeout links it into the token. Status classification is the
+    /// caller's job, so a non-2xx is returned as data; only genuine
+    /// transport failures throw.
+    member _.SendWith(request: HttpRequest, cancellationToken: CancellationToken) : Async<HttpResponse> = async {
+        let message = toRequestMessage request
+        let! response = client.SendAsync(message, cancellationToken) |> Async.AwaitTask
+        let! body = response.Content.ReadAsStringAsync() |> Async.AwaitTask
+
+        return {
+            StatusCode = int response.StatusCode
+            Headers = collectHeaders response
+            Body = body
+        }
+    }
+
     interface IHttpTransport with
-        /// Buffered request/response — byte-identical to the providers'
-        /// non-streaming arm: `client.SendAsync(request, cts.Token)`, then
-        /// read the body string. Status classification is the caller's job
-        /// (via `ErrorClassifier`), so a non-2xx is returned as data, not
-        /// thrown — only genuine transport failures throw.
-        member _.Send(request: HttpRequest) : Async<HttpResponse> = async {
-            let message = toRequestMessage request
+        /// Buffered request/response under this transport's per-call timeout.
+        member this.Send(request: HttpRequest) : Async<HttpResponse> = async {
             use cts = newTimeoutCts ()
-
-            let! response = client.SendAsync(message, cts.Token) |> Async.AwaitTask
-            let! body = response.Content.ReadAsStringAsync() |> Async.AwaitTask
-
-            return {
-                StatusCode = int response.StatusCode
-                Headers = collectHeaders response
-                Body = body
-            }
+            return! this.SendWith(request, cts.Token)
         }

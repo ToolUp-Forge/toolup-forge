@@ -832,7 +832,7 @@ let private judgeTests =
                         {
                             Content = reply
                             ToolCalls = []
-                            StopReason = "end_turn"
+                            StopReason = StopReason.EndTurn
                             Usage = None
                         }
                 ]

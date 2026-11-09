@@ -183,7 +183,7 @@ type private OneToolCallProvider(toolName: string) =
                             ]
                         else
                             []
-                    StopReason = if calls = 1 then "tool_use" else "end_turn"
+                    StopReason = if calls = 1 then StopReason.ToolUse else StopReason.EndTurn
                     Usage = None
                 }
         }

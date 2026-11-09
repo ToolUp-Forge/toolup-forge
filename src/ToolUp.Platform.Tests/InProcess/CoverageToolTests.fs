@@ -780,7 +780,7 @@ type private DiscoveringProvider() =
                                 Arguments = "{}"
                             }
                         ]
-                        StopReason = "tool_use"
+                        StopReason = StopReason.ToolUse
                         Usage = None
                     }
             | 2 ->
@@ -813,7 +813,7 @@ type private DiscoveringProvider() =
                                 Arguments = derivedArgs
                             }
                         ]
-                        StopReason = "tool_use"
+                        StopReason = StopReason.ToolUse
                         Usage = None
                     }
             | _ ->
@@ -836,7 +836,7 @@ type private DiscoveringProvider() =
                     Ok {
                         Content = answer
                         ToolCalls = []
-                        StopReason = "end_turn"
+                        StopReason = StopReason.EndTurn
                         Usage = None
                     }
         }

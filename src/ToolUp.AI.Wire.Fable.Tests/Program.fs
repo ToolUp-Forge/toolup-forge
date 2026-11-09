@@ -99,7 +99,7 @@ let tests =
                         Expect.equal u.CachedPromptTokens GeminiWireFixtures.textResponseExpectedCachedTokens "cached"
                         Expect.equal u.OutputTokens GeminiWireFixtures.textResponseExpectedOutputTokens "output tokens"
                     | None -> Expect.isTrue false "usage should be populated"
-                | Error d -> Expect.isTrue false (sprintf "expected Ok, got Error %s" d))
+                | Error d -> Expect.isTrue false (sprintf "expected Ok, got Error %A" d))
 
             testCase "parseResponse — functionCall → synthetic id + tool_use" (fun () ->
                 match GeminiAIProviderWire.parseResponse GeminiWireFixtures.functionCallResponseJson with
@@ -112,7 +112,7 @@ let tests =
                         Expect.equal tc.Id GeminiWireFixtures.functionCallExpectedSyntheticId "synthetic id"
                         Expect.equal tc.Arguments GeminiWireFixtures.functionCallExpectedArgs "canonical args"
                     | _ -> Expect.isTrue false "expected exactly one tool call"
-                | Error d -> Expect.isTrue false (sprintf "expected Ok, got Error %s" d))
+                | Error d -> Expect.isTrue false (sprintf "expected Ok, got Error %A" d))
 
             testCase "name-keyed functionResponse round-trip" (fun () ->
                 Expect.equal
@@ -136,7 +136,7 @@ let tests =
             testCase "parseResponse — text + tool_use + usage" (fun () ->
                 let r = ClaudeWireFixtures.parsedResponse ()
                 Expect.equal r.Content "Hello" "content"
-                Expect.equal r.StopReason "tool_use" "stop reason"
+                Expect.equal r.StopReason StopReason.ToolUse "stop reason"
 
                 match r.ToolCalls with
                 | [ tc ] ->
@@ -158,7 +158,7 @@ let tests =
 
                 Expect.equal emitted "Hello world" "onStream surfaced the text deltas"
                 Expect.equal response.Content "Hello world" "Content accumulated"
-                Expect.equal response.StopReason "tool_use" "stop reason"
+                Expect.equal response.StopReason StopReason.ToolUse "stop reason"
 
                 match response.ToolCalls with
                 | [ tc ] ->
