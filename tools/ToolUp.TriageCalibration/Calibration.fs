@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-/// Phase 663 — corpus-driven calibration of the Tier-3 fast-path triage
+/// Corpus-driven calibration of the Tier-3 fast-path triage
 /// tier. A case file (JSON, supplied by path) is run through the SAME pure
-/// decision path the resolver uses — `isEligibleInstruction`,
+/// decision path the resolver uses — `Eligibility.assess`,
 /// `buildTriagePrompt`, `parseTriageDecision`, `planTriage` — with one
 /// structured provider call per eligible case, and the one answer is
 /// re-scored at every confidence floor. See README.md for both schemas.
@@ -59,71 +59,27 @@ let ReasonQuestionMark = "question-mark"
 [<Literal>]
 let ReasonQuestionOpener = "question-opener"
 
-/// The resolver refused the instruction for a reason this tool does not
-/// recognise — the pre-filter has gained a rule since this tool was
-/// written. Reported rather than mislabelled.
-[<Literal>]
-let ReasonUnclassified = "unclassified"
-
 /// The instruction is eligible but the snapshot declares no fields; the
 /// resolver does not attempt triage on an empty surface.
 [<Literal>]
 let ReasonNoDeclaredFields = "no-declared-fields"
 
-/// The leading words the resolver's pre-filter treats as a question. The
-/// resolver's own list is private; this copy is used ONLY to NAME a refusal
-/// the resolver has already made (`isEligibleInstruction` is always the
-/// verdict). If the two drift, a refusal this list does not explain is
-/// reported as `unclassified` — never attributed to the wrong rule.
-let private questionOpeners = [
-    "what"
-    "why"
-    "how"
-    "which"
-    "who"
-    "when"
-    "where"
-    "explain"
-    "summarise"
-    "summarize"
-    "compare"
-    "analyse"
-    "analyze"
-    "tell me"
-    "show me"
-    "describe"
-]
-
-/// The verdict comes from the resolver; the reason is derived by
-/// elimination over the pre-filter's documented rules, in the resolver's
-/// own order.
+/// The resolver's own assessment, named in this report's vocabulary: a
+/// question is reported by the signal that marked it.
 let eligibilityReason (maxChars: int) (instruction: string) : string =
-    if isEligibleInstruction maxChars instruction then
-        ReasonEligible
-    elif String.IsNullOrWhiteSpace instruction then
-        ReasonEmpty
-    else
-        let trimmed = instruction.Trim()
-
-        if trimmed.Length > maxChars then
-            ReasonTooLong
-        elif trimmed.Contains "?" then
-            ReasonQuestionMark
-        elif
-            questionOpeners
-            |> List.exists (fun o -> trimmed.ToLowerInvariant().StartsWith(o, StringComparison.Ordinal))
-        then
-            ReasonQuestionOpener
-        else
-            ReasonUnclassified
+    match Eligibility.assess maxChars instruction with
+    | Eligibility.Eligible -> ReasonEligible
+    | Eligibility.Empty -> ReasonEmpty
+    | Eligibility.TooLong -> ReasonTooLong
+    | Eligibility.ReadShaped ReadSignal.QuestionMark -> ReasonQuestionMark
+    | Eligibility.ReadShaped ReadSignal.QuestionOpener -> ReasonQuestionOpener
 
 // ─── The case file ────────────────────────────────────────────────
 
-[<Literal>]
-let DecisionSetField = "set_field"
+/// The case vocabulary's two verdicts, the resolver's own tokens.
+let DecisionSetField = (TriageVerdict.SetField(None, None)).Token
 
-[<Literal>]
-let DecisionNeedsFullAgent = "needs_full_agent"
+let DecisionNeedsFullAgent = TriageVerdict.NeedsFullAgent.Token
 
 /// What the case author says the right answer is. `Value = None` with
 /// `set_field` is a clear.
@@ -302,8 +258,8 @@ let StagePreFilter = "pre-filter"
 let StageModelCall = "model-call"
 
 /// Call outcome for a call that returned parseable content. The other
-/// call outcomes are the resolver's own tokens: `OutcomeUnparseable`,
-/// `OutcomeProviderError`, `OutcomeTimeout`.
+/// call outcomes are the resolver's own `TriageOutcome` tokens:
+/// `unparseable`, `provider-error`, `timeout`.
 [<Literal>]
 let CallAnswered = "answered"
 
@@ -322,7 +278,7 @@ let ScoreMissed = "missed"
 [<Literal>]
 let ScoreCorrectDecline = "correct-decline"
 
-type Eligibility = { Eligible: bool; Reason: string }
+type CaseEligibility = { Eligible: bool; Reason: string }
 
 type Latency = { Stage: string; Ms: float }
 
@@ -353,7 +309,7 @@ type CaseResult = {
     Id: string
     Instruction: string
     Expected: ExpectedVerdict
-    Eligibility: Eligibility
+    Eligibility: CaseEligibility
     Latency: Latency
     Call: ModelCall option
     /// One per floor for a case that reached the model; empty otherwise.
@@ -423,6 +379,13 @@ let private sameText (a: string option) (b: string option) =
     | Some x, Some y -> String.Equals(x, y, StringComparison.OrdinalIgnoreCase)
     | _ -> false
 
+/// Score a case that did not resolve, whatever stopped it.
+let private scoreFallThrough (expected: ExpectedVerdict) : string =
+    if expected.Decision = DecisionSetField then
+        ScoreMissed
+    else
+        ScoreCorrectDecline
+
 /// Score one plan against the case's expectation.
 let score (expected: ExpectedVerdict) (plan: TriagePlan) : string =
     match plan with
@@ -433,7 +396,7 @@ let score (expected: ExpectedVerdict) (plan: TriagePlan) : string =
             ScoreCorrectResolve
         else
             ScoreWrongResolve
-    // Phase 664 — the case vocabulary names only `set_field` and
+    // The case vocabulary names only `set_field` and
     // `needs_full_agent`, so a list or navigation resolution can never be
     // the single field the case expects: it is a wrong resolve against a
     // `set_field` expectation and a false fire against a decline.
@@ -443,11 +406,7 @@ let score (expected: ExpectedVerdict) (plan: TriagePlan) : string =
             ScoreWrongResolve
         else
             ScoreFalseFire
-    | TriageFallThrough _ ->
-        if expected.Decision = DecisionSetField then
-            ScoreMissed
-        else
-            ScoreCorrectDecline
+    | TriageFallThrough _ -> scoreFallThrough expected
 
 /// Re-score one cached decision at every floor: `planTriage` alone, no
 /// provider involved.
@@ -470,28 +429,28 @@ let rescore
         match plan with
         | TriageSetField(field, value, _) -> {
             Floor = floor
-            Outcome = OutcomeHit
+            Outcome = TriageOutcome.Hit.Token
             FieldId = Some field.FieldId
             Value = value
             Score = score expected plan
           }
         | TriageSetFields(clauses, _) -> {
             Floor = floor
-            Outcome = OutcomeHit
+            Outcome = TriageOutcome.Hit.Token
             FieldId = Some(clauses |> List.map (fun (f, _) -> f.FieldId) |> String.concat ",")
             Value = None
             Score = score expected plan
           }
         | TriageNavigate(_, target, _) -> {
             Floor = floor
-            Outcome = OutcomeHit
+            Outcome = TriageOutcome.Hit.Token
             FieldId = Some NavigationFieldId
             Value = Some target
             Score = score expected plan
           }
         | TriageFallThrough outcome -> {
             Floor = floor
-            Outcome = outcome
+            Outcome = outcome.Token
             FieldId = None
             Value = None
             Score = score expected plan
@@ -506,7 +465,7 @@ let private fallThroughAt (floors: float list) (expected: ExpectedVerdict) (outc
         Outcome = outcome
         FieldId = None
         Value = None
-        Score = score expected (TriageFallThrough outcome)
+        Score = scoreFallThrough expected
     })
 
 // ─── Running ──────────────────────────────────────────────────────
@@ -571,7 +530,7 @@ let callOnce
         let record =
             match outcome with
             | None -> {
-                Outcome = OutcomeTimeout
+                Outcome = TriageOutcome.Timeout.Token
                 Route = routeGuess
                 ServedModel = provider.Capabilities.Model
                 RawContent = None
@@ -581,7 +540,7 @@ let callOnce
                 OutputTokens = None
               }
             | Some(Error err) -> {
-                Outcome = OutcomeProviderError
+                Outcome = TriageOutcome.ProviderError.Token
                 Route = routeGuess
                 ServedModel = provider.Capabilities.Model
                 RawContent = None
@@ -597,7 +556,7 @@ let callOnce
                     Outcome =
                         match decision with
                         | Some _ -> CallAnswered
-                        | None -> OutcomeUnparseable
+                        | None -> TriageOutcome.Unparseable.Token
                     Route = ModelOverrideOutcome.route call.Model
                     ServedModel = ModelOverrideOutcome.served call.Model
                     RawContent = Some call.Response.Content
@@ -699,12 +658,14 @@ let summarise (floors: float list) (cases: CaseResult list) : RunSummary =
             |> List.map (fun c ->
                 match c.Floors |> List.tryFind (fun f -> f.Floor = floor) with
                 | Some f -> f.Outcome, f.Score
-                | None -> c.Eligibility.Reason, score c.Expected (TriageFallThrough c.Eligibility.Reason))
+                | None -> c.Eligibility.Reason, scoreFallThrough c.Expected)
 
         let n s =
             scores |> List.filter (fun (_, x) -> x = s) |> List.length
 
-        let hits = scores |> List.filter (fun (o, _) -> o = OutcomeHit) |> List.length
+        let hits =
+            scores |> List.filter (fun (o, _) -> o = TriageOutcome.Hit.Token) |> List.length
+
         let correct = n ScoreCorrectResolve
         let wrong = n ScoreWrongResolve
         let falseFire = n ScoreFalseFire
@@ -734,9 +695,9 @@ let summarise (floors: float list) (cases: CaseResult list) : RunSummary =
         Ineligible = cases |> List.filter (fun c -> not c.Eligibility.Eligible) |> List.length
         ModelCalls = calls.Length
         Answered = countCalls CallAnswered
-        Unparseable = countCalls OutcomeUnparseable
-        ProviderErrors = countCalls OutcomeProviderError
-        Timeouts = countCalls OutcomeTimeout
+        Unparseable = countCalls TriageOutcome.Unparseable.Token
+        ProviderErrors = countCalls TriageOutcome.ProviderError.Token
+        Timeouts = countCalls TriageOutcome.Timeout.Token
         PreFilterMsTotal =
             cases
             |> List.filter (fun c -> c.Latency.Stage = StagePreFilter)
@@ -829,23 +790,27 @@ let private encodeExpected (e: ExpectedVerdict) =
     ]
 
 let private encodeDecision (d: TriageModelDecision) =
+    let fieldId, value, target, fields =
+        match d.Decision with
+        | TriageVerdict.SetField(fieldId, value) -> fieldId, value, None, []
+        | TriageVerdict.SetFields clauses -> None, None, None, clauses
+        | TriageVerdict.Navigate target -> None, None, Some target, []
+        | TriageVerdict.NeedsFullAgent -> None, None, None, []
+
     obj [
-        "decision", str d.Decision
-        "fieldId", optStr d.FieldId
-        "value", optStr d.Value
+        "decision", str d.Decision.Token
+        "fieldId", optStr fieldId
+        "value", optStr value
         "confidence", num d.Confidence
         "reason", str d.Reason
-        // Phase 664 — added members (the result schema only ever adds
-        // under `/1`), so a cached list or navigation answer re-scores
-        // faithfully rather than losing its clauses.
-        "target", optStr d.Target
+        "target", optStr target
         "fields",
-        (if List.isEmpty d.Fields then
+        (if List.isEmpty fields then
              null
          else
              let a = JsonArray()
 
-             for c in d.Fields do
+             for c in fields do
                  a.Add(obj [ "fieldId", str c.FieldId; "value", optStr c.Value ])
 
              a :> JsonNode)
@@ -993,7 +958,7 @@ let private getArr o n : JsonNode list =
     | _ -> raise (DecodeError $"'{n}' is not an array")
 
 /// A member that may be ABSENT — written by a later tool version than the
-/// file (Phase 664's `target` / `fields`). Absent and `null` both read as
+/// file (`target` / `fields`). Absent and `null` both read as
 /// `null`; every other accessor above refuses a missing member.
 let private tryMember (o: JsonNode) (name: string) : JsonNode =
     match o with
@@ -1008,17 +973,8 @@ let private decodeExpected o : ExpectedVerdict = {
     Value = getOptStr o "value"
 }
 
-let private decodeDecision o : TriageModelDecision = {
-    Decision = getStr o "decision"
-    FieldId = getOptStr o "fieldId"
-    Value = getOptStr o "value"
-    Confidence = getNum o "confidence"
-    Reason = getStr o "reason"
-    Target =
-        match tryMember o "target" with
-        | null -> None
-        | v -> Some(v.GetValue<string>())
-    Fields =
+let private decodeDecision o : TriageModelDecision =
+    let clauses () =
         match tryMember o "fields" with
         | :? JsonArray as a ->
             a
@@ -1030,7 +986,25 @@ let private decodeDecision o : TriageModelDecision = {
                 : TriageFieldClause))
             |> List.ofSeq
         | _ -> []
-}
+
+    let verdict =
+        match getStr o "decision" with
+        | d when d = (TriageVerdict.SetField(None, None)).Token ->
+            TriageVerdict.SetField(getOptStr o "fieldId", getOptStr o "value")
+        | d when d = (TriageVerdict.SetFields []).Token -> TriageVerdict.SetFields(clauses ())
+        | d when d = (TriageVerdict.Navigate "").Token ->
+            TriageVerdict.Navigate(
+                match tryMember o "target" with
+                | null -> ""
+                | v -> v.GetValue<string>()
+            )
+        | _ -> TriageVerdict.NeedsFullAgent
+
+    {
+        Decision = verdict
+        Confidence = getNum o "confidence"
+        Reason = getStr o "reason"
+    }
 
 let private decodeCall o : ModelCall = {
     Outcome = getStr o "outcome"
