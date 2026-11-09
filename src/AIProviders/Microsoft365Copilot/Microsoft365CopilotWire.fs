@@ -12,6 +12,7 @@ open System
 open System.Text.Json
 open System.Text.Json.Nodes
 open ToolUp.Platform.AI
+open ToolUp.AI.Wire
 
 // ─── Request shaping ─────────────────────────────────────────────────
 //
@@ -256,3 +257,48 @@ let streamDelta (previous: string) (current: string) : string option =
         Some(current.Substring previous.Length)
     else
         None
+
+/// The `chatOverStream` assembly as a `StreamProcessor`. Each completed SSE
+/// event carries the conversation so far; the reply is its last message that
+/// is not the prompt, and what is forwarded is how far that reply grew.
+type Microsoft365CopilotStream = {
+    Frame: SseFrame
+    /// The reply text forwarded so far.
+    Streamed: string
+    /// The latest reply seen.
+    Latest: string
+}
+
+module Microsoft365CopilotStream =
+    let initial = {
+        Frame = SseFrame.empty
+        Streamed = ""
+        Latest = ""
+    }
+
+    let private accept (prompt: string) (state: Microsoft365CopilotStream) (data: string option) =
+        match data |> Option.bind (tryReplyText prompt) with
+        | Some reply when reply <> "" ->
+            match streamDelta state.Streamed reply with
+            | Some delta ->
+                {
+                    state with
+                        Latest = reply
+                        Streamed = reply
+                },
+                Some delta
+            | None -> { state with Latest = reply }, None
+        | _ -> state, None
+
+    /// The processor for a call whose question is `prompt`.
+    let processor (prompt: string) : StreamProcessor<Microsoft365CopilotStream> = {
+        Initial = initial
+        Step =
+            fun state line ->
+                let frame, completed = SseFrame.feed state.Frame line
+                accept prompt { state with Frame = frame } completed
+        Finish =
+            fun state ->
+                let state, trailing = accept prompt state (SseFrame.finish state.Frame)
+                trailing, toResponse state.Latest
+    }

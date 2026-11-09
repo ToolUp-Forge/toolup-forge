@@ -105,6 +105,23 @@ let private connectors: (string * (HttpClient -> (TimeSpan -> Async<unit>) -> IA
             },
             CopilotAIProvider.DefaultModel
         )
+    "Microsoft 365 Copilot",
+    fun client pause ->
+        let options = {
+            Microsoft365CopilotAIProvider.Microsoft365CopilotOptions.defaults with
+                BaseUrl = "https://vendor.example"
+        }
+
+        ConnectorProvider(
+            {
+                Microsoft365CopilotAIProvider.connector
+                    client
+                    (Microsoft365CopilotAIProvider.FromAccessToken testKey)
+                    options with
+                    Pause = pause
+            },
+            Microsoft365CopilotAIProvider.DefaultModel
+        )
 ]
 
 let private oneMessage = [ AIProviderMessage.text "user" "hello" ]
