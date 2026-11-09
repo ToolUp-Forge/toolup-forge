@@ -29,6 +29,11 @@ ToolUp.Remoting.Generator.ClientMethodPlan.MethodName : System.String { get }
 ToolUp.Remoting.Generator.ClientMethodPlan.ReturnDecoder : System.String { get }
 ToolUp.Remoting.Generator.ClientMethodPlan.ReturnSpelling : System.String { get }
 ToolUp.Remoting.Generator.ClientMethodPlan.SendsBody : System.Boolean { get }
+ToolUp.Remoting.Generator.ClientMethodShape (class)
+ToolUp.Remoting.Generator.ClientMethodShape..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Type], System.Type)
+ToolUp.Remoting.Generator.ClientMethodShape.Domains : Microsoft.FSharp.Collections.FSharpList`1[System.Type] { get }
+ToolUp.Remoting.Generator.ClientMethodShape.Method : System.String { get }
+ToolUp.Remoting.Generator.ClientMethodShape.Returns : System.Type { get }
 ToolUp.Remoting.Generator.ClientPlan (class)
 ToolUp.Remoting.Generator.ClientPlan..ctor(ToolUp.Remoting.Generator.GenerationPlan, ToolUp.Remoting.Generator.GenerationPlan, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.Generator.ClientRecordPlan], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.Generator.Refusal])
 ToolUp.Remoting.Generator.ClientPlan.Decoders : ToolUp.Remoting.Generator.GenerationPlan { get }
@@ -103,7 +108,7 @@ ToolUp.Remoting.Generator.Plan.argumentTypesOf(System.Type) : Microsoft.FSharp.C
 ToolUp.Remoting.Generator.Plan.bindingName(System.Type) : System.String
 ToolUp.Remoting.Generator.Plan.camelCase(System.String) : System.String
 ToolUp.Remoting.Generator.Plan.clientKey(System.Type) : System.String
-ToolUp.Remoting.Generator.Plan.clientMethodsOf(System.Type) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`3[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Type], System.Type]], System.String]
+ToolUp.Remoting.Generator.Plan.clientMethodsOf(System.Type) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.Generator.ClientMethodShape], System.String]
 ToolUp.Remoting.Generator.Plan.clientNamespaces(Microsoft.FSharp.Collections.FSharpList`1[System.Type]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Remoting.Generator.Plan.forClientProxies(System.Collections.Generic.IEnumerable`1[System.Type]) : ToolUp.Remoting.Generator.ClientPlan
 ToolUp.Remoting.Generator.Plan.forJsonEncoders(System.Collections.Generic.IEnumerable`1[System.Type]) : ToolUp.Remoting.Generator.GenerationPlan
