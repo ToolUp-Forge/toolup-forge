@@ -543,4 +543,24 @@ let tests =
                 (Ok before)
                 "the previous snapshot is kept for the next startup's comparison"
         }
+
+        test "CrdtDocumentStore — a snapshot that does not decode refuses, and nothing is folded over it" {
+            let docRef = CrdtDocRef.create "team-t1" "doc-1"
+            let name = "crdt/team-t1/doc-1/snapshot.json"
+            let storage = planted platform name
+
+            let store =
+                ToolUp.Platform.Jobs.BlobCrdtDocumentStore(storage, { SnapshotThreshold = 1 })
+                :> ToolUp.Platform.Jobs.ICrdtDocumentStore
+
+            expectRefusedRead "Snapshot" (fun () -> store.Snapshot docRef |> run |> ignore)
+
+            expectRefusedRead "Append" (fun () -> store.Append(docRef, [| 1uy |], "session-1") |> run |> ignore)
+
+            Expect.isEmpty
+                (storage.List(platform, "crdt/team-t1/doc-1/log/") |> run)
+                "no update was appended over a document the store could not read"
+
+            expectQuarantined storage platform name
+        }
     ]
