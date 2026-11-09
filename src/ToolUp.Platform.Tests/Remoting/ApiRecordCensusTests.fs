@@ -5,6 +5,7 @@ module ToolUp.Platform.Tests.Remoting.ApiRecordCensusTests
 
 open Expecto
 open ToolUp.Remoting.Generator
+open ToolUp.Remoting.Server
 
 // ─── Phase 946 — the API-record census can exclude a record ───────────
 //
@@ -50,6 +51,43 @@ let tests =
             Expect.isFalse
                 (censusOfThisAssembly () |> List.contains typeof<PlantedMarkedCallbacks>)
                 "and the assembly census does not list it"
+        }
+
+        test "every platform API record reads to a contract with no refusal" {
+            // `BudgetAccount` is a record of callbacks the shape census counts
+            // but no dispatcher mounts; what counts as an API record is the
+            // analyzer's definition to settle, not this census's.
+            let notMounted = set [ "BudgetAccount" ]
+
+            let platformRecords =
+                Plan.apiRecordsIn typeof<ToolUp.Platform.RequiresRoleAttribute>.Assembly
+                |> List.filter (fun record -> not (notMounted.Contains record.Name))
+
+            Expect.equal (List.length platformRecords) 40 "the forty platform API records"
+
+            let flags = {
+                ContractFlags.defaults with
+                    AuthResolverComposed = true
+                    RecordSeamsComposed = true
+            }
+
+            let refused =
+                platformRecords
+                |> List.choose (fun record ->
+                    match Contract.ofType flags record with
+                    | Ok _ -> None
+                    | Error refusals -> Some(record.Name, ContractRefusal.render refusals))
+
+            if not (List.isEmpty refused) then
+                failtestf
+                    "%d platform API record(s) the contract refuses:
+%s"
+                    refused.Length
+                    (refused
+                     |> List.map (fun (name, why) -> name + ": " + why)
+                     |> String.concat
+                         "
+")
         }
 
         test "the exclusion is matched by the attribute's name" {

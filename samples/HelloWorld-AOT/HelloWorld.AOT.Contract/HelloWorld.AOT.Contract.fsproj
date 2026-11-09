@@ -35,6 +35,13 @@
                           ReferenceOutputAssembly="false"
                           Private="false"
                           UndefineProperties="RuntimeIdentifier;SelfContained;PublishAot;PublishTrimmed" />
+        <!-- Build-order only, like the generator: the dispatch item emits the
+             record's ApiContract through the server's own contract reader,
+             which the generator loads from this part's output. -->
+        <ProjectReference Include="..\..\..\src\ToolUp.Platform.Server.Remoting\ToolUp.Platform.Server.Remoting.fsproj"
+                          ReferenceOutputAssembly="false"
+                          Private="false"
+                          UndefineProperties="RuntimeIdentifier;SelfContained;PublishAot;PublishTrimmed" />
         <!-- UndefineProperties: `dotnet publish -r win-x64` hands its RID and AOT
              switches to every referenced project, which would build the
              generator self-contained under bin/<cfg>/net10.0/win-x64/ - a
@@ -55,6 +62,7 @@
         <ToolUpRemotingDispatch Include="..\HelloWorld.AOT\Generated\CorpusApiDispatch.fs"
                                 ApiRecord="HelloWorld.AOT.Contract.ICorpusApi"
                                 Opens="ToolUp.Platform.Tests.Remoting"
-                                Namespace="HelloWorld.AOT" />
+                                Namespace="HelloWorld.AOT"
+                                ServerAssembly="..\..\..\src\ToolUp.Platform.Server.Remoting\bin\$(Configuration)\net10.0\ToolUp.Platform.Server.Remoting.dll" />
     </ItemGroup>
 </Project>

@@ -828,6 +828,56 @@ let tests =
                         source
                         m.MethodName
                         (sprintf "method '%s' is missing from the emitted source" m.MethodName))
+
+            testCase "the emitted contract IS the server's contract — the committed table, compiled"
+            <| fun () ->
+                Expect.equal
+                    HelloWorld.AOT.ICorpusApiDispatch.contract
+                    (ToolUp.Remoting.Server.Contract.read typeof<HelloWorld.AOT.Contract.ICorpusApi>)
+                    "the contract the generator emitted as data must equal the one Contract.read yields"
+
+                Expect.equal
+                    HelloWorld.AOT.ICorpusApiDispatch.invocations.Contract
+                    HelloWorld.AOT.ICorpusApiDispatch.contract
+                    "the generated table carries the emitted contract"
+
+            testCase "the committed CorpusApiDispatch.fs is what the generator emits"
+            <| fun () ->
+                let expected =
+                    Dispatch.compilationUnit
+                        "HelloWorld.AOT"
+                        [ "ToolUp.Platform.Tests.Remoting" ]
+                        (Dispatch.tableFor typeof<HelloWorld.AOT.Contract.ICorpusApi>)
+
+                let committed =
+                    IO.File.ReadAllText(
+                        IO.Path.Combine(
+                            jsonRepoRoot (),
+                            "samples",
+                            "HelloWorld-AOT",
+                            "HelloWorld.AOT",
+                            "Generated",
+                            "CorpusApiDispatch.fs"
+                        )
+                    )
+
+                Expect.equal
+                    (normaliseSource committed)
+                    (normaliseSource expected)
+                    "regenerate it: dotnet build samples/HelloWorld-AOT/HelloWorld.AOT.Contract"
+
+            testCase "each method's flattened types are the contract's own flattening"
+            <| fun () ->
+                let table = Dispatch.tableFor healthMonitorApi
+                let contract = ToolUp.Remoting.Server.Contract.read healthMonitorApi
+
+                for m in table.Methods do
+                    let c = contract.Methods |> List.find (fun c -> c.Name = m.MethodName)
+
+                    Expect.equal
+                        (List.length m.FlattenedTypes)
+                        (List.length c.Arguments + 1)
+                        (sprintf "%s: the arguments, then the return" m.MethodName)
         ]
 
         testList "the emitted module" [

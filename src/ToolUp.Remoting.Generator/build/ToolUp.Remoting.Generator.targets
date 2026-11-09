@@ -38,6 +38,10 @@
                        corpus the consumer runs draws. A DECLARATION, never
                        inferred.
     - ApiRecord      : (dispatch) exactly one API record per item.
+    - ServerAssembly : (dispatch) the ToolUp.Platform.Server.Remoting.dll whose
+                       contract reader emits the record's ApiContract, when it
+                       is not beside the built assembly (a contract project
+                       that references only FSharp.Core or the shared tier).
 
     Phase 853 - the two JSON emissions take the same metadata (ApiRecords,
     Opens, Namespace, Module); with no Opens they open every namespace the
@@ -112,6 +116,7 @@
       <_ToolUpRemotingArgs>dispatch --assembly &quot;$(TargetPath)&quot; --out &quot;%(ToolUpRemotingDispatch.FullPath)&quot; --api-record &quot;%(ToolUpRemotingDispatch.ApiRecord)&quot;</_ToolUpRemotingArgs>
       <_ToolUpRemotingArgs Condition="'%(ToolUpRemotingDispatch.Opens)' != ''">$(_ToolUpRemotingArgs) --open &quot;%(ToolUpRemotingDispatch.Opens)&quot;</_ToolUpRemotingArgs>
       <_ToolUpRemotingArgs Condition="'%(ToolUpRemotingDispatch.Namespace)' != ''">$(_ToolUpRemotingArgs) --namespace &quot;%(ToolUpRemotingDispatch.Namespace)&quot;</_ToolUpRemotingArgs>
+      <_ToolUpRemotingArgs Condition="'%(ToolUpRemotingDispatch.ServerAssembly)' != ''">$(_ToolUpRemotingArgs) --server-assembly &quot;%(ToolUpRemotingDispatch.ServerAssembly)&quot;</_ToolUpRemotingArgs>
     </PropertyGroup>
     <Message Importance="high" Text="ToolUp.Remoting.Generator: dispatch -> %(ToolUpRemotingDispatch.Identity)" />
     <Exec Command="dotnet exec &quot;$(ToolUpRemotingGeneratorDll)&quot; $(_ToolUpRemotingArgs)"

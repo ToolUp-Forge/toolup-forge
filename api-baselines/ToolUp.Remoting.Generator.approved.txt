@@ -57,9 +57,10 @@ ToolUp.Remoting.Generator.DispatchMethod.FlattenedTypes : Microsoft.FSharp.Colle
 ToolUp.Remoting.Generator.DispatchMethod.MethodName : System.String { get }
 ToolUp.Remoting.Generator.DispatchMethod.ReturnSpelling : System.String { get }
 ToolUp.Remoting.Generator.DispatchTable (class)
-ToolUp.Remoting.Generator.DispatchTable..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.Generator.DispatchMethod])
+ToolUp.Remoting.Generator.DispatchTable..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.Generator.DispatchMethod], System.String)
 ToolUp.Remoting.Generator.DispatchTable.ApiRecordName : System.String { get }
 ToolUp.Remoting.Generator.DispatchTable.ApiRecordSpelling : System.String { get }
+ToolUp.Remoting.Generator.DispatchTable.Contract : System.String { get }
 ToolUp.Remoting.Generator.DispatchTable.Methods : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.Generator.DispatchMethod] { get }
 ToolUp.Remoting.Generator.Emit (class)
 ToolUp.Remoting.Generator.Emit.clientCompilationUnit(ToolUp.Remoting.Generator.ClientEmitOptions, ToolUp.Remoting.Generator.ClientPlan) : System.String

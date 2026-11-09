@@ -141,6 +141,7 @@ let private registeredTests =
         ClientProxyGenerationTests.tests
         PlatformDecodersGenerationTests.tests
         ApiRecordCensusTests.tests
+        ApiContractTests.tests
         ProofOracleTests.tests
         DisclosureProofOracleTests.tests
         ModelInputProofOracleTests.tests

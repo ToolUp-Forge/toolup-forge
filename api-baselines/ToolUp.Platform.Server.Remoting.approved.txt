@@ -272,6 +272,15 @@ ToolUp.Remoting.RemotingDecoders.verifyWith`1(ToolUp.Remoting.DecoderWriter, Sys
 ToolUp.Remoting.RemotingDecoders.verify`1(System.Int32, System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Remoting.DecoderVerification, ToolUp.Remoting.DecoderRefusal]
 ToolUp.Remoting.Server.AllowAnonymousAttribute (class)
 ToolUp.Remoting.Server.AllowAnonymousAttribute..ctor()
+ToolUp.Remoting.Server.ApiContract (class)
+ToolUp.Remoting.Server.ApiContract..ctor(System.String, System.String, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.Server.MethodContract], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.Server.CompanionContract], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Remoting.Server.MethodSchema], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.Server.ContractRefusal])
+ToolUp.Remoting.Server.ApiContract.Companions : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.Server.CompanionContract] { get }
+ToolUp.Remoting.Server.ApiContract.Findings : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.Server.ContractRefusal] { get }
+ToolUp.Remoting.Server.ApiContract.Key : System.String { get }
+ToolUp.Remoting.Server.ApiContract.Methods : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.Server.MethodContract] { get }
+ToolUp.Remoting.Server.ApiContract.Name : System.String { get }
+ToolUp.Remoting.Server.ApiContract.Record : System.Boolean { get }
+ToolUp.Remoting.Server.ApiContract.Schemas : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Remoting.Server.MethodSchema] { get }
 ToolUp.Remoting.Server.ApiDocs`1 (class)
 ToolUp.Remoting.Server.ApiDocs`1..ctor()
 ToolUp.Remoting.Server.ApiDocs`1.alias(System.String, ToolUp.Remoting.Server.RouteDocs) : ToolUp.Remoting.Server.RouteDocs
@@ -286,6 +295,10 @@ ToolUp.Remoting.Server.AuditAttribute (class)
 ToolUp.Remoting.Server.AuditAttribute..ctor(System.String)
 ToolUp.Remoting.Server.AuditAttribute.Kind : ToolUp.Remoting.Server.AuditKind { get }
 ToolUp.Remoting.Server.AuditAttribute.KindName : System.String { get }
+ToolUp.Remoting.Server.AuditContract (class)
+ToolUp.Remoting.Server.AuditContract..ctor(ToolUp.Remoting.Server.AuditKind, Microsoft.FSharp.Core.FSharpOption`1[System.Type])
+ToolUp.Remoting.Server.AuditContract.Input : Microsoft.FSharp.Core.FSharpOption`1[System.Type] { get }
+ToolUp.Remoting.Server.AuditContract.Kind : ToolUp.Remoting.Server.AuditKind { get }
 ToolUp.Remoting.Server.AuditEvent (class)
 ToolUp.Remoting.Server.AuditEvent..ctor(ToolUp.Remoting.Server.AuditKind, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.DateTimeOffset, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String])
 ToolUp.Remoting.Server.AuditEvent.CorrelationId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
@@ -341,6 +354,21 @@ ToolUp.Remoting.Server.AuthDecision+Deny.reason : System.String { get }
 ToolUp.Remoting.Server.AuthDecision+Tags (class)
 ToolUp.Remoting.Server.AuthDecision+Tags.Allow : System.Int32 (literal)
 ToolUp.Remoting.Server.AuthDecision+Tags.Deny : System.Int32 (literal)
+ToolUp.Remoting.Server.AuthRequirement (class)
+ToolUp.Remoting.Server.AuthRequirement.IsClaimRequired : System.Boolean { get }
+ToolUp.Remoting.Server.AuthRequirement.IsRoleRequired : System.Boolean { get }
+ToolUp.Remoting.Server.AuthRequirement.IsTenantRequired : System.Boolean { get }
+ToolUp.Remoting.Server.AuthRequirement.Tag : System.Int32 { get }
+ToolUp.Remoting.Server.AuthRequirement.TenantRequired : ToolUp.Remoting.Server.AuthRequirement { get }
+ToolUp.Remoting.Server.AuthRequirement+ClaimRequired (class)
+ToolUp.Remoting.Server.AuthRequirement+ClaimRequired.claim : System.String { get }
+ToolUp.Remoting.Server.AuthRequirement+ClaimRequired.value : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Remoting.Server.AuthRequirement+RoleRequired (class)
+ToolUp.Remoting.Server.AuthRequirement+RoleRequired.role : System.String { get }
+ToolUp.Remoting.Server.AuthRequirement+Tags (class)
+ToolUp.Remoting.Server.AuthRequirement+Tags.ClaimRequired : System.Int32 (literal)
+ToolUp.Remoting.Server.AuthRequirement+Tags.RoleRequired : System.Int32 (literal)
+ToolUp.Remoting.Server.AuthRequirement+Tags.TenantRequired : System.Int32 (literal)
 ToolUp.Remoting.Server.BlobIdempotencyLayout (class)
 ToolUp.Remoting.Server.BlobIdempotencyLayout.BlobPrefix : System.String (literal)
 ToolUp.Remoting.Server.BlobIdempotencyLayout.DefaultContainer : System.String (literal)
@@ -367,6 +395,95 @@ ToolUp.Remoting.Server.CategorisedErrorResult`1.category : System.String { get }
 ToolUp.Remoting.Server.CategorisedErrorResult`1.error : a { get }
 ToolUp.Remoting.Server.CategorisedErrorResult`1.handled : System.Boolean { get }
 ToolUp.Remoting.Server.CategorisedErrorResult`1.ignored : System.Boolean { get }
+ToolUp.Remoting.Server.Classified (class)
+ToolUp.Remoting.Server.Classified.AllowAnonymous : ToolUp.Remoting.Server.Classified { get }
+ToolUp.Remoting.Server.Classified.IsAllowAnonymous : System.Boolean { get }
+ToolUp.Remoting.Server.Classified.IsPublicEndpoint : System.Boolean { get }
+ToolUp.Remoting.Server.Classified.IsRequires : System.Boolean { get }
+ToolUp.Remoting.Server.Classified.PublicEndpoint : ToolUp.Remoting.Server.Classified { get }
+ToolUp.Remoting.Server.Classified.Tag : System.Int32 { get }
+ToolUp.Remoting.Server.Classified+Requires (class)
+ToolUp.Remoting.Server.Classified+Requires.requirements : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.Server.AuthRequirement] { get }
+ToolUp.Remoting.Server.Classified+Tags (class)
+ToolUp.Remoting.Server.Classified+Tags.AllowAnonymous : System.Int32 (literal)
+ToolUp.Remoting.Server.Classified+Tags.PublicEndpoint : System.Int32 (literal)
+ToolUp.Remoting.Server.Classified+Tags.Requires : System.Int32 (literal)
+ToolUp.Remoting.Server.CompanionContract (class)
+ToolUp.Remoting.Server.CompanionContract..ctor(System.String, System.String, System.String, ToolUp.Remoting.Server.JobCompanion, ToolUp.Remoting.Server.MethodShape)
+ToolUp.Remoting.Server.CompanionContract.Kind : ToolUp.Remoting.Server.JobCompanion { get }
+ToolUp.Remoting.Server.CompanionContract.Name : System.String { get }
+ToolUp.Remoting.Server.CompanionContract.Of : System.String { get }
+ToolUp.Remoting.Server.CompanionContract.Route : System.String { get }
+ToolUp.Remoting.Server.CompanionContract.Shape : ToolUp.Remoting.Server.MethodShape { get }
+ToolUp.Remoting.Server.Contract (class)
+ToolUp.Remoting.Server.Contract.addressableMethods(ToolUp.Remoting.Server.ApiContract) : Microsoft.FSharp.Collections.FSharpSet`1[System.String]
+ToolUp.Remoting.Server.Contract.bind(ToolUp.Remoting.Server.ContractFlags, ToolUp.Remoting.Server.ApiContract) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Remoting.Server.ApiContract, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.Server.ContractRefusal]]
+ToolUp.Remoting.Server.Contract.ofType(ToolUp.Remoting.Server.ContractFlags, System.Type) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Remoting.Server.ApiContract, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.Server.ContractRefusal]]
+ToolUp.Remoting.Server.Contract.read(System.Type) : ToolUp.Remoting.Server.ApiContract
+ToolUp.Remoting.Server.Contract.refusedBatchRoutes(ToolUp.Remoting.Server.ApiContract) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Remoting.Server.ContractFlags (class)
+ToolUp.Remoting.Server.ContractFlags..ctor(System.Boolean, System.Boolean, System.Boolean, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]])
+ToolUp.Remoting.Server.ContractFlags.AuthResolverComposed : System.Boolean { get }
+ToolUp.Remoting.Server.ContractFlags.RecordSeamsComposed : System.Boolean { get }
+ToolUp.Remoting.Server.ContractFlags.RequireAuditOnRoleGated : System.Boolean { get }
+ToolUp.Remoting.Server.ContractFlags.RouteBuilder : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]] { get }
+ToolUp.Remoting.Server.ContractFlagsModule (class)
+ToolUp.Remoting.Server.ContractFlagsModule.defaults : ToolUp.Remoting.Server.ContractFlags { get }
+ToolUp.Remoting.Server.ContractFlagsModule.ofOptions`2(ToolUp.Remoting.Server.RemotingOptions`2[ctx, impl]) : ToolUp.Remoting.Server.ContractFlags
+ToolUp.Remoting.Server.ContractRefusal (class)
+ToolUp.Remoting.Server.ContractRefusal.IsForeignMarker : System.Boolean { get }
+ToolUp.Remoting.Server.ContractRefusal.IsInvalidSchemaVersioning : System.Boolean { get }
+ToolUp.Remoting.Server.ContractRefusal.IsMarkerCollision : System.Boolean { get }
+ToolUp.Remoting.Server.ContractRefusal.IsNotARecord : System.Boolean { get }
+ToolUp.Remoting.Server.ContractRefusal.IsRoleGatedUnaudited : System.Boolean { get }
+ToolUp.Remoting.Server.ContractRefusal.IsRouteDoesNotRoundTrip : System.Boolean { get }
+ToolUp.Remoting.Server.ContractRefusal.IsStreamingCarriesPreflight : System.Boolean { get }
+ToolUp.Remoting.Server.ContractRefusal.IsUnbuildableValidators : System.Boolean { get }
+ToolUp.Remoting.Server.ContractRefusal.IsUnclassifiedMethods : System.Boolean { get }
+ToolUp.Remoting.Server.ContractRefusal.IsVersionedStreaming : System.Boolean { get }
+ToolUp.Remoting.Server.ContractRefusal.Tag : System.Int32 { get }
+ToolUp.Remoting.Server.ContractRefusal+ForeignMarker (class)
+ToolUp.Remoting.Server.ContractRefusal+ForeignMarker.api : System.String { get }
+ToolUp.Remoting.Server.ContractRefusal+ForeignMarker.collisions : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]] { get }
+ToolUp.Remoting.Server.ContractRefusal+InvalidSchemaVersioning (class)
+ToolUp.Remoting.Server.ContractRefusal+InvalidSchemaVersioning.api : System.String { get }
+ToolUp.Remoting.Server.ContractRefusal+InvalidSchemaVersioning.refusal : ToolUp.Remoting.Server.SchemaVersionRefusal { get }
+ToolUp.Remoting.Server.ContractRefusal+MarkerCollision (class)
+ToolUp.Remoting.Server.ContractRefusal+MarkerCollision.api : System.String { get }
+ToolUp.Remoting.Server.ContractRefusal+MarkerCollision.collisions : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`3[System.String, System.String, System.String]] { get }
+ToolUp.Remoting.Server.ContractRefusal+NotARecord (class)
+ToolUp.Remoting.Server.ContractRefusal+NotARecord.api : System.String { get }
+ToolUp.Remoting.Server.ContractRefusal+RoleGatedUnaudited (class)
+ToolUp.Remoting.Server.ContractRefusal+RoleGatedUnaudited.api : System.String { get }
+ToolUp.Remoting.Server.ContractRefusal+RoleGatedUnaudited.methods : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Remoting.Server.ContractRefusal+RouteDoesNotRoundTrip (class)
+ToolUp.Remoting.Server.ContractRefusal+RouteDoesNotRoundTrip.api : System.String { get }
+ToolUp.Remoting.Server.ContractRefusal+RouteDoesNotRoundTrip.divergences : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]] { get }
+ToolUp.Remoting.Server.ContractRefusal+StreamingCarriesPreflight (class)
+ToolUp.Remoting.Server.ContractRefusal+StreamingCarriesPreflight.api : System.String { get }
+ToolUp.Remoting.Server.ContractRefusal+StreamingCarriesPreflight.methods : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]]] { get }
+ToolUp.Remoting.Server.ContractRefusal+Tags (class)
+ToolUp.Remoting.Server.ContractRefusal+Tags.ForeignMarker : System.Int32 (literal)
+ToolUp.Remoting.Server.ContractRefusal+Tags.InvalidSchemaVersioning : System.Int32 (literal)
+ToolUp.Remoting.Server.ContractRefusal+Tags.MarkerCollision : System.Int32 (literal)
+ToolUp.Remoting.Server.ContractRefusal+Tags.NotARecord : System.Int32 (literal)
+ToolUp.Remoting.Server.ContractRefusal+Tags.RoleGatedUnaudited : System.Int32 (literal)
+ToolUp.Remoting.Server.ContractRefusal+Tags.RouteDoesNotRoundTrip : System.Int32 (literal)
+ToolUp.Remoting.Server.ContractRefusal+Tags.StreamingCarriesPreflight : System.Int32 (literal)
+ToolUp.Remoting.Server.ContractRefusal+Tags.UnbuildableValidators : System.Int32 (literal)
+ToolUp.Remoting.Server.ContractRefusal+Tags.UnclassifiedMethods : System.Int32 (literal)
+ToolUp.Remoting.Server.ContractRefusal+Tags.VersionedStreaming : System.Int32 (literal)
+ToolUp.Remoting.Server.ContractRefusal+UnbuildableValidators (class)
+ToolUp.Remoting.Server.ContractRefusal+UnbuildableValidators.api : System.String { get }
+ToolUp.Remoting.Server.ContractRefusal+UnbuildableValidators.refusals : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Remoting.Server.ContractRefusal+UnclassifiedMethods (class)
+ToolUp.Remoting.Server.ContractRefusal+UnclassifiedMethods.api : System.String { get }
+ToolUp.Remoting.Server.ContractRefusal+UnclassifiedMethods.methods : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Remoting.Server.ContractRefusal+VersionedStreaming (class)
+ToolUp.Remoting.Server.ContractRefusal+VersionedStreaming.api : System.String { get }
+ToolUp.Remoting.Server.ContractRefusal+VersionedStreaming.methods : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Remoting.Server.ContractRefusalModule (class)
+ToolUp.Remoting.Server.ContractRefusalModule.render(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.Server.ContractRefusal]) : System.String
 ToolUp.Remoting.Server.CustomAttribute (class)
 ToolUp.Remoting.Server.CustomAttribute..ctor(System.Type)
 ToolUp.Remoting.Server.CustomAttribute.Validate(System.Object) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
@@ -462,8 +579,10 @@ ToolUp.Remoting.Server.GeneratedInvocation (class)
 ToolUp.Remoting.Server.GeneratedInvocation.forMethodWithFirst`2(System.String, System.Type[], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Server.GeneratedArguments, Microsoft.FSharp.Core.FSharpFunc`2[impl, System.Threading.Tasks.Task`1[ToolUp.Remoting.Server.InvocationResult]]]) : ToolUp.Remoting.Server.GeneratedMethod`1[impl]
 ToolUp.Remoting.Server.GeneratedInvocation.forMethod`1(System.String, System.Type[], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Server.GeneratedArguments, Microsoft.FSharp.Core.FSharpFunc`2[impl, System.Threading.Tasks.Task`1[ToolUp.Remoting.Server.InvocationResult]]]) : ToolUp.Remoting.Server.GeneratedMethod`1[impl]
 ToolUp.Remoting.Server.GeneratedInvocation.register`1(ToolUp.Remoting.Server.GeneratedInvocationTable`1[impl]) : System.Void
+ToolUp.Remoting.Server.GeneratedInvocation.tableWith`1(ToolUp.Remoting.Server.ApiContract, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.Server.GeneratedMethod`1[impl]]) : ToolUp.Remoting.Server.GeneratedInvocationTable`1[impl]
 ToolUp.Remoting.Server.GeneratedInvocation.table`1(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.Server.GeneratedMethod`1[impl]]) : ToolUp.Remoting.Server.GeneratedInvocationTable`1[impl]
 ToolUp.Remoting.Server.GeneratedInvocationTable`1 (class)
+ToolUp.Remoting.Server.GeneratedInvocationTable`1.Contract : ToolUp.Remoting.Server.ApiContract { get }
 ToolUp.Remoting.Server.GeneratedInvocationTable`1.Methods : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.Server.GeneratedMethod`1[impl]] { get }
 ToolUp.Remoting.Server.GeneratedMethod`1 (class)
 ToolUp.Remoting.Server.GeneratedMethod`1.FlattenedTypes : System.Type[] { get }
@@ -560,6 +679,23 @@ ToolUp.Remoting.Server.InvocationResult+Tags.EndpointNotFound : System.Int32 (li
 ToolUp.Remoting.Server.InvocationResult+Tags.Exception : System.Int32 (literal)
 ToolUp.Remoting.Server.InvocationResult+Tags.InvalidHttpVerb : System.Int32 (literal)
 ToolUp.Remoting.Server.InvocationResult+Tags.Success : System.Int32 (literal)
+ToolUp.Remoting.Server.JobCompanion (class)
+ToolUp.Remoting.Server.JobCompanion.Cancel : ToolUp.Remoting.Server.JobCompanion { get }
+ToolUp.Remoting.Server.JobCompanion.IsCancel : System.Boolean { get }
+ToolUp.Remoting.Server.JobCompanion.IsProgress : System.Boolean { get }
+ToolUp.Remoting.Server.JobCompanion.IsStatus : System.Boolean { get }
+ToolUp.Remoting.Server.JobCompanion.Progress : ToolUp.Remoting.Server.JobCompanion { get }
+ToolUp.Remoting.Server.JobCompanion.Status : ToolUp.Remoting.Server.JobCompanion { get }
+ToolUp.Remoting.Server.JobCompanion.Tag : System.Int32 { get }
+ToolUp.Remoting.Server.JobCompanion+Tags (class)
+ToolUp.Remoting.Server.JobCompanion+Tags.Cancel : System.Int32 (literal)
+ToolUp.Remoting.Server.JobCompanion+Tags.Progress : System.Int32 (literal)
+ToolUp.Remoting.Server.JobCompanion+Tags.Status : System.Int32 (literal)
+ToolUp.Remoting.Server.JobCompanionCalls (class)
+ToolUp.Remoting.Server.JobCompanionCalls.Equals(System.Object) : System.Boolean
+ToolUp.Remoting.Server.JobCompanionCalls.For`1() : ToolUp.Remoting.Server.JobCompanionCalls
+ToolUp.Remoting.Server.JobCompanionCalls.GetHashCode() : System.Int32
+ToolUp.Remoting.Server.JobCompanionCalls.ResultType : System.Type { get }
 ToolUp.Remoting.Server.JobHandle`1 (class)
 ToolUp.Remoting.Server.JobHandle`1.Tag : System.Int32 { get }
 ToolUp.Remoting.Server.JobHandle`1.jobId : System.String { get }
@@ -608,6 +744,18 @@ ToolUp.Remoting.Server.MemoisedResponse.Body : System.Byte[] { get }
 ToolUp.Remoting.Server.MemoisedResponse.ContentType : System.String { get }
 ToolUp.Remoting.Server.MemoisedResponse.RequestBodyHash : System.String { get }
 ToolUp.Remoting.Server.MemoisedResponse.StatusCode : System.Int32 { get }
+ToolUp.Remoting.Server.MethodContract (class)
+ToolUp.Remoting.Server.MethodContract..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Type], System.Type, ToolUp.Remoting.Server.MethodShape, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Remoting.Server.Classified], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.Server.RateBudget], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Remoting.Server.AuditContract], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.Type])
+ToolUp.Remoting.Server.MethodContract.Arguments : Microsoft.FSharp.Collections.FSharpList`1[System.Type] { get }
+ToolUp.Remoting.Server.MethodContract.Audit : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Remoting.Server.AuditContract] { get }
+ToolUp.Remoting.Server.MethodContract.Budgets : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.Server.RateBudget] { get }
+ToolUp.Remoting.Server.MethodContract.Classification : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Remoting.Server.Classified] { get }
+ToolUp.Remoting.Server.MethodContract.Idempotent : System.Boolean { get }
+ToolUp.Remoting.Server.MethodContract.Name : System.String { get }
+ToolUp.Remoting.Server.MethodContract.Returns : System.Type { get }
+ToolUp.Remoting.Server.MethodContract.Route : System.String { get }
+ToolUp.Remoting.Server.MethodContract.Shape : ToolUp.Remoting.Server.MethodShape { get }
+ToolUp.Remoting.Server.MethodContract.Validated : Microsoft.FSharp.Core.FSharpOption`1[System.Type] { get }
 ToolUp.Remoting.Server.MethodOutcome (class)
 ToolUp.Remoting.Server.MethodOutcome.IsFailed : System.Boolean { get }
 ToolUp.Remoting.Server.MethodOutcome.IsRateLimited : System.Boolean { get }
@@ -626,6 +774,20 @@ ToolUp.Remoting.Server.MethodSchema (class)
 ToolUp.Remoting.Server.MethodSchema..ctor(Microsoft.FSharp.Collections.FSharpMap`2[System.Int32, System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.Int32, System.DateTime])
 ToolUp.Remoting.Server.MethodSchema.Deprecated : Microsoft.FSharp.Collections.FSharpMap`2[System.Int32, System.DateTime] { get }
 ToolUp.Remoting.Server.MethodSchema.Handlers : Microsoft.FSharp.Collections.FSharpMap`2[System.Int32, System.String] { get }
+ToolUp.Remoting.Server.MethodShape (class)
+ToolUp.Remoting.Server.MethodShape.IsLongRunning : System.Boolean { get }
+ToolUp.Remoting.Server.MethodShape.IsStreaming : System.Boolean { get }
+ToolUp.Remoting.Server.MethodShape.IsUnary : System.Boolean { get }
+ToolUp.Remoting.Server.MethodShape.Tag : System.Int32 { get }
+ToolUp.Remoting.Server.MethodShape.Unary : ToolUp.Remoting.Server.MethodShape { get }
+ToolUp.Remoting.Server.MethodShape+LongRunning (class)
+ToolUp.Remoting.Server.MethodShape+LongRunning.companions : ToolUp.Remoting.Server.JobCompanionCalls { get }
+ToolUp.Remoting.Server.MethodShape+Streaming (class)
+ToolUp.Remoting.Server.MethodShape+Streaming.element : System.Type { get }
+ToolUp.Remoting.Server.MethodShape+Tags (class)
+ToolUp.Remoting.Server.MethodShape+Tags.LongRunning : System.Int32 (literal)
+ToolUp.Remoting.Server.MethodShape+Tags.Streaming : System.Int32 (literal)
+ToolUp.Remoting.Server.MethodShape+Tags.Unary : System.Int32 (literal)
 ToolUp.Remoting.Server.MethodTelemetry (class)
 ToolUp.Remoting.Server.MethodTelemetry..ctor(System.String, System.Int32, ToolUp.Remoting.Server.MethodOutcome, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Int32])
 ToolUp.Remoting.Server.MethodTelemetry.ChunkCount : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
@@ -704,6 +866,10 @@ ToolUp.Remoting.Server.RangeAttribute..ctor(System.Double, System.Double)
 ToolUp.Remoting.Server.RangeAttribute.Max : System.Double { get }
 ToolUp.Remoting.Server.RangeAttribute.Min : System.Double { get }
 ToolUp.Remoting.Server.RangeAttribute.Validate(System.Object) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.Remoting.Server.RateBudget (class)
+ToolUp.Remoting.Server.RateBudget..ctor(System.Int32, System.Int32)
+ToolUp.Remoting.Server.RateBudget.Count : System.Int32 { get }
+ToolUp.Remoting.Server.RateBudget.WindowSeconds : System.Int32 { get }
 ToolUp.Remoting.Server.RateLimitAttribute (class)
 ToolUp.Remoting.Server.RateLimitAttribute..ctor(System.Int32, System.Int32)
 ToolUp.Remoting.Server.RateLimitAttribute.Count : System.Int32 { get }
@@ -825,14 +991,37 @@ ToolUp.Remoting.Server.SchemaRouting+Tags.Refused : System.Int32 (literal)
 ToolUp.Remoting.Server.SchemaRouting+Tags.Serve : System.Int32 (literal)
 ToolUp.Remoting.Server.SchemaVersion (class)
 ToolUp.Remoting.Server.SchemaVersion.Header : System.String (literal)
+ToolUp.Remoting.Server.SchemaVersion.addressable(System.Collections.Generic.IEnumerable`1[System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Remoting.Server.MethodSchema]) : Microsoft.FSharp.Collections.FSharpSet`1[System.String]
 ToolUp.Remoting.Server.SchemaVersion.addressableMethods(System.Type) : Microsoft.FSharp.Collections.FSharpSet`1[System.String]
 ToolUp.Remoting.Server.SchemaVersion.applyRouting(ToolUp.Remoting.Server.SchemaRouting, System.String) : System.String
 ToolUp.Remoting.Server.SchemaVersion.classify(System.Type) : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Remoting.Server.MethodSchema]
 ToolUp.Remoting.Server.SchemaVersion.describe(System.Int32, System.Type) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Int32]]]
 ToolUp.Remoting.Server.SchemaVersion.logDeprecation(Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit]], System.String, System.Int32, System.DateTime) : System.Void
 ToolUp.Remoting.Server.SchemaVersion.negotiate(Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Remoting.Server.MethodSchema], Microsoft.FSharp.Collections.FSharpSet`1[System.String], System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String) : ToolUp.Remoting.Server.SchemaRouting
+ToolUp.Remoting.Server.SchemaVersion.read(System.Reflection.PropertyInfo[]) : System.Tuple`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Remoting.Server.MethodSchema], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.Server.SchemaVersionRefusal]]
 ToolUp.Remoting.Server.SchemaVersion.refusalPayload(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Int32]) : System.Object
+ToolUp.Remoting.Server.SchemaVersion.refusalSentence(System.String, ToolUp.Remoting.Server.SchemaVersionRefusal) : System.String
 ToolUp.Remoting.Server.SchemaVersion.supportedVersions(System.Int32, ToolUp.Remoting.Server.MethodSchema) : Microsoft.FSharp.Collections.FSharpList`1[System.Int32]
+ToolUp.Remoting.Server.SchemaVersionRefusal (class)
+ToolUp.Remoting.Server.SchemaVersionRefusal.IsDuplicateVersion : System.Boolean { get }
+ToolUp.Remoting.Server.SchemaVersionRefusal.IsNonPositiveVersion : System.Boolean { get }
+ToolUp.Remoting.Server.SchemaVersionRefusal.IsUnparseableRetirement : System.Boolean { get }
+ToolUp.Remoting.Server.SchemaVersionRefusal.Tag : System.Int32 { get }
+ToolUp.Remoting.Server.SchemaVersionRefusal+DuplicateVersion (class)
+ToolUp.Remoting.Server.SchemaVersionRefusal+DuplicateVersion.first : System.String { get }
+ToolUp.Remoting.Server.SchemaVersionRefusal+DuplicateVersion.methodName : System.String { get }
+ToolUp.Remoting.Server.SchemaVersionRefusal+DuplicateVersion.second : System.String { get }
+ToolUp.Remoting.Server.SchemaVersionRefusal+DuplicateVersion.version : System.Int32 { get }
+ToolUp.Remoting.Server.SchemaVersionRefusal+NonPositiveVersion (class)
+ToolUp.Remoting.Server.SchemaVersionRefusal+NonPositiveVersion.field : System.String { get }
+ToolUp.Remoting.Server.SchemaVersionRefusal+NonPositiveVersion.version : System.Int32 { get }
+ToolUp.Remoting.Server.SchemaVersionRefusal+Tags (class)
+ToolUp.Remoting.Server.SchemaVersionRefusal+Tags.DuplicateVersion : System.Int32 (literal)
+ToolUp.Remoting.Server.SchemaVersionRefusal+Tags.NonPositiveVersion : System.Int32 (literal)
+ToolUp.Remoting.Server.SchemaVersionRefusal+Tags.UnparseableRetirement : System.Int32 (literal)
+ToolUp.Remoting.Server.SchemaVersionRefusal+UnparseableRetirement (class)
+ToolUp.Remoting.Server.SchemaVersionRefusal+UnparseableRetirement.field : System.String { get }
+ToolUp.Remoting.Server.SchemaVersionRefusal+UnparseableRetirement.retireAfter : System.String { get }
 ToolUp.Remoting.Server.SerializationType (class)
 ToolUp.Remoting.Server.SerializationType.IsJson : System.Boolean { get }
 ToolUp.Remoting.Server.SerializationType.IsMessagePack : System.Boolean { get }

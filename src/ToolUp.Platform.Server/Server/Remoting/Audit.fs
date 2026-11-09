@@ -1,10 +1,10 @@
 namespace ToolUp.Remoting.Server
 
 open System
-open Microsoft.FSharp.Reflection
+open System.Reflection
 
 // =============================================================================
-// Phase 69h — per-method audit emission
+// Per-method audit emission
 // =============================================================================
 //
 // API record fields carry `[<Audit(AuditKind.X)>]` to opt into audit
@@ -16,7 +16,7 @@ open Microsoft.FSharp.Reflection
 // default; explicit `[<PiiSafe>]` opts a field into payload inclusion.
 // Fail-safe — forgetting the attribute leaves PII out of the audit row.
 
-/// Phase 69h — opts a method into audit emission. The dispatcher
+/// Opts a method into audit emission. The dispatcher
 /// invokes the registered `IAuditEmitter` with the configured
 /// `AuditKind` after a successful handler return.
 ///
@@ -29,24 +29,9 @@ type AuditAttribute(kindName: string) =
     inherit Attribute()
     member _.KindName = kindName
 
-    member this.Kind: AuditKind =
-        if kindName.StartsWith "Custom:" then
-            AuditKind.Custom(kindName.Substring 7)
-        else
-            match kindName with
-            | "MoneyMoved" -> AuditKind.MoneyMoved
-            | "PolicyChanged" -> AuditKind.PolicyChanged
-            | "PiiAccessed" -> AuditKind.PiiAccessed
-            | "DataExported" -> AuditKind.DataExported
-            | "PermissionGranted" -> AuditKind.PermissionGranted
-            | "PermissionRevoked" -> AuditKind.PermissionRevoked
-            | "TenantCreated" -> AuditKind.TenantCreated
-            | "TenantDeleted" -> AuditKind.TenantDeleted
-            | "RateLimitExceeded" -> AuditKind.RateLimitExceeded
-            | "IdempotencyReplay" -> AuditKind.IdempotencyReplay
-            | other -> AuditKind.Custom other
+    member _.Kind: AuditKind = AuditKind.parse kindName
 
-/// Phase 69h — opts a record field (the input-record's, or a nested
+/// Opts a record field (the input-record's, or a nested
 /// record's) into PII-safe payload inclusion. Fields without this
 /// attribute are redacted to `<redacted>` in the emitted AuditEvent's
 /// payload. Fail-safe: forgetting the attribute keeps PII out of audit
@@ -58,25 +43,6 @@ type PiiSafeAttribute() =
 // -----------------------------------------------------------------------------
 
 module internal Audit =
-
-    /// Decode the string-literal kind name shared by both attribute
-    /// families ("MoneyMoved", "Custom:<name>", …) into an `AuditKind`.
-    let decodeKind (kindName: string) : AuditKind =
-        if kindName.StartsWith "Custom:" then
-            AuditKind.Custom(kindName.Substring 7)
-        else
-            match kindName with
-            | "MoneyMoved" -> AuditKind.MoneyMoved
-            | "PolicyChanged" -> AuditKind.PolicyChanged
-            | "PiiAccessed" -> AuditKind.PiiAccessed
-            | "DataExported" -> AuditKind.DataExported
-            | "PermissionGranted" -> AuditKind.PermissionGranted
-            | "PermissionRevoked" -> AuditKind.PermissionRevoked
-            | "TenantCreated" -> AuditKind.TenantCreated
-            | "TenantDeleted" -> AuditKind.TenantDeleted
-            | "RateLimitExceeded" -> AuditKind.RateLimitExceeded
-            | "IdempotencyReplay" -> AuditKind.IdempotencyReplay
-            | other -> AuditKind.Custom other
 
     // ── Phase 727 severity assessment — the audit family ───────────────
     //
@@ -140,68 +106,22 @@ module internal Audit =
                 | null -> None
                 | p ->
                     match p.GetValue a with
-                    | :? string as kindName when not (isNull kindName) -> Some(decodeKind kindName)
+                    | :? string as kindName when not (isNull kindName) -> Some(AuditKind.parse kindName)
                     | _ -> None
 
-    // Same non-public reflection rule as `AuthClassifier.reflectionFlags`:
-    // internal/private API records (and private input records) must
-    // classify identically to public ones — an empty map here silently
-    // skips audit emission for them (fail-open).
-    let private reflectionFlags =
-        System.Reflection.BindingFlags.Public
-        ||| System.Reflection.BindingFlags.NonPublic
+    /// One field's `[<Audit>]` kind; `None` for an unaudited method.
+    let kindOf (field: PropertyInfo) : AuditKind option =
+        field.GetCustomAttributes(true) |> Array.tryPick tryAuditKind
 
-    /// Cache the `[<Audit>]` attribute per method at startup. Returns
-    /// `None` for unaudited methods; `Some kind` for audited.
-    let classify (apiType: Type) : Map<string, AuditKind> =
-        if not (FSharpType.IsRecord(apiType, reflectionFlags)) then
-            Map.empty
-        else
-            FSharpType.GetRecordFields(apiType, reflectionFlags)
-            |> Array.choose (fun pi ->
-                let attr = pi.GetCustomAttributes(true) |> Array.tryPick tryAuditKind
+    /// An audited method's first-argument record type: the input the payload
+    /// builder redacts. `None` when the first argument is not a record.
+    let inputOf (field: PropertyInfo) : Type option =
+        ApiRecord.firstInput field |> Option.filter ApiRecord.isRecord
 
-                match attr with
-                | Some kind -> Some(pi.Name, kind)
-                | None -> None)
-            |> Map.ofArray
-
-    /// Phase 69h.tail — cache the first-argument record type per audited
-    /// method so the dispatcher can build the PII-redacted payload even
-    /// when the input type carries no `ValidationAttribute` (pre-69h.tail
-    /// the payload extraction rode the validation classifier only, so
-    /// audited methods without validators always emitted empty payloads).
-    /// Same first-input derivation as `Validation.firstInputType` —
-    /// replicated locally because this file compiles before Validation.fs.
-    let inputTypes (apiType: Type) : Map<string, Type> =
-        if not (FSharpType.IsRecord(apiType, reflectionFlags)) then
-            Map.empty
-        else
-            let audited = classify apiType
-
-            FSharpType.GetRecordFields(apiType, reflectionFlags)
-            |> Array.choose (fun pi ->
-                if not (audited.ContainsKey pi.Name) then
-                    None
-                elif FSharpType.IsFunction pi.PropertyType then
-                    let inputT, _ = FSharpType.GetFunctionElements pi.PropertyType
-
-                    if FSharpType.IsRecord(inputT, reflectionFlags) then
-                        Some(pi.Name, inputT)
-                    else
-                        None
-                else
-                    None)
-            |> Map.ofArray
-
-    /// Phase 727 — marker-name collisions across the audit surface, as
-    /// `(surface, subject, renderedAttributeType)` triples for the
-    /// dispatcher's startup refusal (`MarkerCollision.refusal`).
-    ///
-    /// Two scans, because the two markers sit on different records: an
-    /// `[<Audit>]` collision is on the API record's own fields, while a
-    /// `[<PiiSafe>]` collision is on the fields of an AUDITED method's
-    /// input record — which is why this runs after `inputTypes`.
+    /// The marker-name collisions one field contributes, as
+    /// `(surface, subject, renderedAttributeType)` triples: an `[<Audit>]`
+    /// collision on the field itself, and — for an audited method — a
+    /// `[<PiiSafe>]` collision on its input record's own fields.
     ///
     /// The PII scan is deliberately one level deep, matching
     /// `payloadFromInputRecord`'s reach exactly: that function stringifies
@@ -211,23 +131,44 @@ module internal Audit =
     /// this scan follows it in the same commit.
     ///
     /// A method whose `[<Audit>]` is itself foreign is not audited, so its
-    /// input record never reaches the payload builder — the audit
-    /// collision is reported and the PII scan simply has nothing to say
-    /// about it.
+    /// input record never reaches the payload builder — the audit collision
+    /// is reported and the PII scan has nothing to say about it.
+    let foreignMarkersOf (field: PropertyInfo) : (string * string * string) list =
+        let onField =
+            auditMarkers.CollisionsOf field
+            |> List.map (fun rendered -> "audit emission", field.Name, rendered)
+
+        let onInput =
+            match kindOf field, inputOf field with
+            | Some _, Some inputType ->
+                piiMarkers.Collisions inputType
+                |> List.map (fun (inputField, rendered) ->
+                    "PII-safe audit payload", sprintf "%s input field %s" field.Name inputField, rendered)
+            | _ -> []
+
+        onField @ onInput
+
+    /// Cache the `[<Audit>]` attribute per method at startup. Absent for
+    /// unaudited methods.
+    let classify (apiType: Type) : Map<string, AuditKind> =
+        ApiRecord.fields apiType
+        |> Array.choose (fun pi -> kindOf pi |> Option.map (fun kind -> pi.Name, kind))
+        |> Map.ofArray
+
+    /// The first-argument record type per audited method, so the payload is
+    /// built even when the input type carries no `ValidationAttribute`.
+    let inputTypes (apiType: Type) : Map<string, Type> =
+        ApiRecord.fields apiType
+        |> Array.choose (fun pi ->
+            match kindOf pi, inputOf pi with
+            | Some _, Some inputType -> Some(pi.Name, inputType)
+            | _ -> None)
+        |> Map.ofArray
+
+    /// Marker-name collisions across the audit surface, API record and
+    /// audited input records together.
     let foreignMarkers (apiType: Type) : (string * string * string) list =
-        let onApiRecord =
-            auditMarkers.Collisions(apiType, reflectionFlags)
-            |> List.map (fun (field, rendered) -> "audit emission", field, rendered)
-
-        let onInputRecords =
-            inputTypes apiType
-            |> Map.toList
-            |> List.collect (fun (methodName, inputType) ->
-                piiMarkers.Collisions(inputType, reflectionFlags)
-                |> List.map (fun (field, rendered) ->
-                    "PII-safe audit payload", sprintf "%s input field %s" methodName field, rendered))
-
-        onApiRecord @ onInputRecords
+        ApiRecord.fields apiType |> Array.toList |> List.collect foreignMarkersOf
 
     /// Build the PII-redacted payload map from an input record value.
     /// Fields without `[<PiiSafe>]` are redacted to `<redacted:TypeName>`;
@@ -243,7 +184,7 @@ module internal Audit =
         else string value
 
     let private isPiiSafe (pi: System.Reflection.PropertyInfo) : bool =
-        // Phase 727 — CLR identity, not simple name. This predicate is
+        // CLR identity, not simple name. This predicate is
         // the redaction switch: returning true puts the field's value
         // into the audit payload un-redacted. See the severity note at
         // the head of this module for why a forgeable switch here is a
@@ -252,10 +193,10 @@ module internal Audit =
         |> Array.exists (fun (a: obj) -> piiMarkers.IsSanctioned(a.GetType()))
 
     let payloadFromInputRecord (inputType: System.Type) (inputValue: obj) : Map<string, string> =
-        if isNull inputValue || not (FSharpType.IsRecord(inputType, reflectionFlags)) then
+        if isNull inputValue || not (ApiRecord.isRecord inputType) then
             Map.empty
         else
-            FSharpType.GetRecordFields(inputType, reflectionFlags)
+            ApiRecord.fields inputType
             |> Array.map (fun pi ->
                 let value = pi.GetValue inputValue
 

@@ -2,7 +2,6 @@ namespace ToolUp.Remoting.Server
 
 open System
 open System.Collections.Concurrent
-open Microsoft.FSharp.Reflection
 
 // =============================================================================
 // Per-method idempotency keys
@@ -262,16 +261,10 @@ type BlobIdempotencyStore(blobStorage: ToolUp.Platform.BlobStorage.IBlobStorage,
 
 module internal Idempotency =
 
-    // Reflect over public AND non-public records, and recognise BOTH the
-    // server-tier `IdempotentAttribute` and the tier-shared
-    // `ToolUp.Platform.IdempotentAttribute` mirror (which Fable-compiled
-    // Core API records carry) — same family-agnostic + fail-open fix as
-    // the auth, audit, rate-limit and validation classifiers. Without it a Core API record's
-    // `[<Idempotent>]` is invisible (idempotency never engages), and a
-    // non-public record silently skips classification.
-    let private reflectionFlags =
-        System.Reflection.BindingFlags.Public
-        ||| System.Reflection.BindingFlags.NonPublic
+    // Recognise BOTH the server-tier `IdempotentAttribute` and the
+    // tier-shared `ToolUp.Platform.IdempotentAttribute` mirror (which
+    // Fable-compiled Core API records carry); without it a Core API record's
+    // `[<Idempotent>]` is invisible and idempotency never engages.
 
     // ── Severity assessment — the idempotency family ────────
     //
@@ -303,37 +296,39 @@ module internal Idempotency =
 
     let private isIdempotentAttr (a: obj) : bool = markers.IsSanctioned(a.GetType())
 
+    /// Whether one field carries `[<Idempotent>]`.
+    let isIdempotent (field: System.Reflection.PropertyInfo) : bool =
+        field.GetCustomAttributes(true) |> Array.exists isIdempotentAttr
+
+    /// The idempotency marker collisions one field contributes.
+    let foreignMarkersOf (field: System.Reflection.PropertyInfo) : (string * string * string) list =
+        markers.CollisionsOf field
+        |> List.map (fun rendered -> "idempotency", field.Name, rendered)
+
     /// Marker-name collisions on the API record, for the
     /// dispatcher's startup refusal.
     let foreignMarkers (apiType: Type) : (string * string * string) list =
-        markers.Collisions(apiType, reflectionFlags)
-        |> List.map (fun (field, rendered) -> "idempotency", field, rendered)
+        ApiRecord.fields apiType |> Array.toList |> List.collect foreignMarkersOf
 
     /// Cache the `[<Idempotent>]` classification per method at startup.
     let classify (apiType: Type) : Set<string> =
-        if not (FSharpType.IsRecord(apiType, reflectionFlags)) then
-            Set.empty
-        else
-            FSharpType.GetRecordFields(apiType, reflectionFlags)
-            |> Array.choose (fun pi ->
-                let hasIdempotent = pi.GetCustomAttributes(true) |> Array.exists isIdempotentAttr
-
-                if hasIdempotent then Some pi.Name else None)
-            |> Set.ofArray
+        ApiRecord.fields apiType
+        |> Array.choose (fun pi -> if isIdempotent pi then Some pi.Name else None)
+        |> Set.ofArray
 
     /// Derive the scope string for the idempotency store from the
     /// subject id + method name. Same shape as the rate-limit key root
     /// so the two seams partition the same way.
     let deriveScope (subjectKey: string) (methodName: string) : string = subjectKey + "|" + methodName
 
-    /// 0.1.15 — SHA-256 (lowercase hex) of the request body. Stamped
+    /// SHA-256 (lowercase hex) of the request body. Stamped
     /// into the `MemoisedResponse` on first call; compared against the
     /// current call's body on replay. Mismatch surfaces as a
     /// `ErrorCategory.User` envelope + 409 Conflict so the caller
     /// notices the idempotency-key reuse instead of receiving the
     /// prior response.
     ///
-    /// 0.1.16 — accepts the body as `byte[]` rather than `string`.
+    /// Accepts the body as `byte[]` rather than `string`.
     /// The 0.1.15 string shape went through a UTF-8 decode that
     /// silently replaced invalid bytes with U+FFFD, producing
     /// false-match hashes for any multipart upload containing
