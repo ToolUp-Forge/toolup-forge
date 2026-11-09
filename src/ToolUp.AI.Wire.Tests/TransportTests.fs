@@ -1,11 +1,10 @@
 module ToolUp.AI.Wire.Tests.TransportTests
 
-// ─── Phase 251 — portable egress: classifier + retry-runner ──────
+// ─── Portable egress: classifier + retry runner ──────────────────
 //
 // Host-agnostic, no live HTTP. The classifier and the retry runner are
 // pure portable functions in ToolUp.AI.Wire/Transport/; these cases pin
-// the egress semantics the per-provider mappers (252–254) will rely on
-// once they migrate off their inline loops.
+// the egress semantics every connector runs on.
 
 open ToolUp.Platform.Transport
 open System
@@ -19,7 +18,22 @@ let private fastPolicy attempts : RetryPolicy = {
     InitialBackoff = TimeSpan.Zero
     MaxBackoff = TimeSpan.Zero
     Timeout = None
+    RateLimitFloor = None
 }
+
+/// Run `attempt` under `policy`, recording the pauses instead of sleeping.
+let private pausesOf policy attempt =
+    let pauses = ResizeArray<TimeSpan>()
+
+    let result =
+        RetryRunner.runPausing (fun d -> async { pauses.Add d }) policy attempt
+        |> Async.RunSynchronously
+
+    result, List.ofSeq pauses
+
+/// Fails with `err` every time.
+let private alwaysFailing err () =
+    async { return Error err }: Async<Result<int, AIProviderError>>
 
 let tests =
     testList "ToolUp.AI.Wire.Transport" [
@@ -173,6 +187,7 @@ let tests =
                     InitialBackoff = TimeSpan.FromMilliseconds 100.0
                     MaxBackoff = TimeSpan.FromSeconds 30.0
                     Timeout = None
+                    RateLimitFloor = None
                 }
 
                 Expect.equal (RetryPolicy.delayFor policy 1) TimeSpan.Zero "attempt 1 fires immediately"
@@ -184,6 +199,68 @@ let tests =
 
                 Expect.equal (RetryPolicy.delayFor policy 3) (TimeSpan.FromMilliseconds 200.0) "attempt 3 = ×2"
                 Expect.equal (RetryPolicy.delayFor policy 4) (TimeSpan.FromMilliseconds 400.0) "attempt 4 = ×4"
+            }
+        ]
+
+        testList "RetryPolicy.RateLimitFloor" [
+            let floor = TimeSpan.FromSeconds 15.0
+
+            let withFloor: RetryPolicy = {
+                RetryPolicy.defaults with
+                    MaxAttempts = 4
+                    RateLimitFloor = Some floor
+            }
+
+            test "a 429 waits at least the floor, scaled by the attempt and not capped by MaxBackoff" {
+                let result, pauses =
+                    pausesOf withFloor (alwaysFailing (TransientServer(429, "slow down")))
+
+                Expect.isError result "the bucket never refilled"
+                Expect.equal pauses [ floor; floor * 2.0; floor * 3.0 ] "15 s, 30 s, 45 s"
+
+                Expect.isGreaterThan
+                    (List.last pauses)
+                    withFloor.MaxBackoff
+                    "the floor is a floor, not a backoff the cap trims"
+            }
+
+            test "the floor leaves every other retryable failure on the policy's exponential pause" {
+                let _, pauses = pausesOf withFloor (alwaysFailing (TransientServer(503, "busy")))
+
+                Expect.equal
+                    pauses
+                    [ for n in 2..4 -> RetryPolicy.delayFor withFloor n ]
+                    "the ordinary backoff schedule"
+            }
+
+            test "without a floor a 429 is an ordinary transient failure" {
+                let _, pauses =
+                    pausesOf { withFloor with RateLimitFloor = None } (alwaysFailing (TransientServer(429, "")))
+
+                Expect.equal
+                    pauses
+                    [ for n in 2..4 -> RetryPolicy.delayFor withFloor n ]
+                    "the ordinary backoff schedule"
+            }
+
+            test "a floor shorter than the backoff never shortens the pause" {
+                let policy = {
+                    withFloor with
+                        InitialBackoff = TimeSpan.FromSeconds 20.0
+                        RateLimitFloor = Some(TimeSpan.FromSeconds 1.0)
+                }
+
+                Expect.equal
+                    (RetryPolicy.rateLimitDelay policy 1)
+                    (RetryPolicy.delayFor policy 2)
+                    "the backoff wins when it is longer"
+            }
+
+            test "a transport 429 with no Retry-After classifies as a rate limit" {
+                Expect.equal
+                    (TransportRetry.classOf (TransportError.Transient(429, "", None)))
+                    RetryClass.RateLimited
+                    "the floor applies to a bare 429 on the transport path too"
             }
         ]
     ]

@@ -141,6 +141,7 @@ type LinkConnector() =
                     InitialBackoff = TimeSpan.FromMilliseconds 250.0
                     MaxBackoff = TimeSpan.FromSeconds 10.0
                     Timeout = Some(TimeSpan.FromSeconds 30.0)
+                    RateLimitFloor = None
                 }
         }
 

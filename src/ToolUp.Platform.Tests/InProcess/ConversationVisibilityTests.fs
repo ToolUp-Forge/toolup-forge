@@ -1054,7 +1054,7 @@ type private RecordingProvider() =
                 Ok {
                     Content = "a reply"
                     ToolCalls = []
-                    StopReason = "end_turn"
+                    StopReason = StopReason.EndTurn
                     Usage = None
                 }
         }

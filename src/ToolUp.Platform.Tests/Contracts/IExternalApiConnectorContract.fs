@@ -235,6 +235,7 @@ let private fastRetry attempts : RetryPolicy = {
     InitialBackoff = TimeSpan.Zero
     MaxBackoff = TimeSpan.Zero
     Timeout = None
+    RateLimitFloor = None
 }
 
 let private options: PagedFetchOptions = {
@@ -609,6 +610,7 @@ let private declaredRetryTests =
         InitialBackoff = TimeSpan.FromMilliseconds 10.0
         MaxBackoff = TimeSpan.FromSeconds 1.0
         Timeout = None
+        RateLimitFloor = None
     }
 
     let overriding = fastRetry 2

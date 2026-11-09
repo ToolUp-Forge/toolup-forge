@@ -51,7 +51,7 @@ let private accessContext =
 let private response (text: string) : AIProviderResponse = {
     Content = text
     ToolCalls = []
-    StopReason = "end_turn"
+    StopReason = StopReason.EndTurn
     Usage =
         Some {
             PromptTokens = 11

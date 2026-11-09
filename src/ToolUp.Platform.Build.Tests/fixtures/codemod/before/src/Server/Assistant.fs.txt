@@ -23,3 +23,10 @@ let tuned (n: int) = { assistant with MaxHistoryMessages = Some n }
 
 let reply provider registry dispatch ctx taskId conversationId messages prompt onEvent =
     AIAgentEngine.runAgentLoop provider registry dispatch ctx taskId conversationId AISurface.SidePanel None None CancellationToken.None messages prompt onEvent
+
+// The shipped connectors are Connector records with create* helpers.
+let claude = ClaudeAIProvider.ClaudeAIProvider("key")
+let openAI = OpenAIProvider.OpenAIProvider("key", "gpt-4o")
+let gemini = GeminiAIProvider.GeminiAIProvider("key")
+let copilot = CopilotAIProvider.CopilotAIProvider("https://acme.openai.azure.com", "key")
+let finished (r: AIProviderResponse) = r.StopReason = "end_turn"

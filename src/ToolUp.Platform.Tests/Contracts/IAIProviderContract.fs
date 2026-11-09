@@ -57,7 +57,7 @@ type private StubProvider(cannedContent: string) =
                 Ok {
                     Content = cannedContent
                     ToolCalls = []
-                    StopReason = "end_turn"
+                    StopReason = StopReason.EndTurn
                     Usage = None
                 }
         }

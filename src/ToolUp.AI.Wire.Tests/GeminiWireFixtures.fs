@@ -8,7 +8,7 @@ open ToolUp.Platform.AI
 /// expected primitives in one source file means a green run on each host
 /// proves the Gemini mapper (`GeminiAIProviderWire`) builds the identical
 /// request bytes and parses the identical response shape on both hosts —
-/// the Phase 255 parity property, seeded for Gemini (Phase 253).
+/// the cross-host parity property, for Gemini.
 ///
 /// Data only — no assertions and no calls into `GeminiAIProviderWire`, so
 /// each host's test file drives the mapper with its own `Expect` API.
@@ -45,7 +45,7 @@ let toolRequestTools: AIProviderToolDef list = [
 let toolRequestGolden =
     """{"contents":[{"role":"user","parts":[{"text":"what time is it?"}]}],"systemInstruction":{"parts":[{"text":"You are concise."}]},"tools":[{"functionDeclarations":[{"name":"get_time","description":"Get the current time.","parameters":{"type":"object","properties":{}}}]}],"toolConfig":{"functionCallingConfig":{"mode":"AUTO"}}}"""
 
-// Phase 508 — a rich tool schema reaching `functionDeclarations[].parameters`.
+// a rich tool schema reaching `functionDeclarations[].parameters`.
 // Gemini's mapper degrades an unparseable schema to an empty object rather
 // than throwing, which is the right posture for a blank one and exactly the
 // wrong outcome for a nested one silently mangled: an empty `parameters`
@@ -74,7 +74,7 @@ let textResponseJson =
     """{"candidates":[{"content":{"parts":[{"text":"Hello there"}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":10,"cachedContentTokenCount":4,"candidatesTokenCount":3}}"""
 
 let textResponseExpectedContent = "Hello there"
-let textResponseExpectedStopReason = "end_turn"
+let textResponseExpectedStopReason = StopReason.EndTurn
 let textResponseExpectedPromptTokens = 10
 let textResponseExpectedCachedTokens = 4
 let textResponseExpectedOutputTokens = 3
@@ -88,7 +88,7 @@ let functionCallResponseJson =
 let functionCallExpectedName = "get_time"
 let functionCallExpectedSyntheticId = "gemini-fc-get_time-0"
 let functionCallExpectedArgs = """{"tz":"utc"}"""
-let functionCallExpectedStopReason = "tool_use"
+let functionCallExpectedStopReason = StopReason.ToolUse
 
 // ─── Name-keyed functionResponse round-trip ──────────────────────
 //

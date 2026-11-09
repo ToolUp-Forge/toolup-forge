@@ -46,9 +46,9 @@ let fixtures: (string * JsonValue * string) list = [
     ],
     "{\"model\":\"x\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"stream\":true,\"n\":1}"
 ]
-// ─── Phase 508 — the rich tool-schema pass-through fixture ────────
+// ─── the rich tool-schema pass-through fixture ────────
 //
-// Phase 508 let a tool parameter declare a nested object, an array or a
+// A tool parameter may declare a nested object, an array or a
 // closed enum instead of a bare type name, which put a materially bigger
 // JSON Schema on the wire than any mapper had carried before. Each
 // mapper embeds the schema rather than re-flattening it, so what has to
@@ -71,3 +71,16 @@ let fixtures: (string * JsonValue * string) list = [
 /// thing it is checking proves nothing anyway.
 let nestedToolInputSchema =
     """{"type":"object","properties":{"filter":{"type":"object","description":"Row filter.","properties":{"metric":{"type":"string","description":"Metric.","enum":["revenue","units"]},"weeks":{"type":"integer"}},"required":["metric"]},"units":{"type":"array","description":"Units.","items":{"type":"string","enum":["metric","imperial"]}}},"required":["filter"]}"""
+
+/// A parsed response, or — for a parse `Error` — a sentinel response naming
+/// the error, so a fixture compares unequal and fails loudly rather than
+/// crashing module initialisation.
+let parsedOrSentinel (result: Result<ToolUp.Platform.AI.AIProviderResponse, ToolUp.Platform.AI.AIProviderError>) =
+    match result with
+    | Ok response -> response
+    | Error e -> {
+        Content = "PARSE-ERROR: " + ToolUp.Platform.AI.AIProviderError.toMessage e
+        ToolCalls = []
+        StopReason = ToolUp.Platform.AI.StopReason.Other ""
+        Usage = None
+      }

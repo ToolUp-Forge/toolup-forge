@@ -2,7 +2,7 @@ module ToolUp.AI.Wire.Tests.OpenAIWireFixtures
 
 open ToolUp.Platform.AI
 
-// ─── OpenAI wire-mapping golden fixtures (Wave 32, Phase 252) ─────
+// ─── OpenAI wire-mapping golden fixtures ─────
 //
 // `(name, actual, golden)` request triples and `(name, parsed, expected)`
 // response triples for the portable OpenAI mapper (`OpenAIProviderWire`).
@@ -11,7 +11,7 @@ open ToolUp.Platform.AI
 // (`ToolUp.AI.Wire.Fable.Tests`) each assert `actual = golden` over the
 // SAME inputs, so a green run on each host proves cross-host byte-parity
 // for the OpenAI request build and shape-parity for the response parse —
-// seeding the Phase 255 conformance corpus.
+// the conformance corpus asserts it.
 //
 // The goldens are hand-authored from the OpenAI chat/completions wire
 // contract (field set + member order + null-omission), NOT copied from the
@@ -28,7 +28,7 @@ let private timeTool: AIProviderToolDef = {
     InputSchema = """{"type":"object","properties":{}}"""
 }
 
-/// Phase 508 — a tool whose parameters are a rendered rich schema.
+/// a tool whose parameters are a rendered rich schema.
 let private nestedSchemaTool: AIProviderToolDef = {
     Name = "analyse"
     Description = "Analyse rows."
@@ -127,7 +127,7 @@ let requestFixtures: (string * string * string) list = [
     OpenAIProviderWire.buildRequestBody "gpt-4o" [ imageBytesMessage ] [] None false None,
     """{"model":"gpt-4o","messages":[{"role":"user","content":[{"type":"image_url","image_url":{"url":"data:image/png;base64,AQID"}}]}]}"""
 
-    // Phase 508 — a nested object, an enum and an array-of-enum reach
+    // a nested object, an enum and an array-of-enum reach
     // `function.parameters` unflattened and in the order they were
     // rendered. The mapper parses the schema and re-emits it through
     // JsonHost, so this is the assertion that the round trip is
@@ -151,12 +151,13 @@ let requestFixtures: (string * string * string) list = [
 /// canned body and must reify the identical `AIProviderResponse`.
 let responseFixtures: (string * AIProviderResponse * AIProviderResponse) list = [
     "text+usage",
-    OpenAIProviderWire.parseResponse
+    WireFixtures.parsedOrSentinel
+    <| OpenAIProviderWire.parseResponse
         """{"choices":[{"message":{"content":"Hi there"},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":5,"prompt_tokens_details":{"cached_tokens":4}}}""",
     {
         Content = "Hi there"
         ToolCalls = []
-        StopReason = "end_turn"
+        StopReason = StopReason.EndTurn
         Usage =
             Some {
                 PromptTokens = 10
@@ -167,7 +168,8 @@ let responseFixtures: (string * AIProviderResponse * AIProviderResponse) list = 
     }
 
     "tool_calls",
-    OpenAIProviderWire.parseResponse
+    WireFixtures.parsedOrSentinel
+    <| OpenAIProviderWire.parseResponse
         """{"choices":[{"message":{"content":null,"tool_calls":[{"id":"call_9","function":{"name":"get_time","arguments":"{\"tz\":\"UTC\"}"}}]},"finish_reason":"tool_calls"}]}""",
     {
         Content = ""
@@ -178,25 +180,27 @@ let responseFixtures: (string * AIProviderResponse * AIProviderResponse) list = 
                 Arguments = """{"tz":"UTC"}"""
             }
         ]
-        StopReason = "tool_use"
+        StopReason = StopReason.ToolUse
         Usage = None
     }
 
     "length-truncation",
-    OpenAIProviderWire.parseResponse """{"choices":[{"message":{"content":"partial"},"finish_reason":"length"}]}""",
+    WireFixtures.parsedOrSentinel
+    <| OpenAIProviderWire.parseResponse """{"choices":[{"message":{"content":"partial"},"finish_reason":"length"}]}""",
     {
         Content = "partial"
         ToolCalls = []
-        StopReason = "max_tokens"
+        StopReason = StopReason.MaxTokens
         Usage = None
     }
 
     "empty-choices",
-    OpenAIProviderWire.parseResponse """{"choices":[]}""",
+    WireFixtures.parsedOrSentinel
+    <| OpenAIProviderWire.parseResponse """{"choices":[]}""",
     {
         Content = ""
         ToolCalls = []
-        StopReason = "end_turn"
+        StopReason = StopReason.EndTurn
         Usage = None
     }
 ]

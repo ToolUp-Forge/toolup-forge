@@ -542,7 +542,7 @@ type private NarratingModel() =
                                 Arguments = """{"subject_hierarchy":"brand","subject_path":"acme","metric":"revenue"}"""
                             }
                         ]
-                        StopReason = "tool_use"
+                        StopReason = StopReason.ToolUse
                         Usage = None
                     }
             | Some result ->
@@ -561,7 +561,7 @@ type private NarratingModel() =
                     Ok {
                         Content = answer paragraph
                         ToolCalls = []
-                        StopReason = "end_turn"
+                        StopReason = StopReason.EndTurn
                         Usage = None
                     }
         }

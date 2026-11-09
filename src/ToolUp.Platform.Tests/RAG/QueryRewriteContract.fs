@@ -536,7 +536,7 @@ let tests =
                                 Ok {
                                     Content = rewrittenQuery
                                     ToolCalls = []
-                                    StopReason = "end_turn"
+                                    StopReason = StopReason.EndTurn
                                     Usage = None
                                 }
                         }
@@ -569,7 +569,7 @@ let tests =
                                 Ok {
                                     Content = content
                                     ToolCalls = []
-                                    StopReason = "end_turn"
+                                    StopReason = StopReason.EndTurn
                                     Usage = None
                                 }
                         }

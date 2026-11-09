@@ -5,24 +5,17 @@ namespace ToolUp.Platform.AI
 
 open ToolUp.Platform.Transport
 
-// ─── Pure HTTP error classification (Wave 32, Phase 251) ─────────
+// ─── Pure HTTP error classification ──────────────────────────────
 //
-// The `statusCode → AIProviderError` decision currently inlined
-// identically in every provider's `*.fs` (`if code = 429 || code >= 500
-// then TransientServer else PermanentClient`), lifted to one pure portable
-// function so the per-provider mappers (Phases 252–254) classify by calling
-// in, not by re-deriving the rule. No `System.Net.Http` — reasons over the
-// numeric status only, so it Fable-compiles.
-//
-// Phase 128 — the rule itself now lives once, in the connector-neutral
-// `TransportClassifier` (`ToolUp.Platform.Transport`); this module
-// projects it onto the AI taxonomy. Behaviour is unchanged.
+// The `statusCode → AIProviderError` decision, projected from the
+// connector-neutral `TransportClassifier` onto the AI taxonomy. No
+// `System.Net.Http` — it reasons over the numeric status only, so it
+// Fable-compiles.
 
 module ErrorClassifier =
 
     /// Classify a non-success HTTP response into the retry-aware
-    /// `AIProviderError` taxonomy. The rule is byte-identical to the
-    /// providers' inline egress:
+    /// `AIProviderError` taxonomy:
     ///   * 429 (rate-limited) or any 5xx → `TransientServer` (retry-worthy
     ///     with backoff);
     ///   * every other 4xx (401 / 403 auth, 400 bad request, 404 model not
@@ -39,8 +32,6 @@ module ErrorClassifier =
         | _ -> PermanentClient(statusCode, body)
 
     /// Classify a transport-level failure (connection refused, TCP reset,
-    /// DNS failure, a timeout from the HTTP client) — the `catch` arm in
-    /// today's egress that maps an `HttpRequestException` / cancelled
-    /// `OperationCanceledException` to `TransientNetwork`. Retry-worthy
-    /// within the policy budget.
+    /// DNS failure, a timeout from the HTTP client) as `TransientNetwork`.
+    /// Retry-worthy within the policy budget.
     let classifyTransportFailure (message: string) : AIProviderError = TransientNetwork message

@@ -3,7 +3,7 @@
 
 module ToolUp.Platform.Tests.AI.AIProviderModelOverrideTests
 
-// ─── Phase 661 — per-call model override on `IAIProvider` ──────────
+// ─── per-call model override on `IAIProvider` ──────────
 //
 // Three bars.
 //
@@ -56,7 +56,7 @@ let private usage: TokenUsage = {
 let private okResponse (content: string) : AIProviderResponse = {
     Content = content
     ToolCalls = []
-    StopReason = "end_turn"
+    StopReason = StopReason.EndTurn
     Usage = Some usage
 }
 
@@ -631,11 +631,10 @@ let private decoratorTests =
         }
     ]
 
-// ─── Phase 865 — the budget decorators forward the override ─────
+// ─── the budget decorators forward the override ─────
 //
-// Phase 661 taught metering and the quota gate to forward
-// `IAIProviderModelOverride`; the two budget decorators (Phase 9s's
-// per-user token hour, Phase 499's monetary spend gate) implemented
+// Metering and the quota gate forward `IAIProviderModelOverride`; the two
+// budget decorators (the per-user token hour and the monetary spend gate) implemented
 // `IAIProvider` only. The `SendMessageWith` extension dispatches on the
 // OUTERMOST provider's runtime type, so one budget decorator anywhere in
 // the chain turned every override into the configured model's plain
@@ -988,7 +987,7 @@ let private budgetForwardingTests =
 
 // ─── The conformance pack, bound per implementation ──────────────
 //
-// `IAIProviderModelOverride` is a replaceable seam (Phase 259: a public
+// `IAIProviderModelOverride` is a replaceable seam (a public
 // interface with two or more production implementations), so it carries
 // a pack. Bound here by the in-memory reference and by each shipped
 // decorator over it — the decorators are the production implementations
@@ -1036,7 +1035,7 @@ let private contractBindings =
                 :> IAIProviderFactory
                 |> resolveThrough))
 
-        // Phase 865 — the two budget decorators, with configured ceilings
+        // the two budget decorators, with configured ceilings
         // so the pack runs through their real gates.
         IAIProviderModelOverrideContract.tests
             "BudgetEnforcingProvider (AI.Server)"

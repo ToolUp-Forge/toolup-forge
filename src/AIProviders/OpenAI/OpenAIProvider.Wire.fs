@@ -4,74 +4,21 @@ open ToolUp.AI.Wire
 open ToolUp.Remoting.Json
 open ToolUp.Platform.AI
 
-// ─── Portable wire mapping (Wave 32, Phase 252) ──────────────────
+// ─── Portable wire mapping ───────────────────────────────────────
 //
-// The OpenAI chat/completions request build + response parse, rewritten
-// over the portable `JsonValue` model (`ToolUp.AI.Wire`) — no
-// `System.Text.Json` here. The same source compiles to both the .NET
-// server host and a Fable browser host: `JsonHost.serialize` is the
-// canonical byte-stable writer shared by both, and `JsonHost.parse` is the
-// host-bridged reader. The provider (`OpenAIProvider.fs`) injects the HTTP
-// egress via `IHttpTransport` and runs this mapping inside it; this file
-// stays 100% pure (GP 8 Fable-native, GP 12 host-portable). The change is
-// behaviour-preserving (GP 11): identical fields, identical member order,
-// identical null-omission to the prior STJ mapping.
+// The OpenAI chat/completions request build + response parse over the
+// portable `JsonValue` model (`ToolUp.AI.Wire`) — no `System.Text.Json`.
+// The same source compiles to the .NET server host and a Fable browser
+// host: `JsonHost.serialize` is the canonical byte-stable writer, and
+// `JsonHost.parse` the host-bridged reader. The stream assembly is
+// `OpenAIStreaming` in `ToolUp.AI.Wire`.
 
 // ─── Response parsing ────────────────────────────────────────────
 
-/// Parse OpenAI's `usage` block into the provider-neutral `TokenUsage`
-/// shape (Phase 6i.B). OpenAI's prompt caching is automatic above ~1024
-/// tokens — no request-side opt-in needed; the cached portion is reported
-/// at `usage.prompt_tokens_details.cached_tokens` (absent on responses
-/// where no caching occurred).
-///
-/// `CacheCreationTokens` is always `None` here — OpenAI does not expose
-/// a separate cache-write count; it bills cached vs uncached input
-/// differently but doesn't surface the write boundary.
-let parseUsage (root: JsonValue) : TokenUsage option =
-    match JsonValue.tryMember "usage" root with
-    | Some usage ->
-        let getInt (name: string) =
-            usage
-            |> JsonValue.tryMember name
-            |> Option.bind JsonValue.asInt
-            |> Option.defaultValue 0
-
-        let cachedTokens =
-            usage
-            |> JsonValue.tryMember "prompt_tokens_details"
-            |> Option.bind (JsonValue.tryMember "cached_tokens")
-            |> Option.bind JsonValue.asInt
-            |> Option.defaultValue 0
-
-        Some {
-            PromptTokens = getInt "prompt_tokens"
-            CachedPromptTokens = cachedTokens
-            OutputTokens = getInt "completion_tokens"
-            CacheCreationTokens = None
-        }
-    | None -> None
-
-/// Map OpenAI's `finish_reason` to the provider-neutral stop vocabulary
-/// the agent loop recognises (end_turn / tool_use / max_tokens).
-let private toStopReason (finishReason: string) =
-    match finishReason with
-    | "tool_calls" -> "tool_use"
-    | "length" -> "max_tokens"
-    | "stop"
-    | _ -> "end_turn"
-
-/// Parse an OpenAI non-streaming `chat/completions` response.
+/// Walk a parsed `chat/completions` response.
 /// Shape: `choices[0].message.{content, tool_calls[]}` + `choices[0].finish_reason`.
-/// Throws on input that is not valid JSON — the provider wraps the call so
-/// a malformed body surfaces as `MalformedResponse` (unchanged behaviour).
-let parseResponse (json: string) : AIProviderResponse =
-    let root =
-        match JsonHost.parse json with
-        | Some r -> r
-        | None -> failwith "OpenAI chat/completions response was not valid JSON"
-
-    let usage = parseUsage root
+let private parseRoot (root: JsonValue) : AIProviderResponse =
+    let usage = OpenAIStreaming.parseUsage root
 
     let firstChoice =
         root |> JsonValue.tryMember "choices" |> Option.bind (JsonValue.tryItem 0)
@@ -80,7 +27,7 @@ let parseResponse (json: string) : AIProviderResponse =
     | None -> {
         Content = ""
         ToolCalls = []
-        StopReason = "end_turn"
+        StopReason = StopReason.EndTurn
         Usage = usage
       }
     | Some choice ->
@@ -89,7 +36,7 @@ let parseResponse (json: string) : AIProviderResponse =
             |> JsonValue.tryMember "finish_reason"
             |> Option.bind JsonValue.asString
             |> Option.defaultValue "stop"
-            |> toStopReason
+            |> OpenAIStreaming.stopReason
 
         let message = choice |> JsonValue.tryMember "message"
 
@@ -142,9 +89,16 @@ let parseResponse (json: string) : AIProviderResponse =
             Usage = usage
         }
 
+/// Parse an OpenAI non-streaming `chat/completions` response body. A body
+/// that is not JSON is a `MalformedResponse`.
+let parseResponse (json: string) : Result<AIProviderResponse, AIProviderError> =
+    match JsonHost.parse json with
+    | Some root -> Ok(parseRoot root)
+    | None -> Error(MalformedResponse "OpenAI chat/completions response was not valid JSON")
+
 // ─── Request building ────────────────────────────────────────────
 
-// ─── Phase 6o vision support ─────────────────────────────────────
+// ─── Vision support ──────────────────────────────────────────────
 //
 // OpenAI vision-capable models (Chat Completions API). GPT-4o /
 // GPT-4-Turbo accept image_url content blocks; GPT-3.5 does not.
@@ -178,7 +132,7 @@ let private buildMultipartContent (parts: AIContentPart list) : JsonValue =
                 | Url u -> u
 
             jobj [ "type", jstr "image_url"; "image_url", jobj [ "url", jstr url ] ]
-        // Phase 1128 — a block reaches the model as its text summary; the
+        // A block reaches the model as its text summary; the
         // node never enters a request body.
         | BlockPart _ -> jobj [ "type", jstr "text"; "text", jstr (AIContentPart.redactedSummary part) ])
     |> jarr
@@ -199,7 +153,7 @@ let private toOpenAIMessages (messages: AIProviderMessage list) : JsonValue list
                     "content", jstr tr.Content
                 ]
         elif not m.Parts.IsEmpty then
-            // Phase 6o — multipart user message. Emit OpenAI's content
+            // Multipart user message. Emit OpenAI's content
             // array shape. Tool-call envelopes don't apply here
             // (multimodal turns are user→assistant, never assistant→tool).
             jobj [ "role", jstr m.Role; "content", buildMultipartContent m.Parts ]
@@ -231,13 +185,11 @@ let private toOpenAIMessages (messages: AIProviderMessage list) : JsonValue list
 let private buildTools (tools: AIProviderToolDef list) : JsonValue =
     tools
     |> List.map (fun t ->
-        // The tool's JSON Schema embeds as a nested object. A malformed
-        // schema is a caller defect — throw (the prior STJ mapping threw
-        // from `JsonSerializer.Deserialize<JsonElement>` too).
+        // The tool's JSON Schema embeds as a nested object. A connector
+        // refuses a malformed one before building (`callBody`); the pure
+        // mapper stays total and carries it as a string.
         let parameters =
-            match JsonHost.parse t.InputSchema with
-            | Some v -> v
-            | None -> failwith (sprintf "tool '%s' InputSchema is not valid JSON" t.Name)
+            JsonHost.parse t.InputSchema |> Option.defaultValue (jstr t.InputSchema)
 
         jobj [
             "type", jstr "function"
@@ -251,7 +203,7 @@ let private buildTools (tools: AIProviderToolDef list) : JsonValue =
     |> jarr
 
 /// Build the chat-completions request body. `structuredOutputSchema`
-/// (Phase 67b) flips on `response_format: { type: "json_schema",
+/// flips on `response_format: { type: "json_schema",
 /// strict: true }` when supplied; `None` runs the request in normal
 /// free-text / tool-use mode. Mirrors Gemini's wire-layer
 /// `structuredOutputSchema` parameter.
@@ -283,13 +235,13 @@ let buildRequestBody
                // "auto" lets the model decide; matches Anthropic's default.
                [ "tools", buildTools tools; "tool_choice", jstr "auto" ])
         @ (if stream then
-               // Request usage stats in the final stream chunk (Phase 6i.B).
+               // Request usage stats in the final stream chunk.
                [ "stream", jbool true; "stream_options", jobj [ "include_usage", jbool true ] ]
            else
                [])
         @ (match structuredOutputSchema with
            | Some schema ->
-               // Phase 67b — `strict: true` activates OpenAI's
+               // `strict: true` activates OpenAI's
                // constrained-decoding mode (gpt-4o-2024-08-06+ and
                // gpt-4o-mini); older models reject the request rather than
                // silently degrading. `name` is required by the wire format;
@@ -307,114 +259,23 @@ let buildRequestBody
 
     JsonHost.serialize (jobj members)
 
-// ─── Streaming accumulator ───────────────────────────────────────
-
-/// Mutable state for a streaming response. OpenAI streams `choices[0].delta`
-/// chunks that append to the assistant message; tool calls arrive incrementally
-/// with an index and arguments-fragment-per-chunk.
-///
-/// Phase 6i.B: when `stream_options.include_usage = true` is requested
-/// (always — see `buildRequestBody`), OpenAI emits a final pre-`[DONE]`
-/// chunk with empty `choices: []` and a populated `usage` block at the
-/// root. We capture that into `Usage` so the provider's response carries
-/// token counts on the streaming path too.
-type StreamState = {
-    mutable Content: string
-    mutable ToolCalls: AIProviderToolCall list
-    mutable StopReason: string
-    mutable Usage: TokenUsage option
-}
-
-/// Apply one SSE data payload to the accumulator — the pure `chunk → delta`
-/// parser the provider's server-side read loop calls per line. Mirrors the
-/// Claude streaming parser's control flow but for OpenAI's delta shape.
-/// Never throws: a malformed chunk (or any unexpected shape) is swallowed
-/// so one bad frame can't abort the stream.
-let applyStreamChunk (state: StreamState) (onStream: (string -> unit) option) (data: string) =
-    if data = "[DONE]" then
-        ()
-    else
-        try
-            match JsonHost.parse data with
-            | None -> ()
-            | Some root ->
-                // Phase 6i.B: capture the final usage chunk (empty
-                // `choices: []`, populated root `usage`). Last write wins.
-                match parseUsage root with
-                | Some u -> state.Usage <- Some u
-                | None -> ()
-
-                match root |> JsonValue.tryMember "choices" |> Option.bind (JsonValue.tryItem 0) with
-                | Some choice ->
-                    match choice |> JsonValue.tryMember "delta" with
-                    | Some delta ->
-                        // Text-content delta: append to Content and fire onStream.
-                        match delta |> JsonValue.tryMember "content" |> Option.bind JsonValue.asString with
-                        | Some text when text <> "" ->
-                            state.Content <- state.Content + text
-                            onStream |> Option.iter (fun cb -> cb text)
-                        | _ -> ()
-
-                        // Tool-call delta: OpenAI sends `tool_calls[].index`
-                        // + partial fields. First chunk for an index has
-                        // `id` + `function.name`; subsequent chunks have
-                        // `function.arguments` fragments.
-                        match delta |> JsonValue.tryMember "tool_calls" |> Option.bind JsonValue.asArray with
-                        | Some tcs ->
-                            for tc in tcs do
-                                let index =
-                                    tc
-                                    |> JsonValue.tryMember "index"
-                                    |> Option.bind JsonValue.asInt
-                                    |> Option.defaultValue 0
-
-                                let id = tc |> JsonValue.tryMember "id" |> Option.bind JsonValue.asString
-                                let fn = tc |> JsonValue.tryMember "function"
-
-                                let name =
-                                    fn |> Option.bind (JsonValue.tryMember "name") |> Option.bind JsonValue.asString
-
-                                let argsFragment =
-                                    fn
-                                    |> Option.bind (JsonValue.tryMember "arguments")
-                                    |> Option.bind JsonValue.asString
-                                    |> Option.defaultValue ""
-
-                                // Ensure list has entries up to `index`.
-                                while state.ToolCalls.Length <= index do
-                                    state.ToolCalls <-
-                                        state.ToolCalls
-                                        @ [
-                                            {
-                                                AIProviderToolCall.Id = ""
-                                                Name = ""
-                                                Arguments = ""
-                                            }
-                                        ]
-
-                                let current = state.ToolCalls[index]
-
-                                let updated = {
-                                    Id =
-                                        (match id with
-                                         | Some v -> v
-                                         | None -> current.Id)
-                                    Name =
-                                        (match name with
-                                         | Some v -> v
-                                         | None -> current.Name)
-                                    Arguments = current.Arguments + argsFragment
-                                }
-
-                                state.ToolCalls <-
-                                    state.ToolCalls |> List.mapi (fun i c -> if i = index then updated else c)
-                        | None -> ()
-                    | None -> ()
-
-                    // Final chunk carries `finish_reason`.
-                    match choice |> JsonValue.tryMember "finish_reason" |> Option.bind JsonValue.asString with
-                    | Some reason -> state.StopReason <- toStopReason reason
-                    | None -> ()
-                | None -> ()
-        with _ ->
-            ()
+/// The body of one connector call. A structured call's schema, and every
+/// tool's input schema, must parse as JSON: a malformed one is the caller's
+/// defect, refused as `PermanentClient` before anything is sent.
+let callBody
+    (model: string)
+    (messages: AIProviderMessage list)
+    (tools: AIProviderToolDef list)
+    (systemPrompt: string option)
+    (streaming: bool)
+    (schema: string option)
+    : Result<string, AIProviderError> =
+    match tools |> List.tryFind (fun t -> (JsonHost.parse t.InputSchema).IsNone) with
+    | Some t -> Error(PermanentClient(0, sprintf "tool '%s' InputSchema is not valid JSON" t.Name))
+    | None ->
+        match schema with
+        | None -> Ok(buildRequestBody model messages tools systemPrompt streaming None)
+        | Some schema ->
+            match JsonHost.parse schema with
+            | Some value -> Ok(buildRequestBody model messages tools systemPrompt false (Some value))
+            | None -> Error(PermanentClient(0, "structuredOutputSchema is not valid JSON"))

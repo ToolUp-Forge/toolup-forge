@@ -913,6 +913,27 @@ ToolUp.AI.ComposedBlockRefusal+UnknownRequest.kind : System.String { get }
 ToolUp.AI.ComposedBlockRefusal+UnknownRequest.nodeId : System.String { get }
 ToolUp.AI.ComposedBlockRefusalModule (class)
 ToolUp.AI.ComposedBlockRefusalModule.describe(ToolUp.AI.ComposedBlockRefusal) : System.String
+ToolUp.AI.Connector (class)
+ToolUp.AI.Connector.secretHeader(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[System.String]]], System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]]], Microsoft.FSharp.Core.Unit) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]], ToolUp.Platform.AI.AIProviderError]]
+ToolUp.AI.Connector.sleep(System.TimeSpan) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.AI.ConnectorProvider`1 (class)
+ToolUp.AI.ConnectorProvider`1..ctor(ToolUp.AI.Connector`1[S], System.String)
+ToolUp.AI.ConnectorProvider`1.Connector : ToolUp.AI.Connector`1[S] { get }
+ToolUp.AI.Connector`1 (class)
+ToolUp.AI.Connector`1..ctor(Microsoft.FSharp.Core.FSharpFunc`2[System.String, ToolUp.Platform.AI.AIProviderCapabilities], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.Boolean], System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.Boolean], ToolUp.AI.StructuredOutput, System.Net.Http.HttpClient, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]], ToolUp.Platform.AI.AIProviderError]]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.ProviderRequest, ToolUp.AI.Endpoint], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.ProviderRequest, Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Platform.AI.AIProviderError]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.ProviderRequest, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.AI.AIProviderResponse, ToolUp.Platform.AI.AIProviderError]]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.ProviderRequest, ToolUp.AI.Wire.StreamProcessor`1[S]], Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan], Microsoft.FSharp.Core.FSharpFunc`2[System.TimeSpan, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]])
+ToolUp.AI.Connector`1.Body : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.ProviderRequest, Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Platform.AI.AIProviderError]] { get }
+ToolUp.AI.Connector`1.CanServe : Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.Boolean] { get }
+ToolUp.AI.Connector`1.Capabilities : Microsoft.FSharp.Core.FSharpFunc`2[System.String, ToolUp.Platform.AI.AIProviderCapabilities] { get }
+ToolUp.AI.Connector`1.Client : System.Net.Http.HttpClient { get }
+ToolUp.AI.Connector`1.Credential : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]], ToolUp.Platform.AI.AIProviderError]]] { get }
+ToolUp.AI.Connector`1.Endpoint : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.ProviderRequest, ToolUp.AI.Endpoint] { get }
+ToolUp.AI.Connector`1.IsVisionCapable : Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.Boolean] { get }
+ToolUp.AI.Connector`1.ParseResponse : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.ProviderRequest, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.AI.AIProviderResponse, ToolUp.Platform.AI.AIProviderError]]] { get }
+ToolUp.AI.Connector`1.Pause : Microsoft.FSharp.Core.FSharpFunc`2[System.TimeSpan, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]] { get }
+ToolUp.AI.Connector`1.RateLimitFloor : Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan] { get }
+ToolUp.AI.Connector`1.Stream : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.ProviderRequest, ToolUp.AI.Wire.StreamProcessor`1[S]] { get }
+ToolUp.AI.Connector`1.StructuredOutput : ToolUp.AI.StructuredOutput { get }
+ToolUp.AI.Connector`1.UnservedReason : System.String { get }
 ToolUp.AI.ConversationExportAuditHandler (class)
 ToolUp.AI.ConversationExportAuditHandler.exportAuditHandler(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.AspNetCore.Http.HttpContext) : System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]
 ToolUp.AI.ConversationExportAuditHandler+ExportAuditRequest (class)
@@ -936,6 +957,19 @@ ToolUp.AI.DefaultAIProviderFactory+AIPlatformProvider..ctor(ToolUp.AI.AIProvider
 ToolUp.AI.DefaultAIProviderFactory+AIPlatformProvider.BootstrapKeyFromEnv : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.AI.DefaultAIProviderFactory+AIPlatformProvider.Build : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, ToolUp.Platform.AI.IAIProvider]] { get }
 ToolUp.AI.DefaultAIProviderFactory+AIPlatformProvider.Descriptor : ToolUp.AI.AIProviderDescriptor { get }
+ToolUp.AI.Endpoint (class)
+ToolUp.AI.Endpoint.IsAt : System.Boolean { get }
+ToolUp.AI.Endpoint.IsOpened : System.Boolean { get }
+ToolUp.AI.Endpoint.Tag : System.Int32 { get }
+ToolUp.AI.Endpoint+At (class)
+ToolUp.AI.Endpoint+At.url : System.String { get }
+ToolUp.AI.Endpoint+Opened (class)
+ToolUp.AI.Endpoint+Opened.body : System.String { get }
+ToolUp.AI.Endpoint+Opened.route : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Platform.AI.AIProviderError]] { get }
+ToolUp.AI.Endpoint+Opened.url : System.String { get }
+ToolUp.AI.Endpoint+Tags (class)
+ToolUp.AI.Endpoint+Tags.At : System.Int32 (literal)
+ToolUp.AI.Endpoint+Tags.Opened : System.Int32 (literal)
 ToolUp.AI.FastPathBeaconHandler (class)
 ToolUp.AI.FastPathBeaconHandler.BeaconDedupWindow : System.Int32 (literal)
 ToolUp.AI.FastPathBeaconHandler.BeaconSurfaceLabel : System.String (literal)
@@ -1369,6 +1403,18 @@ ToolUp.AI.PlatformAIKeysHandler (class)
 ToolUp.AI.PlatformAIKeysHandler.platformAIKeysApi(ToolUp.AI.IAIProviderFactory, Microsoft.AspNetCore.Http.HttpContext) : ToolUp.AI.PlatformAIKeysApi
 ToolUp.AI.PlatformAITools (class)
 ToolUp.AI.PlatformAITools.builtIn : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.AIToolRegistry+RegisteredTool] { get }
+ToolUp.AI.ProviderCall (class)
+ToolUp.AI.ProviderCall.send`1(ToolUp.AI.Connector`1[S], ToolUp.AI.ProviderRequest, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit]], ToolUp.Platform.Transport.RetryPolicy, System.Threading.CancellationToken) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.AI.AIProviderResponse, ToolUp.Platform.AI.AIProviderError]]
+ToolUp.AI.ProviderRequest (class)
+ToolUp.AI.ProviderRequest..ctor(System.String, System.String, ToolUp.Platform.AI.AIProviderCallOptions, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderMessage], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderToolDef], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean)
+ToolUp.AI.ProviderRequest.ConfiguredModel : System.String { get }
+ToolUp.AI.ProviderRequest.Messages : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderMessage] { get }
+ToolUp.AI.ProviderRequest.Model : System.String { get }
+ToolUp.AI.ProviderRequest.Options : ToolUp.Platform.AI.AIProviderCallOptions { get }
+ToolUp.AI.ProviderRequest.Schema : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.AI.ProviderRequest.Streaming : System.Boolean { get }
+ToolUp.AI.ProviderRequest.SystemPrompt : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.AI.ProviderRequest.Tools : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderToolDef] { get }
 ToolUp.AI.RegisteredLanguageProfile (class)
 ToolUp.AI.RegisteredLanguageProfile.Fragment : System.String { get }
 ToolUp.AI.RegisteredLanguageProfile.FragmentBytes : System.Int32 { get }
@@ -1380,6 +1426,15 @@ ToolUp.AI.SSEHandler.LegacyChannelMigrationGuide : System.String (literal)
 ToolUp.AI.SSEHandler.sendEvent(ToolUp.Platform.Jobs.SSEConnectionManager, System.String, ToolUp.AI.AIStreamEvent) : System.Void
 ToolUp.AI.SSEHandler.sseHandler(ToolUp.Platform.Jobs.SSEConnectionManager, ToolUp.Platform.SseAuthMode, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.AspNetCore.Http.HttpContext) : System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]
 ToolUp.AI.SSEHandler.writeDeprecationHeaders(Microsoft.AspNetCore.Http.HttpResponse) : System.Void
+ToolUp.AI.StructuredOutput (class)
+ToolUp.AI.StructuredOutput.IsNative : System.Boolean { get }
+ToolUp.AI.StructuredOutput.IsViaPrompt : System.Boolean { get }
+ToolUp.AI.StructuredOutput.Native : ToolUp.AI.StructuredOutput { get }
+ToolUp.AI.StructuredOutput.Tag : System.Int32 { get }
+ToolUp.AI.StructuredOutput.ViaPrompt : ToolUp.AI.StructuredOutput { get }
+ToolUp.AI.StructuredOutput+Tags (class)
+ToolUp.AI.StructuredOutput+Tags.Native : System.Int32 (literal)
+ToolUp.AI.StructuredOutput+Tags.ViaPrompt : System.Int32 (literal)
 ToolUp.AI.SuspendedPrompt (class)
 ToolUp.AI.SuspendedPrompt.SuspendedDispatchTimeoutMs : System.Int32 (literal)
 ToolUp.AI.SuspendedPrompt.awaitDecisionWithin`1(System.Int32, System.Threading.Tasks.Task`1[Decision], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[Decision]]

@@ -152,7 +152,7 @@ let private readRefusals (store: IEventStore) (scopeId: string) : AITokenBudgetE
 let private okResponse: AIProviderResponse = {
     Content = "ok"
     ToolCalls = []
-    StopReason = "end_turn"
+    StopReason = StopReason.EndTurn
     Usage = None
 }
 

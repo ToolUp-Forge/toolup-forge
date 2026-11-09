@@ -63,7 +63,7 @@ type ScriptedModel() =
                                     """{"subject_hierarchy":"site","subject_path":"uk-web","metric":"revenue"}"""
                             }
                         ]
-                        StopReason = "tool_use"
+                        StopReason = StopReason.ToolUse
                         Usage = None
                     }
             | Some result ->
@@ -77,7 +77,7 @@ type ScriptedModel() =
                         Content =
                             answer (fact.GetProperty("factId").GetString()) (fact.GetProperty("rendering").GetString())
                         ToolCalls = []
-                        StopReason = "end_turn"
+                        StopReason = StopReason.EndTurn
                         Usage = None
                     }
         }

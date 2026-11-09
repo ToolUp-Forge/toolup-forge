@@ -70,7 +70,7 @@ let private okProvider: IAIProvider =
                 Ok {
                     Content = "ok"
                     ToolCalls = []
-                    StopReason = "end_turn"
+                    StopReason = StopReason.EndTurn
                     Usage = None
                 }
         }

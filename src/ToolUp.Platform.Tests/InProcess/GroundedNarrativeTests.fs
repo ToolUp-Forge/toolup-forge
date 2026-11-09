@@ -633,7 +633,7 @@ type private ScriptedModel(write: Writer) =
                                 Arguments = """{"subject_hierarchy":"brand","subject_path":"acme","metric":"revenue"}"""
                             }
                         ]
-                        StopReason = "tool_use"
+                        StopReason = StopReason.ToolUse
                         Usage = None
                     }
             | _ ->
@@ -654,7 +654,7 @@ type private ScriptedModel(write: Writer) =
                         Content =
                             write (fact.GetProperty("factId").GetString()) (fact.GetProperty("rendering").GetString())
                         ToolCalls = []
-                        StopReason = "end_turn"
+                        StopReason = StopReason.EndTurn
                         Usage = None
                     }
         }
@@ -1879,7 +1879,7 @@ let private replyOnly (content: string) =
                 Ok {
                     Content = content
                     ToolCalls = []
-                    StopReason = "end_turn"
+                    StopReason = StopReason.EndTurn
                     Usage = None
                 }
         }

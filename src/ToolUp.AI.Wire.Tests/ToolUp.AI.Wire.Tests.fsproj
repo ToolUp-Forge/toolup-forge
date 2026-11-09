@@ -18,16 +18,16 @@
     <ItemGroup>
         <Compile Include="WireFixtures.fs" />
         <Compile Include="JsonValueTests.fs" />
-        <!-- Phase 251 — portable egress: error classifier + retry runner. -->
+        <!-- portable egress: error classifier + retry runner. -->
         <Compile Include="TransportTests.fs" />
-        <!-- Phase 252 — the OpenAI portable mapper compiled into this pack
+        <!-- the OpenAI portable mapper compiled into this pack
              (its own copy; no provider-package reference) + its golden
              fixtures + tests. The Fable smoke compiles the same mapper +
              fixtures, so a green run on each host proves byte-parity. -->
         <Compile Include="..\AIProviders\OpenAI\OpenAIProvider.Wire.fs" />
         <Compile Include="OpenAIWireFixtures.fs" />
         <Compile Include="OpenAIWireTests.fs" />
-        <!-- Phase 253 — the Gemini portable mapper compiled into this pack
+        <!-- the Gemini portable mapper compiled into this pack
              (source-linked; no provider-package reference, it depends only on
              ToolUp.AI.Wire) + its golden fixtures + tests. The Fable smoke
              compiles the same mapper + fixtures, so a green run on each host
@@ -35,7 +35,7 @@
         <Compile Include="..\AIProviders\Gemini\GeminiAIProvider.Wire.fs" />
         <Compile Include="GeminiWireFixtures.fs" />
         <Compile Include="GeminiWireTests.fs" />
-        <!-- Phase 254 — the portable Claude mapper compiled into this pack
+        <!-- the portable Claude mapper compiled into this pack
              (its own copy; it depends only on ToolUp.AI.Wire) + its golden
              fixtures + tests. The streaming state machine is exercised via
              ToolUp.AI.Wire's ClaudeStreaming (project-referenced). The Fable
@@ -44,7 +44,9 @@
         <Compile Include="..\AIProviders\Claude\ClaudeAIProvider.Wire.fs" />
         <Compile Include="ClaudeWireFixtures.fs" />
         <Compile Include="ClaudeWireTests.fs" />
-        <!-- Phase 722 — the unregistered-[<Tests>]-list guard, source-linked from
+        <Compile Include="StreamTranscripts.fs" />
+        <Compile Include="StreamingFoldTests.fs" />
+        <!-- the unregistered-[<Tests>]-list guard, source-linked from
              ToolUp.Platform.Tests so there is one implementation. -->
         <Compile Include="..\ToolUp.Platform.Tests\Support\TestRegistrationGuard.fs" Link="Support\TestRegistrationGuard.fs" />
         <Compile Include="Program.fs" />

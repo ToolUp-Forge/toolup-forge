@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
     ToolUp.AI.Wire.Conformance.Fable — the Fable (browser) host of the
-    Wave 32 conformance pack. It transpiles via Fable and runs
+    conformance pack. It transpiles via Fable and runs
     the SAME shared suite (..\Corpus.fs + ..\ConformanceSuite.fs) the .NET
     Expecto host runs, under Node's built-in test runner (node:test). A
     green run on BOTH hosts is the byte-parity / structural-parity gate —
@@ -60,6 +60,7 @@
         <!-- Numbers at the precision boundary, and the writer's string escaping. -->
         <Compile Include="..\Shared\NumberFixtures.fs" />
         <Compile Include="..\Shared\StringFixtures.fs" />
+        <Compile Include="..\Shared\ConnectorFixtures.fs" />
         <Compile Include="..\Shared\Corpus.fs" />
         <Compile Include="..\Shared\ConformanceSuite.fs" />
         <Compile Include="ProgramFable.fs" />

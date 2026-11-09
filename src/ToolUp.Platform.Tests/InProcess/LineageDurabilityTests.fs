@@ -109,6 +109,7 @@ let private policy (maxAttempts: int) : RetryPolicy = {
     InitialBackoff = TimeSpan.Zero
     MaxBackoff = TimeSpan.Zero
     Timeout = None
+    RateLimitFloor = None
 }
 
 /// The substrate that survives a restart: blob storage and the object store.

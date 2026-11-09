@@ -145,7 +145,7 @@ let private readRefusals (store: IEventStore) (scopeId: string) : AISpendBudgetE
 let private okResponse (usage: TokenUsage option) : AIProviderResponse = {
     Content = "ok"
     ToolCalls = []
-    StopReason = "end_turn"
+    StopReason = StopReason.EndTurn
     Usage = usage
 }
 
