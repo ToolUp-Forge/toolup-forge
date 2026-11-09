@@ -6,6 +6,7 @@ module SessionSecurityUI
 open System
 open ToolUp.Elmish
 open Feliz
+open Toolup.UIToolkit
 open ToolUp.Platform
 
 // ─── Phase 528 — session security (client-tier slice) ────────────────
@@ -62,10 +63,11 @@ type Model = {
     /// Sign-out-everywhere is the one action that can lock the user out
     /// of the page they are standing on, so it gets its own confirm.
     PendingRevokeAll: bool
-    /// Error banner. Cleared by `DismissError` or the next mutation.
-    Error: string option
-    /// Transient confirmation after a revoke.
-    Status: string option
+    /// Failure notice (`Notice.Problem`). Cleared by `DismissError` or the
+    /// next mutation.
+    Error: Notice option
+    /// Transient confirmation after a revoke (`Notice.Info`).
+    Status: Notice option
 }
 
 type Msg =
@@ -139,7 +141,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 // no sessions" empty state, which is the one reading a
                 // security page must never invite.
                 Busy = false
-                Error = Some err
+                Error = Some(Notice.Problem err)
         },
         Cmd.none
 
@@ -173,7 +175,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         // `TeamManagerUI.update`'s recorded pattern (Phase 751).
         {
             model with
-                Status = Some MessageCatalog.english.SessionSecurity.RevokeSuccess
+                Status = Some(Notice.Info MessageCatalog.english.SessionSecurity.RevokeSuccess)
         },
         loadCmd ()
 
@@ -181,7 +183,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         {
             model with
                 Busy = false
-                Error = Some err
+                Error = Some(Notice.Problem err)
         },
         Cmd.none
 
@@ -215,13 +217,17 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         // pluralisation rule.
         let message = MessageCatalog.english.SessionSecurity.RevokeAllResult count
 
-        { model with Status = Some message }, loadCmd ()
+        {
+            model with
+                Status = Some(Notice.Info message)
+        },
+        loadCmd ()
 
     | RevokeAllCompleted(Error err) ->
         {
             model with
                 Busy = false
-                Error = Some err
+                Error = Some(Notice.Problem err)
         },
         Cmd.none
 
@@ -351,37 +357,7 @@ let private SessionSecurityBody (model: Model) (dispatch: Msg -> unit) =
     let msgs = (MessageCatalogProvider.useMessages ()).SessionSecurity
     let now = DateTimeOffset.UtcNow
 
-    let errorBanner =
-        match model.Error with
-        | None -> Html.none
-        | Some err ->
-            Html.div [
-                prop.className "mb-4 px-3 py-2 rounded bg-red-50 border border-red-200 text-sm text-red-800"
-                prop.children [
-                    Html.span [ prop.text err ]
-                    Html.button [
-                        prop.className "ml-3 text-xs underline"
-                        prop.text msgs.Dismiss
-                        prop.onClick (fun _ -> dispatch DismissError)
-                    ]
-                ]
-            ]
-
-    let statusBanner =
-        match model.Status with
-        | None -> Html.none
-        | Some status ->
-            Html.div [
-                prop.className "mb-4 px-3 py-2 rounded bg-green-50 border border-green-200 text-sm text-green-800"
-                prop.children [
-                    Html.span [ prop.text status ]
-                    Html.button [
-                        prop.className "ml-3 text-xs underline"
-                        prop.text msgs.Dismiss
-                        prop.onClick (fun _ -> dispatch DismissStatus)
-                    ]
-                ]
-            ]
+    let noticeMsgs = { Dismiss = msgs.Dismiss }
 
     let body =
         if not model.Loaded then
@@ -436,8 +412,8 @@ let private SessionSecurityBody (model: Model) (dispatch: Msg -> unit) =
         prop.children [
             Html.h2 [ prop.className "text-lg font-semibold mb-1"; prop.text msgs.Heading ]
             Html.p [ prop.className "text-sm text-gray-600 mb-4"; prop.text msgs.Subheading ]
-            errorBanner
-            statusBanner
+            StateViews.notice noticeMsgs model.Error (fun () -> dispatch DismissError)
+            StateViews.notice noticeMsgs model.Status (fun () -> dispatch DismissStatus)
             body
             signOutEverywhere
         ]
