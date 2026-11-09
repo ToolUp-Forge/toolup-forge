@@ -151,12 +151,13 @@ let requestFixtures: (string * string * string) list = [
 /// canned body and must reify the identical `AIProviderResponse`.
 let responseFixtures: (string * AIProviderResponse * AIProviderResponse) list = [
     "text+usage",
-    OpenAIProviderWire.parseResponse
+    WireFixtures.parsedOrSentinel
+    <| OpenAIProviderWire.parseResponse
         """{"choices":[{"message":{"content":"Hi there"},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":5,"prompt_tokens_details":{"cached_tokens":4}}}""",
     {
         Content = "Hi there"
         ToolCalls = []
-        StopReason = "end_turn"
+        StopReason = StopReason.EndTurn
         Usage =
             Some {
                 PromptTokens = 10
@@ -167,7 +168,8 @@ let responseFixtures: (string * AIProviderResponse * AIProviderResponse) list = 
     }
 
     "tool_calls",
-    OpenAIProviderWire.parseResponse
+    WireFixtures.parsedOrSentinel
+    <| OpenAIProviderWire.parseResponse
         """{"choices":[{"message":{"content":null,"tool_calls":[{"id":"call_9","function":{"name":"get_time","arguments":"{\"tz\":\"UTC\"}"}}]},"finish_reason":"tool_calls"}]}""",
     {
         Content = ""
@@ -178,25 +180,27 @@ let responseFixtures: (string * AIProviderResponse * AIProviderResponse) list = 
                 Arguments = """{"tz":"UTC"}"""
             }
         ]
-        StopReason = "tool_use"
+        StopReason = StopReason.ToolUse
         Usage = None
     }
 
     "length-truncation",
-    OpenAIProviderWire.parseResponse """{"choices":[{"message":{"content":"partial"},"finish_reason":"length"}]}""",
+    WireFixtures.parsedOrSentinel
+    <| OpenAIProviderWire.parseResponse """{"choices":[{"message":{"content":"partial"},"finish_reason":"length"}]}""",
     {
         Content = "partial"
         ToolCalls = []
-        StopReason = "max_tokens"
+        StopReason = StopReason.MaxTokens
         Usage = None
     }
 
     "empty-choices",
-    OpenAIProviderWire.parseResponse """{"choices":[]}""",
+    WireFixtures.parsedOrSentinel
+    <| OpenAIProviderWire.parseResponse """{"choices":[]}""",
     {
         Content = ""
         ToolCalls = []
-        StopReason = "end_turn"
+        StopReason = StopReason.EndTurn
         Usage = None
     }
 ]

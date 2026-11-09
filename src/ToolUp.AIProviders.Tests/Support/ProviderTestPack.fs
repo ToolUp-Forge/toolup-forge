@@ -132,7 +132,7 @@ let private runCanonicalRoundTrip (provider: IAIProvider) = async {
                 "response carries neither text content nor a tool call (Content=%s, ToolCalls=%d, StopReason=%s)"
                 response.Content
                 response.ToolCalls.Length
-                response.StopReason)
+                response.StopReason.Token)
 
         // Streaming MAY emit zero callbacks when the model returns
         // only tool_use blocks (no text deltas). Assert streaming
@@ -429,7 +429,7 @@ let private runNestedSchemaConformance (provider: IAIProvider) = async {
         | [] ->
             failtestf
                 "nested-schema tool: the model returned no tool call (StopReason=%s, Content=%s) — the arm exists to exercise structured arguments"
-                response.StopReason
+                response.StopReason.Token
                 response.Content
         | call :: _ ->
             Expect.equal call.Name "analyse_rows" "the model called the declared tool"

@@ -26,7 +26,7 @@ let tests =
             testCase "text + tool_use + usage" (fun () ->
                 let r = parsedResponse ()
                 Expect.equal r.Content "Hello" "text content concatenated"
-                Expect.equal r.StopReason "tool_use" "stop reason"
+                Expect.equal r.StopReason StopReason.ToolUse "stop reason"
                 Expect.equal r.ToolCalls.Length 1 "one tool call"
                 let tc = r.ToolCalls.Head
                 Expect.equal tc.Id "toolu_1" "tool call id"
@@ -47,7 +47,7 @@ let tests =
                 let response, emitted = foldStream streamingChunks
                 Expect.equal emitted "Hello world" "onStream surfaced the text deltas in order"
                 Expect.equal response.Content "Hello world" "Content accumulates the text deltas"
-                Expect.equal response.StopReason "tool_use" "stop_reason from message_delta"
+                Expect.equal response.StopReason StopReason.ToolUse "stop_reason from message_delta"
                 Expect.equal response.ToolCalls.Length 1 "one tool call assembled"
                 let tc = response.ToolCalls.Head
                 Expect.equal tc.Id "toolu_9" "tool call id from content_block_start"

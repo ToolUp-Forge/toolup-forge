@@ -143,7 +143,7 @@ let suite =
         testCase "response parity — claude/text+tool_use+usage" (fun () ->
             let r = ClaudeWireFixtures.parsedResponse ()
             Expect.equal r.Content "Hello" "content"
-            Expect.equal r.StopReason "tool_use" "stop reason"
+            Expect.equal r.StopReason StopReason.ToolUse "stop reason"
 
             match r.ToolCalls with
             | [ tc ] ->
@@ -172,7 +172,7 @@ let suite =
 
                 Expect.equal emitted "Hello world" "onStream surfaced the text deltas"
                 Expect.equal response.Content "Hello world" "Content accumulated"
-                Expect.equal response.StopReason "tool_use" "stop reason"
+                Expect.equal response.StopReason StopReason.ToolUse "stop reason"
 
                 match response.ToolCalls with
                 | [ tc ] ->

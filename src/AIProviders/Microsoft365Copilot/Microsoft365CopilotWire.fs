@@ -198,7 +198,7 @@ let tryReplyText (prompt: string) (json: string) : string option =
 let toResponse (reply: string) : AIProviderResponse = {
     Content = reply
     ToolCalls = []
-    StopReason = "end_turn"
+    StopReason = StopReason.EndTurn
     Usage = None
 }
 

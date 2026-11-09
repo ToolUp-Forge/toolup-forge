@@ -65,70 +65,64 @@ let parseUsage (root: JsonValue) : TokenUsage option =
         }
     | None -> None
 
-/// Parse a non-streaming Claude response body. Throws on un-parseable JSON
-/// (`JsonHost.parse` returns `None`) so the caller's `try/with` surfaces it
-/// as `MalformedResponse`, preserving the prior `JsonDocument.Parse`
-/// behaviour. `content` is the block array: `text` blocks concatenate into
-/// `Content`; `tool_use` blocks become `ToolCalls` with the raw `input`
-/// JSON re-serialized as the Arguments string.
-let parseResponse (json: string) : AIProviderResponse =
+/// Parse a non-streaming Messages API response. A body that is not JSON is
+/// a `MalformedResponse`. `content` is the block array: `text` blocks
+/// concatenate into `Content`; `tool_use` blocks become `ToolCalls` with
+/// the raw `input` JSON re-serialized as the Arguments string.
+let parseResponse (json: string) : Result<AIProviderResponse, AIProviderError> =
     match JsonHost.parse json with
-    | None -> failwith "Claude response was not valid JSON"
+    | None -> Error(MalformedResponse "Claude response was not valid JSON")
     | Some root ->
-        let stopReason =
-            root
-            |> JsonValue.tryMember "stop_reason"
-            |> Option.bind JsonValue.asString
-            |> Option.defaultValue "end_turn"
-
         let blocks =
             root
             |> JsonValue.tryMember "content"
             |> Option.bind JsonValue.asArray
             |> Option.defaultValue [||]
 
-        let mutable textContent = ""
-        let mutable toolCalls: AIProviderToolCall list = []
+        let text, toolCalls =
+            blocks
+            |> Array.fold
+                (fun (text, calls) block ->
+                    match block |> JsonValue.tryMember "type" |> Option.bind JsonValue.asString with
+                    | Some "text" ->
+                        let txt =
+                            block
+                            |> JsonValue.tryMember "text"
+                            |> Option.bind JsonValue.asString
+                            |> Option.defaultValue ""
 
-        for block in blocks do
-            match block |> JsonValue.tryMember "type" |> Option.bind JsonValue.asString with
-            | Some "text" ->
-                match block |> JsonValue.tryMember "text" |> Option.bind JsonValue.asString with
-                | Some txt -> textContent <- textContent + txt
-                | None -> ()
-            | Some "tool_use" ->
-                let id =
-                    block
-                    |> JsonValue.tryMember "id"
-                    |> Option.bind JsonValue.asString
-                    |> Option.defaultValue ""
+                        text + txt, calls
+                    | Some "tool_use" ->
+                        let field name =
+                            block
+                            |> JsonValue.tryMember name
+                            |> Option.bind JsonValue.asString
+                            |> Option.defaultValue ""
 
-                let name =
-                    block
-                    |> JsonValue.tryMember "name"
-                    |> Option.bind JsonValue.asString
-                    |> Option.defaultValue ""
+                        let input =
+                            match block |> JsonValue.tryMember "input" with
+                            | Some v -> JsonHost.serialize v
+                            | None -> "{}"
 
-                let input =
-                    match block |> JsonValue.tryMember "input" with
-                    | Some v -> JsonHost.serialize v
-                    | None -> "{}"
-
-                toolCalls <-
-                    toolCalls
-                    @ [
-                        {
-                            AIProviderToolCall.Id = id
-                            Name = name
+                        let call: AIProviderToolCall = {
+                            Id = field "id"
+                            Name = field "name"
                             Arguments = input
                         }
-                    ]
-            | _ -> ()
 
-        {
-            Content = textContent
-            ToolCalls = toolCalls
-            StopReason = stopReason
+                        text, call :: calls
+                    | _ -> text, calls)
+                ("", [])
+
+        Ok {
+            Content = text
+            ToolCalls = List.rev toolCalls
+            StopReason =
+                root
+                |> JsonValue.tryMember "stop_reason"
+                |> Option.bind JsonValue.asString
+                |> Option.map StopReason.ofToken
+                |> Option.defaultValue StopReason.EndTurn
             Usage = parseUsage root
         }
 

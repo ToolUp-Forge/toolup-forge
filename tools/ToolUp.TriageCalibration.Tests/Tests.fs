@@ -61,7 +61,7 @@ type private FakeProvider(script: Map<string, Reply>) =
                     Ok {
                         Content = c
                         ToolCalls = []
-                        StopReason = "end_turn"
+                        StopReason = StopReason.EndTurn
                         Usage =
                             Some {
                                 PromptTokens = 120

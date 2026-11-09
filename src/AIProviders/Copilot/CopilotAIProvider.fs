@@ -254,12 +254,7 @@ type CopilotAIProvider
                         let request = HttpRequest.post requestUrl authHeaders body
 
                         if useStreaming then
-                            let state = {
-                                Content = ""
-                                ToolCalls = []
-                                StopReason = "end_turn"
-                                Usage = None
-                            }
+                            let mutable state = OpenAIStreaming.initial
 
                             use cts =
                                 match retryPolicy.Timeout with
@@ -286,15 +281,11 @@ type CopilotAIProvider
                                         if isNull line then
                                             reading <- false
                                         elif line.StartsWith("data: ") then
-                                            applyStreamChunk state onStream (line.Substring(6))
+                                            let next, text = OpenAIStreaming.processor.Step state line
+                                            state <- next
+                                            text |> Option.iter (fun t -> onStream |> Option.iter (fun cb -> cb t))
 
-                                    return
-                                        Ok {
-                                            Content = state.Content
-                                            ToolCalls = state.ToolCalls
-                                            StopReason = state.StopReason
-                                            Usage = state.Usage
-                                        }
+                                    return Ok(OpenAIStreaming.finalize state)
                             with
                             | :? OperationCanceledException when cts.IsCancellationRequested ->
                                 if state.Content <> "" then
@@ -327,7 +318,7 @@ type CopilotAIProvider
 
                                 if HttpResponse.isSuccess response then
                                     try
-                                        return Ok(parseResponse response.Body)
+                                        return parseResponse response.Body
                                     with ex ->
                                         return Error(MalformedResponse ex.Message)
                                 else
@@ -386,7 +377,7 @@ type CopilotAIProvider
 
                                 if HttpResponse.isSuccess response then
                                     try
-                                        return Ok(parseResponse response.Body)
+                                        return parseResponse response.Body
                                     with ex ->
                                         return Error(MalformedResponse ex.Message)
                                 else

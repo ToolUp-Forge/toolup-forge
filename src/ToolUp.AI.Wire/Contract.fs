@@ -308,11 +308,46 @@ type TokenUsage = {
     CacheCreationTokens: int option
 }
 
+/// Why the model ended one turn. Each connector decodes its vendor's own
+/// vocabulary into it (OpenAI's `finish_reason`, Gemini's `finishReason`,
+/// Anthropic's `stop_reason`); `Token` is the SDK's spelling of it.
+[<RequireQualifiedAccess>]
+type StopReason =
+    /// The model finished its answer.
+    | EndTurn
+    /// The model asked for one or more tool calls.
+    | ToolUse
+    /// The reply hit its length cap.
+    | MaxTokens
+    /// A vendor reason the SDK does not name (Anthropic's `stop_sequence`,
+    /// `pause_turn`, `refusal`, …), carried verbatim.
+    | Other of token: string
+
+    /// `end_turn` | `tool_use` | `max_tokens`, or the vendor's own token.
+    member this.Token =
+        match this with
+        | EndTurn -> "end_turn"
+        | ToolUse -> "tool_use"
+        | MaxTokens -> "max_tokens"
+        | Other token -> token
+
+module StopReason =
+    /// The SDK's spelling of a stop reason.
+    let token (reason: StopReason) : string = reason.Token
+
+    /// Read the SDK's spelling back; any other token is `Other`.
+    let ofToken (token: string) : StopReason =
+        match token with
+        | "end_turn" -> StopReason.EndTurn
+        | "tool_use" -> StopReason.ToolUse
+        | "max_tokens" -> StopReason.MaxTokens
+        | other -> StopReason.Other other
+
 /// Result from a single AI provider call (one turn, not the full agent loop)
 type AIProviderResponse = {
     Content: string
     ToolCalls: AIProviderToolCall list
-    StopReason: string // "end_turn" | "tool_use" | "max_tokens"
+    StopReason: StopReason
     /// Provider-reported token usage for this turn. `None` when the
     /// provider could not extract usage (transient parse failure, or a
     /// streaming early-exit that missed the final usage chunk). Healthy

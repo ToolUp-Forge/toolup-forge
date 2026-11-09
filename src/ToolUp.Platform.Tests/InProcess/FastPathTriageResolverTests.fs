@@ -74,7 +74,7 @@ type private ScriptedProvider(supportsTriage: bool, structuredReply: string, age
                 Ok {
                     Content = agentReply
                     ToolCalls = []
-                    StopReason = "end_turn"
+                    StopReason = StopReason.EndTurn
                     Usage = None
                 }
         }
@@ -87,7 +87,7 @@ type private ScriptedProvider(supportsTriage: bool, structuredReply: string, age
                 Ok {
                     Content = structuredReply
                     ToolCalls = []
-                    StopReason = "end_turn"
+                    StopReason = StopReason.EndTurn
                     Usage = None
                 }
         }
@@ -117,7 +117,7 @@ type private FailingTriageProvider() =
                 Ok {
                     Content = "agent answered"
                     ToolCalls = []
-                    StopReason = "end_turn"
+                    StopReason = StopReason.EndTurn
                     Usage = None
                 }
         }
@@ -156,7 +156,7 @@ type private HangingTriageProvider() =
                 Ok {
                     Content = "agent answered"
                     ToolCalls = []
-                    StopReason = "end_turn"
+                    StopReason = StopReason.EndTurn
                     Usage = None
                 }
         }
@@ -172,7 +172,7 @@ type private HangingTriageProvider() =
                     Content =
                         "{\"decision\":\"set_field\",\"fieldId\":\"country\",\"value\":\"UK\",\"confidence\":0.99,\"reason\":\"\"}"
                     ToolCalls = []
-                    StopReason = "end_turn"
+                    StopReason = StopReason.EndTurn
                     Usage = None
                 }
         }
@@ -216,7 +216,7 @@ type private OverridingTriageProvider(structuredReply: string, canServe: string 
                 Ok {
                     Content = "agent answered"
                     ToolCalls = []
-                    StopReason = "end_turn"
+                    StopReason = StopReason.EndTurn
                     Usage = None
                 }
         }
@@ -228,7 +228,7 @@ type private OverridingTriageProvider(structuredReply: string, canServe: string 
                 Ok {
                     Content = structuredReply
                     ToolCalls = []
-                    StopReason = "end_turn"
+                    StopReason = StopReason.EndTurn
                     Usage = None
                 }
         }

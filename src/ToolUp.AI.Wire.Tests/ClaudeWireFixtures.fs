@@ -138,7 +138,7 @@ let responseJson =
     """{"id":"msg_1","type":"message","role":"assistant","stop_reason":"tool_use","content":[{"type":"text","text":"Hello"},{"type":"tool_use","id":"toolu_1","name":"get_time","input":{"tz":"UTC"}}],"usage":{"input_tokens":10,"output_tokens":5,"cache_read_input_tokens":2,"cache_creation_input_tokens":3}}"""
 
 let parsedResponse () =
-    ClaudeAIProviderWire.parseResponse responseJson
+    WireFixtures.parsedOrSentinel (ClaudeAIProviderWire.parseResponse responseJson)
 
 // ─── Streaming assembly ──────────────────────────────────────────
 

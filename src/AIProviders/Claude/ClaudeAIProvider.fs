@@ -440,10 +440,7 @@ type ClaudeAIProvider
                                 let! response = (transport :> IHttpTransport).Send(request)
 
                                 if HttpResponse.isSuccess response then
-                                    try
-                                        return Ok(parseResponse response.Body)
-                                    with ex ->
-                                        return Error(MalformedResponse ex.Message)
+                                    return parseResponse response.Body
                                 else
                                     return Error(ErrorClassifier.classifyStatus response.StatusCode response.Body)
                             with
@@ -523,68 +520,70 @@ type ClaudeAIProvider
                                 let responseBody = response.Body
 
                                 try
-                                    let parsed = parseResponse responseBody
+                                    match parseResponse responseBody with
+                                    | Error e -> return Error e
+                                    | Ok parsed ->
 
-                                    // Find the schema-tool call. With
-                                    // tool_choice forcing it +
-                                    // disable_parallel_tool_use, exactly
-                                    // one tool_use block is expected.
-                                    let schemaCall =
-                                        parsed.ToolCalls
-                                        |> List.tryFind (fun tc ->
-                                            tc.Name = ClaudeAIProviderWire.StructuredResponseToolName)
-
-                                    match schemaCall with
-                                    | Some call ->
-                                        // Replace .Content with the
-                                        // tool-call's `input` JSON so
-                                        // the response shape matches
-                                        // Gemini / OpenAI's native
-                                        // paths. The payload first runs
-                                        // through the deterministic
-                                        // normalisation pass — Claude
-                                        // models sometimes wrap the
-                                        // response in a single-key
-                                        // `{ "input": ... }` envelope
-                                        // and/or emit it as a
-                                        // JSON-encoded string, and
-                                        // Anthropic does not validate
-                                        // tool inputs against the
-                                        // schema server-side. Strip the
-                                        // schema-tool from ToolCalls;
-                                        // surface any user-tool calls
-                                        // (should be empty per the
-                                        // forced tool_choice, but
-                                        // defensively preserved).
-                                        let userToolCalls =
+                                        // Find the schema-tool call. With
+                                        // tool_choice forcing it +
+                                        // disable_parallel_tool_use, exactly
+                                        // one tool_use block is expected.
+                                        let schemaCall =
                                             parsed.ToolCalls
-                                            |> List.filter (fun tc ->
-                                                tc.Name <> ClaudeAIProviderWire.StructuredResponseToolName)
+                                            |> List.tryFind (fun tc ->
+                                                tc.Name = ClaudeAIProviderWire.StructuredResponseToolName)
 
-                                        return
-                                            Ok {
-                                                parsed with
-                                                    Content =
-                                                        ClaudeAIProviderWire.normaliseStructuredPayload
-                                                            schema
-                                                            call.Arguments
-                                                    ToolCalls = userToolCalls
-                                                    StopReason = "end_turn"
-                                            }
-                                    | None ->
-                                        // Model declined to call the
-                                        // forced tool — should be
-                                        // impossible per Anthropic's
-                                        // tool_choice contract, but
-                                        // surface honestly rather than
-                                        // silently fabricate.
-                                        return
-                                            Error(
-                                                SchemaUnsupported(
-                                                    "structured-output",
-                                                    "Claude did not return the forced structured_response tool call. This is unexpected — the request was issued with tool_choice forcing the call."
+                                        match schemaCall with
+                                        | Some call ->
+                                            // Replace .Content with the
+                                            // tool-call's `input` JSON so
+                                            // the response shape matches
+                                            // Gemini / OpenAI's native
+                                            // paths. The payload first runs
+                                            // through the deterministic
+                                            // normalisation pass — Claude
+                                            // models sometimes wrap the
+                                            // response in a single-key
+                                            // `{ "input": ... }` envelope
+                                            // and/or emit it as a
+                                            // JSON-encoded string, and
+                                            // Anthropic does not validate
+                                            // tool inputs against the
+                                            // schema server-side. Strip the
+                                            // schema-tool from ToolCalls;
+                                            // surface any user-tool calls
+                                            // (should be empty per the
+                                            // forced tool_choice, but
+                                            // defensively preserved).
+                                            let userToolCalls =
+                                                parsed.ToolCalls
+                                                |> List.filter (fun tc ->
+                                                    tc.Name <> ClaudeAIProviderWire.StructuredResponseToolName)
+
+                                            return
+                                                Ok {
+                                                    parsed with
+                                                        Content =
+                                                            ClaudeAIProviderWire.normaliseStructuredPayload
+                                                                schema
+                                                                call.Arguments
+                                                        ToolCalls = userToolCalls
+                                                        StopReason = StopReason.EndTurn
+                                                }
+                                        | None ->
+                                            // Model declined to call the
+                                            // forced tool — should be
+                                            // impossible per Anthropic's
+                                            // tool_choice contract, but
+                                            // surface honestly rather than
+                                            // silently fabricate.
+                                            return
+                                                Error(
+                                                    SchemaUnsupported(
+                                                        "structured-output",
+                                                        "Claude did not return the forced structured_response tool call. This is unexpected — the request was issued with tool_choice forcing the call."
+                                                    )
                                                 )
-                                            )
                                 with ex ->
                                     return Error(MalformedResponse ex.Message)
                             else

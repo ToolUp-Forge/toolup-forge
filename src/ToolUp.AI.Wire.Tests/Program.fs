@@ -14,9 +14,10 @@ let private registeredTests =
         OpenAIWireTests.tests
         GeminiWireTests.tests
         ClaudeWireTests.tests
+        StreamingFoldTests.tests
     ]
 
-/// Phase 722 — the registered list plus the guard that makes an
+/// The registered list plus the guard that makes an
 /// unregistered `[<Tests>]` binding fail loudly instead of vanishing:
 /// this pack runs an explicitly-enumerated list, not Expecto's
 /// `[<Tests>]` auto-discovery, so an attributed binding absent from the

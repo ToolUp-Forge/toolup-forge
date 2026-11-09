@@ -153,19 +153,9 @@ let openAIResponseFixtures: (string * AIProviderResponse * AIProviderResponse) l
     OpenAIWireFixtures.responseFixtures
     |> List.map (fun (name, parsed, expected) -> "openai/" + name, parsed, expected)
 
-/// Gemini `parseResponse` returns `Result`; unwrap to a uniform
-/// `(name, parsed, expected)` triple. A parse `Error` is surfaced as a
-/// sentinel `AIProviderResponse` so the harness FAILS loudly (the records
-/// won't compare equal) rather than crashing module init with `failwith`.
-let private unwrapGemini (r: Result<AIProviderResponse, string>) : AIProviderResponse =
-    match r with
-    | Ok r -> r
-    | Error e -> {
-        Content = "GEMINI-PARSE-ERROR: " + e
-        ToolCalls = []
-        StopReason = ""
-        Usage = None
-      }
+/// Gemini `parseResponse` returns `Result`; a parse `Error` surfaces as a
+/// sentinel so the harness fails loudly.
+let private unwrapGemini = WireFixtures.parsedOrSentinel
 
 let geminiResponseFixtures: (string * AIProviderResponse * AIProviderResponse) list = [
     "gemini/text+usage",

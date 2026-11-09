@@ -85,7 +85,7 @@ let private recordingProvider (recorder: Recorder) (providerId: string) : IAIPro
                 Ok {
                     Content = "ok"
                     ToolCalls = []
-                    StopReason = "end_turn"
+                    StopReason = StopReason.EndTurn
                     Usage = None
                 }
         }

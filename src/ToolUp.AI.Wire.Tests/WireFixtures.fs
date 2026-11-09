@@ -71,3 +71,16 @@ let fixtures: (string * JsonValue * string) list = [
 /// thing it is checking proves nothing anyway.
 let nestedToolInputSchema =
     """{"type":"object","properties":{"filter":{"type":"object","description":"Row filter.","properties":{"metric":{"type":"string","description":"Metric.","enum":["revenue","units"]},"weeks":{"type":"integer"}},"required":["metric"]},"units":{"type":"array","description":"Units.","items":{"type":"string","enum":["metric","imperial"]}}},"required":["filter"]}"""
+
+/// A parsed response, or — for a parse `Error` — a sentinel response naming
+/// the error, so a fixture compares unequal and fails loudly rather than
+/// crashing module initialisation.
+let parsedOrSentinel (result: Result<ToolUp.Platform.AI.AIProviderResponse, ToolUp.Platform.AI.AIProviderError>) =
+    match result with
+    | Ok response -> response
+    | Error e -> {
+        Content = "PARSE-ERROR: " + ToolUp.Platform.AI.AIProviderError.toMessage e
+        ToolCalls = []
+        StopReason = ToolUp.Platform.AI.StopReason.Other ""
+        Usage = None
+      }

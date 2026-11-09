@@ -838,7 +838,7 @@ type private ListingProvider(metric: string, level: string) =
                                 Arguments = "{}"
                             }
                         ]
-                        StopReason = "tool_use"
+                        StopReason = StopReason.ToolUse
                         Usage = None
                     }
             | _ ->
@@ -872,7 +872,7 @@ type private ListingProvider(metric: string, level: string) =
                     Ok {
                         Content = answer
                         ToolCalls = []
-                        StopReason = "end_turn"
+                        StopReason = StopReason.EndTurn
                         Usage = None
                     }
         }

@@ -104,7 +104,7 @@ type private CannedToolCallProvider(toolNameToCall: string, argsJson: string) =
                                 Arguments = argsJson
                             }
                         ]
-                        StopReason = "tool_use"
+                        StopReason = StopReason.ToolUse
                         Usage = None
                     }
             else
@@ -112,7 +112,7 @@ type private CannedToolCallProvider(toolNameToCall: string, argsJson: string) =
                     Ok {
                         Content = "done"
                         ToolCalls = []
-                        StopReason = "end_turn"
+                        StopReason = StopReason.EndTurn
                         Usage = None
                     }
         }

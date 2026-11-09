@@ -74,7 +74,7 @@ let textResponseJson =
     """{"candidates":[{"content":{"parts":[{"text":"Hello there"}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":10,"cachedContentTokenCount":4,"candidatesTokenCount":3}}"""
 
 let textResponseExpectedContent = "Hello there"
-let textResponseExpectedStopReason = "end_turn"
+let textResponseExpectedStopReason = StopReason.EndTurn
 let textResponseExpectedPromptTokens = 10
 let textResponseExpectedCachedTokens = 4
 let textResponseExpectedOutputTokens = 3
@@ -88,7 +88,7 @@ let functionCallResponseJson =
 let functionCallExpectedName = "get_time"
 let functionCallExpectedSyntheticId = "gemini-fc-get_time-0"
 let functionCallExpectedArgs = """{"tz":"utc"}"""
-let functionCallExpectedStopReason = "tool_use"
+let functionCallExpectedStopReason = StopReason.ToolUse
 
 // ─── Name-keyed functionResponse round-trip ──────────────────────
 //

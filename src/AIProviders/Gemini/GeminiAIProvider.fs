@@ -126,9 +126,7 @@ type GeminiAIProvider private (apiKeyFetcher: unit -> Async<string option>, mode
                 let! response = (transport :> IHttpTransport).Send(request)
 
                 if HttpResponse.isSuccess response then
-                    match parseResponse response.Body with
-                    | Ok r -> return Ok r
-                    | Error detail -> return Error(MalformedResponse detail)
+                    return parseResponse response.Body
                 else
                     return Error(ErrorClassifier.classifyStatus response.StatusCode response.Body)
             with
@@ -156,7 +154,7 @@ type GeminiAIProvider private (apiKeyFetcher: unit -> Async<string option>, mode
             let request = HttpRequest.post endpoint (authHeaders key) body
             let transport = HttpClientTransport(client)
             use cts = newTimeoutCts retryPolicy
-            let state = initialStreamState ()
+            let mutable state = GeminiStreaming.initial
 
             try
                 let! response = transport.SendForStreaming(request, cts.Token)
@@ -176,15 +174,11 @@ type GeminiAIProvider private (apiKeyFetcher: unit -> Async<string option>, mode
                         if isNull line then
                             reading <- false
                         elif line.StartsWith("data: ") then
-                            applyStreamChunk state onStream (line.Substring(6))
+                            let next, text = GeminiStreaming.processor.Step state line
+                            state <- next
+                            text |> Option.iter (fun t -> onStream |> Option.iter (fun cb -> cb t))
 
-                    return
-                        Ok {
-                            Content = state.Content
-                            ToolCalls = state.ToolCalls
-                            StopReason = state.StopReason
-                            Usage = state.Usage
-                        }
+                    return Ok(GeminiStreaming.finalize state)
             with
             | :? OperationCanceledException when cts.IsCancellationRequested ->
                 if state.Content <> "" then

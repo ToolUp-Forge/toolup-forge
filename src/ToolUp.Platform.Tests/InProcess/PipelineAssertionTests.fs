@@ -547,7 +547,7 @@ type private QuotingModel(args: string) =
                                 Arguments = args
                             }
                         ]
-                        StopReason = "tool_use"
+                        StopReason = StopReason.ToolUse
                         Usage = None
                     }
             | results ->
@@ -565,7 +565,7 @@ type private QuotingModel(args: string) =
                     Ok {
                         Content = sprintf "The first site took £%s in total." rendering
                         ToolCalls = []
-                        StopReason = "end_turn"
+                        StopReason = StopReason.EndTurn
                         Usage = None
                     }
         }

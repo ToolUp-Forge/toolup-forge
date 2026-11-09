@@ -109,7 +109,7 @@ type private ForgingProvider(toolNameToCall: string) =
                                 Arguments = "{}"
                             }
                         ]
-                        StopReason = "tool_use"
+                        StopReason = StopReason.ToolUse
                         Usage = None
                     }
             else
@@ -117,7 +117,7 @@ type private ForgingProvider(toolNameToCall: string) =
                     Ok {
                         Content = "done"
                         ToolCalls = []
-                        StopReason = "end_turn"
+                        StopReason = StopReason.EndTurn
                         Usage = None
                     }
         }

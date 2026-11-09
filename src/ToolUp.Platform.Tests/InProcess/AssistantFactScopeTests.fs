@@ -103,7 +103,7 @@ type private QueryingModel() =
                                 Arguments = queryArgs
                             }
                         ]
-                        StopReason = "tool_use"
+                        StopReason = StopReason.ToolUse
                         Usage = None
                     }
             | toolResults ->
@@ -113,7 +113,7 @@ type private QueryingModel() =
                     Ok {
                         Content = "Read."
                         ToolCalls = []
-                        StopReason = "end_turn"
+                        StopReason = StopReason.EndTurn
                         Usage = None
                     }
         }

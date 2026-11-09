@@ -44,7 +44,7 @@ let tests =
         testList "parseResponse" [
             test "text response → content + end_turn + usage" {
                 match GeminiAIProviderWire.parseResponse textResponseJson with
-                | Error d -> failtestf "expected Ok; got %s" d
+                | Error d -> failtestf "expected Ok; got %A" d
                 | Ok r ->
                     Expect.equal r.Content textResponseExpectedContent "content"
                     Expect.equal r.StopReason textResponseExpectedStopReason "stop reason"
@@ -61,7 +61,7 @@ let tests =
 
             test "functionCall response → synthetic id + canonical args + tool_use" {
                 match GeminiAIProviderWire.parseResponse functionCallResponseJson with
-                | Error d -> failtestf "expected Ok; got %s" d
+                | Error d -> failtestf "expected Ok; got %A" d
                 | Ok r ->
                     Expect.equal r.StopReason functionCallExpectedStopReason "tool_use overrides finishReason"
 
