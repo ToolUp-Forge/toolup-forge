@@ -167,6 +167,7 @@ let allTests =
         // a live turn's events re-arm it on both chat surfaces, and a silent
         // turn still gets the note.
         ChatWatchdogTests.tests
+        ChatStreamTests.tests
         NarrativePromptAdminUITests.tests
     ]
 
