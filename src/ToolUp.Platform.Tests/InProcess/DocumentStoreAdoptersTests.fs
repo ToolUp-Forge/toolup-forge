@@ -586,7 +586,7 @@ let tests =
             |> ignore
 
             let store =
-                ToolUp.Remoting.Server.BlobIdempotencyStore(storage) :> ToolUp.Remoting.Server.IIdempotencyStore
+                BlobIdempotencyStore(storage) :> ToolUp.Remoting.Server.IIdempotencyStore
 
             Expect.equal
                 (store.TryGet("k-good", "s1") |> run)

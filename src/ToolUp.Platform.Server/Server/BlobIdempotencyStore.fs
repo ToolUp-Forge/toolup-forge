@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-namespace ToolUp.Remoting.Server
+namespace ToolUp.Platform.Infra
 
 open System
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.Infra
+open ToolUp.Remoting.Server
 
 // ─── The distributed idempotency store ──────────────────────────────
 //
@@ -16,7 +16,8 @@ open ToolUp.Platform.Infra
 // tier, and a memoised response is a document like any other — absent,
 // unreadable and undecodable are the document store's three answers, not
 // this file's. The shared layout (`BlobIdempotencyLayout`) stays with the
-// remoting tier, where the TTL sweep finds it.
+// remoting tier, where the TTL sweep finds it. Placed in the Infra part, the
+// type takes that part's namespace (`ToolUp.Platform.Infra`).
 
 /// Raised by `BlobIdempotencyStore.Store` when the memoised
 /// envelope was not written. `IIdempotencyStore.Store` returns
