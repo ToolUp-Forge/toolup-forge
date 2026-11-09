@@ -4471,7 +4471,8 @@ let main args =
 
             1
         else
-            let download = System.Text.RegularExpressions.Regex(@"(?<!\bmember\s+\w+)\.Download\s*\(")
+            let download =
+                System.Text.RegularExpressions.Regex(@"(?<!\bmember\s+\w+)\.Download\s*\(")
 
             let callers =
                 Directory.EnumerateFiles(serverDir, "*.fs", SearchOption.AllDirectories)
