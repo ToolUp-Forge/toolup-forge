@@ -132,4 +132,39 @@ let tests =
 
             expectQuarantined storage platform name
         }
+
+        test "OAuthFlowHandler credential metadata" {
+            let name = "data-sources/t1/credentials/src-1.json"
+            let storage = planted platform name
+
+            expectRefusedRead "loadCredentialMetadata" (fun () ->
+                ToolUp.Platform.Jobs.OAuthFlowHandler.loadCredentialMetadata storage "t1" "src-1"
+                |> run
+                |> ignore)
+
+            expectQuarantined storage platform name
+        }
+
+        test "WebhookRegistry" {
+            let subscriptionId = Guid.NewGuid()
+            let name = $"webhooks/t1/subscriptions/{subscriptionId:N}.json"
+            let storage = planted platform name
+            let registry = ToolUp.Platform.Jobs.WebhookRegistry.createRegistry storage
+
+            expectRefusedRead "GetSubscription" (fun () ->
+                registry.GetSubscription("t1", subscriptionId) |> run |> ignore)
+
+            expectQuarantined storage platform name
+        }
+
+        test "WhatsAppTemplateRegistry — an undecodable template is not vouched for, and is set aside" {
+            let name = "whatsapp-templates/welcome.json"
+            let storage = planted platform name
+
+            let registry =
+                ToolUp.Platform.Jobs.WhatsAppTemplateRegistry.blobBacked storage (Some silentLogger)
+
+            Expect.isNone (registry.GetTemplate "welcome" |> run) "the send is refused"
+            expectQuarantined storage platform name
+        }
     ]

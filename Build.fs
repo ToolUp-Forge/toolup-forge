@@ -4474,7 +4474,6 @@ let main args =
         "Remoting/Idempotency.fs"
         "ResultStore.fs"
         "UsageLog.fs"
-        "WebhookRegistry.fs"
     ]
 
     let runVerifyBlobDownloads (root: string) : int =
