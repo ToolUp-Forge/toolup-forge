@@ -13,12 +13,12 @@ open ToolUp.AuthProviders.Oidc.OidcTokenStore
 //
 // Three presentation states rendered by the shell wrapper:
 //
-//   Checking  → LoadingScreen (brief, on first render while we decide
-//               whether this is a callback or a cold start)
-//   SignedOut → SignInScreen (big button kicking off `beginSignIn`,
+//   Checking  → LoadingScreenWith (brief, on first render while we
+//               decide whether this is a callback or a cold start)
+//   SignedOut → SignInScreenWith (big button kicking off `beginSignIn`,
 //               plus a second button when the config declares an
 //               `OidcSecondaryFlow` — the "Sign up" affordance)
-//   Failed e  → ErrorScreen (message + retry button back to SignedOut)
+//   Failed e  → ErrorScreenWith (message + retry button back to SignedOut)
 //
 // The signed-in path renders the shell directly — there's no wrapper
 // component for that case; the parent just returns `shell`.
@@ -35,25 +35,13 @@ let private pageFrame (children: ReactElement list) : ReactElement =
         ]
     ]
 
-// Phase 751 — every screen here gained an additive `…With` variant
-// taking the resolved `AuthMessages`, and the pre-751 entry point
-// delegates to it with the built-in English catalog. The arities are
-// deliberately NOT widened: these are public non-component render
-// functions, so a widened arity reads as a REMOVAL in the public-API
-// approval baseline and breaks every caller, for a parameter only a
-// catalog-resolving caller can supply (444's recorded pattern, as
-// `BootDegradation.bannerWith` / `ModuleBoundary.wrapWith` did).
-//
-// `OidcShell` below is a component, so it resolves the catalog with the
-// ordinary hook and calls the `…With` forms.
+// Each screen takes the resolved `AuthMessages`; the shell wrapper below is
+// a component and reads them with `MessageCatalogProvider.useMessages`.
 
 let LoadingScreenWith (msgs: AuthMessages) : ReactElement =
     pageFrame [
         Html.div [ prop.className $"{Tokens.Text.secondary} text-sm"; prop.text msgs.SigningIn ]
     ]
-
-let LoadingScreen () : ReactElement =
-    LoadingScreenWith MessageCatalog.english.Auth
 
 /// The sign-in screen with an optional SECOND button beside "Sign in"
 /// — the generic dual-button ("Sign in / Sign up") affordance. The
@@ -61,8 +49,8 @@ let LoadingScreen () : ReactElement =
 /// authorize-request parameters, so `onSecondary` is wired to the same
 /// machinery as `onSignIn` and the callback path is untouched.
 ///
-/// `None` renders exactly what `SignInScreen` renders — the secondary
-/// button is not a hidden element, it is not emitted at all (GP 11).
+/// `None` renders the single "Sign in" button — the secondary button is
+/// not a hidden element, it is not emitted at all (GP 11).
 let SignInScreenWith
     (msgs: AuthMessages)
     (secondary: OidcSecondaryFlow option)
@@ -99,19 +87,6 @@ let SignInScreenWith
         secondaryButton
     ]
 
-let SignInScreenWithSecondary
-    (secondary: OidcSecondaryFlow option)
-    (onSignIn: unit -> unit)
-    (onSecondary: unit -> unit)
-    : ReactElement =
-    SignInScreenWith MessageCatalog.english.Auth secondary onSignIn onSecondary
-
-/// The single-button sign-in screen. Retained as the no-secondary-flow
-/// entry point (and so a consumer rendering it directly is unaffected
-/// by the affordance landing).
-let SignInScreen (onSignIn: unit -> unit) : ReactElement =
-    SignInScreenWithSecondary None onSignIn ignore
-
 let ErrorScreenWith (msgs: AuthMessages) (err: AuthError) (onRetry: unit -> unit) : ReactElement =
     pageFrame [
         Html.h1 [
@@ -128,9 +103,6 @@ let ErrorScreenWith (msgs: AuthMessages) (err: AuthError) (onRetry: unit -> unit
             prop.onClick (fun _ -> onRetry ())
         ]
     ]
-
-let ErrorScreen (err: AuthError) (onRetry: unit -> unit) : ReactElement =
-    ErrorScreenWith MessageCatalog.english.Auth err onRetry
 
 // ─── Shell wrapper ──────────────────────────────────────────────────
 //
