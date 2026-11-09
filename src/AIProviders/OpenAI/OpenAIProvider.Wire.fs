@@ -185,13 +185,11 @@ let private toOpenAIMessages (messages: AIProviderMessage list) : JsonValue list
 let private buildTools (tools: AIProviderToolDef list) : JsonValue =
     tools
     |> List.map (fun t ->
-        // The tool's JSON Schema embeds as a nested object. A malformed
-        // schema is a caller defect — throw (the prior STJ mapping threw
-        // from `JsonSerializer.Deserialize<JsonElement>` too).
+        // The tool's JSON Schema embeds as a nested object. A connector
+        // refuses a malformed one before building (`callBody`); the pure
+        // mapper stays total and carries it as a string.
         let parameters =
-            match JsonHost.parse t.InputSchema with
-            | Some v -> v
-            | None -> failwith (sprintf "tool '%s' InputSchema is not valid JSON" t.Name)
+            JsonHost.parse t.InputSchema |> Option.defaultValue (jstr t.InputSchema)
 
         jobj [
             "type", jstr "function"
@@ -260,3 +258,24 @@ let buildRequestBody
            | None -> [])
 
     JsonHost.serialize (jobj members)
+
+/// The body of one connector call. A structured call's schema, and every
+/// tool's input schema, must parse as JSON: a malformed one is the caller's
+/// defect, refused as `PermanentClient` before anything is sent.
+let callBody
+    (model: string)
+    (messages: AIProviderMessage list)
+    (tools: AIProviderToolDef list)
+    (systemPrompt: string option)
+    (streaming: bool)
+    (schema: string option)
+    : Result<string, AIProviderError> =
+    match tools |> List.tryFind (fun t -> (JsonHost.parse t.InputSchema).IsNone) with
+    | Some t -> Error(PermanentClient(0, sprintf "tool '%s' InputSchema is not valid JSON" t.Name))
+    | None ->
+        match schema with
+        | None -> Ok(buildRequestBody model messages tools systemPrompt streaming None)
+        | Some schema ->
+            match JsonHost.parse schema with
+            | Some value -> Ok(buildRequestBody model messages tools systemPrompt false (Some value))
+            | None -> Error(PermanentClient(0, "structuredOutputSchema is not valid JSON"))

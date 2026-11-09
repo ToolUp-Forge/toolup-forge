@@ -74,6 +74,15 @@ let private connectors: (string * (HttpClient -> (TimeSpan -> Async<unit>) -> IA
             },
             ClaudeAIProvider.DefaultModel
         )
+    "OpenAI",
+    fun client pause ->
+        ConnectorProvider(
+            {
+                OpenAIProvider.connector client testKey with
+                    Pause = pause
+            },
+            OpenAIProvider.DefaultModel
+        )
 ]
 
 let private oneMessage = [ AIProviderMessage.text "user" "hello" ]

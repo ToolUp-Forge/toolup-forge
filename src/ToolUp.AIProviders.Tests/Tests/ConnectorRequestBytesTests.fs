@@ -132,7 +132,7 @@ let private openAI (shape: string) =
     let handler, http = client (Some "https://api.openai.com") (fun _ -> "")
 
     let provider =
-        OpenAIProvider.OpenAIProvider("test-key", ConnectorFixtures.openAIModel, http) :> IAIProvider
+        ConnectorProvider(OpenAIProvider.connector http testKey, ConnectorFixtures.openAIModel) :> IAIProvider
 
     drive provider shape |> ignore
     handler.Sent
