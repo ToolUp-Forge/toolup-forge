@@ -6,7 +6,7 @@ namespace ToolUp.Remoting.Json
 open System
 open ToolUp.Remoting
 
-// ─── Phase 799 — total combinators over the closed JSON value model ──
+// ─── Total combinators over the closed JSON value model ──
 //
 // The Phase 785 algebra, over `JsonValue` instead of `MsgPack.Value`.
 // The four properties are the same and are pinned the same way
@@ -53,7 +53,7 @@ open ToolUp.Remoting
 // `__typename`, `["Case", …]`) are not admitted — a decoder accepts what
 // the writer writes.
 
-/// Phase 799 — a JSON decoder for `'T`: total, pure, reflection-free.
+/// A JSON decoder for `'T`: total, pure, reflection-free.
 type JsonDecoder<'T> = JsonValue -> Result<'T, DecodeError>
 
 /// The total combinators over `JsonValue` — see the file header for the
@@ -173,16 +173,13 @@ module JsonDecode =
     /// A non-negative integral token that fits `uint32`.
     let asUInt32: JsonDecoder<uint32> = unsigned "UInt32" 4294967295UL uint32
 
-    /// Phase 911 — what `asInt64` / `asUInt64` name when they refuse: the
+    /// What `asInt64` / `asUInt64` name when they refuse: the
     /// two forms a proven writer emits. The Fable/Long.js runtime object
     /// `{"high","low","unsigned"}` a raw `JSON.stringify` of a `Long`
-    /// produces is NOT one of them, and is refused on every profile.
-    /// Phase 845 had admitted it (STJ parity); Phase 911 reverses that: no
-    /// writer the gates verify against emits the shape, so nothing but
-    /// hand-written pins stood behind it, and its `unsigned` tag was
-    /// silently ignored — a lenient read no oracle could see. Refusing it
-    /// restores the behaviour of v0.23.0. See
-    /// `docs/migrations/799-json-wire-decoder-algebra.md`.
+    /// produces is NOT one of them, and is refused on every profile: no
+    /// writer the gates verify against emits the shape, and its `unsigned`
+    /// tag would be silently ignored — a lenient read no oracle could see.
+    /// See `docs/migrations/799-json-wire-decoder-algebra.md`.
     let private int64Forms =
         "Int64 as a JSON number or a signed string (\"+42\", \"-7\")"
 
@@ -242,7 +239,7 @@ module JsonDecode =
     /// `decimal` — the digits as written, exactly. The whole point of the
     /// lexical carrier: `79228162514264337593543950335` arrives as itself.
     ///
-    /// Phase 885 — or the same digits QUOTED, which is how the browser
+    /// Or the same digits QUOTED, which is how the browser
     /// writes a decimal (`Fable.SimpleJson`'s `Convert.serialize`, every
     /// reflective client proxy) and what the converter set already reads
     /// (`AllowReadingFromString`). The string must hold a JSON number token
@@ -306,7 +303,7 @@ module JsonDecode =
     /// `DateTime` — the ISO-8601 round-trip string the writer emits, read
     /// with its kind preserved (`DateTimeConverter.Read`'s rule).
     ///
-    /// Phase 885 — on BOTH hosts. Fable's `DateTime.TryParse` reads the
+    /// On BOTH hosts. Fable's `DateTime.TryParse` reads the
     /// right instant but not the text's kind (a `…Z` timestamp came back
     /// Unspecified/Local, so its `Hour` was the browser's local hour), so
     /// the Fable arm restores the kind `DateTimeStyles.RoundtripKind` gives
@@ -347,7 +344,9 @@ module JsonDecode =
         | value -> refuse "DateTime" value
 
     /// `DateTimeOffset` — the ISO-8601 string the writer emits, offset
-    /// preserved.
+    /// preserved. The host split is the parser's: .NET names the invariant
+    /// culture so a server's locale cannot change the read, and Fable's
+    /// parser takes the text alone.
     let asDateTimeOffset: JsonDecoder<DateTimeOffset> =
         function
         | JsonValue.String text ->
@@ -370,7 +369,9 @@ module JsonDecode =
 
 #if !FABLE_COMPILER
     /// `DateOnly` — the day number (`DateOnlyConverter.Write`), bounded by
-    /// the type's own domain. .NET only, as on the MsgPack side.
+    /// the type's own domain. .NET only: the JSON wire's Fable host declares
+    /// no `DateOnly` / `TimeOnly` decoder, so a generated client decoder over
+    /// either fails its Fable compile rather than misreading the value.
     let asDateOnly: JsonDecoder<DateOnly> =
         function
         | JsonValue.Number text as value ->
@@ -422,9 +423,8 @@ module JsonDecode =
 
     // ─── Structure ───────────────────────────────────────────────────
 
-    /// An array's elements, undecoded. The `list` return is the combinator
-    /// surface Phase 799 shipped; since Phase 905 it is converted from the
-    /// array-backed carrier once, linearly.
+    /// An array's elements, undecoded, converted from the array-backed
+    /// carrier once, linearly.
     let items: JsonDecoder<JsonValue list> =
         function
         | JsonValue.Array items -> Ok(List.ofArray items)
@@ -439,10 +439,8 @@ module JsonDecode =
         | value -> refuse (sprintf "an array of %d element(s)" arity) value
 
     /// Element `position` of an array, decoded by `decoder`; a refusal
-    /// beneath it is annotated `[position]`. Phase 905: an indexed read
-    /// under a bounds test, in constant time — over the list this case used
-    /// to carry, element `i` walked `i` cells. A negative position is
-    /// absent, exactly as `List.tryItem` answered it.
+    /// beneath it is annotated `[position]`. An indexed read under a bounds
+    /// test, in constant time; a negative position is absent.
     let index (position: int) (decoder: JsonDecoder<'T>) : JsonDecoder<'T> =
         fun value ->
             match value with
@@ -575,7 +573,7 @@ module JsonDecode =
     let asMap<'K, 'V when 'K: comparison> (key: KeyDecoder<'K>) (entry: JsonDecoder<'V>) : JsonDecoder<Map<'K, 'V>> =
         entries key entry |> map Map.ofList
 
-    // ─── Phase 899 — a map whose key is a JSON VALUE ─────────────────
+    // ─── A map whose key is a JSON VALUE ─────────────────
     //
     // A key that is not string-representable — a union with fields, a
     // tuple, a record — reaches the server in one of TWO forms, and the
@@ -649,7 +647,7 @@ module JsonDecode =
 
         go 0 []
 
-    /// Phase 899 — a map whose KEY is read as a JSON value by `key`: the
+    /// A map whose KEY is read as a JSON value by `key`: the
     /// browser's array of `[key, value]` pairs, or the server writer's
     /// object whose member names are the keys' JSON text. The combinator
     /// for a key that is not string-representable (a union with fields, a

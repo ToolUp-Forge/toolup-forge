@@ -1,24 +1,28 @@
 namespace ToolUp.Remoting.Analyzers
 
 // =============================================================================
-// Phase 195 — ToolUp.Remoting auth/audit analyzer
+// ToolUp.Remoting auth/audit analyzer
 // =============================================================================
 //
-// FSharp.Analyzers.SDK analyzer that shifts the Phase 69d startup refusal
-// (`AuthClassifier` raising "ToolUp.Remoting refused to start: API record …
-// unclassified") LEFT to an IDE squiggle / CI diagnostic:
+// FSharp.Analyzers.SDK analyzer that shifts the dispatcher's startup refusals
+// (`AuthClassifier` raising "ToolUp.Remoting refused to start: API record …")
+// LEFT to an IDE squiggle / CI diagnostic:
 //
-//   * TUR0001 (Error) — a Remoting API-record field with no Phase 69d
-//     authorisation classification. Mirrors `AuthClassifier`'s by-simple-name
-//     recognition exactly (via `Recognition`), so the analyzer flags precisely
-//     the set the dispatcher would refuse to start on.
+//   * TUR0001 (Error) — a Remoting API-record field with no authorisation
+//     classification: no marker with a classifying simple name.
+//   * TUR0003 (Error) — a field carrying a marker named like a classification
+//     that the file shows is not the SDK's attribute. The runtime matches by
+//     identity and refuses it as a collision; TUR0001 reads it as classified.
+//     Together the two state the runtime's identity rule over names
+//     (`Recognition`).
 //   * TUR0002 (Warning, opt-in) — an unaudited API method whose input record
-//     carries a `[<PiiSafe>]` field (Phase 69h). Off by default; enabled by
-//     setting the `TOOLUP_REMOTING_ANALYZER_AUDIT` environment variable.
+//     carries a `[<PiiSafe>]` field. Off by default; enabled by setting the
+//     `TOOLUP_REMOTING_ANALYZER_AUDIT` environment variable.
 //
-// Each finding carries a one-keystroke codefix that inserts a fail-closed
+// TUR0001 and TUR0002 carry a one-keystroke codefix that inserts a fail-closed
 // placeholder (`[<AllowAnonymous>]` / `[<Audit("Custom:TODO")>]`) — never a
-// real role; the author must replace the placeholder deliberately.
+// real role; the author must replace the placeholder deliberately. TUR0003 has
+// none: the foreign marker has to go.
 //
 // Pure tooling (GP 1/11/13): a consumer that never installs the analyzer is
 // byte-for-byte unchanged, and the runtime classifier in Auth.fs is untouched.
@@ -45,7 +49,8 @@ module Analyzer =
 
     let private severityOf =
         function
-        | Recognition.TUR0001 -> Severity.Error
+        | Recognition.TUR0001
+        | Recognition.TUR0003 -> Severity.Error
         | Recognition.TUR0002 -> Severity.Warning
 
     /// Build a Message for one finding, sited on `field` and carrying the
@@ -55,11 +60,17 @@ module Analyzer =
         (field: Extraction.ExtractedField)
         (finding: Recognition.Finding)
         : Message =
-        let fix: Fix = {
-            FromText = ""
-            FromRange = field.InsertAt
-            ToText = finding.SuggestedAttribute + " "
-        }
+        let fixes: Fix list =
+            if finding.SuggestedAttribute = "" then
+                []
+            else
+                [
+                    {
+                        FromText = ""
+                        FromRange = field.InsertAt
+                        ToText = finding.SuggestedAttribute + " "
+                    }
+                ]
 
         {
             Type = "ToolUp.Remoting.Analyzers"
@@ -67,13 +78,74 @@ module Analyzer =
             Code = Recognition.codeString finding.Code
             Severity = severityOf finding.Code
             Range = field.Range
-            Fixes = [ fix ]
+            Fixes = fixes
         }
+
+    /// What the file shows of name resolution, per record: every namespace
+    /// or module the file is declared in or opens (each enclosing prefix
+    /// included, so a partially qualified name resolves), and the simple name
+    /// of every type declared where an unqualified name in that record reaches
+    /// it — the record's own module, an enclosing one, or one the file opens.
+    /// Opens count file-wide, which errs toward reading a marker as the SDK's.
+    let private scopesOf (input: ParsedInput) : range -> Recognition.NameScope =
+        let names (ids: Ident list) = ids |> List.map (fun i -> i.idText)
+
+        let prefixes (path: string list) = [ for i in 1 .. path.Length -> String.concat "." (List.take i path) ]
+
+        let opens = ResizeArray<string>()
+        let enclosing = ResizeArray<string>()
+        let declared = ResizeArray<string list * string>()
+        let records = ResizeArray<range * string list>()
+
+        let rec walk (path: string list) (decls: SynModuleDecl list) =
+            for decl in decls do
+                match decl with
+                | SynModuleDecl.Open(SynOpenDeclTarget.ModuleOrNamespace(SynLongIdent(ids, _, _), _), _) ->
+                    opens.Add(String.concat "." (names ids))
+                | SynModuleDecl.Types(defns, _) ->
+                    for defn in defns do
+                        let (SynTypeDefn(SynComponentInfo(longId = ids), _, _, _, range, _)) = defn
+                        declared.Add(path, Recognition.simpleName (String.concat "." (names ids)))
+                        records.Add(range, path)
+                | SynModuleDecl.NestedModule(moduleInfo = SynComponentInfo(longId = ids); decls = nested) ->
+                    walk (path @ names ids) nested
+                | _ -> ()
+
+        match input with
+        | ParsedInput.ImplFile(ParsedImplFileInput(contents = modules)) ->
+            for SynModuleOrNamespace(longId = ids; decls = decls) in modules do
+                enclosing.AddRange(prefixes (names ids))
+                walk (names ids) decls
+        | ParsedInput.SigFile _ -> ()
+
+        let opened =
+            List.distinct (
+                List.ofSeq enclosing
+                @ (List.ofSeq opens
+                   |> List.collect (fun o -> prefixes (List.ofArray (o.Split '.'))))
+            )
+
+        fun recordRange ->
+            let path =
+                records
+                |> Seq.tryFind (fun (r, _) -> r = recordRange)
+                |> Option.map snd
+                |> Option.defaultValue []
+
+            let reaches (declPath: string list) =
+                (declPath.Length <= path.Length && List.take declPath.Length path = declPath)
+                || opens.Contains(String.concat "." declPath)
+
+            {
+                Opened = opened
+                Declared = declared |> Seq.filter (fst >> reaches) |> Seq.map snd |> Set.ofSeq
+            }
 
     /// Pure analysis over a parsed input — the testable core the
     /// ToolUp.Remoting.Analyzers.Tests pack drives directly.
     let analyzeParseTree (auditOptIn: bool) (input: ParsedInput) : Message list =
         let allRecords = Extraction.records input
+        let scopeOf = scopesOf input
 
         // Records (anywhere in the file) declaring a [<PiiSafe>] field — the
         // TUR0002 input-record signal.
@@ -93,7 +165,11 @@ module Analyzer =
                 AttributeNames = f.AttributeNames
             }
 
-            let authFindings = record.Fields |> List.map asAttrs |> Recognition.authFindings
+            let fields = record.Fields |> List.map asAttrs
+            let authFindings = Recognition.authFindings fields
+
+            let foreignFindings =
+                Recognition.foreignMarkerFindings (scopeOf record.Range) fields
 
             let auditFindings =
                 if not auditOptIn then
@@ -109,7 +185,7 @@ module Analyzer =
                     })
                     |> Recognition.auditFindings
 
-            authFindings @ auditFindings
+            authFindings @ foreignFindings @ auditFindings
             |> List.choose (fun finding ->
                 byName
                 |> Map.tryFind finding.FieldName
@@ -120,19 +196,18 @@ module Analyzer =
     }
 
     [<CliAnalyzer("ToolUpRemotingAuthAudit",
-                  "Flags Remoting API methods missing an auth classification (TUR0001) or audit annotation (TUR0002).",
+                  "Flags Remoting API methods missing an auth classification (TUR0001), carrying a foreign-named auth marker (TUR0003) or missing an audit annotation (TUR0002).",
                   "https://github.com/ToolUp-Forge/toolup-forge/blob/main/src/ToolUp.Remoting.Analyzers/README.md")>]
     let cliAnalyzer: Analyzer<CliContext> =
         fun (ctx: CliContext) -> run ctx.ParseFileResults.ParseTree
 
     [<EditorAnalyzer("ToolUpRemotingAuthAudit",
-                     "Flags Remoting API methods missing an auth classification (TUR0001) or audit annotation (TUR0002).",
+                     "Flags Remoting API methods missing an auth classification (TUR0001), carrying a foreign-named auth marker (TUR0003) or missing an audit annotation (TUR0002).",
                      "https://github.com/ToolUp-Forge/toolup-forge/blob/main/src/ToolUp.Remoting.Analyzers/README.md")>]
     let editorAnalyzer: Analyzer<EditorContext> =
         fun (ctx: EditorContext) -> run ctx.ParseFileResults.ParseTree
 
-    // Phase 776 — the containment rules (TUA001–TUA003), registered as their
-    // own analyser so a host can list, enable or silence the family apart
+    // The containment rules (TUA001–TUA003), registered as their own analyser so a host can list, enable or silence the family apart
     // from the Remoting auth/audit pair above.
 
     let private runContainment (parseTree: ParsedInput) : Async<Message list> = async {

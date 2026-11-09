@@ -4,7 +4,7 @@
 
 namespace ToolUp.Remoting.MsgPack
 
-// ─── Phase 785 — the closed value model ──────────────────────────────
+// ─── The closed value model ──────────────────────────────
 //
 // The reflection reader (`Read.Reader.Read`) is an interpreter over
 // `System.Type`: it walks an open, possibly recursive type graph while
@@ -41,7 +41,7 @@ namespace ToolUp.Remoting.MsgPack
 // final refusal. A case the one-pass reader can never produce would be
 // surface every consumer has to match on and no payload can reach.
 
-/// Phase 785 — the width class the FORMAT BYTE declared, carried
+/// The width class the FORMAT BYTE declared, carried
 /// through the value model so a decoder can apply Phase 786's
 /// information rule without re-reading the bytes.
 ///
@@ -100,7 +100,7 @@ module IntegerWidth =
         | IntegerWidth.Bits32 -> "32-bit"
         | IntegerWidth.Bits64 -> "64-bit"
 
-/// Phase 785 — which IEEE format the value arrived in.
+/// Which IEEE format the value arrived in.
 ///
 /// Carried for the same reason the integer width is: a `float32` on the
 /// wire widened into a `float` is exact, and a `float` narrowed into a
@@ -111,7 +111,7 @@ type FloatWidth =
     | Single
     | Double
 
-/// Phase 785 — one MessagePack value, as this transport's wire can
+/// One MessagePack value, as this transport's wire can
 /// carry it. See the file header for what closed / no-null /
 /// well-founded buy, and for why there is no `Ext`.
 ///
@@ -213,22 +213,21 @@ module Value =
         | Value.Arr items -> sprintf "array of %d element(s)" items.Length
         | Value.Map entries -> sprintf "map of %d entry(ies)" (List.length entries)
 
-    /// Phase 786's information rule, over this model's width classes.
+    /// The information rule: can a wire integer reach a target type without
+    /// losing what the wire carried? The one rule both readers apply — the
+    /// decoder algebra here, and the reflection reader through
+    /// `Read.integerFits`, which converts the value it holds to this
+    /// model's carrier and asks.
     ///
-    /// Lifted here verbatim in behaviour from `Read.integerFits` rather
-    /// than shared with it: that one is an `inline` function generic over
-    /// the numeric type the reader happens to hold, and this one works on
-    /// the two concrete carriers the value model declares. The RULE is
-    /// one rule and a test pins the two against each other over the
-    /// Phase 784 corpus; the implementations are separate because the
-    /// reflection reader must keep compiling unchanged (GP 11).
-    ///
-    ///   * A NEGATIVE value never decodes into an unsigned target, and
-    ///     always fits a signed target whose minimum it clears.
+    ///   * A NEGATIVE value never decodes into an unsigned target (no format
+    ///     this transport emits puts a negative on the wire for an unsigned
+    ///     field), and always fits a signed target whose minimum it clears.
     ///   * A source NO WIDER than the target always survives, sign
-    ///     reinterpretation included — that is the format, not a
-    ///     loophole.
-    ///   * A source WIDER than the target must fit the target's range.
+    ///     reinterpretation included — that is the format as older writers
+    ///     emit it (their `writeSByte` puts `-128y` on the wire as `uint8
+    ///     128`), not a loophole; the target type recovers the sign.
+    ///   * A source WIDER than the target is the genuine narrowing, and must
+    ///     fit the target's range.
     ///
     /// `targetBits` of 0 names a target whose legal values are a DOMAIN
     /// rather than a width (a `DateOnly` day number, a `TimeOnly` tick
