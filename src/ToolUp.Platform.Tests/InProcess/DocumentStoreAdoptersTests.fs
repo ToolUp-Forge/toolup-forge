@@ -423,9 +423,7 @@ let tests =
 
             Expect.isNone (profiles.Get scope |> run) "the consumer falls back per its own policy"
 
-            expectError
-                "SetEntryHealth"
-                (profiles.SetEntryHealth(scope, "primary", ProviderHealthStatus.Healthy) |> run)
+            expectError "SetEntryHealth" (profiles.SetEntryHealth(scope, "primary", ProviderHealth.unknown) |> run)
 
             expectQuarantined storage scope.Container name
 
@@ -437,5 +435,22 @@ let tests =
             Expect.equal (profiles.Set(scope, profile) |> run) (Ok()) "a save is not wedged behind the corrupt profile"
             Expect.equal (profiles.Get scope |> run) (Some profile) "the saved profile reads back"
             expectSetAside storage scope.Container name
+        }
+
+        test "BudgetLedger — an undecodable row is set aside and the period starts again, never wedging admission" {
+            let key = BudgetLedgerKey.create "test-budget" "t1" "2026-11"
+            let name = BudgetLedgerLayout.usageBlob key
+            let storage = planted platform name
+            let ledger = BlobBudgetLedger(storage, silentLogger) :> IBudgetLedger
+
+            Expect.equal (ledger.ReadUsage key |> run).InFlight 0 "an unusable row reads as zero consumption"
+
+            match ledger.Reserve(key, 2M, (fun _ -> Ok())) |> run with
+            | Ok usage -> Expect.equal usage.InFlight 1 "the reservation is admitted over the restarted row"
+            | Error denial -> failtest $"expected the reservation to be admitted, got %A{denial}"
+
+            let after = ledger.ReadUsage key |> run
+            Expect.equal (after.InFlight, after.Spent) (1, 2M) "and it is durable"
+            expectSetAside storage platform name
         }
     ]
