@@ -303,3 +303,101 @@ let raisingReadTests =
             Expect.isFalse (backing.Exists(container, DocPath.value (path "a")) |> run) "nothing was written"
         }
     ]
+// The documents whose codec predates `PlatformJson` keep it: these are the
+// bytes at rest, written through the serializer's default encoder, and a
+// store moved onto `BlobDocumentStore` must go on producing exactly them.
+let byteFixtureTests =
+    testList "Phase 1061 — BlobDocumentStore<'T> — byte fixtures of the documents at rest" [
+        test "the runtime config document" {
+            let codec = PlatformRuntimeConfigStore.codec FeatureMode.Disabled
+            let bytes = codec.Encode FeatureMode.Enabled
+
+            Expect.equal
+                (Encoding.UTF8.GetString bytes)
+                """{"platformKnowledgeBase":"Enabled"}"""
+                "the documented format"
+
+            Expect.equal (codec.Decode bytes) (Ok FeatureMode.Enabled) "round trip"
+
+            // Every document written before Phase 1061 is `{}` (a private DTO
+            // the serializer could not see); it has always meant the default.
+            Expect.equal (codec.Decode(Encoding.UTF8.GetBytes "{}")) (Ok FeatureMode.Disabled) "the bytes at rest"
+
+            Expect.equal
+                (codec.Decode(Encoding.UTF8.GetBytes """{"platformKnowledgeBase":"Later"}"""))
+                (Ok FeatureMode.Disabled)
+                "a mode a later SDK wrote reads as the default"
+
+            Expect.isError (codec.Decode(Encoding.UTF8.GetBytes "not json")) "bytes that are not the document"
+            Expect.isError (codec.Decode(Encoding.UTF8.GetBytes "[]")) "a document that is not an object"
+        }
+
+        test "the runtime config override survives a restart, and an unreadable one refuses the load" {
+            let storage = InMemoryBlobStorage() :> IBlobStorage
+            let first = PlatformRuntimeConfigStore.create storage FeatureMode.Disabled |> run
+
+            Expect.equal (first.SetPlatformKnowledgeBase FeatureMode.Enabled |> run) (Ok()) "the override is set"
+
+            let second = PlatformRuntimeConfigStore.create storage FeatureMode.Disabled |> run
+            Expect.equal (second.Snapshot()) FeatureMode.Enabled "and read back by the next process"
+
+            storage.Upload(ScopeKey.PlatformContainer, "runtime-config.json", Encoding.UTF8.GetBytes "not json")
+            |> run
+            |> ignore
+
+            Expect.throwsT<DocumentUnavailableException>
+                (fun () -> PlatformRuntimeConfigStore.create storage FeatureMode.Disabled |> run |> ignore)
+                "an undecodable override refuses the load rather than reading as the default"
+        }
+
+        test "an event document" {
+            let event: ModuleEvent = {
+                Id = Guid "0b9c3a5e-6d1f-4e2a-9c8b-7a6f5e4d3c2b"
+                OccurredAt = DateTime(2026, 11, 9, 8, 30, 15, DateTimeKind.Utc)
+                ScopeId = "team-a+b"
+                SourceModule = "billing"
+                EventType = "InvoiceIssued"
+                Payload = """{"amount":"<10>"}"""
+            }
+
+            let bytes = PersistentEventStore.eventCodec.Encode event
+
+            Expect.equal
+                (Encoding.UTF8.GetString bytes)
+                """{"eventType":"InvoiceIssued","id":"0b9c3a5e-6d1f-4e2a-9c8b-7a6f5e4d3c2b","occurredAt":"2026-11-09T08:30:15.0000000Z","payload":"{\u0022amount\u0022:\u0022\u003C10\u003E\u0022}","scopeId":"team-a\u002Bb","sourceModule":"billing"}"""
+                "today's bytes: the anonymous record's fields in name order, the default encoder's escapes"
+
+            Expect.equal (PersistentEventStore.eventCodec.Decode bytes) (Ok event) "round trip"
+
+            Expect.isError
+                (PersistentEventStore.eventCodec.Decode(Encoding.UTF8.GetBytes "{}"))
+                "a document missing its fields"
+        }
+
+        test "the event store reads its events through the document store, and an undecodable one is set aside" {
+            let storage = InMemoryBlobStorage() :> IBlobStorage
+
+            let events =
+                PersistentEventStore.PersistentEventStore(storage, EventRetentionPolicy.unlimited) :> IEventStore
+
+            let event = Events.create "team-x" "billing" "InvoiceIssued" "{}"
+            events.Write event |> run
+
+            let name = $"events/team-x/garbage-{Guid.NewGuid():N}.json"
+
+            storage.Upload(ScopeKey.PlatformContainer, name, Encoding.UTF8.GetBytes "not json")
+            |> run
+            |> ignore
+
+            let read = events.ReadAll "team-x" |> run
+            Expect.equal (read |> List.map _.Id) [ event.Id ] "the readable event, and not the garbage"
+
+            let listed = storage.List(ScopeKey.PlatformContainer, "events/team-x/") |> run
+
+            Expect.isTrue
+                (listed |> List.exists (fun n -> n.StartsWith(name + ".corrupt-")))
+                "the garbage was quarantined"
+
+            Expect.isTrue (listed |> List.contains name) "and its canonical blob was not touched"
+        }
+    ]

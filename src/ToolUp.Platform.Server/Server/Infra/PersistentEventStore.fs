@@ -62,8 +62,6 @@ let private isCanonicalEventBlob (name: string) =
     name.EndsWith ".json"
     && not (name.Contains "/_by-type/")
     && not (name.Contains "/_by-source/")
-    && not (name.Contains "\\_by-type\\")
-    && not (name.Contains "\\_by-source\\")
 
 // ─── JSON serialisation ──────────────────────────────────────────
 
@@ -105,52 +103,40 @@ let private deserialize (bytes: byte[]) : ModuleEvent =
         Payload = root.GetProperty("payload").GetString()
     }
 
-// ─── Concurrency helpers ─────────────────────────────────────────
+/// The event document's codec over the hand-walked shape above. The
+/// serializer's default encoder stays: those are the bytes already at rest,
+/// which `BlobDocumentStoreTests` pins.
+let internal eventCodec: BlobCodec<ModuleEvent> = {
+    Encode = serialize
+    Decode =
+        fun bytes ->
+            try
+                Ok(deserialize bytes)
+            with ex ->
+                Error ex.Message
+}
 
-/// Download many blobs in parallel, tolerating individual failures by
-/// skipping them. A partial read is preferable to a total failure —
-/// event history is advisory, not critical path. Callers that need
-/// strict consistency should not be using a blob-backed store.
-let private downloadAll (blobStorage: IBlobStorage) (blobNames: string list) : Async<ModuleEvent list> = async {
+// ─── Reads ───────────────────────────────────────────────────────
+
+/// Read many events through the document store, at most
+/// `BlobDocumentStoreLimits.DefaultListDegree` at once. Event history is
+/// advisory, not critical path, so a partial read is preferable to a total
+/// failure: an event that cannot be read is left out, and one whose bytes
+/// do not decode is also copied aside by the store — but neither is
+/// silent, each is logged with the store's verdict. An index ref whose
+/// canonical blob is gone is drift (a recoverable bug class), not an error,
+/// and is dropped without a word.
+let private readEvents (docs: BlobDocumentStore<ModuleEvent>) (logger: ILogger) (blobNames: string list) = async {
     let! results =
         blobNames
         |> List.map (fun name -> async {
-            let! result = blobStorage.Download(platformContainer, name)
-
-            return
-                match result with
-                | Ok bytes ->
-                    try
-                        Some(deserialize bytes)
-                    with _ ->
-                        None
-                | Error _ -> None
+            match! docs.Read(ScopeKey.platform, DocPath.ofString name) with
+            | Ok event -> return event
+            | Error e ->
+                logger.Warn($"[PersistentEventStore] event left out of the read: {BlobMapStoreError.describe e}")
+                return None
         })
-        |> Async.Parallel
-
-    return results |> Array.choose id |> Array.toList
-}
-
-/// Resolve a list of `(eventId, canonicalBlobName)` pairs (from an
-/// index lookup) to the canonical events. Soft-misses on individual
-/// resolves — drift between index and canonical is a recoverable
-/// bug class, not a hard error.
-let private resolveCanonicals (blobStorage: IBlobStorage) (entries: (Guid * string) list) : Async<ModuleEvent list> = async {
-    let! results =
-        entries
-        |> List.map (fun (_, canonicalName) -> async {
-            let! result = blobStorage.Download(platformContainer, canonicalName)
-
-            return
-                match result with
-                | Ok bytes ->
-                    try
-                        Some(deserialize bytes)
-                    with _ ->
-                        None
-                | Error _ -> None
-        })
-        |> Async.Parallel
+        |> fun reads -> Async.Parallel(reads, maxDegreeOfParallelism = BlobDocumentStoreLimits.DefaultListDegree)
 
     return results |> Array.choose id |> Array.toList
 }
@@ -198,6 +184,10 @@ type internal EventStoreWriteException(scopeId: string, blobName: string, storag
 /// background job or startup routine). Pruning deletes the canonical
 /// blob and both index refs in a single batch.
 type PersistentEventStore(blobStorage: IBlobStorage, retentionPolicy: EventRetentionPolicy) =
+
+    let logger = JsonConsoleLogger.JsonConsoleLogger() :> ILogger
+    let docs = BlobDocumentStore<ModuleEvent>(blobStorage, eventCodec, logger)
+    let downloadAll (names: string list) = readEvents docs logger names
 
     // Per-scope index helpers. Constructed on demand to keep `indexPrefix`
     // scope-pinned (GP4 — team isolation is structural; we can't bake one
@@ -267,7 +257,7 @@ type PersistentEventStore(blobStorage: IBlobStorage, retentionPolicy: EventReten
                     Some(id, name)
                 | None -> None)
 
-        return! resolveCanonicals blobStorage pairs
+        return! readEvents docs logger (pairs |> List.map snd)
     }
 
     /// Compute the set of events eligible for pruning under the
@@ -312,7 +302,7 @@ type PersistentEventStore(blobStorage: IBlobStorage, retentionPolicy: EventReten
             // Download metadata-by-payload (we need OccurredAt to decide
             // eligibility and we already round-trip OccurredAt in the
             // event body).
-            let! events = downloadAll blobStorage canonicalNames
+            let! events = downloadAll canonicalNames
             // Pair back with blob names. Relies on the timestamp prefix
             // making the blob name predictable from the event — the
             // same function that writes also derives the read key.
@@ -371,7 +361,7 @@ type PersistentEventStore(blobStorage: IBlobStorage, retentionPolicy: EventReten
     member this.Rebuild(scopeId: string) : Async<int> = async {
         let! names = blobStorage.List(platformContainer, scopePrefix scopeId)
         let canonicalNames = names |> List.filter isCanonicalEventBlob
-        let! events = downloadAll blobStorage canonicalNames
+        let! events = downloadAll canonicalNames
 
         do! events |> List.map writeIndexEntries |> Async.Parallel |> Async.Ignore
 
@@ -406,7 +396,7 @@ type PersistentEventStore(blobStorage: IBlobStorage, retentionPolicy: EventReten
 
         let sampleNames = canonicalNames |> List.sortDescending |> List.truncate sampleSize
 
-        let! events = downloadAll blobStorage sampleNames
+        let! events = downloadAll sampleNames
         let typeIndex = typeIndexFor scopeId
         let sourceIndex = sourceIndexFor scopeId
 
@@ -478,7 +468,7 @@ type PersistentEventStore(blobStorage: IBlobStorage, retentionPolicy: EventReten
         member _.ReadAll(scopeId) = async {
             let! names = blobStorage.List(platformContainer, scopePrefix scopeId)
             let canonicalNames = names |> List.filter isCanonicalEventBlob
-            let! events = downloadAll blobStorage canonicalNames
+            let! events = downloadAll canonicalNames
             // Contract: reverse-chronological by OccurredAt.
             return events |> List.sortByDescending _.OccurredAt
         }
@@ -502,17 +492,14 @@ type PersistentEventStore(blobStorage: IBlobStorage, retentionPolicy: EventReten
             // `events/{scopeId}/_by-source/...` for index refs. Either way
             // the second path segment is the scope id. Listing everything
             // and deduplicating in memory is cheaper than two-pass listing.
-            //
-            // `LocalFileStorage` returns names with the OS-native path
-            // separator (backslash on Windows); cloud stores return forward
-            // slashes. Split on both so the same implementation works
-            // against any backend. Mirrors `BlobJobStore.ListScopesWithJobs`.
+            // Every backend returns `/`-delimited names (the `IBlobStorage`
+            // contract), so one separator is the whole rule.
             let! names = blobStorage.List(platformContainer, "events/")
 
             return
                 names
                 |> List.choose (fun name ->
-                    let parts = name.Split([| '/'; '\\' |])
+                    let parts = name.Split '/'
 
                     if parts.Length >= 3 && parts[1] <> "" then
                         Some parts[1]
@@ -545,7 +532,7 @@ type PersistentEventStore(blobStorage: IBlobStorage, retentionPolicy: EventReten
                     // scope can never surface another scope's events.
                     let! names = blobStorage.List(platformContainer, scopePrefix scopeId)
                     let canonicalNames = names |> List.filter isCanonicalEventBlob
-                    let! events = downloadAll blobStorage canonicalNames
+                    let! events = downloadAll canonicalNames
 
                     let matched =
                         events |> List.filter (fun e -> e.Payload.Contains subjectUserId.Value)
