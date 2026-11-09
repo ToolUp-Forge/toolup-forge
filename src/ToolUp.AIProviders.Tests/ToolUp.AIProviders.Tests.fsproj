@@ -26,8 +26,7 @@
         <Compile Include="Tests\Microsoft365CopilotProviderTests.fs" />
         <!-- Phase 661 - per-call model override: offline, per connector. -->
         <Compile Include="Tests\ModelOverrideTests.fs" />
-        <!-- Both Claude sends back off from a 429 by the same floor: offline. -->
-        <Compile Include="Tests\ClaudeRetryFloorTests.fs" />
+        <Compile Include="Tests\RateLimitFloorTests.fs" />
         <!-- forge#1242 — the effort a Claude call is sent with. -->
         <Compile Include="Tests\ClaudeEffortTests.fs" />
         <Compile Include="Tests\ConnectorRequestBytesTests.fs" />

@@ -17,6 +17,7 @@ open System.Threading.Tasks
 open Expecto
 open ToolUp.Platform.AI
 open ToolUp.Platform.Transport
+open ToolUp.AI
 open ToolUp.AI.Wire.Conformance
 
 /// One request as it reached the wire.
@@ -72,6 +73,8 @@ let private client (baseAddress: string option) (answer: string -> string) =
 
 let private noRetry = RetryPolicy.noRetry
 
+let private testKey () = async { return Some "test-key" }
+
 /// Drive `provider` through one call shape.
 let private drive (provider: IAIProvider) (shape: string) =
     let f = ConnectorFixtures.systemPrompt
@@ -116,7 +119,11 @@ let private claude (shape: string) =
     let handler, http = client (Some "https://api.anthropic.com") (fun _ -> "")
 
     let provider =
-        ClaudeAIProvider.ClaudeAIProvider("test-key", http, (fun _ -> async { return () })) :> IAIProvider
+        ConnectorProvider(
+            ClaudeAIProvider.connector http testKey ClaudeAIProvider.DefaultMaxTokens None,
+            ConnectorFixtures.claudeModel
+        )
+        :> IAIProvider
 
     drive provider shape |> ignore
     handler.Sent

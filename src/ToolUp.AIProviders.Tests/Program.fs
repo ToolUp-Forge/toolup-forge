@@ -23,7 +23,7 @@ let private registeredTests =
         Microsoft365CopilotProviderTests.tests
         // Phase 661 - the per-call model override, offline, per connector.
         ModelOverrideTests.tests
-        ClaudeRetryFloorTests.tests
+        RateLimitFloorTests.tests
         ClaudeEffortTests.tests
         ConnectorRequestBytesTests.tests
         ProviderCallTests.tests
