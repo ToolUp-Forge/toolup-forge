@@ -68,6 +68,10 @@ type Model = {
     Error: Notice option
     /// Transient confirmation after a revoke (`Notice.Info`).
     Status: Notice option
+    /// This module's section of `ClientModuleContext.Messages`,
+    /// kept from `init` so `update` authors reader-facing text in the
+    /// session's language (a locale switch re-initialises the module).
+    Messages: SessionSecurityMessages
 }
 
 type Msg =
@@ -106,7 +110,7 @@ let private revokeAllCmd () =
 
 // ─── Init ────────────────────────────────────────────────────────────
 
-let init () : Model * Cmd<Msg> =
+let init (ctx: ClientModuleContext) : Model * Cmd<Msg> =
     {
         Sessions = []
         Loaded = false
@@ -115,6 +119,7 @@ let init () : Model * Cmd<Msg> =
         PendingRevokeAll = false
         Error = None
         Status = None
+        Messages = ctx.Messages.SessionSecurity
     },
     loadCmd ()
 
@@ -175,7 +180,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         // `TeamManagerUI.update`'s recorded pattern (Phase 751).
         {
             model with
-                Status = Some(Notice.Info MessageCatalog.english.SessionSecurity.RevokeSuccess)
+                Status = Some(Notice.Info model.Messages.RevokeSuccess)
         },
         loadCmd ()
 
@@ -215,7 +220,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         // above; the singular/plural branching lives inside the
         // catalog function itself so a translation owns its own
         // pluralisation rule.
-        let message = MessageCatalog.english.SessionSecurity.RevokeAllResult count
+        let message = model.Messages.RevokeAllResult count
 
         {
             model with
@@ -266,9 +271,6 @@ let lastSeenLabelWith (msgs: SessionSecurityMessages) (now: DateTimeOffset) (at:
         // note. Baking it into a translated template would make the
         // date FORMAT a property of the language.
         at.ToString "d MMM yyyy"
-
-let lastSeenLabel (now: DateTimeOffset) (at: DateTimeOffset) : string =
-    lastSeenLabelWith MessageCatalog.english.SessionSecurity now at
 
 let private sessionRow
     (msgs: SessionSecurityMessages)
@@ -444,11 +446,12 @@ let create (config: ModuleLabel option) : ErasedModule =
     // and so a module-visibility profile stated over that list can never
     // hide the page a user signs a stolen session out from.
     ToolUp.Platform.ClientModule.create {
-        Init = init
+        Init = fun () -> init ToolUp.Platform.ClientModuleContext.empty
         Update = update
         Name = name
         Icon = icon
     }
+    |> ToolUp.Platform.ClientModule.withContextInit init
     |> ToolUp.Platform.ClientModule.withId moduleId
     |> ToolUp.Platform.ClientModule.withFullWidthView view
     |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated

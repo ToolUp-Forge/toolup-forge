@@ -15,7 +15,7 @@ open SidebarPreferences
 open ToolUp.Platform.DataProp
 // Phase 767 — the sidebar reads its own catalog section. `SidebarMessages`
 // and the built-in English live in the Feliz-free half of the substrate
-// (`Shared/LocalizationTypes.fs` / `Client/MessageCatalog.fs`), which is
+// (Core's `Shared/LocalizationTypes.fs` / `Shared/MessageCatalog.fs`), which is
 // why the pure `buildSectionsWith` can take the section as a value and
 // the .NET harness can exercise it without a provider; only the
 // `Sidebar` component itself reaches for `MessageCatalogProvider`.

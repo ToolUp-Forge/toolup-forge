@@ -4,12 +4,12 @@
 # removal is breaking and must be reviewed; an addition is non-breaking but must
 # still be folded into this file in the same PR.
 ClientModel (class)
-ClientModel.init() : System.Tuple`2[ClientModel+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ClientModel+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+ClientModel.init(ToolUp.Platform.ClientModuleContext) : System.Tuple`2[ClientModel+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ClientModel+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
 ClientModel.narrativeCommitHandler : ToolUp.Platform.NarrativeCommitHandler { get }
-ClientModel.originalDocumentOpener(ToolUp.Platform.VectorKnowledgeTypes+OriginalDocumentRef) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ClientModel.originalDocumentOpener(ToolUp.Platform.MessageCatalog, ToolUp.Platform.VectorKnowledgeTypes+OriginalDocumentRef) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ClientModel.update(ClientModel+Msg, ClientModel+Model) : System.Tuple`2[ClientModel+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ClientModel+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
 ClientModel+Model (class)
-ClientModel+Model..ctor(Microsoft.FSharp.Collections.FSharpList`1[SharedTypes+KnowledgeDocument], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[ClientModel+NoteEditorTarget], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpOption`1[SharedTypes+AIContextEntry]], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[SharedTypes+KnowledgeDocument], System.Boolean, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[SharedTypes+BulkImportReport], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ClientModel+VersionHistoryState])
+ClientModel+Model..ctor(Microsoft.FSharp.Collections.FSharpList`1[SharedTypes+KnowledgeDocument], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[ClientModel+NoteEditorTarget], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpOption`1[SharedTypes+AIContextEntry]], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[SharedTypes+KnowledgeDocument], System.Boolean, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[SharedTypes+BulkImportReport], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ClientModel+VersionHistoryState], ToolUp.Platform.KnowledgeBaseMessages)
 ClientModel+Model.AIContext : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpOption`1[SharedTypes+AIContextEntry]] { get }
 ClientModel+Model.AIContextEditorOpen : System.Boolean { get }
 ClientModel+Model.AIContextLoadError : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
@@ -19,6 +19,7 @@ ClientModel+Model.BulkImporting : System.Boolean { get }
 ClientModel+Model.BulkReport : Microsoft.FSharp.Core.FSharpOption`1[SharedTypes+BulkImportReport] { get }
 ClientModel+Model.Documents : Microsoft.FSharp.Collections.FSharpList`1[SharedTypes+KnowledgeDocument] { get }
 ClientModel+Model.LoadError : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ClientModel+Model.Messages : ToolUp.Platform.KnowledgeBaseMessages { get }
 ClientModel+Model.NoteEditor : Microsoft.FSharp.Core.FSharpOption`1[ClientModel+NoteEditorTarget] { get }
 ClientModel+Model.NoteSaveError : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ClientModel+Model.PlatformDocsLoadError : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }

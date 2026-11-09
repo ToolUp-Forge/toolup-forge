@@ -1194,11 +1194,12 @@ let create (config: ToolUp.KnowledgeBase.KnowledgeBaseConfig option) : ToolUp.Pl
     let group = config |> Option.bind _.Group |> Option.defaultValue "Knowledge"
 
     ToolUp.Platform.ClientModule.create {
-        Init = ClientModel.init
+        Init = fun () -> ClientModel.init ClientModuleContext.empty
         Update = ClientModel.update
         Name = name
         Icon = icon
     }
+    |> ToolUp.Platform.ClientModule.withContextInit ClientModel.init
     |> ToolUp.Platform.ClientModule.withPages [
         documentsPage, documentsView
         notesPage, notesView

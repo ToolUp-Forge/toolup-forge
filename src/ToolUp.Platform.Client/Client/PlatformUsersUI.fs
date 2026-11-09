@@ -111,6 +111,10 @@ type Model = {
     Error: Notice option
     /// Per-row offboard modal. `None` = closed.
     Offboard: OffboardModalState option
+    /// This module's section of `ClientModuleContext.Messages`,
+    /// kept from `init` so `update` authors reader-facing text in the
+    /// session's language (a locale switch re-initialises the module).
+    Messages: PlatformUsersMessages
 }
 
 type Msg =
@@ -176,7 +180,7 @@ let private isConfirmationRequired (err: string) =
 
 // ─── Init ────────────────────────────────────────────────────────────
 
-let init () : Model * Cmd<Msg> =
+let init (ctx: ClientModuleContext) : Model * Cmd<Msg> =
     {
         Principals = None
         Loading = true
@@ -184,6 +188,7 @@ let init () : Model * Cmd<Msg> =
         Directory = Map.empty
         Error = None
         Offboard = None
+        Messages = ctx.Messages.PlatformUsers
     },
     Cmd.OfRemoting.call tenantApi.ListPrincipals () PrincipalsLoaded (fun e -> PrincipalsLoaded(Error e.Message))
 
@@ -444,7 +449,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                     Offboard =
                         Some {
                             m with
-                                Error = Some(Notice.Problem MessageCatalog.english.PlatformUsers.ReasonRequired)
+                                Error = Some(Notice.Problem model.Messages.ReasonRequired)
                         }
             },
             Cmd.none
@@ -454,7 +459,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                     Offboard =
                         Some {
                             m with
-                                Error = Some(Notice.Problem MessageCatalog.english.PlatformUsers.TokenRequired)
+                                Error = Some(Notice.Problem model.Messages.TokenRequired)
                         }
             },
             Cmd.none
@@ -1036,11 +1041,12 @@ let create (config: ModuleLabel option) : ErasedModule =
         config |> Option.map _.Icon |> Option.defaultValue ToolUp.Platform.Icons.users
 
     ToolUp.Platform.ClientModule.create {
-        Init = init
+        Init = fun () -> init ToolUp.Platform.ClientModuleContext.empty
         Update = update
         Name = name
         Icon = icon
     }
+    |> ToolUp.Platform.ClientModule.withContextInit init
     |> ToolUp.Platform.ClientModule.withId "_sdk.PlatformUsers"
     |> ToolUp.Platform.ClientModule.withFullWidthView view
     |> ToolUp.Platform.ClientModule.withGroup "Platform Management"

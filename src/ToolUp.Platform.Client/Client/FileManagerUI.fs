@@ -34,6 +34,10 @@ type Model = {
     /// "Uploaded Files" panel so an in-flight fetch is visually distinct
     /// from a genuinely-empty scope (both have `UploadedFiles = empty`).
     FilesLoading: bool
+    /// This module's section of `ClientModuleContext.Messages`,
+    /// kept from `init` so `update` authors reader-facing text in the
+    /// session's language (a locale switch re-initialises the module).
+    Messages: FileManagerMessages
 }
 
 type Msg =
@@ -90,7 +94,7 @@ type Msg =
 let private fileApi: FileManagementApi =
     Api.makeProxy<FileManagementApi> (customOptions = UserSession.withRequestHeaders)
 
-let init () =
+let init (ctx: ClientModuleContext) =
     {
         UploadedFiles = Map.empty
         CurrentUpload = NotStarted
@@ -99,6 +103,7 @@ let init () =
         StatusFilter = AllFiles
         ErrorMessage = None
         FilesLoading = true
+        Messages = ctx.Messages.FileManager
     },
     Cmd.ofMsg (LoadFiles(Start()))
 
@@ -129,8 +134,7 @@ let update msg model =
 
                         dispatch (SelectFile(Finished upload))
 
-                reader.onerror <-
-                    fun _ -> dispatch (ApiError(MessageCatalog.english.FileManager.FileReadError file.name))
+                reader.onerror <- fun _ -> dispatch (ApiError(model.Messages.FileReadError file.name))
 
                 reader.readAsText file)
 
@@ -201,7 +205,7 @@ let update msg model =
     | DeleteFile(Finished(Error msg)) ->
         {
             model with
-                ErrorMessage = Some(MessageCatalog.english.FileManager.DeleteFailed msg)
+                ErrorMessage = Some(model.Messages.DeleteFailed msg)
         },
         Cmd.none
 
@@ -224,7 +228,7 @@ let update msg model =
     | ReprocessFile(Finished(Error msg)) ->
         {
             model with
-                ErrorMessage = Some(MessageCatalog.english.FileManager.ReprocessFailed msg)
+                ErrorMessage = Some(model.Messages.ReprocessFailed msg)
         },
         Cmd.none
 
@@ -247,7 +251,7 @@ let update msg model =
     | ResetDataStore(Finished(Error msg)) ->
         {
             model with
-                ErrorMessage = Some(MessageCatalog.english.FileManager.ResetFailed msg)
+                ErrorMessage = Some(model.Messages.ResetFailed msg)
         },
         Cmd.none
 
@@ -270,7 +274,7 @@ let update msg model =
     | RetryIngestion(Finished(Error msg)) ->
         {
             model with
-                ErrorMessage = Some(MessageCatalog.english.FileManager.RetryFailed msg)
+                ErrorMessage = Some(model.Messages.RetryFailed msg)
         },
         Cmd.none
 
@@ -741,11 +745,12 @@ let create (displays: DataTypeDisplay list) (config: DataManagerConfig option) :
     // it can never collide with an app's RBAC-managed `ServerConfig.ModuleNames`
     // key. A deployment's own module in the data slot carries its own Id.
     ToolUp.Platform.ClientModule.create {
-        Init = init
+        Init = fun () -> init ToolUp.Platform.ClientModuleContext.empty
         Update = update
         Name = name
         Icon = icon
     }
+    |> ToolUp.Platform.ClientModule.withContextInit init
     |> ToolUp.Platform.ClientModule.withId moduleId
     |> ToolUp.Platform.ClientModule.withView (view displays)
     |> ToolUp.Platform.ClientModule.withProcessedData _.ProcessedData

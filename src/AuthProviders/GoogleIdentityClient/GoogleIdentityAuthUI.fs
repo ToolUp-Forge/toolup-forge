@@ -36,20 +36,13 @@ let private pageFrame (children: ReactElement list) : ReactElement =
         ]
     ]
 
-// The `…With` / bare pairing below is Phase 444's recorded pattern and
-// `OidcAuthUI`'s: the `…With` variant takes the resolved catalog section,
-// the bare arity delegates to it with the built-in English catalog, and
-// no existing arity widens (a widened arity reads as a baseline removal).
-// Phase 751.C swept the other four auth packages this way; this one was
-// missed, and Phase 758's gate is what found it.
+// Each screen takes the resolved `AuthMessages`; the shell wrapper below is
+// a component and reads them with `MessageCatalogProvider.useMessages`.
 
 let LoadingScreenWith (msgs: AuthMessages) : ReactElement =
     pageFrame [
         Html.div [ prop.className $"{Tokens.Text.secondary} text-sm"; prop.text msgs.SigningIn ]
     ]
-
-let LoadingScreen () : ReactElement =
-    LoadingScreenWith MessageCatalog.english.Auth
 
 let ErrorScreenWith (msgs: AuthMessages) (err: AuthError) (onRetry: unit -> unit) : ReactElement =
     pageFrame [
@@ -67,9 +60,6 @@ let ErrorScreenWith (msgs: AuthMessages) (err: AuthError) (onRetry: unit -> unit
             prop.onClick (fun _ -> onRetry ())
         ]
     ]
-
-let ErrorScreen (err: AuthError) (onRetry: unit -> unit) : ReactElement =
-    ErrorScreenWith MessageCatalog.english.Auth err onRetry
 
 /// User-facing note when the GIS library itself could not load. The
 /// developer-facing advisory (which names the CSP contributor to

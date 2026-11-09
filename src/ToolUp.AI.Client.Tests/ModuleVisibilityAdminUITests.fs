@@ -40,7 +40,7 @@ let private storedProfile: ModuleVisibilityProfile = {
 /// Drive a model to the state the editor reaches once every load has
 /// answered.
 let private loaded (profile: ModuleVisibilityProfile option) =
-    let m0, _ = init ()
+    let m0, _ = init ClientModuleContext.empty
     let m1, _ = update (RegisteredLoaded(Ok registered)) m0
     let m2, _ = update (ProfileLoaded(Ok profile)) m1
     m2
@@ -49,7 +49,7 @@ let tests =
     testList "ModuleVisibilityAdminUI" [
         testCase "init: nothing loaded, no banners, identity rule pending the fetch"
         <| fun _ ->
-            let m0, _ = init ()
+            let m0, _ = init ClientModuleContext.empty
             Expect.equal m0.RegisteredModuleIds [] "init: no candidates yet"
             Expect.equal m0.StoredProfile None "init: no stored profile"
             Expect.equal m0.Resolved None "init: no resolution"
@@ -129,7 +129,7 @@ let tests =
 
         testCase "save is refused before the profile has loaded, and while one is in flight"
         <| fun _ ->
-            let m0, _ = init ()
+            let m0, _ = init ClientModuleContext.empty
             let m1, _ = update (Save "note") m0
             Expect.isFalse m1.Busy "unloaded: no save started"
 
@@ -251,7 +251,7 @@ let tests =
 
         testCase "a failed candidate fetch banners without blocking the editor"
         <| fun _ ->
-            let m0, _ = init ()
+            let m0, _ = init ClientModuleContext.empty
             let m1, _ = update (RegisteredLoaded(Error "module visibility is not enabled")) m0
 
             Expect.equal

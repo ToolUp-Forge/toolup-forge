@@ -31,7 +31,12 @@ open ToolUp.Platform
 //      raising override degrades the language rather than the shell.
 //
 // All three are exercised on .NET rather than through Fable, which is
-// exactly why `MessageCatalog.fs` carries no Feliz dependency.
+// exactly why `MessageCatalog.fs` carries no Feliz dependency. The fourth
+// property — the MODULE CONTEXT (Phase 1072): a module the shell
+// initialises reads, as `ClientModuleContext.Messages`, the catalog the
+// provider publishes — needs the shell itself, so it is pinned where the
+// shell runs (`ShellUpdateEffectsTests`, Node); only its .NET half, what
+// `ClientModuleContext.empty` carries, is here.
 
 let private catalogTests =
     testList "MessageCatalog: locale resolution" [
@@ -322,6 +327,16 @@ let private switchSeamTests =
             unsubscribe ()
             LocaleRequest.request "de"
             Expect.equal count 1 "the dispose thunk must actually remove the callback"
+        }
+
+        // Phase 1072 — the .NET half of the module-context property (see the
+        // header): the shell's `buildContext` reads the browser session and
+        // `ClientConfig` carries Fable-only bindings, so the shell's half runs
+        // in the Node harness.
+        test "ClientModuleContext.empty carries the built-in English catalog" {
+            Expect.isTrue
+                (obj.ReferenceEquals(ClientModuleContext.empty.Messages, MessageCatalog.english))
+                "a context built from `empty` reads English, unchanged for every consumer"
         }
 
         test "a raising subscriber does not stop delivery to the others" {

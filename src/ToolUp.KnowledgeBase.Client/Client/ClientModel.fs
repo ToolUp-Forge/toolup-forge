@@ -113,6 +113,11 @@ type Model = {
     /// reaches, because the affordance that opens it is itself gated on
     /// `KnowledgeDocument.Version > 1`.
     VersionHistory: VersionHistoryState option
+    /// The Knowledge Base section of
+    /// `ClientModuleContext.Messages`, kept from `init` so `update` authors
+    /// its errors in the session's language (a locale switch re-initialises
+    /// the module).
+    Messages: KnowledgeBaseMessages
 }
 
 type Msg =
@@ -203,7 +208,7 @@ let private knowledgeApi =
 let private platformKnowledgeApi =
     Api.makeProxy<IPlatformKnowledgeApi> (customOptions = UserSession.withRequestHeaders)
 
-let init () =
+let init (ctx: ClientModuleContext) =
     {
         Documents = []
         Uploading = false
@@ -232,6 +237,7 @@ let init () =
         BulkImportError = None
 
         VersionHistory = None
+        Messages = ctx.Messages.KnowledgeBase
     },
     Cmd.batch [ Cmd.ofMsg (LoadDocuments(Start())); Cmd.ofMsg (LoadAIContext(Start())) ]
 
@@ -325,7 +331,7 @@ let private openOriginal (original: OriginalDocument) (location: VK.SourceLocato
 /// Refusals are typed, not thrown (GP 9), and an out-of-scope id is
 /// reported in the same words as an absent one so the drawer cannot be
 /// used to probe for a document in another tenant's scope (GP 4).
-let private deliverOriginal (docId: string) : Async<Result<unit, string>> = async {
+let private deliverOriginal (msgs: KnowledgeErrorMessages) (docId: string) : Async<Result<unit, string>> = async {
     let! result = knowledgeApi.GetOriginalDelivery docId
 
     match result with
@@ -334,12 +340,12 @@ let private deliverOriginal (docId: string) : Async<Result<unit, string>> = asyn
         return Ok()
     | Ok(PreviewContent.SignedUrl(url, _)) ->
         if isNull (openOriginalTab url) then
-            return Error MessageCatalog.english.KnowledgeBase.Errors.PopupBlocked
+            return Error msgs.PopupBlocked
         else
             return Ok()
-    | Error NotInScope -> return Error MessageCatalog.english.KnowledgeBase.Errors.DocumentNotAvailable
-    | Error NoOriginalAvailable -> return Error MessageCatalog.english.KnowledgeBase.Errors.NoOriginalForVersion
-    | Error(OriginalRetrievalFailed _) -> return Error MessageCatalog.english.KnowledgeBase.Errors.OriginalFetchFailed
+    | Error NotInScope -> return Error msgs.DocumentNotAvailable
+    | Error NoOriginalAvailable -> return Error msgs.NoOriginalForVersion
+    | Error(OriginalRetrievalFailed _) -> return Error msgs.OriginalFetchFailed
 }
 
 let update (msg: Msg) (model: Model) =
@@ -398,7 +404,7 @@ let update (msg: Msg) (model: Model) =
         {
             model with
                 Uploading = false
-                UploadError = Some MessageCatalog.english.KnowledgeBase.Errors.UploadFailed
+                UploadError = Some model.Messages.Errors.UploadFailed
         },
         Cmd.none
 
@@ -529,8 +535,11 @@ let update (msg: Msg) (model: Model) =
                                 DownloadError = None
                         }
             },
-            Cmd.OfAsync.either deliverOriginal version.DocumentId DownloadVersionSettled (fun ex ->
-                DownloadVersionSettled(Error ex.Message))
+            Cmd.OfAsync.either
+                (deliverOriginal model.Messages.Errors)
+                version.DocumentId
+                DownloadVersionSettled
+                (fun ex -> DownloadVersionSettled(Error ex.Message))
         | None -> model, Cmd.none
 
     | DownloadVersionSettled result ->
@@ -583,7 +592,7 @@ let update (msg: Msg) (model: Model) =
     | SetTagsFailed reason ->
         {
             model with
-                LoadError = Some(MessageCatalog.english.KnowledgeBase.Errors.TagsUpdateFailed reason)
+                LoadError = Some(model.Messages.Errors.TagsUpdateFailed reason)
         },
         Cmd.none
 
@@ -598,7 +607,7 @@ let update (msg: Msg) (model: Model) =
     | DeleteFailed reason ->
         {
             model with
-                LoadError = Some(MessageCatalog.english.KnowledgeBase.Errors.DeleteFailed reason)
+                LoadError = Some(model.Messages.Errors.DeleteFailed reason)
         },
         Cmd.none
 
@@ -651,7 +660,7 @@ let update (msg: Msg) (model: Model) =
         {
             model with
                 Resetting = false
-                UploadError = Some(MessageCatalog.english.KnowledgeBase.Errors.ResetFailed reason)
+                UploadError = Some(model.Messages.Errors.ResetFailed reason)
         },
         Cmd.none
 
@@ -883,7 +892,8 @@ let narrativeCommitHandler: NarrativeCommitHandler = { Submit = submitNarrative 
 /// so the AI Sources panel can open a citation's original document
 /// without a compile-time edge onto the Knowledge Base.
 let originalDocumentOpener: ToolUp.Platform.OriginalDocumentBridge.OriginalDocumentOpener =
-    fun (originalRef: VK.OriginalDocumentRef) -> async {
+    fun (catalog: MessageCatalog) (originalRef: VK.OriginalDocumentRef) -> async {
+        let msgs = catalog.KnowledgeBase.Errors
         let! result = knowledgeApi.GetOriginalDocument originalRef.DocumentId
 
         match result with
@@ -892,8 +902,7 @@ let originalDocumentOpener: ToolUp.Platform.OriginalDocumentBridge.OriginalDocum
             return Ok()
         // Out-of-scope is deliberately indistinguishable from absent —
         // no existence oracle (GP 4).
-        | Error NotInScope -> return Error MessageCatalog.english.KnowledgeBase.Errors.SourceNotAvailable
-        | Error NoOriginalAvailable -> return Error MessageCatalog.english.KnowledgeBase.Errors.SourceHasNoOriginal
-        | Error(OriginalRetrievalFailed _) ->
-            return Error MessageCatalog.english.KnowledgeBase.Errors.OriginalOpenFailed
+        | Error NotInScope -> return Error msgs.SourceNotAvailable
+        | Error NoOriginalAvailable -> return Error msgs.SourceHasNoOriginal
+        | Error(OriginalRetrievalFailed _) -> return Error msgs.OriginalOpenFailed
     }

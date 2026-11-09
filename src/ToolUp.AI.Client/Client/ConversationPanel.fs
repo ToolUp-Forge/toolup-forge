@@ -596,6 +596,7 @@ type private OriginalFetchState =
 [<ReactComponent>]
 let ViewOriginalButton (originalRef: OriginalDocumentRef) =
     let state, setState = React.useState OriginalIdle
+    let catalog = MessageCatalogProvider.useMessages ()
 
     match OriginalDocumentBridge.current () with
     | None ->
@@ -609,7 +610,7 @@ let ViewOriginalButton (originalRef: OriginalDocumentRef) =
                 setState OriginalLoading
 
                 async {
-                    let! result = opener originalRef
+                    let! result = opener catalog originalRef
 
                     match result with
                     | Ok() -> setState OriginalIdle

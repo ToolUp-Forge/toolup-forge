@@ -7,8 +7,8 @@
 #                                                the file a consumer copies to
 #                                                author a second language
 #
-# It is a projection of `MessageCatalog.english` (src/ToolUp.Platform.Client/
-# Client/MessageCatalog.fs), rendered by the golden-file test in
+# It is a projection of `MessageCatalog.english` (src/ToolUp.Platform.Core/
+# Shared/MessageCatalog.fs), rendered by the golden-file test in
 # `LocalizationTests` (the platform test pack). This script drives that test in
 # regeneration mode: with TOOLUP_REGEN_LOCALIZATION_SKELETON=1 set it writes the
 # file instead of comparing. Run it after adding, removing or rewording a catalog

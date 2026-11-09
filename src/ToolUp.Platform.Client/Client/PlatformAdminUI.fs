@@ -107,6 +107,10 @@ type Model = {
     /// render as the raw id. Never errors the UI — a failed resolve just
     /// leaves the map untouched and the ids show through.
     Directory: Map<string, UserSummary>
+    /// This module's section of `ClientModuleContext.Messages`,
+    /// kept from `init` so `update` authors reader-facing text in the
+    /// session's language (a locale switch re-initialises the module).
+    Messages: PlatformAdminMessages
 }
 
 type Msg =
@@ -236,7 +240,7 @@ let private unresolvedUserIds (model: Model) =
     referencedUserIds model
     |> List.filter (fun id -> not (Map.containsKey id model.Directory))
 
-let init () =
+let init (ctx: ClientModuleContext) =
     let model = {
         ActiveTab = AdminsTab
         Admins = Remote.Loading
@@ -255,6 +259,7 @@ let init () =
         PlatformKnowledgeBase = Remote.Loading
         SettingsError = None
         Directory = Map.empty
+        Messages = ctx.Messages.PlatformAdmin
     }
 
     model, Cmd.batch [ loadAdminsCmd (); loadTeamsCmd (); loadPlatformKnowledgeBaseCmd () ]
@@ -296,7 +301,7 @@ let update (msg: Msg) (model: Model) =
         if String.length trimmed = 0 then
             {
                 model with
-                    AssignError = Some(Notice.Problem MessageCatalog.english.PlatformAdmin.EnterUserId)
+                    AssignError = Some(Notice.Problem model.Messages.EnterUserId)
             },
             Cmd.none
         else
@@ -405,13 +410,13 @@ let update (msg: Msg) (model: Model) =
         if String.length name = 0 then
             {
                 model with
-                    CreateTeamError = Some(Notice.Problem MessageCatalog.english.PlatformAdmin.TeamNameRequired)
+                    CreateTeamError = Some(Notice.Problem model.Messages.TeamNameRequired)
             },
             Cmd.none
         elif String.length ownerId = 0 then
             {
                 model with
-                    CreateTeamError = Some(Notice.Problem MessageCatalog.english.PlatformAdmin.OwnerRequired)
+                    CreateTeamError = Some(Notice.Problem model.Messages.OwnerRequired)
             },
             Cmd.none
         else
@@ -1343,11 +1348,12 @@ let create (config: ModuleLabel option) (clientConfig: ClientConfig) : ErasedMod
         config |> Option.map _.Icon |> Option.defaultValue ToolUp.Platform.Icons.users
 
     ToolUp.Platform.ClientModule.create {
-        Init = init
+        Init = fun () -> init ToolUp.Platform.ClientModuleContext.empty
         Update = update
         Name = name
         Icon = icon
     }
+    |> ToolUp.Platform.ClientModule.withContextInit init
     |> ToolUp.Platform.ClientModule.withId moduleId
     |> ToolUp.Platform.ClientModule.withFullWidthView (viewWith clientConfig)
     |> ToolUp.Platform.ClientModule.withGroup "Platform Management"

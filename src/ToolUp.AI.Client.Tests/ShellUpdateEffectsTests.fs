@@ -156,6 +156,7 @@ let private permissionsModel: PermissionsAdminUI.Model = {
     SaveInFlight = false
     Banner = None
     OnAccessibleModulesChanged = None
+    Messages = MessageCatalog.english.PermissionsAdmin
 }
 
 // ─── A module's commands reach that module ───────────────────────────
@@ -235,6 +236,30 @@ let private homeModule () =
     |> ClientModule.register
 
 let private homeState = box { Title = "home"; Updates = 0 }
+
+// ─── The module context carries the shell's catalog (Phase 1072) ─────
+
+type private CatalogMsg = | Woken
+
+/// What the module saw in `ClientModuleContext.Messages` at `Init`.
+type private CatalogModel = { Seen: MessageCatalog }
+
+let private catalogId = "_test1072.catalog"
+let private catalogTopic = "test1072.wake"
+
+let private catalogModule () =
+    ClientModule.create {
+        Init = fun () -> { Seen = MessageCatalog.english }, Cmd.none
+        Update = fun Woken m -> m, Cmd.none
+        Name = catalogId
+        Icon = Html.none
+    }
+    |> ClientModule.withContextInit (fun ctx -> { Seen = ctx.Messages }, Cmd.none)
+    |> ClientModule.withView (fun _ _ -> Html.none, Html.none)
+    |> ClientModule.withId catalogId
+    |> ClientModule.withEventSubscription catalogTopic (fun (_: string) -> Woken)
+    |> ClientModule.register
+
 let private readState = box { Detail = "none" }
 
 /// Drives `Client.update` the way the Elmish loop does: every message goes
@@ -613,5 +638,65 @@ let tests =
                      | Some(Notice.Problem _) -> true
                      | _ -> false)
                     "failure is an error")
+        ]
+
+        testList "the module context carries the shell's catalog (Phase 1072)" [
+            testCase "a module the shell initialises reads the catalog the provider is handed" (fun () ->
+                let modules = [ catalogModule (); homeModule () ]
+
+                let start = {
+                    shellModel homeId [ homeId, homeState ] with
+                        LocaleOverride = Some "fr-FR"
+                }
+
+                let loop = ShellLoop(modules, start)
+                loop.Send(Client.ModuleEventPublished(catalogTopic, "wake"))
+
+                let seen =
+                    (loop.Model.ModuleStates |> Map.find catalogId |> unbox<CatalogModel>).Seen
+
+                Expect.equal seen.Locale "fr-FR" "the module was initialised under the session's locale"
+
+                // `view` mounts `MessageCatalogProvider.provider` with this
+                // call over the same model; the memo makes it one value.
+                let provided =
+                    Client.resolveCatalog ClientConfig.defaults loop.Model.LocaleOverride loop.Model.PlatformConfig
+
+                Expect.isTrue (obj.ReferenceEquals(seen, provided)) "the context and the provider hold one catalog")
+
+            testCase "a module initialised under a French catalog authors its banner in French" (fun () ->
+                let french (c: MessageCatalog) =
+                    if c.Locale.StartsWith "fr" then
+                        {
+                            c with
+                                PermissionsAdmin = {
+                                    c.PermissionsAdmin with
+                                        ExposureNowAvailable = fun name -> $"{name} est maintenant disponible."
+                                }
+                        }
+                    else
+                        c
+
+                let ctx = {
+                    ClientModuleContext.empty with
+                        Messages = MessageCatalog.resolve "fr-FR" (Some french)
+                }
+
+                let initial, _ = PermissionsAdminUI.init ctx
+
+                let model, _ =
+                    PermissionsAdminUI.update
+                        (PermissionsAdminUI.ExposureResult(
+                            "Reports",
+                            ModuleExposure.Hidden,
+                            ModuleExposure.Available,
+                            Ok()
+                        ))
+                        initial
+
+                Expect.equal
+                    model.Banner
+                    (Some(Notice.Info "Reports est maintenant disponible."))
+                    "the reducer read the catalog it was initialised with")
         ]
     ]

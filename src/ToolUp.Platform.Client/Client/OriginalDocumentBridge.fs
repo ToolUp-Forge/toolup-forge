@@ -39,8 +39,9 @@ open ToolUp.Platform.VectorKnowledgeTypes
 /// denial are results, not exceptions (GP 9). The benign message is
 /// safe to show inline: an out-of-scope id is reported as a generic
 /// "not available" so the affordance can't be used as an existence
-/// oracle (GP 4).
-type OriginalDocumentOpener = OriginalDocumentRef -> Async<Result<unit, string>>
+/// oracle (GP 4). The caller hands in the catalog it renders with, so
+/// the message is in the reader's language.
+type OriginalDocumentOpener = MessageCatalog -> OriginalDocumentRef -> Async<Result<unit, string>>
 
 /// Per-tab cache of the producer-supplied opener. Its sole writer is
 /// the KnowledgeBase companion's `register()`; the AI Sources panel is

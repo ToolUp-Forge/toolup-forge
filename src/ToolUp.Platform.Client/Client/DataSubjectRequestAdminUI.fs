@@ -79,6 +79,10 @@ type Model = {
     /// Status notice after a flow completes; cleared on the next action or
     /// dismissed by the user.
     Banner: Notice option
+    /// This module's section of `ClientModuleContext.Messages`,
+    /// kept from `init` so `update` authors reader-facing text in the
+    /// session's language (a locale switch re-initialises the module).
+    Messages: DataSubjectRequestAdminMessages
 }
 
 type Msg =
@@ -151,7 +155,7 @@ let private policyDescription (msgs: DataSubjectRequestAdminMessages) =
 
 // ─── Init / update ───────────────────────────────────────────────────
 
-let init () : Model * Cmd<Msg> =
+let init (ctx: ClientModuleContext) : Model * Cmd<Msg> =
     let model = {
         ActiveTab = ExportTab
         SubjectInput = ""
@@ -165,6 +169,7 @@ let init () : Model * Cmd<Msg> =
         TicketStatus = None
         Busy = Idle
         Banner = None
+        Messages = ctx.Messages.DataSubjectRequestAdmin
     }
 
     model, Cmd.none
@@ -187,13 +192,8 @@ let private erasureInput (model: Model) : ErasureRequestInput = {
     OverridePolicy = model.OverridePolicy
 }
 
-// `validateForm` is called only from the pure `update` reducer below,
-// which has no hook site and no rendered tree at the point its result is
-// produced — so it reads the catalog directly off `MessageCatalog.english`
-// rather than taking `msgs` as a parameter, exactly as `TeamManagerUI.update`
-// does.
 let private validateForm (model: Model) =
-    let msgs = MessageCatalog.english.DataSubjectRequestAdmin
+    let msgs = model.Messages
 
     if model.SubjectInput.Trim() = "" then
         Some msgs.SubjectRequired
@@ -203,10 +203,8 @@ let private validateForm (model: Model) =
         None
 
 let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
-    // Same rationale as `validateForm` above — `update` is pure and has no
-    // hook site, so banner text is read directly off `MessageCatalog.english`
-    // rather than threaded in as `msgs`.
-    let msgs = MessageCatalog.english.DataSubjectRequestAdmin
+    // The catalog is a pure input carried on the model from `init`.
+    let msgs = model.Messages
 
     match msg with
     | SwitchTab tab ->
@@ -891,11 +889,12 @@ let create (config: ModuleLabel option) : ErasedModule =
         config |> Option.map _.Icon |> Option.defaultValue ToolUp.Platform.Icons.users
 
     ToolUp.Platform.ClientModule.create {
-        Init = init
+        Init = fun () -> init ToolUp.Platform.ClientModuleContext.empty
         Update = update
         Name = name
         Icon = icon
     }
+    |> ToolUp.Platform.ClientModule.withContextInit init
     |> ToolUp.Platform.ClientModule.withId moduleId
     |> ToolUp.Platform.ClientModule.withFullWidthView view
     |> ToolUp.Platform.ClientModule.withGroup "Platform Management"

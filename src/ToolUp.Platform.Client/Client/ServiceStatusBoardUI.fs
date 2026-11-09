@@ -30,6 +30,10 @@ type Model = {
     /// per-section refresh button while its targeted call is pending.
     Refreshing: Set<string>
     RecentlyFlipped: Set<string>
+    /// This module's section of `ClientModuleContext.Messages`,
+    /// kept from `init` so `update` authors reader-facing text in the
+    /// session's language (a locale switch re-initialises the module).
+    Messages: ServiceStatusBoardMessages
 }
 
 type Msg =
@@ -48,7 +52,7 @@ let private boardApi: IServiceStatusBoardApi =
 let private loadSnapshotCmd () =
     Cmd.OfRemoting.call boardApi.GetSnapshot () SnapshotLoaded (fun e -> SnapshotLoaded(Error e.Message))
 
-let private loadSectionCmd (section: string) =
+let private loadSectionCmd (msgs: ServiceStatusBoardMessages) (section: string) =
     let api = boardApi
 
     let work: Async<Result<SectionSummary, string>> =
@@ -59,26 +63,27 @@ let private loadSectionCmd (section: string) =
         | s when s = ServiceStatusSnapshot.RateLimitSection -> api.RefreshRateLimit()
         | s when s = ServiceStatusSnapshot.JobQueueSection -> api.RefreshJobQueue()
         | s when s = ServiceStatusSnapshot.SmokeTestSection -> api.RefreshSmokeTest()
-        | other -> async { return Error(MessageCatalog.english.ServiceStatusBoard.UnknownSectionMessage other) }
+        | other -> async { return Error(msgs.UnknownSectionMessage other) }
 
     Cmd.OfRemoting.call (fun () -> work) () (fun result -> SectionLoaded(section, result)) (fun e ->
         SectionLoaded(section, Error e.Message))
 
 // ─── Init ────────────────────────────────────────────────────────────
 
-let init () =
+let init (ctx: ClientModuleContext) =
     let model = {
         Snapshot = Remote.Loading
         Collapsed = Set.empty
         Refreshing = Set.empty
         RecentlyFlipped = Set.empty
+        Messages = ctx.Messages.ServiceStatusBoard
     }
 
     model, loadSnapshotCmd ()
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
-let private sectionOf (snap: ServiceStatusSnapshot) (name: string) : SectionSummary =
+let private sectionOf (msgs: ServiceStatusBoardMessages) (snap: ServiceStatusSnapshot) (name: string) : SectionSummary =
     match name with
     | s when s = ServiceStatusSnapshot.HealthSection -> snap.Health
     | s when s = ServiceStatusSnapshot.PreflightSection -> snap.Preflight
@@ -86,10 +91,7 @@ let private sectionOf (snap: ServiceStatusSnapshot) (name: string) : SectionSumm
     | s when s = ServiceStatusSnapshot.RateLimitSection -> snap.RateLimit
     | s when s = ServiceStatusSnapshot.JobQueueSection -> snap.JobQueue
     | s when s = ServiceStatusSnapshot.SmokeTestSection -> snap.SmokeTest
-    | _ ->
-        SectionSummary.failure
-            (MessageCatalog.english.ServiceStatusBoard.UnknownSectionHeadline name)
-            MessageCatalog.english.ServiceStatusBoard.SectionMappingIncomplete
+    | _ -> SectionSummary.failure (msgs.UnknownSectionHeadline name) msgs.SectionMappingIncomplete
 
 let private updateSection
     (snap: ServiceStatusSnapshot)
@@ -108,7 +110,11 @@ let private updateSection
 /// Compute the set of section names whose severity / disabled state
 /// flipped between the prior and new snapshot. Used to drive the
 /// pulse-highlight on freshly-changed panels.
-let private flippedSections (prev: ServiceStatusSnapshot option) (next: ServiceStatusSnapshot) : Set<string> =
+let private flippedSections
+    (msgs: ServiceStatusBoardMessages)
+    (prev: ServiceStatusSnapshot option)
+    (next: ServiceStatusSnapshot)
+    : Set<string> =
     match prev with
     | None -> Set.empty
     | Some p ->
@@ -123,8 +129,8 @@ let private flippedSections (prev: ServiceStatusSnapshot option) (next: ServiceS
 
         allNames
         |> List.choose (fun name ->
-            let prevSec = sectionOf p name
-            let nextSec = sectionOf next name
+            let prevSec = sectionOf msgs p name
+            let nextSec = sectionOf msgs next name
 
             if prevSec.Disabled <> nextSec.Disabled || prevSec.Severity <> nextSec.Severity then
                 Some name
@@ -139,7 +145,7 @@ let update (msg: Msg) (model: Model) =
     | RefreshAll -> { model with Snapshot = Remote.Loading }, loadSnapshotCmd ()
 
     | SnapshotLoaded(Ok snap) ->
-        let flipped = flippedSections (Remote.toOption model.Snapshot) snap
+        let flipped = flippedSections model.Messages (Remote.toOption model.Snapshot) snap
 
         {
             model with
@@ -171,7 +177,7 @@ let update (msg: Msg) (model: Model) =
             model with
                 Refreshing = Set.add section model.Refreshing
         },
-        loadSectionCmd section
+        loadSectionCmd model.Messages section
 
     | SectionLoaded(section, Ok summary) ->
         let nextRefreshing = Set.remove section model.Refreshing
@@ -191,7 +197,7 @@ let update (msg: Msg) (model: Model) =
 
             let withOverall = { updated with Overall = overall }
 
-            let priorSec = sectionOf snap section
+            let priorSec = sectionOf model.Messages snap section
 
             let recentlyFlipped =
                 if priorSec.Severity <> summary.Severity || priorSec.Disabled <> summary.Disabled then
@@ -218,7 +224,7 @@ let update (msg: Msg) (model: Model) =
 
     | SectionLoaded(section, Error e) ->
         let failureSummary =
-            SectionSummary.failure (MessageCatalog.english.ServiceStatusBoard.SectionRefreshFailed section) e
+            SectionSummary.failure (model.Messages.SectionRefreshFailed section) e
 
         let nextRefreshing = Set.remove section model.Refreshing
 
@@ -445,11 +451,12 @@ let create (config: ModuleLabel option) : ErasedModule =
         config |> Option.map _.Icon |> Option.defaultValue ToolUp.Platform.Icons.health
 
     ToolUp.Platform.ClientModule.create {
-        Init = init
+        Init = fun () -> init ToolUp.Platform.ClientModuleContext.empty
         Update = update
         Name = name
         Icon = icon
     }
+    |> ToolUp.Platform.ClientModule.withContextInit init
     |> ToolUp.Platform.ClientModule.withId moduleId
     |> ToolUp.Platform.ClientModule.withFullWidthView view
     |> ToolUp.Platform.ClientModule.withGroup "Platform Management"

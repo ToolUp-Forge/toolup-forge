@@ -105,6 +105,10 @@ type Model = {
     /// sidebar + admin "show hidden modules" toggle update without a
     /// manual reload. `None` on non-team surfaces / when unwired.
     OnAccessibleModulesChanged: (unit -> unit) option
+    /// This module's section of `ClientModuleContext.Messages`,
+    /// kept from `init` so `update` authors reader-facing text in the
+    /// session's language (a locale switch re-initialises the module).
+    Messages: PermissionsAdminMessages
 }
 
 type Msg =
@@ -230,11 +234,11 @@ let private memberPerms (perms: TeamPermissions) (userId: string) (moduleName: s
 /// renders a single coherent loaded state rather than a flicker of
 /// partial loads. Errors at any leg surface as a `Remote.Failed` pane
 /// the operator can retry.
-let private loadSnapshotAsync () = async {
+let private loadSnapshotAsync (msgs: PermissionsAdminMessages) = async {
     let! activeTeamOpt = teamApi.GetActiveTeam()
 
     match activeTeamOpt with
-    | None -> return Error MessageCatalog.english.PermissionsAdmin.NoActiveTeam
+    | None -> return Error msgs.NoActiveTeam
     | Some teamId ->
         let! members = teamApi.GetTeamMembers teamId
         let! permsResult = permissionApi.GetTeamPermissions teamId
@@ -252,8 +256,8 @@ let private loadSnapshotAsync () = async {
                 }
 }
 
-let private loadSnapshotCmd () =
-    Cmd.OfRemoting.call loadSnapshotAsync () SnapshotLoaded (fun ex -> SnapshotLoaded(Error ex.Message))
+let private loadSnapshotCmd (msgs: PermissionsAdminMessages) =
+    Cmd.OfRemoting.call loadSnapshotAsync msgs SnapshotLoaded (fun ex -> SnapshotLoaded(Error ex.Message))
 
 let private saveDefaultsCmd (teamId: string) (defaults: Map<string, ModulePermission list>) =
     Cmd.OfRemoting.call permissionApi.SetTeamDefaults (teamId, defaults) SaveDefaultsResult (fun ex ->
@@ -283,9 +287,10 @@ let init (ctx: ClientModuleContext) : Model * Cmd<Msg> =
         SaveInFlight = false
         Banner = None
         OnAccessibleModulesChanged = ctx.OnAccessibleModulesChanged
+        Messages = ctx.Messages.PermissionsAdmin
     }
 
-    model, loadSnapshotCmd ()
+    model, loadSnapshotCmd model.Messages
 
 // ─── Update ──────────────────────────────────────────────────────────
 
@@ -307,7 +312,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 EditingMembers = Map.empty
                 Banner = None
         },
-        loadSnapshotCmd ()
+        loadSnapshotCmd model.Messages
 
     | SnapshotLoaded(Ok snap) ->
         // First member auto-selected so the Members tab renders an
@@ -397,7 +402,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         {
             model' with
                 SaveInFlight = false
-                Banner = Some(Notice.Info(MessageCatalog.english.PermissionsAdmin.TeamDefaultsSaved))
+                Banner = Some(Notice.Info(model.Messages.TeamDefaultsSaved))
         },
         Cmd.none
 
@@ -405,7 +410,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         {
             model with
                 SaveInFlight = false
-                Banner = Some(Notice.Problem(MessageCatalog.english.PermissionsAdmin.SaveFailed msg))
+                Banner = Some(Notice.Problem(model.Messages.SaveFailed msg))
         },
         Cmd.none
 
@@ -532,8 +537,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
             {
                 model with
                     EditingMembers = editing'
-                    Banner =
-                        Some(Notice.Info(MessageCatalog.english.PermissionsAdmin.SavedModuleForUser moduleName userId))
+                    Banner = Some(Notice.Info(model.Messages.SavedModuleForUser moduleName userId))
             },
             Cmd.none
         else
@@ -541,18 +545,15 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 model with
                     EditingMembers = editing'
                     SaveInFlight = false
-                    Banner = Some(Notice.Info(MessageCatalog.english.PermissionsAdmin.SavedPermissionsFor userId))
+                    Banner = Some(Notice.Info(model.Messages.SavedPermissionsFor userId))
             },
-            loadSnapshotCmd ()
+            loadSnapshotCmd model.Messages
 
     | SaveMemberResult(userId, moduleName, Error msg) ->
         {
             model with
                 SaveInFlight = false
-                Banner =
-                    Some(
-                        Notice.Problem(MessageCatalog.english.PermissionsAdmin.OverrideSaveFailed userId moduleName msg)
-                    )
+                Banner = Some(Notice.Problem(model.Messages.OverrideSaveFailed userId moduleName msg))
         },
         Cmd.none
 
@@ -583,9 +584,9 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         // never assembled from independently-ordered fragments.
         let bannerText =
             match attempted with
-            | ModuleExposure.Available -> MessageCatalog.english.PermissionsAdmin.ExposureNowAvailable moduleName
-            | ModuleExposure.Hidden -> MessageCatalog.english.PermissionsAdmin.ExposureNowHidden moduleName
-            | ModuleExposure.Unavailable -> MessageCatalog.english.PermissionsAdmin.ExposureNowUnavailable moduleName
+            | ModuleExposure.Available -> model.Messages.ExposureNowAvailable moduleName
+            | ModuleExposure.Hidden -> model.Messages.ExposureNowHidden moduleName
+            | ModuleExposure.Unavailable -> model.Messages.ExposureNowUnavailable moduleName
 
         // Tell the shell to re-fetch its accessible-modules list so the
         // sidebar (and the admin "show hidden modules" toggle) reflect
@@ -618,8 +619,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
 
         {
             model' with
-                Banner =
-                    Some(Notice.Problem(MessageCatalog.english.PermissionsAdmin.ExposureChangeFailed moduleName msg))
+                Banner = Some(Notice.Problem(model.Messages.ExposureChangeFailed moduleName msg))
         },
         Cmd.none
 
