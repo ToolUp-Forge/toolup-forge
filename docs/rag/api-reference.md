@@ -352,6 +352,7 @@ type ScoredPool = {
     Unit: float                          // the boost unit (ScoredPool.unitOf)
     Matches: VectorMatch list            // exactly what Retrieve returns
     Relevance: VectorMatch list option   // the pre-MMR relevance order, when MMR reordered
+    DenseSimilarity: float option        // the best returned match's dense similarity, before fusion
 }
 
 // The scored sibling: a capability by probe, never a member of IRetrievalPipeline.
@@ -402,9 +403,51 @@ recorded on the trace as `ScoreSpace:<space>`, and the step whose order the call
 | MMR (`withMmr`) | Diversity reordering. Its relevance term min-max normalises the pool's scores. Its order is final. | the returned space |
 | threshold (`MinScore`) | Applied by `RAGPromptBuilder`. It keeps only scores strictly above the threshold. | the returned space |
 
-Truncation to `TopK` (or `AdaptiveK`) and the merge sit between MMR and the threshold. They reorder nothing
-once MMR has run: the `Interleaved` merge re-sorts by score only when MMR is off, and `Separate` never
-re-sorts. A reranker whose `MaxBatchSize` is below `TopK` therefore returns at most `MaxBatchSize` matches.
+Truncation to `TopK` (or `AdaptiveK`) and the merge sit between MMR and the threshold. Adaptive-K reads the
+score gaps of the relevance order (`ScoredPool.Relevance` when MMR ran), never MMR's diversity order, and keeps
+that many matches in the order MMR left them. The merge bounds the result to `TopK`: `Interleaved` re-sorts by
+score only when MMR is off, and `Separate` groups the result by scope, in the order the request listed the
+scopes, each scope's matches in the order they arrived. A reranker whose `MaxBatchSize` is below `TopK`
+therefore returns at most `MaxBatchSize` matches.
+
+#### The stages and their trace marks
+
+`Retrieve` is one composition of named stages — authorise, facts, rewrite, candidates, filters, normalise,
+rerank, boosts, MMR, truncate, merge — each returning the pool and the marks it records. The marks are the
+cases of `RetrievalStage`, rendered by `RetrievalStage.mark`, in the order the stages ran; a stage that did not
+run records nothing. Every mark the default pipeline can emit (`<…>` is a value):
+
+| Mark | Recorded when |
+|---|---|
+| `AuthoriseScopes` | Always: the requested scopes are narrowed to the readable ones. |
+| `FactResolve` | A fact resolver is wired and the request carries a fact clause. |
+| `DisclosureFilter` | The disclosure gate withheld at least one resolved fact. |
+| `FactsDegraded:<TimedOut|Failed>` | The fact stage overran its budget or raised; no fact is admitted. |
+| `QueryRewrite` | A query rewriter is wired and the request carries history. |
+| `Dense` | Always, when a scope is readable: the dense candidates. |
+| `DenseDegraded:<TimedOut|Refused|Failed>` | The bounded query embed produced no vector; the dense branch is empty. |
+| `Sparse` | A keyword index is composed. |
+| `RRF` | The dense and keyword rankings were fused. |
+| `MetadataFilter` | The request carries a live `Filters` map. |
+| `OriginFilter` | The request carries an `OriginFilter`. |
+| `DerivedDisclosureDegraded:<TimedOut|Failed>` | The derived-disclosure check overran or raised; every chunk citing facts is dropped. |
+| `DerivedDisclosure` | The derived-disclosure check dropped at least one chunk. |
+| `DerivedDisclosure:<dropped>/<pool>` | Beside it: how many it dropped, of how many. |
+| `Normalise:MinMax` | The fused pool was normalised onto `[0, 1]`. |
+| `Rerank` | A reranker is composed. |
+| `Rerank:<n>/<pool>` | The pool was larger than the reranker's batch and was capped at it. |
+| `ActiveModuleBoost` | The request names an active module and the boost is positive. |
+| `SummaryBoost` | The summary boost lifted at least one chunk. |
+| `FactNarrativeJoin` | The fact→narrative join lifted at least one chunk. |
+| `MMR` | MMR is enabled. |
+| `AdaptiveK` | The request carries an adaptive-K hint. |
+| `TopK` | It does not. |
+| `Merge` | Always, when a scope is readable. |
+| `FinalOrder:<step>` | The step whose order the caller receives: the last of `Dense`, `RRF`, `Rerank`, a boost, `MMR`, `Interleaved` (the merge's re-sort) or `Separate` (the merge's grouping across scopes). |
+| `ScoreSpace:<Cosine|Fused|Reranked>` | Last: the space the returned scores are in. |
+
+A bounded stage (the facts, the query rewrite, the derived-disclosure check) runs under `Bounded.run`: an
+overrun or a fault is returned as data, and the stage records its `Degraded` mark rather than raise.
 
 ### `IEmbeddingCache`
 
@@ -533,6 +576,12 @@ A telemetry that also implements `RagTelemetry.IScoredRagTelemetry` (`RollingRag
 the chunk pool itself, `RecordScoredRetrieval(pool, minScore)`, and classifies it in the pool's space with
 `RetrievalScoreSpace.admits`: empty, a hit when the best score clears the threshold, a low-score miss
 otherwise. The prompt builder probes for it and falls back to `RecordRetrieval`.
+
+A fused pool's best match scores `1.0` whether the corpus answered the query or not, so a fused pool is also
+read on the absolute signal it carries, `ScoredPool.DenseSimilarity`: it is a hit only when that similarity
+clears `RagTelemetry.DefaultDenseMissFloor` (`0.25`, in cosine space), and that similarity is the top score
+recorded, so `RetrievalAvgTopScore` reads it. `RollingRagTelemetry(windowSeconds, denseMissFloor)` sets another
+floor.
 
 Retrieval outcomes are recorded as a score plus a result count rather than as hit / miss / empty counters per scope, so a caller can set its own thresholds after the fact; per-scope detail for index-load failures lives in the `KnowledgeIndexLoadFailed` audit trail rather than the snapshot.
 

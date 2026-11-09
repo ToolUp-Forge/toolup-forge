@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-/// Phase 663 — the calibration tool's plumbing, driven by a fake provider:
+/// The calibration tool's plumbing, driven by a fake provider:
 /// the eligibility short-circuit, one call re-scored at four floors, the
 /// failure strata, and the result-file schema round-trip. No network, no
 /// key.
@@ -190,7 +190,7 @@ let eligibilityTests =
 
             for instruction in [ "what now"; "Explain this"; "show me sales"; "x?"; String('y', max + 1); "" ] do
                 Expect.isFalse
-                    (isEligibleInstruction max instruction)
+                    (Eligibility.isEligible (Eligibility.assess max instruction))
                     $"the resolver refuses '{instruction}', so the tool's reason cannot be a guess"
 
                 Expect.notEqual (eligibilityReason max instruction) ReasonEligible "and the tool agrees"
@@ -215,7 +215,7 @@ let rescoringTests =
 
             Expect.equal
                 (c.Floors |> List.map _.Outcome)
-                [ OutcomeHit; OutcomeHit; OutcomeLowConfidence; OutcomeLowConfidence ]
+                [ "hit"; "hit"; "low-confidence"; "low-confidence" ]
                 "0.80 clears 0.70 and 0.78, not 0.85 or 0.92"
 
             Expect.equal
@@ -283,10 +283,10 @@ let failureTests =
                 |> Async.RunSynchronously
 
             let c = result.Cases.Head
-            Expect.equal c.Call.Value.Outcome OutcomeTimeout "the 662 token, distinct from provider-error"
+            Expect.equal c.Call.Value.Outcome "timeout" "the 662 token, distinct from provider-error"
             Expect.equal c.Latency.Stage StageModelCall "a timeout is a model-call cost"
             Expect.isLessThan c.Latency.Ms 10_000.0 "cut by the tool's own backstop"
-            Expect.isTrue (c.Floors |> List.forall (fun f -> f.Outcome = OutcomeTimeout)) "every floor falls through"
+            Expect.isTrue (c.Floors |> List.forall (fun f -> f.Outcome = "timeout")) "every floor falls through"
             Expect.equal result.Summary.Timeouts 1 "counted"
         }
 
@@ -299,7 +299,7 @@ let failureTests =
 
             Expect.equal
                 (result.Cases |> List.map _.Call.Value.Outcome)
-                [ OutcomeProviderError; OutcomeUnparseable ]
+                [ "provider-error"; "unparseable" ]
                 "each stratum named by the resolver's token"
 
             Expect.equal

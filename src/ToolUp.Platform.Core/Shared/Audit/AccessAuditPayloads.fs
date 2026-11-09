@@ -71,7 +71,7 @@ type AssetDeletedPayload = {
 // ─── Phase 3d — team-invitation audit payloads ───────────────────────
 //
 // One payload per audit lifecycle event for the team-invitation
-// substrate. All five emit under the team's audit stream (`AuditStreamKey.ofTeam`) with reserved
+// substrate. All five emit under the team's audit stream (`AuditScope.team`) with reserved
 // `SourceModule = "_platform.team_invites"` so admin queries filtering
 // on the source module surface the invitation trail in isolation.
 

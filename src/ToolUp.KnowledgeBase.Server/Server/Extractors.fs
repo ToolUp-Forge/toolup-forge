@@ -33,25 +33,17 @@ let makeChunk
             ]
     }
 
-// ─── OCR availability (Phase 500) ─────────────────────────────────
+// ─── OCR availability ─────────────────────────────────────────────
 //
-// The `IOcrProvider` seam has always resolved to *something* — DI hands
-// back `NoOpOcrProvider` when a deployment composed no companion, so
-// every call site could consult it unconditionally. That is a good
-// property and this does not change it. What it adds is the ability to
-// ASK which one you got, because two situations that look identical to
-// the extractor are completely different to the user:
+// The `IOcrProvider` seam always resolves to *something* — DI hands back
+// `NoOpOcrProvider` when a deployment composed no companion, so every call
+// site can consult it unconditionally. What `ocrComposed` adds is the
+// ability to ASK which one you got, because two situations that look
+// identical to the extractor are completely different to the user:
 //
 //   * a real OCR provider ran and recovered nothing — the page really is
 //     blank;
 //   * no OCR provider exists, so nothing was even attempted.
-//
-// Before this, both landed as `Complete 0` — "indexed successfully, zero
-// chunks" — which told a user their scanned contract was searchable when
-// it was not, and told the operator nothing at all. Distinguishing them
-// is the whole of the observability half of Phase 500 (GP 13: the core
-// stays zero-cost, but a deployment must be able to SEE what it is not
-// paying for).
 //
 // The discriminator is a type test against the no-op, not a string
 // comparison on `Name`. `Name` is documented as a free-form trace label,
@@ -69,10 +61,10 @@ let ocrComposed (ocr: IOcrProvider) : bool =
 
 /// Extensions (lower-case, no leading dot) that carry no text layer at
 /// all and are therefore *only* indexable through OCR. Distinct from
-/// `supportedExtensions` below on purpose: these are not "supported"
-/// in the Phase 119 upload-policy sense — a deployment with no OCR
-/// companion cannot index them, and the policy's allowlist / reject
-/// levers must keep behaving exactly as they did (GP 11).
+/// `supportedExtensions` on purpose: these are not "supported" in the
+/// upload-policy sense — a deployment with no OCR companion cannot index
+/// them, and the policy's allowlist / reject levers must keep behaving
+/// exactly as they did (GP 11).
 let ocrOnlyExtensions: Set<string> =
     Set.ofList [ "png"; "jpg"; "jpeg"; "tif"; "tiff"; "bmp"; "gif"; "webp" ]
 
@@ -91,473 +83,587 @@ let private imageMimeType (ext: string) : string =
     | "webp" -> "image/webp"
     | other -> sprintf "image/%s" other
 
-/// Extract (TextChunk * SourceReference) pairs from a PDF file.
-/// Three-stage path:
-///   1. `IOcrProvider.IsScanned` — if the document looks like a scanned
-///      image PDF, route the whole file through `ExtractText` and emit
-///      one chunk per OCR page.
-///   2. `ITableExtractor.ExtractTables` — emit any extracted tables as
-///      `chunkSpreadsheet`-formatted chunks (citable row ranges, repeated
-///      column headers). Same chunk shape as XLSX/CSV ingestion.
-///   3. PdfPig text extraction — emit page-text chunks, token-split via
-///      `splitByTokens` when a page exceeds the budget.
-///
-/// With the no-op providers from `ToolUp.RAG.NoOpDocUnderstanding`,
-/// step 1 returns `false` and step 2 returns `[]`, so the path collapses
-/// to step 3 — byte-equivalent to the pre-Phase-14i extractor.
-let private extractPdf
-    (ocr: IOcrProvider)
-    (tables: ITableExtractor)
-    (docId: string)
-    (fileName: string)
-    (bytes: byte[])
-    : Async<(TextChunk * SourceReference) list> =
-    async {
-        let mimeType = "application/pdf"
-        let config = ChunkingConfig.defaults
+// ─── The extractor model: format → parts → chunks ─────────────────
 
-        let makeSrc (location: SourceLocation) : SourceReference = {
-            DocumentId = docId
-            DocumentName = fileName
-            FileType = "pdf"
+/// How a block of prose is headed.
+[<RequireQualifiedAccess>]
+type ProseHeading =
+    /// Under a title, at a location: its chunks are headed `title`, or
+    /// `title (part i of n)` when it splits, and a block too short to
+    /// split is kept whole.
+    | Titled of title: string * location: SourceLocation
+    /// Running text with no title: its chunks are headed `text`, or
+    /// `part i of n`, each located by that header, and a block too short
+    /// to split yields nothing.
+    | Running
+
+/// How a sheet's chunks are headed and located.
+[<RequireQualifiedAccess>]
+type SheetKind =
+    /// A workbook sheet: headed `Sheet "<name>", …`, located by sheet and row range.
+    | Workbook
+    /// A delimited file: headed by the row range alone, located by row group.
+    | Delimited
+
+/// What a document carries that has no text the extractor could read.
+[<RequireQualifiedAccess>]
+type Textless =
+    /// An image upload.
+    | Image
+    /// A PDF whose pages carry images but (almost) no text layer.
+    | ScannedPdf
+
+/// One thing an extractor read out of a document, before chunking.
+type Part =
+    /// Prose, split by tokens.
+    | Prose of heading: ProseHeading * text: string
+    /// Text taken whole as one chunk (an OCR page).
+    | Verbatim of header: string * location: SourceLocation * text: string
+    /// A table in a document: its rows chunked with the column headers
+    /// repeated, headed `title (table)`, or `title (table, part i of n)`.
+    | Table of title: string * location: SourceLocation * data: SheetData
+    /// A whole sheet: a schema-and-sample chunk, then row-group chunks.
+    | Sheet of kind: SheetKind * data: SheetData
+    /// Content whose text only OCR could recover, and no OCR is composed.
+    /// It yields no chunk; it is what the empty-extraction status reads.
+    | Unread of Textless
+
+/// The document a list of parts was read from.
+type PartSource = {
+    DocumentId: string
+    FileName: string
+    /// The lower-case extension, no leading dot.
+    FileType: string
+}
+
+/// Parse the row range "rows N–M of T" emitted by `Chunking.chunkSpreadsheet`'s
+/// header line, to round-trip it into the chunk's `SourceReference.Location`.
+let private parseRowRange (chunkText: string) : (int * int) option =
+    let m = Regex.Match(chunkText, @"rows (\d+)–(\d+)", RegexOptions.None)
+
+    if m.Success then
+        Some(int m.Groups[1].Value, int m.Groups[2].Value)
+    else
+        None
+
+/// The one fold from parts to chunks. Every chunk carries the same
+/// metadata (`makeChunk`) and a source reference located by its part.
+let chunksOf (origin: ChunkOrigin) (source: PartSource) (parts: Part list) : (TextChunk * SourceReference) list =
+    let emit (header: string) (content: string) (location: SourceLocation) =
+        let src: SourceReference = {
+            DocumentId = source.DocumentId
+            DocumentName = source.FileName
+            FileType = source.FileType
             Location = location
             IndexedAt = DateTimeOffset.UtcNow
         }
 
-        // One projection for both OCR routes below — the declared
-        // `IsScanned` route and the Phase 500 empty-text fallback — so
-        // the two can never emit differently-shaped chunks.
-        let ocrChunks (pages: OcrPage list) = [
-            for p in pages do
-                let text = p.Text.Trim()
+        makeChunk origin source.FileName header content src, src
 
-                if text.Length > 10 then
-                    let src = makeSrc (Page p.PageNumber)
-                    let header = sprintf "Page %d (OCR)" p.PageNumber
-                    let chunk = makeChunk Document fileName header text src
-                    (chunk, src)
-        ]
+    let numbered (pieces: string list) (whole: string) (part: int -> int -> string) =
+        let total = pieces.Length
 
-        let! isScanned = ocr.IsScanned bytes mimeType
+        pieces
+        |> List.mapi (fun i piece -> (if total = 1 then whole else part (i + 1) total), piece)
 
-        if isScanned then
-            let! pages = ocr.ExtractText bytes mimeType
-            return ocrChunks pages
-        else
-            let! extractedTables = tables.ExtractTables bytes mimeType
+    [
+        for part in parts do
+            match part with
+            | Prose(ProseHeading.Titled(title, location), text) ->
+                let pieces =
+                    match splitByTokens ChunkingConfig.defaults text with
+                    | [] -> [ text ]
+                    | pieces -> pieces
 
-            let tableChunks = [
-                for t in extractedTables do
-                    let sheetName =
-                        match t.Page with
-                        | Some n -> sprintf "Page %d" n
-                        | None -> "Table"
+                for header, piece in numbered pieces title (sprintf "%s (part %d of %d)" title) do
+                    emit header piece location
+            | Prose(ProseHeading.Running, text) ->
+                for header, piece in
+                    numbered (splitByTokens ChunkingConfig.defaults text) "text" (sprintf "part %d of %d") do
+                    emit header piece (SharedTypes.Section header)
+            | Verbatim(header, location, text) -> emit header text location
+            | Table(title, location, data) ->
+                let pieces = chunkSpreadsheet ChunkingConfig.defaults data
 
-                    let sheetData: SheetData = {
-                        SheetName = sheetName
-                        Headers = t.Headers
-                        Rows = t.Rows
-                    }
+                for header, piece in numbered pieces (title + " (table)") (sprintf "%s (table, part %d of %d)" title) do
+                    emit header piece location
+            | Sheet(kind, data) ->
+                let name = data.SheetName
 
-                    let pieces = chunkSpreadsheet config sheetData
+                let schemaHeader =
+                    match kind with
+                    | SheetKind.Workbook -> sprintf "Sheet \"%s\", schema + sample" name
+                    | SheetKind.Delimited -> "schema + sample"
 
-                    for i, piece in List.indexed pieces do
-                        let location =
-                            match t.Page with
-                            | Some n -> Page n
-                            | None -> Page 0
+                // The schema-and-sample chunk first: one chunk that is high-
+                // recall for "what columns does this have?" and "show me an
+                // example row".
+                let sample =
+                    data.Rows
+                    |> List.truncate 5
+                    |> List.map (fun (_, values) -> formatRow data.Headers values)
+                    |> String.concat "\n"
 
-                        let src = makeSrc location
+                emit
+                    schemaHeader
+                    (sprintf "Columns: %s\n%s" (String.concat ", " data.Headers) sample)
+                    (SourceLocation.Sheet(name, None))
 
-                        let header =
-                            if pieces.Length = 1 then
-                                sprintf "%s (table)" sheetName
-                            else
-                                sprintf "%s (table, part %d of %d)" sheetName (i + 1) pieces.Length
+                // Token-aware row groups: as many rows as fit within the
+                // budget, the column headers repeated in each.
+                for group in chunkSpreadsheet ChunkingConfig.tabular data do
+                    match kind with
+                    | SheetKind.Workbook ->
+                        let rowRange =
+                            match parseRowRange group with
+                            | Some(s, e) -> sprintf "rows %d–%d" s e
+                            | None -> "rows"
 
-                        let chunk = makeChunk Document fileName header piece src
-                        (chunk, src)
-            ]
+                        emit
+                            (sprintf "Sheet \"%s\", %s" name rowRange)
+                            group
+                            (SourceLocation.Sheet(name, Some rowRange))
+                    | SheetKind.Delimited ->
+                        let startRow, endRow =
+                            parseRowRange group |> Option.defaultValue (2, data.Rows.Length + 1)
 
-            use doc = UglyToad.PdfPig.PdfDocument.Open(bytes)
+                        emit (sprintf "rows %d–%d" startRow endRow) group (RowGroup(startRow, endRow))
+            | Unread _ -> ()
+    ]
 
-            let textChunks = [
-                for page in doc.GetPages() do
-                    let text = page.GetWords() |> Seq.map _.Text |> String.concat " " |> _.Trim()
+/// What an extraction needs beside the document: the OCR and table
+/// companions, and which DOCX extractor the deployment composed.
+type ExtractDeps = {
+    Ocr: IOcrProvider
+    Tables: ITableExtractor
+    Docx: DocxExtraction.DocxExtractionMode
+}
 
-                    if text.Length > 10 then
-                        let pieces = splitByTokens config text
-
-                        // splitByTokens returns [] for inputs below MinTokens; in
-                        // that case keep the original page as a single short chunk
-                        // so we never silently drop content.
-                        let parts = if pieces.IsEmpty then [ text ] else pieces
-
-                        let total = parts.Length
-
-                        for i, piece in List.indexed parts do
-                            let header =
-                                if total = 1 then
-                                    sprintf "Page %d" page.Number
-                                else
-                                    sprintf "Page %d (part %d of %d)" page.Number (i + 1) total
-
-                            let src = makeSrc (Page page.Number)
-                            let chunk = makeChunk Document fileName header piece src
-                            (chunk, src)
-            ]
-
-            // Phase 500 — the empty-text fallback. `IsScanned` is a
-            // cheap up-front heuristic and a heuristic can be wrong: a
-            // PDF carrying a stray text artefact (a scanner watermark, a
-            // page-number stamp, an OCR'd-then-stripped layer) reads as
-            // "not scanned" and then yields nothing from PdfPig. Before
-            // this, that document indexed as zero chunks with an OCR
-            // engine sitting right there unused. When native extraction
-            // produced NOTHING and a real companion is composed, run OCR
-            // anyway — the direct reading of 500.B's "route through the
-            // composed provider when text extraction yields empty /
-            // near-empty output".
-            //
-            // Deliberately gated on `ocrComposed`: with the no-op
-            // default this whole branch is skipped, so an uncomposed
-            // deployment does not even pay the extra `ExtractText` call
-            // that would return `[]` (GP 13), and the path stays
-            // byte-equivalent to the pre-500 extractor.
-            if textChunks.IsEmpty && tableChunks.IsEmpty && ocrComposed ocr then
-                let! pages = ocr.ExtractText bytes mimeType
-                return ocrChunks pages
-            else
-                return textChunks @ tableChunks
+module ExtractDeps =
+    /// The deps for these companions, with the DOCX mode the deployment
+    /// composed (`DocxExtraction.enableStructuredDocxExtraction`).
+    let composed (ocr: IOcrProvider) (tables: ITableExtractor) : ExtractDeps = {
+        Ocr = ocr
+        Tables = tables
+        Docx = DocxExtraction.composedMode ()
     }
 
-/// Extract (TextChunk * SourceReference) pairs from an image upload
-/// (Phase 500). An image has no text layer by construction, so the
-/// composed `IOcrProvider` is the *only* route — with the no-op default
-/// this returns `[]` and the caller reports "OCR unavailable" rather
-/// than a successful index of nothing.
-let private extractImage
-    (ocr: IOcrProvider)
-    (docId: string)
-    (fileName: string)
-    (ext: string)
-    (bytes: byte[])
-    : Async<(TextChunk * SourceReference) list> =
-    async {
-        if not (ocrComposed ocr) then
-            return []
-        else
-            let mimeType = imageMimeType ext
-            let! pages = ocr.ExtractText bytes mimeType
+/// The document an extractor reads.
+type ExtractInput = {
+    FileName: string
+    /// The lower-case extension, no leading dot.
+    Extension: string
+    Bytes: byte[]
+}
+
+/// A format's extractor: the extensions it reads, and the parts it reads.
+type Extractor = {
+    Formats: string list
+    Parts: ExtractDeps -> ExtractInput -> Async<Part list>
+}
+
+/// The text of each OCR page that carries more than a stray mark.
+let private ocrPages (pages: OcrPage list) (header: OcrPage -> string) (location: OcrPage -> SourceLocation) = [
+    for p in pages do
+        let text = p.Text.Trim()
+
+        if text.Length > 10 then
+            Verbatim(header p, location p, text)
+]
+
+/// Threshold below which a PDF's text layer counts as absent rather than
+/// sparse. A scanned page routinely carries a handful of stray characters
+/// (a stamped page number, a scanner watermark); a text page does not stop
+/// at 32.
+[<Literal>]
+let private ScannedTextThreshold = 32
+
+/// PDF, read three ways:
+///   1. `IOcrProvider.IsScanned` — a scanned image PDF goes through
+///      `ExtractText`, one part per OCR page.
+///   2. `ITableExtractor.ExtractTables` — each table a `Table` part.
+///   3. PdfPig — each page's words a prose part.
+/// When the text layer yields nothing, a composed OCR companion reads the
+/// file anyway (`IsScanned` is a heuristic and can be wrong); with none
+/// composed, a document whose pages carry images and almost no text is
+/// reported `Unread`, judged in the same open. With the no-op providers
+/// steps 1 and 2 contribute nothing.
+let private pdf: Extractor = {
+    Formats = [ "pdf" ]
+    Parts =
+        fun deps input -> async {
+            let mimeType = "application/pdf"
+            let pageOf (p: OcrPage) = Page p.PageNumber
+            let ocrHeader (p: OcrPage) = sprintf "Page %d (OCR)" p.PageNumber
+            let! isScanned = deps.Ocr.IsScanned input.Bytes mimeType
+
+            if isScanned then
+                let! pages = deps.Ocr.ExtractText input.Bytes mimeType
+                return ocrPages pages ocrHeader pageOf
+            else
+                let! extractedTables = deps.Tables.ExtractTables input.Bytes mimeType
+
+                let tables = [
+                    for t in extractedTables do
+                        if not t.Rows.IsEmpty && t.Headers.Length > 0 then
+                            let sheetName =
+                                match t.Page with
+                                | Some n -> sprintf "Page %d" n
+                                | None -> "Table"
+
+                            Table(
+                                sheetName,
+                                Page(defaultArg t.Page 0),
+                                {
+                                    SheetName = sheetName
+                                    Headers = t.Headers
+                                    Rows = t.Rows
+                                }
+                            )
+                ]
+
+                let text, unread =
+                    use doc = UglyToad.PdfPig.PdfDocument.Open(input.Bytes)
+                    let pages = doc.GetPages() |> Seq.toList
+
+                    let text = [
+                        for page in pages do
+                            let words = page.GetWords() |> Seq.map _.Text |> String.concat " " |> _.Trim()
+
+                            if words.Length > 10 then
+                                Prose(ProseHeading.Titled(sprintf "Page %d" page.Number, Page page.Number), words)
+                    ]
+
+                    let unread =
+                        text.IsEmpty
+                        && tables.IsEmpty
+                        && not (ocrComposed deps.Ocr)
+                        && (pages |> List.exists (fun page -> not (Seq.isEmpty (page.GetImages()))))
+                        && (pages
+                            |> List.sumBy (fun page -> if isNull page.Text then 0 else page.Text.Trim().Length)) < ScannedTextThreshold
+
+                    text, unread
+
+                if text.IsEmpty && tables.IsEmpty && ocrComposed deps.Ocr then
+                    let! pages = deps.Ocr.ExtractText input.Bytes mimeType
+                    return ocrPages pages ocrHeader pageOf
+                elif unread then
+                    return [ Unread Textless.ScannedPdf ]
+                else
+                    return text @ tables
+        }
+}
+
+/// An image has no text layer, so the composed `IOcrProvider` is the only
+/// route; with none composed the image is `Unread`.
+let private image: Extractor = {
+    Formats = Set.toList ocrOnlyExtensions
+    Parts =
+        fun deps input -> async {
+            if not (ocrComposed deps.Ocr) then
+                return [ Unread Textless.Image ]
+            else
+                let! pages = deps.Ocr.ExtractText input.Bytes (imageMimeType input.Extension)
+
+                // An image is one page; `Page 1` keeps the locator uniform
+                // with the PDF path, so a Sources panel opens it the same way.
+                return ocrPages pages (fun _ -> sprintf "%s (OCR)" input.FileName) (fun p -> Page(max 1 p.PageNumber))
+        }
+}
+
+/// PPTX: each slide's text, headed by its number and title.
+let private pptx: Extractor = {
+    Formats = [ "pptx" ]
+    Parts =
+        fun _ input -> async {
+            use stream = new MemoryStream(input.Bytes)
+
+            use presentation =
+                DocumentFormat.OpenXml.Packaging.PresentationDocument.Open(stream, false)
+
+            let slideIds =
+                presentation.PresentationPart.Presentation.SlideIdList.Elements<
+                    DocumentFormat.OpenXml.Presentation.SlideId
+                 >()
 
             return [
-                for p in pages do
-                    let text = p.Text.Trim()
+                for slideNum, slideId in Seq.indexed slideIds |> Seq.map (fun (i, s) -> i + 1, s) do
+                    let slidePart =
+                        presentation.PresentationPart.GetPartById(slideId.RelationshipId.Value)
+                        :?> DocumentFormat.OpenXml.Packaging.SlidePart
 
-                    if text.Length > 10 then
-                        // An image is one page. `Page 1` keeps the
-                        // citation locator uniform with the PDF path, so
-                        // a Sources panel opens it the same way.
-                        let src: SourceReference = {
-                            DocumentId = docId
-                            DocumentName = fileName
-                            FileType = ext
-                            Location = Page(max 1 p.PageNumber)
-                            IndexedAt = DateTimeOffset.UtcNow
-                        }
+                    // A title placeholder has PlaceholderShape.Type = Title or
+                    // CenteredTitle (or no type at all).
+                    let title =
+                        slidePart.Slide.Descendants<DocumentFormat.OpenXml.Presentation.Shape>()
+                        |> Seq.tryPick (fun sp ->
+                            let appNv =
+                                if sp.NonVisualShapeProperties <> null then
+                                    sp.NonVisualShapeProperties.ApplicationNonVisualDrawingProperties
+                                else
+                                    null
 
-                        let chunk = makeChunk Document fileName (sprintf "%s (OCR)" fileName) text src
-                        (chunk, src)
+                            if appNv <> null && appNv.PlaceholderShape <> null then
+                                let ph = appNv.PlaceholderShape
+
+                                let isTitle =
+                                    ph.Type = null
+                                    || (ph.Type.HasValue
+                                        && (ph.Type.Value = DocumentFormat.OpenXml.Presentation.PlaceholderValues.Title
+                                            || ph.Type.Value = DocumentFormat.OpenXml.Presentation.PlaceholderValues.CenteredTitle))
+
+                                if isTitle then
+                                    let txt =
+                                        sp.Descendants<DocumentFormat.OpenXml.Drawing.Text>()
+                                        |> Seq.map _.Text
+                                        |> String.concat " "
+                                        |> _.Trim()
+
+                                    if txt.Length > 0 then Some txt else None
+                                else
+                                    None
+                            else
+                                None)
+
+                    let allText =
+                        slidePart.Slide.Descendants<DocumentFormat.OpenXml.Drawing.Text>()
+                        |> Seq.map _.Text
+                        |> Seq.filter (fun s -> s.Trim().Length > 0)
+                        |> String.concat " "
+
+                    if allText.Length > 5 then
+                        let header =
+                            match title with
+                            | Some t -> sprintf "Slide %d: \"%s\"" slideNum t
+                            | None -> sprintf "Slide %d" slideNum
+
+                        Prose(ProseHeading.Titled(header, Slide(slideNum, title)), allText)
             ]
-    }
+        }
+}
 
-/// Extract (TextChunk * SourceReference) pairs from a PPTX file.
-let private extractPptx (docId: string) (fileName: string) (bytes: byte[]) : (TextChunk * SourceReference) list =
-    use stream = new MemoryStream(bytes)
+let private sectionTitle (heading: string) = sprintf "Section: \"%s\"" heading
 
-    use presentation =
-        DocumentFormat.OpenXml.Packaging.PresentationDocument.Open(stream, false)
+/// DOCX, flat: the top-level paragraphs under each heading, one section
+/// per heading (tables are not read).
+let private docxFlat: Extractor = {
+    Formats = [ "docx" ]
+    Parts =
+        fun _ input -> async {
+            use stream = new MemoryStream(input.Bytes)
 
-    let pres = presentation.PresentationPart.Presentation
+            use doc =
+                DocumentFormat.OpenXml.Packaging.WordprocessingDocument.Open(stream, false)
 
-    let results = System.Collections.Generic.List<TextChunk * SourceReference>()
-    let mutable slideNum = 0
+            let paragraphs =
+                doc.MainDocumentPart.Document.Body.Elements<DocumentFormat.OpenXml.Wordprocessing.Paragraph>()
+                |> Seq.choose (fun para ->
+                    let text = para.InnerText.Trim()
 
-    for slideId in pres.SlideIdList.Elements<DocumentFormat.OpenXml.Presentation.SlideId>() do
-        slideNum <- slideNum + 1
-        let rId = slideId.RelationshipId.Value
-
-        let slidePart =
-            presentation.PresentationPart.GetPartById(rId) :?> DocumentFormat.OpenXml.Packaging.SlidePart
-
-        // Title placeholder shapes have PlaceholderShape.Type = Title or CenteredTitle.
-        // Fall back to None when the slide has no title shape.
-        let title =
-            slidePart.Slide.Descendants<DocumentFormat.OpenXml.Presentation.Shape>()
-            |> Seq.tryPick (fun sp ->
-                let appNv =
-                    if sp.NonVisualShapeProperties <> null then
-                        sp.NonVisualShapeProperties.ApplicationNonVisualDrawingProperties
-                    else
-                        null
-
-                if appNv <> null && appNv.PlaceholderShape <> null then
-                    let ph = appNv.PlaceholderShape
-
-                    let isTitle =
-                        ph.Type = null
-                        || (ph.Type.HasValue
-                            && (ph.Type.Value = DocumentFormat.OpenXml.Presentation.PlaceholderValues.Title
-                                || ph.Type.Value = DocumentFormat.OpenXml.Presentation.PlaceholderValues.CenteredTitle))
-
-                    if isTitle then
-                        let txt =
-                            sp.Descendants<DocumentFormat.OpenXml.Drawing.Text>()
-                            |> Seq.map _.Text
-                            |> String.concat " "
-                            |> _.Trim()
-
-                        if txt.Length > 0 then Some txt else None
-                    else
+                    if text.Length = 0 then
                         None
-                else
-                    None)
-
-        let allText =
-            slidePart.Slide.Descendants<DocumentFormat.OpenXml.Drawing.Text>()
-            |> Seq.map _.Text
-            |> Seq.filter (fun s -> s.Trim().Length > 0)
-            |> String.concat " "
-
-        if allText.Length > 5 then
-            let titleStr = title |> Option.defaultValue ""
-
-            let baseHeader =
-                if titleStr = "" then
-                    sprintf "Slide %d" slideNum
-                else
-                    sprintf "Slide %d: \"%s\"" slideNum titleStr
-
-            let pieces = splitByTokens ChunkingConfig.defaults allText
-
-            let parts = if pieces.IsEmpty then [ allText ] else pieces
-
-            let total = parts.Length
-
-            for i, piece in List.indexed parts do
-                let header =
-                    if total = 1 then
-                        baseHeader
                     else
-                        sprintf "%s (part %d of %d)" baseHeader (i + 1) total
+                        let styleId =
+                            match para.ParagraphProperties with
+                            | null -> ""
+                            | props ->
+                                match props.ParagraphStyleId with
+                                | null -> ""
+                                | sid -> sid.Val.Value
 
-                let src: SourceReference = {
-                    DocumentId = docId
-                    DocumentName = fileName
-                    FileType = "pptx"
-                    Location = Slide(slideNum, title)
-                    IndexedAt = DateTimeOffset.UtcNow
-                }
+                        Some(styleId.StartsWith "Heading", text))
+                |> List.ofSeq
 
-                let chunk = makeChunk Document fileName header piece src
-                results.Add((chunk, src))
+            // Each heading opens a section; the paragraphs before the
+            // first heading are the "Document" section.
+            let sections =
+                paragraphs
+                |> List.fold
+                    (fun (closed, heading, body) (isHeading, text) ->
+                        if isHeading then
+                            (heading, List.rev body) :: closed, text, []
+                        else
+                            closed, heading, text :: body)
+                    ([], "Document", [])
+                |> fun (closed, heading, body) -> List.rev ((heading, List.rev body) :: closed)
 
-    results |> Seq.toList
+            return [
+                for heading, body in sections do
+                    if not body.IsEmpty then
+                        Prose(
+                            ProseHeading.Titled(sectionTitle heading, SharedTypes.Section heading),
+                            String.concat " " body
+                        )
+            ]
+        }
+}
 
-/// Extract (TextChunk * SourceReference) pairs from a DOCX file.
-let private extractDocx (docId: string) (fileName: string) (bytes: byte[]) : (TextChunk * SourceReference) list =
-    use stream = new MemoryStream(bytes)
+/// DOCX, structured: the `ToolUp.OpenXml` model, keyed by the full heading
+/// path (`Intro › Background`); list items keep their bullet, and tables
+/// are read as tables.
+let private docxStructured: Extractor = {
+    Formats = [ "docx" ]
+    Parts =
+        fun _ input -> async {
+            let imported = ToolUp.OpenXml.Import.fromBytes input.Bytes
+            let parts = ResizeArray<Part>()
+            let headingPath = ResizeArray<int * string>()
+            let pendingText = ResizeArray<string>()
 
-    use doc =
-        DocumentFormat.OpenXml.Packaging.WordprocessingDocument.Open(stream, false)
+            let currentHeading () =
+                if headingPath.Count = 0 then
+                    "Document"
+                else
+                    headingPath |> Seq.map snd |> String.concat " › "
 
-    let body = doc.MainDocumentPart.Document.Body
+            let flushText () =
+                if pendingText.Count > 0 then
+                    let heading = currentHeading ()
 
-    let results = System.Collections.Generic.List<TextChunk * SourceReference>()
-    let mutable currentHeading = "Document"
-    let mutable currentParagraphs = System.Collections.Generic.List<string>()
+                    parts.Add(
+                        Prose(
+                            ProseHeading.Titled(sectionTitle heading, SharedTypes.Section heading),
+                            String.concat "\n" pendingText
+                        )
+                    )
 
-    let flushSection () =
-        if currentParagraphs.Count > 0 then
-            let text = String.concat " " currentParagraphs
-            let pieces = splitByTokens ChunkingConfig.defaults text
+                    pendingText.Clear()
 
-            let parts = if pieces.IsEmpty then [ text ] else pieces
+            let cellText (cell: ToolUp.OpenXml.TableCell) =
+                cell.Blocks
+                |> List.map ToolUp.OpenXml.Block.text
+                |> String.concat " "
+                |> _.Trim()
 
-            let total = parts.Length
+            let addTable (table: ToolUp.OpenXml.TableModel) =
+                match table.Rows with
+                | [] -> ()
+                // A single-row table has no data rows: its cells join the
+                // running section text.
+                | [ onlyRow ] -> pendingText.Add(onlyRow.Cells |> List.map cellText |> String.concat "\t")
+                | headerRow :: dataRows ->
+                    let heading = currentHeading ()
 
-            for i, piece in List.indexed parts do
-                let header =
-                    if total = 1 then
-                        sprintf "Section: \"%s\"" currentHeading
+                    parts.Add(
+                        Table(
+                            sectionTitle heading,
+                            SharedTypes.Section heading,
+                            {
+                                SheetName = heading
+                                Headers = headerRow.Cells |> List.map cellText |> Array.ofList
+                                // 1-based source rows as a spreadsheet shows them.
+                                Rows =
+                                    dataRows
+                                    |> List.mapi (fun i row -> (i + 2, row.Cells |> List.map cellText |> Array.ofList))
+                            }
+                        )
+                    )
+
+            for section in imported.Model.Sections do
+                for block in section.Blocks do
+                    match block with
+                    | ToolUp.OpenXml.Block.Heading(level, paragraph) ->
+                        let text = (ToolUp.OpenXml.ParagraphModel.text paragraph).Trim()
+
+                        if text.Length > 0 then
+                            flushText ()
+
+                            while headingPath.Count > 0 && fst headingPath[headingPath.Count - 1] >= level do
+                                headingPath.RemoveAt(headingPath.Count - 1)
+
+                            headingPath.Add(level, text)
+                    | ToolUp.OpenXml.Block.Paragraph paragraph ->
+                        let text = (ToolUp.OpenXml.ParagraphModel.text paragraph).Trim()
+
+                        if text.Length > 0 then
+                            pendingText.Add text
+                    | ToolUp.OpenXml.Block.ListItem(_, paragraph) ->
+                        let text = (ToolUp.OpenXml.ParagraphModel.text paragraph).Trim()
+
+                        if text.Length > 0 then
+                            pendingText.Add("- " + text)
+                    | ToolUp.OpenXml.Block.Table table ->
+                        flushText ()
+                        addTable table
+                    | ToolUp.OpenXml.Block.Figure figure ->
+                        // A figure's only text is its accessible description.
+                        match figure.Description with
+                        | Some description when description.Trim().Length > 0 -> pendingText.Add(description.Trim())
+                        | Some _
+                        | None -> ()
+                    | ToolUp.OpenXml.Block.OpaqueBlock _ -> ()
+
+            flushText ()
+            return List.ofSeq parts
+        }
+}
+
+/// XLSX: each sheet with a header row and at least one data row.
+let private xlsx: Extractor = {
+    Formats = [ "xlsx" ]
+    Parts =
+        fun _ input -> async {
+            use stream = new MemoryStream(input.Bytes)
+
+            use workbook =
+                DocumentFormat.OpenXml.Packaging.SpreadsheetDocument.Open(stream, false)
+
+            let sharedStrings =
+                match workbook.WorkbookPart.SharedStringTablePart with
+                | null -> [||]
+                | sst ->
+                    sst.SharedStringTable.Elements<DocumentFormat.OpenXml.Spreadsheet.SharedStringItem>()
+                    |> Seq.map _.InnerText
+                    |> Seq.toArray
+
+            let cellValue (cell: DocumentFormat.OpenXml.Spreadsheet.Cell) =
+                if cell = null || cell.CellValue = null then
+                    ""
+                else
+                    let raw = cell.CellValue.InnerText
+
+                    if
+                        cell.DataType <> null
+                        && cell.DataType.Value = DocumentFormat.OpenXml.Spreadsheet.CellValues.SharedString
+                    then
+                        match Int32.TryParse(raw) with
+                        | true, idx when idx < sharedStrings.Length -> sharedStrings[idx]
+                        | _ -> raw
                     else
-                        sprintf "Section: \"%s\" (part %d of %d)" currentHeading (i + 1) total
+                        raw
 
-                let src: SourceReference = {
-                    DocumentId = docId
-                    DocumentName = fileName
-                    FileType = "docx"
-                    Location = Section currentHeading
-                    IndexedAt = DateTimeOffset.UtcNow
-                }
+            let values (row: DocumentFormat.OpenXml.Spreadsheet.Row) =
+                row.Elements<DocumentFormat.OpenXml.Spreadsheet.Cell>()
+                |> Seq.map cellValue
+                |> Seq.toArray
 
-                let chunk = makeChunk Document fileName header piece src
-                results.Add((chunk, src))
+            return [
+                for sheet in workbook.WorkbookPart.Workbook.Sheets.Elements<DocumentFormat.OpenXml.Spreadsheet.Sheet>() do
+                    let worksheetPart =
+                        workbook.WorkbookPart.GetPartById(sheet.Id.Value)
+                        :?> DocumentFormat.OpenXml.Packaging.WorksheetPart
 
-            currentParagraphs <- System.Collections.Generic.List<string>()
+                    let rows =
+                        worksheetPart.Worksheet.Descendants<DocumentFormat.OpenXml.Spreadsheet.Row>()
+                        |> Seq.toArray
 
-    for para in body.Elements<DocumentFormat.OpenXml.Wordprocessing.Paragraph>() do
-        let styleId =
-            match para.ParagraphProperties with
-            | null -> ""
-            | props ->
-                match props.ParagraphStyleId with
-                | null -> ""
-                | sid -> sid.Val.Value
-
-        let text = para.InnerText.Trim()
-
-        if text.Length > 0 then
-            if styleId.StartsWith "Heading" then
-                flushSection ()
-                currentHeading <- text
-            else
-                currentParagraphs.Add(text)
-
-    flushSection ()
-    results |> Seq.toList
-
-/// Parse the row range "rows N–M of T" emitted by `Chunking.chunkSpreadsheet`'s
-/// header line. Used to round-trip the row range into the chunk's
-/// `SourceReference.Location` for click-through citations.
-let private parseRowRange (chunkText: string) : (int * int) option =
-    let m = Regex.Match(chunkText, @"rows (\d+)\u2013(\d+)", RegexOptions.None)
-
-    if m.Success then
-        let startRow = int m.Groups[1].Value
-        let endRow = int m.Groups[2].Value
-        Some(startRow, endRow)
-    else
-        None
-
-/// Extract (TextChunk * SourceReference) pairs from an XLSX file.
-let private extractXlsx (docId: string) (fileName: string) (bytes: byte[]) : (TextChunk * SourceReference) list =
-    use stream = new MemoryStream(bytes)
-
-    use workbook =
-        DocumentFormat.OpenXml.Packaging.SpreadsheetDocument.Open(stream, false)
-
-    let sheets =
-        workbook.WorkbookPart.Workbook.Sheets.Elements<DocumentFormat.OpenXml.Spreadsheet.Sheet>()
-
-    let results = System.Collections.Generic.List<TextChunk * SourceReference>()
-
-    let sharedStrings =
-        match workbook.WorkbookPart.SharedStringTablePart with
-        | null -> [||]
-        | sst ->
-            sst.SharedStringTable.Elements<DocumentFormat.OpenXml.Spreadsheet.SharedStringItem>()
-            |> Seq.map _.InnerText
-            |> Seq.toArray
-
-    let getCellValue (cell: DocumentFormat.OpenXml.Spreadsheet.Cell) =
-        if cell = null || cell.CellValue = null then
-            ""
-        else
-            let raw = cell.CellValue.InnerText
-
-            if
-                cell.DataType <> null
-                && cell.DataType.Value = DocumentFormat.OpenXml.Spreadsheet.CellValues.SharedString
-            then
-                match Int32.TryParse(raw) with
-                | true, idx when idx < sharedStrings.Length -> sharedStrings[idx]
-                | _ -> raw
-            else
-                raw
-
-    let getCells (row: DocumentFormat.OpenXml.Spreadsheet.Row) =
-        row.Elements<DocumentFormat.OpenXml.Spreadsheet.Cell>() |> Seq.toArray
-
-    for sheet in sheets do
-        let sheetName = sheet.Name.Value
-        let rId = sheet.Id.Value
-
-        let worksheetPart =
-            workbook.WorkbookPart.GetPartById(rId) :?> DocumentFormat.OpenXml.Packaging.WorksheetPart
-
-        let rows =
-            worksheetPart.Worksheet.Descendants<DocumentFormat.OpenXml.Spreadsheet.Row>()
-            |> Seq.toArray
-
-        if rows.Length >= 2 then
-            let headers = getCells rows[0] |> Array.map getCellValue
-
-            let dataRows =
-                rows
-                |> Array.skip 1
-                |> Array.mapi (fun i r ->
-                    let values = getCells r |> Array.map getCellValue
-                    // 1-based source row index: header is row 1, first data row is 2.
-                    (i + 2, values))
-                |> Array.toList
-
-            let sheetData: SheetData = {
-                SheetName = sheetName
-                Headers = headers
-                Rows = dataRows
-            }
-
-            // Schema-+-sample chunk first — gives retrieval a single
-            // chunk that's high-recall for "what columns does this
-            // sheet have?" / "show me an example row" queries.
-            let sampleRowsText =
-                dataRows
-                |> List.truncate 5
-                |> List.map (fun (_, values) -> formatRow headers values)
-                |> String.concat "\n"
-
-            let schemaSrc: SourceReference = {
-                DocumentId = docId
-                DocumentName = fileName
-                FileType = "xlsx"
-                Location = Sheet(sheetName, None)
-                IndexedAt = DateTimeOffset.UtcNow
-            }
-
-            let schemaHeader = sprintf "Sheet \"%s\", schema + sample" sheetName
-
-            let schemaContent =
-                let colList = String.concat ", " headers
-                sprintf "Columns: %s\n%s" colList sampleRowsText
-
-            let schemaChunk = makeChunk Document fileName schemaHeader schemaContent schemaSrc
-            results.Add((schemaChunk, schemaSrc))
-
-            // Token-aware row-group chunks. `chunkSpreadsheet` packs as
-            // many rows as fit within `MaxTokens`, repeating the column
-            // headers per chunk and emitting a `rows N–M of T` header line.
-            let rowChunks = chunkSpreadsheet ChunkingConfig.tabular sheetData
-
-            for groupContent in rowChunks do
-                let rowRange =
-                    match parseRowRange groupContent with
-                    | Some(s, e) -> sprintf "rows %d\u2013%d" s e
-                    | None -> "rows"
-
-                let groupSrc: SourceReference = {
-                    DocumentId = docId
-                    DocumentName = fileName
-                    FileType = "xlsx"
-                    Location = Sheet(sheetName, Some rowRange)
-                    IndexedAt = DateTimeOffset.UtcNow
-                }
-
-                let groupHeader = sprintf "Sheet \"%s\", %s" sheetName rowRange
-                let groupChunk = makeChunk Document fileName groupHeader groupContent groupSrc
-                results.Add((groupChunk, groupSrc))
-
-    results |> Seq.toList
+                    if rows.Length >= 2 then
+                        Sheet(
+                            SheetKind.Workbook,
+                            {
+                                SheetName = sheet.Name.Value
+                                Headers = values rows[0]
+                                // 1-based source rows: the header is row 1.
+                                Rows =
+                                    rows
+                                    |> Array.skip 1
+                                    |> Array.mapi (fun i r -> (i + 2, values r))
+                                    |> Array.toList
+                            }
+                        )
+            ]
+        }
+}
 
 /// The records of a CSV file, header first, each cell trimmed, read by the
 /// RFC 4180 reader so a quoted field keeps its delimiters and line breaks.
@@ -574,123 +680,172 @@ let internal csvRows (text: string) : string[] list =
         | Error _ -> None)
     |> Seq.toList
 
-/// Extract (TextChunk * SourceReference) pairs from a CSV file.
-let private extractCsv (docId: string) (fileName: string) (bytes: byte[]) : (TextChunk * SourceReference) list =
-    match csvRows (Encoding.UTF8.GetString bytes) with
-    | []
-    | [ _ ] -> []
-    | headers :: records ->
-        let results = System.Collections.Generic.List<TextChunk * SourceReference>()
-
-        let dataRows =
-            records
-            // 1-based source row index: header is row 1, first data row is 2.
-            |> List.mapi (fun i values -> (i + 2, values))
-
-        let sheetData: SheetData = {
-            SheetName = "data"
-            Headers = headers
-            Rows = dataRows
+/// CSV: one sheet, `data`, when the file has a header and a record.
+let private csv: Extractor = {
+    Formats = [ "csv" ]
+    Parts =
+        fun _ input -> async {
+            return
+                match csvRows (Encoding.UTF8.GetString input.Bytes) with
+                | []
+                | [ _ ] -> []
+                | headers :: records -> [
+                    Sheet(
+                        SheetKind.Delimited,
+                        {
+                            SheetName = "data"
+                            Headers = headers
+                            // 1-based source rows: the header is row 1.
+                            Rows = records |> List.mapi (fun i values -> (i + 2, values))
+                        }
+                    )
+                  ]
         }
+}
 
-        // Schema-+-sample chunk first — high-recall for "what columns
-        // does this file have?" / "show me an example row" queries.
-        let sampleRowsText =
-            dataRows
-            |> List.truncate 5
-            |> List.map (fun (_, values) -> formatRow headers values)
-            |> String.concat "\n"
+/// Plain text: running text, split by tokens with overlap so a query
+/// straddling two chunks still hits one of them.
+let private txt: Extractor = {
+    Formats = [ "txt" ]
+    Parts =
+        fun _ input -> async {
+            let text = (Encoding.UTF8.GetString input.Bytes).Trim()
 
-        let schemaSrc: SourceReference = {
-            DocumentId = docId
-            DocumentName = fileName
-            FileType = "csv"
-            Location = Sheet("data", None)
-            IndexedAt = DateTimeOffset.UtcNow
-        }
-
-        let schemaContent =
-            let colList = String.concat ", " headers
-            sprintf "Columns: %s\n%s" colList sampleRowsText
-
-        let schemaChunk =
-            makeChunk Document fileName "schema + sample" schemaContent schemaSrc
-
-        results.Add((schemaChunk, schemaSrc))
-
-        // Token-aware row-group chunks via `chunkSpreadsheet`. The chunker
-        // packs as many rows as fit within `MaxTokens`, repeats the column
-        // headers per chunk, and emits a `rows N–M of T` header line we
-        // round-trip back into `Location = RowGroup(startRow, endRow)`.
-        let rowChunks = chunkSpreadsheet ChunkingConfig.tabular sheetData
-
-        for groupContent in rowChunks do
-            let startRow, endRow =
-                match parseRowRange groupContent with
-                | Some(s, e) -> s, e
-                | None -> 2, records.Length + 1
-
-            let groupSrc: SourceReference = {
-                DocumentId = docId
-                DocumentName = fileName
-                FileType = "csv"
-                Location = RowGroup(startRow, endRow)
-                IndexedAt = DateTimeOffset.UtcNow
-            }
-
-            let groupHeader = sprintf "rows %d\u2013%d" startRow endRow
-            let groupChunk = makeChunk Document fileName groupHeader groupContent groupSrc
-            results.Add((groupChunk, groupSrc))
-
-        results |> Seq.toList
-
-/// Extract (TextChunk * SourceReference) pairs from a plain-text file.
-/// Splits into token-budgeted chunks via `splitByTokens` rather than fixed
-/// line counts — preserves sentence boundaries and applies overlap so a
-/// query straddling two chunks still hits at least one of them.
-let private extractTxt (docId: string) (fileName: string) (bytes: byte[]) : (TextChunk * SourceReference) list =
-    let text = (Encoding.UTF8.GetString bytes).Trim()
-
-    if text.Length = 0 then
-        []
-    else
-        let pieces = splitByTokens ChunkingConfig.defaults text
-        let results = System.Collections.Generic.List<TextChunk * SourceReference>()
-
-        let total = pieces.Length
-
-        pieces
-        |> List.iteri (fun i chunkText ->
-            let header =
-                if total = 1 then
-                    "text"
+            return
+                if text.Length = 0 then
+                    []
                 else
-                    sprintf "part %d of %d" (i + 1) total
+                    [ Prose(ProseHeading.Running, text) ]
+        }
+}
 
-            let src: SourceReference = {
-                DocumentId = docId
-                DocumentName = fileName
-                FileType = "txt"
-                Location = Section header
-                IndexedAt = DateTimeOffset.UtcNow
-            }
+/// The searchable formats' extractors, with the DOCX extractor `docx`
+/// selects. An image is not among them: without an OCR companion it is not
+/// searchable, and the upload policy reads this list.
+let extractors (docx: DocxExtraction.DocxExtractionMode) : Extractor list = [
+    pdf
+    pptx
+    (match docx with
+     | DocxExtraction.DocxExtractionMode.Flat -> docxFlat
+     | DocxExtraction.DocxExtractionMode.Structured -> docxStructured)
+    xlsx
+    csv
+    txt
+]
 
-            let chunk = makeChunk Document fileName header chunkText src
-            results.Add((chunk, src)))
+/// Extensions (lower-case, no leading dot) a searchable extractor reads:
+/// the upload policy's "is this type searchable?", distinguishing an
+/// unrecognised type (stored but unsearchable, or rejected) from a
+/// recognised but empty file.
+let supportedExtensions: Set<string> =
+    extractors DocxExtraction.DocxExtractionMode.Flat
+    |> List.collect _.Formats
+    |> Set.ofList
 
-        results |> Seq.toList
+/// `true` when an extractor recognises `ext` (lower-case, no leading
+/// dot). Unrecognised types yield no parts.
+let isSupportedExtension (ext: string) : bool =
+    supportedExtensions.Contains(ext.ToLowerInvariant())
 
-/// Phase 103 — stamp the structured original-document reference into
-/// each chunk's metadata at ingestion, replacing reliance on the
-/// implicit `knowledge/{docId}/{filename}` blob-name convention:
-/// retrieval reads the ref (`ChunkMetadata.OriginalRefKey`) instead of
-/// rebuilding the path. Applied by the upload path only — uploaded
-/// files are the one source kind with a fetchable binary original;
-/// note / narrative chunks carry no ref, so their citations surface
-/// `RetrievedSource.OriginalRef = None`. The per-chunk `Location`
-/// (Phase 106) is the neutral projection of the chunk's provenance, so
-/// a Sources panel can open the original at the cited page / slide /
-/// sheet / section.
+let private extensionOf (fileName: string) =
+    Path.GetExtension(fileName).ToLowerInvariant().TrimStart('.')
+
+/// The parts the extractor for `fileName`'s format reads; none for a
+/// format no extractor reads.
+let extractParts (deps: ExtractDeps) (fileName: string) (bytes: byte[]) : Async<Part list> =
+    let input = {
+        FileName = fileName
+        Extension = extensionOf fileName
+        Bytes = bytes
+    }
+
+    match
+        image :: extractors deps.Docx
+        |> List.tryFind (fun e -> List.contains input.Extension e.Formats)
+    with
+    | Some extractor -> extractor.Parts deps input
+    | None -> async.Return []
+
+/// An uploaded document's parts, and the chunks `chunksOf` folds them to.
+let extract
+    (deps: ExtractDeps)
+    (docId: string)
+    (fileName: string)
+    (bytes: byte[])
+    : Async<Part list * (TextChunk * SourceReference) list> =
+    async {
+        let! parts = extractParts deps fileName bytes
+
+        let source = {
+            DocumentId = docId
+            FileName = fileName
+            FileType = extensionOf fileName
+        }
+
+        return parts, chunksOf Document source parts
+    }
+
+/// The chunks of an uploaded document, with the deployment's composed DOCX
+/// mode: the entry every caller that needs no parts reads.
+let extractChunks
+    (ocr: IOcrProvider)
+    (tables: ITableExtractor)
+    (docId: string)
+    (fileName: string)
+    (bytes: byte[])
+    : Async<(TextChunk * SourceReference) list> =
+    async {
+        let! _, chunks = extract (ExtractDeps.composed ocr tables) docId fileName bytes
+        return chunks
+    }
+
+/// The terminal status of an upload whose extraction yielded no chunk,
+/// decided from the parts the extractor reported:
+///
+///   * a part only OCR could read, and none composed → `OcrUnavailable`
+///   * a recognised format, genuinely empty         → `Complete 0`
+///   * no extractor for the format                   → `UnsupportedFormat`
+///
+/// With an OCR companion composed the extractor reports no `Unread` part:
+/// an empty result means the engine looked and found nothing. The detail
+/// names the remedy, because it reaches the user verbatim.
+let emptyExtractionStatus (fileName: string) (parts: Part list) : IngestionStatus =
+    let unread =
+        parts
+        |> List.tryPick (fun part ->
+            match part with
+            | Unread textless -> Some textless
+            | _ -> None)
+
+    match unread with
+    | Some Textless.Image ->
+        OcrUnavailable(
+            sprintf
+                "'%s' is an image, so its text can only be recovered by OCR — no IOcrProvider companion is composed, so it was stored but not indexed. Compose one (e.g. ToolUp.OcrProviders.Tesseract) to make image uploads searchable."
+                fileName
+        )
+    | Some Textless.ScannedPdf ->
+        OcrUnavailable(
+            sprintf
+                "'%s' looks like a scanned PDF — its pages carry images but no text layer, so nothing could be indexed. No IOcrProvider companion is composed; compose one (e.g. ToolUp.OcrProviders.Tesseract) to make scanned documents searchable."
+                fileName
+        )
+    | None ->
+        let ext = extensionOf fileName
+
+        if isSupportedExtension ext then
+            Complete 0
+        else
+            UnsupportedFormat(sprintf "no extractor for '.%s' — stored but not searchable" ext)
+
+/// Stamp the structured original-document reference into each chunk's
+/// metadata at ingestion, so retrieval reads the ref
+/// (`ChunkMetadata.OriginalRefKey`) instead of rebuilding the blob path.
+/// Applied by the upload path only — an uploaded file is the one source
+/// kind with a fetchable binary original; note and narrative chunks carry
+/// no ref. The per-chunk `Location` is the neutral projection of the
+/// chunk's provenance, so a Sources panel can open the original at the
+/// cited page / slide / sheet / section.
 let stampOriginalRefs
     (docId: string)
     (fileName: string)
@@ -713,148 +868,3 @@ let stampOriginalRefs
                 Metadata = chunk.Metadata.Add(ChunkMetadata.OriginalRefKey, toJson originalRef)
         },
         src)
-
-/// Dispatch to the appropriate extractor based on file extension. The
-/// PDF path is async because it consults `IOcrProvider` /
-/// `ITableExtractor` (Phase 14i). Other extractors operate on already
-/// structured formats and stay synchronous, lifted into `async` for a
-/// uniform return type.
-/// Extensions (lower-case, no leading dot) that `extractChunks` has a
-/// real extractor for. The single source of truth for "is this type
-/// searchable?" — Phase 119's upload policy reads it to distinguish an
-/// unrecognised type (stored-but-unsearchable / rejected) from a
-/// recognised-but-empty file (`Complete 0`). Keep in lockstep with the
-/// `match` in `extractChunks`.
-let supportedExtensions: Set<string> =
-    Set.ofList [ "pdf"; "pptx"; "docx"; "xlsx"; "csv"; "txt" ]
-
-/// `true` when an extractor recognises `ext` (lower-case, no leading
-/// dot). Unrecognised types yield `[]` from `extractChunks`.
-let isSupportedExtension (ext: string) : bool =
-    supportedExtensions.Contains(ext.ToLowerInvariant())
-
-// ─── "OCR unavailable" classification (Phase 500) ─────────────────
-//
-// The observability half of the phase. `extractChunks` returning `[]`
-// has three quite different causes and the upload path has to tell them
-// apart before it picks a terminal status:
-//
-//   * no extractor for the type          → `UnsupportedFormat` (Phase 119)
-//   * a recognised, genuinely empty file → `Complete 0`
-//   * a recognised file with no TEXT LAYER, and no OCR composed
-//                                        → `OcrUnavailable` (here)
-//
-// The third was previously indistinguishable from the second, which is
-// how a scanned PDF came to be reported as a successful index. Note the
-// direction of the guard: this classifies only when NO companion is
-// composed. With a real provider in place an empty result means the
-// engine looked and found nothing, which is a genuine `Complete 0` and
-// must not be dressed up as a missing capability.
-
-/// A PDF's extractable-text length and whether any page carries an
-/// embedded raster image. Total: a PDF that will not open answers
-/// `(0, false)` so the caller falls through to its ordinary paths —
-/// adjudicating PDF validity belongs to `ExtractionErrors.classify`,
-/// which sees the actual exception.
-let private inspectPdf (bytes: byte[]) : int * bool =
-    try
-        use doc = UglyToad.PdfPig.PdfDocument.Open(bytes)
-        let mutable textChars = 0
-        let mutable hasImage = false
-
-        for page in doc.GetPages() do
-            let text = page.Text
-
-            if not (isNull text) then
-                textChars <- textChars + text.Trim().Length
-
-            if not hasImage then
-                hasImage <- page.GetImages() |> Seq.isEmpty |> not
-
-        textChars, hasImage
-    with _ ->
-        0, false
-
-/// Threshold below which a PDF's text layer counts as absent rather
-/// than sparse. A scanned page routinely carries a handful of stray
-/// characters (a stamped page number, a scanner watermark); a genuine
-/// text page does not stop at 32.
-[<Literal>]
-let private ScannedTextThreshold = 32
-
-/// `Some detail` when this document yielded nothing BECAUSE it needs OCR
-/// and no `IOcrProvider` companion is composed; `None` in every other
-/// case. Called only on the empty-extraction path, so a deployment with
-/// no scanned uploads never opens a PDF twice (GP 13).
-///
-/// `detail` is surfaced verbatim to the user through
-/// `IngestionStatus.OcrUnavailable`, so it names the remedy — an
-/// operator reading "OCR unavailable" with no idea what to install has
-/// been told the symptom and nothing else.
-let ocrUnavailableDetail (ocr: IOcrProvider) (fileName: string) (bytes: byte[]) : string option =
-    if ocrComposed ocr then
-        None
-    else
-        let ext = Path.GetExtension(fileName).ToLowerInvariant().TrimStart('.')
-
-        if ocrOnlyExtensions.Contains ext then
-            Some(
-                sprintf
-                    "'%s' is an image, so its text can only be recovered by OCR — no IOcrProvider companion is composed, so it was stored but not indexed. Compose one (e.g. ToolUp.OcrProviders.Tesseract) to make image uploads searchable."
-                    fileName
-            )
-        elif ext = "pdf" then
-            let textChars, hasImage = inspectPdf bytes
-
-            if hasImage && textChars < ScannedTextThreshold then
-                Some(
-                    sprintf
-                        "'%s' looks like a scanned PDF — its pages carry images but no text layer, so nothing could be indexed. No IOcrProvider companion is composed; compose one (e.g. ToolUp.OcrProviders.Tesseract) to make scanned documents searchable."
-                        fileName
-                )
-            else
-                None
-        else
-            None
-
-let extractChunks
-    (ocr: IOcrProvider)
-    (tables: ITableExtractor)
-    (docId: string)
-    (fileName: string)
-    (bytes: byte[])
-    : Async<(TextChunk * SourceReference) list> =
-    async {
-        match Path.GetExtension(fileName).ToLowerInvariant() with
-        | ".pdf" -> return! extractPdf ocr tables docId fileName bytes
-        | ".pptx" -> return extractPptx docId fileName bytes
-        | ".docx" ->
-            // Phase 124 — compose-time opt-in structured mode
-            // (heading-path-aware chunking over the ToolUp.OpenXml
-            // structural model). GP 11: the flat path stays the
-            // byte-for-byte default.
-            match DocxExtraction.currentMode () with
-            | DocxExtraction.DocxExtractionMode.Structured -> return DocxExtraction.extract docId fileName bytes
-            | DocxExtraction.DocxExtractionMode.Flat -> return extractDocx docId fileName bytes
-        | ".xlsx" -> return extractXlsx docId fileName bytes
-        | ".csv" -> return extractCsv docId fileName bytes
-        | ".txt" -> return extractTxt docId fileName bytes
-        | other ->
-            // Phase 500 — image uploads. Kept OUT of
-            // `supportedExtensions` deliberately: that set drives the
-            // Phase 119 upload policy, and an image is genuinely not
-            // indexable without an OCR companion, so a deployment's
-            // allowlist / reject decisions must not silently change
-            // (GP 11). What changes is only what happens once an image
-            // HAS been stored — with a companion composed it now
-            // indexes, and without one it reports "OCR unavailable"
-            // instead of "no extractor for this type".
-            let ext = other.TrimStart('.')
-
-            if ocrOnlyExtensions.Contains ext then
-                return! extractImage ocr docId fileName ext bytes
-            else
-                return []
-    }
-
-// ─── Document index persistence ───────────────────────────────────

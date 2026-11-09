@@ -26,7 +26,7 @@ open ToolUp.AI
 // `AIConsentRequired` are**, and for the same reason: a held server-side
 // invocation waiting on the user is a transport concern, and routing it
 // through one surface's Elmish model would tie the question to whichever
-// surface happens to be mounted. `SSEClient` hands the event straight
+// surface happens to be mounted. `ChatStream.AIStream` hands the event straight
 // here; a module-level bridge holds it and a mounted component renders
 // it — the `ConsentDialog` / `PromptAccessoryBridge` / `FastPathBridge`
 // idiom this tier already uses.
@@ -94,8 +94,8 @@ let subscribe (listener: PendingApprovalRequest list -> unit) : unit -> unit =
 
     fun () -> listeners <- listeners |> List.filter (fun l -> not (obj.ReferenceEquals(l, listener)))
 
-/// Phase 503: handle an incoming `ToolApprovalRequired` SSE event. Called
-/// by `SSEClient.subscribe`, not dispatched into Elmish — see the module
+/// Handle an incoming `ToolApprovalRequired` SSE event. Called once per
+/// tab by `ChatStream.AIStream`, not dispatched into Elmish — see the module
 /// header for why.
 ///
 /// Idempotent on `ApprovalId`: SSE delivery can repeat across a

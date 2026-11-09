@@ -45,7 +45,7 @@ type NoOpRagTelemetry() =
         member _.RecordObserverFailure(_) = ()
         member _.Snapshot() = async.Return zeroSnapshot
 
-// ─── Rolling-window telemetry (default for Phase 14m) ─────────────
+// ─── Rolling-window telemetry (the default) ──────────────────────
 
 /// One observation in the rolling window. Stored verbatim in the
 /// per-event queues so the snapshot can compute averages, p95, and
@@ -83,8 +83,21 @@ type IScoredRagTelemetry =
     /// Record one retrieval's pool of similarity chunks (facts excluded)
     /// against the deployment's `MinScore`: empty, a hit when its best
     /// score clears the threshold (`RetrievalScoreSpace.admits`), and a
-    /// low-score miss otherwise.
+    /// low-score miss otherwise. A fused pool that carries its best match's
+    /// dense similarity is also a low-score miss when that similarity does
+    /// not clear the dense floor (`DefaultDenseMissFloor`).
     abstract RecordScoredRetrieval: pool: IRetrievalPipeline.ScoredPool * minScore: float option -> unit
+
+/// The cosine similarity a fused pool's best match must exceed to count as
+/// a hit. A fused pool's own best score is `1.0` whether the corpus answered
+/// the query or not, so its miss is read on the absolute signal the pool
+/// carries beside the fused order (`ScoredPool.DenseSimilarity`), against
+/// this floor. 0.25 sits above the similarity off-topic text reaches under
+/// the shipped embedders and below that of a passage that shares the
+/// query's subject; a deployment whose embedder runs hotter sets its own
+/// with the two-argument `RollingRagTelemetry` constructor.
+[<Literal>]
+let DefaultDenseMissFloor = 0.25
 
 /// In-memory `IRagTelemetry` keeping a 1-minute rolling window of every
 /// recorded event. Hot-path recorders (`RecordEmbedding`,
@@ -98,8 +111,10 @@ type IScoredRagTelemetry =
 /// (e.g. for slow-burst dashboards) can extend it without forking. Default
 /// is 60 s — short enough to surface a live spike, long enough to absorb
 /// per-second jitter.
-type RollingRagTelemetry(?windowSeconds: int) =
-    let window = defaultArg windowSeconds 60 |> max 1 |> float |> TimeSpan.FromSeconds
+type RollingRagTelemetry
+    /// A window of `windowSeconds`, reading a fused pool's miss against `denseMissFloor`.
+    (windowSeconds: int, denseMissFloor: float) =
+    let window = windowSeconds |> max 1 |> float |> TimeSpan.FromSeconds
 
     let embeddingSamples = ConcurrentQueue<TimedSample>()
     let flushSamples = ConcurrentQueue<TimedSample>()
@@ -281,20 +296,31 @@ type RollingRagTelemetry(?windowSeconds: int) =
             }
         }
 
+    /// A window of `windowSeconds` (60 when omitted), with the default
+    /// dense miss floor.
+    new(?windowSeconds: int) = RollingRagTelemetry(defaultArg windowSeconds 60, DefaultDenseMissFloor)
+
     interface IScoredRagTelemetry with
         member _.RecordScoredRetrieval(pool, minScore) =
             match pool.Matches with
             | [] -> recordRetrieval Empty 0.0
             | matches ->
                 let top = matches |> List.map _.Score |> List.max
+                let admitted = IRetrievalPipeline.RetrievalScoreSpace.admits pool.Space minScore top
 
-                let outcome =
-                    if IRetrievalPipeline.RetrievalScoreSpace.admits pool.Space minScore top then
-                        Hit
-                    else
-                        LowScoreMiss
+                // A fused pool's best score is relative; when the pool carries
+                // the absolute reading, the miss is read there, in cosine
+                // space, and that reading is the top score recorded.
+                match pool.Space, pool.DenseSimilarity with
+                | IRetrievalPipeline.RetrievalScoreSpace.Fused, Some similarity ->
+                    let relevant =
+                        IRetrievalPipeline.RetrievalScoreSpace.admits
+                            IRetrievalPipeline.RetrievalScoreSpace.Cosine
+                            (Some denseMissFloor)
+                            similarity
 
-                recordRetrieval outcome top
+                    recordRetrieval (if admitted && relevant then Hit else LowScoreMiss) similarity
+                | _ -> recordRetrieval (if admitted then Hit else LowScoreMiss) top
 
 // ─── Total latency + in-flight on the retrieval path ──────────────
 

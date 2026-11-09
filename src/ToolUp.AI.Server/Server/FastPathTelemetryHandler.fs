@@ -10,9 +10,9 @@ open ToolUp.Platform.Scope.StorageScopeResolver
 open ToolUp.AI.FastPathBeaconHandler
 open ToolUp.Platform.Compose
 
-// ─── Phase 6j.A — `/dev/ai-fastpath` telemetry endpoint ─────────
+// ─── `/dev/ai-fastpath` telemetry endpoint ─────────
 //
-// Mirrors the Phase 9a `/dev/inspect` shape. Returns rolling-window
+// Mirrors the `/dev/inspect` shape. Returns rolling-window
 // p50 / p95 / total-count counts broken down by `Tier × ModuleId`.
 // Reads from `IEventStore.ReadBySource(_, "_platform.ai.fastpath")`
 // filtered to the caller's scope so cross-team enumeration is
@@ -36,7 +36,7 @@ let private FastPathResolvedEventType = "FastPathResolved"
 [<Literal>]
 let private SequenceOutcomeEventType = "SequencedFastPathOutcome"
 
-// ─── Phase 6j.B — Tier-3 triage rollup ───────────────────────────
+// ─── Tier-3 triage rollup ───────────────────────────
 //
 // The triage resolver writes one row per ATTEMPT under its own
 // `EventType` on this same source, carrying the outcome token. Rolling
@@ -55,7 +55,7 @@ let private SequenceOutcomeEventType = "SequencedFastPathOutcome"
 // correctly declining" and "triage is broken and silently costing a
 // call per turn". A single hit-rate number cannot tell those apart.
 
-// ─── Phase 6j.G — sequencer outcome vocabulary ───────────────────
+// ─── Sequencer outcome vocabulary ───────────────────
 //
 // The resolver companion's executor emits one outcome string per
 // sequence; the telemetry rollup buckets them three ways:
@@ -88,7 +88,7 @@ let private fallThroughOutcomes =
 /// Rolling window for p50/p95 latency stats. The endpoint reports
 /// both the rolling-window slice and the all-time count so an
 /// operator sees both the recent rate and the historical total.
-/// Shared across the AI-tier `/dev/*` rollups since Phase 36.E.
+/// Shared across the AI-tier `/dev/*` rollups.
 let private rollingWindow = AIDiagnosticsWindow.rollingWindow
 
 // ─── Wire shape (matches FastPathBeaconHandler.FastPathEventPayload
@@ -125,7 +125,7 @@ type private FastPathReport = {
     TotalCountAllTime: int
     TotalCountInWindow: int
     PerTierModule: TierBreakdown list
-    // ── Phase 6j.G sequencer keys ──────────────────────────────
+    // ── Sequencer keys ──────────────────────────────
     /// Count of `"all-resolved"` sequence-outcome beacons in the
     /// rolling window. Each one represents a sequenced instruction
     /// the resolver dispatched without falling through to the LLM.
@@ -142,7 +142,7 @@ type private FastPathReport = {
     /// sequence-outcome beacon. `0.0` when no sequence attempts in
     /// window. Drives 8-clause-cap tuning from data.
     MeanClausesPerSequence: float
-    // ── Phase 6j.B Tier-3 triage keys ──────────────────────────
+    // ── Tier-3 triage keys ──────────────────────────
     /// Triage attempts in the rolling window — turns that actually
     /// reached the triage provider call. Turns that were never
     /// candidates (triage disabled, no declared fields, a question
@@ -205,7 +205,7 @@ let computeSequencerRollup
             MeanClausesPerSequence = meanClauses
         |}
 
-/// Public rollup helper for the Phase 6j.B triage rows — pure over
+/// Public rollup helper for the triage rows — pure over
 /// decoded attempt payloads, exposed for the same reason
 /// `computeSequencerRollup` is: the Expecto pack can construct
 /// synthetic attempts and assert the keys without a Giraffe pipeline.
@@ -225,15 +225,16 @@ let computeTriageRollup
     =
     let total = attempts.Length
 
-    let counts =
-        FastPathTriageResolver.outcomes
-        |> List.map (fun token -> token, attempts |> List.filter (fun a -> a.Outcome = token) |> List.length)
+    let countOf (outcome: FastPathTriageResolver.TriageOutcome) =
+        attempts
+        |> List.filter (fun a -> FastPathTriageResolver.TriageEventPayload.outcome a = Some outcome)
+        |> List.length
 
-    let hits =
-        counts
-        |> List.tryFind (fun (token, _) -> token = FastPathTriageResolver.OutcomeHit)
-        |> Option.map snd
-        |> Option.defaultValue 0
+    let counts =
+        FastPathTriageResolver.TriageOutcome.all
+        |> List.map (fun outcome -> outcome.Token, countOf outcome)
+
+    let hits = countOf FastPathTriageResolver.TriageOutcome.Hit
 
     {|
         TriageAttempts = total
@@ -249,11 +250,6 @@ let computeTriageRollup
 
 // ─── Statistics ─────────────────────────────────────────────────
 
-/// Nearest-rank percentile — hoisted into `AIDiagnosticsWindow` by
-/// Phase 36.E when this file's copy became one of three byte-identical
-/// ones. The local name stays so the breakdown builder reads unchanged.
-let private percentile = AIDiagnosticsWindow.percentile
-
 let private buildBreakdown (events: (FastPathEventPayload * DateTime) list) : TierBreakdown list =
     events
     |> List.groupBy (fun (p, _) -> p.Tier, p.ModuleId)
@@ -264,8 +260,8 @@ let private buildBreakdown (events: (FastPathEventPayload * DateTime) list) : Ti
             Tier = tier
             ModuleId = moduleId
             Count = bucket.Length
-            P50LatencyMs = percentile latencies 0.50
-            P95LatencyMs = percentile latencies 0.95
+            P50LatencyMs = AIDiagnosticsWindow.percentile latencies 0.50
+            P95LatencyMs = AIDiagnosticsWindow.percentile latencies 0.95
             MinLatencyMs = if latencies.Length = 0 then 0.0 else Array.min latencies
             MaxLatencyMs = if latencies.Length = 0 then 0.0 else Array.max latencies
         })
@@ -276,9 +272,7 @@ let private buildBreakdown (events: (FastPathEventPayload * DateTime) list) : Ti
 let private payloadJsonOptions = PlatformJson.options
 
 let private indentedJsonOptions =
-    let o = FableConverters.create ()
-    o.WriteIndented <- true
-    o
+    JsonSerializerOptions(PlatformJson.options, WriteIndented = true)
 
 let private decodePayload (evt: ModuleEvent) : (FastPathEventPayload * DateTime) option =
     try
@@ -300,7 +294,7 @@ let private decodeTriageAttempt (evt: ModuleEvent) : (FastPathTriageResolver.Tri
         if isNull (box payload) then
             None
         else
-            Some(FastPathTriageResolver.TriageEventPayload.coerceLegacy payload, evt.OccurredAt)
+            Some(payload, evt.OccurredAt)
     with _ ->
         None
 
@@ -346,7 +340,7 @@ let private buildReport (ctx: HttpContext) : Async<FastPathReport> = async {
         | None -> async { return [] }
         | Some store -> store.ReadBySource(scope.ScopeId, FastPathSourceModule)
 
-    // Phase 6j.G — dispatch by `EventType` so the rollup walks
+    // Dispatch by `EventType` so the rollup walks
     // `FastPathResolved` events into the per-tier breakdown and
     // `SequencedFastPathOutcome` events into the sequencer rollup
     // without trying to deserialise either as the other's shape.

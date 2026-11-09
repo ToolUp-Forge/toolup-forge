@@ -440,20 +440,14 @@ and withRetrievalPlanned
                     let opts = FactClausePlanOptions.clamp planOptions
                     let sw = System.Diagnostics.Stopwatch.StartNew()
 
-                    // `Async.StartChild` bounds the wait, not the work: a
-                    // compile whose provider call is still in flight keeps
-                    // running and is abandoned. That is the honest limit of
-                    // a caller-side bound (the same one the Phase 506
-                    // query-rewrite stage lives with) — the guarantee owed
-                    // to the user is that the turn proceeds.
-                    let bounded = async {
-                        let! child =
-                            Async.StartChild(planner.PlanClauses(ctx.Scope, ctx.Access.UserId, query), opts.TimeoutMs)
+                    // The bound is on the wait, not the work: a compile
+                    // whose provider call is still in flight is abandoned.
+                    // The guarantee owed to the user is that the turn proceeds.
+                    let! outcome =
+                        ToolUp.RAG.RetrievalPipeline.Bounded.run
+                            (Some opts.TimeoutMs)
+                            (planner.PlanClauses(ctx.Scope, ctx.Access.UserId, query))
 
-                        return! child
-                    }
-
-                    let! outcome = Async.Catch bounded
                     sw.Stop()
                     let elapsedMs = sw.Elapsed.TotalMilliseconds
 
@@ -469,18 +463,18 @@ and withRetrievalPlanned
                         | Some t -> t.RecordRetrievalStages [ stage, elapsedMs ]
 
                     match outcome with
-                    | Choice1Of2 planned when not (PlannedFactClauses.isEmpty planned) ->
+                    | Ok planned when not (PlannedFactClauses.isEmpty planned) ->
                         mark "FactClausePlan"
                         ctx.PlannedAnswerId.Value <- Some planned.PlanId
                         return planned
-                    | Choice1Of2 _ ->
+                    | Ok _ ->
                         // Ran, resolved nothing. Still worth a mark — the
                         // difference between "the feeder is costing us a
                         // round-trip per turn and never firing" and "the
                         // feeder is off" is otherwise invisible.
                         mark "FactClausePlanEmpty"
                         return PlannedFactClauses.none
-                    | Choice2Of2 _ ->
+                    | Error _ ->
                         // Timeout or planner fault. Never rethrown: the
                         // turn proceeds exactly as a fact-less one would.
                         mark "FactClausePlanTimeout"

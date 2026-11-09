@@ -1,0 +1,47 @@
+# The retrieval pipeline's trace marks (RetrievalTrace.Stages).
+#
+# `mark` lines enumerate every mark the default RetrievalPipeline can emit,
+# with <placeholders> for the parts that carry a value. They were gathered
+# from SparseIndexCompositionTests.fs and docs/rag/api-reference.md, and
+# RetrievalStage.mark renders exactly this set.
+#
+# `<composition>: <marks>` lines are the full mark sequence one request
+# produces in that composition (SparseIndexCompositionTests.markScenarios).
+# A change that moves one of them changes what every trace reader sees.
+
+mark AuthoriseScopes
+mark FactResolve
+mark DisclosureFilter
+mark FactsDegraded:<TimedOut|Failed>
+mark QueryRewrite
+mark Dense
+mark DenseDegraded:<TimedOut|Refused|Failed>
+mark Sparse
+mark RRF
+mark MetadataFilter
+mark OriginFilter
+mark DerivedDisclosureDegraded:<TimedOut|Failed>
+mark DerivedDisclosure
+mark DerivedDisclosure:<dropped>/<pool>
+mark Normalise:MinMax
+mark Rerank
+mark Rerank:<n>/<pool>
+mark ActiveModuleBoost
+mark SummaryBoost
+mark FactNarrativeJoin
+mark MMR
+mark AdaptiveK
+mark TopK
+mark Merge
+mark FinalOrder:<step>
+mark ScoreSpace:<Cosine|Fused|Reranked>
+
+dense-only: AuthoriseScopes Dense TopK Merge FinalOrder:Interleaved ScoreSpace:Cosine
+fused: AuthoriseScopes Dense Sparse RRF Normalise:MinMax TopK Merge FinalOrder:Interleaved ScoreSpace:Fused
+reranked: AuthoriseScopes Dense Sparse RRF Normalise:MinMax Rerank TopK Merge FinalOrder:Interleaved ScoreSpace:Reranked
+reranked-capped: AuthoriseScopes Dense Sparse RRF Normalise:MinMax Rerank Rerank:2/6 TopK Merge FinalOrder:Interleaved ScoreSpace:Reranked
+fused-boosted-filtered-mmr-adaptive: AuthoriseScopes Dense Sparse RRF MetadataFilter OriginFilter Normalise:MinMax ActiveModuleBoost SummaryBoost MMR AdaptiveK Merge FinalOrder:MMR ScoreSpace:Fused
+dense-only-boosted-filtered-adaptive: AuthoriseScopes Dense MetadataFilter OriginFilter ActiveModuleBoost SummaryBoost AdaptiveK Merge FinalOrder:Interleaved ScoreSpace:Cosine
+fused-separate: AuthoriseScopes Dense Sparse RRF Normalise:MinMax TopK Merge FinalOrder:RRF ScoreSpace:Fused
+fused-facts-rewrite-disclosure: AuthoriseScopes FactResolve DisclosureFilter QueryRewrite Dense Sparse RRF DerivedDisclosure DerivedDisclosure:1/3 Normalise:MinMax FactNarrativeJoin TopK Merge FinalOrder:Interleaved ScoreSpace:Fused
+fused-every-bound-degraded: AuthoriseScopes FactResolve FactsDegraded:TimedOut QueryRewrite Dense Sparse DenseDegraded:Failed RRF DerivedDisclosureDegraded:Failed DerivedDisclosure DerivedDisclosure:2/3 Normalise:MinMax TopK Merge FinalOrder:Interleaved ScoreSpace:Fused

@@ -103,7 +103,7 @@ let private resolveAccessContext (ctx: HttpContext) : AccessContext =
             | _ -> AccessContext.unrestricted (AnonymousSession "anonymous")
 
 /// The share-token store scope a team's invitations live under. NOT its
-/// audit stream key: audit rows go through `AuditStreamKey.ofTeam`.
+/// audit stream key: audit rows go through `AuditScope.team`.
 let private teamScopeId (teamId: string) : string =
     ScopeKey.container (ScopeKey.Team(TeamId teamId))
 

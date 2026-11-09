@@ -1,0 +1,25 @@
+=== chunk 1
+source: doc-golden | people.csv | csv | Sheet ("data", None)
+meta _locationHint = schema + sample
+meta _origin = Document
+meta _source = {"DocumentId":"doc-golden","DocumentName":"people.csv","FileType":"csv","Location":{"Sheet":["data",null]},"IndexedAt":"<clock>"}
+meta dataTypeId = KnowledgeDocument
+content:
+[people.csv — schema + sample]
+Columns: name, notes, amount
+name: Smith, J | notes: line one
+line two | amount: 12
+name: Jones | notes: plain | amount: 7
+=== chunk 2
+source: doc-golden | people.csv | csv | RowGroup (2, 3)
+meta _locationHint = rows 2–3
+meta _origin = Document
+meta _source = {"DocumentId":"doc-golden","DocumentName":"people.csv","FileType":"csv","Location":{"RowGroup":[2,3]},"IndexedAt":"<clock>"}
+meta dataTypeId = KnowledgeDocument
+content:
+[people.csv — rows 2–3]
+Sheet "data", rows 2–3 of 2
+Columns: name, notes, amount
+name: Smith, J | notes: line one
+line two | amount: 12
+name: Jones | notes: plain | amount: 7

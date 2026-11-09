@@ -162,6 +162,25 @@ type ConversationMessage = {
     Verification: AnswerVerification option
 }
 
+module ConversationMessage =
+    /// A message built on the client: a plain-text turn by `participant` in
+    /// `conversationId`, with a fresh id and the current time. `CreatedBy` and
+    /// `BeaconId` are `""`, the values a client-built message always carries
+    /// (only the server writes them).
+    let note (participant: ParticipantType) (conversationId: Guid) (content: string) : ConversationMessage = {
+        Id = Guid.NewGuid()
+        ConversationId = conversationId
+        Participant = participant
+        Content = content
+        Timestamp = DateTime.UtcNow
+        ToolCalls = []
+        RetrievedSources = []
+        Parts = []
+        CreatedBy = ""
+        BeaconId = ""
+        Verification = None
+    }
+
 /// Conversation metadata
 type Conversation = {
     Id: Guid
@@ -345,14 +364,33 @@ type AIStreamEvent =
         summary: string *
         detail: string *
         redactedArgumentsPreview: string
-    /// Phase 1131 — a part a server-resident tool attached to the
-    /// assistant turn (a block, Phase 1128), emitted when the tool round
+    /// A part a server-resident tool attached to the
+    /// assistant turn (a block), emitted when the tool round
     /// that produced it completes, one event per part in tool-call order.
     /// The final assistant message carries the same parts after its text,
     /// in the same order, and the conversation record persists them, so a
     /// reloaded conversation shows each part where the stream placed it.
     /// The part is encoded exactly as the conversation record encodes it.
     | BlockAttached of conversationId: Guid * part: AIContentPart
+
+module AIStreamEvent =
+    /// The event's case name: the label a trace entry carries beside the
+    /// frame. Written with the type, so a case added to the grammar names
+    /// itself here or the compiler refuses the match.
+    let kind (event: AIStreamEvent) : string =
+        match event with
+        | MessageDelta _ -> "MessageDelta"
+        | ToolCallStarted _ -> "ToolCallStarted"
+        | ToolCallCompleted _ -> "ToolCallCompleted"
+        | TaskStatusChanged _ -> "TaskStatusChanged"
+        | MessageComplete _ -> "MessageComplete"
+        | StreamError _ -> "StreamError"
+        | StreamCancelled _ -> "StreamCancelled"
+        | ClientToolInvoke _ -> "ClientToolInvoke"
+        | AnswerVerified _ -> "AnswerVerified"
+        | AIConsentRequired _ -> "AIConsentRequired"
+        | ToolApprovalRequired _ -> "ToolApprovalRequired"
+        | BlockAttached _ -> "BlockAttached"
 
 // ─── Tool outcomes ───────────────────────────────────────────────
 //

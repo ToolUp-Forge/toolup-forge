@@ -278,6 +278,31 @@ let tests =
                 "a payload carrying a line feed is framed one data: line per line, never cut short"
         }
 
+        test "an event's trace kind is the case name its frame carries" {
+            let verdict: AnswerVerification = {
+                Verified = 0
+                Unmatched = 0
+                Unverifiable = 0
+                Numbers = []
+                Mode = "Annotate"
+            }
+
+            let everyCase = [
+                yield! turn
+                StreamError "boom"
+                StreamCancelled conversationId
+                ClientToolInvoke(taskId, toolCallId, "t", "{}", None, None)
+                AnswerVerified(conversationId, verdict)
+                AIConsentRequired(taskId, toolCallId, conversationId, "t", "m", "", "")
+                ToolApprovalRequired(taskId, toolCallId, conversationId, "t", "m", "s", "d", "")
+                BlockAttached(conversationId, ToolUp.Platform.AI.TextPart "x")
+            ]
+
+            for e in everyCase do
+                let payload = JsonSerializer.Serialize(e, fableJson)
+                Expect.stringStarts payload $"{{\"{AIStreamEvent.kind e}\":" "the kind names the frame's case"
+        }
+
         test "legacy frames are default `message` events — the client reads them with onmessage" {
             let frames = Sse.parse (legacyWire "user-1" turn)
             Expect.equal frames.Length turn.Length "one frame per event"

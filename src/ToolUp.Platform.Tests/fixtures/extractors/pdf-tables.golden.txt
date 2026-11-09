@@ -1,0 +1,520 @@
+=== chunk 1
+source: doc-golden | tables.pdf | pdf | Page 1
+meta _locationHint = Page 1
+meta _origin = Document
+meta _source = {"DocumentId":"doc-golden","DocumentName":"tables.pdf","FileType":"pdf","Location":{"Page":1},"IndexedAt":"<clock>"}
+meta dataTypeId = KnowledgeDocument
+content:
+[tables.pdf — Page 1]
+A page of text that carries the two tables below.
+=== chunk 2
+source: doc-golden | tables.pdf | pdf | Page 1
+meta _locationHint = Page 1 (table)
+meta _origin = Document
+meta _source = {"DocumentId":"doc-golden","DocumentName":"tables.pdf","FileType":"pdf","Location":{"Page":1},"IndexedAt":"<clock>"}
+meta dataTypeId = KnowledgeDocument
+content:
+[tables.pdf — Page 1 (table)]
+Sheet "Page 1", rows 2–3 of 2
+Columns: region, revenue
+region: north | revenue: 100
+region: south | revenue: 200
+=== chunk 3
+source: doc-golden | tables.pdf | pdf | Page 0
+meta _locationHint = Table (table, part 1 of 10)
+meta _origin = Document
+meta _source = {"DocumentId":"doc-golden","DocumentName":"tables.pdf","FileType":"pdf","Location":{"Page":0},"IndexedAt":"<clock>"}
+meta dataTypeId = KnowledgeDocument
+content:
+[tables.pdf — Table (table, part 1 of 10)]
+Sheet "Table", rows 2–43 of 399
+Columns: k, v
+k: key 2 with some padding words | v: 2
+k: key 3 with some padding words | v: 3
+k: key 4 with some padding words | v: 4
+k: key 5 with some padding words | v: 5
+k: key 6 with some padding words | v: 6
+k: key 7 with some padding words | v: 7
+k: key 8 with some padding words | v: 8
+k: key 9 with some padding words | v: 9
+k: key 10 with some padding words | v: 10
+k: key 11 with some padding words | v: 11
+k: key 12 with some padding words | v: 12
+k: key 13 with some padding words | v: 13
+k: key 14 with some padding words | v: 14
+k: key 15 with some padding words | v: 15
+k: key 16 with some padding words | v: 16
+k: key 17 with some padding words | v: 17
+k: key 18 with some padding words | v: 18
+k: key 19 with some padding words | v: 19
+k: key 20 with some padding words | v: 20
+k: key 21 with some padding words | v: 21
+k: key 22 with some padding words | v: 22
+k: key 23 with some padding words | v: 23
+k: key 24 with some padding words | v: 24
+k: key 25 with some padding words | v: 25
+k: key 26 with some padding words | v: 26
+k: key 27 with some padding words | v: 27
+k: key 28 with some padding words | v: 28
+k: key 29 with some padding words | v: 29
+k: key 30 with some padding words | v: 30
+k: key 31 with some padding words | v: 31
+k: key 32 with some padding words | v: 32
+k: key 33 with some padding words | v: 33
+k: key 34 with some padding words | v: 34
+k: key 35 with some padding words | v: 35
+k: key 36 with some padding words | v: 36
+k: key 37 with some padding words | v: 37
+k: key 38 with some padding words | v: 38
+k: key 39 with some padding words | v: 39
+k: key 40 with some padding words | v: 40
+k: key 41 with some padding words | v: 41
+k: key 42 with some padding words | v: 42
+k: key 43 with some padding words | v: 43
+=== chunk 4
+source: doc-golden | tables.pdf | pdf | Page 0
+meta _locationHint = Table (table, part 2 of 10)
+meta _origin = Document
+meta _source = {"DocumentId":"doc-golden","DocumentName":"tables.pdf","FileType":"pdf","Location":{"Page":0},"IndexedAt":"<clock>"}
+meta dataTypeId = KnowledgeDocument
+content:
+[tables.pdf — Table (table, part 2 of 10)]
+Sheet "Table", rows 44–84 of 399
+Columns: k, v
+k: key 44 with some padding words | v: 44
+k: key 45 with some padding words | v: 45
+k: key 46 with some padding words | v: 46
+k: key 47 with some padding words | v: 47
+k: key 48 with some padding words | v: 48
+k: key 49 with some padding words | v: 49
+k: key 50 with some padding words | v: 50
+k: key 51 with some padding words | v: 51
+k: key 52 with some padding words | v: 52
+k: key 53 with some padding words | v: 53
+k: key 54 with some padding words | v: 54
+k: key 55 with some padding words | v: 55
+k: key 56 with some padding words | v: 56
+k: key 57 with some padding words | v: 57
+k: key 58 with some padding words | v: 58
+k: key 59 with some padding words | v: 59
+k: key 60 with some padding words | v: 60
+k: key 61 with some padding words | v: 61
+k: key 62 with some padding words | v: 62
+k: key 63 with some padding words | v: 63
+k: key 64 with some padding words | v: 64
+k: key 65 with some padding words | v: 65
+k: key 66 with some padding words | v: 66
+k: key 67 with some padding words | v: 67
+k: key 68 with some padding words | v: 68
+k: key 69 with some padding words | v: 69
+k: key 70 with some padding words | v: 70
+k: key 71 with some padding words | v: 71
+k: key 72 with some padding words | v: 72
+k: key 73 with some padding words | v: 73
+k: key 74 with some padding words | v: 74
+k: key 75 with some padding words | v: 75
+k: key 76 with some padding words | v: 76
+k: key 77 with some padding words | v: 77
+k: key 78 with some padding words | v: 78
+k: key 79 with some padding words | v: 79
+k: key 80 with some padding words | v: 80
+k: key 81 with some padding words | v: 81
+k: key 82 with some padding words | v: 82
+k: key 83 with some padding words | v: 83
+k: key 84 with some padding words | v: 84
+=== chunk 5
+source: doc-golden | tables.pdf | pdf | Page 0
+meta _locationHint = Table (table, part 3 of 10)
+meta _origin = Document
+meta _source = {"DocumentId":"doc-golden","DocumentName":"tables.pdf","FileType":"pdf","Location":{"Page":0},"IndexedAt":"<clock>"}
+meta dataTypeId = KnowledgeDocument
+content:
+[tables.pdf — Table (table, part 3 of 10)]
+Sheet "Table", rows 85–125 of 399
+Columns: k, v
+k: key 85 with some padding words | v: 85
+k: key 86 with some padding words | v: 86
+k: key 87 with some padding words | v: 87
+k: key 88 with some padding words | v: 88
+k: key 89 with some padding words | v: 89
+k: key 90 with some padding words | v: 90
+k: key 91 with some padding words | v: 91
+k: key 92 with some padding words | v: 92
+k: key 93 with some padding words | v: 93
+k: key 94 with some padding words | v: 94
+k: key 95 with some padding words | v: 95
+k: key 96 with some padding words | v: 96
+k: key 97 with some padding words | v: 97
+k: key 98 with some padding words | v: 98
+k: key 99 with some padding words | v: 99
+k: key 100 with some padding words | v: 100
+k: key 101 with some padding words | v: 101
+k: key 102 with some padding words | v: 102
+k: key 103 with some padding words | v: 103
+k: key 104 with some padding words | v: 104
+k: key 105 with some padding words | v: 105
+k: key 106 with some padding words | v: 106
+k: key 107 with some padding words | v: 107
+k: key 108 with some padding words | v: 108
+k: key 109 with some padding words | v: 109
+k: key 110 with some padding words | v: 110
+k: key 111 with some padding words | v: 111
+k: key 112 with some padding words | v: 112
+k: key 113 with some padding words | v: 113
+k: key 114 with some padding words | v: 114
+k: key 115 with some padding words | v: 115
+k: key 116 with some padding words | v: 116
+k: key 117 with some padding words | v: 117
+k: key 118 with some padding words | v: 118
+k: key 119 with some padding words | v: 119
+k: key 120 with some padding words | v: 120
+k: key 121 with some padding words | v: 121
+k: key 122 with some padding words | v: 122
+k: key 123 with some padding words | v: 123
+k: key 124 with some padding words | v: 124
+k: key 125 with some padding words | v: 125
+=== chunk 6
+source: doc-golden | tables.pdf | pdf | Page 0
+meta _locationHint = Table (table, part 4 of 10)
+meta _origin = Document
+meta _source = {"DocumentId":"doc-golden","DocumentName":"tables.pdf","FileType":"pdf","Location":{"Page":0},"IndexedAt":"<clock>"}
+meta dataTypeId = KnowledgeDocument
+content:
+[tables.pdf — Table (table, part 4 of 10)]
+Sheet "Table", rows 126–166 of 399
+Columns: k, v
+k: key 126 with some padding words | v: 126
+k: key 127 with some padding words | v: 127
+k: key 128 with some padding words | v: 128
+k: key 129 with some padding words | v: 129
+k: key 130 with some padding words | v: 130
+k: key 131 with some padding words | v: 131
+k: key 132 with some padding words | v: 132
+k: key 133 with some padding words | v: 133
+k: key 134 with some padding words | v: 134
+k: key 135 with some padding words | v: 135
+k: key 136 with some padding words | v: 136
+k: key 137 with some padding words | v: 137
+k: key 138 with some padding words | v: 138
+k: key 139 with some padding words | v: 139
+k: key 140 with some padding words | v: 140
+k: key 141 with some padding words | v: 141
+k: key 142 with some padding words | v: 142
+k: key 143 with some padding words | v: 143
+k: key 144 with some padding words | v: 144
+k: key 145 with some padding words | v: 145
+k: key 146 with some padding words | v: 146
+k: key 147 with some padding words | v: 147
+k: key 148 with some padding words | v: 148
+k: key 149 with some padding words | v: 149
+k: key 150 with some padding words | v: 150
+k: key 151 with some padding words | v: 151
+k: key 152 with some padding words | v: 152
+k: key 153 with some padding words | v: 153
+k: key 154 with some padding words | v: 154
+k: key 155 with some padding words | v: 155
+k: key 156 with some padding words | v: 156
+k: key 157 with some padding words | v: 157
+k: key 158 with some padding words | v: 158
+k: key 159 with some padding words | v: 159
+k: key 160 with some padding words | v: 160
+k: key 161 with some padding words | v: 161
+k: key 162 with some padding words | v: 162
+k: key 163 with some padding words | v: 163
+k: key 164 with some padding words | v: 164
+k: key 165 with some padding words | v: 165
+k: key 166 with some padding words | v: 166
+=== chunk 7
+source: doc-golden | tables.pdf | pdf | Page 0
+meta _locationHint = Table (table, part 5 of 10)
+meta _origin = Document
+meta _source = {"DocumentId":"doc-golden","DocumentName":"tables.pdf","FileType":"pdf","Location":{"Page":0},"IndexedAt":"<clock>"}
+meta dataTypeId = KnowledgeDocument
+content:
+[tables.pdf — Table (table, part 5 of 10)]
+Sheet "Table", rows 167–207 of 399
+Columns: k, v
+k: key 167 with some padding words | v: 167
+k: key 168 with some padding words | v: 168
+k: key 169 with some padding words | v: 169
+k: key 170 with some padding words | v: 170
+k: key 171 with some padding words | v: 171
+k: key 172 with some padding words | v: 172
+k: key 173 with some padding words | v: 173
+k: key 174 with some padding words | v: 174
+k: key 175 with some padding words | v: 175
+k: key 176 with some padding words | v: 176
+k: key 177 with some padding words | v: 177
+k: key 178 with some padding words | v: 178
+k: key 179 with some padding words | v: 179
+k: key 180 with some padding words | v: 180
+k: key 181 with some padding words | v: 181
+k: key 182 with some padding words | v: 182
+k: key 183 with some padding words | v: 183
+k: key 184 with some padding words | v: 184
+k: key 185 with some padding words | v: 185
+k: key 186 with some padding words | v: 186
+k: key 187 with some padding words | v: 187
+k: key 188 with some padding words | v: 188
+k: key 189 with some padding words | v: 189
+k: key 190 with some padding words | v: 190
+k: key 191 with some padding words | v: 191
+k: key 192 with some padding words | v: 192
+k: key 193 with some padding words | v: 193
+k: key 194 with some padding words | v: 194
+k: key 195 with some padding words | v: 195
+k: key 196 with some padding words | v: 196
+k: key 197 with some padding words | v: 197
+k: key 198 with some padding words | v: 198
+k: key 199 with some padding words | v: 199
+k: key 200 with some padding words | v: 200
+k: key 201 with some padding words | v: 201
+k: key 202 with some padding words | v: 202
+k: key 203 with some padding words | v: 203
+k: key 204 with some padding words | v: 204
+k: key 205 with some padding words | v: 205
+k: key 206 with some padding words | v: 206
+k: key 207 with some padding words | v: 207
+=== chunk 8
+source: doc-golden | tables.pdf | pdf | Page 0
+meta _locationHint = Table (table, part 6 of 10)
+meta _origin = Document
+meta _source = {"DocumentId":"doc-golden","DocumentName":"tables.pdf","FileType":"pdf","Location":{"Page":0},"IndexedAt":"<clock>"}
+meta dataTypeId = KnowledgeDocument
+content:
+[tables.pdf — Table (table, part 6 of 10)]
+Sheet "Table", rows 208–248 of 399
+Columns: k, v
+k: key 208 with some padding words | v: 208
+k: key 209 with some padding words | v: 209
+k: key 210 with some padding words | v: 210
+k: key 211 with some padding words | v: 211
+k: key 212 with some padding words | v: 212
+k: key 213 with some padding words | v: 213
+k: key 214 with some padding words | v: 214
+k: key 215 with some padding words | v: 215
+k: key 216 with some padding words | v: 216
+k: key 217 with some padding words | v: 217
+k: key 218 with some padding words | v: 218
+k: key 219 with some padding words | v: 219
+k: key 220 with some padding words | v: 220
+k: key 221 with some padding words | v: 221
+k: key 222 with some padding words | v: 222
+k: key 223 with some padding words | v: 223
+k: key 224 with some padding words | v: 224
+k: key 225 with some padding words | v: 225
+k: key 226 with some padding words | v: 226
+k: key 227 with some padding words | v: 227
+k: key 228 with some padding words | v: 228
+k: key 229 with some padding words | v: 229
+k: key 230 with some padding words | v: 230
+k: key 231 with some padding words | v: 231
+k: key 232 with some padding words | v: 232
+k: key 233 with some padding words | v: 233
+k: key 234 with some padding words | v: 234
+k: key 235 with some padding words | v: 235
+k: key 236 with some padding words | v: 236
+k: key 237 with some padding words | v: 237
+k: key 238 with some padding words | v: 238
+k: key 239 with some padding words | v: 239
+k: key 240 with some padding words | v: 240
+k: key 241 with some padding words | v: 241
+k: key 242 with some padding words | v: 242
+k: key 243 with some padding words | v: 243
+k: key 244 with some padding words | v: 244
+k: key 245 with some padding words | v: 245
+k: key 246 with some padding words | v: 246
+k: key 247 with some padding words | v: 247
+k: key 248 with some padding words | v: 248
+=== chunk 9
+source: doc-golden | tables.pdf | pdf | Page 0
+meta _locationHint = Table (table, part 7 of 10)
+meta _origin = Document
+meta _source = {"DocumentId":"doc-golden","DocumentName":"tables.pdf","FileType":"pdf","Location":{"Page":0},"IndexedAt":"<clock>"}
+meta dataTypeId = KnowledgeDocument
+content:
+[tables.pdf — Table (table, part 7 of 10)]
+Sheet "Table", rows 249–289 of 399
+Columns: k, v
+k: key 249 with some padding words | v: 249
+k: key 250 with some padding words | v: 250
+k: key 251 with some padding words | v: 251
+k: key 252 with some padding words | v: 252
+k: key 253 with some padding words | v: 253
+k: key 254 with some padding words | v: 254
+k: key 255 with some padding words | v: 255
+k: key 256 with some padding words | v: 256
+k: key 257 with some padding words | v: 257
+k: key 258 with some padding words | v: 258
+k: key 259 with some padding words | v: 259
+k: key 260 with some padding words | v: 260
+k: key 261 with some padding words | v: 261
+k: key 262 with some padding words | v: 262
+k: key 263 with some padding words | v: 263
+k: key 264 with some padding words | v: 264
+k: key 265 with some padding words | v: 265
+k: key 266 with some padding words | v: 266
+k: key 267 with some padding words | v: 267
+k: key 268 with some padding words | v: 268
+k: key 269 with some padding words | v: 269
+k: key 270 with some padding words | v: 270
+k: key 271 with some padding words | v: 271
+k: key 272 with some padding words | v: 272
+k: key 273 with some padding words | v: 273
+k: key 274 with some padding words | v: 274
+k: key 275 with some padding words | v: 275
+k: key 276 with some padding words | v: 276
+k: key 277 with some padding words | v: 277
+k: key 278 with some padding words | v: 278
+k: key 279 with some padding words | v: 279
+k: key 280 with some padding words | v: 280
+k: key 281 with some padding words | v: 281
+k: key 282 with some padding words | v: 282
+k: key 283 with some padding words | v: 283
+k: key 284 with some padding words | v: 284
+k: key 285 with some padding words | v: 285
+k: key 286 with some padding words | v: 286
+k: key 287 with some padding words | v: 287
+k: key 288 with some padding words | v: 288
+k: key 289 with some padding words | v: 289
+=== chunk 10
+source: doc-golden | tables.pdf | pdf | Page 0
+meta _locationHint = Table (table, part 8 of 10)
+meta _origin = Document
+meta _source = {"DocumentId":"doc-golden","DocumentName":"tables.pdf","FileType":"pdf","Location":{"Page":0},"IndexedAt":"<clock>"}
+meta dataTypeId = KnowledgeDocument
+content:
+[tables.pdf — Table (table, part 8 of 10)]
+Sheet "Table", rows 290–330 of 399
+Columns: k, v
+k: key 290 with some padding words | v: 290
+k: key 291 with some padding words | v: 291
+k: key 292 with some padding words | v: 292
+k: key 293 with some padding words | v: 293
+k: key 294 with some padding words | v: 294
+k: key 295 with some padding words | v: 295
+k: key 296 with some padding words | v: 296
+k: key 297 with some padding words | v: 297
+k: key 298 with some padding words | v: 298
+k: key 299 with some padding words | v: 299
+k: key 300 with some padding words | v: 300
+k: key 301 with some padding words | v: 301
+k: key 302 with some padding words | v: 302
+k: key 303 with some padding words | v: 303
+k: key 304 with some padding words | v: 304
+k: key 305 with some padding words | v: 305
+k: key 306 with some padding words | v: 306
+k: key 307 with some padding words | v: 307
+k: key 308 with some padding words | v: 308
+k: key 309 with some padding words | v: 309
+k: key 310 with some padding words | v: 310
+k: key 311 with some padding words | v: 311
+k: key 312 with some padding words | v: 312
+k: key 313 with some padding words | v: 313
+k: key 314 with some padding words | v: 314
+k: key 315 with some padding words | v: 315
+k: key 316 with some padding words | v: 316
+k: key 317 with some padding words | v: 317
+k: key 318 with some padding words | v: 318
+k: key 319 with some padding words | v: 319
+k: key 320 with some padding words | v: 320
+k: key 321 with some padding words | v: 321
+k: key 322 with some padding words | v: 322
+k: key 323 with some padding words | v: 323
+k: key 324 with some padding words | v: 324
+k: key 325 with some padding words | v: 325
+k: key 326 with some padding words | v: 326
+k: key 327 with some padding words | v: 327
+k: key 328 with some padding words | v: 328
+k: key 329 with some padding words | v: 329
+k: key 330 with some padding words | v: 330
+=== chunk 11
+source: doc-golden | tables.pdf | pdf | Page 0
+meta _locationHint = Table (table, part 9 of 10)
+meta _origin = Document
+meta _source = {"DocumentId":"doc-golden","DocumentName":"tables.pdf","FileType":"pdf","Location":{"Page":0},"IndexedAt":"<clock>"}
+meta dataTypeId = KnowledgeDocument
+content:
+[tables.pdf — Table (table, part 9 of 10)]
+Sheet "Table", rows 331–371 of 399
+Columns: k, v
+k: key 331 with some padding words | v: 331
+k: key 332 with some padding words | v: 332
+k: key 333 with some padding words | v: 333
+k: key 334 with some padding words | v: 334
+k: key 335 with some padding words | v: 335
+k: key 336 with some padding words | v: 336
+k: key 337 with some padding words | v: 337
+k: key 338 with some padding words | v: 338
+k: key 339 with some padding words | v: 339
+k: key 340 with some padding words | v: 340
+k: key 341 with some padding words | v: 341
+k: key 342 with some padding words | v: 342
+k: key 343 with some padding words | v: 343
+k: key 344 with some padding words | v: 344
+k: key 345 with some padding words | v: 345
+k: key 346 with some padding words | v: 346
+k: key 347 with some padding words | v: 347
+k: key 348 with some padding words | v: 348
+k: key 349 with some padding words | v: 349
+k: key 350 with some padding words | v: 350
+k: key 351 with some padding words | v: 351
+k: key 352 with some padding words | v: 352
+k: key 353 with some padding words | v: 353
+k: key 354 with some padding words | v: 354
+k: key 355 with some padding words | v: 355
+k: key 356 with some padding words | v: 356
+k: key 357 with some padding words | v: 357
+k: key 358 with some padding words | v: 358
+k: key 359 with some padding words | v: 359
+k: key 360 with some padding words | v: 360
+k: key 361 with some padding words | v: 361
+k: key 362 with some padding words | v: 362
+k: key 363 with some padding words | v: 363
+k: key 364 with some padding words | v: 364
+k: key 365 with some padding words | v: 365
+k: key 366 with some padding words | v: 366
+k: key 367 with some padding words | v: 367
+k: key 368 with some padding words | v: 368
+k: key 369 with some padding words | v: 369
+k: key 370 with some padding words | v: 370
+k: key 371 with some padding words | v: 371
+=== chunk 12
+source: doc-golden | tables.pdf | pdf | Page 0
+meta _locationHint = Table (table, part 10 of 10)
+meta _origin = Document
+meta _source = {"DocumentId":"doc-golden","DocumentName":"tables.pdf","FileType":"pdf","Location":{"Page":0},"IndexedAt":"<clock>"}
+meta dataTypeId = KnowledgeDocument
+content:
+[tables.pdf — Table (table, part 10 of 10)]
+Sheet "Table", rows 372–400 of 399
+Columns: k, v
+k: key 372 with some padding words | v: 372
+k: key 373 with some padding words | v: 373
+k: key 374 with some padding words | v: 374
+k: key 375 with some padding words | v: 375
+k: key 376 with some padding words | v: 376
+k: key 377 with some padding words | v: 377
+k: key 378 with some padding words | v: 378
+k: key 379 with some padding words | v: 379
+k: key 380 with some padding words | v: 380
+k: key 381 with some padding words | v: 381
+k: key 382 with some padding words | v: 382
+k: key 383 with some padding words | v: 383
+k: key 384 with some padding words | v: 384
+k: key 385 with some padding words | v: 385
+k: key 386 with some padding words | v: 386
+k: key 387 with some padding words | v: 387
+k: key 388 with some padding words | v: 388
+k: key 389 with some padding words | v: 389
+k: key 390 with some padding words | v: 390
+k: key 391 with some padding words | v: 391
+k: key 392 with some padding words | v: 392
+k: key 393 with some padding words | v: 393
+k: key 394 with some padding words | v: 394
+k: key 395 with some padding words | v: 395
+k: key 396 with some padding words | v: 396
+k: key 397 with some padding words | v: 397
+k: key 398 with some padding words | v: 398
+k: key 399 with some padding words | v: 399
+k: key 400 with some padding words | v: 400

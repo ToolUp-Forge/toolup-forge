@@ -910,236 +910,89 @@ let private validateSequenceBeacon (b: SequenceBeacon) : Result<unit, string> =
     else
         Ok()
 
-let private emitSequencedClauseEvent
-    (eventStore: IEventStore option)
-    (logger: ILogger option)
-    (scope: StorageScope)
-    (beacon: SequencedClauseBeacon)
-    : Async<unit> =
-    async {
-        match eventStore with
-        | None -> return ()
-        | Some store ->
-            let evt: ModuleEvent = {
-                Id = Guid.NewGuid()
-                OccurredAt = DateTime.UtcNow
-                ScopeId = scope.ScopeId
-                SourceModule = FastPathSourceModule
-                EventType = SequencedClauseEventType
-                Payload = toJson beacon
-            }
+/// One telemetry endpoint: decode the body as `'T`, gate on the resolved
+/// scope and user, refuse a beacon `validate` refuses, and write it as a
+/// `_platform.ai.fastpath` event of `eventType`. `label` names the beacon in
+/// the log lines. 202 when accepted; 400 / 401 otherwise.
+let private telemetryBeacon<'T>
+    (validate: 'T -> Result<unit, string>)
+    (eventType: string)
+    (label: string)
+    : HttpHandler =
+    fun next (ctx: HttpContext) -> task {
+        let logger = resolveLogger ctx
 
-            try
-                do! EventStore.writeOrRaise store evt
-            with ex ->
-                logWarn logger $"Sequenced fast-path clause event write failed: {ex.Message}"
+        let warn (m: string) =
+            match logger with
+            | Some l -> l.Warn m
+            | None -> ()
+
+        let emit (scope: StorageScope) (beacon: 'T) = async {
+            match ctx.RequestServices.GetService(typeof<IEventStore>) with
+            | :? IEventStore as store ->
+                let evt: ModuleEvent = {
+                    Id = Guid.NewGuid()
+                    OccurredAt = DateTime.UtcNow
+                    ScopeId = scope.ScopeId
+                    SourceModule = FastPathSourceModule
+                    EventType = eventType
+                    Payload = toJson beacon
+                }
+
+                try
+                    do! EventStore.writeOrRaise store evt
+                with ex ->
+                    logWarn logger $"Sequenced fast-path {label} event write failed: {ex.Message}"
+            | _ -> ()
+        }
+
+        try
+            use reader = new StreamReader(ctx.Request.Body)
+            let! body = reader.ReadToEndAsync()
+
+            let beacon = JsonSerializer.Deserialize<'T>(body, jsonOptions)
+
+            if isNull (box beacon) then
+                warn $"Sequenced fast-path {label} beacon rejected: unparseable request body."
+                ctx.Response.StatusCode <- 400
+                return! next ctx
+            else
+                match tryResolveScope ctx, tryResolveUserId ctx, validate beacon with
+                | None, _, _ ->
+                    warn
+                        $"Sequenced fast-path {label} beacon rejected: no resolved StorageScope. ScopeResolutionMiddleware must run before this endpoint."
+
+                    ctx.Response.StatusCode <- 401
+                    return! next ctx
+                | Some _, None, _ ->
+                    warn $"Sequenced fast-path {label} beacon rejected: no resolved UserId."
+                    ctx.Response.StatusCode <- 401
+                    return! next ctx
+                | Some _, Some _, Error reason ->
+                    warn $"Sequenced fast-path {label} beacon rejected ({reason})."
+                    ctx.Response.StatusCode <- 400
+                    return! next ctx
+                | Some scope, Some _, Ok() ->
+                    do! emit scope beacon
+                    ctx.Response.StatusCode <- 202
+                    return! next ctx
+        with ex ->
+            match logger with
+            | Some l -> l.Error($"Sequenced fast-path {label} beacon handler failed.", Some ex)
+            | None -> ()
+
+            ctx.Response.StatusCode <- 400
+            return! next ctx
     }
 
-let private emitSequenceOutcomeEvent
-    (eventStore: IEventStore option)
-    (logger: ILogger option)
-    (scope: StorageScope)
-    (beacon: SequenceOutcomeBeacon)
-    : Async<unit> =
-    async {
-        match eventStore with
-        | None -> return ()
-        | Some store ->
-            let evt: ModuleEvent = {
-                Id = Guid.NewGuid()
-                OccurredAt = DateTime.UtcNow
-                ScopeId = scope.ScopeId
-                SourceModule = FastPathSourceModule
-                EventType = SequenceOutcomeEventType
-                Payload = toJson beacon
-            }
-
-            try
-                do! EventStore.writeOrRaise store evt
-            with ex ->
-                logWarn logger $"Sequenced fast-path outcome event write failed: {ex.Message}"
-    }
-
-let private emitSequenceResolvedEvent
-    (eventStore: IEventStore option)
-    (logger: ILogger option)
-    (scope: StorageScope)
-    (beacon: SequenceBeacon)
-    : Async<unit> =
-    async {
-        match eventStore with
-        | None -> return ()
-        | Some store ->
-            let evt: ModuleEvent = {
-                Id = Guid.NewGuid()
-                OccurredAt = DateTime.UtcNow
-                ScopeId = scope.ScopeId
-                SourceModule = FastPathSourceModule
-                EventType = SequenceResolvedEventType
-                Payload = toJson beacon
-            }
-
-            try
-                do! EventStore.writeOrRaise store evt
-            with ex ->
-                logWarn logger $"Sequenced fast-path aggregate event write failed: {ex.Message}"
-    }
-
+/// `POST /api/ai/fastpath/sequenced-clause-beacon` — one clause of a sequence.
 let sequencedClauseBeaconHandler: HttpHandler =
-    fun next (ctx: HttpContext) -> task {
-        let logger = resolveLogger ctx
+    telemetryBeacon validateSequencedClauseBeacon SequencedClauseEventType "clause"
 
-        let eventStoreOpt =
-            match ctx.RequestServices.GetService(typeof<IEventStore>) with
-            | :? IEventStore as s -> Some s
-            | _ -> None
-
-        let warn (m: string) =
-            match logger with
-            | Some l -> l.Warn m
-            | None -> ()
-
-        try
-            use reader = new StreamReader(ctx.Request.Body)
-            let! body = reader.ReadToEndAsync()
-
-            let beacon = JsonSerializer.Deserialize<SequencedClauseBeacon>(body, jsonOptions)
-
-            if isNull (box beacon) then
-                warn "Sequenced fast-path clause beacon rejected: unparseable request body."
-                ctx.Response.StatusCode <- 400
-                return! next ctx
-            else
-                match tryResolveScope ctx, tryResolveUserId ctx, validateSequencedClauseBeacon beacon with
-                | None, _, _ ->
-                    warn
-                        "Sequenced fast-path clause beacon rejected: no resolved StorageScope. ScopeResolutionMiddleware must run before this endpoint."
-
-                    ctx.Response.StatusCode <- 401
-                    return! next ctx
-                | Some _, None, _ ->
-                    warn "Sequenced fast-path clause beacon rejected: no resolved UserId."
-                    ctx.Response.StatusCode <- 401
-                    return! next ctx
-                | Some _, Some _, Error reason ->
-                    warn $"Sequenced fast-path clause beacon rejected ({reason})."
-                    ctx.Response.StatusCode <- 400
-                    return! next ctx
-                | Some scope, Some _, Ok() ->
-                    do! emitSequencedClauseEvent eventStoreOpt logger scope beacon
-                    ctx.Response.StatusCode <- 202
-                    return! next ctx
-        with ex ->
-            match logger with
-            | Some l -> l.Error("Sequenced fast-path clause beacon handler failed.", Some ex)
-            | None -> ()
-
-            ctx.Response.StatusCode <- 400
-            return! next ctx
-    }
-
+/// `POST /api/ai/fastpath/sequence-outcome-beacon` — how a sequence ended.
 let sequenceOutcomeBeaconHandler: HttpHandler =
-    fun next (ctx: HttpContext) -> task {
-        let logger = resolveLogger ctx
+    telemetryBeacon validateSequenceOutcomeBeacon SequenceOutcomeEventType "outcome"
 
-        let eventStoreOpt =
-            match ctx.RequestServices.GetService(typeof<IEventStore>) with
-            | :? IEventStore as s -> Some s
-            | _ -> None
-
-        let warn (m: string) =
-            match logger with
-            | Some l -> l.Warn m
-            | None -> ()
-
-        try
-            use reader = new StreamReader(ctx.Request.Body)
-            let! body = reader.ReadToEndAsync()
-
-            let beacon = JsonSerializer.Deserialize<SequenceOutcomeBeacon>(body, jsonOptions)
-
-            if isNull (box beacon) then
-                warn "Sequenced fast-path outcome beacon rejected: unparseable request body."
-                ctx.Response.StatusCode <- 400
-                return! next ctx
-            else
-                match tryResolveScope ctx, tryResolveUserId ctx, validateSequenceOutcomeBeacon beacon with
-                | None, _, _ ->
-                    warn
-                        "Sequenced fast-path outcome beacon rejected: no resolved StorageScope. ScopeResolutionMiddleware must run before this endpoint."
-
-                    ctx.Response.StatusCode <- 401
-                    return! next ctx
-                | Some _, None, _ ->
-                    warn "Sequenced fast-path outcome beacon rejected: no resolved UserId."
-                    ctx.Response.StatusCode <- 401
-                    return! next ctx
-                | Some _, Some _, Error reason ->
-                    warn $"Sequenced fast-path outcome beacon rejected ({reason})."
-                    ctx.Response.StatusCode <- 400
-                    return! next ctx
-                | Some scope, Some _, Ok() ->
-                    do! emitSequenceOutcomeEvent eventStoreOpt logger scope beacon
-                    ctx.Response.StatusCode <- 202
-                    return! next ctx
-        with ex ->
-            match logger with
-            | Some l -> l.Error("Sequenced fast-path outcome beacon handler failed.", Some ex)
-            | None -> ()
-
-            ctx.Response.StatusCode <- 400
-            return! next ctx
-    }
-
+/// `POST /api/ai/fastpath/sequence-beacon` — the whole-sequence aggregate.
 let sequenceBeaconHandler: HttpHandler =
-    fun next (ctx: HttpContext) -> task {
-        let logger = resolveLogger ctx
-
-        let eventStoreOpt =
-            match ctx.RequestServices.GetService(typeof<IEventStore>) with
-            | :? IEventStore as s -> Some s
-            | _ -> None
-
-        let warn (m: string) =
-            match logger with
-            | Some l -> l.Warn m
-            | None -> ()
-
-        try
-            use reader = new StreamReader(ctx.Request.Body)
-            let! body = reader.ReadToEndAsync()
-
-            let beacon = JsonSerializer.Deserialize<SequenceBeacon>(body, jsonOptions)
-
-            if isNull (box beacon) then
-                warn "Sequenced fast-path aggregate beacon rejected: unparseable request body."
-                ctx.Response.StatusCode <- 400
-                return! next ctx
-            else
-                match tryResolveScope ctx, tryResolveUserId ctx, validateSequenceBeacon beacon with
-                | None, _, _ ->
-                    warn
-                        "Sequenced fast-path aggregate beacon rejected: no resolved StorageScope. ScopeResolutionMiddleware must run before this endpoint."
-
-                    ctx.Response.StatusCode <- 401
-                    return! next ctx
-                | Some _, None, _ ->
-                    warn "Sequenced fast-path aggregate beacon rejected: no resolved UserId."
-                    ctx.Response.StatusCode <- 401
-                    return! next ctx
-                | Some _, Some _, Error reason ->
-                    warn $"Sequenced fast-path aggregate beacon rejected ({reason})."
-                    ctx.Response.StatusCode <- 400
-                    return! next ctx
-                | Some scope, Some _, Ok() ->
-                    do! emitSequenceResolvedEvent eventStoreOpt logger scope beacon
-                    ctx.Response.StatusCode <- 202
-                    return! next ctx
-        with ex ->
-            match logger with
-            | Some l -> l.Error("Sequenced fast-path aggregate beacon handler failed.", Some ex)
-            | None -> ()
-
-            ctx.Response.StatusCode <- 400
-            return! next ctx
-    }
+    telemetryBeacon validateSequenceBeacon SequenceResolvedEventType "aggregate"
