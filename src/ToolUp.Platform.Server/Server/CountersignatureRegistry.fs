@@ -591,44 +591,37 @@ type BlobCountersignatureRegistry(blobs: IBlobStorage, signer: ICountersignature
         | Result.Ok cleanKind, Result.Ok cleanId -> Some $"{root}{cleanKind}/{cleanId}/"
         | _ -> None
 
-    let jsonOptions = PlatformJson.options
-
-    let tryDecode (bytes: byte[]) =
-        try
-            let decoded =
-                JsonSerializer.Deserialize<CountersignatureRecord>(Encoding.UTF8.GetString bytes, jsonOptions)
-
-            // A document persisted before `Roster` existed — or one
-            // truncated in transit — deserialises with a null list, which
-            // NREs on the first list operation rather than failing here.
-            // Coerce, then let the evaluation ignore it: a record with an
-            // empty roster matches no agreement.
-            if isNull (box decoded.Roster) then
-                Some { decoded with Roster = [] }
-            else
-                Some decoded
-        with _ ->
-            None
+    /// A document persisted before `Roster` existed — or one truncated in
+    /// transit — deserialises with a null list, which NREs on the first
+    /// list operation rather than failing here. Coerce, then let the
+    /// evaluation ignore it: a record with an empty roster matches no
+    /// agreement.
+    let docs =
+        BlobDocumentStore<CountersignatureRecord>(
+            blobs,
+            {
+                Encode = PlatformJson.serialize<CountersignatureRecord>
+                Decode =
+                    fun bytes ->
+                        PlatformJson.deserialize<CountersignatureRecord> bytes
+                        |> Result.map (fun decoded ->
+                            if isNull (box decoded.Roster) then
+                                { decoded with Roster = [] }
+                            else
+                                decoded)
+            },
+            ToolUp.Platform.Config.ConsoleLogger.ConsoleLogger() :> ILogger
+        )
 
     /// The one read path. Named separately from the interface member so
     /// `Status` can reach it without casting itself back to the
-    /// interface — an implementation detail, not a second contract.
+    /// interface — an implementation detail, not a second contract. A
+    /// record that cannot be read or decoded REFUSES the read
+    /// (`DocumentUnavailableException`): revocation is a record, so one
+    /// dropped from the list would re-validate what it revoked.
     let readPrefix (prefix: string) = async {
-        let! names = blobs.List(container, prefix)
-
-        let! documents =
-            names
-            |> List.map (fun name -> async {
-                let! result = blobs.Download(container, name)
-
-                return
-                    match result with
-                    | Ok bytes -> tryDecode bytes
-                    | Error _ -> None
-            })
-            |> Async.Parallel
-
-        return documents |> Array.choose id |> List.ofArray
+        let! rows = docs.List(ScopeKey.platform, prefix, BlobDocumentStoreLimits.DefaultListDegree)
+        return rows |> List.map (snd >> DocumentUnavailable.orRaise)
     }
 
     let recordsFor (subject: (string * string) option) =
@@ -648,7 +641,7 @@ type BlobCountersignatureRegistry(blobs: IBlobStorage, signer: ICountersignature
                         "Refusing to persist a countersignature whose subject kind or id is not a well-formed identifier — it would become a blob name outside the countersignature directory"
                 )
         | Some folder ->
-            let payload = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(record, jsonOptions))
+            let payload = PlatformJson.serialize record
 
             let! result = blobs.Upload(container, $"{folder}{CountersignatureCanonical.recordId record}.json", payload)
 

@@ -4460,7 +4460,6 @@ let main args =
         "BudgetLedger.fs"
         "ComputeBudgetStore.fs"
         "ConfigDriftDetector.fs"
-        "CountersignatureRegistry.fs"
         "DataIngestor.fs"
         "DataSourceConfigStore.fs"
         // Excluded from the move by Phase 1061's own rule until 976 and 979 ship.
