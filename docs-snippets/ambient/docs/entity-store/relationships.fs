@@ -19,7 +19,7 @@ module PageAmbient =
     let scope: string = failwith "ambient"
 
     type Order = {
-        Id: EntityId
+        Id: string
         Type: string
         Version: int
         CustomerId: string
@@ -39,7 +39,7 @@ module PageAmbient =
     /// declared through it, and the target the second leg loads. The page
     /// shows the first two in full; `Course` it only ever names.
     type Enrollment = {
-        Id: EntityId
+        Id: string
         Type: string
         Version: int
         StudentId: string
@@ -47,7 +47,7 @@ module PageAmbient =
     }
 
     type Course = {
-        Id: EntityId
+        Id: string
         Type: string
         Version: int
         Title: string

@@ -192,7 +192,7 @@ let kickoffOnboardingJob: WorkflowAction =
         | None -> return failwith "no onboarding job is registered in this scope"
         | Some job ->
             // TriggerOnce answers with a Result rather than throwing.
-            match! jobs.TriggerOnce(scopeId, job.JobId, ctx.AccessContext.UserId) with
+            match! jobs.TriggerOnce(scopeId, job.JobId, UserId ctx.AccessContext.UserId) with
             | Ok() -> return ()
             // Throwing is how an action defers to its registered
             // `ActionFailurePolicy` — see below.

@@ -16,7 +16,7 @@ module PageAmbient =
     /// The page's example entity — the three required fields plus the
     /// one the user edits.
     type Note = {
-        Id: EntityId
+        Id: string
         Type: string
         Version: int
         Body: string
@@ -29,7 +29,7 @@ module PageAmbient =
     let scopeId: string = failwith "ambient"
 
     /// The id of the note the user is editing.
-    let noteId: EntityId = failwith "ambient"
+    let noteId: string = failwith "ambient"
 
     /// What the user typed.
     let editedBody: string = failwith "ambient"

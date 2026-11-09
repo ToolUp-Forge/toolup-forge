@@ -155,7 +155,7 @@ let checkCertificate (publicKey: PublicKeyMetadata) (moduleName: string) (envelo
         printfn "module %s declares %s; %d live approval(s) at %O" payload.ModuleName payload.DeclaredPolicy payload.LiveApprovals.Length payload.AttestedAtUtc
 
         for approval in payload.LiveApprovals do
-            printfn "  %s/%s consented by %s (record %s)" approval.TeamId approval.SubjectId approval.Party approval.ConsentId
+            printfn "  %s/%s consented by %s (record %s)" approval.TeamId.Value approval.SubjectId approval.Party approval.ConsentId
     | Error refusal -> printfn "REFUSED: %s" (AttestationRefusal.describe refusal)
 ```
 
