@@ -63,6 +63,7 @@
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\SmokeTestDefaultsTests.fs" Link="InProcess\SmokeTestDefaultsTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\JobProgressTests.fs" Link="InProcess\JobProgressTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\StoreFireAndForgetTests.fs" Link="InProcess\StoreFireAndForgetTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\TeamStoreReadPathTests.fs" Link="InProcess\TeamStoreReadPathTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>
