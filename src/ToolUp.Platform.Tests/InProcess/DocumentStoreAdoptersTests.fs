@@ -408,4 +408,34 @@ let tests =
 
             expectQuarantined storage platform badName
         }
+
+        test
+            "ProviderProfile — an undecodable profile reads as unconfigured by decision, health refuses, and a save replaces it" {
+            let scope: StorageScope = {
+                ScopeId = "t-profile"
+                Container = "team-t-profile"
+                Persist = true
+            }
+
+            let name = "provider-profile.json"
+            let storage = planted scope.Container name
+            let profiles = ToolUp.Platform.Infra.BlobProviderProfile.create storage
+
+            Expect.isNone (profiles.Get scope |> run) "the consumer falls back per its own policy"
+
+            expectError
+                "SetEntryHealth"
+                (profiles.SetEntryHealth(scope, "primary", ProviderHealthStatus.Healthy) |> run)
+
+            expectQuarantined storage scope.Container name
+
+            let profile = {
+                ProviderProfile.empty () with
+                    UpdatedAt = DateTime(2026, 11, 9, 0, 0, 0, DateTimeKind.Utc)
+            }
+
+            Expect.equal (profiles.Set(scope, profile) |> run) (Ok()) "a save is not wedged behind the corrupt profile"
+            Expect.equal (profiles.Get scope |> run) (Some profile) "the saved profile reads back"
+            expectSetAside storage scope.Container name
+        }
     ]
