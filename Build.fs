@@ -4474,7 +4474,6 @@ let main args =
         "JobStore.fs"
         "JobTriggerWatermark.fs"
         "MigrationStatusStore.fs"
-        "ModuleVisibilityStore.fs"
         "NotificationAddressBook.fs"
         "OAuthFlowHandler.fs"
         "PrincipalRegistry.fs"
