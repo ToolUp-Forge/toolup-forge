@@ -4459,7 +4459,6 @@ let main args =
         "BlobNotificationPreferenceStore.fs"
         "BudgetLedger.fs"
         "ComputeBudgetStore.fs"
-        "Config/ConfigStore.fs"
         "ConfigDriftDetector.fs"
         "CountersignatureRegistry.fs"
         "DataIngestor.fs"
