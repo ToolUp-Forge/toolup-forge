@@ -59,7 +59,7 @@ let private BudgetAuditWriteTimeoutMs = 5_000
 /// records written. `FableConverters` round-trips F# records and
 /// `option` losslessly, so a record reads back in the shape the agent
 /// loop wrote it.
-let private budgetJsonOptions = FableConverters.create ()
+let private budgetJsonOptions = PlatformJson.options
 
 /// One cached window sum, plus the two figures that make the
 /// `/dev/inspect` panel readable. `CapAtLastSum` is diagnostic ONLY —

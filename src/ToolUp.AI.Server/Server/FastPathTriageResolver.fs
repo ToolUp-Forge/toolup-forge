@@ -430,7 +430,7 @@ let verdictShape (decision: string) : string =
 // separately testable. The async orchestration at the bottom does IO
 // and nothing else.
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 let private toJson (value: obj) =
     JsonSerializer.Serialize(value, jsonOptions)

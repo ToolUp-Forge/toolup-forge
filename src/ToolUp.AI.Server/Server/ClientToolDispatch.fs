@@ -88,7 +88,7 @@ type ClientToolDispatchRegistry() =
 /// surface uses (ToolUp.Remoting client serialises with the same
 /// converter set on the way in, AIStreamEvent rendering uses it on the
 /// way out — see `SSEHandler.jsonOptions`).
-let private resultJsonOptions = FableConverters.create ()
+let private resultJsonOptions = PlatformJson.options
 
 /// Phase 6g.A: Giraffe handler for `/api/ai/tool-result`. Browsers
 /// POST a `ClientToolResultRequest` after running a `ClientResident`

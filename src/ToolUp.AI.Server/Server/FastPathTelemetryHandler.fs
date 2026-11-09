@@ -273,7 +273,7 @@ let private buildBreakdown (events: (FastPathEventPayload * DateTime) list) : Ti
 
 // ─── Event-store read + decode ──────────────────────────────────
 
-let private payloadJsonOptions = FableConverters.create ()
+let private payloadJsonOptions = PlatformJson.options
 
 let private indentedJsonOptions =
     let o = FableConverters.create ()

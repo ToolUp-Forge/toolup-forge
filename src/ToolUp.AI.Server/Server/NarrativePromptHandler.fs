@@ -89,7 +89,7 @@ module NarrativeRegenerateJob =
     /// What a regeneration job carries.
     type RegeneratePayload = { RunKey: string }
 
-    let private jsonOptions = FableConverters.create ()
+    let private jsonOptions = PlatformJson.options
 
     let tryParsePayload (json: string) : RegeneratePayload option =
         try
