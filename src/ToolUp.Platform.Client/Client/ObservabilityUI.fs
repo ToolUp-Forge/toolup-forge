@@ -12,6 +12,7 @@ open Feliz.AgCharts
 open Feliz.AgGrid
 open ToolUp.Elmish
 open ToolUp.Platform
+open Toolup.UIToolkit
 
 // ─── Phase 9x — the self-hosted observability admin module ───────────
 //
@@ -71,17 +72,6 @@ type FetchError =
     /// The request never got an answer; carries the transport's reason.
     | Unreachable of string
 
-/// One read's progress.
-type LoadState<'T> =
-    /// Not asked for — the source is off, or the module has not got there.
-    | NotLoaded
-    /// In flight.
-    | Loading
-    /// Answered.
-    | Loaded of 'T
-    /// Failed; rendered through the catalog.
-    | LoadError of FetchError
-
 /// The log search as the operator last submitted it.
 type LogFilter = {
     /// Whole-word message search; blank matches everything.
@@ -99,7 +89,7 @@ type LogFilter = {
 /// The module's state.
 type Model = {
     /// Which sources the server enabled — read first, decides the tabs.
-    Sources: LoadState<ObservabilitySources>
+    Sources: Remote<ObservabilitySources, FetchError>
     /// The section on screen.
     ActiveTab: Tab
     /// The log search as last submitted.
@@ -110,17 +100,17 @@ type Model = {
     /// values rather than showing stale ones.
     FilterRevision: int
     /// The latest log search result.
-    Logs: LoadState<ObservabilityLogsResponse>
+    Logs: Remote<ObservabilityLogsResponse, FetchError>
     /// The log line whose full record is shown under the grid.
     Selected: LogRecord option
     /// The metric charts' look-back window, in minutes.
     MetricsWindow: int
     /// One entry per charted metric, in render order.
-    Metrics: (string * LoadState<ObservabilityMetricResponse>) list
+    Metrics: (string * Remote<ObservabilityMetricResponse, FetchError>) list
     /// The metric an alert row linked to; its chart renders first.
     FocusedMetric: string option
     /// The latest alert-rule read.
-    Alerts: LoadState<ObservabilityAlertsResponse>
+    Alerts: Remote<ObservabilityAlertsResponse, FetchError>
 }
 
 /// The module's messages.
@@ -262,18 +252,18 @@ let private defaultFilter: LogFilter = {
 /// The initial state: every read pending on the sources answer.
 let init () =
     let model = {
-        Sources = Loading
+        Sources = Remote.Loading
         ActiveTab = LogsTab
         Filter = defaultFilter
         FilterRevision = 0
-        Logs = NotLoaded
+        Logs = Remote.NotAsked
         Selected = None
         MetricsWindow = ObservabilityReadback.DefaultWindowMinutes
         Metrics =
             ObservabilityReadback.defaultChartedMetrics
-            |> List.map (fun metric -> metric, NotLoaded)
+            |> List.map (fun metric -> metric, Remote.NotAsked)
         FocusedMetric = None
-        Alerts = NotLoaded
+        Alerts = Remote.NotAsked
     }
 
     model, loadSourcesCmd ()
@@ -288,7 +278,7 @@ let private searchLogs (model: Model) (filter: LogFilter) =
     {
         model with
             Filter = filter
-            Logs = Loading
+            Logs = Remote.Loading
             Selected = None
     },
     loadLogsCmd filter
@@ -296,24 +286,29 @@ let private searchLogs (model: Model) (filter: LogFilter) =
 /// The module's update — pure; every read is a `Cmd`.
 let update (msg: Msg) (model: Model) =
     match msg with
-    | SourcesLoaded(Error error) -> { model with Sources = LoadError error }, Cmd.none
+    | SourcesLoaded(Error error) ->
+        {
+            model with
+                Sources = Remote.Failed error
+        },
+        Cmd.none
 
     | SourcesLoaded(Ok sources) ->
         let withMetrics =
             if sources.Metrics then
                 {
                     model with
-                        Metrics = model.Metrics |> List.map (fun (metric, _) -> metric, Loading)
+                        Metrics = model.Metrics |> List.map (fun (metric, _) -> metric, Remote.Loading)
                 }
             else
                 model
 
         let next = {
             withMetrics with
-                Sources = Loaded sources
+                Sources = Remote.Loaded sources
                 ActiveTab = firstTab sources
-                Logs = (if sources.Logs then Loading else NotLoaded)
-                Alerts = (if sources.Alerts then Loading else NotLoaded)
+                Logs = (if sources.Logs then Remote.Loading else Remote.NotAsked)
+                Alerts = (if sources.Alerts then Remote.Loading else Remote.NotAsked)
         }
 
         next,
@@ -345,9 +340,12 @@ let update (msg: Msg) (model: Model) =
                 WindowMinutes = minutes
         }
 
-    | LogsLoaded(Ok response) -> { model with Logs = Loaded response }, Cmd.none
-
-    | LogsLoaded(Error error) -> { model with Logs = LoadError error }, Cmd.none
+    | LogsLoaded result ->
+        {
+            model with
+                Logs = Remote.ofResult result
+        },
+        Cmd.none
 
     | SelectRecord record -> { model with Selected = Some record }, Cmd.none
 
@@ -370,7 +368,7 @@ let update (msg: Msg) (model: Model) =
         let next = {
             model with
                 MetricsWindow = minutes
-                Metrics = model.Metrics |> List.map (fun (metric, _) -> metric, Loading)
+                Metrics = model.Metrics |> List.map (fun (metric, _) -> metric, Remote.Loading)
         }
 
         next, loadMetricsCmd next
@@ -378,16 +376,13 @@ let update (msg: Msg) (model: Model) =
     | RefreshMetrics ->
         let next = {
             model with
-                Metrics = model.Metrics |> List.map (fun (metric, _) -> metric, Loading)
+                Metrics = model.Metrics |> List.map (fun (metric, _) -> metric, Remote.Loading)
         }
 
         next, loadMetricsCmd next
 
     | MetricLoaded(metric, result) ->
-        let loaded =
-            match result with
-            | Ok response -> Loaded response
-            | Error error -> LoadError error
+        let loaded = Remote.ofResult result
 
         {
             model with
@@ -408,7 +403,7 @@ let update (msg: Msg) (model: Model) =
                     if known then
                         model.Metrics
                     else
-                        model.Metrics @ [ metric, Loading ]
+                        model.Metrics @ [ metric, Remote.Loading ]
         }
 
         next,
@@ -417,11 +412,14 @@ let update (msg: Msg) (model: Model) =
          else
              loadMetricCmd model.MetricsWindow metric)
 
-    | RefreshAlerts -> { model with Alerts = Loading }, loadAlertsCmd ()
+    | RefreshAlerts -> { model with Alerts = Remote.Loading }, loadAlertsCmd ()
 
-    | AlertsLoaded(Ok response) -> { model with Alerts = Loaded response }, Cmd.none
-
-    | AlertsLoaded(Error error) -> { model with Alerts = LoadError error }, Cmd.none
+    | AlertsLoaded result ->
+        {
+            model with
+                Alerts = Remote.ofResult result
+        },
+        Cmd.none
 
 // ─── Shared renderers ────────────────────────────────────────────────
 
@@ -432,12 +430,6 @@ let private describeError (msgs: ObservabilityMessages) (error: FetchError) : st
     | HttpStatus code -> msgs.ErrorStatus code
     | Unreadable reason -> msgs.ErrorUnreadable reason
     | Unreachable reason -> msgs.ErrorUnreachable reason
-
-let private errorBanner (message: string) =
-    Html.div [
-        prop.className "p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm"
-        prop.text message
-    ]
 
 let private warningBanner (message: string) =
     Html.div [
@@ -687,12 +679,13 @@ let private logGrid (msgs: ObservabilityMessages) (records: LogRecord list) (dis
 let private logsTabView (msgs: ObservabilityMessages) (model: Model) (dispatch: Msg -> unit) =
     let body =
         match model.Logs with
-        | NotLoaded
-        | Loading -> loadingLine msgs
-        | LoadError error -> errorBanner (describeError msgs error)
-        | Loaded response when List.isEmpty response.Records ->
+        | Remote.NotAsked
+        | Remote.Loading
+        | Remote.Reloading _ -> loadingLine msgs
+        | Remote.Failed error -> StateViews.noticeStatic (Notice.Problem(describeError msgs error))
+        | Remote.Loaded response when List.isEmpty response.Records ->
             Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.NoLogs ]
-        | Loaded response ->
+        | Remote.Loaded response ->
             Html.div [
                 prop.className "flex flex-col gap-3"
                 prop.children [
@@ -718,7 +711,8 @@ let private logsTabView (msgs: ObservabilityMessages) (model: Model) (dispatch: 
                         prop.className "flex items-center gap-2"
                         prop.children [
                             windowPicker msgs model.Filter.WindowMinutes (SetLogWindow >> dispatch)
-                            refreshButton msgs (model.Logs = Loading) (fun () -> dispatch (SubmitFilter model.Filter))
+                            refreshButton msgs (Remote.isLoading model.Logs) (fun () ->
+                                dispatch (SubmitFilter model.Filter))
                         ]
                     ]
                 ]
@@ -738,14 +732,15 @@ let private metricChart
     (msgs: ObservabilityMessages)
     (focused: bool)
     (metric: string)
-    (state: LoadState<ObservabilityMetricResponse>)
+    (state: Remote<ObservabilityMetricResponse, FetchError>)
     =
     let body =
         match state with
-        | NotLoaded
-        | Loading -> loadingLine msgs
-        | LoadError error -> errorBanner (describeError msgs error)
-        | Loaded response ->
+        | Remote.NotAsked
+        | Remote.Loading
+        | Remote.Reloading _ -> loadingLine msgs
+        | Remote.Failed error -> StateViews.noticeStatic (Notice.Problem(describeError msgs error))
+        | Remote.Loaded response ->
             let partial =
                 match response.Warning with
                 | Some reason -> warningBanner (msgs.PartialRead reason)
@@ -829,7 +824,8 @@ let private MetricsAutoRefresh (dispatch: Msg -> unit) =
     Html.none
 
 let private metricsTabView (msgs: ObservabilityMessages) (model: Model) (dispatch: Msg -> unit) =
-    let anyLoading = model.Metrics |> List.exists (fun (_, state) -> state = Loading)
+    let anyLoading =
+        model.Metrics |> List.exists (fun (_, state) -> Remote.isLoading state)
 
     let ordered =
         match model.FocusedMetric with
@@ -878,10 +874,11 @@ let private statePill (msgs: ObservabilityMessages) (state: AlertRuleState) =
 let private alertsTabView (msgs: ObservabilityMessages) (model: Model) (dispatch: Msg -> unit) =
     let body =
         match model.Alerts with
-        | NotLoaded
-        | Loading -> loadingLine msgs
-        | LoadError error -> errorBanner (describeError msgs error)
-        | Loaded response ->
+        | Remote.NotAsked
+        | Remote.Loading
+        | Remote.Reloading _ -> loadingLine msgs
+        | Remote.Failed error -> StateViews.noticeStatic (Notice.Problem(describeError msgs error))
+        | Remote.Loaded response ->
             Html.table [
                 prop.className "min-w-full border border-border rounded bg-white"
                 prop.children [
@@ -951,7 +948,7 @@ let private alertsTabView (msgs: ObservabilityMessages) (model: Model) (dispatch
             Html.div [
                 prop.className "flex justify-end"
                 prop.children [
-                    refreshButton msgs (model.Alerts = Loading) (fun () -> dispatch RefreshAlerts)
+                    refreshButton msgs (Remote.isLoading model.Alerts) (fun () -> dispatch RefreshAlerts)
                 ]
             ]
             body
@@ -1001,19 +998,20 @@ let private ObservabilityBody (model: Model) (dispatch: Msg -> unit) =
 
     let content =
         match model.Sources with
-        | NotLoaded
-        | Loading -> Html.div [ prop.className "p-4"; prop.children [ loadingLine msgs ] ]
-        | LoadError error ->
+        | Remote.NotAsked
+        | Remote.Loading
+        | Remote.Reloading _ -> Html.div [ prop.className "p-4"; prop.children [ loadingLine msgs ] ]
+        | Remote.Failed error ->
             Html.div [
                 prop.className "p-4"
-                prop.children [ errorBanner (describeError msgs error) ]
+                prop.children [ StateViews.noticeStatic (Notice.Problem(describeError msgs error)) ]
             ]
-        | Loaded sources when not (sources.Logs || sources.Metrics || sources.Alerts) ->
+        | Remote.Loaded sources when not (sources.Logs || sources.Metrics || sources.Alerts) ->
             Html.div [
                 prop.className "p-4"
                 prop.children [ Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.NoSources ] ]
             ]
-        | Loaded sources ->
+        | Remote.Loaded sources ->
             Html.div [
                 prop.className "flex flex-col h-full"
                 prop.children [
