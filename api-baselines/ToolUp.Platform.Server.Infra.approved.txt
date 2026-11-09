@@ -1829,7 +1829,7 @@ ToolUp.Platform.Infra.IRateLimitReader.GetCurrent(ToolUp.Platform.InboundRateLim
 ToolUp.Platform.Infra.IRateLimitStore (interface)
 ToolUp.Platform.Infra.IRateLimitStore.GetRecentDecisions(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.InboundRateLimitKey], System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RateLimitDecisionEvent]]
 ToolUp.Platform.Infra.IRateLimitWriter (interface)
-ToolUp.Platform.Infra.IRateLimitWriter.IncrementAndCheck(ToolUp.Platform.InboundRateLimitKey, ToolUp.Platform.RateLimitWindow, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.InboundRateLimitDecision, ToolUp.Platform.Infra.RateLimitStoreError]]
+ToolUp.Platform.Infra.IRateLimitWriter.IncrementAndCheck(ToolUp.Platform.InboundRateLimitKey, ToolUp.Platform.RateLimitWindow, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Admission, ToolUp.Platform.Infra.RateLimitStoreError]]
 ToolUp.Platform.Infra.IReranker (class)
 ToolUp.Platform.Infra.IReranker+IReranker (interface)
 ToolUp.Platform.Infra.IReranker+IReranker.MaxBatchSize : System.Int32 { get }
@@ -2005,6 +2005,7 @@ ToolUp.Platform.Infra.InMemoryOAuthStateStore..ctor()
 ToolUp.Platform.Infra.InMemoryRateLimitStore (class)
 ToolUp.Platform.Infra.InMemoryRateLimitStore.create() : ToolUp.Platform.Infra.IRateLimitStore
 ToolUp.Platform.Infra.InMemoryRateLimitStore.createWithClock(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset]) : ToolUp.Platform.Infra.IRateLimitStore
+ToolUp.Platform.Infra.InMemoryRateLimitStore.over(ToolUp.Remoting.Server.InMemoryRateLimitStore) : ToolUp.Platform.Infra.IRateLimitStore
 ToolUp.Platform.Infra.InMemoryTimeSeriesStore (class)
 ToolUp.Platform.Infra.InMemoryTimeSeriesStore..ctor()
 ToolUp.Platform.Infra.InMemoryTimeSeriesStoreModule (class)
@@ -2976,7 +2977,7 @@ ToolUp.Platform.Infra.RateLimitEventApi (class)
 ToolUp.Platform.Infra.RateLimitEventApi.routes : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]] { get }
 ToolUp.Platform.Infra.RateLimitMiddleware (class)
 ToolUp.Platform.Infra.RateLimitMiddleware+InboundRateLimitMiddleware (class)
-ToolUp.Platform.Infra.RateLimitMiddleware+InboundRateLimitMiddleware..ctor(Microsoft.AspNetCore.Http.RequestDelegate, ToolUp.Platform.Infra.IRateLimitStore, ToolUp.Platform.ILogger)
+ToolUp.Platform.Infra.RateLimitMiddleware+InboundRateLimitMiddleware..ctor(Microsoft.AspNetCore.Http.RequestDelegate, ToolUp.Platform.Infra.IRateLimitStore, ToolUp.Platform.ILogger, ToolUp.Platform.IAuditLog)
 ToolUp.Platform.Infra.RateLimitMiddleware+InboundRateLimitMiddleware.InvokeAsync(Microsoft.AspNetCore.Http.HttpContext, ToolUp.Platform.ServerConfig) : System.Threading.Tasks.Task
 ToolUp.Platform.Infra.RateLimitStoreError (class)
 ToolUp.Platform.Infra.RateLimitStoreError.IsStoreContractViolation : System.Boolean { get }
@@ -2989,6 +2990,24 @@ ToolUp.Platform.Infra.RateLimitStoreError+StoreUnavailable.reason : System.Strin
 ToolUp.Platform.Infra.RateLimitStoreError+Tags (class)
 ToolUp.Platform.Infra.RateLimitStoreError+Tags.StoreContractViolation : System.Int32 (literal)
 ToolUp.Platform.Infra.RateLimitStoreError+Tags.StoreUnavailable : System.Int32 (literal)
+ToolUp.Platform.Infra.RateLimitVerdict (class)
+ToolUp.Platform.Infra.RateLimitVerdict.IsAdmittedOnStoreFailure : System.Boolean { get }
+ToolUp.Platform.Infra.RateLimitVerdict.IsAnswered : System.Boolean { get }
+ToolUp.Platform.Infra.RateLimitVerdict.IsRefusedOnStoreFailure : System.Boolean { get }
+ToolUp.Platform.Infra.RateLimitVerdict.Tag : System.Int32 { get }
+ToolUp.Platform.Infra.RateLimitVerdict+AdmittedOnStoreFailure (class)
+ToolUp.Platform.Infra.RateLimitVerdict+AdmittedOnStoreFailure.reason : System.String { get }
+ToolUp.Platform.Infra.RateLimitVerdict+Answered (class)
+ToolUp.Platform.Infra.RateLimitVerdict+Answered.Item : ToolUp.Platform.Admission { get }
+ToolUp.Platform.Infra.RateLimitVerdict+RefusedOnStoreFailure (class)
+ToolUp.Platform.Infra.RateLimitVerdict+RefusedOnStoreFailure.reason : System.String { get }
+ToolUp.Platform.Infra.RateLimitVerdict+Tags (class)
+ToolUp.Platform.Infra.RateLimitVerdict+Tags.AdmittedOnStoreFailure : System.Int32 (literal)
+ToolUp.Platform.Infra.RateLimitVerdict+Tags.Answered : System.Int32 (literal)
+ToolUp.Platform.Infra.RateLimitVerdict+Tags.RefusedOnStoreFailure : System.Int32 (literal)
+ToolUp.Platform.Infra.RateLimitVerdictModule (class)
+ToolUp.Platform.Infra.RateLimitVerdictModule.auditRefusal(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.Infra.RateLimitVerdictModule.ofResult(ToolUp.Platform.StorePosture, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Admission, ToolUp.Platform.Infra.RateLimitStoreError]) : ToolUp.Platform.Infra.RateLimitVerdict
 ToolUp.Platform.Infra.RateLimiting (class)
 ToolUp.Platform.Infra.RateLimiting.configure(ToolUp.Platform.RateLimitConfig, Microsoft.AspNetCore.RateLimiting.RateLimiterOptions) : System.Void
 ToolUp.Platform.Infra.RegistryCapabilities (class)

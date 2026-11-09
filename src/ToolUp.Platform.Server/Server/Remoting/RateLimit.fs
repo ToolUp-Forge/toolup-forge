@@ -8,7 +8,7 @@ open System.Collections.Concurrent
 // =============================================================================
 //
 // API record fields can carry one or more `[<RateLimit>]` attributes; the
-// dispatcher evaluates each budget per call against an `IRateLimitStore`,
+// dispatcher evaluates each budget per call against an `IRemotingRateLimitStore`,
 // denies with a categorised `ErrorCategory.RateLimit` envelope + 429 +
 // `Retry-After` header when any budget is exhausted.
 //
@@ -30,7 +30,7 @@ type RateLimitAttribute(count: int, windowSeconds: int) =
     inherit Attribute()
     member _.Count = count
     member _.WindowSeconds = windowSeconds
-    /// `TimeSpan` view of the window for use in `IRateLimitStore.TryAcquire`.
+    /// `TimeSpan` view of the window for use in `IRemotingRateLimitStore.TryAcquire`.
     member this.Window = TimeSpan.FromSeconds(float windowSeconds)
 
 /// Named window-size constants for the
@@ -56,19 +56,27 @@ type RateBudget = { Count: int; WindowSeconds: int }
 
 // -----------------------------------------------------------------------------
 
-/// Default in-memory implementation of `IRateLimitStore`.
-/// Sliding-window counter via a per-key timestamp queue. Suitable for
-/// single-instance deployments; distributed deployments wire Redis or
-/// equivalent against the `IRateLimitStore` contract.
+/// The one in-memory rate-limit store (Phase 1068): the default
+/// `IRemotingRateLimitStore`, and the store behind the Phase 56
+/// `ToolUp.Platform.Infra.InMemoryRateLimitStore` and the in-memory
+/// share-token limiter, which adapt it. Sliding window over a per-key
+/// timestamp queue. Suitable for single-instance deployments; distributed
+/// deployments wire Redis or equivalent against the interfaces.
 ///
 /// Admission is atomic per key: N callers released together against one
-/// remaining slot admit exactly one.
+/// remaining slot admit exactly one. A non-positive budget admits every
+/// call and records nothing — a misconfigured budget never becomes a
+/// refusal of every caller.
 ///
 /// Bounded by `maxBuckets` (default 100_000) through `BoundedFifo`: a new key
 /// at the cap evicts the oldest bucket (by first insertion), so a deployment
 /// hit by many distinct IPs or subject ids cannot OOM the host.
-type InMemoryRateLimitStore(?maxBuckets: int) =
+///
+/// `clock` (default `DateTimeOffset.UtcNow`) exists so a window's edge is
+/// assertable without racing the wall clock.
+type InMemoryRateLimitStore(?maxBuckets: int, ?clock: unit -> DateTimeOffset) =
     let cap = defaultArg maxBuckets 100_000
+    let now = defaultArg clock (fun () -> DateTimeOffset.UtcNow)
     let buckets = ConcurrentDictionary<string, ConcurrentQueue<DateTimeOffset>>()
 
     let fifo =
@@ -80,10 +88,26 @@ type InMemoryRateLimitStore(?maxBuckets: int) =
             BoundedFifoPolicy.oldestFirst ignore
         )
 
-    interface IRateLimitStore with
-        member _.TryAcquire(key, count, window) = async {
-            let now = DateTimeOffset.UtcNow
-            let cutoff = now - window
+    /// Drop the timestamps that have left the window. The queue is ordered
+    /// by enqueue time (admissions are serialised under its lock), so the
+    /// walk stops at the first one still inside. Call under `lock queue`.
+    let evict (queue: ConcurrentQueue<DateTimeOffset>) (cutoff: DateTimeOffset) =
+        let mutable peeked = DateTimeOffset.MinValue
+        let mutable evicting = true
+
+        while evicting && queue.TryPeek(&peeked) do
+            if peeked < cutoff then
+                let mutable dequeued = DateTimeOffset.MinValue
+                queue.TryDequeue(&dequeued) |> ignore
+            else
+                evicting <- false
+
+    /// Admit one call against `count` per `window` for `key`.
+    member _.Acquire(key: string, count: int, window: TimeSpan) : ToolUp.Platform.Admission =
+        if count <= 0 then
+            ToolUp.Platform.Admission.Admit 0
+        else
+            let at = now ()
 
             let queue =
                 match buckets.TryGetValue key with
@@ -99,52 +123,33 @@ type InMemoryRateLimitStore(?maxBuckets: int) =
             // records its admission, and all pass. The lock is the queue
             // itself — one per key, so distinct subjects never contend —
             // and nothing inside it awaits.
-            let decision =
-                lock queue (fun () ->
-                    // Evict expired timestamps from the front. The queue is
-                    // ordered by enqueue time (admissions are serialised
-                    // above), so we can stop at the first non-expired entry.
-                    let mutable peeked = DateTimeOffset.MinValue
-                    let mutable evicting = true
+            lock queue (fun () ->
+                evict queue (at - window)
 
-                    while evicting && queue.TryPeek(&peeked) do
-                        if peeked < cutoff then
-                            let mutable dequeued = DateTimeOffset.MinValue
-                            queue.TryDequeue(&dequeued) |> ignore
-                        else
-                            evicting <- false
+                if queue.Count < count then
+                    queue.Enqueue at
+                    ToolUp.Platform.Admission.Admit(count - queue.Count)
+                else
+                    // Budget exhausted (the queue is non-empty: count > 0).
+                    // The next slot frees when the oldest in-window
+                    // admission leaves the window.
+                    let mutable oldest = DateTimeOffset.MinValue
+                    queue.TryPeek(&oldest) |> ignore
+                    let retryAfter = (oldest + window) - at
+                    ToolUp.Platform.Admission.Deny(max retryAfter (TimeSpan.FromMilliseconds 1.0)))
 
-                    if queue.Count < count then
-                        queue.Enqueue now
-                        RateLimitAllowed
-                    else
-                        // Budget exhausted. RetryAfter is the time until the
-                        // oldest in-window entry expires (the earliest moment
-                        // a new acquisition becomes possible).
-                        let mutable oldest = DateTimeOffset.MinValue
+    /// The admissions `key` holds inside the trailing `window`, without
+    /// admitting one. A key the store has never seen holds none.
+    member _.Admitted(key: string, window: TimeSpan) : int =
+        match buckets.TryGetValue key with
+        | true, queue ->
+            lock queue (fun () ->
+                evict queue (now () - window)
+                queue.Count)
+        | false, _ -> 0
 
-                        if queue.TryPeek(&oldest) then
-                            let retryAfter = (oldest + window) - now
-
-                            let safe =
-                                if retryAfter < TimeSpan.Zero then
-                                    TimeSpan.FromMilliseconds 1.0
-                                else
-                                    retryAfter
-
-                            RateLimitDenied safe
-                        else
-                            // An empty queue that is still "full" means a
-                            // non-positive budget. Under the lock no other
-                            // caller can have drained it, so this is no
-                            // longer a race — kept as it was (admit and
-                            // record) so a non-positive budget behaves
-                            // exactly as before.
-                            queue.Enqueue now
-                            RateLimitAllowed)
-
-            return decision
-        }
+    interface IRemotingRateLimitStore with
+        member this.TryAcquire(key, count, window) = async { return this.Acquire(key, count, window) }
 
     /// Diagnostics: bucket count for telemetry / health checks.
     member _.BucketCount = buckets.Count
@@ -240,23 +245,23 @@ module internal RateLimit =
     /// first denial (if any). All budgets must pass for the call to
     /// proceed (AND semantics).
     let evaluate
-        (store: IRateLimitStore)
+        (store: IRemotingRateLimitStore)
         (subjectKey: string)
         (methodName: string)
         (budgets: RateLimitAttribute list)
-        : Async<RateLimitDecision> =
-        let rec charge (remaining: RateLimitAttribute list) : Async<RateLimitDecision> = async {
+        : Async<ToolUp.Platform.Admission> =
+        let rec charge (left: int) (remaining: RateLimitAttribute list) : Async<ToolUp.Platform.Admission> = async {
             match remaining with
-            | [] -> return RateLimitAllowed
+            | [] -> return ToolUp.Platform.Admission.Admit left
             | budget :: rest ->
                 let key = sprintf "%s|%s|%ds" subjectKey methodName budget.WindowSeconds
 
                 match! store.TryAcquire(key, budget.Count, budget.Window) with
-                | RateLimitAllowed -> return! charge rest
+                | ToolUp.Platform.Admission.Admit n -> return! charge (min left n) rest
                 | denied -> return denied
         }
 
-        charge budgets
+        charge Int32.MaxValue budgets
 
     /// Derive a stable subject key for the rate-limit bucket. Uses the
     /// resolved auth context's `SubjectId` when available; otherwise

@@ -346,6 +346,11 @@
 @@ L40 [66-platform-mode-env]
 -    Environment.SetEnvironmentVariable("TOOLUP_PLATFORM_MODE", "individual")
 +    Environment.SetEnvironmentVariable("TOOLUP_PLATFORM_SURFACES", "individual")
+--- a/src/Server/RateLimit.fs
++++ b/src/Server/RateLimit.fs
+@@ L6 [1068-remoting-store]
+-let remoting = ToolUp.Remoting.Server.InMemoryRateLimitStore() :> ToolUp.Remoting.Server.IRateLimitStore
++let remoting = ToolUp.Remoting.Server.InMemoryRateLimitStore() :> ToolUp.Remoting.Server.IRemotingRateLimitStore
 --- a/src/Server/Remoting.fs
 +++ b/src/Server/Remoting.fs
 @@ L7 [1056-error-result]
@@ -382,4 +387,4 @@
 @@ L41 [73-remoting-namespace]
 -let legacyJson = Fable.Remoting.Json.FableJsonConverter()
 +let legacyJson = ToolUp.Remoting.Json.FableJsonConverter()
-Codemod: 96 rewrite(s) across 16 file(s) pending.
+Codemod: 97 rewrite(s) across 17 file(s) pending.

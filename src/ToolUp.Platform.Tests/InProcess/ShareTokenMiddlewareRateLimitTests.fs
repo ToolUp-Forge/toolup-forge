@@ -81,6 +81,13 @@ let private invoke (sp: IServiceProvider) : HttpContext * bool =
     mw.InvokeAsync(ctx) |> Async.AwaitTask |> Async.RunSynchronously
     ctx, nextInvoked
 
+/// Limiter fake whose store has failed: every `Admit` answers
+/// `StorageFailed`, as a distributed limiter does when its backend is down.
+type private FailingLimiter() =
+    interface IShareTokenRateLimiter with
+        member _.Admit(_, _, _) = async { return Error(ShareTokenError.StorageFailed "simulated outage") }
+        member _.IsDistributed = true
+
 let private buildServices (claim: ShareTokenClaim) (limiter: IShareTokenRateLimiter option) : IServiceProvider =
     let services = ServiceCollection()
 
@@ -169,5 +176,42 @@ let tests =
                 Expect.equal ctx.Response.StatusCode 200 "response untouched"
 
                 Expect.isTrue (ctx.Items.ContainsKey ShareTokenAuth.ShareTokenClaimItemsKey) "claim stashed as before"
+        }
+
+        // Phase 1068 — the share-token gate's store posture. A token is a
+        // credential, so its limiter failing is refused like a failed
+        // `Validate` (401 + denial row); the gate carries no `FailOpen`, and
+        // `ShareTokenRateLimit` therefore declares no `StorePosture`. The
+        // route-level gates that CAN fail open read the posture their policy
+        // declares (`RouteLimit.StorePosture`, `LiveSessionOptions.SubscribeStorePosture`).
+        test "a rate-capped token whose limiter fails is refused, never admitted open" {
+            let rate = {
+                MaxUses = 5
+                Window = TimeSpan.FromSeconds 60.0
+            }
+
+            let sp =
+                buildServices (claimWith (Some rate)) (Some(FailingLimiter() :> IShareTokenRateLimiter))
+
+            let ctx, nextInvoked = invoke sp
+            Expect.isFalse nextInvoked "a failed limiter never admits the token"
+            Expect.equal ctx.Response.StatusCode 401 "refused as a token-path failure"
+
+            Expect.isFalse
+                (ctx.Items.ContainsKey ShareTokenAuth.ShareTokenClaimItemsKey)
+                "the refused request does not stash the claim"
+        }
+
+        test "a rate-capped token whose limiter answers is admitted (the control)" {
+            let rate = {
+                MaxUses = 5
+                Window = TimeSpan.FromSeconds 60.0
+            }
+
+            let sp =
+                buildServices (claimWith (Some rate)) (Some(BudgetLimiter 5 :> IShareTokenRateLimiter))
+
+            let _, nextInvoked = invoke sp
+            Expect.isTrue nextInvoked "an answering limiter with budget admits"
         }
     ]

@@ -1875,6 +1875,8 @@ ToolUp.Platform AdminTileContext
 ToolUp.Platform AdminTileRegistry
 ToolUp.Platform AdminTiles
 ToolUp.Platform Administration
+ToolUp.Platform Admission
+ToolUp.Platform Admit
 ToolUp.Platform AdvisoryRendererDefaults
 ToolUp.Platform AgChartExport
 ToolUp.Platform AgGrid
@@ -2671,8 +2673,10 @@ ToolUp.Platform FactImportRefused
 ToolUp.Platform FactNode
 ToolUp.Platform FactRef
 ToolUp.Platform FactTableRun
+ToolUp.Platform FailClosed
 ToolUp.Platform FailClosedOnScanError
 ToolUp.Platform FailOnMissing
+ToolUp.Platform FailOpen
 ToolUp.Platform FailOpenOnScanError
 ToolUp.Platform Failed
 ToolUp.Platform Failure
@@ -4016,6 +4020,7 @@ ToolUp.Platform Stop
 ToolUp.Platform StorageFailed
 ToolUp.Platform StorageFailure
 ToolUp.Platform StorageScope
+ToolUp.Platform StorePosture
 ToolUp.Platform StoreUnavailable
 ToolUp.Platform StoreUnreachable
 ToolUp.Platform Stores
@@ -7082,6 +7087,7 @@ ToolUp.Platform.Infra.InMemoryEventStore InMemoryEventStore
 ToolUp.Platform.Infra.InMemoryOAuth1aStateStore create
 ToolUp.Platform.Infra.InMemoryRateLimitStore create
 ToolUp.Platform.Infra.InMemoryRateLimitStore createWithClock
+ToolUp.Platform.Infra.InMemoryRateLimitStore over
 ToolUp.Platform.Infra.InMemoryTimeSeriesStore create
 ToolUp.Platform.Infra.IngestedPayload ContentFormatKey
 ToolUp.Platform.Infra.IngestedPayload CurrentPayloadFormat
@@ -7283,10 +7289,13 @@ ToolUp.Platform.Infra.RateLimitEventApi routes
 ToolUp.Platform.Infra.RateLimitMiddleware InboundRateLimitMiddleware
 ToolUp.Platform.Infra.RateLimitMiddleware extractKey
 ToolUp.Platform.Infra.RateLimitMiddleware matchPolicy
+ToolUp.Platform.Infra.RateLimitMiddleware refuseUnavailable
 ToolUp.Platform.Infra.RateLimitMiddleware renderDenyBody
 ToolUp.Platform.Infra.RateLimitMiddleware secondsUntilWindowEnd
 ToolUp.Platform.Infra.RateLimitMiddleware stampAllowHeaders
 ToolUp.Platform.Infra.RateLimitMiddleware stampDenyHeaders
+ToolUp.Platform.Infra.RateLimitVerdict auditRefusal
+ToolUp.Platform.Infra.RateLimitVerdict ofResult
 ToolUp.Platform.Infra.RateLimiting configure
 ToolUp.Platform.Infra.RateLimiting sseConnectPolicy
 ToolUp.Platform.Infra.RegistryCapabilities none

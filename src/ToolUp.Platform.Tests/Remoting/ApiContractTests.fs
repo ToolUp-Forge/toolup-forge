@@ -126,8 +126,8 @@ let private anonymous =
 let private resolver (_: HttpContext) = async { return anonymous }
 
 let private noRateLimit =
-    { new IRateLimitStore with
-        member _.TryAcquire(_, _, _) = async { return RateLimitAllowed }
+    { new IRemotingRateLimitStore with
+        member _.TryAcquire(_, _, _) = async { return ToolUp.Platform.Admission.Admit 0 }
     }
 
 /// The message a composition raises, or a failure naming that it started.

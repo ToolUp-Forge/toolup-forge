@@ -121,6 +121,7 @@ let private registeredTests =
         OidcJwksTtlTests.tests
         AuditTests.tests
         RateLimitTests.tests
+        RateLimitTests.middlewareTests
         IdempotencyTests.tests
         ReportingComposeTests.tests
         ReportingAuthorizationTests.tests

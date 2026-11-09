@@ -120,7 +120,7 @@ type internal Mount = {
     TelemetryGate: (unit -> bool) option
     Resolver: (HttpContext -> Async<IAuthContext>) option
     RemoteIp: (HttpContext -> string option) option
-    RateLimitStore: IRateLimitStore option
+    RateLimitStore: IRemotingRateLimitStore option
     AuditEmitter: IAuditEmitter option
     IdempotencyStore: IIdempotencyStore option
     IdempotencyTtl: TimeSpan

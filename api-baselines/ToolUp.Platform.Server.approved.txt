@@ -3658,10 +3658,11 @@ ToolUp.Platform.Compose.LiveSessionHandler (class)
 ToolUp.Platform.Compose.LiveSessionHandler.FrameEventName : System.String (literal)
 ToolUp.Platform.Compose.LiveSessionHandler.handler(ToolUp.Platform.Compose.LiveSessionOptions, ToolUp.Platform.Jobs.ILiveSessionHost) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]
 ToolUp.Platform.Compose.LiveSessionOptions (class)
-ToolUp.Platform.Compose.LiveSessionOptions..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Jobs.ILiveSessionHost])
+ToolUp.Platform.Compose.LiveSessionOptions..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], ToolUp.Platform.StorePosture, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Jobs.ILiveSessionHost])
 ToolUp.Platform.Compose.LiveSessionOptions.Host : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Jobs.ILiveSessionHost] { get }
 ToolUp.Platform.Compose.LiveSessionOptions.MaxSessionsPerScope : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
 ToolUp.Platform.Compose.LiveSessionOptions.Route : System.String { get }
+ToolUp.Platform.Compose.LiveSessionOptions.SubscribeStorePosture : ToolUp.Platform.StorePosture { get }
 ToolUp.Platform.Compose.LiveSessionOptions.SubscribesPerMinutePerScope : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
 ToolUp.Platform.Compose.LiveSessionOptionsModule (class)
 ToolUp.Platform.Compose.LiveSessionOptionsModule.defaults : ToolUp.Platform.Compose.LiveSessionOptions { get }

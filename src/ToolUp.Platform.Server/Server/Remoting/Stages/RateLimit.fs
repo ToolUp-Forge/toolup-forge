@@ -4,7 +4,7 @@ open System
 open Microsoft.Extensions.Primitives
 open ToolUp.Remoting.Server
 
-/// Stage 7: `[<RateLimit>]` budgets, when an `IRateLimitStore` is composed.
+/// Stage 7: `[<RateLimit>]` budgets, when an `IRemotingRateLimitStore` is composed.
 /// Every budget must pass (AND), charged against the caller's subject key.
 /// An exhausted budget is 429 with `Retry-After`, the categorised
 /// `RateLimit` envelope, a `RateLimited` telemetry outcome (separable from
@@ -29,9 +29,9 @@ module internal RateLimit =
                     |> Async.StartAsTask
 
                 match decision with
-                | RateLimitAllowed -> return StageOutcome.Continue ctx
-                | RateLimitDenied retryAfter ->
-                    let seconds = max 1 (int (Math.Ceiling retryAfter.TotalSeconds))
+                | ToolUp.Platform.Admission.Admit _ -> return StageOutcome.Continue ctx
+                | ToolUp.Platform.Admission.Deny retryAfter ->
+                    let seconds = ToolUp.Platform.RateLimitedError.retryAfterSeconds retryAfter
                     ctx.Http.Response.Headers["Retry-After"] <- StringValues(string seconds)
 
                     match mount.AuditEmitter with

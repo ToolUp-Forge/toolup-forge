@@ -215,8 +215,14 @@ let admitRateLimit
 
                 try
                     match! store.IncrementAndCheck(key, declared.Window, declared.MaxCalls) with
-                    | Ok(DenyWithError limited) -> return Error(McpError.RateLimited limited)
-                    | Ok(AllowWithRemaining _) -> return Ok()
+                    | Ok(Admission.Deny retryAfter) ->
+                        return
+                            Error(
+                                McpError.RateLimited(
+                                    RateLimitedError.ofDenial declared.MaxCalls declared.Window retryAfter
+                                )
+                            )
+                    | Ok(Admission.Admit _) -> return Ok()
                     | Error _ -> return Ok()
                 with _ ->
                     return Ok()
