@@ -47,6 +47,7 @@
         <Compile Include="..\ToolUp.Platform.Tests\Remoting\ClientProxyGenerationTests.fs" Link="Remoting\ClientProxyGenerationTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Remoting\PlatformDecodersGenerationTests.fs" Link="Remoting\PlatformDecodersGenerationTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Remoting\ApiRecordCensusTests.fs" Link="Remoting\ApiRecordCensusTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Remoting\ApiContractTests.fs" Link="Remoting\ApiContractTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Remoting\ProofOracleTests.fs" Link="Remoting\ProofOracleTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\ColumnMatcherTests.fs" Link="InProcess\ColumnMatcherTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\ColumnMappingTests.fs" Link="InProcess\ColumnMappingTests.fs" />
