@@ -76,7 +76,7 @@ type IJobProgressSink =
 // ─── JSON helper ─────────────────────────────────────────────────────────
 
 module private ProgressJson =
-    let private options = FableConverters.create ()
+    let private options = PlatformJson.options
 
     let serialize (value: 'T) : string =
         JsonSerializer.Serialize(value, options)

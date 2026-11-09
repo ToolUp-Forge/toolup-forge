@@ -14,7 +14,7 @@ open ToolUp.Platform.Config.TeamManagement
 /// is never surfaced to the client), but keeping the converter keeps
 /// the persisted representation consistent with every other SDK store
 /// and future-proofs direct Fable consumers.
-let private eventJsonOptions = FableConverters.create ()
+let private eventJsonOptions = PlatformJson.options
 
 /// Build the `IFeatureFlagApi` ToolUp.Remoting handler. Resolves
 /// `FlagEvaluator`, `IFeatureFlagStore`, and `AccessContext` lazily

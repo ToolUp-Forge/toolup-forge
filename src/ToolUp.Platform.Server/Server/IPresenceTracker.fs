@@ -90,7 +90,7 @@ type IPresenceTracker =
 type InMemoryPresenceTracker(channel: INotificationChannel, ?expiry: TimeSpan, ?now: unit -> DateTime) =
     let expiry = defaultArg expiry (TimeSpan.FromSeconds 90.0)
     let clock = defaultArg now (fun () -> DateTime.UtcNow)
-    let jsonOptions = FableConverters.create ()
+    let jsonOptions = PlatformJson.options
 
     // scopeId -> (userId -> peer). Per-scope shard; a roster read touches
     // only the requested scope's inner map (GP 4).

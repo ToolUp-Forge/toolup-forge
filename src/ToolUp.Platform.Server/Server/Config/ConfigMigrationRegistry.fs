@@ -283,7 +283,7 @@ type ConfigMigrationSupport = {
 /// rather than a sidecar.
 type MigratingConfigStore(inner: IConfigStore, support: ConfigMigrationSupport) =
 
-    let eventJsonOptions = FableConverters.create ()
+    let eventJsonOptions = PlatformJson.options
     let registry = support.Registry
     let logger = support.Logger
 

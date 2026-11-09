@@ -87,7 +87,7 @@ let private extractDateFromBlobName (blobName: string) (scopeId: string) : DateT
 // thread-safe once it has been used for a serialise call (it
 // freezes on first use).
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 let private toJson (records: UsageRecord list) : byte[] =
     let json = JsonSerializer.Serialize(records, jsonOptions)

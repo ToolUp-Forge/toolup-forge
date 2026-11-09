@@ -340,7 +340,7 @@ type BlobExternalHandleStore(blobs: IBlobStorage, now: unit -> DateTime) =
                 "blobs"
                 "BlobExternalHandleStore requires an IBlobStorage that also implements IConditionalBlobStorage (conditional writes). The MarkTerminal compare-and-set is the entire exactly-once guarantee — a download-modify-upload fallback races exactly where a completion callback and the reconciliation poll meet, and losing that race resolves one unit of work twice. Use InMemoryExternalHandleStore for a single-instance deployment, or a backend with conditional-write support."
 
-    let json = FableConverters.create ()
+    let json = PlatformJson.options
 
     let recordName (scopeId: string) (handleId: Guid) =
         $"%s{recordPrefix}%s{scopeId}/%O{handleId}.json"

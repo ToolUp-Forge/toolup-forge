@@ -189,7 +189,7 @@ type CredentialMetadata = {
 }
 
 module private MetadataJson =
-    let private options = FableConverters.create ()
+    let private options = PlatformJson.options
 
     let serialize (value: CredentialMetadata) : byte[] =
         JsonSerializer.Serialize(value, options) |> Encoding.UTF8.GetBytes

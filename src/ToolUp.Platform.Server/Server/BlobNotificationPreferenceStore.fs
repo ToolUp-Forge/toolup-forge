@@ -39,7 +39,7 @@ open ToolUp.Platform.BlobStorage
 let private platformContainer = ScopeKey.PlatformContainer
 let private root = "notification-preferences"
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 let private serialise (value: 'T) : byte[] =
     Encoding.UTF8.GetBytes(JsonSerializer.Serialize(value, jsonOptions))

@@ -14,7 +14,7 @@ open ToolUp.Platform.BlobStorage
 /// `FlagValue` is a DU that must round-trip through `Fable.SimpleJson`
 /// on the client (the platform's non-Remoting serialisation rule).
 module private Json =
-    let private options = FableConverters.create ()
+    let private options = PlatformJson.options
 
     let serialize (m: Map<string, FlagValue>) : byte[] =
         JsonSerializer.Serialize(m, options) |> Encoding.UTF8.GetBytes

@@ -33,7 +33,7 @@ let private configsPrefix (scopeId: string) = $"data-sources/{scopeId}/configs/"
 // `BlobJobStore`.
 
 module private Json =
-    let private options = FableConverters.create ()
+    let private options = PlatformJson.options
 
     let serialize (value: 'T) : byte[] =
         JsonSerializer.Serialize(value, options) |> Encoding.UTF8.GetBytes

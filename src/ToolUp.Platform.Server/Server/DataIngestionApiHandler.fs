@@ -26,7 +26,7 @@ open ToolUp.Platform.Config
 // `FableConverters` matches `AuditLog.fs`'s emission settings, so
 // payloads round-trip without re-deriving the wire shape.
 
-let private oauthRefreshJsonOptions = FableConverters.create ()
+let private oauthRefreshJsonOptions = PlatformJson.options
 
 let private decodeOAuthRefreshPayload<'T> (json: string) : 'T option =
     try

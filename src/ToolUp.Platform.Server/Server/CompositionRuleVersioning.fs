@@ -346,7 +346,7 @@ module RuleErrata =
     /// The canonical F#-aware serialiser options (Option / DU / record
     /// converters), so the published document reads the same way every
     /// other forge JSON surface does.
-    let private jsonOptions = FableConverters.create ()
+    let private jsonOptions = PlatformJson.options
 
     let private dispositionToWire (disposition: RuleErratumDisposition) : string =
         match disposition with

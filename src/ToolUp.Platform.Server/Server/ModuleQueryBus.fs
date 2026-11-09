@@ -18,7 +18,7 @@ open ToolUp.Platform.Infra.Tracing
 /// through DUs, options, and records (the platform's SSE serialisation
 /// rule).
 module private Json =
-    let private options = FableConverters.create ()
+    let private options = PlatformJson.options
 
     let serialize<'T> (value: 'T) : string =
         JsonSerializer.Serialize(value, options)

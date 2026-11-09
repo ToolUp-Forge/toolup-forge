@@ -107,7 +107,7 @@ module private BlobBackedLifecycleSummaryStoreInternal =
     /// F# records / DUs / options so the persisted `LifecycleSummary`
     /// round-trips with its `TenantLifecyclePhase` DU + nested outcome
     /// list intact. Constructed once at module level.
-    let jsonOptions = FableConverters.create ()
+    let jsonOptions = PlatformJson.options
 
 /// Phase 54e — `ILifecycleSummaryStore` backed by `IBlobStorage`. Each
 /// scope's last summary lives at

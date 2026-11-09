@@ -15,7 +15,7 @@ open ToolUp.Platform.Infra
 /// `ModuleVisibilityRule`) plus an `option`, and the bare-STJ default
 /// contract emits a shape that does not round-trip.
 module private Json =
-    let private options = FableConverters.create ()
+    let private options = PlatformJson.options
 
     let serialize (p: ModuleVisibilityProfile) : byte[] =
         JsonSerializer.Serialize(p, options) |> Encoding.UTF8.GetBytes

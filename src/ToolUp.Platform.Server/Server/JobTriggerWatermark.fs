@@ -95,7 +95,7 @@ let private CursorContainer = ScopeKey.PlatformContainer
 
 let private cursorBlobName (scopeId: string) = $"job-triggers/{scopeId}.cursor"
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 /// In-memory per-scope cursor map with blob-backed persistence.
 /// One instance per deployment, shared by `JobNotifyEventStore`

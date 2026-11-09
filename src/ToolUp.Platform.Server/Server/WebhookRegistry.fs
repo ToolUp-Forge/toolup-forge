@@ -52,7 +52,7 @@ let private allDeliveriesRoot = "webhooks/"
 // `Fable.SimpleJson` on the client). Same pattern as `BlobConfigStore`.
 
 module private Json =
-    let private options = FableConverters.create ()
+    let private options = PlatformJson.options
 
     let serialize (value: 'T) : byte[] =
         JsonSerializer.Serialize(value, options) |> Encoding.UTF8.GetBytes
@@ -80,7 +80,7 @@ let private SecretRotatedNotificationKey =
 /// `Json` module above deliberately — that one is the Fable-shaped
 /// PERSISTENCE codec for subscription blobs, and coupling a wire format
 /// to a storage format is how one of them ends up unable to change.
-let private envelopeJson = FableConverters.create ()
+let private envelopeJson = PlatformJson.options
 
 /// Phase 464 — this process's instance identity, stamped onto every
 /// published envelope so a receiving instance can tell a sibling's

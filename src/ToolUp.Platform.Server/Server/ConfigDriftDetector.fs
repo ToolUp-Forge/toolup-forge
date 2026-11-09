@@ -93,7 +93,7 @@ let rec private redact (node: JsonNode) : unit =
                 redact child
         | _ -> ()
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 let private serializeConfig (config: ServerConfig) : JsonObject =
     let raw = JsonSerializer.Serialize(config, jsonOptions)

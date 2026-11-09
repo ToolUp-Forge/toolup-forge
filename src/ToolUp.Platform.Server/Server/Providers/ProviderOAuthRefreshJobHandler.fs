@@ -71,7 +71,7 @@ type ProviderOAuthRefreshPayload = {
 }
 
 module ProviderOAuthRefreshPayload =
-    let private options = FableConverters.create ()
+    let private options = PlatformJson.options
 
     let serialize (payload: ProviderOAuthRefreshPayload) : string =
         JsonSerializer.Serialize(payload, options)

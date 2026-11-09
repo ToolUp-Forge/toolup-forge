@@ -46,7 +46,7 @@ open ToolUp.Platform.BlobStorage
 
 let private cursorContainer = ScopeKey.PlatformContainer
 
-let private cursorJsonOptions = FableConverters.create ()
+let private cursorJsonOptions = PlatformJson.options
 
 let private toCursorJson (cursor: AuditReplicatorCursor) =
     JsonSerializer.Serialize(cursor, cursorJsonOptions)

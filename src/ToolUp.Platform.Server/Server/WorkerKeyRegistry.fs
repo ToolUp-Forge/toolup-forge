@@ -586,7 +586,7 @@ type BlobWorkerKeyRegistry(blobs: IBlobStorage, now: unit -> DateTime) =
                 "blobs"
                 "BlobWorkerKeyRegistry requires an IBlobStorage that also implements IConditionalBlobStorage (conditional writes). Every mutation is a read-decide-write whose decision is a security decision — is this key revoked, does this material match — and a download-modify-upload fallback lets a concurrent first-contact enrolment overwrite a revocation and re-open a compromised key. Use InMemoryWorkerKeyRegistry for a single-instance deployment, or a blob backend with conditional-write support."
 
-    let json = FableConverters.create ()
+    let json = PlatformJson.options
 
     let keyName (workerId: string) (keyId: string) =
         $"%s{prefix}%s{workerId}/%s{keyId}.json"

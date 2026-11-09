@@ -89,7 +89,7 @@ module TreePatchEnvelope =
     /// STJ options with the full F# converter set (`Option` / DU / record)
     /// — the canonical non-Remoting JSON wire (matches the `Fable.SimpleJson`
     /// shape a browser client decodes). Built once at module load.
-    let private wireOptions = FableConverters.create ()
+    let private wireOptions = PlatformJson.options
 
     /// True when the envelope is a full-state SNAPSHOT (a resync reply or a
     /// re-base) rather than an incremental diff — i.e. it carries no

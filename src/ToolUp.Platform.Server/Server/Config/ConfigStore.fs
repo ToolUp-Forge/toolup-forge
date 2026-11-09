@@ -14,7 +14,7 @@ open ToolUp.Platform.BlobStorage
 /// DUs, and `option` types losslessly so modules can hand the store
 /// their domain records without hand-rolling a DTO layer.
 module private Json =
-    let private options = FableConverters.create ()
+    let private options = PlatformJson.options
 
     let serialize (value: 'T) : string =
         JsonSerializer.Serialize(value, options)

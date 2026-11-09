@@ -216,7 +216,7 @@ module internal DeliveryScope =
 
 // ─── Firing ────────────────────────────────────────────────────────────
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 let private originText (origin: DeliveryOrigin) =
     match origin with

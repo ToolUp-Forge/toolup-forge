@@ -207,7 +207,7 @@ type InMemoryCrdtDocumentStore(?now: unit -> DateTime) =
 /// Reads pass straight through — the decorator adds no caching, so it
 /// cannot go stale against the store it wraps.
 type NotifyingCrdtDocumentStore(inner: ICrdtDocumentStore, channel: INotificationChannel) =
-    let jsonOptions = FableConverters.create ()
+    let jsonOptions = PlatformJson.options
 
     let publish (change: CrdtChange) (update: CrdtUpdate) = async {
         try

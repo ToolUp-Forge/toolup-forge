@@ -35,7 +35,7 @@ let Container = ScopeKey.PlatformContainer
 [<Literal>]
 let private Prefix = "sessions/"
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 // ─── Session-id derivation ───────────────────────────────────────────
 

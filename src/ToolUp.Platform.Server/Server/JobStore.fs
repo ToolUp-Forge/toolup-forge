@@ -83,7 +83,7 @@ let private hashKey (key: string) =
 // `WebhookRegistry`, `ConfigStore`, `LineageStore`.
 
 module private Json =
-    let private options = FableConverters.create ()
+    let private options = PlatformJson.options
 
     let serialize (value: 'T) : byte[] =
         JsonSerializer.Serialize(value, options) |> Encoding.UTF8.GetBytes

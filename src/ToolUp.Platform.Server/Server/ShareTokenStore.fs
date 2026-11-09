@@ -106,7 +106,7 @@ let private tokensPrefix (scopeId: string) = $"share-tokens/{scopeId}/"
 // ─── JSON ────────────────────────────────────────────────────────────
 
 module private Json =
-    let private options = FableConverters.create ()
+    let private options = PlatformJson.options
 
     let serialize (value: 'T) : byte[] =
         JsonSerializer.Serialize(value, options) |> Encoding.UTF8.GetBytes

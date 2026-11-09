@@ -33,7 +33,7 @@ type SchemaMigrationJobPayload = {
     ActorUserId: UserId
 }
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 /// Serialise a payload for `JobRegistration.Payload` / `ScheduledJobDeclaration.withPayload`.
 let serialisePayload (payload: SchemaMigrationJobPayload) : string =

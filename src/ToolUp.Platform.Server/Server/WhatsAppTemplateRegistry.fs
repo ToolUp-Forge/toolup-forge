@@ -27,7 +27,7 @@ open ToolUp.Platform.BlobStorage
 [<Literal>]
 let private PlatformContainer = ScopeKey.PlatformContainer
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 /// `true` for a name that is safe to use as a blob-name segment: ASCII
 /// letters, digits, `_` and `-`, at most 512 characters. Both vendors'

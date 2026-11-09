@@ -236,7 +236,7 @@ let constantTimeEquals (expected: string) (actual: string) : bool =
 
 // ─── Audit emission helpers ──────────────────────────────────────────
 
-let private fableJsonOptions = FableConverters.create ()
+let private fableJsonOptions = PlatformJson.options
 
 let private serialize (value: 'T) : string =
     JsonSerializer.Serialize(value, fableJsonOptions)

@@ -56,7 +56,7 @@ let defaultAuditLookBack = TimeSpan.FromDays 90.0
 
 // Same converter set as the audit write path (`EventStoreAuditLog`),
 // so the payload decode here tracks the persisted wire shape.
-let private auditJsonOptions = FableConverters.create ()
+let private auditJsonOptions = PlatformJson.options
 
 /// Parse one stored membership blob (TeamManagement's wire shape) to
 /// `(teamId, role)` rows. A malformed / tombstoned blob degrades to

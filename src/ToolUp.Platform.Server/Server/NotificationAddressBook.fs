@@ -47,7 +47,7 @@ open ToolUp.Platform.BlobStorage
 [<Literal>]
 let private PlatformContainer = ScopeKey.PlatformContainer
 
-let private contactJsonOptions = FableConverters.create ()
+let private contactJsonOptions = PlatformJson.options
 
 /// Reserved blob name for a user's persisted contact record. The
 /// container is `_platform`; this nested path keeps each scope's

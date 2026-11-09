@@ -45,7 +45,7 @@ let private blobName (scopeId: string) (entry: NarrativeEntry) =
 
 // ─── JSON serialisation ──────────────────────────────────────────
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 let private serialize (entry: NarrativeEntry) : byte[] =
     let json = JsonSerializer.Serialize(entry, jsonOptions)

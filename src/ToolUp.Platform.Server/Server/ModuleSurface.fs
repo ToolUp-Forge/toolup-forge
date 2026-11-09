@@ -1102,7 +1102,7 @@ module ModuleSurface =
     /// The canonical wire serialiser (F# records / DUs / options round-trip
     /// through the same converter set the rest of the SDK's non-Remoting
     /// JSON uses).
-    let private jsonOptions = FableConverters.create ()
+    let private jsonOptions = PlatformJson.options
 
     /// Project a module's surface to JSON so an external tool can snapshot
     /// it without linking the server assembly. Deterministic: every list on

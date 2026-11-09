@@ -43,7 +43,7 @@ open ToolUp.Platform
 // operator-declared keys and nothing here adds to them. The only field this
 // handler contributes is the scope, which the request already carries.
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 /// Fallback scope when the caller resolves to none (anonymous mode, or a
 /// subject with no config scope). Matches the ad / consent sinks'

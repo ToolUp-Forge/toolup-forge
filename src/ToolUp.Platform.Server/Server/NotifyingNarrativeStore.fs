@@ -50,7 +50,7 @@ module NarrativeNotifications =
 /// harnesses without a channel working).
 type NotifyingNarrativeStore(inner: INarrativeStore, channel: INotificationChannel) =
 
-    let jsonOptions = FableConverters.create ()
+    let jsonOptions = PlatformJson.options
 
     let publishPayload (scopeId: string) (key: string) (payload: obj) : Async<unit> = async {
         if isNull (box channel) then

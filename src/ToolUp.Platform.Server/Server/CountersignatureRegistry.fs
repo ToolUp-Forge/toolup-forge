@@ -591,7 +591,7 @@ type BlobCountersignatureRegistry(blobs: IBlobStorage, signer: ICountersignature
         | Result.Ok cleanKind, Result.Ok cleanId -> Some $"{root}{cleanKind}/{cleanId}/"
         | _ -> None
 
-    let jsonOptions = FableConverters.create ()
+    let jsonOptions = PlatformJson.options
 
     let tryDecode (bytes: byte[]) =
         try
