@@ -12,9 +12,9 @@ open Microsoft.FSharp.Reflection
 // classification) and evaluates them per-request against an `IAuthContext`
 // resolved per the consumer's resolver.
 //
-// Wire-compatible: server-side enforcement only; the deny response uses
-// 69b.E's categorised envelope (`ErrorCategory.Auth`) so clients reading the
-// `error` body still parse.
+// Wire-compatible: server-side enforcement only; the deny response uses the
+// categorised envelope (`ErrorCategory.Auth`) so clients reading the `error`
+// body still parse.
 
 /// Caller must hold the named role for the method to dispatch.
 [<AttributeUsage(AttributeTargets.Property ||| AttributeTargets.Field, AllowMultiple = true)>]
@@ -31,7 +31,7 @@ type RequiresClaimAttribute(claim: string) =
     member val Value: string = null with get, set
 
 /// Caller must have a tenant context resolved. Use this to gate a method
-/// against tenant-bound subjects (Phase 66's `Subject.Tenant`).
+/// against tenant-bound subjects (`Subject.Tenant`).
 [<AttributeUsage(AttributeTargets.Property ||| AttributeTargets.Field)>]
 type TenantScopedAttribute() =
     inherit Attribute()
@@ -52,11 +52,11 @@ type PublicEndpointAttribute() =
 
 // -----------------------------------------------------------------------------
 
-/// The recognition mechanism Phase 335 introduced for the
-/// auth markers, factored out so the other attribute families riding the
-/// same dispatch path share ONE implementation instead of five copies
-/// that drift. Two matchers disagreeing about what counts as a marker is
-/// precisely the drift 335 was written to end, and five hand-rolled
+/// The recognition mechanism of the auth markers, shared so the other
+/// attribute families riding the same dispatch path use ONE implementation
+/// instead of five copies that drift. Two matchers disagreeing about what
+/// counts as a marker is precisely the drift identity matching ends, and
+/// five hand-rolled
 /// copies of "is this one of ours" would have re-created it a family at
 /// a time.
 ///
@@ -115,6 +115,7 @@ type internal MarkerFamily(sanctioned: Type seq) =
         |> List.collect (fun pi -> this.CollisionsOf pi |> List.map (fun rendered -> pi.Name, rendered))
 
 /// Result of evaluating a method's classification against an `IAuthContext`.
+[<RequireQualifiedAccess>]
 type AuthDecision =
     /// Method is allowed for this caller. Dispatch proceeds.
     | Allow
@@ -145,16 +146,16 @@ type Classified =
     /// The caller must meet every requirement.
     | Requires of requirements: AuthRequirement list
 
-/// The evaluator's view of a method. `Unclassified` is produced only by the
-/// legacy `AuthClassifier.classify` projection, for a field with no marker;
-/// the contract never yields it, and its removal rides the request-pipeline
-/// redesign. Internal visibility: the adapter assemblies consume it via
+/// The evaluator's view of a classified method. A field with no marker has
+/// no classification at all (it is absent from `AuthClassifier.classify`),
+/// so the evaluator never meets a method it would have to refuse by default.
+/// Internal visibility: the adapter assemblies consume it via
 /// InternalsVisibleTo.
+[<RequireQualifiedAccess>]
 type internal MethodClassification =
     | Public
     | Anonymous
     | RequiresAuth of requirements: AuthRequirement list
-    | Unclassified
 
 module internal AuthClassifier =
 
@@ -168,28 +169,25 @@ module internal AuthClassifier =
     // evaluation runs over the normalised `AuthRequirement` data.
     //
     // Recognition is by CLR TYPE IDENTITY over an allow-list
-    // of exactly those two families, NOT by bare simple name as 69d.tail
-    // shipped it. Simple-name matching made the classification input
+    // of exactly those two families, NOT by bare simple name. Simple-name
+    // matching would make the classification input
     // forgeable: any attribute applicable to a record field whose type
     // name happened to be `PublicEndpointAttribute` or
     // `AllowAnonymousAttribute` — very common names a consumer or a
-    // third-party package may well define — silently classified the
-    // method `Public` / `Anonymous`, so `evaluate` returned `Allow` for
-    // every caller with NO startup signal (the field *was* classified, so
-    // the default-deny startup gate was satisfied). Identity matching is
-    // stronger than the namespace-qualified name the phase asked for: it
-    // also pins the declaring ASSEMBLY, so a consumer type declared into
+    // third-party package may well define — would silently classify the
+    // method `Public` / `Anonymous`, so `evaluate` would return `Allow` for
+    // every caller with NO startup signal (the field *is* classified, so
+    // the default-deny startup gate is satisfied). Identity matching is
+    // stronger than a namespace-qualified name: it also pins the
+    // declaring ASSEMBLY, so a consumer type declared into
     // `namespace ToolUp.Remoting.Server` from its own assembly is foreign
     // too. Both families are compile-time referenceable from here
     // (Platform.Server already references Platform.Core), so the set is
     // built from `typeof<>` rather than from strings.
 
-    // The set and the simple-name collision detection now
-    // ride the shared `MarkerFamily` (above), which is the same code the
-    // audit / rate-limit / idempotency families use. The membership is
-    // unchanged; only the mechanism is shared, so the five recognisers
-    // can no longer drift apart the way this one drifted from
-    // `Streaming.fs`'s diagnostic between 69d.tail and 335.
+    // The set and the simple-name collision detection ride the shared
+    // `MarkerFamily` (above), the same code the audit / rate-limit /
+    // idempotency families use, so the recognisers cannot drift apart.
     let private markers =
         MarkerFamily [
             // Server-tier family (this assembly).
@@ -260,32 +258,29 @@ module internal AuthClassifier =
     /// The evaluator's view of a contract classification.
     let ofClassified (classified: Classified) : MethodClassification =
         match classified with
-        | Classified.PublicEndpoint -> Public
-        | Classified.AllowAnonymous -> Anonymous
-        | Classified.Requires requirements -> RequiresAuth requirements
+        | Classified.PublicEndpoint -> MethodClassification.Public
+        | Classified.AllowAnonymous -> MethodClassification.Anonymous
+        | Classified.Requires requirements -> MethodClassification.RequiresAuth requirements
 
     /// The authorisation-marker collisions on one field, rendered.
     let foreignMarkersOf (field: System.Reflection.PropertyInfo) : string list = markers.CollisionsOf field
 
-    /// Walk an API record type's fields, return classification per field: the
-    /// legacy projection, in which a field with no marker reads `Unclassified`.
+    /// Walk an API record type's fields and return the classification of
+    /// every field that carries a marker. A field with none is absent.
     let classify (apiType: Type) : Map<string, MethodClassification> =
         ApiRecord.fields apiType
-        |> Array.map (fun pi ->
-            pi.Name,
-            match classifiedOf pi with
-            | Some classified -> ofClassified classified
-            | None -> Unclassified)
+        |> Array.choose (fun pi ->
+            classifiedOf pi
+            |> Option.map (fun classified -> pi.Name, ofClassified classified))
         |> Map.ofArray
 
-    /// Return the list of unclassified method names for a classification map.
-    let unclassified (classifications: Map<string, MethodClassification>) : string list =
-        classifications
-        |> Map.toList
-        |> List.choose (fun (name, cls) ->
-            match cls with
-            | Unclassified -> Some name
-            | _ -> None)
+    /// The fields of an API record that carry no authorisation marker, in
+    /// declaration order.
+    let unclassified (apiType: Type) : string list =
+        ApiRecord.fields apiType
+        |> Array.filter (classifiedOf >> Option.isNone)
+        |> Array.map _.Name
+        |> List.ofArray
 
     /// Walk an API record's fields and return every attribute
     /// whose SIMPLE NAME collides with one of the sanctioned markers but
@@ -295,8 +290,8 @@ module internal AuthClassifier =
     ///
     /// A collision is refused at startup rather than merely ignored. Two
     /// reasons, and the second is why "ignore it" is not enough: a field
-    /// carrying ONLY the foreign marker now classifies `Unclassified`, so
-    /// the 69d gate would already refuse — but naming it "unclassified"
+    /// carrying ONLY the foreign marker has no classification, so the
+    /// unclassified-method refusal would already fire — but naming it "unclassified"
     /// misdescribes the cause and sends the consumer to annotate a field
     /// they believe they already annotated; and a field carrying a
     /// foreign `PublicEndpointAttribute` ALONGSIDE a genuine
@@ -313,8 +308,8 @@ module internal AuthClassifier =
     /// must yield back the field name. The classification map is keyed by
     /// field name; the dispatcher looks classifications up by runtime key.
     /// A custom `RouteBuilder` / casing / alias that breaks the round-trip
-    /// makes the per-request lookup miss — and (Phase 132 deny-on-miss)
-    /// deny every call. Returns the `(fieldName, divergentRuntimeKey)`
+    /// makes the per-request lookup miss, so the method's guard would not
+    /// be found. Returns the `(fieldName, divergentRuntimeKey)`
     /// pairs that do not round-trip; empty means every key aligns.
     let nonRoundTripping
         (routeBuilder: string -> string -> string)
@@ -344,7 +339,7 @@ module internal AuthClassifier =
         |> Map.toList
         |> List.collect (fun (_, cls) ->
             match cls with
-            | RequiresAuth reqs ->
+            | MethodClassification.RequiresAuth reqs ->
                 reqs
                 |> List.choose (function
                     | RoleRequired r -> Some r
@@ -357,24 +352,20 @@ module internal AuthClassifier =
     /// dispatcher calls this on every successful endpoint lookup.
     let evaluate (classification: MethodClassification) (context: IAuthContext option) : AuthDecision =
         match classification with
-        | Public -> Allow
-        | Anonymous ->
+        | MethodClassification.Public -> AuthDecision.Allow
+        | MethodClassification.Anonymous ->
             // Anonymous methods accept anyone — the auth context, if
             // present, isn't enforced (used for telemetry only).
-            Allow
-        | Unclassified ->
-            // Should never reach here; startup-classifier refuses to start.
-            // Belt + braces — fail-closed if reached at runtime.
-            Deny "unclassified-method"
-        | RequiresAuth requirements ->
+            AuthDecision.Allow
+        | MethodClassification.RequiresAuth requirements ->
             match context with
             | None ->
                 // No auth-context resolver registered, but the method
                 // requires one. Fail-closed.
-                Deny "no-auth-context-resolver"
+                AuthDecision.Deny "no-auth-context-resolver"
             | Some ctx ->
                 if ctx.IsAnonymous() then
-                    Deny "anonymous-not-permitted"
+                    AuthDecision.Deny "anonymous-not-permitted"
                 else
                     let denials =
                         requirements
@@ -393,6 +384,6 @@ module internal AuthClassifier =
                             | TenantRequired -> if ctx.HasTenant() then None else Some "missing-tenant")
 
                     if List.isEmpty denials then
-                        Allow
+                        AuthDecision.Allow
                     else
-                        Deny(String.concat "; " denials)
+                        AuthDecision.Deny(String.concat "; " denials)

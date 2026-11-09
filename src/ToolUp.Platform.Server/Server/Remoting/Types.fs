@@ -130,6 +130,7 @@ type CategorisedErrorResult<'a> = {
 
 /// The ErrorResult lets you choose whether you want to propagate a custom error back to the client or to ignore it. Either case, an exception is thrown on the call-site from the client.
 /// `PropagateCategorised` lets a handler can attach an `ErrorCategory` for client-side branching.
+[<RequireQualifiedAccess>]
 type ErrorResult =
     | Ignore
     | Propagate of obj
@@ -150,12 +151,14 @@ type ErrorHandler<'context> = System.Exception -> RouteInfo<'context> -> ErrorRe
 /// `Api.make` time. Closes the build-once / read-per-call class of
 /// defect that the closure-captured sync pattern was prone to when a
 /// composition-root closure captured a still-uninitialised value.
+[<RequireQualifiedAccess>]
 type ProtocolImplementation<'context, 'serverImpl> =
     | Empty
     | StaticValue of 'serverImpl
     | FromContext of ('context -> 'serverImpl)
     | FromContextAsync of ('context -> Async<'serverImpl>)
 
+[<RequireQualifiedAccess>]
 type SerializationType =
     | Json
     | MessagePack
@@ -208,7 +211,7 @@ type internal InvocationPropsInt = {
     Output: Stream
 }
 
-type InvocationProps<'impl> = {
+type internal InvocationProps<'impl> = {
     Input: Stream
     /// When the adapter's body cache has already
     /// materialised the request bytes (via validation / audit /
@@ -234,24 +237,6 @@ type MakeEndpointProps = {
     JsonSerializer: JsonSerializerBackend
     FlattenedTypes: Type[]
 }
-
-type InvocationResult =
-    | Success of isBinaryOutput: bool
-    | EndpointNotFound
-    | InvalidHttpVerb
-    | Exception of exn * functionName: string * requestBodyText: string option
-    /// The request did not DECODE. Distinct from `Exception`
-    /// because it is a caller-side mistake, not a server fault: the
-    /// handler never ran, nothing partial was committed, and retrying the
-    /// identical bytes will fail identically. Adapters route it to the
-    /// `ErrorCategory.Validation` envelope + HTTP 400, never to
-    /// `Errors.unhandled` + 500.
-    ///
-    /// Carrying it as its own case rather than as a typed exception
-    /// inside `Exception` is deliberate: an adapter that forgets to
-    /// handle it fails to COMPILE, whereas a missed type test would
-    /// silently fall back to the 500 this phase exists to remove.
-    | DecodeRefused of error: DecodeError * functionName: string
 
 // an example is a list of arguments and the description of the example
 type Example = obj list * string
@@ -464,13 +449,13 @@ type RequestBodyDisposedException(methodName: string, responseHadStarted: bool, 
 /// type are replayed verbatim so the client sees a byte-identical
 /// response.
 ///
-/// `RequestBodyHash` (0.1.15) is a SHA-256 (lowercase hex) of the
+/// `RequestBodyHash` is a SHA-256 (lowercase hex) of the
 /// original request body — the dispatcher compares the current call's
 /// body hash against this on TryGet replays and returns
 /// `ErrorCategory.User` / 409 Conflict when they differ. Closes the
 /// Stripe-pattern footgun where a client reuses an idempotency key
 /// against a mutated body and silently gets back the prior response.
-/// Empty string for legacy entries materialised by 0.1.14 stores.
+/// Empty for an entry stored without one, which is never compared.
 type MemoisedResponse = {
     Body: byte[]
     StatusCode: int
@@ -586,15 +571,8 @@ type IJobDispatcher =
 
 /// Telemetry hook.
 ///
-/// Per-method outcome emitted by the dispatcher after each invocation.
-/// `Failed` carries the exception that was thrown; in a later phase the
-/// error envelope grows a categorisation DU and that category will ride
-/// alongside the exception here.
-///
-/// `[<RequireQualifiedAccess>]` because the case names would otherwise
-/// shadow existing `InvocationResult.Success` (the internal proxy
-/// dispatch result) — qualified-access forces `MethodOutcome.Succeeded`
-/// / `MethodOutcome.Failed` at every call site, eliminating the clash.
+/// Per-method outcome emitted by the dispatcher once per call, when the
+/// call settles. `Failed` carries the exception that was thrown.
 [<RequireQualifiedAccess>]
 type MethodOutcome =
     | Succeeded
@@ -674,6 +652,7 @@ type IRemotingTelemetry =
 /// `[]` flows through unchanged. To opt out (e.g. you want to receive
 /// literal empty bodies for non-Remoting clients hitting the same
 /// route), pipe through `Remoting.withoutBodyNormalisation`.
+[<RequireQualifiedAccess>]
 type BodyNormalisation =
     | Enabled
     | Disabled
@@ -752,7 +731,7 @@ type RemotingOptions<'context, 'serverImpl> = {
     /// `ForwardedHeadersMiddleware` with `KnownProxies` /
     /// `KnownNetworks` to whitelist trusted hops. Without this, every
     /// anonymous request from the Internet collapses into a single
-    /// rate-limit bucket per proxy IP — defeating the 0.1.14
+    /// rate-limit bucket per proxy IP — defeating the
     /// per-IP partition.
     RemoteIpResolver: ('context -> string option) option
     /// The `IJobDispatcher` behind every method returning

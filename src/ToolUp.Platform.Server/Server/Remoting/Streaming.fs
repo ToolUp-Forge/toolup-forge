@@ -5,6 +5,7 @@ open System.Collections.Generic
 open System.Reflection
 open System.Text
 open System.Text.Json
+open System.Threading
 open System.Threading.Channels
 open System.Threading.Tasks
 open Microsoft.FSharp.Reflection
@@ -14,22 +15,16 @@ open ToolUp.Remoting
 // Server-sent streaming via IAsyncEnumerable<'T>
 // =============================================================================
 //
-// API record fields whose F# function shape returns `IAsyncEnumerable<'T>`
-// are classified as streaming methods at startup. At request time the
-// dispatcher bypasses the proxy entirely:
-//   * Body is parsed; the first argument is deserialised via STJ
-//   * The method's function value is invoked via reflection on the impl
-//   * The returned IAsyncEnumerable is iterated; each element is framed as
-//     an `event: chunk` carrying `id: <correlation-id>-<chunk-index>`
-//   * On normal end of sequence: `event: complete`
-//   * On exception: `event: error` carrying `{"message":"…"}`
-// The bytes are Core's `Sse.encode`, the grammar the Fable client parses with.
-//
-// v0 supports unary methods only (single arg → IAsyncEnumerable). Multi-arg
-// curried methods are a follow-up (need recursive Invoke unfurling).
-// Method shape is NON-async outer (`'arg -> IAsyncEnumerable<'T>`) to keep
-// the reflection path simple; an Async<IAsyncEnumerable> shape is a
-// follow-up that adds the `Async.StartAsTask` reflection bridge.
+// An API record field whose function shape returns `IAsyncEnumerable<'T>`
+// is a streaming method. It is a call like any other: it runs through every
+// stage of the request pipeline (authorisation, validation, rate limit,
+// audit), its argument decodes through the proxy's own argument seam, and
+// the proxy answers it with a `StreamSource` instead of a written result.
+// The response writer then iterates the source under the request's abort
+// token and frames each element as an `event: chunk` carrying
+// `id: <correlation-id>-<chunk-index>`, then `event: complete`, or
+// `event: error` carrying `{"message":"…"}` when the producer faults. The
+// bytes are Core's `Sse.encode`, the grammar the Fable client parses with.
 
 /// Public helpers for *producing* the `IAsyncEnumerable<'T>`
 /// a streaming method returns. The dispatcher (internal `Streaming` module
@@ -39,6 +34,59 @@ open ToolUp.Remoting
 /// producer) rather than a natural pull-based sequence.
 [<RequireQualifiedAccess>]
 module AsyncStream =
+
+    /// How many values a bridge holds for a consumer that has not read them.
+    [<Literal>]
+    let Capacity = 64
+
+    /// `emit` for a callback producer over a bounded channel: a value the
+    /// channel has room for is written at once; on a full channel the
+    /// producer is HELD until the consumer reads (back-pressure: a
+    /// synchronous callback has no other way to wait, and it is the
+    /// producer's thread that waits, never the request's). A value emitted
+    /// after the consumer left (the channel completed, or `ct` signalled) is
+    /// dropped: `emit` never throws into the producer, whose detached tail
+    /// would otherwise fault on the thread pool.
+    let private holdingEmit (channel: Channel<'T>) (ct: CancellationToken) (value: 'T) : unit =
+        if not (channel.Writer.TryWrite value) then
+            try
+                channel.Writer.WriteAsync(value, ct).AsTask().Wait()
+            with _ ->
+                ()
+
+    /// The consumer's side of a bridge: ends after the first value satisfying
+    /// `isTerminal` (that value IS yielded), and on disposal runs `release`
+    /// and closes the channel.
+    let private terminating
+        (isTerminal: 'T -> bool)
+        (channel: Channel<'T>)
+        (release: unit -> unit)
+        (ct: CancellationToken)
+        : IAsyncEnumerator<'T> =
+        let inner = channel.Reader.ReadAllAsync(ct).GetAsyncEnumerator ct
+
+        { new IAsyncEnumerator<'T> with
+            member _.Current = inner.Current
+
+            member _.MoveNextAsync() =
+                ValueTask<bool>(
+                    task {
+                        let! moved = inner.MoveNextAsync()
+
+                        if moved && isTerminal inner.Current then
+                            // Terminal value yielded: close the writer so the
+                            // reader drains and the next move ends.
+                            channel.Writer.TryComplete() |> ignore
+
+                        return moved
+                    }
+                )
+
+            member _.DisposeAsync() =
+                release ()
+                channel.Writer.TryComplete() |> ignore
+                inner.DisposeAsync()
+        }
 
     /// Bridge a push-based producer to an `IAsyncEnumerable<'T>`.
     ///
@@ -61,15 +109,21 @@ module AsyncStream =
     /// by design, since the detached-tail case can't distinguish "foreground
     /// done" from "production done". Producers that are fully synchronous
     /// simply emit their terminal value last.
+    ///
+    /// The producer is started under the consumer's token, which the
+    /// dispatcher passes as the request's `RequestAborted`: a client that
+    /// leaves cancels it. At most `Capacity` values wait for the consumer; a
+    /// producer that outruns it is held in `emit` until it reads.
     let fromCallback (isTerminal: 'T -> bool) (runProducer: ('T -> unit) -> Async<unit>) : IAsyncEnumerable<'T> =
         { new IAsyncEnumerable<'T> with
-            member _.GetAsyncEnumerator(ct: System.Threading.CancellationToken) =
-                let channel = Channel.CreateUnbounded<'T>()
+            member _.GetAsyncEnumerator(ct: CancellationToken) =
+                let channel =
+                    Channel.CreateBounded<'T>(BoundedChannelOptions(Capacity, FullMode = BoundedChannelFullMode.Wait))
 
                 Async.Start(
                     async {
                         try
-                            do! runProducer (fun v -> channel.Writer.TryWrite v |> ignore)
+                            do! runProducer (holdingEmit channel ct)
                         with ex ->
                             // Foreground fault before any terminal was emitted —
                             // surface it as the stream's terminal so the consumer
@@ -79,29 +133,7 @@ module AsyncStream =
                     ct
                 )
 
-                let inner = channel.Reader.ReadAllAsync(ct).GetAsyncEnumerator ct
-
-                { new IAsyncEnumerator<'T> with
-                    member _.Current = inner.Current
-
-                    member _.MoveNextAsync() =
-                        ValueTask<bool>(
-                            task {
-                                let! moved = inner.MoveNextAsync()
-
-                                if moved && isTerminal inner.Current then
-                                    // Terminal value yielded — close the writer so
-                                    // the reader drains and the next move ends.
-                                    channel.Writer.TryComplete() |> ignore
-
-                                return moved
-                            }
-                        )
-
-                    member _.DisposeAsync() =
-                        channel.Writer.TryComplete() |> ignore
-                        inner.DisposeAsync()
-                }
+                terminating isTerminal channel ignore ct
         }
 
     /// Bridge a SUBSCRIPTION-based producer to an
@@ -130,10 +162,19 @@ module AsyncStream =
     /// `isTerminal`, or the consumer MUST dispose. A feed that does
     /// neither holds the subscription open, exactly as `fromCallback`'s
     /// contract says of a producer that never emits its terminal.
+    ///
+    /// A feed is never held by a slow consumer, since it serves every
+    /// subscriber from one publisher: at most `Capacity` values wait, and the
+    /// OLDEST is dropped to make room, so the newest value, the terminal one
+    /// included, always reaches the consumer. A feed's values are states, not
+    /// increments, so a dropped intermediate state loses nothing.
     let fromSubscription (isTerminal: 'T -> bool) (subscribe: ('T -> unit) -> IDisposable) : IAsyncEnumerable<'T> =
         { new IAsyncEnumerable<'T> with
-            member _.GetAsyncEnumerator(ct: System.Threading.CancellationToken) =
-                let channel = Channel.CreateUnbounded<'T>()
+            member _.GetAsyncEnumerator(ct: CancellationToken) =
+                let channel =
+                    Channel.CreateBounded<'T>(
+                        BoundedChannelOptions(Capacity, FullMode = BoundedChannelFullMode.DropOldest)
+                    )
 
                 let subscription =
                     try
@@ -148,31 +189,24 @@ module AsyncStream =
                             member _.Dispose() = ()
                         }
 
-                let inner = channel.Reader.ReadAllAsync(ct).GetAsyncEnumerator ct
-
-                { new IAsyncEnumerator<'T> with
-                    member _.Current = inner.Current
-
-                    member _.MoveNextAsync() =
-                        ValueTask<bool>(
-                            task {
-                                let! moved = inner.MoveNextAsync()
-
-                                if moved && isTerminal inner.Current then
-                                    channel.Writer.TryComplete() |> ignore
-
-                                return moved
-                            }
-                        )
-
-                    member _.DisposeAsync() =
-                        // The whole reason this bridge exists: the feed is
-                        // told, exactly once, that nobody is listening.
-                        subscription.Dispose()
-                        channel.Writer.TryComplete() |> ignore
-                        inner.DisposeAsync()
-                }
+                // The whole reason this bridge exists: the feed is told,
+                // exactly once, that nobody is listening.
+                terminating isTerminal channel subscription.Dispose ct
         }
+
+/// What a streaming call answers with: the producer, opened under the
+/// request's abort token, and how one element is encoded. Built for a typed
+/// stream by `Streaming.sourceOf<'T>`, whose element type is closed once per
+/// method when the proxy is built, so iterating it makes no reflective call.
+[<NoComparison; NoEquality>]
+type internal StreamSource = {
+    /// The element type `'T`.
+    Element: Type
+    /// Open the producer; the token is the request's `RequestAborted`.
+    Produce: CancellationToken -> IAsyncEnumerator<obj>
+    /// One element's JSON: the composed serializer at the element type.
+    Encode: obj -> string
+}
 
 module internal Streaming =
 
@@ -197,187 +231,35 @@ module internal Streaming =
         else
             None
 
-    /// Cache per-method classification at startup. Returns a map from
-    /// method name → (arg type, element type) ONLY for streaming
-    /// methods; non-streaming methods are absent so per-call lookup is
-    /// a fast Map.tryFind miss.
-    let classify (apiType: Type) : Map<string, Type * Type> =
-        ApiRecord.fields apiType
-        |> Array.choose (fun apiField -> shapeOf apiField |> Option.map (fun shape -> apiField.Name, shape))
-        |> Map.ofArray
+    /// The source of a typed stream, encoding each element with `options` at
+    /// its declared type, so a `null` element (a `None`) encodes as such
+    /// rather than faulting on its runtime type.
+    let sourceOf<'T> (options: JsonSerializerOptions) (stream: IAsyncEnumerable<'T>) : StreamSource = {
+        Element = typeof<'T>
+        Produce =
+            fun ct ->
+                let inner = stream.GetAsyncEnumerator ct
 
-    // ── Align this diagnostic with the dispatch classifiers.
-    //
-    // This diagnostic once matched every marker by bare simple type name,
-    // which was consistent with the classifiers of the day. The auth
-    // classifier then moved to CLR type identity and left this one
-    // behind, so two matchers disagreed about what counts as
-    // `[<RequiresRole>]` — exactly the drift that move was written to end.
-    //
-    // The diagnostic is fail-SAFE (a missed match produces a diagnostic,
-    // not an authorisation), so this is a correctness-of-message item
-    // rather than a hole — with ONE exception that is a real defect: the
-    // pre-727 matcher recognised `RateLimitAttribute` only via a
-    // server-tier type test, and its name arm had no `RateLimitAttribute`
-    // case, so a tier-shared `ToolUp.Platform.RateLimitAttribute` on a
-    // streaming method was recognised by NEITHER path. The adapter
-    // started, and the declared budget was silently dropped by the SSE
-    // short-circuit — which is the precise outcome this refusal exists to
-    // prevent, on the family (Fable-compiled Core API records) that
-    // carries the mirror in the first place. Identity matching over both
-    // families fixes that by construction.
-    //
-    // A foreign attribute of a colliding name is still REPORTED, rendered
-    // as a collision rather than as a declared guard: the refusal is
-    // preserved (never weakened), and the message stops asserting that
-    // the consumer declared a `[<RequiresRole>]` this SDK would honour.
-    // That is what makes the two matchers agree on the forged case — both
-    // now say "this is not one of our markers", where before one silently
-    // ignored it and the other named it as a guard.
-    let private preflightMarkers =
-        MarkerFamily [
-            // Server-tier family (this assembly).
-            typeof<RequiresRoleAttribute>
-            typeof<RequiresClaimAttribute>
-            typeof<TenantScopedAttribute>
-            typeof<RateLimitAttribute>
-            typeof<AuditAttribute>
-            typeof<IdempotentAttribute>
-            // Tier-shared mirror family (`ToolUp.Platform.Core`).
-            typeof<ToolUp.Platform.RequiresRoleAttribute>
-            typeof<ToolUp.Platform.RequiresClaimAttribute>
-            typeof<ToolUp.Platform.TenantScopedAttribute>
-            typeof<ToolUp.Platform.RateLimitAttribute>
-            typeof<ToolUp.Platform.AuditAttribute>
-            typeof<ToolUp.Platform.IdempotentAttribute>
-        ]
+                { new IAsyncEnumerator<obj> with
+                    member _.Current = box inner.Current
+                    member _.MoveNextAsync() = inner.MoveNextAsync()
+                    member _.DisposeAsync() = inner.DisposeAsync()
+                }
+        Encode = fun element -> JsonSerializer.Serialize<'T>(unbox<'T> element, options)
+    }
 
-    let private stringProp (name: string) (a: obj) : string option =
-        match a.GetType().GetProperty name with
-        | null -> None
-        | p ->
-            match p.GetValue a with
-            | :? string as s -> Some s
-            | _ -> None
+    type private SourceOf =
+        static member For<'T>() : JsonSerializerOptions -> obj -> StreamSource =
+            fun options stream -> sourceOf<'T> options (stream :?> IAsyncEnumerable<'T>)
 
-    let private intProp (name: string) (a: obj) : int option =
-        match a.GetType().GetProperty name with
-        | null -> None
-        | p ->
-            match p.GetValue a with
-            | :? int as i -> Some i
-            | _ -> None
-
-    /// Describe one attribute on a streaming method: `Some` when it is a
-    /// sanctioned pre-flight marker the SSE path cannot enforce, or a
-    /// foreign attribute colliding with one of their names; `None` when
-    /// it is neither. The name dispatch runs INSIDE the identity gate, so
-    /// it decodes a type already established as ours rather than guessing
-    /// from a name (the same shape as `AuthClassifier.tryRequirement`).
-    let private describeUnenforceable (a: obj) : string option =
-        let t = a.GetType()
-
-        if preflightMarkers.IsForeign t then
-            Some(
-                sprintf
-                    "foreign '%s' — name collides with a pre-flight marker; not honoured"
-                    (preflightMarkers.Render t)
-            )
-        elif not (preflightMarkers.IsSanctioned t) then
-            None
-        else
-            match t.Name with
-            | "RequiresRoleAttribute" ->
-                Some(sprintf "RequiresRole(\"%s\")" (stringProp "Role" a |> Option.defaultValue "?"))
-            | "RequiresClaimAttribute" ->
-                Some(sprintf "RequiresClaim(\"%s\")" (stringProp "Claim" a |> Option.defaultValue "?"))
-            | "TenantScopedAttribute" -> Some "TenantScoped"
-            | "RateLimitAttribute" ->
-                let count = intProp "Count" a |> Option.defaultValue 0
-                let window = intProp "WindowSeconds" a |> Option.defaultValue 0
-                Some(sprintf "RateLimit(%d, %ds)" count window)
-            | "AuditAttribute" -> Some(sprintf "Audit(\"%s\")" (stringProp "KindName" a |> Option.defaultValue "?"))
-            | "IdempotentAttribute" -> Some "Idempotent"
-            | _ -> None
-
-    /// Return the names of streaming methods that carry pre-flight
-    /// attributes the streaming dispatch path doesn't honour today.
-    /// `[<RequiresRole>]` / `[<RequiresClaim>]` / `[<TenantScoped>]` /
-    /// `[<RateLimit>]` / `[<Audit>]` / `[<Idempotent>]` on a streaming
-    /// method are silently ignored by the SSE short-circuit; the
-    /// adapter refuses to start when any are present, forcing the
-    /// composer to either drop the attribute or convert the method
-    /// off the streaming shape until per-frame composition lands.
-    /// `[<AllowAnonymous>]` and `[<PublicEndpoint>]` are explicit
-    /// "no auth needed" markers — those are honoured (they're
-    /// requirements only at the level of the auth classifier, not
-    /// enforced per-request).
-    let unenforceableOf (apiField: PropertyInfo) : string list =
-        match shapeOf apiField with
-        | None -> []
-        | Some _ ->
-            apiField.GetCustomAttributes(true)
-            |> Array.choose describeUnenforceable
-            |> Array.toList
-
-    /// Every streaming method with its unenforceable attributes, in field order.
-    let streamingMethodsCarryingUnenforceableAttributes (apiType: Type) : (string * string list) list =
-        ApiRecord.fields apiType
-        |> Array.toList
-        |> List.choose (fun apiField ->
-            match unenforceableOf apiField with
-            | [] -> None
-            | attrs -> Some(apiField.Name, attrs))
-
-    /// Read the request body and deserialise the first array element
-    /// as the streaming method's argument. Same shape as the validation
-    /// engine's parser; factored to a local helper to avoid coupling
-    /// the streaming dispatch to the Validation module.
-    let parseFirstArg (bodyText: string) (argType: Type) (options: JsonSerializerOptions) : obj option =
-        try
-            use doc = JsonDocument.Parse bodyText
-
-            if doc.RootElement.ValueKind <> JsonValueKind.Array then
-                None
-            elif doc.RootElement.GetArrayLength() = 0 then
-                None
-            else
-                let firstArg = doc.RootElement[0]
-                let raw = firstArg.GetRawText()
-                Some(JsonSerializer.Deserialize(raw, argType, options))
-        with _ ->
-            None
-
-    /// Invoke the streaming method on `impl` with the deserialised
-    /// `arg`, returning the resulting `IAsyncEnumerable` as a non-
-    /// generic interface (`IEnumerator`-shaped). Uses reflection over
-    /// the FSharpFunc's `Invoke` method.
-    ///
-    /// Null-guards on both `pi` (property missing) AND on
-    /// `funcObj` (the property's value is null — e.g. the impl
-    /// record was constructed with `Unchecked.defaultof<_>` or a
-    /// partial-record builder that didn't populate every field).
-    /// Previously the latter NREd silently outside any try/with;
-    /// now both paths surface a clear `invalidOp` the adapter's
-    /// streaming-branch try/with can convert to an SSE error frame.
-    let invokeMethod (impl: obj) (methodName: string) (arg: obj) : obj =
-        let pi = impl.GetType().GetProperty methodName
-
-        if isNull pi then
-            invalidOp (sprintf "method '%s' not found on %s" methodName (impl.GetType().Name))
-        else
-            let funcObj = pi.GetValue impl
-
-            if isNull funcObj then
-                invalidOp (
-                    sprintf
-                        "streaming method '%s' on %s is null — the impl record was constructed without populating this field"
-                        methodName
-                        (impl.GetType().Name)
-                )
-
-            let invokeMethod = funcObj.GetType().GetMethod "Invoke"
-            invokeMethod.Invoke(funcObj, [| arg |])
+    /// `sourceOf` for an element type known only as a `Type`, closed over it
+    /// ONCE: the function returned makes no reflective call.
+    let sourceFor (element: Type) : JsonSerializerOptions -> obj -> StreamSource =
+        typeof<SourceOf>
+            .GetMethod("For", BindingFlags.Static ||| BindingFlags.Public ||| BindingFlags.NonPublic)
+            .MakeGenericMethod([| element |])
+            .Invoke(null, [||])
+        :?> JsonSerializerOptions -> obj -> StreamSource
 
     /// Frame one element as an `event: chunk` carrying the dispatcher's
     /// `id: <correlation-id>-<chunk-index>` (zero-based), so every chunk is

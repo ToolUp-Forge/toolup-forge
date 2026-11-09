@@ -25,63 +25,24 @@ let jsonSerializeWithBackend (backend: JsonSerializerBackend) (o: 'a) (stream: S
 /// into `HttpResponse.Body`. Kestrel runs with `AllowSynchronousIO=false`
 /// by default, which rejects the sync `JsonSerializer.Serialize(stream,...)`
 /// overload with `InvalidOperationException: Synchronous operations are
-/// disallowed.` Callers writing the envelope directly into the response
-/// body (Giraffe `setJsonBody` / `setResponseBody` hot path, AspNetCore
-/// middleware equivalent) must use this overload.
+/// disallowed.` A caller writing directly into the response body (the
+/// pipeline's response writer) must use this overload.
 let jsonSerializeWithBackendAsync (backend: JsonSerializerBackend) (o: 'a) (stream: Stream) =
     match backend with
     | SystemTextJson stjOptions -> JsonSerializer.SerializeAsync<'a>(stream, o, stjOptions)
 
-/// Phase 69m — parse the outer arguments-array JSON into a list of
-/// per-argument `JsonElement` clones. Each element is `Clone()`d so it
-/// survives the parent JsonDocument's disposal (the clone produces a
-/// self-contained JsonElement backed by a fresh small JsonDocument
-/// holding only that element's bytes). The per-argument deserialise
-/// path consumes the JsonElement directly — no re-parse per argument.
-///
-/// Previously this function returned `string list` (raw JSON text per
-/// argument) and the deserialise path re-parsed each slice into its
-/// own JsonDocument, costing N+1 parses for N arguments.
-let private parseArgumentArray
-    (_backend: JsonSerializerBackend)
-    (functionName: string)
-    (expectedArgCount: int)
-    (text: string)
-    : JsonElement list =
-    // Phase 783 — the outer-array parse is part of the decode seam: a
-    // body that is not JSON at all, and a body that is JSON but not an
-    // array, are both caller-side shape mistakes and refuse rather than
-    // throw. `JsonDocument.Parse` itself raises `JsonException` on
-    // malformed input, so the `try` is load-bearing, not defensive.
-    use doc =
-        try
-            JsonDocument.Parse(text)
-        with :? JsonException as ex ->
-            DecodeError.failAt
-                [ sprintf "%s(args)" functionName ]
-                (sprintf "a JSON array of %d argument(s)" expectedArgCount)
-                (sprintf "malformed JSON (%s)" ex.Message)
-
-    if doc.RootElement.ValueKind <> JsonValueKind.Array then
-        DecodeError.failAt
-            [ sprintf "%s(args)" functionName ]
-            (sprintf "a JSON array of %d argument(s)" expectedArgCount)
-            (string doc.RootElement.ValueKind)
-
-    doc.RootElement.EnumerateArray() |> Seq.map _.Clone() |> Seq.toList
-
-/// Phase 69m — parse the outer arguments-array from cached bytes
-/// directly (no string materialisation). Used when the adapter's body
-/// cache already holds the bytes for upstream pre-flight stages
-/// (validation / audit / idempotency-hash); the proxy reads from there
-/// instead of re-allocating a string + re-reading the request stream.
+/// Parse the outer arguments array of a body into one self-contained
+/// (`Clone`d) `JsonElement` per argument, so each argument deserialises
+/// without a re-parse. The outer parse is part of the decode seam: a body
+/// that is not JSON, or is JSON but not an array, is a caller-side shape
+/// mistake and refuses rather than throws (`JsonDocument.Parse` raises on
+/// malformed input, so the `try` is load-bearing).
 let private parseArgumentArrayBytes
     (_backend: JsonSerializerBackend)
     (functionName: string)
     (expectedArgCount: int)
     (bytes: byte[])
     : JsonElement list =
-    // Phase 783 — same refusal shape as the text path above.
     use doc =
         try
             JsonDocument.Parse(System.ReadOnlyMemory bytes)
@@ -99,19 +60,13 @@ let private parseArgumentArrayBytes
 
     doc.RootElement.EnumerateArray() |> Seq.map _.Clone() |> Seq.toList
 
-/// Phase 69m — deserialise one `JsonElement` argument into `'inp`.
-/// `JsonElement.Deserialize` walks the existing element's tokens; no
-/// re-parse. Previously this function took raw JSON text and called
-/// `JsonSerializer.Deserialize<'inp>(text, opts)`, which re-parsed
-/// the slice into its own JsonDocument per argument.
+/// Deserialise one `JsonElement` argument into `'inp`, refusing rather than
+/// throwing. Routes through the one seam in `FableConverters`, so every
+/// exception System.Text.Json or the converter set can raise arrives here as
+/// a `DecodeError` naming the argument's path, its expected type and what
+/// the wire actually held.
 ///
-/// Phase 783 — now the refusing form of that deserialise. Routes
-/// through the one seam in `FableConverters` (`tryDeserialise`), so every
-/// exception System.Text.Json or the converter set can raise arrives here
-/// as a `DecodeError` naming the argument's path, its expected type and
-/// what the wire actually held.
-///
-/// Phase 839 — `recordName` is the owning API record's name
+/// `recordName` is the owning API record's name
 /// (`makeProps.RecordName`), passed through to `FableConverters.tryDeserialiseFor`
 /// so a decoder registered for THIS record wins over one registered
 /// unscoped for the same argument type.
@@ -155,7 +110,7 @@ let private (|Task|_|) (s: TypeShape) =
         |> Some
     | _ -> None
 
-/// 0.1.15 — copy a multipart section's body into the supplied stream
+/// Copy a multipart section's body into the supplied stream
 /// with a hard byte cap. Raises a clear error if the cap is exceeded
 /// before materialising the entire section's bytes (would otherwise
 /// OOM the host on a hostile request).
@@ -176,7 +131,7 @@ let private copyWithCap (source: Stream) (target: Stream) (cap: int64) (sectionI
                     copied <- copied + int64 n
 
                     if copied > cap then
-                        // 0.1.16 — typed exception so the adapter can map
+                        // A typed exception so the pipeline can map
                         // to `ErrorCategory.User` + 413 Payload Too Large
                         // rather than the generic `System` category any
                         // plain failwithf would land in.
@@ -219,7 +174,7 @@ let private readMultipartArgs props (options: RemotingOptions<_, _>) = task {
             go <- false
         else
             if sectionIdx >= sectionCountCap then
-                // 0.1.16 — typed exception (see copyWithCap above).
+                // A typed exception (see copyWithCap above).
                 raise (
                     MultipartCapExceededException(
                         sprintf
@@ -242,7 +197,7 @@ let private readMultipartArgs props (options: RemotingOptions<_, _>) = task {
 
                 do! copyWithCap section.Body buffer sectionCap sectionIdx
 
-                // Phase 69m — multipart JSON sections are single values
+                // Multipart JSON sections are single values
                 // (one argument per multipart part), so the section's
                 // payload IS the per-argument JSON. Parse directly from
                 // the buffer's bytes into a `JsonElement` (then `Clone`
@@ -256,24 +211,17 @@ let private readMultipartArgs props (options: RemotingOptions<_, _>) = task {
     return Seq.toList parts
 }
 
-// ─── The endpoint's steps, shared by both routes (Phase 906) ────────────
+// ─── The endpoint's steps, shared by both routes ────────────────────────
 //
 // The reflective endpoint below (`makeEndpointProxy`) and a generated
 // method (`GeneratedArguments`, SourceGenDispatch.fs) walk a call through
-// the SAME steps: take the next argument, then complete the call. They
-// were the bodies of `makeEndpointProxy`'s visitor arms until Phase 906
-// lifted them out unchanged, so the generated route is these functions
-// called from typed code rather than a second implementation of them.
+// the SAME steps: take the next argument, then complete the call. The
+// generated route is these functions called from typed code rather than a
+// second implementation of them.
 
-// Check that no arguments are left
-//
-// Phase 783 — an arity mismatch is a decode refusal, not a server
-// fault. It is the same class as a mistyped field: the caller sent a
-// shape the method cannot accept, the handler never runs, and
-// resending the identical bytes fails identically. Refusing here is
-// what makes the phase's guarantee total — otherwise a request with
-// the right field types and the wrong argument COUNT would still
-// arrive as an uncategorised 500.
+// An arity mismatch is a decode refusal, not a server fault: the caller
+// sent a shape the method cannot accept, the handler never runs, and
+// resending the identical bytes fails identically.
 let private arityRefusal (makeProps: MakeEndpointProps) (actual: int) : DecodeError =
     let typeInfo =
         typeNames makeProps.FlattenedTypes[0 .. makeProps.FlattenedTypes.Length - 2]
@@ -308,81 +256,89 @@ let private writeToOutputMemoryStream
 
     props.Output.Position <- 0L
 
+/// What one call through the proxy came to. Internal: the request pipeline's
+/// `invoke` stage turns it into the response, and nothing else sees it.
+[<RequireQualifiedAccess>]
+type internal Invoked =
+    /// The handler's result is serialised into the call's output stream;
+    /// `binary` when the method returns `byte[]`.
+    | Written of binary: bool
+    /// A streaming method answered with its source; nothing is written yet.
+    | Streamed of StreamSource
+    /// No method of this record has the route: another handler may own it.
+    | NotRouted
+    /// The verb cannot call the method (only POST, or GET for no argument).
+    | VerbRefused
+    /// The request did not DECODE: a caller-side mistake, the handler never
+    /// ran, and the identical bytes would fail identically.
+    | Refused of error: DecodeError * methodName: string
+    /// The handler (or the serialiser) threw.
+    | Faulted of exn * methodName: string * requestBodyText: string option
+
 /// The completion of an `Async<'result>` method: refuse a surplus argument,
 /// await, write the result.
 let private completeAsync
     (makeProps: MakeEndpointProps)
     (props: InvocationPropsInt)
     (s: Async<'result>)
-    : Task<InvocationResult> =
+    : Task<Invoked> =
     let isBinaryOutput = typeof<'result> = typeof<byte[]>
 
     task {
         validateArgumentCount props makeProps
         let! result = s
         writeToOutputMemoryStream makeProps isBinaryOutput props result
-        return Success isBinaryOutput
+        return Invoked.Written isBinaryOutput
     }
 
 /// The completion of a `Task<'result>` method.
-let private completeTask
-    (makeProps: MakeEndpointProps)
-    (props: InvocationPropsInt)
-    (s: Task<'result>)
-    : Task<InvocationResult> =
+let private completeTask (makeProps: MakeEndpointProps) (props: InvocationPropsInt) (s: Task<'result>) : Task<Invoked> =
     let isBinaryOutput = typeof<'result> = typeof<byte[]>
 
     task {
         validateArgumentCount props makeProps
         let! result = s
         writeToOutputMemoryStream makeProps isBinaryOutput props result
-        return Success isBinaryOutput
+        return Invoked.Written isBinaryOutput
     }
 
 /// One argument step: the value of the next parameter (typed `'inp`) and
 /// the call's state with that argument consumed. Raises a `DecodeException`
-/// for a refusal, which the endpoint's `invoke` turns into `DecodeRefused`.
+/// for a refusal, which the endpoint's `invoke` turns into `Invoked.Refused`.
 let private nextArgument<'inp>
     (makeProps: MakeEndpointProps)
     (props: InvocationPropsInt)
     : struct ('inp * InvocationPropsInt) =
-    match props.Arguments with
-    | Choice1Of2 bytes :: t ->
+    match props.Arguments, props.FirstArgument with
+    | Choice1Of2 bytes :: t, _ ->
         if typeof<'inp> <> typeof<byte[]> then
-            // Phase 783 — a multipart binary section
-            // landing on a non-`byte[]` parameter is a
-            // shape refusal like any other.
+            // A multipart binary section landing on a
+            // non-`byte[]` parameter is a shape refusal
+            // like any other.
             DecodeError.failAt [ sprintf "%s(args)" makeProps.FieldName ] typeof<'inp>.Name "binary input"
 
         let inp = box bytes :?> 'inp
         struct (inp, { props with Arguments = t })
-    | Choice2Of2 _ :: t when props.FirstArgument.IsSome ->
-        // Phase 856.B — the adapter's validation stage
-        // already decoded this argument through the
-        // same `tryDeserialiseArgWithBackend<'inp>`
-        // (see `ApiProxy.ParseFirst`); the value is
-        // reused, never deserialised twice.
+    | Choice2Of2 _ :: t, ValueSome first ->
+        // The validation stage already decoded this
+        // argument through the same
+        // `tryDeserialiseArgWithBackend<'inp>` (see
+        // `ApiProxy.ParseFirst`); the value is reused,
+        // never deserialised twice.
         let rest = {
             props with
                 Arguments = t
                 FirstArgument = ValueNone
         }
 
-        struct (unbox<'inp> props.FirstArgument.Value, rest)
-    | Choice2Of2 argElement :: t ->
-        // Phase 69m: argElement is a self-contained
-        // (cloned) `JsonElement`. `JsonElement.Deserialize`
-        // walks the existing element tokens — no re-parse.
-        // Previous behaviour was N+1 parses (outer array
-        // parse + per-argument re-parse from text); the
-        // new shape is one parse total.
-        //
-        // Phase 783 — the deserialise now returns a
-        // `Result`. `Error` is annotated with the
-        // argument's index and raised as a refusal;
-        // `makeApiProxy`'s handler below turns it into
-        // `InvocationResult.DecodeRefused`, so `f` is
-        // never applied. The happy path is unchanged.
+        struct (unbox<'inp> first, rest)
+    | Choice2Of2 argElement :: t, ValueNone ->
+        // argElement is a self-contained (cloned)
+        // `JsonElement`, deserialised without a re-parse.
+        // An `Error` is annotated with the argument's
+        // index and raised as a refusal, which the
+        // endpoint turns into `Invoked.Refused`, so `f` is
+        // never applied.
         let argIndex = makeProps.FlattenedTypes.Length - 1 - props.Arguments.Length
 
         match tryDeserialiseArgWithBackend<'inp> (Some makeProps.RecordName) makeProps.JsonSerializer argElement with
@@ -392,33 +348,33 @@ let private nextArgument<'inp>
             |> DecodeError.under (sprintf "args[%d]" (max argIndex 0))
             |> DecodeError.under makeProps.FieldName
             |> DecodeError.fail
-    | [] when typeof<'inp> = typeof<unit> ->
+    | [], _ when typeof<'inp> = typeof<unit> ->
         let inp = box () :?> 'inp
         struct (inp, { props with Arguments = [] })
-    | [] -> DecodeError.fail (arityRefusal makeProps props.Arguments.Length)
+    | [], _ -> DecodeError.fail (arityRefusal makeProps props.Arguments.Length)
 
 let rec private makeEndpointProxy<'fieldPart>
     (makeProps: MakeEndpointProps)
-    : 'fieldPart -> InvocationPropsInt -> Task<InvocationResult> =
-    let wrap (p: 'a -> InvocationPropsInt -> Task<InvocationResult>) =
-        unbox<'fieldPart -> InvocationPropsInt -> Task<InvocationResult>> p
+    : 'fieldPart -> InvocationPropsInt -> Task<Invoked> =
+    let wrap (p: 'a -> InvocationPropsInt -> Task<Invoked>) =
+        unbox<'fieldPart -> InvocationPropsInt -> Task<Invoked>> p
 
     match shapeof<'fieldPart> with
     | FSharpAsync a ->
         a.Element.Accept
-            { new ITypeVisitor<'fieldPart -> InvocationPropsInt -> Task<InvocationResult>> with
+            { new ITypeVisitor<'fieldPart -> InvocationPropsInt -> Task<Invoked>> with
                 member _.Visit<'result>() =
                     wrap (fun (s: Async<'result>) props -> completeAsync makeProps props s)
             }
     | Task t ->
         t.Element.Accept
-            { new ITypeVisitor<'fieldPart -> InvocationPropsInt -> Task<InvocationResult>> with
+            { new ITypeVisitor<'fieldPart -> InvocationPropsInt -> Task<Invoked>> with
                 member _.Visit<'result>() =
                     wrap (fun (s: Task<'result>) props -> completeTask makeProps props s)
             }
     | Shape.FSharpFunc func ->
         func.Accept
-            { new IFSharpFuncVisitor<'fieldPart -> InvocationPropsInt -> Task<InvocationResult>> with
+            { new IFSharpFuncVisitor<'fieldPart -> InvocationPropsInt -> Task<Invoked>> with
                 member _.Visit<'inp, 'out>() =
                     let outp = makeEndpointProxy<'out> makeProps
 
@@ -426,44 +382,33 @@ let rec private makeEndpointProxy<'fieldPart>
                         let struct (inp, rest) = nextArgument<'inp> makeProps props
                         outp (f inp) rest)
             }
-    | _ ->
-        // Phase 69c — streaming methods returning IAsyncEnumerable<'T>
-        // are handled by the adapter's SSE short-circuit BEFORE the proxy
-        // dispatches. Emit a no-op endpoint here so startup classification
-        // doesn't reject the record; the adapter never invokes this stub
-        // for streaming methods at request time.
-        let returnT = typeof<'fieldPart>
+    | _ when Streaming.isAsyncEnumerable typeof<'fieldPart> ->
+        // A streaming method answers with its source, built once per method
+        // for its element type; the response writer iterates it.
+        let toSource = Streaming.sourceFor (typeof<'fieldPart>.GetGenericArguments()[0])
 
-        let isStreamingReturn =
-            returnT.IsGenericType
-            && returnT.GetGenericTypeDefinition() = typedefof<System.Collections.Generic.IAsyncEnumerable<_>>
+        let options =
+            match makeProps.JsonSerializer with
+            | SystemTextJson options -> options
 
-        let isStreamingFuncReturn =
-            FSharp.Reflection.FSharpType.IsFunction returnT
-            && (let _, ret = FSharp.Reflection.FSharpType.GetFunctionElements returnT
+        wrap (fun (stream: 'fieldPart) props ->
+            validateArgumentCount props makeProps
 
-                ret.IsGenericType
-                && ret.GetGenericTypeDefinition() = typedefof<System.Collections.Generic.IAsyncEnumerable<_>>)
-
-        if isStreamingReturn || isStreamingFuncReturn then
-            fun (_: 'fieldPart) (_: InvocationPropsInt) ->
-                Task.FromResult(
-                    InvocationResult.Exception(
-                        exn
-                            "Phase 69c streaming method invoked through proxy fallback — adapter SSE short-circuit was skipped",
-                        makeProps.FieldName,
-                        None
-                    )
+            if isNull (box stream) then
+                invalidOp (
+                    sprintf "streaming method '%s' returned null instead of an IAsyncEnumerable<_>" makeProps.FieldName
                 )
-        else
-            failwithf
-                "The type '%s' of the record field '%s' for record type '%s' is not valid. It must either be Async<'t>, Task<'t> or a function that returns either (i.e. 'u -> Async<'t>)"
-                typeof<'fieldPart>.Name
-                makeProps.FieldName
-                makeProps.RecordName
 
-/// Phase 856.B — a request's arguments, parsed and with the FIRST one
-/// decoded, by the proxy's own argument path, ahead of dispatch.
+            Task.FromResult(Invoked.Streamed(toSource options (box stream))))
+    | _ ->
+        failwithf
+            "The type '%s' of the record field '%s' for record type '%s' is not valid. It must either be Async<'t>, Task<'t>, IAsyncEnumerable<'t> or a function that returns one of them (i.e. 'u -> Async<'t>)"
+            typeof<'fieldPart>.Name
+            makeProps.FieldName
+            makeProps.RecordName
+
+/// A request's arguments, parsed and with the FIRST one decoded, by the
+/// proxy's own argument path, ahead of dispatch.
 type internal ParsedArguments = {
     /// The outer array's elements, exactly as the dispatch path parses them.
     Elements: JsonElement list
@@ -472,46 +417,36 @@ type internal ParsedArguments = {
     First: obj
 }
 
-/// Phase 856.B — the proxy, with its argument parse exposed to the adapter.
+/// The proxy, with its argument parse exposed to the request pipeline.
 ///
-/// The validation pre-flight used to parse the buffered body a SECOND time
-/// (`Validation.parseFirstArgFromBody`: text, `JsonDocument`, `GetRawText`,
-/// a plain `JsonSerializer.Deserialize` by `Type`) and then the proxy parsed
-/// it again to dispatch. Worse than the cost, the two decodes were not the
-/// same decode: since Phase 839 the dispatch path resolves a record-scoped
-/// algebra decoder first, so validation could pass or refuse a value the
-/// handler would never have received. `ParseFirst` is the dispatch path's
-/// own parse and first-argument decode, run early; handing its result to
-/// `Invoke` means the body is parsed once and the first argument decoded
-/// once, and validation sees exactly the value the handler is given.
-///
-/// `ParseFirst` answers `ValueNone` for anything it cannot parse or decode —
-/// the refusal stays the dispatch path's to make, with its proper
-/// `DecodeRefused` result, exactly as validation deferred before.
+/// `ParseFirst` is the dispatch path's own parse and first-argument decode,
+/// run early: handing its result to `Invoke` means the body is parsed once
+/// and the first argument decoded once, and validation sees exactly the value
+/// the handler is given (the record-scoped decoder included). It answers
+/// `ValueNone` for anything it cannot parse or decode — the refusal stays the
+/// dispatch path's to make, as `Invoked.Refused`.
 type internal ApiProxy<'impl> = {
-    Invoke: InvocationProps<'impl> -> ParsedArguments voption -> Task<InvocationResult>
+    Invoke: InvocationProps<'impl> -> ParsedArguments voption -> Task<Invoked>
     /// Endpoint name (the built route, as `InvocationProps.EndpointName`),
     /// then the cached body bytes.
     ParseFirst: string -> byte[] -> ParsedArguments voption
 }
 
 type private ProxyEndpoint<'impl> = {
-    Invoke: InvocationProps<'impl> -> ParsedArguments voption -> Task<InvocationResult>
+    Invoke: InvocationProps<'impl> -> ParsedArguments voption -> Task<Invoked>
     ParseFirst: byte[] -> ParsedArguments voption
 }
 
 /// One method's endpoint: the verb check, the body read and the
-/// argument-array parse, the early first-argument parse (Phase 856.B) and
-/// the refusal mapping, around `dispatch` — the method's own call. Phase
-/// 906 lifted it out of the reflective member visitor unchanged, so a
-/// reflective endpoint and a generated one are this same function with a
-/// different `dispatch`.
+/// argument-array parse, the early first-argument parse and the refusal
+/// mapping, around `dispatch` — the method's own call. A reflective endpoint
+/// and a generated one are this same function with a different `dispatch`.
 let private makeEndpoint<'impl, 'ctx>
     (options: RemotingOptions<'ctx, 'impl>)
     (methodName: string)
     (flattenedTypes: Type[])
     (decodeFirst: (JsonElement -> Result<obj, DecodeError>) option)
-    (dispatch: 'impl -> InvocationPropsInt -> Task<InvocationResult>)
+    (dispatch: 'impl -> InvocationPropsInt -> Task<Invoked>)
     : ProxyEndpoint<'impl> =
     let isNoArg =
         flattenedTypes.Length = 1
@@ -531,15 +466,29 @@ let private makeEndpoint<'impl, 'ctx>
                 ValueNone
         | _ -> ValueNone
 
-    let invoke (props: InvocationProps<'impl>) (parsed: ParsedArguments voption) = task {
-        let mutable requestBodyText = None
+    /// The request body: the bytes the pipeline already read, or the stream
+    /// the proxy BORROWS (read, left open, rewound, so a stage after dispatch
+    /// still sees the whole body — `PostDispatchBodyReadTests`).
+    let bodyOf (props: InvocationProps<'impl>) : Task<byte[]> =
+        match props.InputBytes with
+        | Some bytes -> Task.FromResult bytes
+        | None -> task {
+            use buffer = new MemoryStream()
+            do! props.Input.CopyToAsync buffer
 
+            if props.Input.CanSeek then
+                props.Input.Position <- 0L
+
+            return buffer.ToArray()
+          }
+
+    let invoke (props: InvocationProps<'impl>) (parsed: ParsedArguments voption) = task {
         try
             if
                 not (props.HttpVerb.Equals("POST", StringComparison.OrdinalIgnoreCase))
                 && not (isNoArg && props.HttpVerb.Equals("GET", StringComparison.OrdinalIgnoreCase))
             then
-                return InvalidHttpVerb
+                return Invoked.VerbRefused
             elif props.InputContentType.StartsWith("multipart/form-data", StringComparison.Ordinal) then
                 let! args = readMultipartArgs props options
 
@@ -552,68 +501,23 @@ let private makeEndpoint<'impl, 'ctx>
 
                 return! dispatch (props.ImplementationBuilder()) props'
             else
-                // Phase 69m — if the adapter populated
-                // `InputBytes` (cached body bytes from an
-                // upstream pre-flight stage), parse directly
-                // from bytes — no second string materialisation
-                // and no second stream read on `ctx.Request.Body`.
-                // Fallback (no cache) reads the stream as before.
                 let! args = task {
-                    match parsed, props.InputBytes with
-                    | ValueSome p, _ ->
-                        // Phase 856.B — parsed ahead of dispatch
-                        // from these same cached bytes.
+                    match parsed with
+                    | ValueSome p ->
+                        // Parsed ahead of dispatch, from these same bytes.
                         return p.Elements |> List.map Choice2Of2
-                    | ValueNone, Some bytes when bytes.Length > 0 ->
-                        // `requestBodyText` stays None on the
-                        // happy path; the exception arm
-                        // materialises text from these bytes
-                        // lazily for error reporting.
-                        return
-                            parseArgumentArrayBytes options.JsonSerializer methodName (flattenedTypes.Length - 1) bytes
-                            |> List.map Choice2Of2
-                    | ValueNone, Some _ ->
-                        // Empty cached bytes — same shape as
-                        // an empty stream read.
-                        return []
-                    | ValueNone, None ->
-                        // Phase 461 — the proxy BORROWS
-                        // `props.Input`; it never owns it.
-                        // `props.Input` is `ctx.Request.Body`,
-                        // a buffered `FileBufferingReadStream`
-                        // whose lifetime belongs to ASP.NET
-                        // Core (disposed at end-of-request).
-                        // Until 461 this `use` disposed it the
-                        // moment dispatch finished, so any
-                        // post-dispatch reader that was the
-                        // FIRST to touch the body met a dead
-                        // stream, threw after the response had
-                        // started, and the reset surfaced as a
-                        // gateway 502 over a handler that had
-                        // succeeded. The rule "seed the cache
-                        // before dispatch" then lived in a
-                        // comment here plus a guard per known
-                        // consumer. Now the invariant is
-                        // structural: read, leave the stream
-                        // open, rewind — so a stage registered
-                        // AFTER dispatch, by an author who never
-                        // read this, still sees the full body.
-                        // `PostDispatchBodyReadTests` is the
-                        // contract; the single buffering stage
-                        // is the adapter's `EnableBuffering`.
-                        use sr = new StreamReader(props.Input, Encoding.UTF8, leaveOpen = true)
-                        let! text = sr.ReadToEndAsync()
+                    | ValueNone ->
+                        let! bytes = bodyOf props
 
-                        if props.Input.CanSeek then
-                            props.Input.Position <- 0L
-
-                        if String.IsNullOrEmpty text then
+                        if bytes.Length = 0 then
                             return []
                         else
-                            requestBodyText <- Some text
-
                             return
-                                parseArgumentArray options.JsonSerializer methodName (flattenedTypes.Length - 1) text
+                                parseArgumentArrayBytes
+                                    options.JsonSerializer
+                                    methodName
+                                    (flattenedTypes.Length - 1)
+                                    bytes
                                 |> List.map Choice2Of2
                 }
 
@@ -628,52 +532,22 @@ let private makeEndpoint<'impl, 'ctx>
                 }
 
                 return! dispatch (props.ImplementationBuilder()) props'
-        // Phase 783 — a decode refusal short-circuits to
-        // its own result case BEFORE the generic exception
-        // arm below. This is the one place the refusal
-        // leaves the proxy, and it is deliberately the
-        // SAME seam the generic arm already used rather
-        // than a new stage: the decode happens deep inside
-        // the curried `fieldProxy` recursion, so there is
-        // no earlier point at which the refusal exists.
-        //
-        // Note what did NOT move. The phase text proposed
-        // short-circuiting "before any pre-flight work
-        // that assumed a decoded value (69e validation,
-        // 69f idempotency hashing of the parsed args)".
-        // Neither pre-flight assumes one: 69e validation
-        // reads the value `ApiProxy.ParseFirst` decoded
-        // (Phase 856.B) — this proxy's own parse, run
-        // early — so a value it cannot decode reaches no
-        // validator and the refusal stays this arm's to
-        // make; and 69f hashes the RAW request body, not
-        // parsed arguments. (`Validation.parseFirstArgFromBody`,
-        // which this note used to cite as the validation
-        // pre-flight, is off the adapter's request path
-        // since Phase 905.) Reordering
-        // would also have been a regression — it would put
-        // argument decoding ahead of auth and rate-limit,
-        // handing an unauthenticated caller field-level
-        // detail about the method's shape and charging no
-        // budget for it.
+        // A decode refusal is its own outcome, never a fault. The decode
+        // happens deep inside the curried call, so this is the one place the
+        // refusal exists. Argument decoding stays here, AFTER the pipeline's
+        // authorisation and rate limit: an unauthenticated caller learns no
+        // field names and is charged for what it sends.
         with
-        | DecodeException error -> return InvocationResult.DecodeRefused(error, methodName)
+        | DecodeException error -> return Invoked.Refused(error, methodName)
         | e ->
-            // Phase 69m — when the cached-bytes path was
-            // taken, `requestBodyText` is None on the happy
-            // path. Materialise text from cached bytes here
-            // (cold path; cost only paid on actual errors)
-            // so error reporting still carries the request
-            // body context.
-            let resolvedBodyText =
-                match requestBodyText with
-                | Some _ -> requestBodyText
-                | None ->
-                    match props.InputBytes with
-                    | Some bytes when bytes.Length > 0 -> Some(System.Text.Encoding.UTF8.GetString bytes)
-                    | _ -> None
+            // The body text rides the fault for the error handler; read on
+            // this cold path only.
+            let bodyText =
+                match props.InputBytes with
+                | Some bytes when bytes.Length > 0 -> Some(Encoding.UTF8.GetString bytes)
+                | _ -> None
 
-            return InvocationResult.Exception(e, methodName, resolvedBodyText)
+            return Invoked.Faulted(e, methodName, bodyText)
     }
 
     {
@@ -695,9 +569,9 @@ let private makeReflectiveApiProxy<'impl, 'ctx> (options: RemotingOptions<'ctx, 
                             FlattenedTypes = flattenedTypes
                         }
 
-                    // Phase 856.B — the first parameter's decode, built once
-                    // per method. Absent for a method with no JSON first
-                    // argument to decode (no-argument, or `unit`).
+                    // The first parameter's decode, built once per method.
+                    // Absent for a method with no JSON first argument to
+                    // decode (no-argument, or `unit`).
                     let decodeFirst: (JsonElement -> Result<obj, DecodeError>) option =
                         if flattenedTypes.Length < 2 || flattenedTypes[0] = typeof<unit> then
                             None
@@ -733,7 +607,7 @@ let private makeReflectiveApiProxy<'impl, 'ctx> (options: RemotingOptions<'ctx, 
                 fun (props: InvocationProps<'impl>) parsed ->
                     match Map.tryFind props.EndpointName endpoints with
                     | Some endpoint -> endpoint.Invoke props parsed
-                    | _ -> Task.FromResult EndpointNotFound
+                    | _ -> Task.FromResult Invoked.NotRouted
             ParseFirst =
                 fun endpointName bytes ->
                     match Map.tryFind endpointName endpoints with
@@ -745,7 +619,7 @@ let private makeReflectiveApiProxy<'impl, 'ctx> (options: RemotingOptions<'ctx, 
             "Protocol definition must be encoded as a record type. The input type '%s' was not a record."
             typeof<'impl>.Name
 
-/// Phase 906 — the proxy's side of `GeneratedArguments`: generated code
+/// The proxy's side of `GeneratedArguments`: generated code
 /// takes each argument and completes the call through the endpoint's own
 /// steps (`nextArgument`, `completeAsync`), never a copy of them.
 type private ProxyGeneratedArguments(makeProps: MakeEndpointProps, initial: InvocationPropsInt) =
@@ -757,9 +631,10 @@ type private ProxyGeneratedArguments(makeProps: MakeEndpointProps, initial: Invo
         props <- rest
         value
 
-    override _.Complete<'T>(call: Async<'T>) : Task<InvocationResult> = completeAsync makeProps props call
+    override _.Complete<'T>(call: Async<'T>) : Task =
+        completeAsync makeProps props call :> Task
 
-/// Phase 906 — the proxy over a generated invocation table. Each covered
+/// The proxy over a generated invocation table. Each covered
 /// method's endpoint is `makeEndpoint` around the generated call; a route
 /// the table does not cover is served by the reflective proxy, built on the
 /// first request that needs it (so a record every method of which is
@@ -784,8 +659,15 @@ let private makeGeneratedApiProxy<'impl, 'ctx>
             m.DecodeFirst
             |> Option.map (fun decode -> decode recordName options.JsonSerializer)
 
-        makeEndpoint options m.Name m.FlattenedTypes decodeFirst (fun impl props ->
-            m.Call (ProxyGeneratedArguments(makeProps, props)) impl)
+        // A generated method returns `Async<'r>`; its result is binary
+        // exactly when `'r` is `byte[]`.
+        let binary =
+            (Array.last m.FlattenedTypes).GetGenericArguments() = [| typeof<byte[]> |]
+
+        makeEndpoint options m.Name m.FlattenedTypes decodeFirst (fun impl props -> task {
+            do! m.Call (ProxyGeneratedArguments(makeProps, props)) impl
+            return Invoked.Written binary
+        })
 
     let endpoints =
         table.Methods
@@ -807,12 +689,12 @@ let private makeGeneratedApiProxy<'impl, 'ctx>
                 | None -> reflective.Value.ParseFirst endpointName bytes
     }
 
-/// The proxy every adapter dispatches through. Phase 906 — when the
+/// The proxy the request pipeline dispatches through. When the
 /// generator's table for `'impl` is registered (`GeneratedInvocation.register`),
 /// its methods are served by their generated invocations; otherwise, and
 /// for any method the table does not cover, by reflection. Either way it is
-/// the same `ApiProxy`, so whatever pre-flight chain an adapter runs around
-/// the proxy runs around a generated method too.
+/// the same `ApiProxy`, so every stage of the pipeline runs around a
+/// generated method too.
 let internal makeApiProxyWithParse<'impl, 'ctx> (options: RemotingOptions<'ctx, 'impl>) : ApiProxy<'impl> =
     match GeneratedDispatchRegistry.tryGet<'impl> () with
     | Some(:? GeneratedInvocationTable<'impl> as table) -> makeGeneratedApiProxy table options
@@ -825,11 +707,15 @@ let internal contractOf<'impl> () : ApiContract =
     | Some(:? GeneratedInvocationTable<'impl> as table) -> table.Contract
     | _ -> Contract.read typeof<'impl>
 
-/// The proxy the adapters dispatch through: `InvocationProps` in,
-/// `InvocationResult` out. Phase 856.B left its shape unchanged — it is
-/// `makeApiProxyWithParse` with nothing parsed ahead of dispatch.
-let makeApiProxy<'impl, 'ctx>
-    (options: RemotingOptions<'ctx, 'impl>)
-    : InvocationProps<'impl> -> Task<InvocationResult> =
-    let proxy = makeApiProxyWithParse options
-    fun props -> proxy.Invoke props ValueNone
+/// The outer arguments array of a body read by the pipeline, as the proxy
+/// parses it: a refusal for a body that is not a JSON array.
+let internal parseArguments
+    (backend: JsonSerializerBackend)
+    (functionName: string)
+    (expectedArgCount: int)
+    (bytes: byte[])
+    : Result<JsonElement list, DecodeError> =
+    try
+        Ok(parseArgumentArrayBytes backend functionName expectedArgCount bytes)
+    with DecodeException error ->
+        Error error

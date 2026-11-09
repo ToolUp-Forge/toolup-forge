@@ -533,10 +533,10 @@ module AuthorizationSurface =
         match classification with
         // The auth-context resolver is not consulted at all — the
         // method dispatches regardless of caller identity.
-        | ToolUp.Remoting.Server.Public -> [ "public-endpoint" ], AnonymousReachable
+        | ToolUp.Remoting.Server.MethodClassification.Public -> [ "public-endpoint" ], AnonymousReachable
         // Anonymous callers are admitted alongside authenticated ones.
-        | ToolUp.Remoting.Server.Anonymous -> [ "allow-anonymous" ], AnonymousReachable
-        | ToolUp.Remoting.Server.RequiresAuth requirements ->
+        | ToolUp.Remoting.Server.MethodClassification.Anonymous -> [ "allow-anonymous" ], AnonymousReachable
+        | ToolUp.Remoting.Server.MethodClassification.RequiresAuth requirements ->
             let tokens =
                 requirements
                 |> List.map (fun requirement ->
@@ -547,12 +547,14 @@ module AuthorizationSurface =
                     | ToolUp.Remoting.Server.TenantRequired -> "tenant")
 
             tokens, ExplicitRequirement
-        // The dispatcher REFUSES TO START on an unclassified method, so
-        // this cannot reach production. It is reported rather than
-        // dropped because a surface derived from a type under
-        // development is exactly where a reviewer wants to see it — and
-        // at the fail-closed classification, never as reachable.
-        | ToolUp.Remoting.Server.Unclassified -> [ "unclassified" ], InheritedDefaultDeny
+
+    /// A field with no marker. The dispatcher REFUSES TO START on one, so this
+    /// cannot reach production; it is reported rather than dropped because a
+    /// surface derived from a type under development is exactly where a
+    /// reviewer wants to see it — at the fail-closed classification, never
+    /// as reachable.
+    let private unclassifiedMethod: string list * AccessClassification =
+        [ "unclassified" ], InheritedDefaultDeny
 
     /// Derive the remoting half of a component's surface from an API
     /// record TYPE. `ServerApp` accumulates BUILT handlers rather than
@@ -567,10 +569,14 @@ module AuthorizationSurface =
         if isNull apiType then
             empty
         else
-            ToolUp.Remoting.Server.AuthClassifier.classify apiType
+            let classified =
+                ToolUp.Remoting.Server.AuthClassifier.classify apiType
+                |> Map.map (fun _ classification -> ofMethodClassification classification)
+
+            ToolUp.Remoting.Server.AuthClassifier.unclassified apiType
+            |> List.fold (fun surface fieldName -> Map.add fieldName unclassifiedMethod surface) classified
             |> Map.toList
-            |> List.map (fun (fieldName, classification) ->
-                let tokens, access = ofMethodClassification classification
+            |> List.map (fun (fieldName, (tokens, access)) ->
 
                 {
                     Component = componentId
