@@ -11,6 +11,7 @@ open Feliz
 open Feliz.AgCharts
 open ToolUp.Elmish
 open ToolUp.Platform
+open Toolup.UIToolkit
 
 // ─── Phase 9w — the Datadog readback admin module ────────────────────
 //
@@ -30,7 +31,7 @@ open ToolUp.Platform
 // endpoint answers 200 with an empty payload and a `Warning` when
 // Datadog could not be reached — so a rotated key or an outage shows one
 // warning line above real, empty tables rather than blanking the module.
-// `LoadError` is reserved for the cases where the platform itself did
+// `Remote.Failed` is reserved for the cases where the platform itself did
 // not answer: 403, 503, a transport failure, or a body that will not
 // parse.
 
@@ -43,23 +44,17 @@ type Tab =
     | RecentErrorsTab
     | KeyMetricsTab
 
-type LoadState<'T> =
-    | NotLoaded
-    | Loading
-    | Loaded of 'T
-    | LoadError of string
-
 type Model = {
     /// The deployment's readback configuration — the window and page
     /// size the panel asks for, carried so they cannot drift from the
     /// ones the endpoints apply.
     Config: DatadogReadbackConfig
     ActiveTab: Tab
-    Monitors: LoadState<DatadogMonitorsResponse>
-    Logs: LoadState<DatadogLogsResponse>
+    Monitors: Remote<DatadogMonitorsResponse, string>
+    Logs: Remote<DatadogLogsResponse, string>
     /// One entry per charted metric, in declaration order. A list rather
     /// than a map so the chart grid renders in a stable order.
-    Metrics: (string * LoadState<DatadogMetricResponse>) list
+    Metrics: (string * Remote<DatadogMetricResponse, string>) list
 }
 
 type Msg =
@@ -145,11 +140,11 @@ let init (config: DatadogReadbackConfig) () =
     let model = {
         Config = config
         ActiveTab = MonitorsTab
-        Monitors = Loading
-        Logs = Loading
+        Monitors = Remote.Loading
+        Logs = Remote.Loading
         Metrics =
             DatadogReadback.defaultChartedMetrics
-            |> List.map (fun metric -> metric, Loading)
+            |> List.map (fun metric -> metric, Remote.Loading)
     }
 
     model, Cmd.batch [ loadMonitorsCmd (); loadLogsCmd config; loadMetricsCmd config ]
@@ -158,40 +153,33 @@ let update (msg: Msg) (model: Model) =
     match msg with
     | SwitchTab tab -> { model with ActiveTab = tab }, Cmd.none
 
-    | RefreshMonitors -> { model with Monitors = Loading }, loadMonitorsCmd ()
+    | RefreshMonitors -> { model with Monitors = Remote.Loading }, loadMonitorsCmd ()
 
-    | MonitorsLoaded(Ok response) ->
+    | MonitorsLoaded result ->
         {
             model with
-                Monitors = Loaded response
+                Monitors = Remote.ofResult result
         },
         Cmd.none
 
-    | MonitorsLoaded(Error message) ->
+    | RefreshLogs -> { model with Logs = Remote.Loading }, loadLogsCmd model.Config
+
+    | LogsLoaded result ->
         {
             model with
-                Monitors = LoadError message
+                Logs = Remote.ofResult result
         },
         Cmd.none
-
-    | RefreshLogs -> { model with Logs = Loading }, loadLogsCmd model.Config
-
-    | LogsLoaded(Ok response) -> { model with Logs = Loaded response }, Cmd.none
-
-    | LogsLoaded(Error message) -> { model with Logs = LoadError message }, Cmd.none
 
     | RefreshMetrics ->
         {
             model with
-                Metrics = model.Metrics |> List.map (fun (metric, _) -> metric, Loading)
+                Metrics = model.Metrics |> List.map (fun (metric, _) -> metric, Remote.Loading)
         },
         loadMetricsCmd model.Config
 
     | MetricLoaded(metric, result) ->
-        let next =
-            match result with
-            | Ok response -> Loaded response
-            | Error message -> LoadError message
+        let next = Remote.ofResult result
 
         {
             model with
@@ -228,12 +216,6 @@ let private warningBanner (msgs: DatadogReadbackMessages) (warning: string optio
             prop.className "p-3 mb-3 bg-yellow-50 border border-yellow-200 rounded text-yellow-800 text-sm"
             prop.text (msgs.DegradedWarning reason)
         ]
-
-let private errorBanner (message: string) =
-    Html.div [
-        prop.className "p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm"
-        prop.text message
-    ]
 
 let private emptyRow (colSpan: int) (message: string) =
     Html.tr [
@@ -293,10 +275,11 @@ let private tagList (tags: string list) = String.concat ", " tags
 let private monitorsTabView (msgs: DatadogReadbackMessages) (model: Model) (dispatch: Msg -> unit) =
     let body =
         match model.Monitors with
-        | NotLoaded
-        | Loading -> Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.Loading ]
-        | LoadError message -> errorBanner message
-        | Loaded response ->
+        | Remote.NotAsked
+        | Remote.Loading
+        | Remote.Reloading _ -> Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.Loading ]
+        | Remote.Failed message -> StateViews.noticeStatic (Notice.Problem message)
+        | Remote.Loaded response ->
             Html.div [
                 prop.children [
                     warningBanner msgs response.Warning
@@ -345,7 +328,7 @@ let private monitorsTabView (msgs: DatadogReadbackMessages) (model: Model) (disp
             Html.div [
                 prop.className "flex justify-end"
                 prop.children [
-                    refreshButton msgs (model.Monitors = Loading) (fun () -> dispatch RefreshMonitors)
+                    refreshButton msgs (Remote.isLoading model.Monitors) (fun () -> dispatch RefreshMonitors)
                 ]
             ]
             body
@@ -357,10 +340,11 @@ let private monitorsTabView (msgs: DatadogReadbackMessages) (model: Model) (disp
 let private recentErrorsTabView (msgs: DatadogReadbackMessages) (model: Model) (dispatch: Msg -> unit) =
     let body =
         match model.Logs with
-        | NotLoaded
-        | Loading -> Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.Loading ]
-        | LoadError message -> errorBanner message
-        | Loaded response ->
+        | Remote.NotAsked
+        | Remote.Loading
+        | Remote.Reloading _ -> Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.Loading ]
+        | Remote.Failed message -> StateViews.noticeStatic (Notice.Problem message)
+        | Remote.Loaded response ->
             Html.div [
                 prop.children [
                     warningBanner msgs response.Warning
@@ -412,7 +396,7 @@ let private recentErrorsTabView (msgs: DatadogReadbackMessages) (model: Model) (
                         prop.className "text-sm text-gray-600"
                         prop.text (msgs.WindowLabel model.Config.DefaultWindowMinutes)
                     ]
-                    refreshButton msgs (model.Logs = Loading) (fun () -> dispatch RefreshLogs)
+                    refreshButton msgs (Remote.isLoading model.Logs) (fun () -> dispatch RefreshLogs)
                 ]
             ]
             body
@@ -426,13 +410,18 @@ let private recentErrorsTabView (msgs: DatadogReadbackMessages) (model: Model) (
 /// keeps the axis labels identical across a re-fetch.
 type private ChartRow = { At: string; Value: float }
 
-let private metricChart (msgs: DatadogReadbackMessages) (metric: string) (state: LoadState<DatadogMetricResponse>) =
+let private metricChart
+    (msgs: DatadogReadbackMessages)
+    (metric: string)
+    (state: Remote<DatadogMetricResponse, string>)
+    =
     let body =
         match state with
-        | NotLoaded
-        | Loading -> Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.Loading ]
-        | LoadError message -> errorBanner message
-        | Loaded response ->
+        | Remote.NotAsked
+        | Remote.Loading
+        | Remote.Reloading _ -> Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.Loading ]
+        | Remote.Failed message -> StateViews.noticeStatic (Notice.Problem message)
+        | Remote.Loaded response ->
             if List.isEmpty response.Series.Points then
                 Html.div [
                     prop.children [
@@ -500,7 +489,8 @@ let private MetricsAutoRefresh (dispatch: Msg -> unit) =
     Html.none
 
 let private keyMetricsTabView (msgs: DatadogReadbackMessages) (model: Model) (dispatch: Msg -> unit) =
-    let anyLoading = model.Metrics |> List.exists (fun (_, state) -> state = Loading)
+    let anyLoading =
+        model.Metrics |> List.exists (fun (_, state) -> Remote.isLoading state)
 
     Html.div [
         prop.className "p-4 flex flex-col gap-3"
