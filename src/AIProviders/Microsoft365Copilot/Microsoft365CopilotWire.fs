@@ -262,6 +262,7 @@ let streamDelta (previous: string) (current: string) : string option =
 /// event carries the conversation so far; the reply is its last message that
 /// is not the prompt, and what is forwarded is how far that reply grew.
 type Microsoft365CopilotStream = {
+    /// The SSE event being framed.
     Frame: SseFrame
     /// The reply text forwarded so far.
     Streamed: string
@@ -269,7 +270,9 @@ type Microsoft365CopilotStream = {
     Latest: string
 }
 
+/// The `chatOverStream` fold.
 module Microsoft365CopilotStream =
+    /// The state before the first line.
     let initial = {
         Frame = SseFrame.empty
         Streamed = ""

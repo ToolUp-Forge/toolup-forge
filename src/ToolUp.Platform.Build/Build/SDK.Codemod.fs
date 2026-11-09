@@ -66,6 +66,10 @@ type CodemodMigration =
     /// `InvocationResult` is gone, the fork's unions are qualified, and a
     /// streaming method may carry the pre-flight markers.
     | RequestPipeline
+    /// A shipped AI connector is a `Connector` record plus `create*`
+    /// helpers over the one `ProviderCall.send`; `StopReason` is a union
+    /// and `RetryPolicy` carries a `RateLimitFloor`.
+    | ConnectorKernel
 
 /// Helpers over `CodemodMigration`.
 module CodemodMigration =
@@ -93,6 +97,7 @@ module CodemodMigration =
         | CodemodMigration.TypedIdentity -> "docs/migrations/878-typed-identity.md"
         | CodemodMigration.RequestPipeline ->
             "docs/migrations/1056-redesign-b-request-pipeline-as-stages-with-streaming-inside.md"
+        | CodemodMigration.ConnectorKernel -> "docs/migrations/1079-redesign-f-the-connector-kernel.md"
 
     /// The phase label the renderings print.
     let label migration =
@@ -114,6 +119,7 @@ module CodemodMigration =
         | CodemodMigration.SubsystemNamespaces -> "Phase 1198"
         | CodemodMigration.TypedIdentity -> "Phase 878"
         | CodemodMigration.RequestPipeline -> "Phase 1056"
+        | CodemodMigration.ConnectorKernel -> "Phase 1079"
 
 /// Which files a rule applies to. The Phase 11.C.5 Tier 2 renames are
 /// PACKAGE ids — they live in `.fsproj` / `Directory.Packages.props` —
@@ -1394,6 +1400,41 @@ module Codemod =
             CodemodFileClass.Source
             @"\bAsyncStream\.from(?:Callback|Subscription)\b"
             "a streaming producer now runs under the request's abort token (a client that leaves cancels it) and behind a bounded channel: a `fromCallback` producer that outruns its consumer is held in `emit` until it reads; a `fromSubscription` feed drops its oldest waiting value instead. A producer that relied on unbounded buffering, or on running past a disconnect, is reviewed here"
+        // A shipped connector's constructor is gone: each vendor is a
+        // `Connector` plus `create*` helpers. The constructor's argument
+        // types decide the helper (a key or a secret store), so these are
+        // reported, not rewritten.
+        review
+            "1079-claude-constructor"
+            CodemodMigration.ConnectorKernel
+            CodemodFileClass.Source
+            @"\bClaudeAIProvider\.ClaudeAIProvider\b|(?<![.\w])new\s+ClaudeAIProvider\s*\("
+            "the `ClaudeAIProvider` constructors are gone: `ClaudeAIProvider(apiKey)` is `ClaudeAIProvider.createWithApiKey apiKey`, `(apiKey, model)` is `createWithApiKeyAndModel`, `(apiKey, model, maxTokens, effort)` is `createWithApiKeyModelMaxTokensAndEffort`, `(secretStore)` is `create`, `(secretStore, model)` is `createWithModel`, `(secretStore, model, maxTokens, effort)` is `createWithSecretStore`; a key read on every call is `createWithKeySource fetch model maxTokens effort`, and a custom client is `ConnectorProvider(ClaudeAIProvider.connector client fetch maxTokens effort, model)`"
+        review
+            "1079-openai-constructor"
+            CodemodMigration.ConnectorKernel
+            CodemodFileClass.Source
+            @"\bOpenAIProvider\.OpenAIProvider\b|(?<![.\w])new\s+OpenAIProvider\s*\("
+            "the `OpenAIProvider` constructors are gone: `OpenAIProvider(apiKey)` is `OpenAIProvider.createWithApiKey apiKey`, `(apiKey, model)` is `createWithApiKeyAndModel`, `(secretStore)` is `create`, `(secretStore, model)` is `createWithModel`; a key read on every call is `createWithKeySource fetch model`, and a custom client is `ConnectorProvider(OpenAIProvider.connector client fetch, model)`"
+        review
+            "1079-gemini-constructor"
+            CodemodMigration.ConnectorKernel
+            CodemodFileClass.Source
+            @"\bGeminiAIProvider\.GeminiAIProvider\b|(?<![.\w])new\s+GeminiAIProvider\s*\("
+            "the `GeminiAIProvider` constructors are gone: `GeminiAIProvider(apiKey)` is `GeminiAIProvider.createWithApiKey apiKey`, `(apiKey, model)` is `createWithApiKeyAndModel`, `(secretStore)` is `create`, `(secretStore, model)` is `createWithModel`; a key read on every call is `createWithKeySource fetch model`, and a custom client is `ConnectorProvider(GeminiAIProvider.connector client fetch, model)`"
+        review
+            "1079-copilot-constructor"
+            CodemodMigration.ConnectorKernel
+            CodemodFileClass.Source
+            @"\bCopilotAIProvider\.CopilotAIProvider\b|(?<![.\w])new\s+CopilotAIProvider\s*\(|\bMicrosoft365CopilotProvider\b"
+            "the `CopilotAIProvider` constructors are gone: `(endpoint, apiKey[, model])` is `CopilotAIProvider.createWithApiKey` / `createWithApiKeyAndModel`, `(secretStore, endpoint[, model])` is `create` / `createWithModel`, `(endpoint, credential[, model])` is `createWithCredential` / `createWithCredentialAndModel`, and an explicit api-version is `createWithAuth endpoint apiVersion auth model`. `Microsoft365CopilotProvider` is gone too: use `Microsoft365CopilotAIProvider.create*`, or `createWithHttpClient` for a custom client"
+        // `StopReason` is a union: a string literal beside it is a token.
+        review
+            "1079-stop-reason-token"
+            CodemodMigration.ConnectorKernel
+            CodemodFileClass.Source
+            @"\bStopReason\s*(?:=|<>)\s*""|\.StopReason\s+""|""(?:end_turn|tool_use|max_tokens)""\s*(?:=|<>)\s*\w[\w.]*\.StopReason\b"
+            "if this is an `AIProviderResponse`, `StopReason` is a union now: `\"end_turn\"` is `StopReason.EndTurn`, `\"tool_use\"` is `StopReason.ToolUse`, `\"max_tokens\"` is `StopReason.MaxTokens` and any other token is `StopReason.Other \"…\"`; `.Token` reads the string back. `AILatencyRecord.StopReason` is still the recorded string"
     ]
 
 
@@ -2392,6 +2433,7 @@ module Codemod =
             CodemodMigration.TypedIdentity
             CodemodMigration.SubsystemNamespaces
             CodemodMigration.RequestPipeline
+            CodemodMigration.ConnectorKernel
         ]
         |> List.tryFind (fun m -> CodemodMigration.label m = "Phase " + phase.Trim())
 

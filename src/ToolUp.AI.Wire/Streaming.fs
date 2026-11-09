@@ -352,13 +352,19 @@ module OpenAIStreaming =
         | "length" -> StopReason.MaxTokens
         | _ -> StopReason.EndTurn
 
+    /// The accumulator threaded through the read loop.
     type StreamState = {
+        /// The text so far.
         Content: string
+        /// The tool calls so far, their arguments still being stitched.
         ToolCalls: AIProviderToolCall list
+        /// The latest finish reason seen.
         StopReason: StopReason
+        /// The usage chunk, once it arrives.
         Usage: TokenUsage option
     }
 
+    /// The state before the first chunk.
     let initial: StreamState = {
         Content = ""
         ToolCalls = []
@@ -452,6 +458,7 @@ module OpenAIStreaming =
                 },
                 text
 
+    /// Collapse the accumulator into the response.
     let finalize (state: StreamState) : AIProviderResponse = {
         Content = state.Content
         ToolCalls = state.ToolCalls
@@ -504,13 +511,19 @@ module GeminiStreaming =
         | "MAX_TOKENS" -> StopReason.MaxTokens
         | _ -> StopReason.EndTurn
 
+    /// The accumulator threaded through the read loop.
     type StreamState = {
+        /// The text so far.
         Content: string
+        /// The tool calls so far, their arguments still being stitched.
         ToolCalls: AIProviderToolCall list
+        /// The latest finish reason seen.
         StopReason: StopReason
+        /// The usage chunk, once it arrives.
         Usage: TokenUsage option
     }
 
+    /// The state before the first chunk.
     let initial: StreamState = {
         Content = ""
         ToolCalls = []
@@ -607,6 +620,7 @@ module GeminiStreaming =
             | None -> state, None
             | Some root -> applyChunk state root
 
+    /// Collapse the accumulator into the response.
     let finalize (state: StreamState) : AIProviderResponse = {
         Content = state.Content
         ToolCalls = state.ToolCalls

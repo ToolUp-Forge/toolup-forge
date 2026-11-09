@@ -37,8 +37,11 @@ type ProviderRequest = {
     /// The per-call options, for the knobs a connector reads (a reply cap,
     /// an effort).
     Options: AIProviderCallOptions
+    /// The turn's messages.
     Messages: AIProviderMessage list
+    /// The tools the model may call.
     Tools: AIProviderToolDef list
+    /// The system prompt, if any.
     SystemPrompt: string option
     /// The JSON Schema of a structured call; `None` for a chat call.
     Schema: string option
@@ -74,13 +77,16 @@ type Connector<'S> = {
     UnservedReason: string
     /// Whether a model accepts image input.
     IsVisionCapable: string -> bool
+    /// How a structured call is answered.
     StructuredOutput: StructuredOutput
     /// The client the calls go out on (its base address and instance
     /// timeout already set).
     Client: HttpClient
     /// The headers the credential yields for one call, or why there are none.
     Credential: unit -> Async<Result<(string * string) list, AIProviderError>>
+    /// Where one call is posted.
     Endpoint: ProviderRequest -> Endpoint
+    /// The request body of one call, or why the call is refused before it is sent.
     Body: ProviderRequest -> Result<string, AIProviderError>
     /// Parse a 2xx body.
     ParseResponse: ProviderRequest -> string -> Result<AIProviderResponse, AIProviderError>
@@ -93,6 +99,7 @@ type Connector<'S> = {
     Pause: TimeSpan -> Async<unit>
 }
 
+/// Helpers for building a `Connector`.
 module Connector =
     /// The production pause.
     let sleep (delay: TimeSpan) : Async<unit> = Async.Sleep delay
@@ -110,6 +117,7 @@ module Connector =
             | _ -> return Error(PermanentClient(0, missing))
         }
 
+/// The one provider call every connector runs on.
 module ProviderCall =
 
     /// The caller's token, with the policy's per-call timeout.

@@ -12,6 +12,7 @@ Microsoft365CopilotAIProvider.KnownModels : Microsoft.FSharp.Collections.FSharpL
 Microsoft365CopilotAIProvider.ProviderId : System.String (literal)
 Microsoft365CopilotAIProvider.WorkIQAskScope : System.String (literal)
 Microsoft365CopilotAIProvider.capabilities : ToolUp.Platform.AI.AIProviderCapabilities { get }
+Microsoft365CopilotAIProvider.connector(System.Net.Http.HttpClient, Microsoft365CopilotAIProvider+Microsoft365CopilotTokenSource, Microsoft365CopilotAIProvider+Microsoft365CopilotOptions) : ToolUp.AI.Connector`1[Microsoft365CopilotWire+Microsoft365CopilotStream]
 Microsoft365CopilotAIProvider.create(Azure.Core.TokenCredential) : ToolUp.Platform.AI.IAIProvider
 Microsoft365CopilotAIProvider.createWithAccessToken(System.String) : ToolUp.Platform.AI.IAIProvider
 Microsoft365CopilotAIProvider.createWithAccessTokenAndModel(System.String, System.String) : ToolUp.Platform.AI.IAIProvider
@@ -31,10 +32,6 @@ Microsoft365CopilotAIProvider+Microsoft365CopilotOptionsModule.withBaseUrl(Syste
 Microsoft365CopilotAIProvider+Microsoft365CopilotOptionsModule.withFiles(Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft365CopilotAIProvider+Microsoft365CopilotOptions) : Microsoft365CopilotAIProvider+Microsoft365CopilotOptions
 Microsoft365CopilotAIProvider+Microsoft365CopilotOptionsModule.withTimeZone(System.String, Microsoft365CopilotAIProvider+Microsoft365CopilotOptions) : Microsoft365CopilotAIProvider+Microsoft365CopilotOptions
 Microsoft365CopilotAIProvider+Microsoft365CopilotOptionsModule.withWebSearch(System.Boolean, Microsoft365CopilotAIProvider+Microsoft365CopilotOptions) : Microsoft365CopilotAIProvider+Microsoft365CopilotOptions
-Microsoft365CopilotAIProvider+Microsoft365CopilotProvider (class)
-Microsoft365CopilotAIProvider+Microsoft365CopilotProvider..ctor(Microsoft365CopilotAIProvider+Microsoft365CopilotTokenSource)
-Microsoft365CopilotAIProvider+Microsoft365CopilotProvider..ctor(Microsoft365CopilotAIProvider+Microsoft365CopilotTokenSource, Microsoft365CopilotAIProvider+Microsoft365CopilotOptions)
-Microsoft365CopilotAIProvider+Microsoft365CopilotProvider..ctor(Microsoft365CopilotAIProvider+Microsoft365CopilotTokenSource, Microsoft365CopilotAIProvider+Microsoft365CopilotOptions, System.Net.Http.HttpClient)
 Microsoft365CopilotAIProvider+Microsoft365CopilotTokenSource (class)
 Microsoft365CopilotAIProvider+Microsoft365CopilotTokenSource.IsFromAccessToken : System.Boolean { get }
 Microsoft365CopilotAIProvider+Microsoft365CopilotTokenSource.IsFromCredential : System.Boolean { get }
@@ -57,6 +54,14 @@ Microsoft365CopilotWire+CopilotTurn (class)
 Microsoft365CopilotWire+CopilotTurn..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String])
 Microsoft365CopilotWire+CopilotTurn.AdditionalContext : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 Microsoft365CopilotWire+CopilotTurn.Prompt : System.String { get }
+Microsoft365CopilotWire+Microsoft365CopilotStream (class)
+Microsoft365CopilotWire+Microsoft365CopilotStream..ctor(Microsoft365CopilotWire+SseFrame, System.String, System.String)
+Microsoft365CopilotWire+Microsoft365CopilotStream.Frame : Microsoft365CopilotWire+SseFrame { get }
+Microsoft365CopilotWire+Microsoft365CopilotStream.Latest : System.String { get }
+Microsoft365CopilotWire+Microsoft365CopilotStream.Streamed : System.String { get }
+Microsoft365CopilotWire+Microsoft365CopilotStreamModule (class)
+Microsoft365CopilotWire+Microsoft365CopilotStreamModule.initial : Microsoft365CopilotWire+Microsoft365CopilotStream { get }
+Microsoft365CopilotWire+Microsoft365CopilotStreamModule.processor(System.String) : ToolUp.AI.Wire.StreamProcessor`1[Microsoft365CopilotWire+Microsoft365CopilotStream]
 Microsoft365CopilotWire+SseFrame (class)
 Microsoft365CopilotWire+SseFrame..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.String])
 Microsoft365CopilotWire+SseFrame.Pending : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }

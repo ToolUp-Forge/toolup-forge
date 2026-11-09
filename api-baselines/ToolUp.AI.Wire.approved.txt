@@ -7,21 +7,59 @@ ToolUp.AI.Wire.ClaudeStreaming (class)
 ToolUp.AI.Wire.ClaudeStreaming.finalize(ToolUp.AI.Wire.ClaudeStreaming+StreamState) : ToolUp.Platform.AI.AIProviderResponse
 ToolUp.AI.Wire.ClaudeStreaming.initial : ToolUp.AI.Wire.ClaudeStreaming+StreamState { get }
 ToolUp.AI.Wire.ClaudeStreaming.processData(ToolUp.AI.Wire.ClaudeStreaming+StreamState, System.String) : System.Tuple`2[ToolUp.AI.Wire.ClaudeStreaming+StreamState, Microsoft.FSharp.Core.FSharpOption`1[System.String]]
+ToolUp.AI.Wire.ClaudeStreaming.processor : ToolUp.AI.Wire.StreamProcessor`1[ToolUp.AI.Wire.ClaudeStreaming+StreamState] { get }
 ToolUp.AI.Wire.ClaudeStreaming+StreamState (class)
-ToolUp.AI.Wire.ClaudeStreaming+StreamState..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderToolCall], System.String, System.Int32, System.Int32, System.Int32, System.Boolean, System.Int32, System.Boolean)
+ToolUp.AI.Wire.ClaudeStreaming+StreamState..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderToolCall], ToolUp.Platform.AI.StopReason, System.Int32, System.Int32, System.Int32, System.Boolean, System.Int32, System.Boolean)
 ToolUp.AI.Wire.ClaudeStreaming+StreamState.CacheCreationSeen : System.Boolean { get }
 ToolUp.AI.Wire.ClaudeStreaming+StreamState.CacheCreationTokens : System.Int32 { get }
 ToolUp.AI.Wire.ClaudeStreaming+StreamState.CacheReadTokens : System.Int32 { get }
 ToolUp.AI.Wire.ClaudeStreaming+StreamState.Content : System.String { get }
 ToolUp.AI.Wire.ClaudeStreaming+StreamState.InputTokens : System.Int32 { get }
 ToolUp.AI.Wire.ClaudeStreaming+StreamState.OutputTokens : System.Int32 { get }
-ToolUp.AI.Wire.ClaudeStreaming+StreamState.StopReason : System.String { get }
+ToolUp.AI.Wire.ClaudeStreaming+StreamState.StopReason : ToolUp.Platform.AI.StopReason { get }
 ToolUp.AI.Wire.ClaudeStreaming+StreamState.ToolCalls : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderToolCall] { get }
 ToolUp.AI.Wire.ClaudeStreaming+StreamState.UsageSeen : System.Boolean { get }
+ToolUp.AI.Wire.GeminiStreaming (class)
+ToolUp.AI.Wire.GeminiStreaming.applyChunk(ToolUp.AI.Wire.GeminiStreaming+StreamState, ToolUp.Remoting.Json.JsonValue) : System.Tuple`2[ToolUp.AI.Wire.GeminiStreaming+StreamState, Microsoft.FSharp.Core.FSharpOption`1[System.String]]
+ToolUp.AI.Wire.GeminiStreaming.finalize(ToolUp.AI.Wire.GeminiStreaming+StreamState) : ToolUp.Platform.AI.AIProviderResponse
+ToolUp.AI.Wire.GeminiStreaming.initial : ToolUp.AI.Wire.GeminiStreaming+StreamState { get }
+ToolUp.AI.Wire.GeminiStreaming.parseUsage(ToolUp.Remoting.Json.JsonValue) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AI.TokenUsage]
+ToolUp.AI.Wire.GeminiStreaming.processData(ToolUp.AI.Wire.GeminiStreaming+StreamState, System.String) : System.Tuple`2[ToolUp.AI.Wire.GeminiStreaming+StreamState, Microsoft.FSharp.Core.FSharpOption`1[System.String]]
+ToolUp.AI.Wire.GeminiStreaming.processor : ToolUp.AI.Wire.StreamProcessor`1[ToolUp.AI.Wire.GeminiStreaming+StreamState] { get }
+ToolUp.AI.Wire.GeminiStreaming.stopReason(System.String) : ToolUp.Platform.AI.StopReason
+ToolUp.AI.Wire.GeminiStreaming.syntheticToolCallId(System.String, System.Int32) : System.String
+ToolUp.AI.Wire.GeminiStreaming+StreamState (class)
+ToolUp.AI.Wire.GeminiStreaming+StreamState..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderToolCall], ToolUp.Platform.AI.StopReason, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AI.TokenUsage])
+ToolUp.AI.Wire.GeminiStreaming+StreamState.Content : System.String { get }
+ToolUp.AI.Wire.GeminiStreaming+StreamState.StopReason : ToolUp.Platform.AI.StopReason { get }
+ToolUp.AI.Wire.GeminiStreaming+StreamState.ToolCalls : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderToolCall] { get }
+ToolUp.AI.Wire.GeminiStreaming+StreamState.Usage : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AI.TokenUsage] { get }
 ToolUp.AI.Wire.JsonHost (class)
 ToolUp.AI.Wire.JsonHost.escape(System.String) : System.String
 ToolUp.AI.Wire.JsonHost.parse(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Remoting.Json.JsonValue]
 ToolUp.AI.Wire.JsonHost.serialize(ToolUp.Remoting.Json.JsonValue) : System.String
+ToolUp.AI.Wire.OpenAIStreaming (class)
+ToolUp.AI.Wire.OpenAIStreaming.finalize(ToolUp.AI.Wire.OpenAIStreaming+StreamState) : ToolUp.Platform.AI.AIProviderResponse
+ToolUp.AI.Wire.OpenAIStreaming.initial : ToolUp.AI.Wire.OpenAIStreaming+StreamState { get }
+ToolUp.AI.Wire.OpenAIStreaming.parseUsage(ToolUp.Remoting.Json.JsonValue) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AI.TokenUsage]
+ToolUp.AI.Wire.OpenAIStreaming.processData(ToolUp.AI.Wire.OpenAIStreaming+StreamState, System.String) : System.Tuple`2[ToolUp.AI.Wire.OpenAIStreaming+StreamState, Microsoft.FSharp.Core.FSharpOption`1[System.String]]
+ToolUp.AI.Wire.OpenAIStreaming.processor : ToolUp.AI.Wire.StreamProcessor`1[ToolUp.AI.Wire.OpenAIStreaming+StreamState] { get }
+ToolUp.AI.Wire.OpenAIStreaming.stopReason(System.String) : ToolUp.Platform.AI.StopReason
+ToolUp.AI.Wire.OpenAIStreaming+StreamState (class)
+ToolUp.AI.Wire.OpenAIStreaming+StreamState..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderToolCall], ToolUp.Platform.AI.StopReason, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AI.TokenUsage])
+ToolUp.AI.Wire.OpenAIStreaming+StreamState.Content : System.String { get }
+ToolUp.AI.Wire.OpenAIStreaming+StreamState.StopReason : ToolUp.Platform.AI.StopReason { get }
+ToolUp.AI.Wire.OpenAIStreaming+StreamState.ToolCalls : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderToolCall] { get }
+ToolUp.AI.Wire.OpenAIStreaming+StreamState.Usage : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AI.TokenUsage] { get }
+ToolUp.AI.Wire.StreamProcessor (class)
+ToolUp.AI.Wire.StreamProcessor.dataPayload(System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.AI.Wire.StreamProcessor.overData`1(S, Microsoft.FSharp.Core.FSharpFunc`2[S, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.Tuple`2[S, Microsoft.FSharp.Core.FSharpOption`1[System.String]]]], Microsoft.FSharp.Core.FSharpFunc`2[S, ToolUp.Platform.AI.AIProviderResponse]) : ToolUp.AI.Wire.StreamProcessor`1[S]
+ToolUp.AI.Wire.StreamProcessor.replay`1(ToolUp.AI.Wire.StreamProcessor`1[S], Microsoft.FSharp.Collections.FSharpList`1[System.String]) : System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.AI.AIProviderResponse]
+ToolUp.AI.Wire.StreamProcessor`1 (class)
+ToolUp.AI.Wire.StreamProcessor`1..ctor(S, Microsoft.FSharp.Core.FSharpFunc`2[S, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.Tuple`2[S, Microsoft.FSharp.Core.FSharpOption`1[System.String]]]], Microsoft.FSharp.Core.FSharpFunc`2[S, System.Tuple`2[Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.AI.AIProviderResponse]])
+ToolUp.AI.Wire.StreamProcessor`1.Finish : Microsoft.FSharp.Core.FSharpFunc`2[S, System.Tuple`2[Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.AI.AIProviderResponse]] { get }
+ToolUp.AI.Wire.StreamProcessor`1.Initial : S { get }
+ToolUp.AI.Wire.StreamProcessor`1.Step : Microsoft.FSharp.Core.FSharpFunc`2[S, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.Tuple`2[S, Microsoft.FSharp.Core.FSharpOption`1[System.String]]]] { get }
 ToolUp.Platform.AI.AIContentPart (class)
 ToolUp.Platform.AI.AIContentPart.IsBlockPart : System.Boolean { get }
 ToolUp.Platform.AI.AIContentPart.IsImagePart : System.Boolean { get }
@@ -126,9 +164,9 @@ ToolUp.Platform.AI.AIProviderMessageModule.multipart(System.String, Microsoft.FS
 ToolUp.Platform.AI.AIProviderMessageModule.redactedSummary(ToolUp.Platform.AI.AIProviderMessage) : System.String
 ToolUp.Platform.AI.AIProviderMessageModule.text(System.String, System.String) : ToolUp.Platform.AI.AIProviderMessage
 ToolUp.Platform.AI.AIProviderResponse (class)
-ToolUp.Platform.AI.AIProviderResponse..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderToolCall], System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AI.TokenUsage])
+ToolUp.Platform.AI.AIProviderResponse..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderToolCall], ToolUp.Platform.AI.StopReason, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AI.TokenUsage])
 ToolUp.Platform.AI.AIProviderResponse.Content : System.String { get }
-ToolUp.Platform.AI.AIProviderResponse.StopReason : System.String { get }
+ToolUp.Platform.AI.AIProviderResponse.StopReason : ToolUp.Platform.AI.StopReason { get }
 ToolUp.Platform.AI.AIProviderResponse.ToolCalls : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderToolCall] { get }
 ToolUp.Platform.AI.AIProviderResponse.Usage : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AI.TokenUsage] { get }
 ToolUp.Platform.AI.AIProviderToolCall (class)
@@ -208,7 +246,29 @@ ToolUp.Platform.AI.ModelOverrideOutcomeModule.resolve(Microsoft.FSharp.Core.FSha
 ToolUp.Platform.AI.ModelOverrideOutcomeModule.route(ToolUp.Platform.AI.ModelOverrideOutcome) : System.String
 ToolUp.Platform.AI.ModelOverrideOutcomeModule.served(ToolUp.Platform.AI.ModelOverrideOutcome) : System.String
 ToolUp.Platform.AI.RetryRunner (class)
+ToolUp.Platform.AI.RetryRunner.classify(ToolUp.Platform.AI.AIProviderError) : ToolUp.Platform.Transport.RetryClass
+ToolUp.Platform.AI.RetryRunner.runPausing`1(Microsoft.FSharp.Core.FSharpFunc`2[System.TimeSpan, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]], ToolUp.Platform.Transport.RetryPolicy, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Platform.AI.AIProviderError]]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Platform.AI.AIProviderError]]
 ToolUp.Platform.AI.RetryRunner.run`1(ToolUp.Platform.Transport.RetryPolicy, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Platform.AI.AIProviderError]]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Platform.AI.AIProviderError]]
+ToolUp.Platform.AI.StopReason (class)
+ToolUp.Platform.AI.StopReason.EndTurn : ToolUp.Platform.AI.StopReason { get }
+ToolUp.Platform.AI.StopReason.IsEndTurn : System.Boolean { get }
+ToolUp.Platform.AI.StopReason.IsMaxTokens : System.Boolean { get }
+ToolUp.Platform.AI.StopReason.IsOther : System.Boolean { get }
+ToolUp.Platform.AI.StopReason.IsToolUse : System.Boolean { get }
+ToolUp.Platform.AI.StopReason.MaxTokens : ToolUp.Platform.AI.StopReason { get }
+ToolUp.Platform.AI.StopReason.Tag : System.Int32 { get }
+ToolUp.Platform.AI.StopReason.Token : System.String { get }
+ToolUp.Platform.AI.StopReason.ToolUse : ToolUp.Platform.AI.StopReason { get }
+ToolUp.Platform.AI.StopReason+Other (class)
+ToolUp.Platform.AI.StopReason+Other.token : System.String { get }
+ToolUp.Platform.AI.StopReason+Tags (class)
+ToolUp.Platform.AI.StopReason+Tags.EndTurn : System.Int32 (literal)
+ToolUp.Platform.AI.StopReason+Tags.MaxTokens : System.Int32 (literal)
+ToolUp.Platform.AI.StopReason+Tags.Other : System.Int32 (literal)
+ToolUp.Platform.AI.StopReason+Tags.ToolUse : System.Int32 (literal)
+ToolUp.Platform.AI.StopReasonModule (class)
+ToolUp.Platform.AI.StopReasonModule.ofToken(System.String) : ToolUp.Platform.AI.StopReason
+ToolUp.Platform.AI.StopReasonModule.token(ToolUp.Platform.AI.StopReason) : System.String
 ToolUp.Platform.AI.TokenUsage (class)
 ToolUp.Platform.AI.TokenUsage..ctor(System.Int32, System.Int32, System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.Int32])
 ToolUp.Platform.AI.TokenUsage.CacheCreationTokens : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }

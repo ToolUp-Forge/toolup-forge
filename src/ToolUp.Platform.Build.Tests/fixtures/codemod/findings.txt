@@ -1,4 +1,4 @@
-Codemod: 86 site(s) in 17 file(s) need human review (not rewritten):
+Codemod: 91 site(s) in 17 file(s) need human review (not rewritten):
   src/Client/App.fs
     L14 [66-dev-default-user-id] DevDefaultUserId = "dev-admin"
       -> Phase 66: `ClientConfig.DevDefaultUserId` is deleted — the public-utility-with-admin shape it approximated is `Surfaces = Surfaces.anonymousAndIndividual` (worked example 4)
@@ -70,6 +70,16 @@ Codemod: 86 site(s) in 17 file(s) need human review (not rewritten):
       -> Phase 1077: the history window is `AIAssistantServerConfig.Limits.HistoryWindow` now: set `Limits = { AgentLoopLimits.defaults with HistoryWindow = <n> }`, and read it as `AIAssistantServerConfig.limits cfg |> AgentLoopLimits.historyWindow`
     L25 [1077-run-agent-loop] AIAgentEngine.runAgentLoop provider registry dispatch ctx taskId conversationId AISurface.SidePanel None None CancellationToken.None messages prompt onEvent
       -> Phase 1077: `AIAgentEngine.runAgentLoop` is removed: call `runAgentLoopWithInput` with the same arguments, passing `ModelInput.ofSystemPrompt "SystemPromptBuilder" systemPrompt messages` where the system prompt was (or build an `AIAgentEngine.TurnContext` and call `AIAgentEngine.run`)
+    L28 [1079-claude-constructor] let claude = ClaudeAIProvider.ClaudeAIProvider("key")
+      -> Phase 1079: the `ClaudeAIProvider` constructors are gone: `ClaudeAIProvider(apiKey)` is `ClaudeAIProvider.createWithApiKey apiKey`, `(apiKey, model)` is `createWithApiKeyAndModel`, `(apiKey, model, maxTokens, effort)` is `createWithApiKeyModelMaxTokensAndEffort`, `(secretStore)` is `create`, `(secretStore, model)` is `createWithModel`, `(secretStore, model, maxTokens, effort)` is `createWithSecretStore`; a key read on every call is `createWithKeySource fetch model maxTokens effort`, and a custom client is `ConnectorProvider(ClaudeAIProvider.connector client fetch maxTokens effort, model)`
+    L29 [1079-openai-constructor] let openAI = OpenAIProvider.OpenAIProvider("key", "gpt-4o")
+      -> Phase 1079: the `OpenAIProvider` constructors are gone: `OpenAIProvider(apiKey)` is `OpenAIProvider.createWithApiKey apiKey`, `(apiKey, model)` is `createWithApiKeyAndModel`, `(secretStore)` is `create`, `(secretStore, model)` is `createWithModel`; a key read on every call is `createWithKeySource fetch model`, and a custom client is `ConnectorProvider(OpenAIProvider.connector client fetch, model)`
+    L30 [1079-gemini-constructor] let gemini = GeminiAIProvider.GeminiAIProvider("key")
+      -> Phase 1079: the `GeminiAIProvider` constructors are gone: `GeminiAIProvider(apiKey)` is `GeminiAIProvider.createWithApiKey apiKey`, `(apiKey, model)` is `createWithApiKeyAndModel`, `(secretStore)` is `create`, `(secretStore, model)` is `createWithModel`; a key read on every call is `createWithKeySource fetch model`, and a custom client is `ConnectorProvider(GeminiAIProvider.connector client fetch, model)`
+    L31 [1079-copilot-constructor] let copilot = CopilotAIProvider.CopilotAIProvider("https://acme.openai.azure.com", "key")
+      -> Phase 1079: the `CopilotAIProvider` constructors are gone: `(endpoint, apiKey[, model])` is `CopilotAIProvider.createWithApiKey` / `createWithApiKeyAndModel`, `(secretStore, endpoint[, model])` is `create` / `createWithModel`, `(endpoint, credential[, model])` is `createWithCredential` / `createWithCredentialAndModel`, and an explicit api-version is `createWithAuth endpoint apiVersion auth model`. `Microsoft365CopilotProvider` is gone too: use `Microsoft365CopilotAIProvider.create*`, or `createWithHttpClient` for a custom client
+    L32 [1079-stop-reason-token] let finished (r: AIProviderResponse) = r.StopReason = "end_turn"
+      -> Phase 1079: if this is an `AIProviderResponse`, `StopReason` is a union now: `"end_turn"` is `StopReason.EndTurn`, `"tool_use"` is `StopReason.ToolUse`, `"max_tokens"` is `StopReason.MaxTokens` and any other token is `StopReason.Other "…"`; `.Token` reads the string back. `AILatencyRecord.StopReason` is still the recorded string
   src/Server/Config.fs
     L65 [877-record-update-unprovable] { (ServerConfig.fromEnv logger overrides) with LogLevel = LogLevel.Debug }
       -> Phase 877: this record update sets a field that moved into a concern record, and the codemod could not nest it: `(ServerConfig.fromEnv logger overrides)` is not named as the config and every moved label it sets (LogLevel) is one other records carry too; if it is a `ServerConfig`, nest by hand, otherwise nothing changes. Bind the base to a name and write `<Concern> = { <base>.<Concern> with <Field> = … }` by hand
@@ -194,6 +204,7 @@ Codemod: 86 site(s) in 17 file(s) need human review (not rewritten):
     Phase 1066 — docs/migrations/1066-redesign-d-schedulerpolicy-coalesced-and-joblifecycle-transition.md
     Phase 1067 — docs/migrations/1067-redesign-d-hosting-register-placement-and-options-records.md
     Phase 1077 — docs/migrations/1077-redesign-f-turnoutcome-loopstate-and-loop-step.md
+    Phase 1079 — docs/migrations/1079-redesign-f-the-connector-kernel.md
     Phase 1094 — docs/migrations/1094-redesign-h-factscompose-options-modelling-dedup-and-fact-tools.md
     Phase 1095 — docs/migrations/1095-redesign-h-deliveryplan-and-connector-capabilities.md
     Phase 11.C.5 — docs/migrations/11-C-5-public-api-stability-cluster.md
