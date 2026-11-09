@@ -47,6 +47,14 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Scope
 open ToolUp.Platform.Compose
 
+/// A permission read the case expects to succeed; an `Error` fails it by name.
+let private readOk (read: Async<Result<'T, PermissionStoreError>>) : Async<'T> = async {
+    match! read with
+    | Ok value -> return value
+    | Error e -> return failtestf "the permission read failed: %s" (PermissionStoreError.describe e)
+}
+
+
 // ─── Fixtures ────────────────────────────────────────────────────────
 
 let private Read = ModulePermission.Read
@@ -72,22 +80,26 @@ type private RecordingAuditLog() =
 
         member _.GetAuditTrail(_, _, _) = async { return [] }
 
-/// Phase 1062 — an inner store whose document cannot be read. Before the
-/// phase its read RAISED (`PermissionStoreUnavailableException`), and the
-/// raise travelled through the decorator and out of `grantModuleAccess`
-/// past the classification of its `Result`.
+/// An inner store whose document cannot be read: every read answers
+/// `Unreadable` and every write refuses. Before Phase 1062 the read RAISED
+/// and the raise travelled out of `grantModuleAccess` past the
+/// classification of its `Result`.
 type private UnreadablePermissionStore() =
-    static member Fault =
-        PermissionStoreUnavailableException "pinned: the permission document is unreadable"
+    let unreadable () = async {
+        return Error(PermissionStoreError.Unreadable "pinned: the permission document is unreadable")
+    }
+
+    let refused () = async { return Error "pinned: the permission document is unreadable" }
 
     interface IPermissionStore with
-        member _.GetTeamPermissions _ = async { return raise UnreadablePermissionStore.Fault }
-        member _.SetTeamPermissions(_, _) = async { return raise UnreadablePermissionStore.Fault }
-        member _.GetEffectivePermissions(_, _) = async { return raise UnreadablePermissionStore.Fault }
-        member _.SetMemberPermissions(_, _, _, _) = async { return raise UnreadablePermissionStore.Fault }
-        member _.SetTeamDefaults(_, _) = async { return raise UnreadablePermissionStore.Fault }
-        member _.GetModuleExposure _ = async { return raise UnreadablePermissionStore.Fault }
-        member _.SetModuleExposure(_, _, _) = async { return raise UnreadablePermissionStore.Fault }
+        member _.GetTeamPermissions _ = unreadable ()
+        member _.UpdateTeamPermissions(_, _) = refused ()
+        member _.SetTeamPermissions(_, _) = refused ()
+        member _.GetEffectivePermissions(_, _) = unreadable ()
+        member _.SetMemberPermissions(_, _, _, _) = refused ()
+        member _.SetTeamDefaults(_, _) = refused ()
+        member _.GetModuleExposure _ = unreadable ()
+        member _.SetModuleExposure(_, _, _) = refused ()
 
 /// The synchronous scheduler the dispatch cases pass to
 /// `guardDispatch`, so decision and emission are observed together.
@@ -350,7 +362,7 @@ let tests =
                 | other -> failtestf "expected JustificationRequired, got %A" other
 
                 // Nothing was persisted by either refusal.
-                let! doc = store.GetTeamPermissions(TeamId "t1")
+                let! doc = readOk (store.GetTeamPermissions(TeamId "t1"))
                 Expect.isEmpty doc.Members "a refused grant writes nothing"
                 Expect.isEmpty doc.Grants "a refused grant records nothing"
             }
@@ -372,7 +384,7 @@ let tests =
 
                 Expect.equal outcome (Ok GrantWriteOutcome.Granted) "granted outright — no third party is involved"
 
-                let! doc = store.GetTeamPermissions(TeamId "t1")
+                let! doc = readOk (store.GetTeamPermissions(TeamId "t1"))
                 let record = TeamPermissions.grantsFor "alice" doc |> Map.tryFind "Partner"
 
                 match record with
@@ -407,7 +419,7 @@ let tests =
                     (Ok(GrantWriteOutcome.RecordedPendingConsent "alice"))
                     "the admin cannot consent on the subject's behalf"
 
-                let! pending = store.GetTeamPermissions(TeamId "t1")
+                let! pending = readOk (store.GetTeamPermissions(TeamId "t1"))
 
                 let pendingRecord =
                     TeamPermissions.grantsFor "alice" pending |> Map.tryFind "Partner"
@@ -419,14 +431,14 @@ let tests =
                 // The permission entry EXISTS meanwhile — which is
                 // exactly why liveness has to be a separate question from
                 // `canAccessModule`.
-                let! effective = store.GetEffectivePermissions(UserId "alice", TeamId "t1")
+                let! effective = readOk (store.GetEffectivePermissions(UserId "alice", TeamId "t1"))
                 Expect.isTrue (effective.ContainsKey "Partner") "the permission entry is written; it is just inert"
 
                 match! GrantPolicyGuard.PermissionGrants.acceptGrant store "t1" "alice" "Partner" with
                 | Error e -> failtestf "acceptGrant failed: %s" e
                 | Ok() -> ()
 
-                let! accepted = store.GetTeamPermissions(TeamId "t1")
+                let! accepted = readOk (store.GetTeamPermissions(TeamId "t1"))
 
                 let acceptedRecord =
                     TeamPermissions.grantsFor "alice" accepted |> Map.tryFind "Partner"
@@ -475,7 +487,7 @@ let tests =
                     Expect.equal named party "the refusal names the party whose approval is missing"
                 | other -> failtestf "expected CounterpartyApprovalUnavailable, got %A" other
 
-                let! doc = store.GetTeamPermissions(TeamId "t1")
+                let! doc = readOk (store.GetTeamPermissions(TeamId "t1"))
                 Expect.isEmpty doc.Members "nothing persisted — an emailed approval is not an artifact"
             }
 
@@ -754,10 +766,10 @@ let tests =
                 | Error e -> failtestf "SetMemberPermissions failed: %s" e
                 | Ok() -> ()
 
-                let! doc = store.GetTeamPermissions(TeamId "t1")
+                let! doc = readOk (store.GetTeamPermissions(TeamId "t1"))
                 Expect.isEmpty doc.Grants "no records are minted for an AdminDiscretion module"
 
-                let! effective = store.GetEffectivePermissions(UserId "alice", TeamId "t1")
+                let! effective = readOk (store.GetEffectivePermissions(UserId "alice", TeamId "t1"))
                 Expect.equal effective (Map.ofList [ "Ordinary", [ Read; Write ] ]) "and the merge is unchanged"
             }
 
@@ -783,7 +795,7 @@ let tests =
                 | Ok _ -> ()
 
                 let store = PermissionStore(storage) :> IPermissionStore
-                let! doc = store.GetTeamPermissions(TeamId "t1")
+                let! doc = readOk (store.GetTeamPermissions(TeamId "t1"))
 
                 Expect.isEmpty doc.Grants "absent ⇒ empty ⇒ every module behaves as AdminDiscretion"
                 Expect.equal (Map.count doc.Members) 1 "and the rest of the document is unaffected"

@@ -343,8 +343,8 @@ let private isBacked (policy: GrantPolicy) (record: ModuleGrantRecord option) =
     | GrantPolicy.AdminDiscretion -> true
     // Phase 552 — the counterparty arm's backing is BOTH halves: this
     // record AND a live consent artifact. `isBacked` is the pure,
-    // document-only half, so it answers `false` here and the async
-    // `validateEntry` below adds the oracle. Keeping it out of this
+    // document-only half, so it answers `false` here and
+    // `validateEntry` below adds the consent verdict. Keeping it out of this
     // function is deliberate: a pure predicate that silently meant
     // "backed, assuming someone else checked the registry" is the shape
     // that produces a guard nobody can read correctly.
@@ -371,57 +371,54 @@ let private isCounterpartyRecordAdequate (policy: GrantPolicy) (record: ModuleGr
     | None -> false
     | Some r -> r.State = GrantState.Active && r.SatisfiedPolicy = policy
 
+/// The verdict on one (subject, module, permissions) entry a write produces.
+/// `NeedsConsent` is not a refusal: the counterparty arm asks a live store,
+/// which a pure validation cannot, so the decorator resolves the named
+/// consent and validates again.
+type private EntryVerdict =
+    | Admitted
+    | Refused of GrantRefusal
+    | NeedsConsent of userId: string * moduleName: string * party: PartyRef
+
 /// Validate one (subject, module, permissions) grant against the
 /// registry, the records present in the document being written, and —
-/// for the counterparty arm — the live consent registry.
+/// for the counterparty arm — the consent verdicts resolved so far.
 ///
-/// Async because the counterparty arm consults a store; every other arm
-/// resolves without touching it, so an estate that declares no
-/// counterparty policy performs no consent work here at all (GP 13).
+/// Pure: the counterparty arm reads `consentOf`, and an entry whose consent
+/// has not been asked about yet answers `NeedsConsent`. Every other arm
+/// resolves without it, so an estate that declares no counterparty policy
+/// performs no consent work at all (GP 13).
 let private validateEntry
     (registry: ModuleGrantPolicyRegistry)
-    (consent: CounterpartyConsentOracle)
-    (teamId: string)
+    (consentOf: string * string -> bool option)
     (records: Map<string, Map<string, ModuleGrantRecord>>)
     (userId: string)
     (moduleName: string)
     (permissions: ModulePermission list)
-    : Async<Result<unit, GrantRefusal>> =
-    async {
-        if List.isEmpty permissions then
-            return Ok()
-        else
-            let policy = ModuleGrantPolicyRegistry.resolve registry moduleName
+    : EntryVerdict =
+    if List.isEmpty permissions then
+        Admitted
+    else
+        let policy = ModuleGrantPolicyRegistry.resolve registry moduleName
+        let record = records |> Map.tryFind userId |> Option.bind (Map.tryFind moduleName)
 
-            match policy with
-            | GrantPolicy.AdminDiscretion -> return Ok()
-            | GrantPolicy.RequiresCounterpartyApproval party ->
-                // Phase 552 — BOTH halves, and in this order. The consent
-                // is asked about first because it is the expensive, live
-                // fact; a document record without it is exactly the forged
-                // row Phase 551 recorded as refusable, and a live consent
-                // without a record is a grant nobody actually wrote.
-                let record = records |> Map.tryFind userId |> Option.bind (Map.tryFind moduleName)
-
-                let! consented = consent.IsConsentLive(TeamId teamId, userId, moduleName, party)
-
-                if consented && isCounterpartyRecordAdequate policy record then
-                    return Ok()
-                elif consented then
-                    // Consent is live but the document carries no adequate
-                    // record — the write is trying to create authority
-                    // without recording what satisfied the policy.
-                    return Error(GrantRefusal.UnbackedGrant(moduleName, policy))
-                else
-                    return Error(GrantRefusal.CounterpartyApprovalUnavailable(moduleName, party))
-            | _ ->
-                let record = records |> Map.tryFind userId |> Option.bind (Map.tryFind moduleName)
-
-                if isBacked policy record then
-                    return Ok()
-                else
-                    return Error(GrantRefusal.UnbackedGrant(moduleName, policy))
-    }
+        match policy with
+        | GrantPolicy.AdminDiscretion -> Admitted
+        | GrantPolicy.RequiresCounterpartyApproval party ->
+            // BOTH halves: the consent is the live fact, and a document record
+            // without it is exactly the forged row Phase 551 recorded as
+            // refusable; a live consent without a record is a grant nobody
+            // actually wrote.
+            match consentOf (userId, moduleName) with
+            | None -> NeedsConsent(userId, moduleName, party)
+            | Some true when isCounterpartyRecordAdequate policy record -> Admitted
+            | Some true -> Refused(GrantRefusal.UnbackedGrant(moduleName, policy))
+            | Some false -> Refused(GrantRefusal.CounterpartyApprovalUnavailable(moduleName, party))
+        | _ ->
+            if isBacked policy record then
+                Admitted
+            else
+                Refused(GrantRefusal.UnbackedGrant(moduleName, policy))
 
 /// A policy-bearing module may never be handed out through team
 /// DEFAULTS: a default applies to every member who lacks an explicit
@@ -498,10 +495,6 @@ type GrantPolicyPermissionStore
             }
             |> Async.Start
 
-    let refuse (subjectId: string) (moduleName: string) (refusal: GrantRefusal) (teamId: string) =
-        record subjectId moduleName refusal teamId
-        Error(GrantRefusal.describe refusal)
-
     /// Phase 730 — the success twin of `record`, emitted from this same
     /// decorator so a grant cannot be admitted without a row.
     ///
@@ -560,6 +553,149 @@ type GrantPolicyPermissionStore
             && ModuleGrantPolicyRegistry.resolve registry moduleName
                <> GrantPolicy.AdminDiscretion)
 
+    /// The member entries a write ADDS or CHANGES relative to the document it
+    /// replaces — what the write guard validates and the success row covers.
+    /// An entry the write leaves exactly as it was moves no authority: it is
+    /// neither re-validated nor re-recorded.
+    let changedEntries (current: TeamPermissions) (next: TeamPermissions) = [
+        for KeyValue(userId, byModule) in next.Members do
+            let prior = current.Members |> Map.tryFind userId |> Option.defaultValue Map.empty
+
+            for KeyValue(moduleName, perms) in byModule do
+                if Map.tryFind moduleName prior <> Some perms then
+                    userId, moduleName, perms
+    ]
+
+    /// The legacy single-entry write has nowhere to carry evidence, so an
+    /// unbacked grant through it is named for what the caller is missing —
+    /// the acknowledgement `PermissionGrants.grantModuleAccess` collects. The
+    /// counterparty arm keeps its own names.
+    let legacyMemberRefusal (refusal: GrantRefusal) =
+        match refusal with
+        | GrantRefusal.UnbackedGrant(moduleName, policy) ->
+            match policy with
+            | GrantPolicy.RequiresCounterpartyApproval _ -> refusal
+            | _ -> GrantRefusal.AcknowledgementRequired(moduleName, policy)
+        | other -> other
+
+    /// Every write path: ONE guarded read-modify-write of the wrapped store,
+    /// validating what the write PRODUCES against the document it replaces —
+    /// so the document validated is the document written, with no second read.
+    /// The counterparty arm's consent is a live store the pure transform
+    /// cannot ask; a pass that meets an unasked consent writes nothing, the
+    /// consents it names are resolved, and the write is attempted again.
+    let governed
+        (teamId: TeamId)
+        (name: GrantRefusal -> GrantRefusal)
+        (change: TeamPermissions -> Result<TeamPermissions, string>)
+        =
+        let consents =
+            System.Collections.Concurrent.ConcurrentDictionary<string * string, bool>()
+
+        let consentOf key =
+            match consents.TryGetValue key with
+            | true, live -> Some live
+            | _ -> None
+
+        let rec attempt (pass: int) = async {
+            // What the LAST run of the transform decided; the store may replay
+            // it on a lost precondition, so each run starts these afresh.
+            let needed = ref []
+            let refusal = ref None
+            let admitted = ref ([], TeamPermissions.empty)
+
+            let! written =
+                inner.UpdateTeamPermissions(
+                    teamId,
+                    fun current ->
+                        needed.Value <- []
+                        refusal.Value <- None
+
+                        match change current with
+                        | Error e -> Error e
+                        | Ok next ->
+                            let entries = changedEntries current next
+
+                            let verdicts =
+                                entries
+                                |> List.map (fun (userId, moduleName, perms) ->
+                                    userId,
+                                    moduleName,
+                                    validateEntry registry consentOf next.Grants userId moduleName perms)
+
+                            // The first refusal is the answer; consents asked
+                            // about are only those ahead of it.
+                            let ahead =
+                                verdicts
+                                |> List.takeWhile (fun (_, _, v) ->
+                                    match v with
+                                    | Refused _ -> false
+                                    | _ -> true)
+
+                            let firstRefusal =
+                                verdicts
+                                |> List.tryPick (fun (userId, moduleName, v) ->
+                                    match v with
+                                    | Refused r -> Some(userId, moduleName, name r)
+                                    | _ -> None)
+
+                            needed.Value <-
+                                ahead
+                                |> List.choose (fun (_, _, v) ->
+                                    match v with
+                                    | NeedsConsent(u, m, party) -> Some(u, m, party)
+                                    | _ -> None)
+
+                            match needed.Value, firstRefusal with
+                            | _ :: _, _ ->
+                                Error "GRANT-POLICY-CONSENT-UNRESOLVED: a counterparty consent was not resolved."
+                            | [], Some(userId, moduleName, r) ->
+                                refusal.Value <- Some(userId, moduleName, r)
+                                Error(GrantRefusal.describe r)
+                            | [], None ->
+                                match validateDefaults registry current.Defaults next.Defaults with
+                                | Error r ->
+                                    let moduleName =
+                                        match r with
+                                        | GrantRefusal.UnbackedGrant(m, _)
+                                        | GrantRefusal.CounterpartyApprovalUnavailable(m, _) -> m
+                                        | _ -> ""
+
+                                    refusal.Value <- Some("", moduleName, r)
+                                    Error(GrantRefusal.describe r)
+                                | Ok() ->
+                                    admitted.Value <- entries, next
+                                    Ok next
+                )
+
+            match needed.Value with
+            | _ :: _ when pass < 3 ->
+                for userId, moduleName, party in needed.Value do
+                    let! live = consent.IsConsentLive(teamId, userId, moduleName, party)
+                    consents[(userId, moduleName)] <- live
+
+                return! attempt (pass + 1)
+            | _ ->
+                match refusal.Value, written with
+                | Some(userId, moduleName, r), _ -> record userId moduleName r teamId.Value
+                | None, Ok() ->
+                    // Phase 730 — the success twin, AFTER the write commits and
+                    // only then: a row claiming a grant the store then refused
+                    // would assert authority that does not exist.
+                    let entries, next = admitted.Value
+
+                    for userId, moduleName, perms in governedGrants entries do
+                        let grantRecord =
+                            next.Grants |> Map.tryFind userId |> Option.bind (Map.tryFind moduleName)
+
+                        recordGranted teamId.Value userId moduleName perms grantRecord
+                | None, Error _ -> ()
+
+                return written
+        }
+
+        attempt 0
+
     /// The pre-552 shape: no consent registry, so the counterparty arm
     /// refuses every grant exactly as Phase 551 shipped it. Preserved as
     /// an explicit secondary constructor, not folded into an optional
@@ -575,176 +711,30 @@ type GrantPolicyPermissionStore
 
         member _.GetModuleExposure teamId = inner.GetModuleExposure teamId
 
+        // Exposure is a visibility axis and grants no authority to a subject.
         member _.SetModuleExposure(teamId, moduleName, state) =
             inner.SetModuleExposure(teamId, moduleName, state)
 
-        member _.SetTeamPermissions(teamId, permissions) = async {
-            // Whole-document replacement: validate every member entry the
-            // write adds or widens, against the records the SAME document
-            // carries. This is what makes `PermissionGrants.grantModuleAccess`
-            // work through the decorator rather than around it — it writes
-            // the permission entry and its record together, so the pair
-            // validates.
-            let! previous = inner.GetTeamPermissions teamId
+        member _.UpdateTeamPermissions(teamId, change) = governed teamId id change
 
-            let changedEntries = [
-                for KeyValue(userId, byModule) in permissions.Members do
-                    let priorForUser =
-                        previous.Members |> Map.tryFind userId |> Option.defaultValue Map.empty
+        // Whole-document replacement: every member entry the write adds or
+        // widens is validated against the records the SAME document carries,
+        // which is what lets `PermissionGrants.grantModuleAccess` write the
+        // entry and its record together through the decorator.
+        member _.SetTeamPermissions(teamId, permissions) =
+            governed teamId id (fun _ -> Ok permissions)
 
-                    for KeyValue(moduleName, perms) in byModule do
-                        if Map.tryFind moduleName priorForUser <> Some perms then
-                            userId, moduleName, perms
-            ]
+        // The legacy write path has nowhere to carry acknowledgement or
+        // justification, so a policy-bearing grant through it validates
+        // against the record ALREADY on the document — a backed module
+        // passes, an unbacked first grant is refused and the caller is
+        // pointed at `PermissionGrants.grantModuleAccess`. Revocation and
+        // every `AdminDiscretion` module are unaffected.
+        member _.SetMemberPermissions(teamId, userId, moduleName, permissions) =
+            governed teamId legacyMemberRefusal (TeamPermissionsEdit.setMember userId moduleName permissions >> Ok)
 
-            // Sequential rather than parallel: the counterparty arm reads
-            // the consent registry, and the first refusal is the answer —
-            // fanning out would perform reads for entries whose verdict is
-            // already decided, against an authorization store, per write.
-            let! entryFailure =
-                changedEntries
-                |> List.fold
-                    (fun acc (userId, moduleName, perms) -> async {
-                        match! acc with
-                        | Some _ as found -> return found
-                        | None ->
-                            match!
-                                validateEntry registry consent teamId.Value permissions.Grants userId moduleName perms
-                            with
-                            | Ok() -> return None
-                            | Error e -> return Some(userId, moduleName, e)
-                    })
-                    (async { return None })
-
-            match entryFailure with
-            | Some(userId, moduleName, e) -> return refuse userId moduleName e teamId.Value
-            | None ->
-                match validateDefaults registry previous.Defaults permissions.Defaults with
-                | Error e ->
-                    let moduleName =
-                        match e with
-                        | GrantRefusal.UnbackedGrant(m, _)
-                        | GrantRefusal.CounterpartyApprovalUnavailable(m, _) -> m
-                        | _ -> ""
-
-                    return refuse "" moduleName e teamId.Value
-                | Ok() ->
-                    let! written = inner.SetTeamPermissions(teamId, permissions)
-
-                    // Phase 730 — emit the success twin AFTER the write
-                    // commits, and only then. A row claiming a grant that
-                    // the store then refused would be worse than no row:
-                    // it asserts authority that does not exist.
-                    match written with
-                    | Ok() ->
-                        for userId, moduleName, perms in governedGrants changedEntries do
-                            let grantRecord =
-                                permissions.Grants |> Map.tryFind userId |> Option.bind (Map.tryFind moduleName)
-
-                            recordGranted teamId.Value userId moduleName perms grantRecord
-                    | Error _ -> ()
-
-                    return written
-        }
-
-        member _.SetMemberPermissions(teamId, userId, moduleName, permissions) = async {
-            // The legacy write path. It has nowhere to carry
-            // acknowledgement or justification, so a policy-bearing grant
-            // through it is refused by construction and the caller is
-            // pointed at `PermissionGrants.grantModuleAccess`. Revocation
-            // (empty list) and every `AdminDiscretion` module are
-            // unaffected — which is every existing call site.
-            if List.isEmpty permissions then
-                return! inner.SetMemberPermissions(teamId, userId, moduleName, permissions)
-            else
-                match ModuleGrantPolicyRegistry.resolve registry moduleName with
-                | GrantPolicy.AdminDiscretion ->
-                    return! inner.SetMemberPermissions(teamId, userId, moduleName, permissions)
-                | GrantPolicy.RequiresCounterpartyApproval party as policy ->
-                    // Phase 552 — symmetric with the arms below: a RE-grant
-                    // of a module whose consent is live and whose record is
-                    // already adequate is a no-op on the policy question and
-                    // is let through. What this path still cannot do is
-                    // CREATE the record — it has nowhere to carry the
-                    // evidence — so a first counterparty grant refuses here
-                    // and points at `GrantConsents.grantWithCounterpartyApproval`.
-                    let! existing = inner.GetTeamPermissions teamId
-
-                    let existingRecord =
-                        existing.Grants
-                        |> Map.tryFind userId.Value
-                        |> Option.bind (Map.tryFind moduleName)
-
-                    let! consented = consent.IsConsentLive(teamId, userId.Value, moduleName, party)
-
-                    if consented && isCounterpartyRecordAdequate policy existingRecord then
-                        let! written = inner.SetMemberPermissions(teamId, userId, moduleName, permissions)
-
-                        // Phase 730 — a re-grant on a governed module is
-                        // still authority changing hands, so it earns a
-                        // row. The record is the one already on the
-                        // document: this path cannot create one.
-                        match written with
-                        | Ok() -> recordGranted teamId.Value userId.Value moduleName permissions existingRecord
-                        | Error _ -> ()
-
-                        return written
-                    elif consented then
-                        return
-                            refuse userId.Value moduleName (GrantRefusal.UnbackedGrant(moduleName, policy)) teamId.Value
-                    else
-                        return
-                            refuse
-                                userId.Value
-                                moduleName
-                                (GrantRefusal.CounterpartyApprovalUnavailable(moduleName, party))
-                                teamId.Value
-                | policy ->
-                    // An adequate record may already exist (a re-grant of
-                    // an already-consented module), in which case the
-                    // write is a no-op on the policy question and is let
-                    // through.
-                    let! existing = inner.GetTeamPermissions teamId
-
-                    let record =
-                        existing.Grants
-                        |> Map.tryFind userId.Value
-                        |> Option.bind (Map.tryFind moduleName)
-
-                    if isBacked policy record then
-                        let! written = inner.SetMemberPermissions(teamId, userId, moduleName, permissions)
-
-                        // Phase 730 — same reasoning as the counterparty
-                        // arm above: the policy question is a no-op on a
-                        // re-grant, the authority question is not.
-                        match written with
-                        | Ok() -> recordGranted teamId.Value userId.Value moduleName permissions record
-                        | Error _ -> ()
-
-                        return written
-                    else
-                        return
-                            refuse
-                                userId.Value
-                                moduleName
-                                (GrantRefusal.AcknowledgementRequired(moduleName, policy))
-                                teamId.Value
-        }
-
-        member _.SetTeamDefaults(teamId, defaults) = async {
-            let! previous = inner.GetTeamPermissions teamId
-
-            match validateDefaults registry previous.Defaults defaults with
-            | Error e ->
-                let moduleName =
-                    match e with
-                    | GrantRefusal.UnbackedGrant(m, _)
-                    | GrantRefusal.CounterpartyApprovalUnavailable(m, _) -> m
-                    | _ -> ""
-
-                return refuse "" moduleName e teamId.Value
-            | Ok() -> return! inner.SetTeamDefaults(teamId, defaults)
-        }
+        member _.SetTeamDefaults(teamId, defaults) =
+            governed teamId id (TeamPermissionsEdit.setDefaults defaults >> Ok)
 
 // ─── Policy-aware grant entry points ─────────────────────────────────
 
@@ -772,53 +762,50 @@ module PermissionGrants =
             match evaluateGrant policy request.ModuleName request.SubjectId request.Permissions request.Evidence with
             | Error refusal -> return Error refusal
             | Ok recordOpt ->
-                let! existing = store.GetTeamPermissions(request.TeamId)
+                // ONE guarded read-modify-write: the entry and its record are
+                // computed from the document they replace, inside the store's
+                // update, so the pair is never momentarily inconsistent and
+                // the decorators validate the document actually written.
+                let edit (existing: TeamPermissions) =
+                    let priorForUser =
+                        existing.Members
+                        |> Map.tryFind request.SubjectId
+                        |> Option.defaultValue Map.empty
 
-                let priorForUser =
-                    existing.Members
-                    |> Map.tryFind request.SubjectId
-                    |> Option.defaultValue Map.empty
+                    let updatedForUser =
+                        if List.isEmpty request.Permissions then
+                            priorForUser |> Map.remove request.ModuleName
+                        else
+                            priorForUser |> Map.add request.ModuleName request.Permissions
 
-                let updatedForUser =
-                    if List.isEmpty request.Permissions then
-                        priorForUser |> Map.remove request.ModuleName
-                    else
-                        priorForUser |> Map.add request.ModuleName request.Permissions
+                    let priorGrants =
+                        existing.Grants
+                        |> Map.tryFind request.SubjectId
+                        |> Option.defaultValue Map.empty
 
-                let updatedMembers =
-                    if Map.isEmpty updatedForUser then
-                        existing.Members |> Map.remove request.SubjectId
-                    else
-                        existing.Members |> Map.add request.SubjectId updatedForUser
+                    let updatedGrantsForUser =
+                        match recordOpt with
+                        | Some r -> priorGrants |> Map.add request.ModuleName r
+                        // A revocation, or an `AdminDiscretion` grant, clears
+                        // any stale record so the document does not accumulate
+                        // evidence for authority that no longer exists.
+                        | None -> priorGrants |> Map.remove request.ModuleName
 
-                let priorGrants =
-                    existing.Grants
-                    |> Map.tryFind request.SubjectId
-                    |> Option.defaultValue Map.empty
+                    Ok {
+                        existing with
+                            Members =
+                                if Map.isEmpty updatedForUser then
+                                    existing.Members |> Map.remove request.SubjectId
+                                else
+                                    existing.Members |> Map.add request.SubjectId updatedForUser
+                            Grants =
+                                if Map.isEmpty updatedGrantsForUser then
+                                    existing.Grants |> Map.remove request.SubjectId
+                                else
+                                    existing.Grants |> Map.add request.SubjectId updatedGrantsForUser
+                    }
 
-                let updatedGrantsForUser =
-                    match recordOpt with
-                    | Some r -> priorGrants |> Map.add request.ModuleName r
-                    // A revocation, or an `AdminDiscretion` grant, clears
-                    // any stale record so the document does not accumulate
-                    // evidence for authority that no longer exists.
-                    | None -> priorGrants |> Map.remove request.ModuleName
-
-                let updatedGrants =
-                    if Map.isEmpty updatedGrantsForUser then
-                        existing.Grants |> Map.remove request.SubjectId
-                    else
-                        existing.Grants |> Map.add request.SubjectId updatedGrantsForUser
-
-                let! written =
-                    store.SetTeamPermissions(
-                        request.TeamId,
-                        {
-                            existing with
-                                Members = updatedMembers
-                                Grants = updatedGrants
-                        }
-                    )
+                let! written = store.UpdateTeamPermissions(request.TeamId, edit)
 
                 match written with
                 | Error e ->
@@ -885,35 +872,30 @@ module PermissionGrants =
         (moduleName: string)
         : Async<Result<unit, string>> =
         async {
-            let! existing = store.GetTeamPermissions(TeamId teamId)
+            return!
+                store.UpdateTeamPermissions(
+                    TeamId teamId,
+                    fun existing ->
+                        match existing.Grants |> Map.tryFind subjectId |> Option.bind (Map.tryFind moduleName) with
+                        | None ->
+                            Error
+                                $"GRANT-POLICY-NO-PENDING-GRANT: no grant record for subject '{subjectId}' on module '{moduleName}'."
+                        | Some r ->
+                            let accepted = {
+                                r with
+                                    State = GrantState.Active
+                                    ConsentedBy = Some subjectId
+                            }
 
-            let record =
-                existing.Grants |> Map.tryFind subjectId |> Option.bind (Map.tryFind moduleName)
+                            let forUser =
+                                existing.Grants
+                                |> Map.tryFind subjectId
+                                |> Option.defaultValue Map.empty
+                                |> Map.add moduleName accepted
 
-            match record with
-            | None ->
-                return
-                    Error
-                        $"GRANT-POLICY-NO-PENDING-GRANT: no grant record for subject '{subjectId}' on module '{moduleName}'."
-            | Some r ->
-                let accepted = {
-                    r with
-                        State = GrantState.Active
-                        ConsentedBy = Some subjectId
-                }
-
-                let forUser =
-                    existing.Grants
-                    |> Map.tryFind subjectId
-                    |> Option.defaultValue Map.empty
-                    |> Map.add moduleName accepted
-
-                return!
-                    store.SetTeamPermissions(
-                        TeamId teamId,
-                        {
-                            existing with
-                                Grants = existing.Grants |> Map.add subjectId forUser
-                        }
-                    )
+                            Ok {
+                                existing with
+                                    Grants = existing.Grants |> Map.add subjectId forUser
+                            }
+                )
         }

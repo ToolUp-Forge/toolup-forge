@@ -120,9 +120,10 @@ let private registryOf declarations =
 /// that refused — `grantModuleAccess` must not claim to know which.
 type private FailingStore(message: string) =
     interface IPermissionStore with
-        member _.GetTeamPermissions _ = async { return TeamPermissions.empty }
-        member _.GetEffectivePermissions(_, _) = async { return Map.empty }
-        member _.GetModuleExposure _ = async { return Map.empty }
+        member _.GetTeamPermissions _ = async { return Ok TeamPermissions.empty }
+        member _.GetEffectivePermissions(_, _) = async { return Ok Map.empty }
+        member _.GetModuleExposure _ = async { return Ok Map.empty }
+        member _.UpdateTeamPermissions(_, _) = async { return Error message }
         member _.SetModuleExposure(_, _, _) = async { return Error message }
         member _.SetTeamPermissions(_, _) = async { return Error message }
         member _.SetMemberPermissions(_, _, _, _) = async { return Error message }

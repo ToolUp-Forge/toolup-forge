@@ -3,7 +3,7 @@ module ToolUp.Platform.Tests.InProcess.ScopeResolutionFailClosedTests
 // Phase 1059 — a permission-store fault while `ScopeResolutionMiddleware`
 // stamps a team member's permissions REFUSES the request.
 //
-// `PermissionStore` raises `PermissionStoreUnavailableException` for a
+// `PermissionStore` answers a `PermissionStoreError` for a
 // present-but-unreadable document so that the request fails closed. Before
 // this phase the middleware read the permissions inside its catch-all, AFTER
 // the subject and the storage scope were stamped: the catch swallowed the
@@ -37,21 +37,29 @@ let private memberUser: AuthenticatedUser = {
         DisplayName = "Member"
 }
 
-/// A permission store whose reads either raise (the fault) or return the
+/// How a faulting store fails: it answers the fault as data (the contract),
+/// or it raises (a custom store that does not honour it).
+type private Fault =
+    | Answers of PermissionStoreError
+    | Raises of exn
+
+/// A permission store whose reads either fail (the fault) or return the
 /// team's restrictive document (the control): module M is granted nothing,
 /// another module is granted `Read`.
-let private permissionStore (fault: exn option) =
+let private permissionStore (fault: Fault option) =
     let restricted = Map.ofList [ moduleName, []; "Other", [ ModulePermission.Read ] ]
 
-    let read (value: 'a) : Async<'a> = async {
+    let read (value: 'a) : Async<Result<'a, PermissionStoreError>> = async {
         match fault with
-        | Some ex -> return raise ex
-        | None -> return value
+        | Some(Answers e) -> return Error e
+        | Some(Raises ex) -> return raise ex
+        | None -> return Ok value
     }
 
     { new IPermissionStore with
         member _.GetTeamPermissions _ = read TeamPermissions.empty
         member _.SetTeamPermissions(_, _) = async { return Ok() }
+        member _.UpdateTeamPermissions(_, _) = async { return Ok() }
         member _.GetEffectivePermissions(_, _) = read restricted
         member _.SetMemberPermissions(_, _, _, _) = async { return Ok() }
         member _.SetTeamDefaults(_, _) = async { return Ok() }
@@ -149,9 +157,11 @@ let tests =
             Expect.equal status 403 "M is restricted by the team's document"
         }
 
-        testCaseAsync "a PermissionStoreUnavailableException refuses with 503 and never reaches M's handler"
+        testCaseAsync "an unreadable permission document refuses with 503 and never reaches M's handler"
         <| async {
-            let fault = PermissionStoreUnavailableException "permissions document unreadable"
+            let fault =
+                Answers(PermissionStoreError.Unreadable "permissions document unreadable")
+
             let! status, reached, rows = run (permissionStore (Some fault))
 
             Expect.isFalse reached "a request whose permissions could not be read must not reach a module handler"
@@ -162,14 +172,14 @@ let tests =
 
             match failures with
             | [ _, AuthScopeResolutionFailed payload ] ->
-                Expect.equal payload.ExceptionKind "PermissionStoreUnavailableException" "the row names the fault"
+                Expect.equal payload.ExceptionKind "PermissionReadRefused" "the row names the fault"
                 Expect.stringContains payload.Message "IPermissionStore" "the row names the store"
             | other -> failtestf "expected exactly one ScopeResolutionFailed row, got %A" other
         }
 
         testCaseAsync "any IPermissionStore fault refuses, not only the typed one"
         <| async {
-            let! status, reached, _ = run (permissionStore (Some(InvalidOperationException "store down")))
+            let! status, reached, _ = run (permissionStore (Some(Raises(InvalidOperationException "store down"))))
             Expect.isFalse reached "an untyped store fault is still a fault"
             Expect.equal status 503 "refused"
         }

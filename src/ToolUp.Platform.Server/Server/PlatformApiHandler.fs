@@ -898,7 +898,7 @@ let permissionApiHandler (_config: ServerConfig) =
                         match callerRole with
                         | Some r when TeamRoles.canManageMembers r ->
                             let! perms = ps.GetTeamPermissions(TeamId teamId)
-                            return Ok perms
+                            return perms |> Result.mapError PermissionStoreError.describe
                         | _ -> return Error "Insufficient permissions"
                     | _ -> return Error "Team management not available in this mode"
                 }

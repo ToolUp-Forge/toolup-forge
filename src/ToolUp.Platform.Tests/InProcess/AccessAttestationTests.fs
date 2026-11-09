@@ -169,24 +169,30 @@ type private FixedPermissionStore(documents: Map<string, TeamPermissions>) =
                 documents
                 |> Map.tryFind teamId.Value
                 |> Option.defaultValue TeamPermissions.empty
+                |> Ok
         }
 
         member _.SetTeamPermissions(_, _) = async { return Error "read-only fixture" }
-        member _.GetEffectivePermissions(_, _) = async { return Map.empty }
+        member _.UpdateTeamPermissions(_, _) = async { return Error "read-only fixture" }
+        member _.GetEffectivePermissions(_, _) = async { return Ok Map.empty }
         member _.SetMemberPermissions(_, _, _, _) = async { return Error "read-only fixture" }
         member _.SetTeamDefaults(_, _) = async { return Error "read-only fixture" }
-        member _.GetModuleExposure(_) = async { return Map.empty }
+        member _.GetModuleExposure(_) = async { return Ok Map.empty }
         member _.SetModuleExposure(_, _, _) = async { return Error "read-only fixture" }
 
 /// A permission store whose documents cannot be read.
 type private BrokenPermissionStore() =
     interface IPermissionStore with
-        member _.GetTeamPermissions(_) = async { return failwith "permission blob unreachable" }
+        member _.GetTeamPermissions(_) = async {
+            return Error(PermissionStoreError.Unreadable "permission blob unreachable")
+        }
+
         member _.SetTeamPermissions(_, _) = async { return Error "broken" }
-        member _.GetEffectivePermissions(_, _) = async { return Map.empty }
+        member _.UpdateTeamPermissions(_, _) = async { return Error "broken" }
+        member _.GetEffectivePermissions(_, _) = async { return Ok Map.empty }
         member _.SetMemberPermissions(_, _, _, _) = async { return Error "broken" }
         member _.SetTeamDefaults(_, _) = async { return Error "broken" }
-        member _.GetModuleExposure(_) = async { return Map.empty }
+        member _.GetModuleExposure(_) = async { return Ok Map.empty }
         member _.SetModuleExposure(_, _, _) = async { return Error "broken" }
 
 /// A consent registry that cannot be read.

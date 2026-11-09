@@ -371,8 +371,7 @@ let registerTeamPermissionStores
                     settings,
                     resolvedLogger,
                     resolveProposer sp,
-                    (fun () -> System.DateTimeOffset.UtcNow),
-                    Async.Start
+                    (fun () -> System.DateTimeOffset.UtcNow)
                 )
                 :> IPermissionStore
             | _ -> guarded)

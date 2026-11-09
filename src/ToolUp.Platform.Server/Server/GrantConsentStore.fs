@@ -732,14 +732,6 @@ let grantWithCounterpartyApproval
             match resolved with
             | Error denial -> return Error denial
             | Ok consentRecord ->
-                let! existing = store.GetTeamPermissions(TeamId teamId)
-
-                let priorForUser =
-                    existing.Members |> Map.tryFind subjectId |> Option.defaultValue Map.empty
-
-                let priorGrants =
-                    existing.Grants |> Map.tryFind subjectId |> Option.defaultValue Map.empty
-
                 let grantRecord = {
                     State = GrantState.Active
                     SatisfiedPolicy = policy
@@ -756,18 +748,27 @@ let grantWithCounterpartyApproval
                     ConsentedBy = None
                 }
 
+                // The entry and its record are written together, computed
+                // from the document they replace in one guarded update.
                 let! written =
-                    store.SetTeamPermissions(
+                    store.UpdateTeamPermissions(
                         TeamId teamId,
-                        {
-                            existing with
-                                Members =
-                                    existing.Members
-                                    |> Map.add subjectId (priorForUser |> Map.add moduleName permissions)
-                                Grants =
-                                    existing.Grants
-                                    |> Map.add subjectId (priorGrants |> Map.add moduleName grantRecord)
-                        }
+                        fun existing ->
+                            let priorForUser =
+                                existing.Members |> Map.tryFind subjectId |> Option.defaultValue Map.empty
+
+                            let priorGrants =
+                                existing.Grants |> Map.tryFind subjectId |> Option.defaultValue Map.empty
+
+                            Ok {
+                                existing with
+                                    Members =
+                                        existing.Members
+                                        |> Map.add subjectId (priorForUser |> Map.add moduleName permissions)
+                                    Grants =
+                                        existing.Grants
+                                        |> Map.add subjectId (priorGrants |> Map.add moduleName grantRecord)
+                            }
                     )
 
                 match written with

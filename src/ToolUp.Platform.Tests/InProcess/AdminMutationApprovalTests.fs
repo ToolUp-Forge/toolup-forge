@@ -85,22 +85,26 @@ type private RecordingAuditLog() =
         member _.Record(scopeId, audit) = async { recorded.Add(scopeId, audit) }
         member _.GetAuditTrail(_, _, _) = async { return [] }
 
-/// Phase 1062 — an inner store whose document cannot be read. Before the
-/// phase its read RAISED (`PermissionStoreUnavailableException`), and the
-/// raise travelled through the decorator and out of `grantModuleAccess`
-/// past the classification of its `Result`.
+/// An inner store whose document cannot be read: every read answers
+/// `Unreadable` and every write refuses. Before Phase 1062 the read RAISED
+/// and the raise travelled out of `grantModuleAccess` past the
+/// classification of its `Result`.
 type private UnreadablePermissionStore() =
-    static member Fault =
-        PermissionStoreUnavailableException "pinned: the permission document is unreadable"
+    let unreadable () = async {
+        return Error(PermissionStoreError.Unreadable "pinned: the permission document is unreadable")
+    }
+
+    let refused () = async { return Error "pinned: the permission document is unreadable" }
 
     interface IPermissionStore with
-        member _.GetTeamPermissions _ = async { return raise UnreadablePermissionStore.Fault }
-        member _.SetTeamPermissions(_, _) = async { return raise UnreadablePermissionStore.Fault }
-        member _.GetEffectivePermissions(_, _) = async { return raise UnreadablePermissionStore.Fault }
-        member _.SetMemberPermissions(_, _, _, _) = async { return raise UnreadablePermissionStore.Fault }
-        member _.SetTeamDefaults(_, _) = async { return raise UnreadablePermissionStore.Fault }
-        member _.GetModuleExposure _ = async { return raise UnreadablePermissionStore.Fault }
-        member _.SetModuleExposure(_, _, _) = async { return raise UnreadablePermissionStore.Fault }
+        member _.GetTeamPermissions _ = unreadable ()
+        member _.UpdateTeamPermissions(_, _) = refused ()
+        member _.SetTeamPermissions(_, _) = refused ()
+        member _.GetEffectivePermissions(_, _) = unreadable ()
+        member _.SetMemberPermissions(_, _, _, _) = refused ()
+        member _.SetTeamDefaults(_, _) = refused ()
+        member _.GetModuleExposure _ = unreadable ()
+        member _.SetModuleExposure(_, _, _) = refused ()
 
 /// The synchronous scheduler the ceremony cases pass, so decision and
 /// emission are observed together.
@@ -132,7 +136,9 @@ let private documentBytes (storage: IBlobStorage) (teamId: string) =
     |> Async.RunSynchronously
 
 let private effectiveFor (store: IPermissionStore) userId teamId =
-    store.GetEffectivePermissions(userId, teamId) |> Async.RunSynchronously
+    match store.GetEffectivePermissions(userId, teamId) |> Async.RunSynchronously with
+    | Ok perms -> perms
+    | Error e -> failtestf "the permission read failed: %s" (PermissionStoreError.describe e)
 
 let private run x = Async.RunSynchronously x
 

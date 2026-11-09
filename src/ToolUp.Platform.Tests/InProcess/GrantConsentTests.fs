@@ -56,6 +56,14 @@ open ToolUp.Platform.Scope.GrantConsentStore
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Scope
 
+/// A permission read the case expects to succeed; an `Error` fails it by name.
+let private readOk (read: Async<Result<'T, PermissionStoreError>>) : Async<'T> = async {
+    match! read with
+    | Ok value -> return value
+    | Error e -> return failtestf "the permission read failed: %s" (PermissionStoreError.describe e)
+}
+
+
 // ─── Fixtures ────────────────────────────────────────────────────────
 
 let private Read = ModulePermission.Read
@@ -696,7 +704,7 @@ let tests =
 
                     Expect.equal result (Error ConsentDenial.NoConsentRecord) "no consent, no grant"
 
-                    let! doc = inner.GetTeamPermissions(TeamId teamId)
+                    let! doc = readOk (inner.GetTeamPermissions(TeamId teamId))
                     Expect.isEmpty (Map.toList doc.Members) "and nothing was persisted"
                 })
 
@@ -727,7 +735,7 @@ let tests =
 
                     Expect.equal result (Ok GrantWriteOutcome.Granted) "the arm Phase 551 could not reach now completes"
 
-                    let! doc = inner.GetTeamPermissions(TeamId teamId)
+                    let! doc = readOk (inner.GetTeamPermissions(TeamId teamId))
 
                     let record =
                         doc.Grants |> Map.tryFind subjectId |> Option.bind (Map.tryFind moduleName)

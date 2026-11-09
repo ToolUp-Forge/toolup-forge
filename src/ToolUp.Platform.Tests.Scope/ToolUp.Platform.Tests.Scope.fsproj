@@ -15,12 +15,12 @@
     </ItemGroup>
     <ItemGroup>
         <Compile Include="..\ToolUp.Platform.Tests\Contracts\IDataObjectStoreContract.fs" Link="Contracts\IDataObjectStoreContract.fs" />
-        <Compile Include="..\ToolUp.Platform.Tests\Contracts\IPermissionStoreContract.fs" Link="Contracts\IPermissionStoreContract.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Contracts\IGrantConsentStoreContract.fs" Link="Contracts\IGrantConsentStoreContract.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Contracts\IShareTokenStoreContract.fs" Link="Contracts\IShareTokenStoreContract.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Contracts\IServiceAccountStoreContract.fs" Link="Contracts\IServiceAccountStoreContract.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Contracts\StoreIdSanitisingContract.fs" Link="Contracts\StoreIdSanitisingContract.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Contracts\InMemoryBlobStorage.fs" Link="Contracts\InMemoryBlobStorage.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\IPermissionStoreContract.fs" Link="Contracts\IPermissionStoreContract.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Contracts\IPeerBearerAuthContract.fs" Link="Contracts\IPeerBearerAuthContract.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Contracts\IActionAuthorizerContract.fs" Link="Contracts\IActionAuthorizerContract.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Contracts\ISessionRegistryContract.fs" Link="Contracts\ISessionRegistryContract.fs" />

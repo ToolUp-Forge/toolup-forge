@@ -618,12 +618,9 @@ type BlobPageDocumentStore
         }
 
     let grantsOf (teamId: string) (userId: string) : Async<Result<PageGrant list, PageStoreError>> = async {
-        try
-            let! doc = permissions.GetTeamPermissions(TeamId teamId)
-            return Ok(TeamPermissions.pageGrantsFor userId doc)
-        with
-        | PermissionStoreUnavailableException reason -> return Error(PageStoreError.PermissionsUnavailable reason)
-        | ex -> return Error(PageStoreError.PermissionsUnavailable ex.Message)
+        match! permissions.GetTeamPermissions(TeamId teamId) with
+        | Ok doc -> return Ok(TeamPermissions.pageGrantsFor userId doc)
+        | Error e -> return Error(PageStoreError.PermissionsUnavailable(PermissionStoreError.describe e))
     }
 
     let roleOf (teamId: string) (userId: string) : Async<Result<TeamRole option, PageStoreError>> = async {

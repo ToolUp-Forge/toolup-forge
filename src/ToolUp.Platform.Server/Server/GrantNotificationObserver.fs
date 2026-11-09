@@ -440,12 +440,11 @@ let recipientsOf (settings: GrantNotificationSettings) (notice: GrantNotice) : s
 /// publishes a notice per affected principal. Never refuses, never
 /// rewrites a result, never fails a write.
 ///
-/// `schedule` runs the fan-out. Production passes `Async.Start` — delivery
-/// is fire-and-forget and a channel that stalls must not hold a grant
-/// write open; a test passes a synchronous scheduler and observes the
-/// write and its notices from one call, so "wrote but did not notify" and
-/// "notified but did not write" both fail rather than passing half the
-/// assertion (the shape `GrantPolicyGuard.guardDispatch` established).
+/// The fan-out is awaited after the write commits: `publish` contains and
+/// logs its own failure, so a channel outage never fails a grant, and a
+/// caller observes the write and its notices from one call — "wrote but did
+/// not notify" and "notified but did not write" both fail a test rather than
+/// passing half the assertion.
 ///
 /// `resolveActor` is the server-side request identity, threaded in from
 /// the composition root exactly as Phase 555's proposer is. `None` is a
@@ -465,8 +464,7 @@ type GrantNotificationObserver
         settings: GrantNotificationSettings,
         logger: ILogger,
         resolveActor: unit -> string option,
-        now: unit -> DateTimeOffset,
-        schedule: Async<unit> -> unit
+        now: unit -> DateTimeOffset
     ) =
 
     let jsonOptions = PlatformJson.options
@@ -512,52 +510,48 @@ type GrantNotificationObserver
                 $"[GrantNotificationObserver] failed to publish a grant notice for module '{notice.Payload.ModuleName}' in team '{notice.Payload.TeamId}'; the grant itself is unaffected. {ex.Message}"
     }
 
-    let fanOut (teamId: string) (prior: TeamPermissions) (written: TeamPermissions) =
-        try
-            let actorId = resolveActor () |> Option.defaultValue ""
-            let notices = diff registry teamId actorId (now ()) prior written
-
-            if not (List.isEmpty notices) then
-                schedule (
-                    async {
-                        for notice in notices do
-                            do! publish notice
-                    }
-                )
-        with ex ->
-            // The delta itself is pure, so this is unreachable short of a
-            // corrupt document — logged rather than propagated for the
-            // same reason the publish is: the write has already landed.
-            logger.Warn
-                $"[GrantNotificationObserver] failed to derive grant notices for team '{teamId}'; the grant itself is unaffected. {ex.Message}"
-
-    /// Read the pre-write document, delegate, and fan out on success.
-    /// The read is the observer's only cost and it is paid only on a
-    /// policy-declaring deployment's permission WRITES — never on a read
-    /// path, and never at all when no module declares a policy (the
-    /// observer is not composed).
-    let observing (teamId: string) (write: Async<Result<unit, string>>) = async {
-        let! prior = async {
+    /// Publish the notices a committed write earns. Awaited, and contained:
+    /// `publish` swallows and logs its own failure, so a notification outage
+    /// never fails a grant that has already landed, and a caller observes the
+    /// notices from the same call that wrote the grant.
+    let fanOut (teamId: string) (prior: TeamPermissions) (written: TeamPermissions) = async {
+        let notices =
             try
-                let! doc = inner.GetTeamPermissions(TeamId teamId)
-                return Some doc
+                diff registry teamId (resolveActor () |> Option.defaultValue "") (now ()) prior written
             with ex ->
+                // The delta itself is pure, so this is unreachable short of a
+                // corrupt document — logged rather than propagated: the write
+                // has already landed.
                 logger.Warn
-                    $"[GrantNotificationObserver] could not read the pre-write permission document for team '{teamId}'; the write proceeds unobserved. {ex.Message}"
+                    $"[GrantNotificationObserver] failed to derive grant notices for team '{teamId}'; the grant itself is unaffected. {ex.Message}"
 
-                return None
-        }
+                []
 
-        let! result = write
+        for notice in notices do
+            do! publish notice
+    }
 
-        match result, prior with
-        | Ok(), Some priorDoc ->
-            try
-                let! written = inner.GetTeamPermissions(TeamId teamId)
-                fanOut teamId priorDoc written
-            with ex ->
-                logger.Warn
-                    $"[GrantNotificationObserver] could not read back the permission document for team '{teamId}' after a successful write; no notice was published. {ex.Message}"
+    /// Delegate the write as ONE guarded read-modify-write of the inner
+    /// store and fan out on success: the transform sees the document the
+    /// write replaces and produces the one it writes, so the delta is read
+    /// off the write itself — no read before it and no read back after it.
+    /// Paid only on a policy-declaring deployment's permission WRITES, never
+    /// on a read path, and never at all when no module declares a policy
+    /// (the observer is not composed).
+    let observing (teamId: TeamId) (change: TeamPermissions -> Result<TeamPermissions, string>) = async {
+        let observed = ref None
+
+        let! result =
+            inner.UpdateTeamPermissions(
+                teamId,
+                fun current ->
+                    let next = change current
+                    observed.Value <- next |> Result.toOption |> Option.map (fun written -> current, written)
+                    next
+            )
+
+        match result, observed.Value with
+        | Ok(), Some(prior, written) -> do! fanOut teamId.Value prior written
         | _ -> ()
 
         return result
@@ -581,11 +575,13 @@ type GrantNotificationObserver
         member _.SetModuleExposure(teamId, moduleName, state) =
             inner.SetModuleExposure(teamId, moduleName, state)
 
+        member _.UpdateTeamPermissions(teamId, change) = observing teamId change
+
         member _.SetTeamPermissions(teamId, permissions) =
-            observing teamId.Value (inner.SetTeamPermissions(teamId, permissions))
+            observing teamId (fun _ -> Ok permissions)
 
         member _.SetMemberPermissions(teamId, userId, moduleName, permissions) =
-            observing teamId.Value (inner.SetMemberPermissions(teamId, userId, moduleName, permissions))
+            observing teamId (TeamPermissionsEdit.setMember userId moduleName permissions >> Ok)
 
         // A team default has no subject to notify: it applies to every
         // member who lacks an explicit entry, which is why Phase 551

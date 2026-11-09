@@ -743,6 +743,16 @@ let listPending
             return Ok live
     }
 
+/// The document a mutation produces from the one it replaces — the same
+/// edits the store's own write paths apply.
+let private applyMutation (mutation: AdminMutation) (current: TeamPermissions) : TeamPermissions =
+    match mutation with
+    | AdminMutation.SetTeamPermissions p -> p
+    | AdminMutation.SetMemberPermissions(userId, moduleName, permissions) ->
+        TeamPermissionsEdit.setMember userId moduleName permissions current
+    | AdminMutation.SetTeamDefaults defaults -> TeamPermissionsEdit.setDefaults defaults current
+    | AdminMutation.SetModuleExposure(moduleName, state) -> TeamPermissionsEdit.setExposure moduleName state current
+
 // ─── The `IPermissionStore` decorator ────────────────────────────────
 
 /// `IPermissionStore` decorator implementing the two-person rule.
@@ -803,19 +813,41 @@ type DualControlPermissionStore
     let queuedMessage (queued: AdminMutationQueued) =
         DualControlSignal.message queued.RequestId queued.ExpiresAtUtc
 
-    /// The whole write path: gate, then either apply verbatim or park.
+    /// The whole write path: gate, then either apply or park — decided
+    /// inside ONE guarded read-modify-write of the wrapped store, so the
+    /// document the gate judged is the document the write replaces.
     ///
     /// An UNGATED write returns the inner store's result **verbatim**,
     /// error string included. That is not laziness — a deployment that
     /// enables dual control and then sees different error text on writes
     /// the gate does not touch has had its behaviour changed where the
     /// phase promised it would not be.
-    let gate (teamId: string) (mutation: AdminMutation) : Async<Result<unit, string>> = async {
-        let! previous = inner.GetTeamPermissions(TeamId teamId)
+    let decide (teamId: string) (mutationOf: TeamPermissions -> Result<AdminMutation, string>) = async {
+        // The mutation the LAST run of the transform found gated; the store
+        // may replay it on a lost precondition, so each run resets it.
+        let parked = ref None
 
-        if not (isGated settings.Scope isPolicyBearing previous mutation) then
-            return! applyToInner teamId mutation
-        else
+        let! applied =
+            inner.UpdateTeamPermissions(
+                TeamId teamId,
+                fun current ->
+                    parked.Value <- None
+
+                    match mutationOf current with
+                    | Error e -> Error e
+                    | Ok mutation when isGated settings.Scope isPolicyBearing current mutation ->
+                        parked.Value <- Some mutation
+                        Error "DUAL-CONTROL-GATED"
+                    | Ok mutation -> Ok(applyMutation mutation current)
+            )
+
+        return parked.Value, applied
+    }
+
+    let gate (teamId: string) (mutationOf: TeamPermissions -> Result<AdminMutation, string>) = async {
+        match! decide teamId mutationOf with
+        | None, applied -> return applied
+        | Some mutation, _ ->
             match resolveProposer () with
             | None
             | Some "" -> return Error(AdminMutationRefusal.describe AdminMutationRefusal.UnattributedProposer)
@@ -841,14 +873,11 @@ type DualControlPermissionStore
     /// policy-aware admin surface calls, so it can render "queued for
     /// approval, request X" instead of parsing prose.
     member _.Write(teamId: string, proposerId: string, mutation: AdminMutation) = async {
-        let! previous = inner.GetTeamPermissions(TeamId teamId)
-
-        if not (isGated settings.Scope isPolicyBearing previous mutation) then
-            match! applyToInner teamId mutation with
-            | Ok() -> return Ok AdminMutationWriteOutcome.AppliedImmediately
-            | Error e -> return Error(AdminMutationRefusal.ApprovalStoreUnavailable e)
-        else
-            match! propose approvals settings auditLog schedule (now ()) teamId proposerId mutation with
+        match! decide teamId (fun _ -> Ok mutation) with
+        | None, Ok() -> return Ok AdminMutationWriteOutcome.AppliedImmediately
+        | None, Error e -> return Error(AdminMutationRefusal.ApprovalStoreUnavailable e)
+        | Some parked, _ ->
+            match! propose approvals settings auditLog schedule (now ()) teamId proposerId parked with
             | Error refusal -> return Error refusal
             | Ok queued -> return Ok(AdminMutationWriteOutcome.QueuedForApproval queued)
     }
@@ -878,14 +907,18 @@ type DualControlPermissionStore
 
         member _.GetModuleExposure teamId = inner.GetModuleExposure teamId
 
+        // A generic change is judged as the whole document it produces.
+        member _.UpdateTeamPermissions(teamId, change) =
+            gate teamId.Value (fun current -> change current |> Result.map AdminMutation.SetTeamPermissions)
+
         member _.SetTeamPermissions(teamId, permissions) =
-            gate teamId.Value (AdminMutation.SetTeamPermissions permissions)
+            gate teamId.Value (fun _ -> Ok(AdminMutation.SetTeamPermissions permissions))
 
         member _.SetMemberPermissions(teamId, userId, moduleName, permissions) =
-            gate teamId.Value (AdminMutation.SetMemberPermissions(userId, moduleName, permissions))
+            gate teamId.Value (fun _ -> Ok(AdminMutation.SetMemberPermissions(userId, moduleName, permissions)))
 
         member _.SetTeamDefaults(teamId, defaults) =
-            gate teamId.Value (AdminMutation.SetTeamDefaults defaults)
+            gate teamId.Value (fun _ -> Ok(AdminMutation.SetTeamDefaults defaults))
 
         member _.SetModuleExposure(teamId, moduleName, state) =
-            gate teamId.Value (AdminMutation.SetModuleExposure(moduleName, state))
+            gate teamId.Value (fun _ -> Ok(AdminMutation.SetModuleExposure(moduleName, state)))

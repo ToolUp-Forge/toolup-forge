@@ -432,13 +432,12 @@ let private liveApprovalsFor
     (teamId: string)
     : Async<Result<AttestedApproval list, string>> =
     async {
-        let! perms = async {
-            try
-                let! p = sources.Permissions.GetTeamPermissions(TeamId teamId)
-                return Ok p
-            with ex ->
-                return Error $"permission document for team '{teamId}' could not be read: {ex.Message}"
-        }
+        let! read = sources.Permissions.GetTeamPermissions(TeamId teamId)
+
+        let perms =
+            read
+            |> Result.mapError (fun e ->
+                $"permission document for team '{teamId}' could not be read: {PermissionStoreError.describe e}")
 
         match perms with
         | Error e -> return Error e
