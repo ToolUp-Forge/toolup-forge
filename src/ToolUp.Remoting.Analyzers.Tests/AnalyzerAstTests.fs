@@ -6,7 +6,7 @@ open FSharp.Compiler.Text
 open FSharp.Analyzers.SDK
 open ToolUp.Remoting.Analyzers
 
-// ─── Phase 195 — analyzer AST-path coverage ──────────────────────────
+// ─── Analyzer AST-path coverage ──────────────────────────────────────
 //
 // The recognition-vs-runtime parity (the load-bearing acceptance criterion)
 // is pinned in ToolUp.Platform.Tests via the source-linked Recognition.fs.
@@ -106,7 +106,7 @@ type MyApi = {
 }
 """
 
-// Phase 964 (h) — an all-function record marked `NotRemotingApi` is not an
+// An all-function record marked `NotRemotingApi` is not an
 // API contract, whatever its shape: the generator's census skips it by
 // attribute NAME in any namespace (`Plan.isExcludedFromApiCensus`), and the
 // analyzer must agree. Both the source form and the CLR form, bare and
@@ -137,6 +137,73 @@ let private otherAttributeApi =
 [<RequireQualifiedAccess>]
 type MyApi = {
     GetThings: unit -> Async<int>
+}
+"""
+
+// The identity rule (TUR0003). The runtime matches a marker by CLR identity
+// and refuses one that carries a classifying simple name without being the
+// SDK's; TUR0001 reads such a field as classified. The foreign marker is the
+// file's own `RequiresRole`, declared beside the record it shadows the SDK's in.
+let private foreignDeclaredApi =
+    """module Demo
+open ToolUp.Platform
+type RequiresRoleAttribute(role: string) =
+    inherit System.Attribute()
+type MyApi = {
+    [<RequiresRole "Admin">]
+    PromoteUser: string -> Async<unit>
+    [<AllowAnonymous>]
+    GetVersion: unit -> Async<string>
+}
+"""
+
+// A foreign marker reached by its qualified name, beside a genuine one: the
+// runtime refuses the collision whichever way the classification would fall.
+let private foreignQualifiedApi =
+    """module Demo
+open ToolUp.Platform
+type MyApi = {
+    [<Contoso.Security.RequiresRole "Admin">]
+    PromoteUser: string -> Async<unit>
+    [<RequiresRole "Admin">]
+    [<Contoso.Security.PublicEndpoint>]
+    MixedMarkers: unit -> Async<int>
+}
+"""
+
+// The SDK's markers by every spelling the scan can see: fully qualified (both
+// families, both name forms), partially qualified through an open, and
+// qualified where the file declares a foreign type of the same name.
+let private sdkSpellingsApi =
+    """module Demo
+open ToolUp
+type RequiresRoleAttribute(role: string) =
+    inherit System.Attribute()
+type MyApi = {
+    [<ToolUp.Platform.RequiresRole "Admin">]
+    A: unit -> Async<int>
+    [<ToolUp.Remoting.Server.RequiresClaimAttribute("scope")>]
+    B: unit -> Async<int>
+    [<Platform.AllowAnonymous>]
+    C: unit -> Async<int>
+    [<global.ToolUp.Platform.TenantScoped>]
+    D: unit -> Async<int>
+}
+"""
+
+// A foreign type declared in a module the record neither sits in nor opens
+// does not reach the record's unqualified marker, which is the SDK's.
+let private foreignOutOfReachApi =
+    """namespace Demo
+open ToolUp.Platform
+module Foreign =
+    type PublicEndpointAttribute() =
+        inherit System.Attribute()
+type MyApi = {
+    [<PublicEndpoint>]
+    Open: int -> Async<int>
+    [<Foreign.PublicEndpoint>]
+    Forged: int -> Async<int>
 }
 """
 
@@ -210,5 +277,43 @@ let private auditTests =
         }
     ]
 
+let private identityTests =
+    testList "AST extraction → TUR0003 (the identity rule)" [
+        test "a foreign-named RequiresRole raises TUR0003 where TUR0001 is silent" {
+            let msgs = analyze false foreignDeclaredApi
+            Expect.equal (codes msgs) [ "TUR0003" ] "the shadowed marker is foreign; TUR0001 reads it as classified"
+
+            let m = List.head msgs
+            Expect.equal m.Severity Severity.Error "TUR0003 is an Error (the runtime refuses to start)"
+            Expect.stringContains m.Message "PromoteUser" "names the method"
+            Expect.isEmpty m.Fixes "no insertion resolves a foreign marker"
+        }
+
+        test "a foreign marker by qualified name raises TUR0003, beside a genuine one too" {
+            let msgs = analyze false foreignQualifiedApi
+            Expect.equal (codes msgs) [ "TUR0003"; "TUR0003" ] "both foreign markers flagged, nothing else"
+        }
+
+        test "the SDK's markers are not foreign by any spelling the scan sees" {
+            Expect.isEmpty
+                (analyze false sdkSpellingsApi)
+                "qualified, partially qualified and global-qualified SDK markers"
+        }
+
+        test "a foreign declaration out of the record's reach does not shadow its marker" {
+            let msgs = analyze false foreignOutOfReachApi
+            Expect.equal (codes msgs) [ "TUR0003" ] "only the Foreign-qualified marker"
+            Expect.stringContains (List.head msgs).Message "Forged" "on the forged method"
+        }
+
+        test "the existing fixtures raise no TUR0003" {
+            for source in [ unclassifiedApi; fullyClassifiedApi; mixedApi; piiNoAudit; piiWithAudit ] do
+                Expect.isFalse
+                    (analyze true source |> List.exists (fun m -> m.Code = "TUR0003"))
+                    "an unqualified marker the file does not declare is the SDK's"
+        }
+    ]
+
 [<Tests>]
-let tests = testList "ToolUp.Remoting.Analyzers" [ astTests; auditTests ]
+let tests =
+    testList "ToolUp.Remoting.Analyzers" [ astTests; identityTests; auditTests ]

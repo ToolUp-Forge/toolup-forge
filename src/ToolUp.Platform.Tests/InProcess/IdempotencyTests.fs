@@ -145,12 +145,12 @@ let tests =
 
         // ── Dispatcher ordering (source pin) ──
         test "idempotency pre-flight precedes rate-limit (a replay must not spend the budget)" {
-            let adapter = serverSource [ "Remoting"; "Giraffe"; "GiraffeAdapter.fs" ]
-            let idemIdx = adapter.IndexOf "// Idempotency pre-flight."
-            let rateLimitIdx = adapter.IndexOf "// Rate-limit pre-flight."
+            let pipeline = serverSource [ "Remoting"; "Stages"; "Pipeline.fs" ]
+            let idemIdx = pipeline.IndexOf "Idempotency.stage"
+            let rateLimitIdx = pipeline.IndexOf "RateLimit.stage"
 
-            Expect.isGreaterThan idemIdx -1 "the idempotency pre-flight must exist"
-            Expect.isGreaterThan rateLimitIdx -1 "the rate-limit pre-flight must exist"
+            Expect.isGreaterThan idemIdx -1 "the idempotency stage must be in the pipeline"
+            Expect.isGreaterThan rateLimitIdx -1 "the rate-limit stage must be in the pipeline"
             Expect.isLessThan idemIdx rateLimitIdx "idempotency runs before rate-limit"
         }
     ]

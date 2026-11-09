@@ -97,7 +97,7 @@ let tests =
             // Locate the `FromContextAsync createImplementationFromAsync` arm
             // and assert the body doesn't re-trigger the rebuild.
             let asyncArmIdx =
-                contents.IndexOf "| FromContextAsync createImplementationFromAsync ->"
+                contents.IndexOf "| ProtocolImplementation.FromContextAsync createImplementationFromAsync ->"
 
             Expect.isGreaterThan asyncArmIdx -1 "FromContextAsync arm must exist in buildHttpHandler"
 
@@ -151,12 +151,12 @@ let tests =
 
             Expect.stringContains
                 contents
-                "| StaticValue impl -> GiraffeUtil.buildDispatcherTable options (fun _ -> impl)"
+                "| ProtocolImplementation.StaticValue impl -> GiraffeUtil.buildDispatcherTable options (fun _ -> impl)"
                 "StaticValue arm builds the table once at compose time."
 
             Expect.stringContains
                 contents
-                "| FromContext createImplementationFrom -> GiraffeUtil.buildDispatcherTable options createImplementationFrom"
+                "GiraffeUtil.buildDispatcherTable options createImplementationFrom"
                 "FromContext arm builds the table once at compose time."
         }
 
@@ -173,12 +173,12 @@ let tests =
 
             Expect.stringContains
                 contents
-                "Phase 69n"
-                "The docstring should still cite Phase 69n explicitly so readers know \
-                 the substrate cost was lifted to compose time."
+                "costs no more per request than `fromContext`"
+                "The docstring should say the substrate cost is paid at compose time, \
+                 so readers know the pattern is safe at any request rate."
         }
 
-        test "AspNetCore middleware FromContextAsync refusal stays in place (parity scope)" {
+        test "AspNetCore middleware mounts FromContextAsync once and resolves per request" {
             let middlewarePath =
                 Path.Combine(
                     repoRoot (),
@@ -194,9 +194,12 @@ let tests =
 
             Expect.stringContains
                 contents
-                "Remoting.fromContextAsync is not yet supported by the AspNetCore middleware"
-                "Phase 69n is Giraffe-only. The AspNetCore middleware adapter continues to \
-                 refuse fromContextAsync for its existing Phase 69b–69k parity reasons; \
-                 lifting the refusal is a separate question."
+                "let dispatch = Middleware.buildFromImplementation options"
+                "the middleware runs the same pipeline as Giraffe, mounted once at compose time"
+
+            Expect.stringContains
+                contents
+                "return! dispatch (fun _ -> impl) next ctx"
+                "per request only the async resolver runs"
         }
     ]

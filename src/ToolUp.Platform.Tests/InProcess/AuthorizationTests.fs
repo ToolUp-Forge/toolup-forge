@@ -94,13 +94,13 @@ let private authContext
 
 let private expectDeny (decision: AuthDecision) (label: string) =
     match decision with
-    | Deny _ -> ()
+    | AuthDecision.Deny _ -> ()
     | AuthDecision.Allow -> failtestf "%s: expected Deny, got Allow" label
 
 let private expectAllow (decision: AuthDecision) (label: string) =
     match decision with
     | AuthDecision.Allow -> ()
-    | Deny reason -> failtestf "%s: expected Allow, got Deny %s" label reason
+    | AuthDecision.Deny reason -> failtestf "%s: expected Allow, got Deny %s" label reason
 
 let private classificationOf (apiType: Type) (methodName: string) =
     AuthClassifier.classify apiType
@@ -160,21 +160,25 @@ let tests =
             Expect.isFalse (authCtx.HasRole "PlatformAdmin") "no PlatformRole stamped → denied"
         }
 
-        // ── Phase 132 — deny-on-miss: a classification-map miss defaults to
-        //    Unclassified (→ Deny), not Public, once a resolver is armed ──
-        test "Phase 132: classification-map miss denies (defaults to Unclassified, not Public)" {
-            let cls = AuthClassifier.classify typeof<ServerAttributedApi>
+        // ── A method with no marker has no classification, and a composition
+        //    with a resolver refuses the record rather than serve it ──
+        test "an unmarked method is absent from the classification and refused under a resolver" {
+            let cls = AuthClassifier.classify typeof<PartiallyAnnotatedApi>
+            Expect.isFalse (cls.ContainsKey "Naked") "an unmarked method has no classification"
 
-            // The dispatcher's per-request lookup shape, post-132: a runtime
-            // key with no classified field defaults to Unclassified.
-            let missed =
-                cls |> Map.tryFind "MethodThatDoesNotExist" |> Option.defaultValue Unclassified
+            let flags = {
+                ContractFlags.defaults with
+                    AuthResolverComposed = true
+                    RecordSeamsComposed = true
+            }
 
-            Expect.equal missed Unclassified "a miss must default to Unclassified, not Public"
-
-            expectDeny
-                (AuthClassifier.evaluate missed (Some(authContext [ "PlatformAdmin" ] [] false false)))
-                "a classification-map miss denies even a real admin (fail-closed)"
+            match Contract.ofType flags typeof<PartiallyAnnotatedApi> with
+            | Error refusals ->
+                Expect.contains
+                    refusals
+                    (ContractRefusal.UnclassifiedMethods("PartiallyAnnotatedApi", [ "Naked" ]))
+                    "the record is refused at compose, naming the unmarked method"
+            | Ok _ -> failtest "a composition with a resolver must refuse an unmarked method"
         }
 
         // ── Phase 132 — round-trip startup assertion: every classified field
@@ -307,19 +311,19 @@ let tests =
             let cls = AuthClassifier.classify typeof<ServerAttributedApi>
 
             match cls["AdminOnly"] with
-            | RequiresAuth [ RoleRequired "Admin" ] -> ()
+            | MethodClassification.RequiresAuth [ RoleRequired "Admin" ] -> ()
             | other -> failtestf "AdminOnly: unexpected classification %A" other
 
             match cls["NeedsScope"] with
-            | RequiresAuth [ ClaimRequired("scope", None) ] -> ()
+            | MethodClassification.RequiresAuth [ ClaimRequired("scope", None) ] -> ()
             | other -> failtestf "NeedsScope: unexpected classification %A" other
 
             match cls["TenantOnly"] with
-            | RequiresAuth [ TenantRequired ] -> ()
+            | MethodClassification.RequiresAuth [ TenantRequired ] -> ()
             | other -> failtestf "TenantOnly: unexpected classification %A" other
 
-            Expect.equal cls["OpenToAll"] Anonymous "OpenToAll must classify Anonymous"
-            Expect.equal cls["PublicSurface"] Public "PublicSurface must classify Public"
+            Expect.equal cls["OpenToAll"] MethodClassification.Anonymous "OpenToAll must classify Anonymous"
+            Expect.equal cls["PublicSurface"] MethodClassification.Public "PublicSurface must classify Public"
         }
 
         test "mirror-family attributes classify identically (family-agnostic recognition)" {
@@ -337,7 +341,7 @@ let tests =
 
         test "multi-attribute methods normalise to multiple requirements" {
             match classificationOf typeof<MirrorAttributedApi> "AdminAndTenant" with
-            | RequiresAuth requirements ->
+            | MethodClassification.RequiresAuth requirements ->
                 Expect.containsAll
                     requirements
                     [ RoleRequired "Admin"; TenantRequired ]
@@ -346,8 +350,10 @@ let tests =
         }
 
         test "unclassified methods are detected" {
-            let cls = AuthClassifier.classify typeof<PartiallyAnnotatedApi>
-            Expect.equal (AuthClassifier.unclassified cls) [ "Naked" ] "exactly the naked method is unclassified"
+            Expect.equal
+                (AuthClassifier.unclassified typeof<PartiallyAnnotatedApi>)
+                [ "Naked" ]
+                "exactly the naked method is unclassified"
         }
 
         // ── Evaluation semantics ──
@@ -395,18 +401,17 @@ let tests =
                 "anonymous caller denied even when the double claims the role"
         }
 
-        test "fail-closed: RequiresAuth with no resolved context denies; unclassified denies at runtime" {
+        test "fail-closed: RequiresAuth with no resolved context denies" {
             let cls = classificationOf typeof<ServerAttributedApi> "AdminOnly"
             expectDeny (AuthClassifier.evaluate cls None) "no auth context resolved"
-            expectDeny (AuthClassifier.evaluate Unclassified (Some(authContext [] [] false false))) "unclassified"
         }
 
         test "Public and Anonymous classifications always allow" {
-            expectAllow (AuthClassifier.evaluate Public None) "public, no context"
-            expectAllow (AuthClassifier.evaluate Anonymous None) "anonymous-permitted, no context"
+            expectAllow (AuthClassifier.evaluate MethodClassification.Public None) "public, no context"
+            expectAllow (AuthClassifier.evaluate MethodClassification.Anonymous None) "anonymous-permitted, no context"
 
             expectAllow
-                (AuthClassifier.evaluate Anonymous (Some(authContext [] [] false true)))
+                (AuthClassifier.evaluate MethodClassification.Anonymous (Some(authContext [] [] false true)))
                 "anonymous-permitted, anonymous caller"
         }
 
@@ -466,7 +471,7 @@ let tests =
         testList "every forge SDK API record is fully classified" [
             for name, apiType in forgeApiRecords ->
                 test name {
-                    let unclassified = AuthClassifier.classify apiType |> AuthClassifier.unclassified
+                    let unclassified = AuthClassifier.unclassified apiType
 
                     Expect.isEmpty
                         unclassified

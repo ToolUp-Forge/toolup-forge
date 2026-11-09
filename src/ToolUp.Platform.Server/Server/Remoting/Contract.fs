@@ -94,13 +94,11 @@ type ContractRefusal =
     | MarkerCollision of api: string * collisions: (string * string * string) list
     /// Declared `[<Custom>]` validators the engine cannot build.
     | UnbuildableValidators of api: string * refusals: string list
-    /// Streaming methods carrying pre-flight attributes the SSE path does not
-    /// enforce: `(method, attributes)`.
-    | StreamingCarriesPreflight of api: string * methods: (string * string list) list
     /// A wire-schema annotation that cannot be served as written.
     | InvalidSchemaVersioning of api: string * refusal: SchemaVersionRefusal
-    /// Streaming methods carrying wire-schema versioning.
-    | VersionedStreaming of api: string * methods: string list
+    /// Streaming methods carrying `[<Idempotent>]`: a stream has no response
+    /// to memoise, so a retry with the same key could never be replayed.
+    | IdempotentStreaming of api: string * methods: string list
 
 /// The one description of an API record.
 [<RequireQualifiedAccess>]
@@ -207,23 +205,10 @@ module ContractRefusal =
                      sprintf "%s [%s] carries '%s'" subject surface attrType)
                  |> String.concat "; ")
         | ContractRefusal.UnbuildableValidators(api, refusals) -> Validation.unbuildableRefusal api refusals
-        | ContractRefusal.StreamingCarriesPreflight(api, methods) ->
-            let pretty =
-                methods
-                |> List.map (fun (methodName, attrs) ->
-                    sprintf "  '%s' carries: [%s]" methodName (String.concat "; " attrs))
-                |> String.concat Environment.NewLine
-
-            sprintf
-                "ToolUp.Remoting refused to start: API record '%s' has streaming method(s) carrying pre-flight attributes the SSE dispatch path does not enforce today. Silently honouring them would route around the declared guard.%s%s%sFix: either remove the attribute, or convert the method off the IAsyncEnumerable<'T> return shape until per-frame seam composition lands."
-                api
-                Environment.NewLine
-                pretty
-                Environment.NewLine
         | ContractRefusal.InvalidSchemaVersioning(api, refusal) -> SchemaVersion.refusalSentence api refusal
-        | ContractRefusal.VersionedStreaming(api, methods) ->
+        | ContractRefusal.IdempotentStreaming(api, methods) ->
             sprintf
-                "ToolUp.Remoting refused to start: API record '%s' has streaming method(s) carrying wire-schema versioning the SSE dispatch path does not honour: [%s]. The SSE short-circuit resolves its handler before the negotiated version is applied, so the declared versions would be silently ignored. Fix: drop the [<SupportsSchema>] / [<DeprecatedSchema>] annotation, or move the method off the IAsyncEnumerable<'T> return shape."
+                "ToolUp.Remoting refused to start: API record '%s' has streaming method(s) carrying [<Idempotent>]: [%s]. A stream has no single response to memoise, so a retry with the same X-Idempotency-Key would run the producer again rather than replay it. Fix: drop [<Idempotent>], or move the method off the IAsyncEnumerable<'T> return shape."
                 api
                 (String.concat "; " methods)
 
@@ -307,22 +292,6 @@ module Contract =
         let methods = fields |> Array.map (methodOf name) |> List.ofArray
         let schemas, schemaRefusals = SchemaVersion.read fields
 
-        let streaming =
-            methods
-            |> List.choose (fun m ->
-                match m.Shape with
-                | MethodShape.Streaming _ -> Some m.Name
-                | _ -> None)
-            |> Set.ofList
-
-        let versionedStreaming =
-            schemas
-            |> Map.toList
-            |> List.filter (fun (logical, schema) ->
-                streaming.Contains logical
-                || (schema.Handlers |> Map.exists (fun _ field -> streaming.Contains field)))
-            |> List.map fst
-
         let findings =
             List.concat [
                 fields
@@ -348,17 +317,16 @@ module Contract =
                     | Some input -> Validation.unbuildableOf m.Name input
                     | None -> [])
                 |> nonEmpty (fun r -> ContractRefusal.UnbuildableValidators(name, r))
-                fields
-                |> Array.toList
-                |> List.choose (fun f ->
-                    match Streaming.unenforceableOf f with
-                    | [] -> None
-                    | attrs -> Some(f.Name, attrs))
-                |> nonEmpty (fun m -> ContractRefusal.StreamingCarriesPreflight(name, m))
                 schemaRefusals
                 |> List.map (fun r -> ContractRefusal.InvalidSchemaVersioning(name, r))
-                versionedStreaming
-                |> nonEmpty (fun m -> ContractRefusal.VersionedStreaming(name, m))
+                methods
+                |> List.filter (fun m ->
+                    m.Idempotent
+                    && (match m.Shape with
+                        | MethodShape.Streaming _ -> true
+                        | _ -> false))
+                |> List.map _.Name
+                |> nonEmpty (fun ms -> ContractRefusal.IdempotentStreaming(name, ms))
             ]
 
         {

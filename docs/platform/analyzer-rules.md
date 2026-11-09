@@ -9,6 +9,7 @@ The `ToolUp.Remoting.Analyzers` package is the SDK's static analyser rule set: [
 | Id | Title | Severity | Since |
 |---|---|---|---|
 | `TUR0001` | Remoting API method without an authorisation classification | Error | 0.7.0 |
+| `TUR0003` | Remoting API method carrying a foreign-named authorisation marker | Error | 0.42.0 |
 | `TUR0002` | Unaudited Remoting method whose input carries a `[<PiiSafe>]` field | Warning (opt-in) | 0.7.0 |
 | `TUA001` | Container resolution outside service registration | Warning | 0.28.0 |
 | `TUA002` | `HttpClient` constructed without the platform egress handler | Warning | 0.28.0 |
@@ -21,6 +22,14 @@ The `ToolUp.Remoting.Analyzers` package is the SDK's static analyser rule set: [
 - **Rationale:** The Remoting dispatcher refuses to start when an API-record method carries none of the authorisation classifications. Finding it at edit time is strictly cheaper than finding it at server start.
 - **Sanctioned alternative:** Classify the method: `[<RequiresRole>]`, `[<RequiresClaim>]`, `[<TenantScoped>]`, `[<AllowAnonymous>]` or `[<PublicEndpoint>]`. The codefix inserts the fail-closed placeholder `[<AllowAnonymous>]`, which must be replaced deliberately.
 - **Runtime half:** The dispatcher's startup authorisation classifier.
+
+### TUR0003 — Remoting API method carrying a foreign-named authorisation marker
+
+- **Severity:** Error
+- **Since:** 0.42.0
+- **Rationale:** The dispatcher matches an authorisation marker by type identity, not by name, and refuses to start when a method carries an attribute named like one (`RequiresRole`, `AllowAnonymous`, …) that is not the SDK's: a name collision must never decide a method's classification. TUR0001 reads such a method as classified, so this rule reports what TUR0001 cannot. It fires where the file shows the marker is not the SDK's: qualified by a path that reaches neither `ToolUp.Platform` nor `ToolUp.Remoting.Server` through the file's opens, or unqualified while the file declares a type of that name.
+- **Sanctioned alternative:** Use the SDK's attribute — `ToolUp.Platform.*` (or `ToolUp.Remoting.Server.*` in a server-only record) — qualified where a local type of the same name would shadow it, and remove or rename the foreign one. No codefix is offered: the foreign marker has to go.
+- **Runtime half:** The dispatcher's startup marker-collision refusal.
 
 ### TUR0002 — Unaudited Remoting method whose input carries a `[<PiiSafe>]` field
 

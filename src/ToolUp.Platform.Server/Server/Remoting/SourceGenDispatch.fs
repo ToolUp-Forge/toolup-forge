@@ -6,61 +6,38 @@ open System.Text.Json
 open System.Threading.Tasks
 
 // =============================================================================
-// Source-generator-driven dispatcher (substrate + manual PoC)
+// Generated invocations
 // =============================================================================
 //
-// This file ships the RUNTIME-side substrate of Phase 69k:
-//   * the 69k v0 contract, `IGeneratedDispatchTable`, is
-//     REMOVED: a route handler of that shape writes its own response and
-//     so would run outside the pre-flight chain (see "Phase 906" below).
-//     No adapter composed it, and none would.
-//   * `GeneratedDispatchRegistry` — the runtime registry where a generator's
-//     emitted `register ()` places its table.
-//   * `[<DispatcherTarget>]` marker attribute the source-generator would
-//     scan for when emitting tables.
-//   * `GeneratedArguments`, `GeneratedMethod<'impl>`,
-//     `GeneratedInvocationTable<'impl>` and the `GeneratedInvocation`
-//     builders — the shape the generator's dispatch emission now targets.
+// The runtime half of the source generator's dispatch emission: the
+// registry a generated module's `register ()` writes its table to, and the
+// shape the table takes (`GeneratedArguments`, `GeneratedMethod<'impl>`,
+// `GeneratedInvocationTable<'impl>`, the `GeneratedInvocation` builders).
 //
-// ─── Phase 906 — the generated invocation runs INSIDE the pre-flight chain ─
+// A generated invocation is NOT a route handler: a handler that wrote its own
+// response would run outside the request pipeline's stages — an
+// authorisation bypass. It is one method's endpoint INSIDE the proxy: the
+// proxy (`Proxy.fs`) consults this registry when it is built and, for every
+// method the table covers, composes the generated call where it would
+// otherwise have built a reflective endpoint. The pipeline's `invoke` stage
+// calls the proxy whichever endpoint it composed, so every stage runs around
+// a generated method exactly as around a reflective one.
 //
-// Phase 804 measured a cold-start gain from dispatching without the
-// reflective proxy build; Phase 856.A found it unrealisable as then
-// specified, for two reasons, both of which this phase answers:
-//
-//   1. Nothing produced a table. The generator's dispatch emission
-//      (`ToolUp.Remoting.Generator`, `Dispatch.fs`) now emits, per API
-//      record, an `invocations: GeneratedInvocationTable<'impl>` and a
-//      `register ()` that places it here.
-//
-//   2. A route handler that writes its own response would run OUTSIDE the
-//      adapter's pre-flight chain (auth, rate limit, validation,
-//      idempotency, audit, telemetry) — an authorisation bypass. So the
-//      emitted invocation is NOT a route handler. It is one method's
-//      endpoint INSIDE the proxy: the proxy (`Proxy.fs`) consults this
-//      registry when it is built and, for every method the table covers,
-//      composes the generated call where it would otherwise have built a
-//      reflective endpoint. The adapter's chain is keyed off the proxy's
-//      `InvocationResult` exactly as before, so every stage runs around a
-//      generated method as it runs around a reflective one — the invocation
-//      is the chain's innermost stage, never a parallel route.
-//
-// What the generated code owns is deliberately small: the typed call of
-// the handler and the static type of its result. Everything else — the
-// verb check, reading the body, the argument-array parse, each argument's
-// decode (the proxy's own record-scoped seam, Phase 839), the arity
-// refusal, the result's serialise and every `InvocationResult` case — is
-// the proxy's own code, shared with the reflective endpoint through
-// `GeneratedArguments`, so the two routes cannot drift. A method the table
-// does not cover (a `Task`-returning or streaming method, or one added to
-// the record after generation) is served by the reflective proxy, built
-// lazily on its first request.
+// What the generated code owns is deliberately small: the typed call of the
+// handler and the static type of its result. Everything else — the verb
+// check, reading the body, the argument-array parse, each argument's decode
+// (the proxy's own record-scoped seam), the arity refusal, the result's
+// serialise and every refusal the call can end in — is the proxy's own code,
+// shared with the reflective endpoint through `GeneratedArguments`, so the
+// two routes cannot drift. A method the table does not cover (a
+// `Task`-returning or streaming method, or one added to the record after
+// generation) is served by the reflective proxy, built lazily on its first
+// request.
 
-/// Marker attribute on an API record type. The 69k sketch had
-/// a source-generator scan for this attribute and emit a dispatch table
-/// per attributed record; the generator that shipped is driven
-/// by its build items instead and emits a `GeneratedInvocationTable<'impl>`.
-/// Without a registered table the runtime uses reflection.
+/// Marker attribute on an API record type. The generator is driven by its
+/// build items, not by this attribute, and emits a
+/// `GeneratedInvocationTable<'impl>`; without a registered table the runtime
+/// uses reflection.
 [<AttributeUsage(AttributeTargets.Interface
                  ||| AttributeTargets.Class
                  ||| AttributeTargets.Struct)>]
@@ -82,12 +59,9 @@ module GeneratedDispatchRegistry =
 
     let private tables = System.Collections.Concurrent.ConcurrentDictionary<Type, obj>()
 
-    /// Register a generated dispatch table for `'TImpl`. The runtime
-    /// looks up by `typeof<'TImpl>` so the generator emits one
-    /// registration call per API record type.
-    /// Register a generated dispatch table for `'TImpl`. The runtime
-    /// stores the boxed table; callers casting via `tryGet<'TContext, 'TImpl>`
-    /// recover the typed form.
+    /// Register a generated dispatch table for `'TImpl`, boxed and keyed by
+    /// `typeof<'TImpl>`: the generator emits one registration per API record
+    /// type, and `tryGet<'TImpl>` recovers it.
     let register<'TImpl> (table: obj) : unit = tables[typeof<'TImpl>] <- table
 
     /// Try to resolve the generated dispatch table for `'TImpl`. Returns
@@ -116,7 +90,7 @@ module GeneratedDispatchRegistry =
 /// already decoded, a `unit` argument, a multipart binary section, the
 /// arity refusal) and `Complete` is its completion (the refusal of a
 /// surplus argument, the handler awaited, the result serialised as the
-/// options say, the `InvocationResult`). A refusal raised by either is the
+/// options say). A refusal raised by either is the
 /// proxy's to report, exactly as on the reflective path.
 ///
 /// Only the proxy creates one; the constructor is internal.
@@ -128,7 +102,7 @@ type GeneratedArguments internal () =
 
     /// Complete the call: refuse a surplus argument, await the handler,
     /// write its result to the response as the proxy does.
-    abstract Complete<'T> : call: Async<'T> -> Task<InvocationResult>
+    abstract Complete<'T> : call: Async<'T> -> Task
 
 /// One method of a generated invocation table: its name, its
 /// flattened field type (the reflective proxy's `TypeInfo.flattenFuncTypes`
@@ -141,7 +115,7 @@ type GeneratedMethod<'impl>
         name: string,
         flattenedTypes: Type[],
         decodeFirst: (string -> JsonSerializerBackend -> JsonElement -> Result<obj, DecodeError>) option,
-        call: GeneratedArguments -> 'impl -> Task<InvocationResult>
+        call: GeneratedArguments -> 'impl -> Task
     ) =
     /// The record field's name — the route's method segment.
     member _.Name = name
@@ -185,7 +159,7 @@ module GeneratedInvocation =
     let forMethod<'impl>
         (name: string)
         (flattenedTypes: Type[])
-        (call: GeneratedArguments -> 'impl -> Task<InvocationResult>)
+        (call: GeneratedArguments -> 'impl -> Task)
         : GeneratedMethod<'impl> =
         if not (isNoJsonFirst flattenedTypes) then
             invalidArg
@@ -204,7 +178,7 @@ module GeneratedInvocation =
     let forMethodWithFirst<'impl, 'first>
         (name: string)
         (flattenedTypes: Type[])
-        (call: GeneratedArguments -> 'impl -> Task<InvocationResult>)
+        (call: GeneratedArguments -> 'impl -> Task)
         : GeneratedMethod<'impl> =
         if isNoJsonFirst flattenedTypes || flattenedTypes[0] <> typeof<'first> then
             invalidArg

@@ -38,6 +38,7 @@
         <InternalsVisibleTo Include="ToolUp.JobSchedulers.Tests" />
         <InternalsVisibleTo Include="ToolUp.Cli.Tests" />
         <InternalsVisibleTo Include="ToolUp.Reporting.Tests" />
+        <InternalsVisibleTo Include="ToolUp.Remoting.Benchmarks" />
     </ItemGroup>
     <ItemGroup>
         <!-- The MessagePack reflection engine and the decoder
@@ -102,6 +103,19 @@
         <Compile Include="..\ToolUp.Platform.Server\Server\Remoting\Proxy.fs" />
         <Compile Include="..\ToolUp.Platform.Server\Server\Remoting\DocsApp.fs" />
         <Compile Include="..\ToolUp.Platform.Server\Server\Remoting\Remoting.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Remoting\Stages\Telemetry.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Remoting\Stages\Response.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Remoting\Stages\RequestContext.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Remoting\Stages\Correlate.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Remoting\Stages\Negotiate.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Remoting\Stages\BatchBackstop.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Remoting\Stages\Authorize.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Remoting\Stages\Validate.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Remoting\Stages\Idempotency.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Remoting\Stages\RateLimit.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Remoting\Stages\Invoke.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Remoting\Stages\Audit.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Remoting\Stages\Pipeline.fs" />
         <Compile Include="..\ToolUp.Platform.Server\Server\Remoting\Giraffe\GiraffeAdapter.fs" />
         <Compile Include="..\ToolUp.Platform.Server\Server\Remoting\AspNetCore\Middleware.fs" />
         <!-- The shared request-body binding seam. Depends on

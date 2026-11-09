@@ -247,15 +247,15 @@ let tests =
 
         // ── Dispatcher pre-flight ordering + denial emission (source pins) ──
         test "auth and idempotency-replay both precede the rate-limit pre-flight" {
-            let adapter = serverSource [ "Remoting"; "Giraffe"; "GiraffeAdapter.fs" ]
+            let pipeline = serverSource [ "Remoting"; "Stages"; "Pipeline.fs" ]
 
-            let authIdx = adapter.IndexOf "AuthClassifier.evaluate methodCls"
-            let replayIdx = adapter.IndexOf "x-idempotency-replay"
-            let rateLimitIdx = adapter.IndexOf "// Rate-limit pre-flight."
+            let authIdx = pipeline.IndexOf "Authorize.stage"
+            let replayIdx = pipeline.IndexOf "Idempotency.stage"
+            let rateLimitIdx = pipeline.IndexOf "RateLimit.stage"
 
-            Expect.isGreaterThan authIdx -1 "the auth evaluation must exist"
-            Expect.isGreaterThan replayIdx -1 "the idempotency replay path must exist"
-            Expect.isGreaterThan rateLimitIdx -1 "the rate-limit pre-flight must exist"
+            Expect.isGreaterThan authIdx -1 "the authorize stage must be in the pipeline"
+            Expect.isGreaterThan replayIdx -1 "the idempotency stage must be in the pipeline"
+            Expect.isGreaterThan rateLimitIdx -1 "the rate-limit stage must be in the pipeline"
 
             Expect.isLessThan
                 authIdx
@@ -268,15 +268,15 @@ let tests =
                 "idempotency replay precedes rate-limit — a replayed call must not spend the budget"
         }
 
-        test "the rate-limit denial branch emits denial telemetry and a RateLimitExceeded audit row" {
-            let adapter = serverSource [ "Remoting"; "Giraffe"; "GiraffeAdapter.fs" ]
+        test "the rate-limit denial branch settles RateLimited telemetry and a RateLimitExceeded audit row" {
+            let stage = serverSource [ "Remoting"; "Stages"; "RateLimit.fs" ]
 
-            let deniedIdx = adapter.IndexOf "| RateLimitDenied retryAfter ->"
-            let telemetryIdx = adapter.IndexOf "MethodOutcome.RateLimited retryAfter"
-            let auditIdx = adapter.IndexOf "Kind = AuditKind.RateLimitExceeded"
+            let deniedIdx = stage.IndexOf "| RateLimitDenied retryAfter ->"
+            let telemetryIdx = stage.IndexOf "MethodOutcome.RateLimited retryAfter"
+            let auditIdx = stage.IndexOf "Kind = AuditKind.RateLimitExceeded"
 
             Expect.isGreaterThan deniedIdx -1 "the denial branch must exist"
-            Expect.isGreaterThan telemetryIdx deniedIdx "denial telemetry is emitted inside the denial branch"
+            Expect.isGreaterThan telemetryIdx deniedIdx "denial telemetry is settled inside the denial branch"
 
             Expect.isGreaterThan
                 auditIdx

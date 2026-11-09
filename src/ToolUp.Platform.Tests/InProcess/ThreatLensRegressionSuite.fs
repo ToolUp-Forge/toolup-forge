@@ -726,15 +726,25 @@ let private runBackstop (httpMethod: string) (path: string) (stampAdmin: bool) :
     mw.InvokeAsync(ctx).GetAwaiter().GetResult()
     ctx.Response.StatusCode, reached
 
+/// A record with one method carrying no authorisation marker.
+type UnmarkedApi = { Naked: unit -> Async<int> }
+
 let private lens4Authz =
     testList "Lens 4 — authorization / RBAC" [
-        test "classifier fail-closed: an UNCLASSIFIED method denies even a genuine admin" {
-            let decision =
-                AuthClassifier.evaluate Unclassified (Some(authContext [ "PlatformAdmin" ] false))
+        test "classifier fail-closed: an UNCLASSIFIED method is refused at compose, before any caller" {
+            let flags = {
+                ContractFlags.defaults with
+                    AuthResolverComposed = true
+                    RecordSeamsComposed = true
+            }
 
-            match decision with
-            | Deny _ -> ()
-            | AuthDecision.Allow -> failtest "an unclassified method must fail closed, not default to allow"
+            match Contract.ofType flags typeof<UnmarkedApi> with
+            | Error refusals ->
+                Expect.contains
+                    refusals
+                    (ContractRefusal.UnclassifiedMethods("UnmarkedApi", [ "Naked" ]))
+                    "an unclassified method must fail closed, not default to allow"
+            | Ok _ -> failtest "an unclassified method must fail closed, not default to allow"
         }
 
         test "backstop secure: a stamped PlatformAdmin reaches the guarded handler" {

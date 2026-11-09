@@ -127,107 +127,56 @@ let tests =
                  consumer-supplied IRemotingTelemetry sinks emit unconditionally."
         }
 
-        test "GiraffeAdapter non-streaming branch reads TelemetryGate before allocating" {
-            let adapterPath =
+        test "the one telemetry scope reads the sink and its gate before allocating" {
+            let telemetryPath =
                 Path.Combine(
                     repoRoot (),
                     "src",
                     "ToolUp.Platform.Server",
                     "Server",
                     "Remoting",
-                    "Giraffe",
-                    "GiraffeAdapter.fs"
+                    "Stages",
+                    "Telemetry.fs"
                 )
 
-            let contents = File.ReadAllText adapterPath
+            let contents = File.ReadAllText telemetryPath
+            let startIdx = contents.IndexOf "let start ("
+
+            Expect.isGreaterThan startIdx -1 "the pipeline must start its telemetry in one place"
+
+            let startScope = contents.Substring(startIdx, min 600 (contents.Length - startIdx))
 
             Expect.stringContains
-                contents
-                "let telemetryActive ="
-                "Non-streaming branch must compute a `telemetryActive` discriminant. The \
-                 Stopwatch + MethodTelemetry allocation guards on this value."
-
-            // Line-by-line + adjacency check is CRLF-robust (the file is
-            // normalised to CRLF on Windows working copies; a single
-            // multi-line literal with `\n` would only match LF-shape source).
-            Expect.stringContains
-                contents
-                "if telemetryActive then"
-                "Non-streaming branch must wrap the Stopwatch alloc in `if telemetryActive then`."
-
-            // Anchor by finding the index of the `let stopwatch =` declaration
-            // and asserting that the immediate next lines carry the gate
-            // wrapper. This pins the structural adjacency without depending
-            // on exact whitespace shape.
-            let stopwatchIdx = contents.IndexOf("let stopwatch =")
-
-            Expect.isGreaterThan stopwatchIdx -1 "non-streaming branch must declare `let stopwatch =`"
-
-            let stopwatchScope =
-                contents.Substring(stopwatchIdx, min 400 (contents.Length - stopwatchIdx))
+                startScope
+                "| Some isOpen -> isOpen ()"
+                "the gate must be consulted — without it the gate field is dead code"
 
             Expect.stringContains
-                stopwatchScope
-                "if telemetryActive then"
-                "Stopwatch declaration must immediately gate on telemetryActive. \
-                 An unguarded Stopwatch.StartNew() reverts GP 13."
+                startScope
+                "| _ -> None"
+                "no sink, or a shut gate, starts nothing: the scope is `None` and nothing is allocated (GP 13)"
 
-            Expect.stringContains
-                stopwatchScope
-                "Stopwatch.StartNew()"
-                "Stopwatch.StartNew() must remain the true-branch of the telemetryActive gate."
+            Expect.isLessThan
+                (startScope.IndexOf "isOpen ()")
+                (startScope.IndexOf "Stopwatch.GetTimestamp()")
+                "the clock is read only after the gate opens"
         }
 
-        test "GiraffeAdapter streaming branch reads TelemetryGate before allocating" {
-            let adapterPath =
+        test "every call, streaming included, starts the same scope" {
+            let contextPath =
                 Path.Combine(
                     repoRoot (),
                     "src",
                     "ToolUp.Platform.Server",
                     "Server",
                     "Remoting",
-                    "Giraffe",
-                    "GiraffeAdapter.fs"
+                    "Stages",
+                    "RequestContext.fs"
                 )
 
-            let contents = File.ReadAllText adapterPath
-
             Expect.stringContains
-                contents
-                "let streamingTelemetryActive ="
-                "Streaming branch must compute a `streamingTelemetryActive` discriminant. \
-                 The SSE-method dispatcher path must be symmetric with the non-streaming branch."
-        }
-
-        test "Dispatcher gate honours both options.Telemetry.IsSome AND the gate" {
-            let adapterPath =
-                Path.Combine(
-                    repoRoot (),
-                    "src",
-                    "ToolUp.Platform.Server",
-                    "Server",
-                    "Remoting",
-                    "Giraffe",
-                    "GiraffeAdapter.fs"
-                )
-
-            let contents = File.ReadAllText adapterPath
-
-            // Both branches use the same two-condition shape:
-            //   options.Telemetry.IsSome
-            //   && (match options.TelemetryGate with
-            //       | Some gate -> gate ()
-            //       | None -> true)
-            Expect.stringContains
-                contents
-                "options.Telemetry.IsSome"
-                "Telemetry-gate discriminant must read options.Telemetry.IsSome as the outer \
-                 condition. A gate without telemetry doesn't make sense."
-
-            Expect.stringContains
-                contents
-                "match options.TelemetryGate with"
-                "Telemetry-gate discriminant must consult options.TelemetryGate — without it \
-                 the gate field is dead code."
+                (File.ReadAllText contextPath)
+                "Telemetry = TelemetryScope.start mount.Telemetry mount.TelemetryGate"
+                "the request context starts the call's one telemetry scope, whatever the method's shape"
         }
     ]

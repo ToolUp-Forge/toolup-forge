@@ -13,21 +13,22 @@ namespace ToolUp.Remoting.Analyzers
 //     of the five classifications.
 //   * the `[<Audit>]` / `[<PiiSafe>]` recognition in Audit.fs.
 //
-// THE ANALYZER CLASSIFIES BY SIMPLE NAME; THE RUNTIME MATCHES BY CLR IDENTITY.
-// The analyzer sees syntax, so `simpleName` reduces a source name
-// (`[<RequiresRole "...">]`) or a CLR name (`RequiresRoleAttribute`) to one key.
-// `AuthClassifier` instead compares the attribute's type with the platform's own.
-// The two agree on every platform attribute, and they part on one case: a
-// foreign attribute carrying a platform marker's simple name is a runtime
-// refusal that this analyzer reads as classified. That gap is a known finding,
-// not a parity this file provides.
+// The runtime matches a marker by CLR IDENTITY; the analyzer sees syntax, so it
+// states the runtime's rule as two rules over names:
 //
-// This file is SOURCE-LINKED into ToolUp.Platform.Tests (a `<Compile Include>`
+//   * TUR0001 — a field carrying no marker with a classifying SIMPLE NAME is
+//     unclassified. `simpleName` reduces a source name (`[<RequiresRole "...">]`)
+//     or a CLR name (`RequiresRoleAttribute`) to one key.
+//   * TUR0003 — a marker with a classifying simple name that is NOT the SDK's
+//     attribute, by the names the file shows (`isForeignMarker`), is a foreign
+//     marker the runtime refuses as a collision. Where the file does not show
+//     where an unqualified name comes from, it is taken to be the SDK's.
+//
+// This file is SOURCE-LINKED into the Platform test pack (a `<Compile Include>`
 // link, NOT a project reference, so the lean test pack never drags FCS in via
 // the analyzer's FSharp.Analyzers.SDK dependency). The parity test runs THIS
 // decision code against the real internal `AuthClassifier` over fixture record
-// types declared with the platform's own attributes, which is the set the two
-// agree on.
+// types declared with the platform's own attributes.
 //
 // The analyzer (`Analyzer.fs`) extracts a normalised `FieldAttributes` list from
 // the syntax tree and feeds it here.
@@ -38,8 +39,8 @@ module Recognition =
     /// field (method) name and the names of every attribute applied to it.
     /// Names may be in either source form (`RequiresRole`) or CLR form
     /// (`RequiresRoleAttribute`) — `simpleName` reconciles them — and may be
-    /// dotted (`ToolUp.Platform.RequiresRole`); only the trailing segment
-    /// matters here, where the runtime compares the attribute's CLR type.
+    /// dotted (`ToolUp.Platform.RequiresRole`): the trailing segment is the
+    /// name TUR0001 keys on, and the qualifier is what `isForeignMarker` reads.
     type FieldAttributes = {
         FieldName: string
         AttributeNames: string list
@@ -57,11 +58,13 @@ module Recognition =
     type Code =
         | TUR0001
         | TUR0002
+        | TUR0003
 
     let codeString =
         function
         | TUR0001 -> "TUR0001"
         | TUR0002 -> "TUR0002"
+        | TUR0003 -> "TUR0003"
 
     type Finding = {
         Code: Code
@@ -71,7 +74,8 @@ module Recognition =
         Message: string
         /// The placeholder attribute the codefix inserts to resolve the
         /// finding. Never a real role — always a fail-closed / TODO marker the
-        /// author must replace deliberately.
+        /// author must replace deliberately. Empty when no insertion resolves
+        /// the finding (TUR0003: the foreign marker has to go).
         SuggestedAttribute: string
     }
 
@@ -160,3 +164,67 @@ module Recognition =
                     m.Field.FieldName
             SuggestedAttribute = "[<Audit(\"Custom:TODO\")>]"
         })
+
+    /// The namespaces the SDK's markers are declared in: the server-tier
+    /// family and the tier-shared mirrors, the two `AuthClassifier` accepts.
+    let sdkMarkerNamespaces = set [ "ToolUp.Remoting.Server"; "ToolUp.Platform" ]
+
+    /// What the scan sees of one file's name resolution.
+    type NameScope = {
+        /// The namespaces and modules the file opens or is declared in, each
+        /// enclosing prefix included, so a partially qualified name resolves.
+        Opened: string list
+        /// The simple names (`simpleName`) of the types the file declares.
+        Declared: Set<string>
+    }
+
+    /// True when `name`, a marker with a classifying simple name, is certainly
+    /// not the SDK's attribute by what the file shows: qualified by a path that
+    /// reaches no SDK namespace through any open, or unqualified while the file
+    /// declares a type of that name itself (a local declaration is what the
+    /// unqualified name resolves to). An unqualified name the file does not
+    /// declare is the SDK's: the scan cannot see where it comes from, and a
+    /// guess there would report what the runtime accepts.
+    let isForeignMarker (scope: NameScope) (name: string) : bool =
+        let simple = simpleName name
+
+        if not (classifyingAuthAttributes.Contains simple) then
+            false
+        else
+            let trimmed = name.Trim()
+
+            match trimmed.LastIndexOf '.' with
+            | -1 -> scope.Declared.Contains simple
+            | i ->
+                // `global.` roots the path; the parser spells it `` `global` ``.
+                let qualifier =
+                    let q = trimmed.Substring(0, i)
+
+                    match q.IndexOf '.' with
+                    | dot when dot > 0 && (q.StartsWith "global." || q.StartsWith "`global`.") -> q.Substring(dot + 1)
+                    | _ -> q
+
+                ("" :: scope.Opened)
+                |> List.exists (fun opened ->
+                    sdkMarkerNamespaces.Contains(if opened = "" then qualifier else opened + "." + qualifier))
+                |> not
+
+    /// TUR0003 findings (a foreign-named authorisation marker) for an API
+    /// record's fields: one per marker that has a classifying simple name and
+    /// is not the SDK's. TUR0001 reads such a field as classified; the runtime
+    /// refuses the record at startup as a marker collision.
+    let foreignMarkerFindings (scope: NameScope) (fields: FieldAttributes list) : Finding list =
+        fields
+        |> List.collect (fun f ->
+            f.AttributeNames
+            |> List.filter (isForeignMarker scope)
+            |> List.map (fun name -> {
+                Code = TUR0003
+                FieldName = f.FieldName
+                Message =
+                    sprintf
+                        "API method '%s' carries [<%s>], an authorisation marker by name that is not the SDK's (ToolUp.Platform or ToolUp.Remoting.Server). The runtime matches markers by type identity and refuses a foreign-named marker as a collision, so ToolUp.Remoting refuses to start when this record is composed. Use the SDK's attribute, qualified if a local type shadows it."
+                        f.FieldName
+                        name
+                SuggestedAttribute = ""
+            }))
