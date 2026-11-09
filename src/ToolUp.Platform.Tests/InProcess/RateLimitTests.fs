@@ -337,3 +337,72 @@ let tests =
                 $"every round admits exactly the one remaining slot (round, admitted) — %d{overAdmitted.Length} of %d{rounds} rounds over-admitted"
         }
     ]
+
+// ─── Phase 1068 — the Phase 56 inbound middleware's refusal shapes ────
+
+let private quietLogger =
+    { new ToolUp.Platform.ILogger with
+        member _.Debug _ = ()
+        member _.Info _ = ()
+        member _.Warn _ = ()
+        member _.Error(_, _) = ()
+    }
+
+/// Drive `InboundRateLimitMiddleware` once against `store` for a policy on
+/// `/limited`, returning the response and whether `next` ran.
+let private invokeMiddleware
+    (store: ToolUp.Platform.Infra.IRateLimitStore)
+    (policy: ToolUp.Platform.RouteLimit)
+    (services: IServiceProvider option)
+    =
+    let ctx = Microsoft.AspNetCore.Http.DefaultHttpContext()
+    ctx.Request.Path <- Microsoft.AspNetCore.Http.PathString "/limited"
+    services |> Option.iter (fun sp -> ctx.RequestServices <- sp)
+    let mutable reached = false
+
+    let next =
+        Microsoft.AspNetCore.Http.RequestDelegate(fun _ ->
+            reached <- true
+            System.Threading.Tasks.Task.CompletedTask)
+
+    let middleware =
+        ToolUp.Platform.Infra.RateLimitMiddleware.InboundRateLimitMiddleware(next, store, quietLogger)
+
+    let config = {
+        ToolUp.Platform.ServerConfig.defaults with
+            RateLimits = [ policy ]
+    }
+
+    middleware.InvokeAsync(ctx, config).GetAwaiter().GetResult()
+    ctx.Response, reached
+
+[<Tests>]
+let middlewareTests =
+    testList "Phase 1068 — inbound rate-limit middleware" [
+        test "a DenySilently refusal is a bare 204 — no RateLimit-* and no Retry-After header" {
+            // The DU says the caller "should not be told they hit the cap";
+            // until 1068 the middleware stamped `RateLimit-Remaining: 0` and
+            // `Retry-After` on the 204, telling them exactly that.
+            let store = ToolUp.Platform.Infra.InMemoryRateLimitStore.create ()
+
+            let policy = {
+                ToolUp.Platform.RouteLimit.perIpPerMinute "/limited" 1 with
+                    OnExceeded = ToolUp.Platform.DenySilently
+            }
+
+            invokeMiddleware store policy None |> ignore
+            let response, reached = invokeMiddleware store policy None
+
+            Expect.isFalse reached "the over-budget call does not reach the handler"
+            Expect.equal response.StatusCode 204 "DenySilently answers 204"
+
+            let leaked =
+                response.Headers.Keys
+                |> Seq.filter (fun h ->
+                    h.StartsWith("RateLimit-", StringComparison.OrdinalIgnoreCase)
+                    || String.Equals(h, "Retry-After", StringComparison.OrdinalIgnoreCase))
+                |> Seq.toList
+
+            Expect.isEmpty leaked "a silent denial carries no rate-limit header"
+        }
+    ]

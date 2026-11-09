@@ -249,3 +249,10 @@ let tests =
 /// the conformance bar is uniform.
 let contractTests =
     IRateLimitStoreContract.tests "InMemoryRateLimitStore" InMemoryRateLimitStore.create
+
+/// Bind `IRemotingRateLimitStoreContract` (the `TryAcquire` pack) against
+/// the in-memory remoting store. Phase 1068: the two packs above and here
+/// hold both interfaces over one implementation.
+let remotingContractTests =
+    IRemotingRateLimitStoreContract.tests "InMemoryRateLimitStore (remoting)" (fun () ->
+        ToolUp.Remoting.Server.InMemoryRateLimitStore() :> ToolUp.Remoting.Server.IRateLimitStore)
