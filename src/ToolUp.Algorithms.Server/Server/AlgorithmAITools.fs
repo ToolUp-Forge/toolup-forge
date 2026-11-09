@@ -34,7 +34,7 @@ open ToolUp.Platform.Infra
 // `method`, `referenceLevels`) survive the projection deliberately —
 // they are the point.
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 /// Serialise a value with the platform's canonical converter set.
 let private serialise (value: obj) : string =
