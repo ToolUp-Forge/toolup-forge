@@ -134,31 +134,13 @@ let secretCacheInvalidator (secretStore: ISecretStore) : WebhookSecretRotatedEnv
 let private defaultLogger =
     lazy (ToolUp.Platform.Config.ConsoleLogger.ConsoleLogger() :> ILogger)
 
-/// Read many documents through the document store, at most
-/// `BlobDocumentStoreLimits.DefaultListDegree` at once. A partial result is
-/// preferable to a total failure for the dispatcher's hot path, so a
-/// document that cannot be read or decoded is left out — but logged, and
-/// quarantined by the store when its bytes do not decode, never silently.
-let private readAll<'T> (blobStorage: IBlobStorage) (blobNames: string list) : Async<'T list> = async {
-    let docs =
-        BlobDocumentStore<'T>(blobStorage, BlobCodec.json<'T>, defaultLogger.Value)
-
-    let! rows =
-        docs.ReadMany(
-            ScopeKey.platform,
-            blobNames |> List.map DocPath.ofString,
-            BlobDocumentStoreLimits.DefaultListDegree
-        )
-
-    return
-        rows
-        |> List.choose (fun (_, row) ->
-            match row with
-            | Ok value -> Some value
-            | Error e ->
-                defaultLogger.Value.Warn($"[WebhookRegistry] left out of the read: {BlobMapStoreError.describe e}")
-                None)
-}
+let private readAll<'T> (blobStorage: IBlobStorage) (blobNames: string list) : Async<'T list> =
+    BlobDocuments.readAvailable
+        (BlobDocumentStore<'T>(blobStorage, BlobCodec.json<'T>, defaultLogger.Value))
+        defaultLogger.Value
+        "WebhookRegistry"
+        ScopeKey.platform
+        blobNames
 
 // ─── IWebhookRegistry — blob-backed ──────────────────────────────
 

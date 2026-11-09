@@ -658,3 +658,33 @@ type BlobMapStore<'T>(storage: IBlobStorage, codec: BlobCodec<'T>, logger: ILogg
         (container: string, blobName: string, transform: 'T option -> BlobUpdate<'T, 'R>)
         : Async<Result<'R, BlobMapStoreError>> =
         docs.UpdateAt(container, blobName, transform)
+
+/// Reads shared by the stores whose listings prefer a partial result to a
+/// total failure.
+module BlobDocuments =
+
+    /// The documents at `names` in `scope` through `docs`, at most
+    /// `BlobDocumentStoreLimits.DefaultListDegree` at once, in the order
+    /// given. One that cannot be read or decoded is left out — logged as
+    /// `who`, and quarantined by the store when its bytes do not decode —
+    /// never silently; an absent one is left out without a word.
+    let readAvailable
+        (docs: BlobDocumentStore<'T>)
+        (logger: ILogger)
+        (who: string)
+        (scope: ScopeKey)
+        (names: string list)
+        : Async<'T list> =
+        async {
+            let! rows =
+                docs.ReadMany(scope, names |> List.map DocPath.ofString, BlobDocumentStoreLimits.DefaultListDegree)
+
+            return
+                rows
+                |> List.choose (fun (_, row) ->
+                    match row with
+                    | Ok value -> Some value
+                    | Error e ->
+                        logger.Warn($"[{who}] left out of the read: {BlobMapStoreError.describe e}")
+                        None)
+        }
