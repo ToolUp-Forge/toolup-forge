@@ -360,11 +360,10 @@ let private quietLogger =
 let private invokeMiddleware
     (store: ToolUp.Platform.Infra.IRateLimitStore)
     (policy: ToolUp.Platform.RouteLimit)
-    (services: IServiceProvider option)
+    (audit: IAuditLog)
     =
     let ctx = Microsoft.AspNetCore.Http.DefaultHttpContext()
     ctx.Request.Path <- Microsoft.AspNetCore.Http.PathString "/limited"
-    services |> Option.iter (fun sp -> ctx.RequestServices <- sp)
     let mutable reached = false
 
     let next =
@@ -373,7 +372,7 @@ let private invokeMiddleware
             System.Threading.Tasks.Task.CompletedTask)
 
     let middleware =
-        ToolUp.Platform.Infra.RateLimitMiddleware.InboundRateLimitMiddleware(next, store, quietLogger)
+        ToolUp.Platform.Infra.RateLimitMiddleware.InboundRateLimitMiddleware(next, store, quietLogger, audit)
 
     let config = {
         ToolUp.Platform.ServerConfig.defaults with
@@ -394,25 +393,12 @@ type private FailingInboundStore() =
 
         member _.GetRecentDecisions(_, _) = async { return [] }
 
-/// An `IAuditLog` that keeps what it is handed, as a service provider.
+/// An `IAuditLog` that keeps what it is handed.
 type private RecordingAudit() =
     let rows =
         System.Collections.Concurrent.ConcurrentQueue<string * ToolUp.Platform.AuditEvent>()
 
     member _.Rows = rows |> Seq.toList
-
-    member this.Services =
-        let services = Microsoft.Extensions.DependencyInjection.ServiceCollection()
-
-        Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.AddSingleton<IAuditLog>(
-            services,
-            this :> IAuditLog
-        )
-        |> ignore
-
-        Microsoft.Extensions.DependencyInjection.ServiceCollectionContainerBuilderExtensions.BuildServiceProvider
-            services
-        :> IServiceProvider
 
     interface IAuditLog with
         member _.Record(scopeId, audit) = async { rows.Enqueue(scopeId, audit) }
@@ -433,7 +419,7 @@ let middlewareTests =
             let policy = RouteLimit.perIpPerMinute "/limited" 1
 
             let response, reached =
-                invokeMiddleware (FailingInboundStore()) policy (Some audit.Services)
+                invokeMiddleware (FailingInboundStore()) policy (audit :> IAuditLog)
 
             Expect.isTrue reached "the request reaches the handler"
             Expect.equal response.StatusCode 200 "the response is the handler's"
@@ -449,7 +435,7 @@ let middlewareTests =
             }
 
             let response, reached =
-                invokeMiddleware (FailingInboundStore()) policy (Some audit.Services)
+                invokeMiddleware (FailingInboundStore()) policy (audit :> IAuditLog)
 
             Expect.isFalse reached "the request does not reach the handler"
             Expect.equal response.StatusCode 503 "a store that cannot count refuses under FailClosed"
@@ -479,8 +465,10 @@ let middlewareTests =
         test "a Return429 refusal still carries its RateLimit-* and Retry-After headers" {
             let store = ToolUp.Platform.Infra.InMemoryRateLimitStore.create ()
             let policy = RouteLimit.perIpPerMinute "/limited" 1
-            invokeMiddleware store policy None |> ignore
-            let response, reached = invokeMiddleware store policy None
+            invokeMiddleware store policy (RecordingAudit() :> IAuditLog) |> ignore
+
+            let response, reached =
+                invokeMiddleware store policy (RecordingAudit() :> IAuditLog)
 
             Expect.isFalse reached "the over-budget call does not reach the handler"
             Expect.equal response.StatusCode 429 "Return429 answers 429"
@@ -499,8 +487,10 @@ let middlewareTests =
                     OnExceeded = ToolUp.Platform.DenySilently
             }
 
-            invokeMiddleware store policy None |> ignore
-            let response, reached = invokeMiddleware store policy None
+            invokeMiddleware store policy (RecordingAudit() :> IAuditLog) |> ignore
+
+            let response, reached =
+                invokeMiddleware store policy (RecordingAudit() :> IAuditLog)
 
             Expect.isFalse reached "the over-budget call does not reach the handler"
             Expect.equal response.StatusCode 204 "DenySilently answers 204"

@@ -104,19 +104,16 @@ module RateLimitVerdict =
             | StorePosture.FailClosed -> RateLimitVerdict.RefusedOnStoreFailure reason
 
     /// Record a `StorePosture.FailClosed` refusal as a `RateLimitRefused`
-    /// audit row under `scopeId`, through the composed `IAuditLog` (none
-    /// composed, nothing written — GP 13). `limiter` names the budget that
-    /// could not be counted (a route prefix, a budget name); the row carries
-    /// no caller key, so no address or user id reaches the trail. Best-effort
-    /// like every audit write: a failing log never changes the response.
-    let auditRefusal (services: IServiceProvider) (scopeId: string) (limiter: string) (reason: string) : Async<unit> = async {
-        match
-            (if isNull services then
-                 null
-             else
-                 services.GetService typeof<IAuditLog>)
-        with
-        | :? IAuditLog as log ->
+    /// audit row under `scopeId` through `log` (none composed, nothing
+    /// written — GP 13). The caller hands the log in as a value: the
+    /// middleware takes it by constructor injection, a handler from its own
+    /// composition. `limiter` names the budget that could not be counted (a
+    /// route prefix, a budget name); the row carries no caller key, so no
+    /// address or user id reaches the trail. Best-effort like every audit
+    /// write: a failing log never changes the response.
+    let auditRefusal (log: IAuditLog option) (scopeId: string) (limiter: string) (reason: string) : Async<unit> = async {
+        match log with
+        | Some log ->
             try
                 do!
                     log.Record(
@@ -130,5 +127,5 @@ module RateLimitVerdict =
                     )
             with _ ->
                 ()
-        | _ -> ()
+        | None -> ()
     }

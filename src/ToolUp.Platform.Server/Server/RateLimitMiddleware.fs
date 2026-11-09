@@ -141,14 +141,14 @@ module RateLimitMiddleware =
     /// Inbound rate-limit middleware. Constructed via
     /// `app.UseMiddleware<InboundRateLimitMiddleware>()` so ASP.NET
     /// Core's middleware factory wires `RequestDelegate` +
-    /// `IRateLimitStore` (resolved from DI) automatically.
+    /// `IRateLimitStore` and `IAuditLog` (resolved from DI) automatically.
     ///
     /// When `ServerConfig.RateLimits` is empty OR `IRateLimitStore`
     /// is not registered (`RateLimitStoreMode = NoRateLimitStore`),
     /// the middleware should NOT be registered at all —
     /// `compose` gates the call. The class is unconditional in DI
     /// only so `app.UseMiddleware<...>()` resolves cleanly.
-    type InboundRateLimitMiddleware(next: RequestDelegate, store: IRateLimitStore, logger: ILogger) =
+    type InboundRateLimitMiddleware(next: RequestDelegate, store: IRateLimitStore, logger: ILogger, audit: IAuditLog) =
         member _.InvokeAsync(ctx: HttpContext, config: ServerConfig) : Task = task {
             let path =
                 if isNull ctx.Request.Path.Value then
@@ -183,8 +183,14 @@ module RateLimitMiddleware =
                     )
 
                     // No caller scope is resolved for an inbound policy:
-                    // the row is written under `_platform`.
-                    do! RateLimitVerdict.auditRefusal ctx.RequestServices "_platform" ("inbound:" + policy.Route) reason
+                    // the row is written under the platform shard.
+                    do!
+                        RateLimitVerdict.auditRefusal
+                            (Some audit)
+                            ScopeKey.PlatformContainer
+                            ("inbound:" + policy.Route)
+                            reason
+
                     do! refuseUnavailable ctx policy
 
                 | RateLimitVerdict.Answered(Admission.Admit remaining) ->
