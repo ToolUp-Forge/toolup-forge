@@ -93,7 +93,7 @@ let private countedValidatedApi () =
     let decodes = ref 0
     let invoked = ref 0
     let options = FableConverters.create ()
-    options.Converters.Insert(0, CountingConverter(FableConverters.create (), decodes))
+    options.Converters.Insert(0, CountingConverter(PlatformJson.options, decodes))
 
     let impl: ValidatedApi = {
         Create =
@@ -224,7 +224,7 @@ let private countedAuditedApi () =
     let invoked = ref 0
     let captured = System.Collections.Concurrent.ConcurrentQueue<AuditEvent>()
     let options = FableConverters.create ()
-    options.Converters.Insert(0, CountingAuditedConverter(FableConverters.create (), decodes))
+    options.Converters.Insert(0, CountingAuditedConverter(PlatformJson.options, decodes))
 
     let emitter =
         { new IAuditEmitter with
