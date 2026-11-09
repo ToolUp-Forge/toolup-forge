@@ -90,4 +90,46 @@ let tests =
             expectRefusedRead "GetRaw" (fun () -> store.GetRaw(scope, "billing") |> run |> ignore)
             expectQuarantined storage platform name
         }
+
+        test "WorkerKeyRegistry" {
+            let name = "external-compute/worker-keys/w1/k1.json"
+            let storage = planted platform name
+            let registry = BlobWorkerKeyRegistry(storage) :> IWorkerKeyRegistry
+
+            expectRefusedRead "Resolve" (fun () -> registry.Resolve("w1", "k1") |> run |> ignore)
+            expectRefusedRead "List" (fun () -> registry.List() |> run |> ignore)
+            expectError "Approve" (registry.Approve("w1", "k1", "admin") |> run)
+            expectQuarantined storage platform name
+        }
+
+        test "ExternalHandleStore — an unreadable record is absent on the ingress path, and never claimed" {
+            let handleId = Guid.NewGuid()
+            let name = $"external-compute/handles/s1/{handleId}.json"
+            let storage = planted platform name
+
+            storage.Upload(platform, $"external-compute/handle-index/{handleId}", Encoding.UTF8.GetBytes "s1")
+            |> run
+            |> ignore
+
+            let store = BlobExternalHandleStore(storage) :> IExternalHandleStore
+
+            Expect.isNone (store.Resolve handleId |> run) "the callback is refused, not thrown out of the ingress path"
+            Expect.isFalse (store.MarkTerminal handleId |> run) "nothing is claimed"
+            expectQuarantined storage platform name
+        }
+
+        test "SessionRegistry — a record that cannot be decoded is never read as absent" {
+            let sessionId = String('a', 64)
+            let name = $"sessions/t1/{sessionId}.json"
+            let storage = planted platform name
+
+            let registry =
+                ToolUp.Platform.Scope.SessionRegistry.BlobBackedSessionRegistry.create storage (Some silentLogger) 30
+
+            match registry.Revoke("t1", sessionId, UserId "admin") |> run with
+            | Error(SessionError.StoreUnavailable _) -> ()
+            | other -> failtest $"expected StoreUnavailable, not NotFound, got %A{other}"
+
+            expectQuarantined storage platform name
+        }
     ]
