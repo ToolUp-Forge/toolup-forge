@@ -11,6 +11,7 @@ open System.Text
 open System.Text.Json
 open System.Threading
 open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.Infra
 
 // ─── Phase 451 — the blob-backed compute-budget store ────────────────────
 //
@@ -230,21 +231,33 @@ type BlobComputeBudgetStore(blobs: IBlobStorage, ?logger: ILogger, ?container: s
         )
         :> IBudgetLedger
 
+    let budgets =
+        BlobMapStore<ComputeBudget>(
+            blobs,
+            {
+                Encode = ComputeBudgetJson.serialiseBudget
+                Decode =
+                    fun bytes ->
+                        match ComputeBudgetJson.deserialiseBudget bytes with
+                        | Some budget -> Ok budget
+                        | None -> Error "not a budget this version wrote"
+            },
+            defaultArg logger (JsonConsoleLogger.JsonConsoleLogger() :> ILogger)
+        )
+
     interface IComputeBudgetStore with
         member _.GetBudget(scopeId: string) = async {
-            match! blobs.Download(container, ComputeBudgetLayout.budgetBlob scopeId) with
-            | Error _ ->
-                // Absent or unreachable — unrestricted. See the file
-                // header on why this direction and not the other.
-                return ComputeBudget.unrestricted
-            | Ok bytes ->
-                match ComputeBudgetJson.deserialiseBudget bytes with
-                | Some budget -> return budget
-                | None ->
-                    warn
-                        $"BlobComputeBudgetStore: unreadable budget blob for scope '{scopeId}' — treating the scope as unrestricted. Re-save the budget to repair it."
+            match! budgets.Read(container, ComputeBudgetLayout.budgetBlob scopeId) with
+            | Ok(Some budget) -> return budget
+            | Ok None -> return ComputeBudget.unrestricted
+            | Error e ->
+                // Unreachable or undecodable (the bytes quarantined by the
+                // store) — unrestricted, logged. See the file header on why
+                // this direction and not the other.
+                warn
+                    $"BlobComputeBudgetStore: budget for scope '{scopeId}' unavailable ({BlobMapStoreError.describe e}) — treating the scope as unrestricted. Re-save the budget to repair it."
 
-                    return ComputeBudget.unrestricted
+                return ComputeBudget.unrestricted
         }
 
         member _.SetBudget(scopeId: string, budget: ComputeBudget) = async {

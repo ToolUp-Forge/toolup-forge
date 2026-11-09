@@ -4457,7 +4457,6 @@ let main args =
         "BlobCrdtDocumentStore.fs"
         "BlobNotificationPreferenceStore.fs"
         "BudgetLedger.fs"
-        "ComputeBudgetStore.fs"
         "ConfigDriftDetector.fs"
         // Excluded from the move by Phase 1061's own rule until 976 and 979 ship.
         "EntityOutbox.fs"

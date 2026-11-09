@@ -167,4 +167,34 @@ let tests =
             Expect.isNone (registry.GetTemplate "welcome" |> run) "the send is refused"
             expectQuarantined storage platform name
         }
+
+        test "DataSourceConfigStore" {
+            let name = "data-sources/t1/configs/src-1.json"
+            let storage = planted platform name
+            let store = DataSourceConfigStore.create storage
+
+            expectRefusedRead "Get" (fun () -> store.Get("t1", "src-1") |> run |> ignore)
+            Expect.isEmpty (store.List "t1" |> run) "the listing leaves the unreadable configuration out"
+            expectQuarantined storage platform name
+        }
+
+        test "MigrationStatusStore" {
+            let name = ToolUp.Platform.Config.MigrationStatusStore.statusBlob "t1" "orders"
+            let storage = planted platform name
+
+            let store =
+                ToolUp.Platform.Config.MigrationStatusStore.BlobMigrationStatusStore(storage) :> ToolUp.Platform.Config.IMigrationStatusStore
+
+            expectRefusedRead "Read" (fun () -> store.Read(TeamId "t1", "orders") |> run |> ignore)
+            expectQuarantined storage platform name
+        }
+
+        test "ComputeBudgetStore — an undecodable budget stays unrestricted by decision, and is set aside" {
+            let name = ComputeBudgetLayout.budgetBlob "t1"
+            let storage = planted ComputeBudgetLayout.DefaultContainer name
+            let store = BlobComputeBudgetStore(storage, silentLogger) :> IComputeBudgetStore
+
+            Expect.equal (store.GetBudget "t1" |> run) ComputeBudget.unrestricted "the recorded fail-open direction"
+            expectQuarantined storage ComputeBudgetLayout.DefaultContainer name
+        }
     ]
