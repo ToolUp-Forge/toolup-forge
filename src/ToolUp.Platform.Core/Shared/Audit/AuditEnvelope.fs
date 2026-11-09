@@ -474,7 +474,7 @@ module BlobStorageAuthAudit =
     ///
     /// **Never delays or changes the caller's own error.** A deployment with
     /// audit off composes `NoOpAuditLog`, which answers `Ok` at once; a
-    /// refused row is discarded (`AuditRow.bestEffort`) because the storage
+    /// refused row, or a log that raises, is discarded because the storage
     /// failure is the caller's answer either way. The one thing this
     /// function must not do is turn a storage failure into a different
     /// storage failure — the caller returns the error it always returned,
@@ -487,9 +487,16 @@ module BlobStorageAuthAudit =
         (statusCode: int)
         (message: string)
         : Async<unit> =
-        AuditRow.emit
-            audit
-            scope
-            (AuditSubject.system companion)
-            (BlobStorageAuthFailed(payload companion container operation statusCode message))
-        |> AuditRow.bestEffort
+        async {
+            // A log that raises despite `Record`'s contract is swallowed too:
+            // the caller's storage error is its answer either way.
+            let! _ =
+                AuditRow.emit
+                    audit
+                    scope
+                    (AuditSubject.system companion)
+                    (BlobStorageAuthFailed(payload companion container operation statusCode message))
+                |> Async.Catch
+
+            return ()
+        }

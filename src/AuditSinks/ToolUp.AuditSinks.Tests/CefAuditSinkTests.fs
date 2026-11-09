@@ -312,8 +312,9 @@ let private emptyStorage () =
 
 let private baseTime = DateTime(2026, 5, 28, 12, 0, 0, DateTimeKind.Utc)
 
+/// The actor the row carried: a team member, so the team-scoped CEF fields render.
 let private envelopeFor (scopeId: string) (event: AuditEvent) =
-    AuditEnvelope.create AuditSubject.unattributed scopeId baseTime event
+    AuditEnvelope.create (TeamAudit(UserId "u123", TeamId "42")) scopeId baseTime event
 
 let private loginEvent (userId: string) =
     UserLoggedIn {
