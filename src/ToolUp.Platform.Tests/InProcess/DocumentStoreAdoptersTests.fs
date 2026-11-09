@@ -491,4 +491,56 @@ let tests =
             Expect.equal (log.Query("t1", None, None) |> run) [ record ] "the new record landed in the restarted day"
             expectSetAside storage platform name
         }
+
+        test "ConfigDriftDetector — an unparseable snapshot is replaced, and one that cannot be read is kept" {
+            let name = "_deploy/last-config.json"
+
+            let audit =
+                { new IAuditLog with
+                    member _.Record(_, _) = async { return () }
+                    member _.GetAuditTrail(_, _, _) = async { return [] }
+                }
+
+            let detect storage =
+                ToolUp.Platform.Config.ConfigDriftDetector.run storage audit silentLogger ServerConfig.defaults []
+                |> run
+
+            let storage = planted platform name
+            detect storage
+            expectSetAside storage platform name
+
+            let backing = InMemoryBlobStorage()
+            let before = Encoding.UTF8.GetBytes "{ \"schema\": 1 }"
+            (backing :> IBlobStorage).Upload(platform, name, before) |> run |> ignore
+
+            let failing =
+                { new IBlobStorage with
+                    member _.CanComposeFrom = false
+                    member _.ComposeFrom(_, _, _) = composeNotSupported "test double"
+                    member _.Download(_, _) = async { return Error "simulated outage" }
+
+                    member _.Upload(c, n, b) =
+                        (backing :> IBlobStorage).Upload(c, n, b)
+
+                    member _.Delete(c, n) = (backing :> IBlobStorage).Delete(c, n)
+                    member _.List(c, p) = (backing :> IBlobStorage).List(c, p)
+                    member _.Exists(c, n) = (backing :> IBlobStorage).Exists(c, n)
+
+                    member _.GetMetadata(c, n) =
+                        (backing :> IBlobStorage).GetMetadata(c, n)
+
+                    member _.DownloadRange(c, n, o, l) =
+                        (backing :> IBlobStorage).DownloadRange(c, n, o, l)
+
+                    member _.Erase(c, p, policy, dryRun) =
+                        (backing :> IBlobStorage).Erase(c, p, policy, dryRun)
+                }
+
+            detect failing
+
+            Expect.equal
+                ((backing :> IBlobStorage).Download(platform, name) |> run)
+                (Ok before)
+                "the previous snapshot is kept for the next startup's comparison"
+        }
     ]

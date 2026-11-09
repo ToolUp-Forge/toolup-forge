@@ -8,6 +8,7 @@ open System.Text.Json.Nodes
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.Infra
 
 // ─── Phase 9q — startup-time config drift detector ───────────────────
 //
@@ -35,9 +36,32 @@ open ToolUp.Platform.BlobStorage
 // any future build-commit field travel in the persisted blob but
 // are not part of the comparison surface — they change on every
 // restart and would drown the signal.
+//
+// **The snapshot is a document** read and written through
+// `BlobDocumentStore`, with a thin codec (indented JSON, the bytes it has
+// always carried). A previous snapshot that does not decode is set aside
+// and replaced, with a warning and no drift event. One that cannot be
+// READ is left in place and NOT overwritten: a transient read failure used
+// to read as a first run and replace the snapshot, so the drift between
+// the last deploy and this one was never reported.
 
-let private deployContainer = ScopeKey.PlatformContainer
-let private snapshotBlobName = "_deploy/last-config.json"
+let private snapshotPath = DocPath.ofString "_deploy/last-config.json"
+
+/// The snapshot as an object, written indented.
+let private snapshotCodec: BlobCodec<JsonObject> = {
+    Encode =
+        fun snapshot ->
+            snapshot.ToJsonString(JsonSerializerOptions(WriteIndented = true))
+            |> Encoding.UTF8.GetBytes
+    Decode =
+        fun bytes ->
+            try
+                match JsonNode.Parse(Encoding.UTF8.GetString bytes) with
+                | :? JsonObject as snapshot -> Ok snapshot
+                | _ -> Error "the snapshot is not a JSON object"
+            with ex ->
+                Error ex.Message
+}
 
 [<Literal>]
 let private snapshotSchema = 1
@@ -247,8 +271,9 @@ let rec private diffTokens
 /// serialises the resolved `ServerConfig` + companion-set hash for
 /// this startup, diffs the two, emits `Warn` log + `ConfigDrift`
 /// audit event when differences are found, then writes the new
-/// snapshot back unconditionally. Failures at any step are logged
-/// at `Warn` and swallowed — drift detection is a diagnostic aid,
+/// snapshot back — unless the previous one could not be read, when it
+/// is kept for the next startup's comparison. Failures at any step are
+/// logged at `Warn` and swallowed — drift detection is a diagnostic aid,
 /// not a control-plane gate.
 let run
     (storage: IBlobStorage)
@@ -263,100 +288,120 @@ let run
             let set = companionSet ()
             let hash = hashCompanionSet set
             let newSnapshot = buildSnapshot config set hash grounding now
+            let snapshots = BlobDocumentStore<JsonObject>(storage, snapshotCodec, logger)
+            let! previous = snapshots.Read(ScopeKey.platform, snapshotPath)
 
-            let indentedOptions = JsonSerializerOptions(WriteIndented = true)
+            let! replace = async {
+                match previous with
+                | Ok(Some prevSnapshot) ->
+                    try
+                        let prevConfig = prevSnapshot["config"]
+                        let currConfig = newSnapshot["config"]
 
-            let newSnapshotBytes =
-                newSnapshot.ToJsonString(indentedOptions) |> Encoding.UTF8.GetBytes
+                        let prevHash =
+                            prevSnapshot["companionSetHash"]
+                            |> Option.ofObj
+                            |> Option.map _.GetValue<string>()
 
-            let! previousResult = storage.Download(deployContainer, snapshotBlobName)
-
-            match previousResult with
-            | Ok bytes ->
-                try
-                    let prevSnapshot = JsonNode.Parse(Encoding.UTF8.GetString bytes) :?> JsonObject
-                    let prevConfig = prevSnapshot["config"]
-                    let currConfig = newSnapshot["config"]
-
-                    let prevHash =
-                        prevSnapshot["companionSetHash"]
-                        |> Option.ofObj
-                        |> Option.map _.GetValue<string>()
-
-                    let configChanges =
-                        if prevConfig <> null && currConfig <> null then
-                            diffTokens "" prevConfig currConfig [] |> List.rev
-                        else
-                            []
-
-                    // Phase 526 — the composed grounding registrations join the
-                    // drift surface: a metric/subject added or removed between
-                    // deploys surfaces here (path `_grounding`). A previous
-                    // snapshot predating this field carries no `grounding`, so
-                    // `prevGrounding` is null and no synthetic drift is emitted.
-                    let prevGrounding = prevSnapshot["grounding"]
-                    let currGrounding = newSnapshot["grounding"]
-
-                    let groundingChanges =
-                        if prevGrounding <> null && currGrounding <> null then
-                            diffTokens "_grounding" prevGrounding currGrounding [] |> List.rev
-                        else
-                            []
-
-                    let changes = configChanges @ groundingChanges
-
-                    let companionChanged = prevHash <> Some hash
-
-                    if not (List.isEmpty changes) || companionChanged then
-                        let pathSummary =
-                            changes |> List.map _.Path |> List.truncate 20 |> String.concat ", "
-
-                        let companionNote =
-                            if companionChanged then
-                                " companion-set hash changed"
+                        let configChanges =
+                            if prevConfig <> null && currConfig <> null then
+                                diffTokens "" prevConfig currConfig [] |> List.rev
                             else
-                                ""
+                                []
 
+                        // Phase 526 — the composed grounding registrations join the
+                        // drift surface: a metric/subject added or removed between
+                        // deploys surfaces here (path `_grounding`). A previous
+                        // snapshot predating this field carries no `grounding`, so
+                        // `prevGrounding` is null and no synthetic drift is emitted.
+                        let prevGrounding = prevSnapshot["grounding"]
+                        let currGrounding = newSnapshot["grounding"]
+
+                        let groundingChanges =
+                            if prevGrounding <> null && currGrounding <> null then
+                                diffTokens "_grounding" prevGrounding currGrounding [] |> List.rev
+                            else
+                                []
+
+                        let changes = configChanges @ groundingChanges
+
+                        let companionChanged = prevHash <> Some hash
+
+                        if not (List.isEmpty changes) || companionChanged then
+                            let pathSummary =
+                                changes |> List.map _.Path |> List.truncate 20 |> String.concat ", "
+
+                            let companionNote =
+                                if companionChanged then
+                                    " companion-set hash changed"
+                                else
+                                    ""
+
+                            logger.Warn(
+                                sprintf
+                                    "Config drift detected at startup: %d field-level change(s)%s. Paths: [%s]"
+                                    changes.Length
+                                    companionNote
+                                    pathSummary
+                            )
+
+                            do!
+                                auditLog.Record(
+                                    ScopeKey.PlatformContainer,
+                                    ConfigDrift {
+                                        Changes = changes
+                                        CompanionSetFrom = prevHash
+                                        CompanionSetTo = hash
+                                        SnapshotTakenAt = now
+                                    }
+                                )
+
+                        return true
+                    with ex ->
+                        // A previous snapshot that decodes but cannot be
+                        // compared — log + overwrite. Don't emit `ConfigDrift`
+                        // for it; the operator's signal is "drift", not "the
+                        // prior file was malformed".
                         logger.Warn(
                             sprintf
-                                "Config drift detected at startup: %d field-level change(s)%s. Paths: [%s]"
-                                changes.Length
-                                companionNote
-                                pathSummary
+                                "Config drift detector: previous snapshot could not be compared (%s); rewriting."
+                                ex.Message
                         )
 
-                        do!
-                            auditLog.Record(
-                                ScopeKey.PlatformContainer,
-                                ConfigDrift {
-                                    Changes = changes
-                                    CompanionSetFrom = prevHash
-                                    CompanionSetTo = hash
-                                    SnapshotTakenAt = now
-                                }
-                            )
-                with ex ->
-                    // Unparseable previous snapshot — log + overwrite.
-                    // Don't emit `ConfigDrift` for a recoverable read
-                    // failure; the operator's signal is "drift", not
-                    // "the prior file was malformed".
+                        return true
+                | Ok None ->
+                    // First run on this deployment — write the snapshot,
+                    // no diff. The detector is intentionally silent on the
+                    // first run so a fresh deploy doesn't ship a synthetic
+                    // "everything changed" event.
+                    return true
+                | Error(BlobMapStoreError.Quarantined _ as e) ->
+                    // Unparseable previous snapshot — set aside by the
+                    // store; log + replace, no `ConfigDrift`.
                     logger.Warn(
                         sprintf
                             "Config drift detector: previous snapshot could not be parsed (%s); rewriting."
-                            ex.Message
+                            (BlobMapStoreError.describe e)
                     )
-            | Error _ ->
-                // First run on this deployment — write the snapshot,
-                // no diff. The detector is intentionally silent on the
-                // first run so a fresh deploy doesn't ship a synthetic
-                // "everything changed" event.
-                ()
 
-            let! writeResult = storage.Upload(deployContainer, snapshotBlobName, newSnapshotBytes)
+                    return true
+                | Error e ->
+                    logger.Warn(
+                        sprintf
+                            "Config drift detector: previous snapshot could not be read (%s); it is kept, not overwritten, so the next startup still compares against it."
+                            (BlobMapStoreError.describe e)
+                    )
 
-            match writeResult with
-            | Ok _ -> ()
-            | Error e -> logger.Warn(sprintf "Config drift detector: snapshot persist failed: %s" e)
+                    return false
+            }
+
+            if replace then
+                match! snapshots.Replace(ScopeKey.platform, snapshotPath, newSnapshot) with
+                | Ok() -> ()
+                | Error e ->
+                    logger.Warn(
+                        sprintf "Config drift detector: snapshot persist failed: %s" (BlobMapStoreError.describe e)
+                    )
 
         with ex ->
             logger.Warn(sprintf "Config drift detector: skipped due to error: %s" ex.Message)
