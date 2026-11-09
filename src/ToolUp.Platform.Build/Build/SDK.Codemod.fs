@@ -70,6 +70,9 @@ type CodemodMigration =
     /// store interfaces answer `Admission`, and a `RouteLimit` declares its
     /// `StorePosture`.
     | RateLimitAdmission
+    /// The client's one async state and memo primitives: `Prefetch`'s stall
+    /// reporter is removed.
+    | RemoteAndMemo
 
 /// Helpers over `CodemodMigration`.
 module CodemodMigration =
@@ -98,6 +101,7 @@ module CodemodMigration =
         | CodemodMigration.RequestPipeline ->
             "docs/migrations/1056-redesign-b-request-pipeline-as-stages-with-streaming-inside.md"
         | CodemodMigration.RateLimitAdmission -> "docs/migrations/1068-redesign-d-rate-limit-unification.md"
+        | CodemodMigration.RemoteAndMemo -> "docs/migrations/1070-redesign-e-remote-and-memo-primitives.md"
 
     /// The phase label the renderings print.
     let label migration =
@@ -120,6 +124,7 @@ module CodemodMigration =
         | CodemodMigration.TypedIdentity -> "Phase 878"
         | CodemodMigration.RequestPipeline -> "Phase 1056"
         | CodemodMigration.RateLimitAdmission -> "Phase 1068"
+        | CodemodMigration.RemoteAndMemo -> "Phase 1070"
 
 /// Which files a rule applies to. The Phase 11.C.5 Tier 2 renames are
 /// PACKAGE ids — they live in `.fsproj` / `Directory.Packages.props` —
@@ -1440,6 +1445,13 @@ module Codemod =
             CodemodFileClass.Source
             @"\bOnExceeded\s*=(?!.*\bStorePosture\b)"
             "if this is a full `RouteLimit` literal it needs `StorePosture = StorePosture.FailOpen` (today's behaviour) or `StorePosture.FailClosed` (refuse and audit when the store fails); a `{ limit with OnExceeded = … }` copy keeps the posture it copies"
+        // `Prefetch`'s stall reporter had no caller anywhere.
+        review
+            "1070-prefetch-stall"
+            CodemodMigration.RemoteAndMemo
+            CodemodFileClass.Source
+            @"\bPrefetch\.(?:warnIfStalled|setStallReporter|resetStallWarning)\b"
+            "`Prefetch.warnIfStalled`, `Prefetch.setStallReporter` and `Prefetch.resetStallWarning` are removed with no replacement: delete the call. A gate that can hang is a `Remote<_, _>` whose `Failed` case the view renders (`StateViews.remote`); a timeout belongs to the request that loads it"
     ]
 
 
@@ -2439,6 +2451,7 @@ module Codemod =
             CodemodMigration.SubsystemNamespaces
             CodemodMigration.RequestPipeline
             CodemodMigration.RateLimitAdmission
+            CodemodMigration.RemoteAndMemo
         ]
         |> List.tryFind (fun m -> CodemodMigration.label m = "Phase " + phase.Trim())
 

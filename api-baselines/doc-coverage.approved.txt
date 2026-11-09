@@ -114,7 +114,7 @@ ToolUp.Hosts.EdgeCache 35/76
 ToolUp.Hosts.GoogleCloudFunctions 2/4
 ToolUp.IngestionQueues.Redis 27/39
 ToolUp.JobSchedulers.Quartz 26/35
-ToolUp.KnowledgeBase.Client 52/395
+ToolUp.KnowledgeBase.Client 54/378
 ToolUp.KnowledgeBase.Core 192/454
 ToolUp.KnowledgeBase.Server 202/337
 ToolUp.Media.CloudTranscode 2/3
@@ -137,8 +137,8 @@ ToolUp.Offline.Server 16/33
 ToolUp.OpenXml 107/298
 ToolUp.OpenXml.Spreadsheet 45/141
 ToolUp.OpenXml.SvgRasterizer.Skia 3/3
-ToolUp.Platform.Build 575/1023
-ToolUp.Platform.Client 2951/7274
+ToolUp.Platform.Build 576/1026
+ToolUp.Platform.Client 2957/7073
 ToolUp.Platform.Core 7578/15649
 ToolUp.Platform.Server 3071/5523
 ToolUp.Platform.Server.Audit 373/694
@@ -149,7 +149,7 @@ ToolUp.Platform.Server.Remoting 360/1027
 ToolUp.Platform.Server.Scope 437/773
 ToolUp.Platform.Testing 118/264
 ToolUp.Platform.Transport 44/90
-ToolUp.Platform.UI 72/184
+ToolUp.Platform.UI 92/231
 ToolUp.PublicRendering 677/1159
 ToolUp.RAG.Core 82/133
 ToolUp.RAG.Server 281/488

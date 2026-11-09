@@ -44,7 +44,7 @@ type Model = {
     /// Set after a successful save; cleared on the next edit.
     Saved: bool
     /// The last load / save error, until dismissed.
-    Error: string option
+    Error: Notice option
 }
 
 /// Elmish messages for the preference centre.
@@ -61,7 +61,7 @@ type Msg =
     | Save
     /// The save completed.
     | SaveCompleted of Result<unit, string>
-    /// Clear the error banner.
+    /// Clear the error notice.
     | DismissError
 
 // ─── API proxy ───────────────────────────────────────────────────────
@@ -113,7 +113,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
             model with
                 Loaded = true
                 Busy = false
-                Error = Some err
+                Error = Some(Notice.Problem err)
         },
         Cmd.none
 
@@ -135,7 +135,12 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
 
     | Save ->
         match UserNotificationPreferences.validate model.Draft with
-        | Error err -> { model with Error = Some err }, Cmd.none
+        | Error err ->
+            {
+                model with
+                    Error = Some(Notice.Problem err)
+            },
+            Cmd.none
         | Ok draft -> { model with Busy = true; Error = None }, saveCmd draft
 
     | SaveCompleted(Ok()) ->
@@ -151,7 +156,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         {
             model with
                 Busy = false
-                Error = Some err
+                Error = Some(Notice.Problem err)
         },
         Cmd.none
 
@@ -200,23 +205,6 @@ let private channelLabel (msgs: NotificationPreferencesMessages) (channel: Prefe
     | PreferenceChannel.Email -> msgs.ChannelEmail
     | PreferenceChannel.Sms -> msgs.ChannelSms
     | PreferenceChannel.Push -> msgs.ChannelPush
-
-let private errorBanner (msgs: NotificationPreferencesMessages) (model: Model) (dispatch: Msg -> unit) =
-    match model.Error with
-    | Some msg ->
-        Html.div [
-            prop.className
-                "mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm flex items-center justify-between"
-            prop.children [
-                Html.span [ prop.text msg ]
-                Html.button [
-                    prop.className "text-xs text-red-600 hover:underline"
-                    prop.text msgs.Dismiss
-                    prop.onClick (fun _ -> dispatch DismissError)
-                ]
-            ]
-        ]
-    | None -> Html.none
 
 let private cellPicker
     (msgs: NotificationPreferencesMessages)
@@ -436,7 +424,7 @@ let private NotificationPreferencesBody (model: Model) (dispatch: Msg -> unit) =
         prop.children [
             Html.h2 [ prop.className "text-lg font-semibold mb-1"; prop.text msgs.Heading ]
             Html.p [ prop.className "text-sm text-gray-600 mb-4"; prop.text msgs.Subheading ]
-            errorBanner msgs model dispatch
+            StateViews.notice { Dismiss = msgs.Dismiss } model.Error (fun () -> dispatch DismissError)
             (match model.View with
              | None when not model.Loaded -> Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.Loading ]
              | None -> Html.none

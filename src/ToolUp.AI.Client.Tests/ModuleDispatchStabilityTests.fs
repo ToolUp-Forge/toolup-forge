@@ -8,8 +8,9 @@ module ToolUp.AI.Client.Tests.ModuleDispatchStabilityTests
 // The shell hands every module view a `ModuleMsg` wrapper over `dispatch`,
 // carrying that module's id. Built inline in `Client.view`, the module's one
 // dispatch prop would be a fresh closure on every render and no memo boundary
-// around a module view could ever hold. `Client.moduleDispatchFor` builds it
-// once per module per loop and hands the SAME function to every render.
+// around a module view could ever hold. The loop's `Client.Dispatchers` set
+// builds it once per module, and the program builds the set once per loop
+// (`Program.withStableDispatch`), so every render hands out the SAME function.
 //
 // This is the transpiled code's property (a JavaScript function's
 // identity is what `React.memo` compares), so it is pinned here under
@@ -17,11 +18,33 @@ module ToolUp.AI.Client.Tests.ModuleDispatchStabilityTests
 // memo boundary makes.
 
 open Fable.Core
+open ToolUp.Elmish
 open ToolUp.Platform
 open ToolUp.AI.Client.Tests.NodeTest
 
 [<Emit("Object.is($0, $1)")>]
 let private objectIs (a: obj) (b: obj) : bool = jsNative
+
+/// The dispatcher a render of the shell's program hands module `moduleId`
+/// for the loop dispatcher `dispatch` — through the program's own view, so
+/// the once-per-loop build is what is measured.
+let private moduleDispatchFor =
+    let rendered: Client.Dispatchers option ref = ref None
+
+    let view =
+        Client.programOver
+            ClientConfig.defaults
+            (fun () -> (), Cmd.none)
+            (fun (_: Client.Msg) () -> (), Cmd.none)
+            Client.dispatchers
+            (fun () dispatchers ->
+                rendered.Value <- Some dispatchers
+                Feliz.Html.none)
+        |> Program.view
+
+    fun (moduleId: string) (dispatch: Client.Msg -> unit) ->
+        view () dispatch |> ignore
+        rendered.Value.Value.ForModule moduleId
 
 let tests =
     testList "The module dispatch prop is referentially stable" [
@@ -33,9 +56,9 @@ let tests =
             // the shell's view the same function on every render.
             let dispatch: Client.Msg -> unit = received.Add
 
-            let first = Client.moduleDispatchFor "m1" dispatch
-            let second = Client.moduleDispatchFor "m1" dispatch
-            let third = Client.moduleDispatchFor "m1" dispatch
+            let first = moduleDispatchFor "m1" dispatch
+            let second = moduleDispatchFor "m1" dispatch
+            let third = moduleDispatchFor "m1" dispatch
 
             Expect.isTrue (objectIs (box first) (box second)) "render 1 and render 2 receive the same function"
             Expect.isTrue (objectIs (box second) (box third)) "render 2 and render 3 receive the same function"
@@ -54,9 +77,9 @@ let tests =
             let received = ResizeArray<Client.Msg>()
             let dispatch: Client.Msg -> unit = received.Add
 
-            let forA = Client.moduleDispatchFor "a" dispatch
-            let forB = Client.moduleDispatchFor "b" dispatch
-            let forAAgain = Client.moduleDispatchFor "a" dispatch
+            let forA = moduleDispatchFor "a" dispatch
+            let forB = moduleDispatchFor "b" dispatch
+            let forAAgain = moduleDispatchFor "a" dispatch
 
             Expect.isFalse (objectIs (box forA) (box forB)) "two modules, two wrappers"
 
@@ -80,8 +103,8 @@ let tests =
             let dispatchA: Client.Msg -> unit = a.Add
             let dispatchB: Client.Msg -> unit = b.Add
 
-            let forA = Client.moduleDispatchFor "m1" dispatchA
-            let forB = Client.moduleDispatchFor "m1" dispatchB
+            let forA = moduleDispatchFor "m1" dispatchA
+            let forB = moduleDispatchFor "m1" dispatchB
 
             Expect.isFalse (objectIs (box forA) (box forB)) "two loops, two wrappers"
 
@@ -90,7 +113,7 @@ let tests =
             Expect.equal b.Count 1 "the second loop received it"
 
             // Going back to the first loop rebuilds rather than serving B's.
-            let forAAgain = Client.moduleDispatchFor "m1" dispatchA
+            let forAAgain = moduleDispatchFor "m1" dispatchA
             forAAgain (box "to-a")
             Expect.equal a.Count 1 "the rebuilt wrapper routes to the first loop"
             Expect.equal b.Count 1 "…and not to the second"

@@ -8,7 +8,8 @@ open ToolUp.Platform
 //
 // The shell's background subscriptions (the NavigationRequest bus, the
 // cross-module event bus, the SSE notification stream, the auth-token
-// watcher, the auth-bridge health observer) register as lifetime-aware
+// watcher, the auth-bridge health observer, the cross-tab identity watch)
+// register as lifetime-aware
 // `EffectHandle`s at the `Program` site — NOT inside `Client.init`. An
 // outer composer that rebuilds the Program from the shell's
 // `init`/`update`/`view` pieces (ToolUp.AI's `withSidePanel`) therefore
@@ -25,7 +26,7 @@ open ToolUp.Platform
 // of them into an outer program, dispatch lifted through the outer Msg
 // (the exact `ShellMsg` shape `withSidePanel` uses).
 
-/// The six shell subscriptions, in their attach order. A shell effect
+/// The shell subscriptions, in their attach order. A shell effect
 /// added without extending this list fails the pin below — which is the
 /// point: it must also be delivered through every outer composer, and
 /// this test is where that obligation surfaces.
@@ -51,6 +52,7 @@ let private expectedIds = [
     "notifications-stream"
     "auth-token-acquired"
     "auth-bridge-health"
+    "identity-across-tabs"
 ]
 
 /// Stand-in for a composer's outer message type (`OuterMsg.ShellMsg`).
@@ -70,7 +72,7 @@ let tests =
             Expect.equal
                 (Client.programLifetimeEffects ClientConfig.defaults |> List.map _.Id)
                 expectedIds
-                "the six shell seams, in attach order — a new shell effect must join this list AND every outer composer"
+                "the shell seams, in attach order — a new shell effect must join this list AND every outer composer"
 
         testCase "the navigation-request effect translates bus requests into ModuleSelected"
         <| fun () ->

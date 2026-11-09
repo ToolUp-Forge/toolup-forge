@@ -13,9 +13,9 @@ type PrefetchStatus<'a> =
     | Failed of exn
 
 /// `Prefetch<'a>` — wraps an async-loaded value with explicit lifecycle.
-/// Codifies the "load N config sources at startup, fire one re-init when
-/// the last one resolves" pattern `SDK.Client` uses at boot
-/// and on team-switch fan-in.
+/// Codifies the "load N sources, fire one command when the last one
+/// resolves" pattern. (The SDK shell's own boot gates are `Remote<unit>`
+/// values, which carry the same three states.)
 ///
 /// Replaces the manual `IsConfigsPending` / `IsFlagsPending` bookkeeping
 /// fields with a single typed shape — combine with `Prefetch.onAllReady`
@@ -103,89 +103,3 @@ module Prefetch =
     /// ```
     let onAllLoaded (loadedFlags: bool list) (cmd: Cmd<'msg>) : Cmd<'msg> =
         if List.forall id loadedFlags then cmd else Cmd.none
-
-    // ─── 0.4.3 — stall surfacing ─────────────────────────────────
-    //
-    // `onAllReady` is silent by design: when not all flags are ready
-    // it returns `Cmd.none`. That's correct for the success path, but
-    // when a prefetch hangs indefinitely (config fetch times out, a
-    // background load never resolves), the gate sits forever and the
-    // consumer's module stays in its seed state with no operator
-    // signal. `warnIfStalled` is the opt-in observability hook —
-    // consumers call it at the same site they call `onAllReady`, and
-    // when the gate has been pending past `stallThreshold` it emits
-    // one warning per gate-name via `Prefetch.stallReporter` (defaults
-    // to `eprintfn`; consumers can override to route into structured
-    // logging).
-
-    let private stalledWarned = System.Collections.Generic.HashSet<string>()
-
-    let mutable private stallReporter: string -> float -> int -> int -> int list -> unit =
-        fun gateName elapsedSeconds pendingCount totalCount pendingIndices ->
-            try
-                eprintfn
-                    "[Prefetch.onAllReady] gate '%s' stalled — elapsed %.1fs, %d of %d prefetches still pending (indices: %A)"
-                    gateName
-                    elapsedSeconds
-                    pendingCount
-                    totalCount
-                    pendingIndices
-            with _ ->
-                ()
-
-    /// Override the default stall reporter. Useful for routing stall
-    /// warnings into the consumer's `ErrorReporter` or a metrics sink
-    /// rather than stderr. Set once at boot, before the first
-    /// `warnIfStalled` call fires.
-    let setStallReporter (reporter: string -> float -> int -> int -> int list -> unit) : unit =
-        stallReporter <- reporter
-
-    /// Reset the once-per-gate-name dedup so a stall warning can fire
-    /// again. Useful at team-switch / tenant-switch boundaries where
-    /// the consumer resets the gates and wants the new run to be able
-    /// to surface its own stall warning. Pass `None` to clear every
-    /// recorded gate name.
-    let resetStallWarning (gateName: string option) : unit =
-        match gateName with
-        | Some name -> stalledWarned.Remove name |> ignore
-        | None -> stalledWarned.Clear()
-
-    /// Emit a one-shot stall warning when `gateStartedAt` is older
-    /// than `stallThreshold` AND at least one of `readyFlags` is
-    /// `false`. The warning fires at most once per `gateName` —
-    /// repeated calls per Elmish update are de-duped.
-    ///
-    /// Pair with `onAllReady` at boot-time fan-in sites:
-    ///
-    /// ```fsharp
-    /// | ConfigsLoaded configs ->
-    ///     let model' = { model with Configs = Prefetch.loaded configs }
-    ///     let flags = [
-    ///         Prefetch.isComplete model'.Configs
-    ///         Prefetch.isComplete model'.Flags
-    ///     ]
-    ///     Prefetch.warnIfStalled
-    ///         "boot.configs+flags"
-    ///         model'.BootStartedAt
-    ///         (System.TimeSpan.FromSeconds 5.0)
-    ///         flags
-    ///     model', Prefetch.onAllReady flags (Cmd.ofMsg ReinitActiveModule)
-    /// ```
-    let warnIfStalled
-        (gateName: string)
-        (gateStartedAt: System.DateTime)
-        (stallThreshold: System.TimeSpan)
-        (readyFlags: bool list)
-        : unit =
-        if not (List.forall id readyFlags) then
-            let elapsed = (System.DateTime.UtcNow - gateStartedAt).TotalSeconds
-
-            if elapsed > stallThreshold.TotalSeconds && not (stalledWarned.Contains gateName) then
-                stalledWarned.Add gateName |> ignore
-
-                let pendingIndices =
-                    readyFlags
-                    |> List.mapi (fun i ready -> if ready then None else Some i)
-                    |> List.choose id
-
-                stallReporter gateName elapsed pendingIndices.Length readyFlags.Length pendingIndices

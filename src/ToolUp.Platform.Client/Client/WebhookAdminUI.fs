@@ -30,8 +30,8 @@ type Model = {
     SelectedId: Guid option
     /// True once the initial fetch has completed, regardless of payload.
     Loaded: bool
-    /// List-level error banner.
-    Error: string option
+    /// List-level error notice, as a `Notice.Problem`.
+    Error: Notice option
     /// Per-subscription action status. Keyed by `SubscriptionId`.
     Status: Map<Guid, FormStatus>
     /// Recent deliveries per subscription. Lazy — populated on detail
@@ -137,7 +137,7 @@ let update (msg: Msg) (model: Model) =
         {
             model with
                 Loaded = true
-                Error = Some err
+                Error = Some(Notice.Problem err)
         },
         Cmd.none
 
@@ -171,7 +171,12 @@ let update (msg: Msg) (model: Model) =
         },
         loadSubscriptionsCmd ()
 
-    | CreateCompleted(Error err) -> { model with Error = Some err }, Cmd.none
+    | CreateCompleted(Error err) ->
+        {
+            model with
+                Error = Some(Notice.Problem err)
+        },
+        Cmd.none
 
     | UpdateStatusSubmit(id, status) ->
         let cmd =
@@ -364,36 +369,20 @@ let private outcomeLabel (msgs: WebhookAdminMessages) (outcome: WebhookDeliveryO
     | WebhookDeliveryOutcome.Failure(None, err, ms) -> msgs.OutcomeFailed err ms, "text-yellow-700"
     | WebhookDeliveryOutcome.DeadLettered err -> msgs.OutcomeDeadLettered err, "text-red-700"
 
-let private statusBanner (msgs: WebhookAdminMessages) (status: FormStatus) (onDismiss: unit -> unit) =
+/// A subscription action's status: a working line while it is in flight,
+/// then the outcome as a dismissible notice.
+let private statusView (msgs: WebhookAdminMessages) (status: FormStatus) (onDismiss: unit -> unit) =
+    let settled (notice: Notice) =
+        Html.div [
+            prop.className "mt-2"
+            prop.children [ StateViews.notice { Dismiss = msgs.Dismiss } (Some notice) onDismiss ]
+        ]
+
     match status with
     | Idle -> Html.none
     | Working -> Html.div [ prop.className "mt-2 text-sm text-gray-500"; prop.text msgs.Working ]
-    | Done msg ->
-        Html.div [
-            prop.className
-                "mt-2 p-2 bg-green-50 border border-green-200 rounded text-green-700 text-sm flex items-center justify-between"
-            prop.children [
-                Html.span [ prop.text msg ]
-                Html.button [
-                    prop.className "text-xs text-green-700 hover:underline"
-                    prop.text msgs.Dismiss
-                    prop.onClick (fun _ -> onDismiss ())
-                ]
-            ]
-        ]
-    | Failed err ->
-        Html.div [
-            prop.className
-                "mt-2 p-2 bg-red-50 border border-red-200 rounded text-red-700 text-sm flex items-center justify-between"
-            prop.children [
-                Html.span [ prop.text err ]
-                Html.button [
-                    prop.className "text-xs text-red-700 hover:underline"
-                    prop.text msgs.Dismiss
-                    prop.onClick (fun _ -> onDismiss ())
-                ]
-            ]
-        ]
+    | Done msg -> settled (Notice.Info msg)
+    | Failed err -> settled (Notice.Problem err)
 
 // ─── Create form ─────────────────────────────────────────────────────
 
@@ -753,7 +742,7 @@ let private subscriptionDetail
                 prop.className "mt-4"
                 prop.children [
                     actionButtons
-                    statusBanner msgs status (fun () -> dispatch (DismissPerSubStatus sub.SubscriptionId))
+                    statusView msgs status (fun () -> dispatch (DismissPerSubStatus sub.SubscriptionId))
                 ]
             ]
             deliveryTable
@@ -844,33 +833,19 @@ let private detailPane (msgs: WebhookAdminMessages) (model: Model) (dispatch: Ms
 let private WebhookAdminBody (model: Model) (dispatch: Msg -> unit) =
     let msgs = (MessageCatalogProvider.useMessages ()).WebhookAdmin
 
-    let errorBanner =
-        match model.Error with
-        | Some msg ->
-            Html.div [
-                prop.className
-                    "m-3 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm flex items-center justify-between"
-                prop.children [
-                    Html.span [ prop.text msg ]
-                    Html.button [
-                        prop.className "text-xs text-red-600 hover:underline"
-                        prop.text msgs.Dismiss
-                        prop.onClick (fun _ -> dispatch DismissError)
-                    ]
-                ]
-            ]
-        | None -> Html.none
-
     let body =
         Html.div [
             prop.className "flex h-full min-h-0"
             prop.children [ sidebar msgs model dispatch; detailPane msgs model dispatch ]
         ]
 
-    // 0.5.6 — FullWidth render. Error banner stacks above the body.
+    // 0.5.6 — FullWidth render. The error notice stacks above the body.
     Html.div [
         prop.className "flex flex-col gap-3 h-full"
-        prop.children [ errorBanner; body ]
+        prop.children [
+            StateViews.notice { Dismiss = msgs.Dismiss } model.Error (fun () -> dispatch DismissError)
+            body
+        ]
     ]
 
 let private view (model: Model) (dispatch: Msg -> unit) : ReactElement = WebhookAdminBody model dispatch

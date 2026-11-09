@@ -287,8 +287,8 @@ let private shellScopeTests =
                 PlatformRole = None
                 ActiveTeamRole = None
                 CurrentArea = ModuleArea.Product
-                ConfigsPrefetch = Prefetch.none
-                FlagsPrefetch = Prefetch.none
+                ConfigsPrefetch = Remote.Loading
+                FlagsPrefetch = Remote.Loading
                 ResetCounters = Map.empty
                 InitPhase = Client.Ready
                 Degradations = []
@@ -441,17 +441,33 @@ let private sidebarBoundaryTests =
             fun () -> sidebarScope "sliced" sliced.Value
 
         testCase "the sidebar's callbacks are the same functions for one loop, and new ones for another" (fun () ->
+            let seen = ResizeArray<Client.Dispatchers>()
+
+            let view =
+                Client.programOver
+                    ClientConfig.defaults
+                    (fun () -> (), Cmd.none)
+                    (fun (_: Client.Msg) () -> (), Cmd.none)
+                    Client.dispatchers
+                    (fun () dispatchers ->
+                        seen.Add dispatchers
+                        Feliz.Html.none)
+                |> Program.view
+
             let loopA = fun (_: Client.Msg) -> ()
             let loopB = fun (_: Client.Msg) -> ()
-            let a1 = Client.sidebarDispatchersFor loopA
-            let a2 = Client.sidebarDispatchersFor loopA
+            view () loopA |> ignore
+            view () loopA |> ignore
+            let a1, a2 = seen[0].Sidebar, seen[1].Sidebar
             Expect.isTrue (obj.ReferenceEquals(a1, a2)) "the same set, render after render"
             Expect.isTrue (obj.ReferenceEquals(a1.Select, a2.Select)) "so each callback is the same function"
-            let b = Client.sidebarDispatchersFor loopB
+            view () loopB |> ignore
+            let b = seen[2].Sidebar
             Expect.isFalse (obj.ReferenceEquals(a1, b)) "a different loop (HMR re-ran the program) gets its own"
+            view () loopA |> ignore
 
             Expect.isFalse
-                (obj.ReferenceEquals(Client.sidebarDispatchersFor loopA, b))
+                (obj.ReferenceEquals(seen[3].Sidebar, b))
                 "and the first loop's are rebuilt, never reused for the second")
 
         testCase "the boundary compares by value, and callbacks and elements by reference" (fun () ->

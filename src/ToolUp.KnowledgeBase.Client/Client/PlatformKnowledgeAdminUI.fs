@@ -40,16 +40,10 @@ open PlatformKnowledgeApi
 
 // ─── Model ───────────────────────────────────────────────────────────
 
-type LoadState<'T> =
-    | NotLoaded
-    | Loading
-    | Loaded of 'T
-    | LoadError of string
-
 type Model = {
     /// Live document list from `ListPlatformDocuments`. Refreshed on
     /// shell init, after every upload, and after every delete.
-    Documents: LoadState<KnowledgeDocument list>
+    Documents: Remote<KnowledgeDocument list, string>
     /// `true` while an upload is in flight. Disables the input so the
     /// user can't double-submit; cleared on `UploadResolved`.
     Uploading: bool
@@ -96,7 +90,7 @@ let private deleteCmd (docId: string) =
 
 let init () =
     let model = {
-        Documents = Loading
+        Documents = Remote.Loading
         Uploading = false
         UploadError = None
         DeleteError = Map.empty
@@ -108,16 +102,19 @@ let init () =
 
 let update (msg: Msg) (model: Model) =
     match msg with
-    | RefreshDocs -> { model with Documents = Loading }, loadDocsCmd ()
-
-    | DocsLoaded(Ok list) ->
+    | RefreshDocs ->
         {
             model with
-                Documents = Loaded(list |> List.sortByDescending _.UploadedAt)
+                Documents = Remote.Loading
+        },
+        loadDocsCmd ()
+
+    | DocsLoaded result ->
+        {
+            model with
+                Documents = result |> Result.map (List.sortByDescending _.UploadedAt) |> Remote.ofResult
         },
         Cmd.none
-
-    | DocsLoaded(Error msg) -> { model with Documents = LoadError msg }, Cmd.none
 
     | UploadFile(bytes, fileName) ->
         {
@@ -132,7 +129,7 @@ let update (msg: Msg) (model: Model) =
             model with
                 Uploading = false
                 UploadError = None
-                Documents = Loading
+                Documents = Remote.Loading
         },
         loadDocsCmd ()
 
@@ -151,7 +148,12 @@ let update (msg: Msg) (model: Model) =
         },
         deleteCmd docId
 
-    | DeleteResolved(_, Ok()) -> { model with Documents = Loading }, loadDocsCmd ()
+    | DeleteResolved(_, Ok()) ->
+        {
+            model with
+                Documents = Remote.Loading
+        },
+        loadDocsCmd ()
 
     | DeleteResolved(docId, Error msg) ->
         {
@@ -161,12 +163,6 @@ let update (msg: Msg) (model: Model) =
         Cmd.none
 
 // ─── View helpers ────────────────────────────────────────────────────
-
-let private errorBanner (message: string) =
-    Html.div [
-        prop.className "px-3 py-2 my-2 rounded bg-red-50 border border-red-200 text-sm text-red-700"
-        prop.text message
-    ]
 
 /// Per-row action for the shared KnowledgeListView: Delete button + any
 /// inline error from the most-recent delete attempt against this row.
@@ -236,7 +232,7 @@ let private uploadPanel (msgs: KnowledgeAdminMessages) (model: Model) (dispatch:
             if model.Uploading then
                 Html.p [ prop.className "text-xs text-text-secondary"; prop.text msgs.Uploading ]
             match model.UploadError with
-            | Some msg -> errorBanner msg
+            | Some msg -> StateViews.noticeStatic (Notice.Problem msg)
             | None -> Html.none
         ]
     ]
@@ -260,10 +256,11 @@ let private documentsPanel (msgs: KnowledgeAdminMessages) (model: Model) (dispat
 
     let listBody =
         match model.Documents with
-        | NotLoaded
-        | Loading -> Html.p [ prop.className "text-sm text-text-secondary p-3"; prop.text msgs.Loading ]
-        | LoadError msg -> errorBanner msg
-        | Loaded docs ->
+        | Remote.NotAsked
+        | Remote.Loading -> Html.p [ prop.className "text-sm text-text-secondary p-3"; prop.text msgs.Loading ]
+        | Remote.Failed msg -> StateViews.noticeStatic (Notice.Problem msg)
+        | Remote.Reloading docs
+        | Remote.Loaded docs ->
             let config: KnowledgeListView.KnowledgeListConfig = {
                 EmptyStateText = msgs.EmptyState
                 RowAction = Some(deleteRowAction msgs model dispatch)

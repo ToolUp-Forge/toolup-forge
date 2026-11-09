@@ -57,17 +57,11 @@ type Tab =
     | MembersTab
     | ModulesTab
 
-type LoadState<'T> =
-    | NotLoaded
-    | Loading
-    | Loaded of 'T
-    | LoadError of string
-
 /// Bundle of "everything needed to render once we know the active team":
 /// the managed-module list (`Managed` from `AccessibilityApi`) + the
 /// member list + the persisted `TeamPermissions` document. Wrapping
 /// these together makes the "loading vs ready" decision a single
-/// `LoadState` check rather than three parallel ones.
+/// `Remote` check rather than three parallel ones.
 type TeamView = {
     TeamId: string
     Members: TeamMembership list
@@ -80,8 +74,8 @@ type Model = {
     ActiveTab: Tab
     /// Top-level snapshot for the caller's active team. `None` ⇒ no
     /// active team yet (typically Anonymous mode dev shells before
-    /// MultiTeam selection); error states surface as `LoadError`.
-    Snapshot: LoadState<TeamView>
+    /// MultiTeam selection); error states surface as `Remote.Failed`.
+    Snapshot: Remote<TeamView, string>
     /// Local-edit overlay for the team-defaults map. `None` while the
     /// snapshot is loading; `Some` mirrors the persisted Defaults and
     /// accumulates uncommitted cell toggles until the operator saves
@@ -104,7 +98,7 @@ type Model = {
     SaveInFlight: bool
     /// Banner under the tab bar: success / error after a save round-
     /// trip. Cleared on the next user interaction or tab switch.
-    Banner: (bool * string) option
+    Banner: Notice option
     /// Phase 245 — `ClientModuleContext.OnAccessibleModulesChanged`,
     /// stashed at init. Invoked after a successful `SetModuleExposure`
     /// so the shell re-fetches its accessible-modules list and the
@@ -234,7 +228,7 @@ let private memberPerms (perms: TeamPermissions) (userId: string) (moduleName: s
 
 /// Fetch the active team's full view in one async block so the UI
 /// renders a single coherent loaded state rather than a flicker of
-/// partial loads. Errors at any leg surface as a `LoadError` banner
+/// partial loads. Errors at any leg surface as a `Remote.Failed` pane
 /// the operator can retry.
 let private loadSnapshotAsync () = async {
     let! activeTeamOpt = teamApi.GetActiveTeam()
@@ -282,7 +276,7 @@ let private saveMemberCmd (teamId: string) (userId: string) (moduleName: string)
 let init (ctx: ClientModuleContext) : Model * Cmd<Msg> =
     let model = {
         ActiveTab = TeamDefaultsTab
-        Snapshot = Loading
+        Snapshot = Remote.Loading
         EditingDefaults = None
         SelectedMember = None
         EditingMembers = Map.empty
@@ -294,11 +288,6 @@ let init (ctx: ClientModuleContext) : Model * Cmd<Msg> =
     model, loadSnapshotCmd ()
 
 // ─── Update ──────────────────────────────────────────────────────────
-
-let private snapshotOpt (model: Model) =
-    match model.Snapshot with
-    | Loaded snap -> Some snap
-    | _ -> None
 
 let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
     match msg with
@@ -313,7 +302,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
     | RefreshSnapshot ->
         {
             model with
-                Snapshot = Loading
+                Snapshot = Remote.Loading
                 EditingDefaults = None
                 EditingMembers = Map.empty
                 Banner = None
@@ -328,7 +317,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
 
         {
             model with
-                Snapshot = Loaded snap
+                Snapshot = Remote.Loaded snap
                 EditingDefaults = Some snap.Permissions.Defaults
                 EditingMembers = Map.empty
                 SelectedMember = firstMember
@@ -339,7 +328,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
     | SnapshotLoaded(Error msg) ->
         {
             model with
-                Snapshot = LoadError msg
+                Snapshot = Remote.Failed msg
                 EditingDefaults = None
                 EditingMembers = Map.empty
         },
@@ -368,7 +357,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
             Cmd.none
 
     | ResetDefaults ->
-        match snapshotOpt model with
+        match Remote.toOption model.Snapshot with
         | None -> model, Cmd.none
         | Some snap ->
             {
@@ -379,7 +368,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
             Cmd.none
 
     | SaveDefaults ->
-        match snapshotOpt model, model.EditingDefaults with
+        match Remote.toOption model.Snapshot, model.EditingDefaults with
         | Some snap, Some edits when not model.SaveInFlight ->
             { model with SaveInFlight = true }, saveDefaultsCmd snap.TeamId edits
         | _ -> model, Cmd.none
@@ -389,7 +378,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         // `TeamPermissions` so subsequent reads (Modules tab, member
         // editor) reflect the truth without a full reload.
         let model' =
-            match snapshotOpt model, model.EditingDefaults with
+            match Remote.toOption model.Snapshot, model.EditingDefaults with
             | Some snap, Some edits ->
                 let updatedSnap = {
                     snap with
@@ -401,14 +390,14 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
 
                 {
                     model with
-                        Snapshot = Loaded updatedSnap
+                        Snapshot = Remote.Loaded updatedSnap
                 }
             | _ -> model
 
         {
             model' with
                 SaveInFlight = false
-                Banner = Some(false, MessageCatalog.english.PermissionsAdmin.TeamDefaultsSaved)
+                Banner = Some(Notice.Info(MessageCatalog.english.PermissionsAdmin.TeamDefaultsSaved))
         },
         Cmd.none
 
@@ -416,7 +405,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         {
             model with
                 SaveInFlight = false
-                Banner = Some(true, MessageCatalog.english.PermissionsAdmin.SaveFailed msg)
+                Banner = Some(Notice.Problem(MessageCatalog.english.PermissionsAdmin.SaveFailed msg))
         },
         Cmd.none
 
@@ -432,7 +421,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         // 0.5.7 — overlay-only mutation. Read the cell's current
         // effective value (overlay if present, else persisted override
         // or team default), toggle the level, persist to overlay.
-        match snapshotOpt model with
+        match Remote.toOption model.Snapshot with
         | None -> model, Cmd.none
         | Some snap ->
             let key = (userId, moduleName)
@@ -460,7 +449,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         // overlay update; cells that already carry the level when
         // `add=true` are left alone, cells that don't carry it when
         // `add=false` are left alone.
-        match snapshotOpt model with
+        match Remote.toOption model.Snapshot with
         | None -> model, Cmd.none
         | Some snap ->
             let editing' =
@@ -507,7 +496,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         Cmd.none
 
     | SaveMembers userId ->
-        match snapshotOpt model with
+        match Remote.toOption model.Snapshot with
         | None -> model, Cmd.none
         | Some snap when not model.SaveInFlight ->
             // Dispatch one save per touched (userId, moduleName) cell.
@@ -543,7 +532,8 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
             {
                 model with
                     EditingMembers = editing'
-                    Banner = Some(false, MessageCatalog.english.PermissionsAdmin.SavedModuleForUser moduleName userId)
+                    Banner =
+                        Some(Notice.Info(MessageCatalog.english.PermissionsAdmin.SavedModuleForUser moduleName userId))
             },
             Cmd.none
         else
@@ -551,7 +541,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 model with
                     EditingMembers = editing'
                     SaveInFlight = false
-                    Banner = Some(false, MessageCatalog.english.PermissionsAdmin.SavedPermissionsFor userId)
+                    Banner = Some(Notice.Info(MessageCatalog.english.PermissionsAdmin.SavedPermissionsFor userId))
             },
             loadSnapshotCmd ()
 
@@ -559,12 +549,15 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         {
             model with
                 SaveInFlight = false
-                Banner = Some(true, MessageCatalog.english.PermissionsAdmin.OverrideSaveFailed userId moduleName msg)
+                Banner =
+                    Some(
+                        Notice.Problem(MessageCatalog.english.PermissionsAdmin.OverrideSaveFailed userId moduleName msg)
+                    )
         },
         Cmd.none
 
     | SetExposure(moduleName, previous, next) ->
-        match snapshotOpt model with
+        match Remote.toOption model.Snapshot with
         | None -> model, Cmd.none
         | Some snap ->
             // Optimistic local update so the selector responds instantly;
@@ -579,7 +572,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
 
             {
                 model with
-                    Snapshot = Loaded snap'
+                    Snapshot = Remote.Loaded snap'
                     Banner = None
             },
             setExposureCmd snap.TeamId moduleName previous next
@@ -600,23 +593,21 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         // `TeamManagerUI`'s direct `OnTeamSwitched` invocation.
         model.OnAccessibleModulesChanged |> Option.iter (fun f -> f ())
 
-        // Phase 1069 — `Banner` is `Some(isError, text)`: a success is
-        // `false`, as `SaveDefaultsResult` writes it.
         {
             model with
-                Banner = Some(false, bannerText)
+                Banner = Some(Notice.Info(bannerText))
         },
         Cmd.none
 
     | ExposureResult(moduleName, previous, _attempted, Error msg) ->
         // Revert the optimistic change back to the prior state.
         let model' =
-            match snapshotOpt model with
+            match Remote.toOption model.Snapshot with
             | None -> model
             | Some snap -> {
                 model with
                     Snapshot =
-                        Loaded {
+                        Remote.Loaded {
                             snap with
                                 Permissions = {
                                     snap.Permissions with
@@ -627,35 +618,14 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
 
         {
             model' with
-                Banner = Some(true, MessageCatalog.english.PermissionsAdmin.ExposureChangeFailed moduleName msg)
+                Banner =
+                    Some(Notice.Problem(MessageCatalog.english.PermissionsAdmin.ExposureChangeFailed moduleName msg))
         },
         Cmd.none
 
     | DismissBanner -> { model with Banner = None }, Cmd.none
 
 // ─── View helpers ────────────────────────────────────────────────────
-
-let private banner (msgs: PermissionsAdminMessages) (model: Model) (dispatch: Msg -> unit) =
-    match model.Banner with
-    | None -> Html.none
-    | Some(isError, msg) ->
-        let cls =
-            if isError then
-                "bg-red-50 border-red-200 text-red-700"
-            else
-                "bg-green-50 border-green-200 text-green-700"
-
-        Html.div [
-            prop.className $"mx-6 mt-4 p-3 border rounded text-sm flex items-center justify-between {cls}"
-            prop.children [
-                Html.span [ prop.text msg ]
-                Html.button [
-                    prop.className "text-xs text-gray-500 hover:text-gray-700 px-2"
-                    prop.text msgs.Dismiss
-                    prop.onClick (fun _ -> dispatch DismissBanner)
-                ]
-            ]
-        ]
 
 let private tabButton (label: string) (active: bool) (onClick: unit -> unit) =
     Html.button [
@@ -1228,10 +1198,7 @@ let private errorPane (msgs: PermissionsAdminMessages) (msg: string) (dispatch: 
     Html.div [
         prop.className "flex-1 p-6 overflow-y-auto"
         prop.children [
-            Html.div [
-                prop.className "p-4 bg-red-50 border border-red-200 rounded text-red-700 text-sm"
-                prop.text msg
-            ]
+            StateViews.noticeStatic (Notice.Problem msg)
             Html.button [
                 prop.className
                     "mt-3 px-3 py-1.5 text-sm font-medium bg-white text-gray-700 border border-border rounded hover:bg-gray-50"
@@ -1254,14 +1221,15 @@ let private PermissionsAdminBody (model: Model) (dispatch: Msg -> unit) =
 
     let content =
         match model.Snapshot with
-        | NotLoaded
-        | Loading ->
+        | Remote.NotAsked
+        | Remote.Loading
+        | Remote.Reloading _ ->
             Html.div [
                 prop.className "flex-1 p-6 overflow-y-auto"
                 prop.children [ Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.Loading ] ]
             ]
-        | LoadError msg -> errorPane msgs msg dispatch
-        | Loaded snap ->
+        | Remote.Failed msg -> errorPane msgs msg dispatch
+        | Remote.Loaded snap ->
             match model.ActiveTab with
             | TeamDefaultsTab -> teamDefaultsView msgs model snap dispatch
             | MembersTab -> membersView msgs model snap dispatch
@@ -1269,7 +1237,17 @@ let private PermissionsAdminBody (model: Model) (dispatch: Msg -> unit) =
 
     Html.div [
         prop.className "flex flex-col h-full"
-        prop.children [ tabBar msgs model dispatch; banner msgs model dispatch; content ]
+        prop.children [
+            tabBar msgs model dispatch
+            if model.Banner.IsSome then
+                Html.div [
+                    prop.className "mx-6 mt-4"
+                    prop.children [
+                        StateViews.notice { Dismiss = msgs.Dismiss } model.Banner (fun () -> dispatch DismissBanner)
+                    ]
+                ]
+            content
+        ]
     ]
 
 let private view (model: Model) (dispatch: Msg -> unit) : ReactElement = PermissionsAdminBody model dispatch

@@ -87,8 +87,8 @@ type OffboardModalState = {
     /// action buttons so a double-click can't fire twice.
     Busy: bool
     /// Inline error inside the modal (transport failure, blank reason,
-    /// bad token). Distinct from the page-level `Error`.
-    Error: string option
+    /// bad token), as a `Notice.Problem`. Distinct from the page-level `Error`.
+    Error: Notice option
 }
 
 type Model = {
@@ -106,8 +106,9 @@ type Model = {
     /// resolve-on-miss pattern as `TeamManagerUI`.
     Directory: Map<string, UserSummary>
     /// Page-level error banner (list load failure, non-admin caller,
-    /// disabled substrate). Cleared by `DismissError` or the next load.
-    Error: string option
+    /// disabled substrate), as a `Notice.Problem`. Cleared by `DismissError`
+    /// or the next load.
+    Error: Notice option
     /// Per-row offboard modal. `None` = closed.
     Offboard: OffboardModalState option
 }
@@ -253,7 +254,12 @@ let private applyOffboardResult
         | None, Some e ->
             {
                 model with
-                    Offboard = Some { m with Busy = false; Error = Some e }
+                    Offboard =
+                        Some {
+                            m with
+                                Busy = false
+                                Error = Some(Notice.Problem e)
+                        }
             },
             Cmd.none
         | None, None ->
@@ -297,7 +303,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
             model with
                 Principals = Some []
                 Loading = false
-                Error = Some e
+                Error = Some(Notice.Problem e)
         },
         Cmd.none
 
@@ -381,7 +387,13 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
     | PreviewLoaded(Error e) ->
         {
             model with
-                Offboard = model.Offboard |> Option.map (fun m -> { m with Busy = false; Error = Some e })
+                Offboard =
+                    model.Offboard
+                    |> Option.map (fun m -> {
+                        m with
+                            Busy = false
+                            Error = Some(Notice.Problem e)
+                    })
         },
         Cmd.none
 
@@ -413,7 +425,13 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
     | TokenMinted(Error e) ->
         {
             model with
-                Offboard = model.Offboard |> Option.map (fun m -> { m with Busy = false; Error = Some e })
+                Offboard =
+                    model.Offboard
+                    |> Option.map (fun m -> {
+                        m with
+                            Busy = false
+                            Error = Some(Notice.Problem e)
+                    })
         },
         Cmd.none
 
@@ -426,7 +444,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                     Offboard =
                         Some {
                             m with
-                                Error = Some(MessageCatalog.english.PlatformUsers.ReasonRequired)
+                                Error = Some(Notice.Problem MessageCatalog.english.PlatformUsers.ReasonRequired)
                         }
             },
             Cmd.none
@@ -436,7 +454,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                     Offboard =
                         Some {
                             m with
-                                Error = Some(MessageCatalog.english.PlatformUsers.TokenRequired)
+                                Error = Some(Notice.Problem MessageCatalog.english.PlatformUsers.TokenRequired)
                         }
             },
             Cmd.none
@@ -530,11 +548,6 @@ let private modalShell (children: ReactElement list) =
             ]
         ]
     ]
-
-let private modalError (state: OffboardModalState) =
-    match state.Error with
-    | Some msg -> Html.p [ prop.className "text-sm text-red-600"; prop.text msg ]
-    | None -> Html.none
 
 let private kindTitle (msgs: PlatformUsersMessages) =
     function
@@ -755,6 +768,11 @@ let private offboardModalView
     let footer (children: ReactElement list) =
         Html.div [ prop.className "flex justify-end gap-3 pt-2"; prop.children children ]
 
+    let modalError =
+        state.Error
+        |> Option.map StateViews.noticeStatic
+        |> Option.defaultValue Html.none
+
     modalShell [
         Html.h3 [ prop.className "text-lg font-semibold"; prop.text heading ]
         subject
@@ -762,7 +780,7 @@ let private offboardModalView
         match state.Step with
         | Compose ->
             reasonField msgs state dispatch
-            modalError state
+            modalError
 
             footer [
                 Forms.Button.secondary msgs.Cancel (fun () -> dispatch CloseOffboard)
@@ -789,7 +807,7 @@ let private offboardModalView
 
             previewTable msgs preview
             reasonField msgs state dispatch
-            modalError state
+            modalError
 
             footer [
                 Forms.Button.secondary msgs.Cancel (fun () -> dispatch CloseOffboard)
@@ -846,7 +864,7 @@ let private offboardModalView
                 ]
             ]
 
-            modalError state
+            modalError
 
             footer [
                 Forms.Button.secondary msgs.Cancel (fun () -> dispatch CloseOffboard)
@@ -926,23 +944,6 @@ let private principalRow
 let private PlatformUsersBody (model: Model) (dispatch: Msg -> unit) =
     let msgs = (MessageCatalogProvider.useMessages ()).PlatformUsers
 
-    let errorBanner =
-        match model.Error with
-        | Some msg ->
-            Html.div [
-                prop.className
-                    "mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm flex items-center justify-between"
-                prop.children [
-                    Html.span [ prop.text msg ]
-                    Html.button [
-                        prop.className "text-xs text-red-600 hover:underline"
-                        prop.text msgs.Dismiss
-                        prop.onClick (fun _ -> dispatch DismissError)
-                    ]
-                ]
-            ]
-        | None -> Html.none
-
     let filterBar =
         Html.div [
             prop.className "flex items-center justify-between mb-4 flex-wrap gap-2"
@@ -1008,7 +1009,7 @@ let private PlatformUsersBody (model: Model) (dispatch: Msg -> unit) =
         prop.children [
             Html.h2 [ prop.className "text-lg font-semibold mb-1"; prop.text msgs.Heading ]
             Html.p [ prop.className "text-sm text-gray-600 mb-4"; prop.text msgs.Subheading ]
-            errorBanner
+            StateViews.notice { Dismiss = msgs.Dismiss } model.Error (fun () -> dispatch DismissError)
             filterBar
             listPane
 

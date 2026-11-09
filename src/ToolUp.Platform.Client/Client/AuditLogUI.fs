@@ -31,11 +31,6 @@ open ToolUp.Platform
 // re-derive where they were on every click. Changing any filter starts
 // a fresh sequence, which is when replacing IS the right behaviour.
 
-type LoadState =
-    | Loading
-    | Loaded
-    | LoadError of string
-
 /// Filter-bar state, held as the STRINGS the inputs carry rather than
 /// as the parsed query. A half-typed date is not a `DateTime`, and
 /// parsing per keystroke would either reject the intermediate states or
@@ -61,7 +56,8 @@ type Model = {
     NextCursor: string option
     /// How many rows the applied filter matches in total.
     MatchedCount: int
-    Status: LoadState
+    /// The first page's read; the rows themselves live in `Events`.
+    Status: Remote<unit, string>
     /// True while an older page is in flight — distinguished from the
     /// first load so the table stays on screen under it.
     LoadingMore: bool
@@ -158,7 +154,7 @@ let init () : Model * Cmd<Msg> =
         Events = []
         NextCursor = None
         MatchedCount = 0
-        Status = Loading
+        Status = Remote.Loading
         LoadingMore = false
         EventTypes = []
         Expanded = Set.empty
@@ -201,7 +197,7 @@ let private restart (filters: Filters) (model: Model) =
             NextCursor = None
             MatchedCount = 0
             Expanded = Set.empty
-            Status = Loading
+            Status = Remote.Loading
     },
     loadPageCmd filters
 
@@ -245,11 +241,16 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Events = page.Events
                 NextCursor = page.NextCursor
                 MatchedCount = page.MatchedCount
-                Status = Loaded
+                Status = Remote.Loaded()
         },
         Cmd.none
 
-    | PageLoaded(Error err) -> { model with Status = LoadError err }, Cmd.none
+    | PageLoaded(Error err) ->
+        {
+            model with
+                Status = Remote.Failed err
+        },
+        Cmd.none
 
     | LoadMore ->
         match model.NextCursor with
@@ -272,7 +273,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         {
             model with
                 LoadingMore = false
-                Status = LoadError err
+                Status = Remote.Failed err
         },
         Cmd.none
 
@@ -305,7 +306,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         {
             model with
                 Exporting = false
-                Status = LoadError err
+                Status = Remote.Failed err
         },
         Cmd.none
 
@@ -557,13 +558,11 @@ let private AuditLogBody (model: Model) (dispatch: Msg -> unit) =
             filterBar msgs model dispatch
 
             match model.Status with
-            | LoadError err ->
-                Html.div [
-                    prop.className "p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700"
-                    prop.text err
-                ]
-            | Loading -> Html.div [ prop.className "text-sm text-gray-500"; prop.text msgs.Loading ]
-            | Loaded -> eventTable msgs model dispatch
+            | Remote.Failed err -> StateViews.noticeStatic (Notice.Problem err)
+            | Remote.NotAsked
+            | Remote.Loading -> Html.div [ prop.className "text-sm text-gray-500"; prop.text msgs.Loading ]
+            | Remote.Reloading()
+            | Remote.Loaded() -> eventTable msgs model dispatch
         ]
     ]
 

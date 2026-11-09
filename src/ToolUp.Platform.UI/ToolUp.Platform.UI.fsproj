@@ -89,6 +89,9 @@
     <!-- The toolkit proper, in the compile order it had inside the client
          tier (Typography → Forms → StateViews is a real dependency chain;
          `Layout.fs` sat between Typography and Forms and stays behind). -->
+    <!-- The async-state and notice model the state views render; pure F#,
+         first so every toolkit file (and every tier above) sees it. -->
+    <Compile Include="Toolkit\Remote.fs" />
     <Compile Include="Toolkit\OutputFormatting.fs" />
     <Compile Include="Toolkit\Tokens.fs" />
     <Compile Include="Toolkit\Typography.fs" />

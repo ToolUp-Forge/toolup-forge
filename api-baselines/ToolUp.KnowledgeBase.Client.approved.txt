@@ -316,27 +316,10 @@ PlatformKnowledgeAdminUI (class)
 PlatformKnowledgeAdminUI.init() : System.Tuple`2[PlatformKnowledgeAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[PlatformKnowledgeAdminUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
 PlatformKnowledgeAdminUI.register() : ToolUp.Platform.ErasedModule
 PlatformKnowledgeAdminUI.update(PlatformKnowledgeAdminUI+Msg, PlatformKnowledgeAdminUI+Model) : System.Tuple`2[PlatformKnowledgeAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[PlatformKnowledgeAdminUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
-PlatformKnowledgeAdminUI+LoadState`1 (class)
-PlatformKnowledgeAdminUI+LoadState`1.IsLoadError : System.Boolean { get }
-PlatformKnowledgeAdminUI+LoadState`1.IsLoaded : System.Boolean { get }
-PlatformKnowledgeAdminUI+LoadState`1.IsLoading : System.Boolean { get }
-PlatformKnowledgeAdminUI+LoadState`1.IsNotLoaded : System.Boolean { get }
-PlatformKnowledgeAdminUI+LoadState`1.Loading : PlatformKnowledgeAdminUI+LoadState`1[T] { get }
-PlatformKnowledgeAdminUI+LoadState`1.NotLoaded : PlatformKnowledgeAdminUI+LoadState`1[T] { get }
-PlatformKnowledgeAdminUI+LoadState`1.Tag : System.Int32 { get }
-PlatformKnowledgeAdminUI+LoadState`1+LoadError (class)
-PlatformKnowledgeAdminUI+LoadState`1+LoadError.Item : System.String { get }
-PlatformKnowledgeAdminUI+LoadState`1+Loaded (class)
-PlatformKnowledgeAdminUI+LoadState`1+Loaded.Item : T { get }
-PlatformKnowledgeAdminUI+LoadState`1+Tags (class)
-PlatformKnowledgeAdminUI+LoadState`1+Tags.LoadError : System.Int32 (literal)
-PlatformKnowledgeAdminUI+LoadState`1+Tags.Loaded : System.Int32 (literal)
-PlatformKnowledgeAdminUI+LoadState`1+Tags.Loading : System.Int32 (literal)
-PlatformKnowledgeAdminUI+LoadState`1+Tags.NotLoaded : System.Int32 (literal)
 PlatformKnowledgeAdminUI+Model (class)
-PlatformKnowledgeAdminUI+Model..ctor(PlatformKnowledgeAdminUI+LoadState`1[Microsoft.FSharp.Collections.FSharpList`1[SharedTypes+KnowledgeDocument]], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String])
+PlatformKnowledgeAdminUI+Model..ctor(ToolUp.Platform.Remote`2[Microsoft.FSharp.Collections.FSharpList`1[SharedTypes+KnowledgeDocument], System.String], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String])
 PlatformKnowledgeAdminUI+Model.DeleteError : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
-PlatformKnowledgeAdminUI+Model.Documents : PlatformKnowledgeAdminUI+LoadState`1[Microsoft.FSharp.Collections.FSharpList`1[SharedTypes+KnowledgeDocument]] { get }
+PlatformKnowledgeAdminUI+Model.Documents : ToolUp.Platform.Remote`2[Microsoft.FSharp.Collections.FSharpList`1[SharedTypes+KnowledgeDocument], System.String] { get }
 PlatformKnowledgeAdminUI+Model.UploadError : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 PlatformKnowledgeAdminUI+Model.Uploading : System.Boolean { get }
 PlatformKnowledgeAdminUI+Msg (class)

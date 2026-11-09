@@ -204,7 +204,10 @@ let private hydrate (sliced: bool) (report: Hydrated -> unit) : unit =
     let modules, config = ComposerScope.testComposition ()
     let model0 = ComposerScope.shellModel0 ()
     let host = document?getElementById placeholder
-    host?innerHTML <- renderToString (Client.viewWithSignIn config modules Client.emptyChrome model0 ignore)
+
+    host?innerHTML <-
+        renderToString (Client.viewWithSignIn config modules Client.emptyChrome model0 (Client.dispatchers ignore))
+
     let serverModule = document?getElementById "composer-module"
     let serverFirst = host?firstChild
 
@@ -220,9 +223,9 @@ let private hydrate (sliced: bool) (report: Hydrated -> unit) : unit =
     let mutable dispatch: (Client.Msg -> unit) option = None
 
     let capture view =
-        fun model d ->
-            dispatch <- Some d
-            view model d
+        fun model (dispatchers: Client.Dispatchers) ->
+            dispatch <- Some dispatchers.Dispatch
+            view model dispatchers
 
     let update msg model =
         Client.update config Unchecked.defaultof<IModuleQueryBus> modules msg model
@@ -230,16 +233,20 @@ let private hydrate (sliced: bool) (report: Hydrated -> unit) : unit =
     if sliced then
         let store = ModelStore.create<Client.Model, Client.Msg> ()
 
-        Program.mkProgram
+        Client.programOver
+            config
             (fun () -> model0, Cmd.none)
             update
+            Client.dispatchers
             (capture (Client.viewSliced store config modules Client.emptyChrome))
         |> Program.withReactStoreHydrate store placeholder
         |> Program.run
     else
-        Program.mkProgram
+        Client.programOver
+            config
             (fun () -> model0, Cmd.none)
             update
+            Client.dispatchers
             (capture (Client.viewWithSignIn config modules Client.emptyChrome))
         |> Program.withReactHydrate placeholder
         |> Program.run
@@ -349,29 +356,40 @@ let private composerTests =
 
     testList "910.C - the AI composer hands the shell a stable dispatch and adopts the store" [
 
-        testCase "the composer's shell dispatch is the same function every render of one loop"
+        testCase "the composer's program hands its view the same dispatchers every render of one loop"
         <| fun () ->
+            let seen = ResizeArray<AIClientConfig.ComposerDispatchers>()
+
+            let view =
+                Client.programOver
+                    ClientConfig.defaults
+                    (fun () -> (), Cmd.none)
+                    (fun (_: AIClientConfig.OuterMsg) () -> (), Cmd.none)
+                    AIClientConfig.composerDispatchersFor
+                    (fun () dispatchers ->
+                        seen.Add dispatchers
+                        Feliz.Html.none)
+                |> Program.view
+
             let loop1: AIClientConfig.OuterMsg -> unit = fun _ -> ()
             let loop2: AIClientConfig.OuterMsg -> unit = fun _ -> ()
-            let first = AIClientConfig.composerDispatchersFor loop1
-            let again = AIClientConfig.composerDispatchersFor loop1
+            view () loop1 |> ignore
+            view () loop1 |> ignore
+            let first, again = seen[0], seen[1]
 
-            Expect.isTrue (obj.ReferenceEquals(first.Shell, again.Shell)) "the shell dispatch is stable"
-            Expect.isTrue (obj.ReferenceEquals(first.SidePanel, again.SidePanel)) "the side-panel dispatch is stable"
+            Expect.isTrue (obj.ReferenceEquals(first, again)) "one set for the loop, render after render"
+            Expect.isTrue (obj.ReferenceEquals(first.Shell, again.Shell)) "so the shell dispatchers are stable"
+            Expect.isTrue (obj.ReferenceEquals(first.SidePanel, again.SidePanel)) "and the side-panel dispatch is"
 
             Expect.isTrue
                 (obj.ReferenceEquals(
-                    Client.moduleDispatchFor ComposerScope.ModuleId first.Shell,
-                    Client.moduleDispatchFor ComposerScope.ModuleId again.Shell
+                    first.Shell.ForModule ComposerScope.ModuleId,
+                    again.Shell.ForModule ComposerScope.ModuleId
                 ))
-                "so the shell's module-dispatch cache hits"
+                "so the module's dispatcher is the same function"
 
-            Expect.isTrue
-                (obj.ReferenceEquals(Client.sidebarDispatchersFor first.Shell, Client.sidebarDispatchersFor again.Shell))
-                "and so does its sidebar-callback cache"
-
-            let other = AIClientConfig.composerDispatchersFor loop2
-            Expect.isFalse (obj.ReferenceEquals(first.Shell, other.Shell)) "a different loop gets its own"
+            view () loop2 |> ignore
+            Expect.isFalse (obj.ReferenceEquals(first.Shell, seen[2].Shell)) "a different loop gets its own"
 
         testCaseDeferred
             "whole tree (withSidePanel): the sidebar boundary holds for a message it does not read"
@@ -524,7 +542,9 @@ let private runAIShell (report: CallbackRun -> unit) : unit =
 
     console?log <-
         allArguments (fun text ->
-            if text.Contains "outerMsg=" then
+            // `Client.programOver`'s trace line: one prefix for the shell and
+            // every composer.
+            if text.Contains "msg=" then
                 traced.Add text)
 
     let mutable context: ClientModuleContext option = None

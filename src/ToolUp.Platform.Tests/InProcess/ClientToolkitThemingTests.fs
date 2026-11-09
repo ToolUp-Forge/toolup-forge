@@ -203,6 +203,29 @@ let private fallbackLocaleTest = test "the toolkit formats under the one named f
     Expect.equal literals [ "OutputFormatting.fs" ] "the \"en-GB\" literal is spelled once, as `fallbackLocale`"
 }
 
+/// The state views' notice and remote renderings take their colour from the
+/// theming tokens alone, so a light and a dark token set both re-skin them:
+/// `Info` reads in `--pos`, `Problem` in `--neg`, the surface in `--surface`,
+/// and no palette literal (`red-`, `green-`, `gray-`, a hex) is spelled. The
+/// dismissible red banner they replaced is gone from the toolkit.
+let private stateViewNoticeTest = test "StateViews.notice and StateViews.remote read only theming tokens" {
+    let code = readCode "ToolUp.Platform.UI/Toolkit/StateViews.fs"
+
+    for definition in [ "let notice "; "let noticeStatic "; "let remote" ] do
+        Expect.isTrue (code.Contains definition) $"StateViews defines `{definition.Trim()}`"
+
+    for token in [ "var(--pos)"; "var(--neg)"; "var(--surface)"; "var(--radius)" ] do
+        Expect.isTrue (code.Contains token) $"the notice views read {token}"
+
+    let palette =
+        Regex.Matches(code, @"\b(?:bg|text|border)-(?:red|green|gray|amber|yellow)-\d+|#[0-9A-Fa-f]{6}\b")
+        |> Seq.map _.Value
+        |> List.ofSeq
+
+    Expect.isEmpty palette "a notice colour is a token, never a palette literal (it would not follow a theme)"
+    Expect.isFalse (code.Contains "errorBanner") "the caller-less error banner is deleted"
+}
+
 /// Phase 1069 — the shell bundle references no vendor UI package. Clerk's
 /// `UserButton` is rendered by the ClerkUI companion, which registers it
 /// as the page header's identity action; `Layout.userButton` renders the
@@ -237,5 +260,6 @@ let tests =
         tokenEmissionTest
         brandHexGuardTest
         fallbackLocaleTest
+        stateViewNoticeTest
         noVendorImportTest
     ]

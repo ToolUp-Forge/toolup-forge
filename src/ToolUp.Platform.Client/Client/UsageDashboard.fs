@@ -22,17 +22,11 @@ open ToolUp.Platform.Usage
 // button. Mirrors `HealthMonitorUI`'s shape — `_sdk.UsageDashboard`
 // reserved Id, `Admin` sidebar group.
 
-type LoadState<'T> =
-    | NotLoaded
-    | Loading
-    | Loaded of 'T
-    | LoadError of string
-
 type Model = {
     Grouping: UsageGrouping
     From: DateTime
     To: DateTime
-    Aggregate: LoadState<UsageAggregateRow list>
+    Aggregate: Remote<UsageAggregateRow list, string>
     Exporting: bool
 }
 
@@ -68,7 +62,7 @@ let init () =
         Grouping = ByResourceKind
         From = monthStart
         To = now
-        Aggregate = Loading
+        Aggregate = Remote.Loading
         Exporting = false
     }
 
@@ -96,7 +90,7 @@ let update msg model =
         let m = {
             model with
                 Grouping = g
-                Aggregate = Loading
+                Aggregate = Remote.Loading
         }
 
         m, loadAggregateCmd g
@@ -105,11 +99,19 @@ let update msg model =
 
     | SetTo toDt -> { model with To = toDt }, Cmd.none
 
-    | Refresh -> { model with Aggregate = Loading }, loadAggregateCmd model.Grouping
+    | Refresh ->
+        {
+            model with
+                Aggregate = Remote.Loading
+        },
+        loadAggregateCmd model.Grouping
 
-    | AggregateLoaded(Ok rows) -> { model with Aggregate = Loaded rows }, Cmd.none
-
-    | AggregateLoaded(Error err) -> { model with Aggregate = LoadError err }, Cmd.none
+    | AggregateLoaded result ->
+        {
+            model with
+                Aggregate = Remote.ofResult result
+        },
+        Cmd.none
 
     | ExportCsv ->
         let range = Some { From = model.From; To = model.To }
@@ -251,14 +253,11 @@ let private UsageDashboardBody (model: Model) (dispatch: Msg -> unit) =
             renderControls msgs model dispatch
 
             match model.Aggregate with
-            | NotLoaded -> Html.div [ prop.className "text-sm text-gray-500"; prop.text msgs.ClickRefresh ]
-            | Loading -> Html.div [ prop.className "text-sm text-gray-500"; prop.text msgs.Loading ]
-            | Loaded rows -> renderTable msgs rows
-            | LoadError err ->
-                Html.div [
-                    prop.className "p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700"
-                    prop.text err
-                ]
+            | Remote.NotAsked -> Html.div [ prop.className "text-sm text-gray-500"; prop.text msgs.ClickRefresh ]
+            | Remote.Loading
+            | Remote.Reloading _ -> Html.div [ prop.className "text-sm text-gray-500"; prop.text msgs.Loading ]
+            | Remote.Loaded rows -> renderTable msgs rows
+            | Remote.Failed err -> StateViews.noticeStatic (Notice.Problem err)
         ]
     ]
 

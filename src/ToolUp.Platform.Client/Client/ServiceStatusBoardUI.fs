@@ -17,18 +17,12 @@ open ToolUp.Platform
 // but renders six collapsible per-section panels under one top-line
 // `OverallStatus` pill.
 
-type LoadState<'T> =
-    | NotLoaded
-    | Loading
-    | Loaded of 'T
-    | LoadError of string
-
 /// Set of section names whose status flipped between the prior and
 /// most-recent snapshot — surfaced via Tailwind `animate-pulse` for
 /// ~1.5s so operators spot freshly-changed sections without re-reading
 /// every panel. Cleared on the next refresh.
 type Model = {
-    Snapshot: LoadState<ServiceStatusSnapshot>
+    Snapshot: Remote<ServiceStatusSnapshot, string>
     /// Sections the user has collapsed. Default empty (all expanded);
     /// the user clicks the header to toggle.
     Collapsed: Set<string>
@@ -74,7 +68,7 @@ let private loadSectionCmd (section: string) =
 
 let init () =
     let model = {
-        Snapshot = Loading
+        Snapshot = Remote.Loading
         Collapsed = Set.empty
         Refreshing = Set.empty
         RecentlyFlipped = Set.empty
@@ -83,11 +77,6 @@ let init () =
     model, loadSnapshotCmd ()
 
 // ─── Helpers ─────────────────────────────────────────────────────────
-
-let private currentSnapshot (model: Model) =
-    match model.Snapshot with
-    | Loaded snap -> Some snap
-    | _ -> None
 
 let private sectionOf (snap: ServiceStatusSnapshot) (name: string) : SectionSummary =
     match name with
@@ -147,14 +136,14 @@ let private flippedSections (prev: ServiceStatusSnapshot option) (next: ServiceS
 
 let update (msg: Msg) (model: Model) =
     match msg with
-    | RefreshAll -> { model with Snapshot = Loading }, loadSnapshotCmd ()
+    | RefreshAll -> { model with Snapshot = Remote.Loading }, loadSnapshotCmd ()
 
     | SnapshotLoaded(Ok snap) ->
-        let flipped = flippedSections (currentSnapshot model) snap
+        let flipped = flippedSections (Remote.toOption model.Snapshot) snap
 
         {
             model with
-                Snapshot = Loaded snap
+                Snapshot = Remote.Loaded snap
                 Refreshing = Set.empty
                 RecentlyFlipped = flipped
         },
@@ -163,7 +152,7 @@ let update (msg: Msg) (model: Model) =
     | SnapshotLoaded(Error e) ->
         {
             model with
-                Snapshot = LoadError e
+                Snapshot = Remote.Failed e
                 Refreshing = Set.empty
         },
         Cmd.none
@@ -187,7 +176,7 @@ let update (msg: Msg) (model: Model) =
     | SectionLoaded(section, Ok summary) ->
         let nextRefreshing = Set.remove section model.Refreshing
 
-        match currentSnapshot model with
+        match Remote.toOption model.Snapshot with
         | Some snap ->
             let updated = updateSection snap section summary
 
@@ -212,7 +201,7 @@ let update (msg: Msg) (model: Model) =
 
             {
                 model with
-                    Snapshot = Loaded withOverall
+                    Snapshot = Remote.Loaded withOverall
                     Refreshing = nextRefreshing
                     RecentlyFlipped = recentlyFlipped
             },
@@ -233,7 +222,7 @@ let update (msg: Msg) (model: Model) =
 
         let nextRefreshing = Set.remove section model.Refreshing
 
-        match currentSnapshot model with
+        match Remote.toOption model.Snapshot with
         | Some snap ->
             let updated = updateSection snap section failureSummary
 
@@ -248,7 +237,7 @@ let update (msg: Msg) (model: Model) =
 
             {
                 model with
-                    Snapshot = Loaded { updated with Overall = overall }
+                    Snapshot = Remote.Loaded { updated with Overall = overall }
                     Refreshing = nextRefreshing
                     RecentlyFlipped = Set.add section model.RecentlyFlipped
             },
@@ -305,12 +294,6 @@ let private refreshButton (msgs: ServiceStatusBoardMessages) (label: string) (lo
         prop.disabled loading
         prop.text (if loading then msgs.Refreshing else label)
         prop.onClick (fun _ -> onClick ())
-    ]
-
-let private errorBanner (msg: string) =
-    Html.div [
-        prop.className "p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm"
-        prop.text msg
     ]
 
 let private sectionPanel
@@ -375,10 +358,7 @@ let private sectionPanel
 // ─── View ────────────────────────────────────────────────────────────
 
 let private boardView (msgs: ServiceStatusBoardMessages) (model: Model) (dispatch: Msg -> unit) =
-    let isLoading =
-        match model.Snapshot with
-        | Loading -> true
-        | _ -> false
+    let isLoading = Remote.isLoading model.Snapshot
 
     Html.div [
         prop.className "flex-1 p-6 overflow-y-auto"
@@ -396,10 +376,11 @@ let private boardView (msgs: ServiceStatusBoardMessages) (model: Model) (dispatc
                 ]
             ]
             match model.Snapshot with
-            | NotLoaded
-            | Loading -> Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.Loading ]
-            | LoadError msg -> errorBanner msg
-            | Loaded snap ->
+            | Remote.NotAsked
+            | Remote.Loading
+            | Remote.Reloading _ -> Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.Loading ]
+            | Remote.Failed msg -> StateViews.noticeStatic (Notice.Problem msg)
+            | Remote.Loaded snap ->
                 Html.div [
                     prop.children [
                         Html.div [
