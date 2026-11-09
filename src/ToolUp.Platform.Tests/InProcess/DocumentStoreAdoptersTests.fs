@@ -46,6 +46,16 @@ let private expectQuarantined (storage: IBlobStorage) (container: string) (name:
     Expect.isTrue (listed |> List.exists (fun n -> n.StartsWith(name + ".corrupt-"))) $"{name} was quarantined"
     Expect.equal (storage.Download(container, name) |> run) (Ok garbage) $"{name} was left exactly as it was"
 
+/// The bytes were copied aside — and only then was the document started
+/// again (`UpdateOrRestart` / `Replace`), so the canonical blob now holds
+/// what the store wrote.
+let private expectSetAside (storage: IBlobStorage) (container: string) (name: string) =
+    let copies = storage.List(container, name + ".corrupt-") |> run
+
+    Expect.equal copies.Length 1 $"{name}'s undecodable bytes were set aside"
+    Expect.equal (storage.Download(container, copies.Head) |> run) (Ok garbage) "byte for byte"
+    Expect.notEqual (storage.Download(container, name) |> run) (Ok garbage) $"{name} was started again"
+
 let private expectRefusedRead (label: string) (read: unit -> unit) =
     Expect.throwsT<DocumentUnavailableException> read $"{label} refuses rather than reading the document as absent"
 
@@ -183,7 +193,8 @@ let tests =
             let storage = planted platform name
 
             let store =
-                ToolUp.Platform.Config.MigrationStatusStore.BlobMigrationStatusStore(storage) :> ToolUp.Platform.Config.IMigrationStatusStore
+                ToolUp.Platform.Config.MigrationStatusStore.BlobMigrationStatusStore(storage)
+                :> ToolUp.Platform.Config.IMigrationStatusStore
 
             expectRefusedRead "Read" (fun () -> store.Read(TeamId "t1", "orders") |> run |> ignore)
             expectQuarantined storage platform name
@@ -196,5 +207,32 @@ let tests =
 
             Expect.equal (store.GetBudget "t1" |> run) ComputeBudget.unrestricted "the recorded fail-open direction"
             expectQuarantined storage ComputeBudgetLayout.DefaultContainer name
+        }
+
+        test "JobTriggerWatermark — an undecodable cursor is Unreadable, never Missing, and the next flush replaces it" {
+            let name = "job-triggers/t1.cursor"
+            let storage = planted platform name
+
+            let watermark =
+                ToolUp.Platform.Jobs.JobTriggerWatermark.JobTriggerWatermark(storage, silentLogger)
+
+            match watermark.LoadPersisted "t1" |> run with
+            | ToolUp.Platform.Jobs.JobTriggerWatermark.Unreadable _ -> ()
+            | other -> failtest $"expected Unreadable, got %A{other}"
+
+            let cursor =
+                ToolUp.Platform.Jobs.JobTriggerWatermark.JobTriggerCursor.at (
+                    DateTime(2026, 11, 9, 0, 0, 0, DateTimeKind.Utc)
+                )
+
+            watermark.Seed("t1", cursor, true)
+            watermark.FlushDirty() |> run
+
+            match watermark.LoadPersisted "t1" |> run with
+            | ToolUp.Platform.Jobs.JobTriggerWatermark.Loaded loaded ->
+                Expect.equal loaded cursor "the flushed cursor reads back"
+            | other -> failtest $"expected Loaded, got %A{other}"
+
+            expectSetAside storage platform name
         }
     ]

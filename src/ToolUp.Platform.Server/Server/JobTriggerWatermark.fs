@@ -2,11 +2,9 @@ module ToolUp.Platform.Jobs.JobTriggerWatermark
 
 open System
 open System.Collections.Concurrent
-open System.Text
-open System.Text.Json
-open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.Infra
 
 // ─── JobTriggerWatermark (Phase 598) ─────────────────────────────
 //
@@ -25,9 +23,9 @@ open ToolUp.Platform.BlobStorage
 // Mirrors `AuditReplicatorCursor` (Phase 9g): `(OccurredAt, Id)` is
 // the deterministic per-scope total order — timestamp primary,
 // event-id `Guid` tie-breaker for identical timestamps. Cursors are
-// tiny JSON blobs at `_platform/job-triggers/{scopeId}.cursor`,
-// serialised via `FableConverters` like every other `_platform`
-// artefact.
+// tiny JSON documents at `_platform/job-triggers/{scopeId}.cursor`,
+// read and written through `BlobDocumentStore` like every other
+// `_platform` document.
 //
 // **Advance point.** `JobNotifyEventStore` advances the in-memory
 // cursor after the scheduler notify returns — it holds the full
@@ -90,12 +88,8 @@ type JobTriggerCursorLoad =
     | Missing
     | Unreadable of error: string
 
-[<Literal>]
-let private CursorContainer = ScopeKey.PlatformContainer
-
-let private cursorBlobName (scopeId: string) = $"job-triggers/{scopeId}.cursor"
-
-let private jsonOptions = PlatformJson.options
+let private cursorPath (scopeId: string) =
+    DocPath.ofString $"job-triggers/{scopeId}.cursor"
 
 /// In-memory per-scope cursor map with blob-backed persistence.
 /// One instance per deployment, shared by `JobNotifyEventStore`
@@ -104,6 +98,13 @@ let private jsonOptions = PlatformJson.options
 /// concurrent use.
 type JobTriggerWatermark(blobStorage: IBlobStorage, logger: ILogger) =
     let cursors = ConcurrentDictionary<string, JobTriggerCursor>()
+
+    // The cursor is a document whose loss costs replay breadth, never a
+    // trigger: a flush replaces it whole, and undecodable bytes are set
+    // aside rather than wedging every later flush.
+    let docs =
+        BlobDocumentStore<JobTriggerCursor>(blobStorage, BlobCodec.json<JobTriggerCursor>, logger)
+
     let dirty = ConcurrentDictionary<string, byte>()
 
     /// Advance the scope's in-memory cursor past `evt` (monotonic —
@@ -140,23 +141,10 @@ type JobTriggerWatermark(blobStorage: IBlobStorage, logger: ILogger) =
     /// corrupt payload — the two are deliberately distinct (see
     /// `JobTriggerCursorLoad`).
     member _.LoadPersisted(scopeId: string) : Async<JobTriggerCursorLoad> = async {
-        let blobName = cursorBlobName scopeId
-
-        try
-            let! exists = blobStorage.Exists(CursorContainer, blobName)
-
-            if not exists then
-                return Missing
-            else
-                let! result = blobStorage.Download(CursorContainer, blobName)
-
-                match result with
-                | Ok bytes ->
-                    let json = Encoding.UTF8.GetString bytes
-                    return Loaded(JsonSerializer.Deserialize<JobTriggerCursor>(json, jsonOptions))
-                | Error err -> return Unreadable err
-        with ex ->
-            return Unreadable ex.Message
+        match! docs.Read(ScopeKey.platform, cursorPath scopeId) with
+        | Ok(Some cursor) -> return Loaded cursor
+        | Ok None -> return Missing
+        | Error e -> return Unreadable(BlobMapStoreError.describe e)
     }
 
     /// Persist every dirty cursor. Failures log and re-mark dirty so
@@ -170,22 +158,11 @@ type JobTriggerWatermark(blobStorage: IBlobStorage, logger: ILogger) =
                 match cursors.TryGetValue scopeId with
                 | false, _ -> ()
                 | true, cursor ->
-                    let json = JsonSerializer.Serialize(cursor, jsonOptions)
-                    let bytes = Encoding.UTF8.GetBytes json
-
-                    try
-                        let! result = blobStorage.Upload(CursorContainer, cursorBlobName scopeId, bytes)
-
-                        match result with
-                        | Ok _ -> ()
-                        | Error err ->
-                            dirty[scopeId] <- 0uy
-
-                            logger.Warn
-                                $"[JobTriggerWatermark] event=cursor_flush_failed scope=%s{scopeId}: {err} — next flush retries"
-                    with ex ->
+                    match! docs.Replace(ScopeKey.platform, cursorPath scopeId, cursor) with
+                    | Ok() -> ()
+                    | Error e ->
                         dirty[scopeId] <- 0uy
 
                         logger.Warn
-                            $"[JobTriggerWatermark] event=cursor_flush_failed scope=%s{scopeId}: {ex.Message} — next flush retries"
+                            $"[JobTriggerWatermark] event=cursor_flush_failed scope=%s{scopeId}: {BlobMapStoreError.describe e} — next flush retries"
     }
