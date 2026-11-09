@@ -4474,7 +4474,6 @@ let main args =
         "Remoting/Idempotency.fs"
         "RestoreDrillVerifier.fs"
         "ResultStore.fs"
-        "Scope/PermissionStore.fs"
         "SecondaryIndex.fs"
         "SessionRegistry.fs"
         "ShareTokenStore.fs"
