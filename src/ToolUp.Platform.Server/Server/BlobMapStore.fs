@@ -7,6 +7,7 @@ open ToolUp.Platform
 
 open System
 open System.Security.Cryptography
+open System.Threading
 open ToolUp.Platform.BlobStorage
 
 // ─── The durable document store ─────────────────────────────────────
@@ -34,6 +35,9 @@ open ToolUp.Platform.BlobStorage
 //     -> bounded retry on a lost precondition (the transform is REPLAYED
 //        over the fresh read, never merged)
 //
+//   * A read that RAISES (rather than answering `Error`) is `Unreadable`
+//     whatever `Exists` said: an exception is a backend that could not be
+//     asked, not an answer, so it is never evidence of absence.
 //   * ABSENT is `None` — the empty state — and the first write carries
 //     `IfAbsent`, so two creators also resolve by precondition. Absence is
 //     established by `Exists`, probed BEFORE the read: a read that fails on
@@ -365,18 +369,21 @@ type BlobDocumentStore<'T>(storage: IBlobStorage, codec: BlobCodec<'T>, logger: 
         | Ok existedBefore ->
             let! result = async {
                 try
-                    return! c.DownloadWithETag(container, blobName)
+                    let! answer = c.DownloadWithETag(container, blobName)
+                    return Choice1Of2 answer
                 with ex ->
-                    return Error ex.Message
+                    return Choice2Of2 ex.Message
             }
 
             match result with
-            | Ok(content, etag) ->
+            | Choice2Of2 raised -> return Error(BlobMapStoreError.Unreadable(blobName, $"the read raised: {raised}"))
+            | Choice1Of2(Ok(content, etag)) ->
                 match! decoded container blobName content with
                 | Ok value -> return Ok(value, Some etag)
                 | Error e -> return Error e
-            | Error reason when existedBefore -> return Error(BlobMapStoreError.Unreadable(blobName, reason))
-            | Error _ -> return Ok(None, None)
+            | Choice1Of2(Error reason) when existedBefore ->
+                return Error(BlobMapStoreError.Unreadable(blobName, reason))
+            | Choice1Of2(Error _) -> return Ok(None, None)
     }
 
     let readPlain (container: string) (blobName: string) = async {
@@ -385,15 +392,18 @@ type BlobDocumentStore<'T>(storage: IBlobStorage, codec: BlobCodec<'T>, logger: 
         | Ok existedBefore ->
             let! result = async {
                 try
-                    return! storage.Download(container, blobName)
+                    let! answer = storage.Download(container, blobName)
+                    return Choice1Of2 answer
                 with ex ->
-                    return Error ex.Message
+                    return Choice2Of2 ex.Message
             }
 
             match result with
-            | Ok content -> return! decoded container blobName content
-            | Error reason when existedBefore -> return Error(BlobMapStoreError.Unreadable(blobName, reason))
-            | Error _ -> return Ok None
+            | Choice2Of2 raised -> return Error(BlobMapStoreError.Unreadable(blobName, $"the read raised: {raised}"))
+            | Choice1Of2(Ok content) -> return! decoded container blobName content
+            | Choice1Of2(Error reason) when existedBefore ->
+                return Error(BlobMapStoreError.Unreadable(blobName, reason))
+            | Choice1Of2(Error _) -> return Ok None
     }
 
     let updateConditional
@@ -466,16 +476,33 @@ type BlobDocumentStore<'T>(storage: IBlobStorage, codec: BlobCodec<'T>, logger: 
                 | Error message -> return Error(BlobMapStoreError.WriteFailed(blobName, message))
     }
 
-    let update (container: string) (blobName: string) (transform: 'T option -> BlobUpdate<'T, 'R>) = async {
-        match cas with
-        | Some c ->
-            let! conditional = confirmConditional c container blobName
+    // Same-instance writers to one document take turns: a fixed set of
+    // stripes (bounded memory, nothing to prune) keyed by the document, held
+    // for the whole read-modify-write. Across nodes the guarantee is the
+    // conditional write; in one process the stripe keeps concurrent writers
+    // from spending the retry budget on each other, and it is the whole
+    // guarantee on a backend without conditional writes.
+    let stripes = Array.init 64 (fun _ -> new SemaphoreSlim(1, 1))
 
-            if conditional then
-                return! updateConditional c container blobName transform
-            else
-                return! updatePlain container blobName transform
-        | None -> return! updatePlain container blobName transform
+    let stripeFor (container: string) (blobName: string) =
+        stripes[(StringComparer.Ordinal.GetHashCode(container + "/" + blobName) &&& 0x7fffffff) % stripes.Length]
+
+    let update (container: string) (blobName: string) (transform: 'T option -> BlobUpdate<'T, 'R>) = async {
+        let stripe = stripeFor container blobName
+        do! stripe.WaitAsync() |> Async.AwaitTask
+
+        try
+            match cas with
+            | Some c ->
+                let! conditional = confirmConditional c container blobName
+
+                if conditional then
+                    return! updateConditional c container blobName transform
+                else
+                    return! updatePlain container blobName transform
+            | None -> return! updatePlain container blobName transform
+        finally
+            stripe.Release() |> ignore
     }
 
     let supportsConditionalWrites (container: string) (blobName: string) =

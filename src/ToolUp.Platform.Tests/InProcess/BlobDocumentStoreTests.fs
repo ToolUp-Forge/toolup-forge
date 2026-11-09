@@ -264,3 +264,42 @@ let tests =
             Expect.equal (DocPath.value (DocPath.ofString "a/b.json")) "a/b.json" "a well-formed path renders as given"
         }
     ]
+
+/// Raises from `Download`; `Exists` answers from `inner`, so the blob may be
+/// absent as far as `Exists` knows.
+type private RaisingStorage(inner: IBlobStorage) =
+    interface IBlobStorage with
+        member _.CanComposeFrom = false
+
+        member _.ComposeFrom(_, _, _) =
+            ToolUp.Platform.BlobStorage.composeNotSupported "test double"
+
+        member _.Download(_, _) = async { return raise (InvalidOperationException "storage read exploded") }
+
+        member _.Upload(container, blobName, content) =
+            inner.Upload(container, blobName, content)
+
+        member _.Delete(container, blobName) = inner.Delete(container, blobName)
+        member _.List(container, prefix) = inner.List(container, prefix)
+        member _.Exists(container, blobName) = inner.Exists(container, blobName)
+        member _.GetMetadata(container, blobName) = inner.GetMetadata(container, blobName)
+
+        member _.DownloadRange(container, blobName, offset, length) =
+            inner.DownloadRange(container, blobName, offset, length)
+
+        member _.Erase(container, prefix, policy, dryRun) =
+            inner.Erase(container, prefix, policy, dryRun)
+
+let raisingReadTests =
+    testList "Phase 1061 — BlobDocumentStore<'T> — a read that raises" [
+        test "is Unreadable even where Exists says the blob is absent, and nothing is written" {
+            let backing = InMemoryBlobStorage() :> IBlobStorage
+            let docs = storeOver (RaisingStorage backing)
+
+            match docs.Update(scope, path "a", increment) |> run with
+            | Error(BlobMapStoreError.Unreadable _) -> ()
+            | other -> failtest $"expected Unreadable, got %A{other}"
+
+            Expect.isFalse (backing.Exists(container, DocPath.value (path "a")) |> run) "nothing was written"
+        }
+    ]
