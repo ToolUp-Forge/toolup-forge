@@ -137,14 +137,14 @@ ToolUp.Offline.Server 16/33
 ToolUp.OpenXml 107/298
 ToolUp.OpenXml.Spreadsheet 45/141
 ToolUp.OpenXml.SvgRasterizer.Skia 3/3
-ToolUp.Platform.Build 576/1026
+ToolUp.Platform.Build 577/1029
 ToolUp.Platform.Client 2957/7073
-ToolUp.Platform.Core 7578/15649
+ToolUp.Platform.Core 7583/15664
 ToolUp.Platform.Server 3071/5523
 ToolUp.Platform.Server.Audit 373/694
 ToolUp.Platform.Server.Config 388/658
 ToolUp.Platform.Server.Infra 2128/3627
-ToolUp.Platform.Server.Jobs 905/1664
+ToolUp.Platform.Server.Jobs 921/1730
 ToolUp.Platform.Server.Remoting 360/1027
 ToolUp.Platform.Server.Scope 437/773
 ToolUp.Platform.Testing 118/264

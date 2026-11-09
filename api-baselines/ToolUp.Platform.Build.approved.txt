@@ -277,12 +277,14 @@ ToolUp.Platform.CodemodMigration.BackgroundPlacement : ToolUp.Platform.CodemodMi
 ToolUp.Platform.CodemodMigration.Capabilities : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration.CompanionOptions : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration.Deprecations : ToolUp.Platform.CodemodMigration { get }
+ToolUp.Platform.CodemodMigration.FailureAsData : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration.IsAgentLoop : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsApiStability : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsBackgroundPlacement : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsCapabilities : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsCompanionOptions : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsDeprecations : System.Boolean { get }
+ToolUp.Platform.CodemodMigration.IsFailureAsData : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsJobOutcomes : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsModelCapabilities : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsNestedConfig : System.Boolean { get }
@@ -317,6 +319,7 @@ ToolUp.Platform.CodemodMigration+Tags.BackgroundPlacement : System.Int32 (litera
 ToolUp.Platform.CodemodMigration+Tags.Capabilities : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.CompanionOptions : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.Deprecations : System.Int32 (literal)
+ToolUp.Platform.CodemodMigration+Tags.FailureAsData : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.JobOutcomes : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.ModelCapabilities : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.NestedConfig : System.Int32 (literal)

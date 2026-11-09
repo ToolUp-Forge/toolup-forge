@@ -5927,6 +5927,8 @@ ToolUp.Platform.EventRetentionPolicyModule.byAge(System.TimeSpan) : ToolUp.Platf
 ToolUp.Platform.EventRetentionPolicyModule.byCount(System.Int32) : ToolUp.Platform.EventRetentionPolicy
 ToolUp.Platform.EventRetentionPolicyModule.ninetyDays : ToolUp.Platform.EventRetentionPolicy { get }
 ToolUp.Platform.EventRetentionPolicyModule.unlimited : ToolUp.Platform.EventRetentionPolicy { get }
+ToolUp.Platform.EventStore (class)
+ToolUp.Platform.EventStore.writeOrRaise(ToolUp.Platform.IEventStore, ToolUp.Platform.ModuleEvent) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.EventStoreChain (class)
 ToolUp.Platform.EventStoreChain.AuditReplicationPosition : System.Int32 (literal)
 ToolUp.Platform.EventStoreChain.InnermostPosition : System.Int32 (literal)
@@ -5949,6 +5951,14 @@ ToolUp.Platform.EventStoreChainLink..ctor(System.String, Microsoft.FSharp.Core.F
 ToolUp.Platform.EventStoreChainLink.Name : System.String { get }
 ToolUp.Platform.EventStoreChainLink.Position : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
 ToolUp.Platform.EventStoreChainLink.Purpose : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.EventStoreError (class)
+ToolUp.Platform.EventStoreError.Tag : System.Int32 { get }
+ToolUp.Platform.EventStoreError.eventId : System.Guid { get }
+ToolUp.Platform.EventStoreError.location : System.String { get }
+ToolUp.Platform.EventStoreError.reason : System.String { get }
+ToolUp.Platform.EventStoreError.scopeId : System.String { get }
+ToolUp.Platform.EventStoreErrorModule (class)
+ToolUp.Platform.EventStoreErrorModule.describe(ToolUp.Platform.EventStoreError) : System.String
 ToolUp.Platform.EventStoreMode (class)
 ToolUp.Platform.EventStoreMode.InMemoryOnly : ToolUp.Platform.EventStoreMode { get }
 ToolUp.Platform.EventStoreMode.IsInMemoryOnly : System.Boolean { get }
@@ -5959,6 +5969,11 @@ ToolUp.Platform.EventStoreMode+PersistentBlobBacked.Item : ToolUp.Platform.Event
 ToolUp.Platform.EventStoreMode+Tags (class)
 ToolUp.Platform.EventStoreMode+Tags.InMemoryOnly : System.Int32 (literal)
 ToolUp.Platform.EventStoreMode+Tags.PersistentBlobBacked : System.Int32 (literal)
+ToolUp.Platform.EventStoreWriteFailed (class)
+ToolUp.Platform.EventStoreWriteFailed..ctor()
+ToolUp.Platform.EventStoreWriteFailed..ctor(ToolUp.Platform.EventStoreError)
+ToolUp.Platform.EventStoreWriteFailed.Data0 : ToolUp.Platform.EventStoreError { get }
+ToolUp.Platform.EventStoreWriteFailed.Message : System.String { get }
 ToolUp.Platform.Events (class)
 ToolUp.Platform.Events.create(System.String, System.String, System.String, System.String) : ToolUp.Platform.ModuleEvent
 ToolUp.Platform.EvidenceBundle (class)
@@ -7490,7 +7505,7 @@ ToolUp.Platform.IEventStore.ListScopes() : Microsoft.FSharp.Control.FSharpAsync`
 ToolUp.Platform.IEventStore.ReadAll(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleEvent]]
 ToolUp.Platform.IEventStore.ReadBySource(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleEvent]]
 ToolUp.Platform.IEventStore.ReadByType(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleEvent]]
-ToolUp.Platform.IEventStore.Write(ToolUp.Platform.ModuleEvent) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.IEventStore.Write(ToolUp.Platform.ModuleEvent) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.EventStoreError]]
 ToolUp.Platform.IEventStoreDecorator (interface)
 ToolUp.Platform.IEventStoreDecorator.DecoratorName : System.String { get }
 ToolUp.Platform.IEventStoreDecorator.DecoratorPosition : System.Int32 { get }
