@@ -67,7 +67,10 @@ Each error has a `describe` / `message` function that renders it as one sentence
   `JobStatusBusyException` (removed); the job admin API renders it, and a `StoreFailed`, with
   `JobTransitionError.message`, as before.
 - **`Dispatch` on a full queue** writes the `WebhookEventDropped` audit row before it answers `Dropped` (it was a
-  detached `Async.Start`). `HookedEventStore` answers `Ok` for a persisted event whatever the fan-out answered:
+  detached `Async.Start`). The queue-full branch was unreachable before this phase: the queue was
+  `BoundedChannelFullMode.DropWrite`, whose `TryWrite` answers `true` while discarding the item, so a dropped event
+  was neither logged nor audited. The queue is now `Wait`; `Dispatch` calls only `TryWrite`, which never waits, so
+  the one difference is that a full queue is seen. `HookedEventStore` answers `Ok` for a persisted event whatever the fan-out answered:
   the drop is the dispatcher's to report, not a failed write.
 - **A delivery-log row that was not written** is `DeliveryLogWriteFailed` (Phase 1064's `recordDeliveryBestEffort`
   is renamed `recordDelivery` and answers it). The delivery stands; each delivery path carries its errors to the
