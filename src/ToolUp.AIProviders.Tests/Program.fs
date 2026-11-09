@@ -11,7 +11,7 @@ open ToolUp.Platform.Tests.Support
 
 let private registeredTests =
     testList "ToolUp.AIProviders.Tests" [
-        // Phase 508 — the offline half of the rich-schema acceptance, once
+        // the offline half of the rich-schema acceptance, once
         // rather than per provider: every provider is handed the same
         // `AIProviderToolDef`, so asserting it four times would assert one
         // thing four times. The per-provider live half rides each list below.
@@ -21,17 +21,17 @@ let private registeredTests =
         GeminiProviderTests.tests
         CopilotProviderTests.tests
         Microsoft365CopilotProviderTests.tests
-        // Phase 661 - the per-call model override, offline, per connector.
+        // the per-call model override, offline, per connector.
         ModelOverrideTests.tests
         RateLimitFloorTests.tests
         ClaudeEffortTests.tests
         ConnectorRequestBytesTests.tests
         ProviderCallTests.tests
-        // Phase 1105 - a refused AI-settings revert is reported, never as "not saved".
+        // a refused AI-settings revert is reported, never as "not saved".
         AISettingsRevertTests.tests
     ]
 
-/// Phase 722 — the registered list plus the guard that makes an
+/// the registered list plus the guard that makes an
 /// unregistered `[<Tests>]` binding fail loudly instead of vanishing:
 /// this pack runs an explicitly-enumerated list, not Expecto's
 /// `[<Tests>]` auto-discovery, so an attributed binding absent from the
@@ -42,7 +42,7 @@ let allTests =
 // Sequenced by default — Expecto deadlocks when parallel tests write to
 // the console (the subject's own ConsoleLogger / compose warnings are enough).
 // `--parallel` still overrides. See docs/platform/testing-conventions.md
-// § "Every Expecto pack runs sequenced by default". (Phase 617.)
+// § "Every Expecto pack runs sequenced by default".
 [<EntryPoint>]
 let main argv =
     runTestsWithCLIArgs [ CLIArguments.Sequenced ] argv allTests

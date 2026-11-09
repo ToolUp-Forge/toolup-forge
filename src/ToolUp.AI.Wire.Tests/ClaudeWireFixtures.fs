@@ -11,7 +11,7 @@ open ToolUp.Platform.AI
 /// portable mapper + the pure `ClaudeStreaming` machine are exercised over
 /// the SAME canned inputs on each host, so a green run on both proves the
 /// request bytes are byte-identical across hosts and the streaming assembly
-/// is host-independent — seeding the Phase 255 conformance corpus.
+/// is host-independent — the conformance corpus asserts it.
 
 // ─── Non-streaming request build (golden bytes) ──────────────────
 //
@@ -77,7 +77,7 @@ let requestTwoTurn () =
 let requestTwoTurnGolden =
     """{"model":"m","max_tokens":8,"messages":[{"role":"user","content":[{"type":"text","text":"a","cache_control":{"type":"ephemeral"}}]},{"role":"assistant","content":"b"}]}"""
 
-/// Phase 508 — a rich tool schema reaching `input_schema`. Claude embeds
+/// a rich tool schema reaching `input_schema`. Claude embeds
 /// the schema as JSON structure, so the pin is that the nested object,
 /// the enum and the array items survive that embed byte for byte — a
 /// mapper that re-encoded or reordered would still send valid JSON and
@@ -103,7 +103,7 @@ let requestNestedToolSchemaGolden =
     + WireFixtures.nestedToolInputSchema
     + ""","cache_control":{"type":"ephemeral"}}]}"""
 
-/// forge#1242 — an effort is the one extra member, after `tool_choice` and before
+/// an effort is the one extra member, after `tool_choice` and before
 /// `stream`, and every other byte stays where it was.
 let requestEffort () =
     ClaudeAIProviderWire.buildRequestBodyWithEffort (Some "low") "m" 16 [ msgUser "hi" ] [] None true None
@@ -111,7 +111,7 @@ let requestEffort () =
 let requestEffortGolden =
     """{"model":"m","max_tokens":16,"messages":[{"role":"user","content":"hi"}],"output_config":{"effort":"low"},"stream":true}"""
 
-/// forge#1242 — no effort, and a blank one, are the minimal request's bytes.
+/// no effort, and a blank one, are the minimal request's bytes.
 let requestNoEffort () =
     ClaudeAIProviderWire.buildRequestBodyWithEffort None "m" 16 [ msgUser "hi" ] [] None false None
 

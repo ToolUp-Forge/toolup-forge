@@ -3,7 +3,7 @@
 
 module ToolUp.AIProviders.Tests.Tests.ClaudeEffortTests
 
-// ─── forge#1242 — the effort a Claude call is sent with ─────────────
+// ─── the effort a Claude call is sent with ─────────────
 //
 // What reaches the request body, read from the request itself. Offline: the
 // HTTP client is a stub that records each body and answers with one status.

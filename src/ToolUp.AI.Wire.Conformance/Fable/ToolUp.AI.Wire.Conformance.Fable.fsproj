@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
     ToolUp.AI.Wire.Conformance.Fable — the Fable (browser) host of the
-    Wave 32 conformance pack. It transpiles via Fable and runs
+    conformance pack. It transpiles via Fable and runs
     the SAME shared suite (..\Corpus.fs + ..\ConformanceSuite.fs) the .NET
     Expecto host runs, under Node's built-in test runner (node:test). A
     green run on BOTH hosts is the byte-parity / structural-parity gate —

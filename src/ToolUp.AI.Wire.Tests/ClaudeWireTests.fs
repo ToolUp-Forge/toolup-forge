@@ -9,7 +9,7 @@ open ToolUp.AI.Wire.Tests.ClaudeWireFixtures
 open ToolUp.Remoting.Json
 
 // .NET (Expecto) host pack for the portable Claude wire mapper + the pure
-// ClaudeStreaming state machine (Phase 254). The Fable smoke runs the SAME
+// ClaudeStreaming state machine. The Fable smoke runs the SAME
 // fixtures under node:test, so a green run on both proves cross-host parity
 // of the request bytes + streaming assembly with no live SSE.
 

@@ -1,6 +1,6 @@
 module ToolUp.AI.Wire.Tests.GeminiWireTests
 
-// ─── Phase 253 — Gemini portable wire mapper (.NET host) ─────────
+// ─── Gemini portable wire mapper (.NET host) ─────────
 //
 // Offline regression for `GeminiAIProviderWire` (the source file is
 // linked into this pack — see the .fsproj — so the SAME mapper that ships

@@ -46,9 +46,9 @@ let fixtures: (string * JsonValue * string) list = [
     ],
     "{\"model\":\"x\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"stream\":true,\"n\":1}"
 ]
-// ─── Phase 508 — the rich tool-schema pass-through fixture ────────
+// ─── the rich tool-schema pass-through fixture ────────
 //
-// Phase 508 let a tool parameter declare a nested object, an array or a
+// A tool parameter may declare a nested object, an array or a
 // closed enum instead of a bare type name, which put a materially bigger
 // JSON Schema on the wire than any mapper had carried before. Each
 // mapper embeds the schema rather than re-flattening it, so what has to

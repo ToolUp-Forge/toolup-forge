@@ -8,7 +8,7 @@ open ToolUp.Platform.AI
 /// expected primitives in one source file means a green run on each host
 /// proves the Gemini mapper (`GeminiAIProviderWire`) builds the identical
 /// request bytes and parses the identical response shape on both hosts —
-/// the Phase 255 parity property, seeded for Gemini (Phase 253).
+/// the cross-host parity property, for Gemini.
 ///
 /// Data only — no assertions and no calls into `GeminiAIProviderWire`, so
 /// each host's test file drives the mapper with its own `Expect` API.
@@ -45,7 +45,7 @@ let toolRequestTools: AIProviderToolDef list = [
 let toolRequestGolden =
     """{"contents":[{"role":"user","parts":[{"text":"what time is it?"}]}],"systemInstruction":{"parts":[{"text":"You are concise."}]},"tools":[{"functionDeclarations":[{"name":"get_time","description":"Get the current time.","parameters":{"type":"object","properties":{}}}]}],"toolConfig":{"functionCallingConfig":{"mode":"AUTO"}}}"""
 
-// Phase 508 — a rich tool schema reaching `functionDeclarations[].parameters`.
+// a rich tool schema reaching `functionDeclarations[].parameters`.
 // Gemini's mapper degrades an unparseable schema to an empty object rather
 // than throwing, which is the right posture for a blank one and exactly the
 // wrong outcome for a nested one silently mangled: an empty `parameters`
