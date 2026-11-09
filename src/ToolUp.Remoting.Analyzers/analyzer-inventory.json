@@ -182,7 +182,7 @@
         "src/ToolUp.AI.Server/Server/AISettingsHandler.fs": 6,
         "src/ToolUp.AI.Server/Server/AIToolRegistry.fs": 8,
         "src/ToolUp.AI.Server/Server/ClientToolDispatch.fs": 1,
-        "src/ToolUp.AI.Server/Server/FastPathBeaconHandler.fs": 6,
+        "src/ToolUp.AI.Server/Server/FastPathBeaconHandler.fs": 4,
         "src/ToolUp.AI.Server/Server/FastPathTelemetryHandler.fs": 1,
         "src/ToolUp.AI.Server/Server/FastPathTriageResolver.fs": 2,
         "src/ToolUp.AI.Server/Server/GroundedNarrativeRun.fs": 2,
