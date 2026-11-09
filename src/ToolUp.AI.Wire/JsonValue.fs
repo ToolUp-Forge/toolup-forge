@@ -275,25 +275,38 @@ module JsonValue =
 
     /// The host's parse of a token, as an option — the one place the numeric
     /// readers differ by host. .NET parses with the styles the token grammar
-    /// admits and the invariant culture; Fable's readers are culture-free,
-    /// take the text alone, and would ignore a style with a warning.
+    /// admits and the invariant culture; Fable's readers are culture-free and
+    /// take the text alone (a style or a provider would be ignored, with a
+    /// warning), so each host constrains only the parse it calls.
+#if FABLE_COMPILER
+    let inline private tryParse< ^n when ^n: (static member TryParse: string * byref< ^n > -> bool)>
+        (_: NumberStyles)
+        (text: string)
+        : ^n option =
+        let mutable n = Unchecked.defaultof< ^n>
+
+        if (^n: (static member TryParse: string * byref< ^n > -> bool) (text, &n)) then
+            Some n
+        else
+            None
+#else
     let inline private tryParse< ^n
-        when ^n: (static member TryParse: string * byref< ^n > -> bool)
-        and ^n: (static member TryParse: string * NumberStyles * IFormatProvider * byref< ^n > -> bool)>
+        when ^n: (static member TryParse: string * NumberStyles * IFormatProvider * byref< ^n > -> bool)>
         (styles: NumberStyles)
         (text: string)
         : ^n option =
         let mutable n = Unchecked.defaultof< ^n>
-#if FABLE_COMPILER
-        let parsed = (^n: (static member TryParse: string * byref< ^n > -> bool) (text, &n))
-#else
-        let parsed =
+
+        if
             (^n: (static member TryParse: string * NumberStyles * IFormatProvider * byref< ^n > -> bool) (text,
                                                                                                           styles,
                                                                                                           CultureInfo.InvariantCulture,
                                                                                                           &n))
+        then
+            Some n
+        else
+            None
 #endif
-        if parsed then Some n else None
 
     /// The token as an `int64`, or `None` when it is not an integral
     /// token or does not fit. Exact: no `float` on the way.
