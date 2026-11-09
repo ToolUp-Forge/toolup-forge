@@ -254,7 +254,7 @@ module RedisRateLimitStore =
                     }
                 | _ -> ()
 
-                return result
+                return result |> Result.map InboundRateLimitDecision.toAdmission
             }
 
             member _.GetRecentDecisions(keyFilter, count) = async {

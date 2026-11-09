@@ -449,8 +449,8 @@ let private azureTableTests =
             let store = storeOver endpoint
 
             match! orEscaped (store.IncrementAndCheck(IpAddressKey "203.0.113.7", PerMinute, 10)) with
-            | Ok(Ok(AllowWithRemaining remaining)) -> Expect.equal remaining 9 "one of ten used"
-            | Ok other -> failtestf "expected AllowWithRemaining 9, got %A" other
+            | Ok(Ok(Admission.Admit remaining)) -> Expect.equal remaining 9 "one of ten used"
+            | Ok other -> failtestf "expected Admission.Admit 9, got %A" other
             | Error escaped -> failtest escaped
         }
 

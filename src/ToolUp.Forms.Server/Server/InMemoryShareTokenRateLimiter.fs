@@ -3,51 +3,34 @@
 
 module ToolUp.Forms.InMemoryShareTokenRateLimiter
 
-open System
-open System.Collections.Concurrent
 open ToolUp.Platform
 open ToolUp.Platform.Compose
 
 // ─── Phase 21e — in-memory IShareTokenRateLimiter default ────────────
 //
-// **Single-instance only.** State lives in a per-process
-// `ConcurrentDictionary` keyed by `(scopeId, tokenId)`; a
+// **Single-instance only.** State lives in a per-process store
+// keyed by `(scopeId, tokenId)`; a
 // multi-replica deployment cannot share window state across nodes,
 // so an attacker hitting two replicas defeats the per-token cap in
 // proportion to the replica count. Distributed deployments wire a
 // companion backed by Redis / their `IRateLimitStore` (Phase 56) /
 // equivalent.
 //
-// **Algorithm.** Sliding window via a per-key bounded queue of
-// admission timestamps. On `Admit`:
-//   1. Drop timestamps older than `rate.Window` (cheap when calls
-//      are evenly spaced; bounded by `rate.MaxUses` in the worst
-//      case).
-//   2. If the queue's length is `< rate.MaxUses`, append now and
-//      return `Ok`.
-//   3. Otherwise return `Error RateLimited`. The queue is unchanged
-//      so the next admission attempts still see the same state.
+// **Algorithm.** The one in-memory sliding-window store,
+// `ToolUp.Remoting.Server.InMemoryRateLimitStore` (Phase 1068), keyed per
+// `(scopeId, tokenId)`: atomic per key, bounded by its bucket cap, and the
+// same implementation the remoting dispatcher and the Phase 56 inbound
+// store count against. A denied admission is not recorded, so the next
+// attempt sees the same window. A non-positive `MaxUses` refuses every
+// admission, as it always has here.
 //
 // Window precision is wall-clock UtcNow ticks — the interface
 // declares sub-second precision is not promised (rule 6).
 
-let private nowUtc () : DateTimeOffset = DateTimeOffset.UtcNow
-
-type private WindowKey =
-    struct
-        val ScopeId: string
-        val TokenId: string
-        new(s, t) = { ScopeId = s; TokenId = t }
-    end
-
-/// In-memory `IShareTokenRateLimiter`. Thread-safe via per-key locks
-/// on the underlying `ResizeArray`. Single-instance only — see
+/// In-memory `IShareTokenRateLimiter`. Single-instance only — see the
 /// module header.
 type InMemoryShareTokenRateLimiter() =
-    let windows = ConcurrentDictionary<WindowKey, ResizeArray<DateTimeOffset>>()
-
-    let getWindow (key: WindowKey) =
-        windows.GetOrAdd(key, fun _ -> ResizeArray<DateTimeOffset>())
+    let store = ToolUp.Remoting.Server.InMemoryRateLimitStore()
 
     interface IShareTokenRateLimiter with
         // Phase 136 part 2 — per-process window state (see module
@@ -57,26 +40,16 @@ type InMemoryShareTokenRateLimiter() =
         member _.IsDistributed = false
 
         member _.Admit(scopeId, tokenId, rate) = async {
-            let key = WindowKey(scopeId, tokenId)
-            let window = getWindow key
+            if rate.MaxUses <= 0 then
+                return Error ShareTokenError.RateLimited
+            else
+                // Length-prefixed, so no (scopeId, tokenId) pair can spell
+                // another's key whatever characters either holds.
+                let key = sprintf "%d:%s|%s" scopeId.Length scopeId tokenId
 
-            return
-                lock window (fun () ->
-                    let now = nowUtc ()
-                    let cutoff = now - rate.Window
-
-                    // Drop timestamps older than the window. Linear in
-                    // window length, bounded by `rate.MaxUses` for any
-                    // admission that previously succeeded — the queue
-                    // never grows past that cap.
-                    while window.Count > 0 && window[0] <= cutoff do
-                        window.RemoveAt 0
-
-                    if window.Count < rate.MaxUses then
-                        window.Add now
-                        Ok()
-                    else
-                        Error ShareTokenError.RateLimited)
+                match store.Acquire(key, rate.MaxUses, rate.Window) with
+                | Admission.Admit _ -> return Ok()
+                | Admission.Deny _ -> return Error ShareTokenError.RateLimited
         }
 
 /// Convenience constructor matching the SDK companion convention.

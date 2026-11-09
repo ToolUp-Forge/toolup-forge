@@ -179,7 +179,7 @@ module Remoting =
             AuthContextResolver = Some resolver
     }
 
-    /// Compose an `IRateLimitStore` against which per-method
+    /// Compose an `IRemotingRateLimitStore` against which per-method
     /// `[<RateLimit(count, windowSeconds)>]` attributes are enforced. The
     /// `InMemoryRateLimitStore` is the in-process default; distributed
     /// deployments wire a Redis / DynamoDB / etc. impl against the same
@@ -193,7 +193,7 @@ module Remoting =
     /// pass for the call to proceed. The first denial returns
     /// `ErrorCategory.RateLimit` envelope + status 429 + `Retry-After`
     /// header.
-    let withRateLimitStore (store: IRateLimitStore) (options: RemotingOptions<'t, 'implementation>) = {
+    let withRateLimitStore (store: IRemotingRateLimitStore) (options: RemotingOptions<'t, 'implementation>) = {
         options with
             RateLimitStore = Some store
     }

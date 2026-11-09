@@ -682,7 +682,10 @@ let registerRateLimitMiddleware (services: IServiceCollection) (config: ServerCo
     // Registration is opt-in via `RateLimitStore`. `NoRateLimitStore`
     // (default) strips the entire substrate — no `IRateLimitStore` in
     // DI, no middleware mount. `InMemoryRateLimitStore` activates the
-    // single-instance default. `ExternalRateLimitStore` is the
+    // single-instance default: ONE in-memory store (Phase 1068), resolved
+    // as the remoting `IRemotingRateLimitStore` and adapted as the Phase 56
+    // `IRateLimitStore`: one implementation and one bucket cap behind both
+    // (their keys never collide). `ExternalRateLimitStore` is the
     // companion-driven branch — the operator's
     // `ComposeExtensions.ServiceConfig` (or a sub-companion's
     // composition extension) registers the external impl as the
@@ -690,7 +693,12 @@ let registerRateLimitMiddleware (services: IServiceCollection) (config: ServerCo
     match config.Stores.RateLimitStore with
     | NoRateLimitStore -> ()
     | ToolUp.Platform.RateLimitStoreMode.InMemoryRateLimitStore ->
-        services.AddSingleton<IRateLimitStore>(InMemoryRateLimitStore.create ())
+        let store = ToolUp.Remoting.Server.InMemoryRateLimitStore()
+
+        services.AddSingleton<ToolUp.Remoting.Server.IRemotingRateLimitStore>(store)
+        |> ignore
+
+        services.AddSingleton<IRateLimitStore>(InMemoryRateLimitStore.over store)
         |> ignore
     | ExternalRateLimitStore ->
         // Companion package wires its own

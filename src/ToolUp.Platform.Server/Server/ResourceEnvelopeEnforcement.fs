@@ -280,6 +280,7 @@ module ResourceEnvelopeEnforcement =
                     Window = PerMinute
                     Threshold = threshold
                     OnExceeded = Return429
+                    StorePosture = StorePosture.FailOpen
                 })
 
     /// The route prefixes `routeLimitsFor` declined to project because an

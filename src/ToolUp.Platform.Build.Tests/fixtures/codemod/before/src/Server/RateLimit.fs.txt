@@ -1,0 +1,26 @@
+module Server.RateLimit
+
+open ToolUp.Platform
+open ToolUp.Platform.Infra
+
+let remoting = ToolUp.Remoting.Server.InMemoryRateLimitStore() :> ToolUp.Remoting.Server.IRateLimitStore
+
+let allowed decision =
+    match decision with
+    | RateLimitAllowed -> true
+    | RateLimitDenied _ -> false
+
+let inbound (store: IRateLimitStore) = store.IncrementAndCheck(IpAddressKey "1.2.3.4", PerMinute, 60)
+
+let remaining result =
+    match result with
+    | Ok(AllowWithRemaining left) -> left
+    | _ -> 0
+
+let burst = {
+    Route = "/api/burst/"
+    Key = ByIp
+    Window = PerMinute
+    Threshold = 20
+    OnExceeded = Return429
+}

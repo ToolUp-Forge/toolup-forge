@@ -5,6 +5,7 @@ case ToolUp.Platform Absent ToolUp.Platform.Infra
 case ToolUp.Platform Accept ToolUp.Platform.Jobs
 case ToolUp.Platform ActionDispatched ToolUp.Platform.Compose
 case ToolUp.Platform Active ToolUp.Platform.Compose
+case ToolUp.Platform AdmittedOnStoreFailure ToolUp.Platform.Infra
 case ToolUp.Platform AggregateMetric ToolUp.Platform.Infra
 case ToolUp.Platform Algebra ToolUp.Platform.Compose
 case ToolUp.Platform AlgorithmNotPinned ToolUp.Platform.Compose
@@ -14,6 +15,7 @@ case ToolUp.Platform AlreadySeeded ToolUp.Platform.Compose
 case ToolUp.Platform AnalysisResult ToolUp.Platform.Infra
 case ToolUp.Platform AnonymousReachable ToolUp.Platform.Compose
 case ToolUp.Platform AnswerPlanNode ToolUp.Platform.Infra
+case ToolUp.Platform Answered ToolUp.Platform.Infra
 case ToolUp.Platform Approved ToolUp.Platform.Infra
 case ToolUp.Platform ArtefactDigestMismatch ToolUp.Platform.Compose
 case ToolUp.Platform ArtifactHashMismatch ToolUp.Platform.Infra
@@ -411,6 +413,7 @@ case ToolUp.Platform ReferrerPolicy ToolUp.Platform.Compose
 case ToolUp.Platform Reflection ToolUp.Platform.Compose
 case ToolUp.Platform RefuseOnDrift ToolUp.Platform.Compose
 case ToolUp.Platform Refused ToolUp.Platform.Compose
+case ToolUp.Platform RefusedOnStoreFailure ToolUp.Platform.Infra
 case ToolUp.Platform Refuses ToolUp.Platform.Compose
 case ToolUp.Platform RegistryFailure ToolUp.Platform.Infra
 case ToolUp.Platform RegistryFailure ToolUp.Platform.Jobs
@@ -1728,6 +1731,7 @@ type ToolUp.Platform RateLimitEventApi ToolUp.Platform.Infra
 type ToolUp.Platform RateLimitMiddleware ToolUp.Platform.Infra
 type ToolUp.Platform RateLimitModeValidator ToolUp.Platform.Config
 type ToolUp.Platform RateLimitStoreError ToolUp.Platform.Infra
+type ToolUp.Platform RateLimitVerdict ToolUp.Platform.Infra
 type ToolUp.Platform RateLimiterInstanceValidator ToolUp.Platform.Config
 type ToolUp.Platform RateLimiting ToolUp.Platform.Infra
 type ToolUp.Platform RedactionAllowlist ToolUp.Platform.Config

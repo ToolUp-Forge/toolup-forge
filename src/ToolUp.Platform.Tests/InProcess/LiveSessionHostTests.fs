@@ -202,6 +202,72 @@ let private seqsOf (text: string) =
     |> Seq.map (fun m -> int m.Groups[1].Value)
     |> Seq.toList
 
+// ─── Phase 1068 — the subscribe budget's declared store posture ──────
+
+/// A Phase 56 store whose write side always fails.
+type private FailingRateLimitStore() =
+    interface IRateLimitStore with
+        member _.GetCurrent(_, _) = async { return 0 }
+        member _.IncrementAndCheck(_, _, _) = async { return Error(StoreUnavailable "simulated outage") }
+        member _.GetRecentDecisions(_, _) = async { return [] }
+
+/// An `IAuditLog` that keeps what it is handed.
+type private RecordingAuditLog() =
+    let rows = System.Collections.Concurrent.ConcurrentQueue<string * AuditEvent>()
+    member _.Rows = rows |> Seq.toList
+
+    interface IAuditLog with
+        member _.Record(scopeId, audit) = async { rows.Enqueue(scopeId, audit) }
+        member _.GetAuditTrail(_, _, _) = async { return [] }
+
+let private postureTests =
+    let subscribeOnce (posture: StorePosture) =
+        let host = LiveSessionHost.createInMemory None
+
+        let options = {
+            LiveSessionOptions.defaults with
+                SubscribesPerMinutePerScope = Some 5
+                SubscribeStorePosture = posture
+        }
+
+        let audit = RecordingAuditLog()
+        let services = ServiceCollection()
+        services.AddSingleton<IRateLimitStore>(FailingRateLimitStore()) |> ignore
+        services.AddSingleton<IAuditLog>(audit) |> ignore
+        let ctx, _ = mkContext services "/api/live-sessions/nope" cancelled
+
+        (LiveSessionHandler.handler options host finalFunc ctx).GetAwaiter().GetResult()
+        |> ignore
+
+        ctx, audit
+
+    testList "subscribe budget store posture (Phase 1068)" [
+        testCase "the default posture is FailOpen"
+        <| fun _ ->
+            Expect.equal
+                LiveSessionOptions.defaults.SubscribeStorePosture
+                StorePosture.FailOpen
+                "a deployment that declares nothing keeps today's behaviour"
+
+        testCase "FailOpen: a failing store admits the subscribe and writes no audit row"
+        <| fun _ ->
+            let ctx, audit = subscribeOnce StorePosture.FailOpen
+            Expect.equal ctx.Response.StatusCode 404 "the subscribe passes the budget gate (no such session)"
+            Expect.isEmpty audit.Rows "an admission is not audited"
+
+        testCase "FailClosed: a failing store refuses the subscribe with 503 and audits it under the scope"
+        <| fun _ ->
+            let ctx, audit = subscribeOnce StorePosture.FailClosed
+            Expect.equal ctx.Response.StatusCode 503 "the subscribe is refused"
+
+            match audit.Rows with
+            | [ scopeId, AuditEvent.RateLimitRefused row ] ->
+                Expect.equal scopeId "anonymous" "written under the caller's scope"
+                Expect.equal row.Provider "live-sessions:subscribe" "names the budget that could not be counted"
+                Expect.stringContains row.Reason "simulated outage" "carries the store's reason"
+            | other -> failtestf "expected one RateLimitRefused row, got %A" other
+    ]
+
 let private burstTests =
     testList "LiveSessionHandler — frame burst (Phase 870)" [
 
@@ -281,4 +347,4 @@ let private burstTests =
     ]
 
 let tests =
-    testList "LiveSessionHost (Phase 112)" [ contractTests; capTests; endpointTests; burstTests ]
+    testList "LiveSessionHost (Phase 112)" [ contractTests; capTests; endpointTests; postureTests; burstTests ]
