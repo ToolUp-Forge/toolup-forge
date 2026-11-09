@@ -542,7 +542,9 @@ let private runAIShell (report: CallbackRun -> unit) : unit =
 
     console?log <-
         allArguments (fun text ->
-            if text.Contains "outerMsg=" then
+            // `Client.programOver`'s trace line: one prefix for the shell and
+            // every composer.
+            if text.Contains "msg=" then
                 traced.Add text)
 
     let mutable context: ClientModuleContext option = None
