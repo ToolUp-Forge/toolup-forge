@@ -68,6 +68,22 @@ type JsonEmitOptions = {
     ArgumentRecords: (string * string list) list
 }
 
+/// What to emit for the JSON RESPONSE side — the encoders the server's
+/// response writer consults before System.Text.Json — beyond the plan.
+type JsonEncoderEmitOptions = {
+    /// The namespace the module is declared in.
+    EncoderNamespace: string
+    /// The module's name.
+    EncoderModuleName: string
+    /// `open` lines beyond `System`, `ToolUp.Remoting` and
+    /// `ToolUp.Remoting.Json`, in order.
+    EncoderOpens: string list
+    /// One entry per API record: its name and the F# SOURCE SPELLING of every
+    /// type its methods return. A record every one of whose return types the
+    /// plan expressed is in `coveredApiRecords`.
+    ReturnRecords: (string * string list) list
+}
+
 /// What to emit for generated CLIENT proxies, beyond the plan.
 type ClientEmitOptions = {
     /// The namespace the module is declared in.
@@ -133,7 +149,7 @@ module Emit =
         Noun = "decoder"
         DocTail = "one combinator per field or case, read off the type's own shape."
         Provenance = [
-            "//   Phase 69k — emitted by ToolUp.Remoting.Generator from the SAME"
+            "//   Emitted by ToolUp.Remoting.Generator from the SAME"
             "//   record/union metadata `Write.writeRecord` and `Write.writeUnion`"
             "//   enumerate, so field positions and union tags are the writer's own"
             "//   ordering rather than a second derivation of it."
@@ -158,7 +174,7 @@ module Emit =
         Noun = "JSON decoder"
         DocTail = "members by name, cases by case name, read off the type's own shape."
         Provenance = [
-            "//   Phase 841 — emitted by ToolUp.Remoting.Generator from the SAME"
+            "//   Emitted by ToolUp.Remoting.Generator from the SAME"
             "//   record/union metadata the System.Text.Json converter set reads:"
             "//   record members by NAME, union cases by case NAME, one decoder per"
             "//   argument type an API record's methods take."
@@ -181,7 +197,7 @@ module Emit =
         Noun = "JSON encoder"
         DocTail = "members by name, cases by case name, as the writer emits them."
         Provenance = [
-            "//   Phase 853 — emitted by ToolUp.Remoting.Generator from the SAME"
+            "//   Emitted by ToolUp.Remoting.Generator from the SAME"
             "//   record/union metadata the System.Text.Json converter set reads:"
             "//   one encoder per argument type and one decoder per response type an"
             "//   API record's methods carry, and one proxy builder per record."
@@ -193,6 +209,24 @@ module Emit =
             "/// decoders, with no reflection at construction or per call. Emitted by"
             "/// ToolUp.Remoting.Generator; do not edit."
         ]
+    }
+
+    let private jsonResponseEncoding = {
+        jsonEncoding with
+            Provenance = [
+                "//   Emitted by ToolUp.Remoting.Generator from the SAME"
+                "//   record/union metadata the System.Text.Json converter set writes:"
+                "//   one encoder per type an API record's methods return, which the"
+                "//   server's response writer consults before the converter set."
+            ]
+            Opens = [ "ToolUp.Remoting"; "ToolUp.Remoting.Json" ]
+            ModuleDoc = [
+                "/// Generated JSON algebra encoders for the RESPONSES the covered API"
+                "/// records' methods return, registered unscoped by `registerAll` (or,"
+                "/// verified byte for byte against the System.Text.Json writer first,"
+                "/// by `registerAllVerified`). Emitted by ToolUp.Remoting.Generator;"
+                "/// do not edit."
+            ]
     }
 
     let private parenthesise (expr: string) =
@@ -511,10 +545,10 @@ module Emit =
                 "    /// a static initialiser would fire at a moment nothing states,"
                 "    /// so a deployment could not say whether the algebra path was live."
             ]
-            (each (sprintf "        RemotingDecoders.register<%s> %s"))
+            (each (sprintf "        Codecs.register<%s> Scope.Unscoped (Codec.msgPack %s)"))
         @ listBinding
             [
-                "    /// Phase 801 — every decoder above beside the reflection reader,"
+                "    /// Every decoder above beside the reflection reader,"
                 "    /// over `draws` draws of its own type from `seed`, through `gate`"
                 "    /// (the shipped one is `RemotingDecoders.gate`, in the server tier)."
                 "    /// One outcome per registration, in registration order; a refusal"
@@ -524,7 +558,7 @@ module Emit =
             (each (sprintf "        RemotingDecoders.verifyThrough<%s> gate draws seed %s"))
         @ registerAllVerified
             [
-                "    /// Phase 801 — `registerAll`, gated: registers every decoder above"
+                "    /// `registerAll`, gated: registers every decoder above"
                 "    /// only when every one verifies, and registers NOTHING otherwise, so"
                 "    /// a disagreement can never leave the table half-adopted."
             ]
@@ -597,7 +631,7 @@ module Emit =
             [
                 "    /// The `(API record, argument type)` pairs this module registers, in"
                 "    /// registration order — each decoder scoped to the one record whose"
-                "    /// methods take it (Phase 839), never to every record of the same type."
+                "    /// methods take it, never to every record of the same type."
             ]
             "    let covered: (string option * string) list = ["
             (registrations
@@ -619,13 +653,17 @@ module Emit =
             ]
             (registrations
              |> List.map (fun (record, spelling, decoder) ->
-                 sprintf "        JsonDecoders.registerFor<%s> \"%s\" %s" spelling record (parenthesise decoder)))
+                 sprintf
+                     "        Codecs.register<%s> (Scope.ForRecord \"%s\") (Codec.jsonDecoder %s)"
+                     spelling
+                     record
+                     (parenthesise decoder)))
         @ [
-            "    /// Phase 840's gate over every registration above: each decoder through"
+            "    /// The gate over every registration above: each decoder through"
             "    /// `gate` over `draws` draws of its own type from `seed`, keyed as"
             "    /// `covered` is. The shipped gate is `JsonDecoders.gateWith"
             "    /// FableConverters.decoderOracle`, in the server tier: every draw"
-            "    /// written by the server's writer AND the browser's (Phase 885)."
+            "    /// written by the server's writer AND the browser's."
             "    let verifyAll"
             "        (gate: JsonDecoderGate)"
             "        (draws: int)"
@@ -662,6 +700,75 @@ module Emit =
             jsonRegistration options plan
         ]
 
+    // ─── The JSON response side ──────────────────────────────────────
+
+    /// The API records every one of whose return types the plan expressed,
+    /// in `ReturnRecords` order: the response-side census.
+    let jsonEncoderCoveredApiRecords (options: JsonEncoderEmitOptions) (plan: GenerationPlan) : string list =
+        let planned = plan.Roots |> List.map _.RootSpelling |> Set.ofList
+
+        options.ReturnRecords
+        |> List.filter (fun (_, spellings) -> spellings |> List.forall planned.Contains)
+        |> List.map fst
+
+    let private jsonEncoderRegistration (options: JsonEncoderEmitOptions) (plan: GenerationPlan) =
+        let each (format: string -> string -> string) =
+            plan.Roots
+            |> List.map (fun r -> format r.RootSpelling (parenthesise r.RootDecoder))
+
+        // Registered UNSCOPED: a response type is written the same way
+        // whichever record returns it. The gate is an argument, as on the
+        // decoder side: the writer it compares against is the server tier's.
+        listBinding
+            [
+                "    /// The wire types this module registers an encoder for, in registration order."
+            ]
+            "    let covered: string list = ["
+            (plan.Roots
+             |> List.map (fun r -> sprintf "        typeof<%s>.FullName" r.RootSpelling))
+        @ listBinding
+            [
+                "    /// The API records every one of whose return types this module"
+                "    /// encodes through the JSON algebra — the response-side census."
+            ]
+            "    let coveredApiRecords: string list = ["
+            (jsonEncoderCoveredApiRecords options plan |> List.map (sprintf "        \"%s\""))
+        @ registerAll
+            [
+                "    /// Register every encoder above, unscoped. Idempotent, and explicit —"
+                "    /// a static initialiser would fire at a moment nothing states, so a"
+                "    /// deployment could not say whether the algebra path was live."
+            ]
+            (each (sprintf "        Codecs.register<%s> Scope.Unscoped (Codec.jsonEncoder %s)"))
+        @ listBinding
+            [
+                "    /// Every encoder above through `gate` over `draws` draws of its own type"
+                "    /// from `seed`: its text against the System.Text.Json writer's, byte for"
+                "    /// byte (the shipped gate is `JsonEncoders.gateWith"
+                "    /// FableConverters.decoderOracle`, in the server tier). One outcome per"
+                "    /// registration, in registration order."
+            ]
+            "    let verifyAll (gate: JsonEncoderGate) (draws: int) (seed: int) : Result<DecoderVerification, DecoderRefusal> list = ["
+            (each (sprintf "        JsonEncoders.verifyThrough<%s> gate draws seed %s"))
+        @ registerAllVerified
+            [
+                "    /// `registerAll`, gated: registers every encoder above only when every"
+                "    /// one passes `gate`, and registers NOTHING otherwise, so a"
+                "    /// disagreement can never leave the table half-adopted."
+            ]
+            "JsonEncoderGate"
+            "DecoderVerification"
+            "verifyAll gate draws seed"
+
+    /// Render a JSON-encoding plan (`Plan.forJsonEncoders`) over API records'
+    /// RETURN types as the response side's F# compilation unit.
+    let jsonEncoderCompilationUnit (options: JsonEncoderEmitOptions) (plan: GenerationPlan) : string =
+        render [
+            header jsonResponseEncoding options.EncoderNamespace options.EncoderOpens options.EncoderModuleName
+            renderBindings jsonResponseEncoding plan
+            jsonEncoderRegistration options plan
+        ]
+
     // ─── Generated client proxies ────────────────────────────────────
     //
     // One module per run: the argument ENCODERS, the response DECODERS, one
@@ -670,7 +777,7 @@ module Emit =
     // decoder — then the lookup `Api.makeProxy` consults and `registerAll`.
     // Nothing in it reflects.
     //
-    // Its decoders are BUILT AT IMPORT, deliberately (Phase 909). Building
+    // Its decoders are BUILT AT IMPORT, deliberately. Building
     // each on first use instead — the body inside a `lazy` — was emitted and
     // measured under Node, interleaved A/B in fresh processes: evaluating the
     // module ROSE from 9.3 to 10.7 ms (min of 8), the shell's import moved

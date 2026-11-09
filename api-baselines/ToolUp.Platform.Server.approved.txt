@@ -4384,7 +4384,9 @@ ToolUp.Platform.Compose.RemotingDecoderFacetModule (class)
 ToolUp.Platform.Compose.RemotingDecoderFacetModule.coverage(ToolUp.Platform.Compose.RemotingDecoderFacet) : System.Tuple`2[System.Int32, System.Int32]
 ToolUp.Platform.Compose.RemotingDecoderFacetModule.describe(ToolUp.Platform.Compose.RemotingDecoderFacet) : System.String
 ToolUp.Platform.Compose.RemotingDecoderFacetModule.describeArguments(ToolUp.Platform.Compose.RemotingDecoderFacet) : System.String
+ToolUp.Platform.Compose.RemotingDecoderFacetModule.describeCodecs(ToolUp.Remoting.DecodePolicy, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.Server.Proxy+CodecMiss]]]) : System.String
 ToolUp.Platform.Compose.RemotingDecoderFacetModule.inspect(ToolUp.Platform.Compose.CompositionProfile, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`3[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean]]) : ToolUp.Platform.Compose.RemotingDecoderFacet
+ToolUp.Platform.Compose.RemotingDecoderFacetModule.inspectCodecs() : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.Server.Proxy+CodecMiss]]]
 ToolUp.Platform.Compose.RemotingDecoderFacetModule.inspectPlatform(ToolUp.Platform.Compose.CompositionProfile) : ToolUp.Platform.Compose.RemotingDecoderFacet
 ToolUp.Platform.Compose.RemotingDecoderFacetModule.inspectServed(ToolUp.Platform.Compose.CompositionProfile, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`3[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean]]) : ToolUp.Platform.Compose.RemotingDecoderFacet
 ToolUp.Platform.Compose.RemotingDecoderFacetModule.inspectServedArguments(ToolUp.Platform.Compose.CompositionProfile) : ToolUp.Platform.Compose.RemotingDecoderFacet

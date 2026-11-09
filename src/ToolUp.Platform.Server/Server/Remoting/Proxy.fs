@@ -61,23 +61,48 @@ let private parseArgumentArrayBytes
     doc.RootElement.EnumerateArray() |> Seq.map _.Clone() |> Seq.toList
 
 /// Deserialise one `JsonElement` argument into `'inp`, refusing rather than
-/// throwing. Routes through the one seam in `FableConverters`, so every
+/// throwing. Routes through the one seam in `FableConverters`
+/// (`tryDeserialiseWith`, which reads `Codecs.resolveJson`), so every
 /// exception System.Text.Json or the converter set can raise arrives here as
 /// a `DecodeError` naming the argument's path, its expected type and what
 /// the wire actually held.
 ///
-/// `recordName` is the owning API record's name
-/// (`makeProps.RecordName`), passed through to `FableConverters.tryDeserialiseFor`
-/// so a decoder registered for THIS record wins over one registered
-/// unscoped for the same argument type.
+/// `recordName` is the owning API record's name, so a decoder registered for
+/// THIS record wins over one registered unscoped for the same argument type;
+/// `policy` is the API's `DecodePolicy`.
 let private tryDeserialiseArgWithBackend<'inp>
+    (policy: DecodePolicy)
     (recordName: string option)
     (backend: JsonSerializerBackend)
     (argElement: JsonElement)
     : Result<'inp, DecodeError> =
     match backend with
     | SystemTextJson stjOptions ->
-        ToolUp.Remoting.Json.SystemTextJson.FableConverters.tryDeserialiseFor<'inp> recordName argElement stjOptions
+        ToolUp.Remoting.Json.SystemTextJson.FableConverters.tryDeserialiseWith<'inp>
+            policy
+            recordName
+            argElement
+            stjOptions
+
+/// The registered JSON encoder for a value of `wireType` returned by a method
+/// of `makeProps`' record, as the text writer it is: `Codecs.resolveJsonEncoder`
+/// under the API's policy, record-scoped then unscoped, rendered with the API's
+/// own escaping (`JsonEncoders.render`). `None` is the
+/// System.Text.Json writer (`ReflectionFallback`, or nothing registered); a
+/// `VerifiedOnly` miss raises the refusal naming the type, which the mount's
+/// boot walk (`codecMisses`) makes unreachable for every type the contract
+/// declares. Read per call, not per mount: a composition registers its codecs
+/// after it builds its APIs.
+let private responseEncoderFor (makeProps: MakeEndpointProps) (wireType: Type) : (obj -> string) option =
+    match Codecs.resolveJsonEncoder makeProps.DecodePolicy (Scope.ForRecord makeProps.RecordName) wireType with
+    | Some(Ok encode) ->
+        let escaping =
+            match makeProps.JsonSerializer with
+            | SystemTextJson options -> options.Encoder
+
+        Some(fun value -> ToolUp.Remoting.Json.JsonEncoders.render escaping (encode value))
+    | Some(Error refusal) -> invalidOp (DecodeError.render refusal)
+    | None -> None
 
 type private MsgPackSerializer<'a> =
     static let serializer = MsgPack.Write.makeSerializer<'a> ()
@@ -250,7 +275,11 @@ let private writeToOutputMemoryStream
         let data = box result :?> byte[]
         props.Output.Write(data, 0, data.Length)
     elif makeProps.ResponseSerialization.IsJson then
-        jsonSerializeWithBackend makeProps.JsonSerializer result props.Output
+        match responseEncoderFor makeProps typeof<'result> with
+        | Some encode ->
+            let bytes = Encoding.UTF8.GetBytes(encode (box result))
+            props.Output.Write(bytes, 0, bytes.Length)
+        | None -> jsonSerializeWithBackend makeProps.JsonSerializer result props.Output
     else
         MsgPackSerializer.Serialize(result, props.Output)
 
@@ -341,7 +370,13 @@ let private nextArgument<'inp>
         // never applied.
         let argIndex = makeProps.FlattenedTypes.Length - 1 - props.Arguments.Length
 
-        match tryDeserialiseArgWithBackend<'inp> (Some makeProps.RecordName) makeProps.JsonSerializer argElement with
+        match
+            tryDeserialiseArgWithBackend<'inp>
+                makeProps.DecodePolicy
+                (Some makeProps.RecordName)
+                makeProps.JsonSerializer
+                argElement
+        with
         | Ok inp -> struct (inp, { props with Arguments = t })
         | Error error ->
             error
@@ -399,7 +434,14 @@ let rec private makeEndpointProxy<'fieldPart>
                     sprintf "streaming method '%s' returned null instead of an IAsyncEnumerable<_>" makeProps.FieldName
                 )
 
-            Task.FromResult(Invoked.Streamed(toSource options (box stream))))
+            let source = toSource options (box stream)
+
+            let source =
+                match responseEncoderFor makeProps source.Element with
+                | Some encode -> { source with Encode = encode }
+                | None -> source
+
+            Task.FromResult(Invoked.Streamed source))
     | _ ->
         failwithf
             "The type '%s' of the record field '%s' for record type '%s' is not valid. It must either be Async<'t>, Task<'t>, IAsyncEnumerable<'t> or a function that returns one of them (i.e. 'u -> Async<'t>)"
@@ -567,6 +609,7 @@ let private makeReflectiveApiProxy<'impl, 'ctx> (options: RemotingOptions<'ctx, 
                             ResponseSerialization = options.ResponseSerialization
                             JsonSerializer = options.JsonSerializer
                             FlattenedTypes = flattenedTypes
+                            DecodePolicy = options.DecodePolicy
                         }
 
                     // The first parameter's decode, built once per method.
@@ -582,6 +625,7 @@ let private makeReflectiveApiProxy<'impl, 'ctx> (options: RemotingOptions<'ctx, 
                                         member _.Visit<'inp>() =
                                             fun element ->
                                                 tryDeserialiseArgWithBackend<'inp>
+                                                    options.DecodePolicy
                                                     (Some typeof<'impl>.Name)
                                                     options.JsonSerializer
                                                     element
@@ -653,6 +697,7 @@ let private makeGeneratedApiProxy<'impl, 'ctx>
             ResponseSerialization = options.ResponseSerialization
             JsonSerializer = options.JsonSerializer
             FlattenedTypes = m.FlattenedTypes
+            DecodePolicy = options.DecodePolicy
         }
 
         let decodeFirst =
@@ -689,6 +734,79 @@ let private makeGeneratedApiProxy<'impl, 'ctx>
                 | None -> reflective.Value.ParseFirst endpointName bytes
     }
 
+/// The contract of `'impl`: the registered generated table's, when there is
+/// one, so the record is not walked at boot; otherwise `Contract.read`.
+let internal contractOf<'impl> () : ApiContract =
+    match GeneratedDispatchRegistry.tryGet<'impl> () with
+    | Some(:? GeneratedInvocationTable<'impl> as table) -> table.Contract
+    | _ -> Contract.read typeof<'impl>
+
+/// One wire type of a contract with no registered codec on the leg the
+/// server reads or writes it through.
+type CodecMiss = {
+    /// The method whose argument or answer it is.
+    Method: string
+    /// The leg: a JSON decoder for an argument, a JSON encoder for an answer.
+    Leg: CodecLeg
+    /// `Codecs.keyFor` of the type.
+    WireType: string
+}
+
+/// Every wire type of `contract` that `Codecs` does not resolve: each method's
+/// arguments (`unit` decodes nothing) through `resolveJson`, scoped to the
+/// record, and its answer (the `Async` / `Task` result, or a stream's element)
+/// through `resolveJsonEncoder`, under `VerifiedOnly`, so a miss is exactly the
+/// refusal the seam would give. The boot walk behind a `VerifiedOnly` mount and
+/// the composition facet's posture line.
+let codecMisses (contract: ApiContract) : CodecMiss list =
+    let scope = Scope.ForRecord contract.Name
+
+    let answerOf (m: MethodContract) =
+        match m.Shape with
+        | MethodShape.Streaming element -> Some element
+        | MethodShape.Unary
+        | MethodShape.LongRunning _ ->
+            if m.Returns.IsGenericType then
+                Some(m.Returns.GetGenericArguments()[0])
+            else
+                None
+
+    let miss (leg: CodecLeg) (m: MethodContract) (refused: bool) (wireType: Type) =
+        if refused then
+            [
+                {
+                    Method = m.Name
+                    Leg = leg
+                    WireType = Codecs.keyFor wireType
+                }
+            ]
+        else
+            []
+
+    let refusedJson (t: Type) =
+        match Codecs.resolveJson DecodePolicy.VerifiedOnly scope t with
+        | Some(Error _) -> true
+        | _ -> false
+
+    let refusedEncoder (t: Type) =
+        match Codecs.resolveJsonEncoder DecodePolicy.VerifiedOnly scope t with
+        | Some(Error _) -> true
+        | _ -> false
+
+    contract.Methods
+    |> List.collect (fun m ->
+        let arguments =
+            m.Arguments
+            |> List.filter (fun t -> t <> typeof<unit>)
+            |> List.collect (fun t -> miss CodecLeg.DecodeJson m (refusedJson t) t)
+
+        let answer =
+            match answerOf m with
+            | Some t -> miss CodecLeg.EncodeJson m (refusedEncoder t) t
+            | None -> []
+
+        arguments @ answer)
+
 /// The proxy the request pipeline dispatches through. When the
 /// generator's table for `'impl` is registered (`GeneratedInvocation.register`),
 /// its methods are served by their generated invocations; otherwise, and
@@ -696,16 +814,26 @@ let private makeGeneratedApiProxy<'impl, 'ctx>
 /// the same `ApiProxy`, so every stage of the pipeline runs around a
 /// generated method too.
 let internal makeApiProxyWithParse<'impl, 'ctx> (options: RemotingOptions<'ctx, 'impl>) : ApiProxy<'impl> =
+    // Under `VerifiedOnly` the mount refuses to start, naming every method and
+    // type of the contract with no registered codec: a refusal at the first
+    // request is too late.
+    if options.DecodePolicy = DecodePolicy.VerifiedOnly then
+        match codecMisses (contractOf<'impl> ()) with
+        | [] -> ()
+        | misses ->
+            invalidOp (
+                sprintf
+                    "%s is composed with DecodePolicy.VerifiedOnly, and %d wire type(s) have no registered codec: %s. Register the generated codecs (Codecs.register, or a generated module's registerAll) before mounting, or compose with DecodePolicy.ReflectionFallback."
+                    typeof<'impl>.Name
+                    (List.length misses)
+                    (misses
+                     |> List.map (fun m -> sprintf "%s (%A) %s" m.Method m.Leg m.WireType)
+                     |> String.concat "; ")
+            )
+
     match GeneratedDispatchRegistry.tryGet<'impl> () with
     | Some(:? GeneratedInvocationTable<'impl> as table) -> makeGeneratedApiProxy table options
     | _ -> makeReflectiveApiProxy options
-
-/// The contract of `'impl`: the registered generated table's, when there is
-/// one, so the record is not walked at boot; otherwise `Contract.read`.
-let internal contractOf<'impl> () : ApiContract =
-    match GeneratedDispatchRegistry.tryGet<'impl> () with
-    | Some(:? GeneratedInvocationTable<'impl> as table) -> table.Contract
-    | _ -> Contract.read typeof<'impl>
 
 /// The outer arguments array of a body read by the pipeline, as the proxy
 /// parses it: a refusal for a body that is not a JSON array.

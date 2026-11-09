@@ -1,6 +1,7 @@
 namespace ToolUp.Remoting.Server
 
 open System
+open ToolUp.Remoting
 open FSharp.Reflection
 open TypeShape
 open System.IO
@@ -236,6 +237,8 @@ type MakeEndpointProps = {
     ResponseSerialization: SerializationType
     JsonSerializer: JsonSerializerBackend
     FlattenedTypes: Type[]
+    /// What a wire type with no registered codec means for this method.
+    DecodePolicy: DecodePolicy
 }
 
 // an example is a list of arguments and the description of the example
@@ -750,4 +753,8 @@ type RemotingOptions<'context, 'serverImpl> = {
     /// subject submitted. Default `"Admin"`. Compose via
     /// `Remoting.withJobAdminRole`.
     JobAdminRole: string
+    /// What a wire type with no registered codec means on this API: the
+    /// reflective path (`ReflectionFallback`, the default) or a refusal naming
+    /// the type (`VerifiedOnly`). Compose via `Remoting.withDecodePolicy`.
+    DecodePolicy: DecodePolicy
 }

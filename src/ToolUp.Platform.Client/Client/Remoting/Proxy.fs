@@ -1057,17 +1057,16 @@ module Proxy =
 
                     match response.StatusCode with
                     | 200 ->
-                        // The opt-in branch, the JSON twin of
-                        // `withBinarySerialization`'s. A return type with a
-                        // registered JSON algebra decoder is decoded through
-                        // it (`decodeJsonResponse`). A MISS is the reflection
-                        // path below, unchanged, so a consumer that registers
-                        // nothing sees nothing different (GP 11). The lookup
-                        // is per call, as the binary branch's is:
-                        // registration happens at composition and need not
-                        // precede the proxy's construction.
-                        match ToolUp.Remoting.Json.JsonDecoders.tryGet None returnClrType with
-                        | Some decoder -> return decodeJsonResponse url response decoder
+                        // The one seam: a return type with a registered JSON
+                        // decoder is decoded through it (`decodeJsonResponse`);
+                        // a miss is the reflective path below, unchanged, so a
+                        // consumer that registers nothing sees nothing
+                        // different (GP 11). Resolved per call: registration
+                        // happens at composition and need not precede the
+                        // proxy's construction.
+                        match Codecs.resolveJson DecodePolicy.ReflectionFallback Scope.Unscoped returnClrType with
+                        | Some(Ok decoder) -> return decodeJsonResponse url response decoder
+                        | Some(Error refusal) -> return raise (DecodeException refusal)
                         | None ->
                             let parsedJson = SimpleJson.parseNative response.ResponseBody
 
@@ -1273,6 +1272,16 @@ module Proxy =
         let url = combineRouteWithBaseUrl route options.BaseUrl
         let headers = requestHeaders options false
 
+        // The element's CLR type, for the codec seam the stream's chunks
+        // resolve a decoder through.
+        let elementClrType =
+            match func.FieldType with
+            | TypeInfo.Func getArgs ->
+                match Array.last (getArgs ()) with
+                | TypeInfo.Any getReturnType -> (getReturnType ()).GetGenericArguments().[0]
+                | _ -> typeof<obj>
+            | _ -> typeof<obj>
+
         fun arg ->
             // The same body shapes `proxyFetch` produces for one argument.
             let body =
@@ -1281,7 +1290,16 @@ module Proxy =
                 else
                     Convert.serialize arg (TypeInfo.Tuple(fun _ -> [| argumentType |]))
 
-            box (RemoteStream.create url headers body options.WithCredentials tryReadDecodeError elementType)
+            box (
+                RemoteStream.create
+                    url
+                    headers
+                    body
+                    options.WithCredentials
+                    tryReadDecodeError
+                    elementClrType
+                    elementType
+            )
 
 /// The registry of GENERATED client proxy builders, by API
 /// record key (its `FullName`, a nested type's `+` written `.`).

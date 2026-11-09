@@ -16,26 +16,27 @@ open ToolUp.Remoting.Generator
 // header carries the argument for that; the consequence here is that the entry
 // point takes an assembly path rather than a compilation.
 //
-// Three modes, and the census is not an afterthought:
+// Six modes, and the census is not an afterthought:
 //
 //   census   — every API record an assembly declares, with the wire types its
 //              methods return and whether each is expressible in the closed
-//              algebra. This is the measurement Phase 69k was triggered on.
-//              The Phase 785 facet classifies the records a composition root
-//              DECLARES, so the facet structurally cannot report the records
-//              nobody declared; this can.
+//              algebra. The boot facet classifies the records a composition
+//              root MOUNTS; this measures an assembly before anything mounts.
 //   decoders — emit a registration module for the named API records.
 //   dispatch — emit the typed argument-parse table for one API record.
 //   json-decoders  — emit the JSON algebra
 //              decoders for the ARGUMENTS the named records' methods take,
 //              each registered scoped to its record — the server's
 //              argument seam reads through them.
+//   json-encoders  — emit the JSON algebra encoders for the RESPONSES the
+//              named records' methods return, registered unscoped — the
+//              server's response writer consults them before the converter set.
 //   client-proxies — emit generated client proxies: argument
 //              encoders, response decoders and one proxy builder per record,
 //              which `Api.makeProxy` uses in place of the reflective proxy.
 
 let private usage =
-    """ToolUp.Remoting.Generator — Phase 69k
+    """ToolUp.Remoting.Generator
 
   census   --assembly <path>
   decoders --assembly <path> --out <file> [--namespace N] [--module M]
@@ -44,10 +45,12 @@ let private usage =
            [--server-assembly <path to ToolUp.Platform.Server.Remoting.dll>]
   json-decoders  --assembly <path> --out <file> [--namespace N] [--module M]
                  [--open NS]... [--api-record FullName]...
+  json-encoders  --assembly <path> --out <file> [--namespace N] [--module M]
+                 [--open NS]... [--api-record FullName]...
   client-proxies --assembly <path> --out <file> [--namespace N] [--module M]
                  [--open NS]... [--api-record FullName]...
 
-With no --open, `json-decoders` and `client-proxies` open every namespace
+With no --open, `json-decoders`, `json-encoders` and `client-proxies` open every namespace
 the emitted types reach.
 
 With no --api-record, `decoders` and `census` cover every API record the
@@ -198,7 +201,7 @@ let private opensFor (args: (string * string) list) (roots: Type list) =
     | [] -> Plan.namespacesReachedBy roots
     | given -> given
 
-/// Phase 841's argument-decoder emission, exposed: what
+/// The argument-decoder emission, exposed: what
 /// ToolUp.Platform.Core's `PlatformJsonDecoders` is, for a consumer's own
 /// records.
 let private jsonDecoders (records: Type list) (args: (string * string) list) =
@@ -224,6 +227,34 @@ let private jsonDecoders (records: Type list) (args: (string * string) list) =
         out
         (List.length plan.Bindings)
         (List.length (Emit.jsonCoveredApiRecords options plan))
+        (List.length records)
+
+    printfn "%s" (Emit.refusalReport plan)
+
+/// The response-encoder emission, exposed: what ToolUp.Platform.Core's
+/// `PlatformJsonEncoders` is, for a consumer's own records.
+let private jsonEncoders (records: Type list) (args: (string * string) list) =
+    let roots = records |> List.collect Plan.returnTypes |> List.distinct
+    let plan = Plan.forJsonResponseEncoders roots
+
+    let options = {
+        EncoderNamespace = defaultArg (value "namespace" args) "ToolUp.Remoting.Json"
+        EncoderModuleName = defaultArg (value "module" args) "GeneratedJsonEncoders"
+        EncoderOpens = opensFor args roots
+        ReturnRecords =
+            records
+            |> List.map (fun r -> r.Name, Plan.returnTypes r |> List.map Plan.typeSpelling)
+    }
+
+    let out = required "out" args
+    let written = writeIfChanged out (Emit.jsonEncoderCompilationUnit options plan)
+
+    printfn
+        "%s %s — %d encoder(s), %d of %d record(s) covered"
+        (if written then "wrote" else "unchanged")
+        out
+        (List.length plan.Roots)
+        (List.length (Emit.jsonEncoderCoveredApiRecords options plan))
         (List.length records)
 
     printfn "%s" (Emit.refusalReport plan)
@@ -301,6 +332,9 @@ let main argv =
                 0
             | "json-decoders" ->
                 jsonDecoders records args
+                0
+            | "json-encoders" ->
+                jsonEncoders records args
                 0
             | "client-proxies" ->
                 clientProxies records args

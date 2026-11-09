@@ -48,6 +48,8 @@
         <Compile Include="..\ToolUp.Platform.Tests\Remoting\ClientEncoderFixture.fs" Link="Remoting\ClientEncoderFixture.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Remoting\ClientProxyGenerationTests.fs" Link="Remoting\ClientProxyGenerationTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Remoting\PlatformDecodersGenerationTests.fs" Link="Remoting\PlatformDecodersGenerationTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Remoting\PlatformJsonEncodersGenerationTests.fs" Link="Remoting\PlatformJsonEncodersGenerationTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Remoting\CodecsTests.fs" Link="Remoting\CodecsTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Remoting\ApiRecordCensusTests.fs" Link="Remoting\ApiRecordCensusTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Remoting\ApiContractTests.fs" Link="Remoting\ApiContractTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Remoting\ProofOracleTests.fs" Link="Remoting\ProofOracleTests.fs" />

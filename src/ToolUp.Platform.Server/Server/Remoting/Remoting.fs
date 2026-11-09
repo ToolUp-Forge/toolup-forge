@@ -1,5 +1,7 @@
 namespace ToolUp.Remoting.Server
 
+open ToolUp.Remoting
+
 module Remoting =
 
     /// Cached default System.Text.Json options for the new default serializer
@@ -47,6 +49,7 @@ module Remoting =
         RemoteIpResolver = None
         JobDispatcher = None
         JobAdminRole = "Admin"
+        DecodePolicy = DecodePolicy.ReflectionFallback
     }
 
     /// Defines how routes are built using the type name and method name. By default, the generated routes are of the form `/typeName/methodName`.
@@ -321,6 +324,17 @@ module Remoting =
     let withoutBodyNormalisation (options: RemotingOptions<'t, 'implementation>) = {
         options with
             BodyNormalisation = BodyNormalisation.Disabled
+    }
+
+    /// Sets what a wire type with no registered codec means on this API
+    /// (`Codecs.resolveJson` / `resolveJsonEncoder`). `ReflectionFallback`,
+    /// the default, keeps the reflective path. `VerifiedOnly` refuses: the
+    /// mount refuses to start, naming every method and type of the contract
+    /// with no registered codec, and the argument seam refuses by name any
+    /// type that reaches it unregistered.
+    let withDecodePolicy (policy: DecodePolicy) (options: RemotingOptions<'t, 'implementation>) = {
+        options with
+            DecodePolicy = policy
     }
 
     /// Builds the API using a function that takes the incoming Http context and returns a protocol implementation. You can use the Http context to read information about the incoming request and also use the Http context to resolve dependencies using the underlying dependency injection mechanism.
