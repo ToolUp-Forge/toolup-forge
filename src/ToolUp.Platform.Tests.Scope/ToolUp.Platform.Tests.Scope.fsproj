@@ -64,6 +64,7 @@
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\PeerAuthPostureTests.fs" Link="InProcess\PeerAuthPostureTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\FailClosedDispatchTests.fs" Link="InProcess\FailClosedDispatchTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\Phase971PlatformTeamsTests.fs" Link="InProcess\Phase971PlatformTeamsTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\IdentityBytesAtRestTests.fs" Link="InProcess\IdentityBytesAtRestTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

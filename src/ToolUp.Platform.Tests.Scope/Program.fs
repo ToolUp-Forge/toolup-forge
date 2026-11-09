@@ -66,6 +66,7 @@ let private registeredTests =
         PeerAuthPostureTests.advisoryTests
         FailClosedDispatchTests.tests
         Phase971PlatformTeamsTests.tests
+        IdentityBytesAtRestTests.tests
     ]
 
 /// The `[<Tests>]` bindings this pack deliberately does not run, each
