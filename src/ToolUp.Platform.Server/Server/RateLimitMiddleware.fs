@@ -100,20 +100,18 @@ module RateLimitMiddleware =
         ctx.Response.Headers["RateLimit-Reset"] <- StringValues(string rle.RetryAfterSeconds)
         ctx.Response.Headers["Retry-After"] <- StringValues(string rle.RetryAfterSeconds)
 
-    /// Approximate seconds until the next `RateLimitWindow` boundary.
-    /// `PerSecond` / `PerMinute` / `PerHour` / `PerDay` round down to
-    /// the next calendar boundary; `SlidingWindow` uses `duration`
+    /// Whole seconds from `now` to the next `RateLimitWindow` boundary.
+    /// `PerSecond` / `PerMinute` / `PerHour` / `PerDay` count to the
+    /// next calendar boundary (a day is 86 400 s from midnight); `SlidingWindow` uses `duration`
     /// directly (the in-memory store resets at the full duration; a
     /// Redis-Lua store may report a tighter value via the typed
     /// `RateLimitedError.RetryAfterSeconds`).
-    let internal secondsUntilWindowEnd (window: RateLimitWindow) : int =
-        let now = DateTimeOffset.UtcNow
-
+    let internal secondsUntilWindowEnd (now: DateTimeOffset) (window: RateLimitWindow) : int =
         match window with
         | PerSecond -> 1
         | PerMinute -> max 1 (60 - now.Second)
         | PerHour -> max 1 ((60 - now.Minute) * 60 - now.Second)
-        | PerDay -> max 1 (((23 - now.Hour) * 3600) + ((60 - now.Minute) * 60) + (60 - now.Second))
+        | PerDay -> max 1 (86400 - (now.Hour * 3600 + now.Minute * 60 + now.Second))
         | SlidingWindow(duration, _) -> max 1 (int (Math.Ceiling duration.TotalSeconds))
 
     /// Render the typed `RateLimitedError` as the JSON body of the
@@ -190,7 +188,7 @@ module RateLimitMiddleware =
                     do! refuseUnavailable ctx policy
 
                 | RateLimitVerdict.Answered(Admission.Admit remaining) ->
-                    stampAllowHeaders ctx policy remaining (secondsUntilWindowEnd policy.Window)
+                    stampAllowHeaders ctx policy remaining (secondsUntilWindowEnd DateTimeOffset.UtcNow policy.Window)
                     do! next.Invoke ctx
 
                 | RateLimitVerdict.Answered(Admission.Deny retryAfter) ->
@@ -208,7 +206,7 @@ module RateLimitMiddleware =
                         let delayMs = min (int maxDelay.TotalMilliseconds) (rle.RetryAfterSeconds * 1000)
 
                         do! Task.Delay(delayMs)
-                        stampAllowHeaders ctx policy 0 (secondsUntilWindowEnd policy.Window)
+                        stampAllowHeaders ctx policy 0 (secondsUntilWindowEnd DateTimeOffset.UtcNow policy.Window)
                         do! next.Invoke ctx
 
                     | DenySilently ->

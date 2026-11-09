@@ -463,6 +463,19 @@ let middlewareTests =
             | other -> failtestf "expected one RateLimitRefused row, got %A" other
         }
 
+        test "RateLimit-Reset counts the exact seconds to the window end at a known instant" {
+            let at h m sec =
+                DateTimeOffset(2026, 11, 9, h, m, sec, TimeSpan.Zero)
+
+            let reset = ToolUp.Platform.Infra.RateLimitMiddleware.secondsUntilWindowEnd
+
+            Expect.equal (reset (at 10 30 15) PerDay) 48585 "10:30:15 is 13:29:45 from midnight"
+            Expect.equal (reset (at 0 0 0) PerDay) 86400 "midnight is a whole day from the next"
+            Expect.equal (reset (at 23 59 59) PerDay) 1 "one second before midnight"
+            Expect.equal (reset (at 10 30 15) PerHour) 1785 "10:30:15 is 29:45 from 11:00"
+            Expect.equal (reset (at 10 30 15) PerMinute) 45 "15 s into the minute leaves 45"
+        }
+
         test "a Return429 refusal still carries its RateLimit-* and Retry-After headers" {
             let store = ToolUp.Platform.Infra.InMemoryRateLimitStore.create ()
             let policy = RouteLimit.perIpPerMinute "/limited" 1
