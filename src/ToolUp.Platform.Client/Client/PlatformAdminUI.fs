@@ -42,18 +42,12 @@ type Tab =
     | TeamsTab
     | SettingsTab
 
-type LoadState<'T> =
-    | NotLoaded
-    | Loading
-    | Loaded of 'T
-    | LoadError of string
-
 type Model = {
     /// Currently rendered section.
     ActiveTab: Tab
     /// Live admin list from `ListPlatformAdmins`. Refreshed on shell
     /// init and after every successful Assign / Revoke.
-    Admins: LoadState<string list>
+    Admins: Remote<string list, string>
     /// Free-text input for the Assign Admin form. Local React state
     /// would be cleaner per the SDK convention, but we keep it on the
     /// Elmish model here so the AssignError banner can pair with the
@@ -62,7 +56,7 @@ type Model = {
     /// Inline error from the most recent Assign attempt — `None` when
     /// no attempt yet, or after a successful one. Cleared on input
     /// edit so the banner doesn't linger after the user retypes.
-    AssignError: string option
+    AssignError: Notice option
     /// Pending Assign confirmation. `Some userId` = the "are you sure?"
     /// modal is open for that user id; the modal's Confirm button
     /// dispatches the actual `AssignPlatformAdmin` call. `None` = no
@@ -73,7 +67,7 @@ type Model = {
     AssignConfirm: string option
     /// Inline error from a Revoke attempt, keyed by user id so the
     /// banner can render next to the right row.
-    RevokeError: Map<string, string>
+    RevokeError: Map<string, Notice>
     /// Create-team form: name input.
     NewTeamName: string
     /// Create-team form: initial-owner user id. Empty string = no
@@ -82,14 +76,14 @@ type Model = {
     /// id into this field).
     NewTeamOwnerUserId: string
     /// Inline error from the most recent CreateTeamWithOwner attempt.
-    CreateTeamError: string option
+    CreateTeamError: Notice option
     /// Tracks whether a CreateTeamWithOwner call is in flight, so
     /// the submit button can disable to prevent double-fire.
     CreateTeamInFlight: bool
-    /// Live all-teams admin table from `ListAllTeams`. Loaded on shell
+    /// Live all-teams admin table from `ListAllTeams`. Remote.Loaded on shell
     /// init and after every successful archive / restore / delete /
     /// create. Platform-Admin only — non-admins never see this surface.
-    Teams: LoadState<TeamSummary list>
+    Teams: Remote<TeamSummary list, string>
     /// Team ids with an archive / restore / delete call in flight, so
     /// their row action buttons can disable to prevent double-fire.
     TeamActionPending: Set<string>
@@ -99,13 +93,13 @@ type Model = {
     ConfirmDeleteTeam: string option
     /// Inline error from a per-team archive / restore / delete attempt,
     /// keyed by team id so the banner renders against the right row.
-    TeamActionError: Map<string, string>
+    TeamActionError: Map<string, Notice>
     /// Phase 4b deferred follow-up — current runtime PlatformKnowledgeBase
-    /// state. Loaded on shell init via `GetPlatformKnowledgeBase`;
+    /// state. Remote.Loaded on shell init via `GetPlatformKnowledgeBase`;
     /// updated optimistically after a successful `Set`.
-    PlatformKnowledgeBase: LoadState<FeatureMode>
+    PlatformKnowledgeBase: Remote<FeatureMode, string>
     /// Inline error from a SetPlatformKnowledgeBase attempt.
-    SettingsError: string option
+    SettingsError: Notice option
     /// Resolved directory entries keyed by user id, populated lazily via
     /// `IUserDirectoryApi.ResolveUsers` after the admin list / teams
     /// table load. Lets the UI render emails in place of raw `oid`s; ids
@@ -227,15 +221,12 @@ let private resolveDirectoryCmd (ids: string list) =
 /// Every user id currently referenced by the loaded admin list + teams
 /// table (Owners + Admins). Used to decide what still needs resolving.
 let private referencedUserIds (model: Model) =
-    let adminIds =
-        match model.Admins with
-        | Loaded xs -> xs
-        | _ -> []
+    let adminIds = model.Admins |> Remote.withDefault []
 
     let teamIds =
-        match model.Teams with
-        | Loaded teams -> teams |> List.collect (fun t -> t.Owners @ t.Admins)
-        | _ -> []
+        model.Teams
+        |> Remote.map (List.collect (fun t -> t.Owners @ t.Admins))
+        |> Remote.withDefault []
 
     adminIds @ teamIds |> List.distinct
 
@@ -248,7 +239,7 @@ let private unresolvedUserIds (model: Model) =
 let init () =
     let model = {
         ActiveTab = AdminsTab
-        Admins = Loading
+        Admins = Remote.Loading
         AssignInput = ""
         AssignError = None
         AssignConfirm = None
@@ -257,11 +248,11 @@ let init () =
         NewTeamOwnerUserId = ""
         CreateTeamError = None
         CreateTeamInFlight = false
-        Teams = Loading
+        Teams = Remote.Loading
         TeamActionPending = Set.empty
         ConfirmDeleteTeam = None
         TeamActionError = Map.empty
-        PlatformKnowledgeBase = Loading
+        PlatformKnowledgeBase = Remote.Loading
         SettingsError = None
         Directory = Map.empty
     }
@@ -274,17 +265,22 @@ let update (msg: Msg) (model: Model) =
     match msg with
     | SwitchTab tab -> { model with ActiveTab = tab }, Cmd.none
 
-    | RefreshAdmins -> { model with Admins = Loading }, loadAdminsCmd ()
+    | RefreshAdmins -> { model with Admins = Remote.Loading }, loadAdminsCmd ()
 
     | AdminsLoaded(Ok list) ->
         let model = {
             model with
-                Admins = Loaded(list |> List.sort)
+                Admins = Remote.Loaded(list |> List.sort)
         }
 
         model, resolveDirectoryCmd (unresolvedUserIds model)
 
-    | AdminsLoaded(Error msg) -> { model with Admins = LoadError msg }, Cmd.none
+    | AdminsLoaded(Error msg) ->
+        {
+            model with
+                Admins = Remote.Failed msg
+        },
+        Cmd.none
 
     | UpdateAssignInput input ->
         {
@@ -300,7 +296,7 @@ let update (msg: Msg) (model: Model) =
         if String.length trimmed = 0 then
             {
                 model with
-                    AssignError = Some(MessageCatalog.english.PlatformAdmin.EnterUserId)
+                    AssignError = Some(Notice.Problem MessageCatalog.english.PlatformAdmin.EnterUserId)
             },
             Cmd.none
         else
@@ -337,11 +333,16 @@ let update (msg: Msg) (model: Model) =
                 AssignInput = ""
                 AssignError = None
                 AssignConfirm = None
-                Admins = Loading
+                Admins = Remote.Loading
         },
         loadAdminsCmd ()
 
-    | AssignResolved(_, Error msg) -> { model with AssignError = Some msg }, Cmd.none
+    | AssignResolved(_, Error msg) ->
+        {
+            model with
+                AssignError = Some(Notice.Problem msg)
+        },
+        Cmd.none
 
     | RequestRevoke targetUserId ->
         {
@@ -350,12 +351,12 @@ let update (msg: Msg) (model: Model) =
         },
         revokeCmd targetUserId
 
-    | RevokeResolved(_, Ok()) -> { model with Admins = Loading }, loadAdminsCmd ()
+    | RevokeResolved(_, Ok()) -> { model with Admins = Remote.Loading }, loadAdminsCmd ()
 
     | RevokeResolved(targetUserId, Error msg) ->
         {
             model with
-                RevokeError = model.RevokeError |> Map.add targetUserId msg
+                RevokeError = model.RevokeError |> Map.add targetUserId (Notice.Problem msg)
         },
         Cmd.none
 
@@ -404,13 +405,13 @@ let update (msg: Msg) (model: Model) =
         if String.length name = 0 then
             {
                 model with
-                    CreateTeamError = Some(MessageCatalog.english.PlatformAdmin.TeamNameRequired)
+                    CreateTeamError = Some(Notice.Problem MessageCatalog.english.PlatformAdmin.TeamNameRequired)
             },
             Cmd.none
         elif String.length ownerId = 0 then
             {
                 model with
-                    CreateTeamError = Some(MessageCatalog.english.PlatformAdmin.OwnerRequired)
+                    CreateTeamError = Some(Notice.Problem MessageCatalog.english.PlatformAdmin.OwnerRequired)
             },
             Cmd.none
         else
@@ -431,7 +432,7 @@ let update (msg: Msg) (model: Model) =
                 NewTeamOwnerUserId = ""
                 CreateTeamError = None
                 CreateTeamInFlight = false
-                Teams = Loading
+                Teams = Remote.Loading
         },
         // Refresh the admin table so the new team appears immediately.
         loadTeamsCmd ()
@@ -439,22 +440,22 @@ let update (msg: Msg) (model: Model) =
     | CreateTeamResolved(Error msg) ->
         {
             model with
-                CreateTeamError = Some msg
+                CreateTeamError = Some(Notice.Problem msg)
                 CreateTeamInFlight = false
         },
         Cmd.none
 
-    | RefreshTeams -> { model with Teams = Loading }, loadTeamsCmd ()
+    | RefreshTeams -> { model with Teams = Remote.Loading }, loadTeamsCmd ()
 
     | TeamsLoaded(Ok teams) ->
         let model = {
             model with
-                Teams = Loaded(teams |> List.sortBy (fun t -> t.Name.ToLowerInvariant()))
+                Teams = Remote.Loaded(teams |> List.sortBy (fun t -> t.Name.ToLowerInvariant()))
         }
 
         model, resolveDirectoryCmd (unresolvedUserIds model)
 
-    | TeamsLoaded(Error msg) -> { model with Teams = LoadError msg }, Cmd.none
+    | TeamsLoaded(Error msg) -> { model with Teams = Remote.Failed msg }, Cmd.none
 
     | SetTeamArchived(teamId, archived) ->
         {
@@ -468,7 +469,7 @@ let update (msg: Msg) (model: Model) =
         {
             model with
                 TeamActionPending = model.TeamActionPending |> Set.remove teamId
-                Teams = Loading
+                Teams = Remote.Loading
         },
         loadTeamsCmd ()
 
@@ -476,7 +477,7 @@ let update (msg: Msg) (model: Model) =
         {
             model with
                 TeamActionPending = model.TeamActionPending |> Set.remove teamId
-                TeamActionError = model.TeamActionError |> Map.add teamId msg
+                TeamActionError = model.TeamActionError |> Map.add teamId (Notice.Problem msg)
         },
         Cmd.none
 
@@ -506,7 +507,7 @@ let update (msg: Msg) (model: Model) =
         {
             model with
                 TeamActionPending = model.TeamActionPending |> Set.remove teamId
-                Teams = Loading
+                Teams = Remote.Loading
         },
         loadTeamsCmd ()
 
@@ -514,14 +515,14 @@ let update (msg: Msg) (model: Model) =
         {
             model with
                 TeamActionPending = model.TeamActionPending |> Set.remove teamId
-                TeamActionError = model.TeamActionError |> Map.add teamId msg
+                TeamActionError = model.TeamActionError |> Map.add teamId (Notice.Problem msg)
         },
         Cmd.none
 
     | PlatformKnowledgeBaseLoaded(Ok mode) ->
         {
             model with
-                PlatformKnowledgeBase = Loaded mode
+                PlatformKnowledgeBase = Remote.Loaded mode
                 SettingsError = None
         },
         Cmd.none
@@ -529,7 +530,7 @@ let update (msg: Msg) (model: Model) =
     | PlatformKnowledgeBaseLoaded(Error msg) ->
         {
             model with
-                PlatformKnowledgeBase = LoadError msg
+                PlatformKnowledgeBase = Remote.Failed msg
         },
         Cmd.none
 
@@ -539,12 +540,17 @@ let update (msg: Msg) (model: Model) =
     | TogglePlatformKnowledgeBaseResolved(requested, Ok()) ->
         {
             model with
-                PlatformKnowledgeBase = Loaded requested
+                PlatformKnowledgeBase = Remote.Loaded requested
                 SettingsError = None
         },
         Cmd.none
 
-    | TogglePlatformKnowledgeBaseResolved(_, Error msg) -> { model with SettingsError = Some msg }, Cmd.none
+    | TogglePlatformKnowledgeBaseResolved(_, Error msg) ->
+        {
+            model with
+                SettingsError = Some(Notice.Problem msg)
+        },
+        Cmd.none
 
     | DirectoryResolved(Ok summaries) ->
         let directory =
@@ -558,12 +564,6 @@ let update (msg: Msg) (model: Model) =
     | DirectoryResolved(Error _) -> model, Cmd.none
 
 // ─── View helpers ────────────────────────────────────────────────────
-
-let private errorBanner (message: string) =
-    Html.div [
-        prop.className "px-3 py-2 my-2 rounded bg-red-50 border border-red-200 text-sm text-red-700"
-        prop.text message
-    ]
 
 /// Human-readable label for a user id: the resolved email when the
 /// directory has it, then the display name, then the raw id as the
@@ -610,7 +610,7 @@ let private adminRow (msgs: PlatformAdminMessages) (model: Model) (dispatch: Msg
                 ]
             ]
             match revokeError with
-            | Some msg -> errorBanner msg
+            | Some notice -> StateViews.noticeStatic notice
             | None -> Html.none
         ]
     ]
@@ -650,7 +650,7 @@ let private adminsTabView (msgs: PlatformAdminMessages) (model: Model) (dispatch
                         ]
                     ]
                     match model.AssignError with
-                    | Some msg -> errorBanner msg
+                    | Some notice -> StateViews.noticeStatic notice
                     | None -> Html.none
                 ]
             ]
@@ -674,11 +674,14 @@ let private adminsTabView (msgs: PlatformAdminMessages) (model: Model) (dispatch
                         ]
                     ]
                     match model.Admins with
-                    | NotLoaded
-                    | Loading -> Html.p [ prop.className "text-sm text-text-secondary p-3"; prop.text msgs.Loading ]
-                    | LoadError msg -> errorBanner msg
-                    | Loaded [] -> Html.p [ prop.className "text-sm text-text-secondary p-3"; prop.text msgs.NoAdmins ]
-                    | Loaded admins ->
+                    | Remote.NotAsked
+                    | Remote.Loading
+                    | Remote.Reloading _ ->
+                        Html.p [ prop.className "text-sm text-text-secondary p-3"; prop.text msgs.Loading ]
+                    | Remote.Failed msg -> StateViews.noticeStatic (Notice.Problem msg)
+                    | Remote.Loaded [] ->
+                        Html.p [ prop.className "text-sm text-text-secondary p-3"; prop.text msgs.NoAdmins ]
+                    | Remote.Loaded admins ->
                         Html.div [
                             prop.className "divide-y divide-border"
                             prop.children (admins |> List.map (adminRow msgs model dispatch))
@@ -885,13 +888,13 @@ let private teamRow (msgs: PlatformAdminMessages) (model: Model) (dispatch: Msg 
                 ]
             ]
             match rowError with
-            | Some msg ->
+            | Some notice ->
                 Html.tr [
                     prop.children [
                         Html.td [
                             prop.colSpan 6
                             prop.className "px-3 pb-2"
-                            prop.children [ errorBanner msg ]
+                            prop.children [ StateViews.noticeStatic notice ]
                         ]
                     ]
                 ]
@@ -927,15 +930,20 @@ let private teamsTableView (msgs: PlatformAdminMessages) (model: Model) (dispatc
                 ]
             ]
             match model.Teams with
-            | NotLoaded
-            | Loading ->
+            | Remote.NotAsked
+            | Remote.Loading
+            | Remote.Reloading _ ->
                 Html.p [
                     prop.className "text-sm text-text-secondary p-3"
                     prop.text msgs.LoadingTeams
                 ]
-            | LoadError msg -> Html.div [ prop.className "p-3"; prop.children [ errorBanner msg ] ]
-            | Loaded [] -> Html.p [ prop.className "text-sm text-text-secondary p-3"; prop.text msgs.NoTeamsYet ]
-            | Loaded teams ->
+            | Remote.Failed msg ->
+                Html.div [
+                    prop.className "p-3"
+                    prop.children [ StateViews.noticeStatic (Notice.Problem msg) ]
+                ]
+            | Remote.Loaded [] -> Html.p [ prop.className "text-sm text-text-secondary p-3"; prop.text msgs.NoTeamsYet ]
+            | Remote.Loaded teams ->
                 Html.div [
                     prop.className "overflow-x-auto"
                     prop.children [
@@ -970,13 +978,11 @@ let private teamsTableView (msgs: PlatformAdminMessages) (model: Model) (dispatc
 /// purge removes the team record AND every membership row.
 let private deleteTeamModalView (msgs: PlatformAdminMessages) (model: Model) (teamId: string) (dispatch: Msg -> unit) =
     let teamName =
-        match model.Teams with
-        | Loaded teams ->
-            teams
-            |> List.tryFind (fun t -> t.TeamId = teamId)
-            |> Option.map _.Name
-            |> Option.defaultValue teamId
-        | _ -> teamId
+        model.Teams
+        |> Remote.toOption
+        |> Option.bind (List.tryFind (fun t -> t.TeamId = teamId))
+        |> Option.map _.Name
+        |> Option.defaultValue teamId
 
     Html.div [
         prop.className "fixed inset-0 bg-black/40 flex items-center justify-center z-50"
@@ -1137,7 +1143,7 @@ let private teamsTabView (msgs: PlatformAdminMessages) (model: Model) (dispatch:
                     ]
 
                     match model.CreateTeamError with
-                    | Some msg -> errorBanner msg
+                    | Some notice -> StateViews.noticeStatic notice
                     | None -> Html.none
                 ]
             ]
@@ -1200,16 +1206,17 @@ let private platformKnowledgeBaseToggle (msgs: PlatformAdminMessages) (model: Mo
                 prop.text msgs.PlatformKnowledgeBaseHeading
             ]
             match model.PlatformKnowledgeBase with
-            | NotLoaded
-            | Loading ->
+            | Remote.NotAsked
+            | Remote.Loading
+            | Remote.Reloading _ ->
                 Html.p [
                     prop.className "text-sm text-text-secondary"
                     prop.text msgs.LoadingCurrentState
                 ]
-            | LoadError msg -> errorBanner msg
-            | Loaded current -> renderToggle current
+            | Remote.Failed msg -> StateViews.noticeStatic (Notice.Problem msg)
+            | Remote.Loaded current -> renderToggle current
             match model.SettingsError with
-            | Some msg -> errorBanner msg
+            | Some notice -> StateViews.noticeStatic notice
             | None -> Html.none
         ]
     ]
