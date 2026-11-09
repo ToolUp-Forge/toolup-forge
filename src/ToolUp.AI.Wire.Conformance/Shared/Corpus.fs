@@ -5,8 +5,9 @@ module ToolUp.AI.Wire.Conformance.Corpus
 
 open ToolUp.Platform.AI
 open ToolUp.AI.Wire.Tests
+open ToolUp.Remoting.Json
 
-// ─── The consolidated conformance corpus (Wave 32, Phase 255) ────────
+// ─── The consolidated conformance corpus ────────
 //
 // Lifts the three per-provider golden fixture sets (seeded by Phases
 // 252 / 253 / 254) into ONE uniform corpus the dual-run harness iterates:
@@ -57,7 +58,7 @@ let private claudeRequests =
     ClaudeWireFixtures.requestFixtures
     |> List.map (fun (name, build, golden) -> "claude/" + name, build (), golden)
 
-/// Phase 1128 — every provider's request body for a history whose
+/// Every provider's request body for a history whose
 /// assistant turn holds block parts (`BlockPartFixtures.providerHistory`).
 /// A block reaches the model as its `redactedSummary` text block; the node
 /// is in no golden, and `ConformanceSuite` also asserts its marker absent

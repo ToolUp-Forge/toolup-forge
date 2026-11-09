@@ -10,6 +10,7 @@ open ToolUp.Platform // RetryPolicy (Phase 11.C.5 Tier 3 — unified)
 open ToolUp.Platform.AI
 open ToolUp.Platform.Secrets
 open ToolUp.AI.Wire // JsonHost (schema parse over the portable JsonValue)
+open ToolUp.Remoting.Json
 open GeminiAIProviderWire
 
 // ─── Provider implementation ─────────────────────────────────────

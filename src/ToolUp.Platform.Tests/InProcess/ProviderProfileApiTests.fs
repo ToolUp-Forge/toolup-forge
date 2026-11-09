@@ -134,7 +134,12 @@ let private layeringTests =
                 |> Array.map _.Name
                 |> Array.filter (fun n -> not (isNull n))
 
-            let aiReferences = references |> Array.filter (fun n -> n.StartsWith "ToolUp.AI")
+            // `ToolUp.AI.Wire` is excepted: it is the portable JSON and
+            // connector-contract substrate Core itself stands on, not the
+            // assistant, so every tier above Core references it.
+            let aiReferences =
+                references
+                |> Array.filter (fun n -> n.StartsWith "ToolUp.AI" && n <> "ToolUp.AI.Wire")
 
             Expect.isEmpty aiReferences (sprintf "no ToolUp.AI* reference, got: %A" aiReferences)
 

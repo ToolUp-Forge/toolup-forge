@@ -7,6 +7,7 @@ open System.Net.Http
 open System.Threading
 open ToolUp.Platform.Infra.Transport
 open ToolUp.AI.Wire // ClaudeStreaming — the pure SSE state machine
+open ToolUp.Remoting.Json
 open ToolUp.Platform // RetryPolicy
 open ToolUp.Platform.AI // IHttpTransport / HttpClientTransport / HttpRequest / ErrorClassifier
 open ToolUp.Platform.Secrets

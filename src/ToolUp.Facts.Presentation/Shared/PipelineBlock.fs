@@ -10,6 +10,7 @@ open Fuaran.UI.Types
 open ToolUp.Platform
 open ToolUp.Platform.AI
 open ToolUp.AI.Wire
+open ToolUp.Remoting.Json
 open ToolUp.Facts
 
 // ─── The pipeline block ─────────────────────────────────────────────
@@ -122,12 +123,12 @@ module PipelineBlock =
         sprintf "/api/_facts/pipeline-block/%s" methodName
 
     let private member' (name: string) (value: string) =
-        JsonHost.serialize (JString name) + ":" + value
+        JsonHost.serialize (JsonValue.String name) + ":" + value
 
-    let private text (s: string) = JsonHost.serialize (JString s)
+    let private text (s: string) = JsonHost.serialize (JsonValue.String s)
 
     let private texts (items: string list) =
-        JsonHost.serialize (JArray(items |> List.map JString))
+        JsonHost.serialize (jarr (items |> List.map JsonValue.String))
 
     /// The request as the JSON a part persists: the tool's argument shape
     /// (`table`, `period_from`, `period_to`, `path_prefix`, `metrics`,
@@ -157,7 +158,7 @@ module PipelineBlock =
     /// none or the JSON does not read.
     let recordedRunStamp (requestJson: string) : string option =
         JsonHost.parse requestJson
-        |> Option.bind (JsonValue.tryField "run_stamp")
+        |> Option.bind (JsonValue.tryMember "run_stamp")
         |> Option.bind JsonValue.asString
 
     /// The withheld report as a block's `Withheld`: each withheld column's

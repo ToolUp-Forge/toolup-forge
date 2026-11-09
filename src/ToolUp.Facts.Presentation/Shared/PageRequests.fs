@@ -6,6 +6,7 @@ namespace ToolUp.Facts.Presentation
 open System
 open Fuaran.Core
 open ToolUp.AI.Wire
+open ToolUp.Remoting.Json
 open ToolUp.Platform.AI
 open ToolUp.Facts
 
@@ -145,27 +146,30 @@ module PageRequest =
                 (Ok [])
 
         match v with
-        | JsonValue.JNull -> Error "a null member, which the canonical form does not carry"
-        | JsonValue.JBool b -> Ok(JVal.JBool b)
-        | JsonValue.JString s -> Ok(JStr s)
-        | JsonValue.JNumber n when n = Math.Floor n && n >= float Int32.MinValue && n <= float Int32.MaxValue ->
-            Ok(JInt(int n))
-        | JsonValue.JNumber n -> Ok(JFloat n)
-        | JsonValue.JArray items -> items |> List.map ofJsonValue |> all |> Result.map JArr
-        | JsonValue.JObject members ->
+        | JsonValue.Null -> Error "a null member, which the canonical form does not carry"
+        | JsonValue.Bool b -> Ok(JVal.JBool b)
+        | JsonValue.String s -> Ok(JStr s)
+        | JsonValue.Number _ ->
+            match JsonValue.asInt v, JsonValue.asFloat v with
+            | Some n, _ -> Ok(JInt n)
+            | None, Some f -> Ok(JFloat f)
+            | None, None -> Error "a number no float can carry"
+        | JsonValue.Array items -> items |> List.ofArray |> List.map ofJsonValue |> all |> Result.map JArr
+        | JsonValue.Object members ->
             members
+            |> List.ofArray
             |> List.map (fun (k, m) -> ofJsonValue m |> Result.map (fun j -> k, j))
             |> all
             |> Result.map JObj
 
     let rec private toJsonValue (v: JVal) : JsonValue =
         match v with
-        | JStr s -> JsonValue.JString s
-        | JInt i -> JsonValue.JNumber(float i)
-        | JFloat f -> JsonValue.JNumber f
-        | JVal.JBool b -> JsonValue.JBool b
-        | JArr items -> JsonValue.JArray(items |> List.map toJsonValue)
-        | JObj members -> JsonValue.JObject(members |> List.map (fun (k, m) -> k, toJsonValue m))
+        | JStr s -> JsonValue.String s
+        | JInt i -> jint i
+        | JFloat f -> jnum f
+        | JVal.JBool b -> JsonValue.Bool b
+        | JArr items -> jarr (items |> List.map toJsonValue)
+        | JObj members -> jobj (members |> List.map (fun (k, m) -> k, toJsonValue m))
 
     let private texts (items: string list) = JArr(items |> List.map JStr)
 

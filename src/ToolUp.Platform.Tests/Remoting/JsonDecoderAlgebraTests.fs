@@ -344,7 +344,7 @@ let private algebraExpectedFor (kind: MutationKind) =
 // ─── The IL pin ──────────────────────────────────────────────────────
 
 let private decodeModuleTypes () =
-    let assembly = typeof<DecodeError>.Assembly
+    let assembly = typeof<JsonOracleLoss>.Assembly
     let root = "ToolUp.Remoting.Json.JsonDecode"
 
     assembly.GetTypes()

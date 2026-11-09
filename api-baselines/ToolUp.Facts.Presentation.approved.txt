@@ -237,12 +237,12 @@ ToolUp.Facts.Presentation.PresentationRequestModule.comparisonDay(ToolUp.Facts.P
 ToolUp.Facts.Presentation.PresentationRequestModule.delivery(ToolUp.Facts.Presentation.PresentationRequest) : System.DateTime
 ToolUp.Facts.Presentation.PresentationRequestModule.kindName(ToolUp.Facts.Presentation.PresentationKind) : System.String
 ToolUp.Facts.Presentation.PresentationRequestModule.ofJson(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.Presentation.PresentationRequest, ToolUp.Facts.Presentation.PresentationRequestError]
-ToolUp.Facts.Presentation.PresentationRequestModule.ofJsonValue(ToolUp.AI.Wire.JsonValue) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.Presentation.PresentationRequest, ToolUp.Facts.Presentation.PresentationRequestError]
+ToolUp.Facts.Presentation.PresentationRequestModule.ofJsonValue(ToolUp.Remoting.Json.JsonValue) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.Presentation.PresentationRequest, ToolUp.Facts.Presentation.PresentationRequestError]
 ToolUp.Facts.Presentation.PresentationRequestModule.periodText(ToolUp.Facts.Presentation.PresentationRequest) : System.String
 ToolUp.Facts.Presentation.PresentationRequestModule.range(ToolUp.Facts.Presentation.PresentationRequest) : System.Tuple`2[System.DateTime, System.DateTime]
 ToolUp.Facts.Presentation.PresentationRequestModule.title(ToolUp.Facts.Presentation.PresentationRequest) : System.String
 ToolUp.Facts.Presentation.PresentationRequestModule.toJson(ToolUp.Facts.Presentation.PresentationRequest) : System.String
-ToolUp.Facts.Presentation.PresentationRequestModule.toJsonValue(ToolUp.Facts.Presentation.PresentationRequest) : ToolUp.AI.Wire.JsonValue
+ToolUp.Facts.Presentation.PresentationRequestModule.toJsonValue(ToolUp.Facts.Presentation.PresentationRequest) : ToolUp.Remoting.Json.JsonValue
 ToolUp.Facts.Presentation.PresentationRequestModule.toQueries(System.Int32, ToolUp.Facts.Presentation.PresentationRequest) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactSeriesQuery]
 ToolUp.Facts.Presentation.PresentationRequestModule.tryKind(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.Presentation.PresentationKind]
 ToolUp.Facts.Presentation.PresentationRequestModule.validate(ToolUp.Facts.Presentation.PresentationRequest) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.Presentation.PresentationRequest, ToolUp.Facts.Presentation.PresentationRequestError]

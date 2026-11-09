@@ -6,6 +6,7 @@ module ToolUp.AI.Wire.Tests.ClaudeWireTests
 open Expecto
 open ToolUp.Platform.AI
 open ToolUp.AI.Wire.Tests.ClaudeWireFixtures
+open ToolUp.Remoting.Json
 
 // .NET (Expecto) host pack for the portable Claude wire mapper + the pure
 // ClaudeStreaming state machine (Phase 254). The Fable smoke runs the SAME

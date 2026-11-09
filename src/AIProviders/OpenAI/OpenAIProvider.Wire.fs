@@ -1,6 +1,7 @@
 module internal OpenAIProviderWire
 
 open ToolUp.AI.Wire
+open ToolUp.Remoting.Json
 open ToolUp.Platform.AI
 
 // ─── Portable wire mapping (Wave 32, Phase 252) ──────────────────
@@ -28,18 +29,18 @@ open ToolUp.Platform.AI
 /// a separate cache-write count; it bills cached vs uncached input
 /// differently but doesn't surface the write boundary.
 let parseUsage (root: JsonValue) : TokenUsage option =
-    match JsonValue.tryField "usage" root with
+    match JsonValue.tryMember "usage" root with
     | Some usage ->
         let getInt (name: string) =
             usage
-            |> JsonValue.tryField name
+            |> JsonValue.tryMember name
             |> Option.bind JsonValue.asInt
             |> Option.defaultValue 0
 
         let cachedTokens =
             usage
-            |> JsonValue.tryField "prompt_tokens_details"
-            |> Option.bind (JsonValue.tryField "cached_tokens")
+            |> JsonValue.tryMember "prompt_tokens_details"
+            |> Option.bind (JsonValue.tryMember "cached_tokens")
             |> Option.bind JsonValue.asInt
             |> Option.defaultValue 0
 
@@ -73,7 +74,7 @@ let parseResponse (json: string) : AIProviderResponse =
     let usage = parseUsage root
 
     let firstChoice =
-        root |> JsonValue.tryField "choices" |> Option.bind (JsonValue.tryItem 0)
+        root |> JsonValue.tryMember "choices" |> Option.bind (JsonValue.tryItem 0)
 
     match firstChoice with
     | None -> {
@@ -85,44 +86,44 @@ let parseResponse (json: string) : AIProviderResponse =
     | Some choice ->
         let stopReason =
             choice
-            |> JsonValue.tryField "finish_reason"
+            |> JsonValue.tryMember "finish_reason"
             |> Option.bind JsonValue.asString
             |> Option.defaultValue "stop"
             |> toStopReason
 
-        let message = choice |> JsonValue.tryField "message"
+        let message = choice |> JsonValue.tryMember "message"
 
         let textContent =
             message
-            |> Option.bind (JsonValue.tryField "content")
+            |> Option.bind (JsonValue.tryMember "content")
             |> Option.bind JsonValue.asString
             |> Option.defaultValue ""
 
         let toolCalls =
             match
                 message
-                |> Option.bind (JsonValue.tryField "tool_calls")
+                |> Option.bind (JsonValue.tryMember "tool_calls")
                 |> Option.bind JsonValue.asArray
             with
             | Some arr -> [
                 for tc in arr ->
                     let id =
                         tc
-                        |> JsonValue.tryField "id"
+                        |> JsonValue.tryMember "id"
                         |> Option.bind JsonValue.asString
                         |> Option.defaultValue ""
 
-                    let fn = tc |> JsonValue.tryField "function"
+                    let fn = tc |> JsonValue.tryMember "function"
 
                     let name =
                         fn
-                        |> Option.bind (JsonValue.tryField "name")
+                        |> Option.bind (JsonValue.tryMember "name")
                         |> Option.bind JsonValue.asString
                         |> Option.defaultValue ""
 
                     let args =
                         fn
-                        |> Option.bind (JsonValue.tryField "arguments")
+                        |> Option.bind (JsonValue.tryMember "arguments")
                         |> Option.bind JsonValue.asString
                         |> Option.defaultValue "{}"
 
@@ -343,12 +344,12 @@ let applyStreamChunk (state: StreamState) (onStream: (string -> unit) option) (d
                 | Some u -> state.Usage <- Some u
                 | None -> ()
 
-                match root |> JsonValue.tryField "choices" |> Option.bind (JsonValue.tryItem 0) with
+                match root |> JsonValue.tryMember "choices" |> Option.bind (JsonValue.tryItem 0) with
                 | Some choice ->
-                    match choice |> JsonValue.tryField "delta" with
+                    match choice |> JsonValue.tryMember "delta" with
                     | Some delta ->
                         // Text-content delta: append to Content and fire onStream.
-                        match delta |> JsonValue.tryField "content" |> Option.bind JsonValue.asString with
+                        match delta |> JsonValue.tryMember "content" |> Option.bind JsonValue.asString with
                         | Some text when text <> "" ->
                             state.Content <- state.Content + text
                             onStream |> Option.iter (fun cb -> cb text)
@@ -358,24 +359,24 @@ let applyStreamChunk (state: StreamState) (onStream: (string -> unit) option) (d
                         // + partial fields. First chunk for an index has
                         // `id` + `function.name`; subsequent chunks have
                         // `function.arguments` fragments.
-                        match delta |> JsonValue.tryField "tool_calls" |> Option.bind JsonValue.asArray with
+                        match delta |> JsonValue.tryMember "tool_calls" |> Option.bind JsonValue.asArray with
                         | Some tcs ->
                             for tc in tcs do
                                 let index =
                                     tc
-                                    |> JsonValue.tryField "index"
+                                    |> JsonValue.tryMember "index"
                                     |> Option.bind JsonValue.asInt
                                     |> Option.defaultValue 0
 
-                                let id = tc |> JsonValue.tryField "id" |> Option.bind JsonValue.asString
-                                let fn = tc |> JsonValue.tryField "function"
+                                let id = tc |> JsonValue.tryMember "id" |> Option.bind JsonValue.asString
+                                let fn = tc |> JsonValue.tryMember "function"
 
                                 let name =
-                                    fn |> Option.bind (JsonValue.tryField "name") |> Option.bind JsonValue.asString
+                                    fn |> Option.bind (JsonValue.tryMember "name") |> Option.bind JsonValue.asString
 
                                 let argsFragment =
                                     fn
-                                    |> Option.bind (JsonValue.tryField "arguments")
+                                    |> Option.bind (JsonValue.tryMember "arguments")
                                     |> Option.bind JsonValue.asString
                                     |> Option.defaultValue ""
 
@@ -411,7 +412,7 @@ let applyStreamChunk (state: StreamState) (onStream: (string -> unit) option) (d
                     | None -> ()
 
                     // Final chunk carries `finish_reason`.
-                    match choice |> JsonValue.tryField "finish_reason" |> Option.bind JsonValue.asString with
+                    match choice |> JsonValue.tryMember "finish_reason" |> Option.bind JsonValue.asString with
                     | Some reason -> state.StopReason <- toStopReason reason
                     | None -> ()
                 | None -> ()

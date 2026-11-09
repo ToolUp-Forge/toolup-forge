@@ -116,7 +116,7 @@ let private declaredSkipped = [ "ToolUp.Platform.Usage.IUsageQueryApi", "returns
 let private clientAssembly =
     typeof<ToolUp.Remoting.Client.RemoteBuilderOptions>.Assembly
 
-let private coreAssembly = typeof<JsonValue>.Assembly
+let private coreAssembly = typeof<JsonOracleLoss>.Assembly
 
 /// A generated binding, read off its compiled module, as a function to
 /// apply. F# compiles a binding whose body is a lambda (every generated

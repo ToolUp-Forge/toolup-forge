@@ -23,6 +23,7 @@ module internal GeminiAIProviderWire
 // (Phase 67b). Usage is `usageMetadata.{promptTokenCount, …}`.
 
 open ToolUp.AI.Wire
+open ToolUp.Remoting.Json
 open ToolUp.Platform.AI
 
 // ─── Vision support ──────────────────────────────────────────────
@@ -84,11 +85,11 @@ let toolNameFromSyntheticId (id: string) (fallbackName: string) : string =
 /// doesn't currently manage, and the per-request response doesn't
 /// expose a cache-write count.
 let parseUsage (root: JsonValue) : TokenUsage option =
-    match JsonValue.tryField "usageMetadata" root with
+    match JsonValue.tryMember "usageMetadata" root with
     | Some usage ->
         let getInt (name: string) =
             usage
-            |> JsonValue.tryField name
+            |> JsonValue.tryMember name
             |> Option.bind JsonValue.asInt
             |> Option.defaultValue 0
 
@@ -121,7 +122,7 @@ let private parseRoot (root: JsonValue) : AIProviderResponse =
     let usage = parseUsage root
 
     let firstCandidate =
-        root |> JsonValue.tryField "candidates" |> Option.bind (JsonValue.tryItem 0)
+        root |> JsonValue.tryMember "candidates" |> Option.bind (JsonValue.tryItem 0)
 
     match firstCandidate with
     | None -> {
@@ -133,30 +134,30 @@ let private parseRoot (root: JsonValue) : AIProviderResponse =
     | Some candidate ->
         let finishReason =
             candidate
-            |> JsonValue.tryField "finishReason"
+            |> JsonValue.tryMember "finishReason"
             |> Option.bind JsonValue.asString
             |> Option.defaultValue "STOP"
 
         let parts =
             candidate
-            |> JsonValue.tryField "content"
-            |> Option.bind (JsonValue.tryField "parts")
+            |> JsonValue.tryMember "content"
+            |> Option.bind (JsonValue.tryMember "parts")
             |> Option.bind JsonValue.asArray
-            |> Option.defaultValue []
+            |> Option.defaultValue [||]
 
         let mutable textContent = ""
         let mutable toolCalls: AIProviderToolCall list = []
         let mutable toolCallIndex = 0
 
         for part in parts do
-            match part |> JsonValue.tryField "text" |> Option.bind JsonValue.asString with
+            match part |> JsonValue.tryMember "text" |> Option.bind JsonValue.asString with
             | Some t -> textContent <- textContent + t
             | None ->
-                match part |> JsonValue.tryField "functionCall" with
+                match part |> JsonValue.tryMember "functionCall" with
                 | Some fc ->
                     let name =
                         fc
-                        |> JsonValue.tryField "name"
+                        |> JsonValue.tryMember "name"
                         |> Option.bind JsonValue.asString
                         |> Option.defaultValue ""
 
@@ -166,7 +167,7 @@ let private parseRoot (root: JsonValue) : AIProviderResponse =
                     // semantically identical to the raw response bytes.
                     let argsJson =
                         fc
-                        |> JsonValue.tryField "args"
+                        |> JsonValue.tryMember "args"
                         |> Option.map JsonHost.serialize
                         |> Option.defaultValue "{}"
 
@@ -390,33 +391,33 @@ let applyStreamChunk (state: StreamState) (onStream: (string -> unit) option) (d
             | Some u -> state.Usage <- Some u
             | None -> ()
 
-            match root |> JsonValue.tryField "candidates" |> Option.bind (JsonValue.tryItem 0) with
+            match root |> JsonValue.tryMember "candidates" |> Option.bind (JsonValue.tryItem 0) with
             | Some candidate ->
                 let parts =
                     candidate
-                    |> JsonValue.tryField "content"
-                    |> Option.bind (JsonValue.tryField "parts")
+                    |> JsonValue.tryMember "content"
+                    |> Option.bind (JsonValue.tryMember "parts")
                     |> Option.bind JsonValue.asArray
-                    |> Option.defaultValue []
+                    |> Option.defaultValue [||]
 
                 for part in parts do
-                    match part |> JsonValue.tryField "text" |> Option.bind JsonValue.asString with
+                    match part |> JsonValue.tryMember "text" |> Option.bind JsonValue.asString with
                     | Some text when text <> "" ->
                         state.Content <- state.Content + text
                         onStream |> Option.iter (fun cb -> cb text)
                     | Some _ -> () // empty text delta — no-op
                     | None ->
-                        match part |> JsonValue.tryField "functionCall" with
+                        match part |> JsonValue.tryMember "functionCall" with
                         | Some fc ->
                             let name =
                                 fc
-                                |> JsonValue.tryField "name"
+                                |> JsonValue.tryMember "name"
                                 |> Option.bind JsonValue.asString
                                 |> Option.defaultValue ""
 
                             let argsJson =
                                 fc
-                                |> JsonValue.tryField "args"
+                                |> JsonValue.tryMember "args"
                                 |> Option.map JsonHost.serialize
                                 |> Option.defaultValue "{}"
 
@@ -437,7 +438,11 @@ let applyStreamChunk (state: StreamState) (onStream: (string -> unit) option) (d
                             state.ToolCallIndex <- state.ToolCallIndex + 1
                         | None -> ()
 
-                match candidate |> JsonValue.tryField "finishReason" |> Option.bind JsonValue.asString with
+                match
+                    candidate
+                    |> JsonValue.tryMember "finishReason"
+                    |> Option.bind JsonValue.asString
+                with
                 | Some reason ->
                     state.StopReason <-
                         if not state.ToolCalls.IsEmpty then

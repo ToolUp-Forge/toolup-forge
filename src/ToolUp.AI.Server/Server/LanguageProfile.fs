@@ -6,6 +6,7 @@ namespace ToolUp.AI
 open System
 open System.Text
 open ToolUp.AI.Wire
+open ToolUp.Remoting.Json
 
 // ─── The assistant's language profile ──────────────────────────────
 //
@@ -267,11 +268,11 @@ module LanguageProfile =
 
     // ── The grammar ───────────────────────────────────────────────
 
-    let private stringMember (name: string) (members: (string * JsonValue) list) : string option =
+    let private stringMember (name: string) (members: (string * JsonValue)[]) : string option =
         members
-        |> List.tryPick (fun (k, v) ->
+        |> Array.tryPick (fun (k, v) ->
             match v with
-            | JsonValue.JString s when k = name -> Some s
+            | JsonValue.String s when k = name -> Some s
             | _ -> None)
 
     /// A node's id, wire kind and kind members, when `members` is a node: an
@@ -279,10 +280,10 @@ module LanguageProfile =
     /// of the language. A column's `kind` (`{"$type":"Text"}`) is not.
     let private asNode
         (schema: LanguageSchema)
-        (members: (string * JsonValue) list)
-        : (string * string * (string * JsonValue) list) option =
-        match stringMember "id" members, members |> List.tryFind (fun (k, _) -> k = "kind") with
-        | Some id, Some(_, JsonValue.JObject kindMembers) ->
+        (members: (string * JsonValue)[])
+        : (string * string * (string * JsonValue)[]) option =
+        match stringMember "id" members, members |> Array.tryFind (fun (k, _) -> k = "kind") with
+        | Some id, Some(_, JsonValue.Object kindMembers) ->
             match stringMember "$type" kindMembers with
             | Some kind when schema.Kinds.ContainsKey kind -> Some(id, kind, kindMembers)
             | _ -> None
@@ -293,15 +294,15 @@ module LanguageProfile =
         (requests: Set<string>)
         (id: string)
         (kind: string)
-        (kindMembers: (string * JsonValue) list)
+        (kindMembers: (string * JsonValue)[])
         : ComposedBlockRefusal list =
         [
             match dataSlots.TryFind kind with
             | None -> ()
             | Some slot ->
-                match kindMembers |> List.tryFind (fun (k, _) -> k = slot) with
+                match kindMembers |> Array.tryFind (fun (k, _) -> k = slot) with
                 | None -> ()
-                | Some(_, JsonValue.JObject binding) when stringMember "$type" binding = Some "Query" ->
+                | Some(_, JsonValue.Object binding) when stringMember "$type" binding = Some "Query" ->
                     match stringMember "name" binding with
                     | Some key when requests.Contains key -> ()
                     | Some key -> ComposedBlockRefusal.UnknownRequest(id, kind, key)
@@ -320,10 +321,10 @@ module LanguageProfile =
         let profile = registered.Profile
 
         match value with
-        | JsonValue.JArray items -> items |> List.collect (walk registered requests)
-        | JsonValue.JObject members ->
+        | JsonValue.Array items -> items |> List.ofArray |> List.collect (walk registered requests)
+        | JsonValue.Object members ->
             match asNode registered.Schema members with
-            | None -> members |> List.collect (snd >> walk registered requests)
+            | None -> members |> List.ofArray |> List.collect (snd >> walk registered requests)
             | Some(id, kind, kindMembers) ->
                 let own = [
                     match profile.Kinds.TryFind kind with
@@ -344,8 +345,10 @@ module LanguageProfile =
                 ]
 
                 let nested =
-                    (kindMembers |> List.filter (fun (k, _) -> k <> "$type"))
-                    @ (members |> List.filter (fun (k, _) -> k <> "id" && k <> "kind"))
+                    Array.append
+                        (kindMembers |> Array.filter (fun (k, _) -> k <> "$type"))
+                        (members |> Array.filter (fun (k, _) -> k <> "id" && k <> "kind"))
+                    |> List.ofArray
                     |> List.collect (snd >> walk registered requests)
 
                 own @ nested
@@ -369,7 +372,7 @@ module LanguageProfile =
 
         match parsed with
         | None -> Error [ ComposedBlockRefusal.Malformed "the block is not JSON" ]
-        | Some(JsonValue.JObject members as root) when (asNode registered.Schema members).IsSome ->
+        | Some(JsonValue.Object members as root) when (asNode registered.Schema members).IsSome ->
             match walk registered requests root with
             | [] -> Ok()
             | refusals -> Error refusals

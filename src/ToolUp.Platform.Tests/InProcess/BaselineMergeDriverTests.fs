@@ -604,13 +604,15 @@ let private approveWriteTests =
         test "the rendered baseline text carries no SDK-band-dependent constructor" {
             let config = activeConfig ()
 
-            let core =
+            // The assembly that declares `DecodeException`, the F# exception
+            // whose band-dependent constructor this is about.
+            let wire =
                 discoverPackable root
-                |> List.tryFind (fun a -> a.Name = "ToolUp.Platform.Core")
-                |> Option.defaultWith (fun () -> failtest "ToolUp.Platform.Core is not a discovered packable assembly")
+                |> List.tryFind (fun a -> a.Name = "ToolUp.AI.Wire")
+                |> Option.defaultWith (fun () -> failtest "ToolUp.AI.Wire is not a discovered packable assembly")
 
-            match resolveDll config core with
-            | None -> skiptest "ToolUp.Platform.Core is not built — the 'the solution is built' precondition names it"
+            match resolveDll config wire with
+            | None -> skiptest "ToolUp.AI.Wire is not built — the 'the solution is built' precondition names it"
             | Some dll ->
                 let text = (renderSurfaceDetail dll (resolverPool root config)).Text
 

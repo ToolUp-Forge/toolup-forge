@@ -453,9 +453,10 @@ exact decimals, or the token's source form — the class of loss Phase 784 pinne
 
 ### The model — `ToolUp.Remoting.Json.JsonValue`
 
-A sibling model in the remoting namespace rather than a widened `AI.Wire` one: that type is
-matched exhaustively in forty-five files across the provider mappings, and a seventh case is a
-break in every one of them. Six closed cases, no null, insertion-ordered members, a `size`
+It began as a sibling model beside the float-backed `AI.Wire` one; since Phase 881 it is the ONE
+JSON value model of the tree, declared in the `ToolUp.AI.Wire` package under this namespace (with
+`JsonText`, `JsonEncode` and `DecodeError`), and the float-backed model is retired
+([migration](../migrations/881-one-json-value-model.md)). Six closed cases, no null, insertion-ordered members, a `size`
 measure — and **`Number of lexical: string`**: the token text as written, never parsed to a
 `float` on the way in. `JsonValue.tryInt64` / `tryUInt64` / `tryDecimal` / `tryFloat` read the
 width a decoder needs from the text, exactly. The number grammar is RFC 8259's, checked by hand
