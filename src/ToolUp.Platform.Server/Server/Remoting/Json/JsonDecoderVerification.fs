@@ -6,16 +6,14 @@ namespace ToolUp.Remoting.Json
 open System
 open ToolUp.Remoting
 
-// Phase 902 — the JSON wire's registration gate, moved from
-// ToolUp.Platform.Core, where it shipped to every Fable consumer behind a
-// `#if !FABLE_COMPILER` guard: the oracle it compares against, the .NET
-// mirror of the browser's writer, and the gate half of `JsonDecoders`.
-// Namespaces and module paths are preserved; `JsonDecoders` is split, the
-// registration table staying in Core and the gate declared here in a
-// module of the same name, which F# resolves as one. A generated module's
-// `verifyAll` takes a `JsonDecoderGate` (Core); `gateWith` makes one.
+// The JSON wire's registration gates, server-tier only: the oracle a decoder
+// is compared against, the .NET mirror of the browser's writer, the gate half
+// of `JsonDecoders`, and `JsonEncoders`. The codec table is in
+// ToolUp.Platform.Core; this module of the same name holds the gate, which F#
+// resolves as one. A generated module's `verifyAll` takes a `JsonDecoderGate`
+// or `JsonEncoderGate` (Core); `gateWith` makes one.
 
-/// Phase 840 — what the JSON wire's registration gate compares a
+/// What the JSON wire's registration gate compares a
 /// candidate decoder against.
 ///
 /// On the MessagePack wire the oracle is the reflection reader, which
@@ -45,7 +43,7 @@ type JsonDecoderOracle = {
 }
 
 
-/// Phase 885 — the BROWSER's writer, as a .NET mirror.
+/// The BROWSER's writer, as a .NET mirror.
 ///
 /// The bytes a server decodes from a browser are not written by the
 /// server's System.Text.Json converter set. A reflective client proxy
@@ -61,7 +59,7 @@ type JsonDecoderOracle = {
 /// The gate cannot run under Fable, so this is the writer ported: a
 /// byte-exact mirror of `Convert.serialize` over the shapes a decoder can
 /// be for, pinned against the TRANSPILED writer's own output by a fixture
-/// both test packs compile (`BrowserWriterFixture`, Phase 885.A) — the
+/// both test packs compile (`BrowserWriterFixture`) — the
 /// Fable pack holds `Convert.serialize` to each pinned text, the .NET pack
 /// holds this mirror to the same text, so the mirror cannot drift from the
 /// writer it stands in for without one of the two going red.
@@ -408,15 +406,14 @@ module BrowserJsonWriter =
         else
             failwithf "the browser writer mirror does not model %s" t.FullName
 
-/// Phase 840 — the JSON wire's registration gate (Phase 902: the
-/// server-tier half of `JsonDecoders`; the registration table is in
-/// ToolUp.Platform.Core).
+/// The JSON wire's decoder registration gate: the server-tier half of
+/// `JsonDecoders` (the codec table is in ToolUp.Platform.Core).
 [<RequireQualifiedAccess>]
 module JsonDecoders =
 
-    // ─── Phase 840 — the registration gate ───────────────────────────
+    // ─── The registration gate ───────────────────────────────────────
     //
-    // Phase 801's rule, on this wire: a registered decoder WINS over the
+    // The MessagePack gate's rule, on this wire: a registered decoder WINS over the
     // converter set, so a wrong one is worse than none — it accepts the
     // text and yields a well-typed value that is not what the client
     // sent. Nothing is registered through `registerVerifiedWith` until it
@@ -437,8 +434,8 @@ module JsonDecoders =
     //      (`JsonDecoderAlgebraTests.algebraOutcomes`).
     //   2. ORACLE LOSS — the converter set reads a value the writer wrote
     //      exactly into something else (its `TimeSpan` read goes through
-    //      a double and can land a tick short, Phase 784; the algebra
-    //      reads the millisecond text exactly, 785.F). Reachable from a
+    //      a double and can land a tick short; the algebra
+    //      reads the millisecond text exactly). Reachable from a
     //      draw, so the oracle DECLARES it (`JsonDecoderOracle.Losses`),
     //      and a draw on which the candidate recovers the written value
     //      exactly, the oracle does not, and the type reaches a declared
@@ -486,7 +483,7 @@ module JsonDecoders =
 
         go target
 
-    /// Phase 840 — the differential gate for the JSON wire. Draw `draws`
+    /// The differential gate for the JSON wire. Draw `draws`
     /// values of `target` (`DecoderShapes.draw`, deterministically from
     /// `seed`), write each with `oracle.Write`, then decode the text
     /// through the candidate (`oracle.Read`, then `decoder`) AND through
@@ -535,7 +532,7 @@ module JsonDecoders =
                 | Ok drawn ->
                     // The writer may refuse a shape by throwing: that
                     // refusal belongs in the gate's vocabulary, not on the
-                    // stack — 801's lazy-writer lesson, applied per draw.
+                    // stack, applied per draw.
                     let written =
                         try
                             Ok(oracle.Write target drawn)
@@ -581,7 +578,7 @@ module JsonDecoders =
 
         go 0 []
 
-    /// Phase 840 — `verifyByTypeWith` for `'T`: the gate over a typed
+    /// `verifyByTypeWith` for `'T`: the gate over a typed
     /// decoder, draws taken of `'T` itself.
     let verifyWith<'T>
         (oracle: JsonDecoderOracle)
@@ -591,9 +588,9 @@ module JsonDecoders =
         : Result<JsonDecoderVerification, DecoderRefusal> =
         verifyByTypeWith oracle draws seed typeof<'T> (fun value -> decoder value |> Result.map box)
 
-    // ─── Phase 885 — the browser's writer as a second reference ──────
+    // ─── The browser's writer as a second reference ──────────────────
     //
-    // 840's oracle writes every draw with the SERVER's writer, but the
+    // The oracle writes every draw with the SERVER's writer, but the
     // text a server decodes from a browser is the browser's. So the gate
     // runs twice: once over the oracle as given, once over its browser
     // twin — the same reader and the same reference decode, the draw
@@ -607,7 +604,7 @@ module JsonDecoders =
     [<Literal>]
     let BrowserLossPrefix = "on the browser's writer (Fable.SimpleJson): "
 
-    /// Phase 885 — `server`'s browser twin: the draw written as a
+    /// `server`'s browser twin: the draw written as a
     /// reflective Fable client writes it (`BrowserJsonWriter.serialize`),
     /// then read and referenced exactly as `server` reads and references
     /// it. `server`'s declared losses are properties of its reference
@@ -625,7 +622,7 @@ module JsonDecoders =
             })
     }
 
-    /// Phase 885 — `verifyByTypeWith` over BOTH writers: `oracle` as
+    /// `verifyByTypeWith` over BOTH writers: `oracle` as
     /// given, then `browserOracle oracle`. The first refusal wins (the
     /// server writer's run is taken first, so a decoder wrong on both is
     /// refused exactly where 840 refused it); on agreement the record is
@@ -650,7 +647,7 @@ module JsonDecoders =
                         DeclaredDifferences = server.DeclaredDifferences @ browser.DeclaredDifferences
                 }
 
-    /// Phase 885 — `verifyBothByTypeWith` for `'T`: what the registration
+    /// `verifyBothByTypeWith` for `'T`: what the registration
     /// gate and the generated `verifyAll` run.
     let verifyBothWith<'T>
         (oracle: JsonDecoderOracle)
@@ -660,12 +657,11 @@ module JsonDecoders =
         : Result<JsonDecoderVerification, DecoderRefusal> =
         verifyBothByTypeWith oracle draws seed typeof<'T> (fun value -> decoder value |> Result.map box)
 
-    /// Phase 902 — the gate over `oracle` as the value a generated
-    /// module's `verifyAll` takes: `verifyBothByTypeWith`, both writers,
-    /// exactly what the generated `verifyAll` ran before Phase 902.
+    /// The gate over `oracle` as the value a generated module's
+    /// `verifyAll` takes: `verifyBothByTypeWith`, both writers.
     let gateWith (oracle: JsonDecoderOracle) : JsonDecoderGate = verifyBothByTypeWith oracle
 
-    /// Phase 840 — a refusal rendered for a boot log or a test failure,
+    /// A refusal rendered for a boot log or a test failure,
     /// naming the ORACLE this wire compares against (the shared
     /// `DecoderRefusal.describe` names the MessagePack wire's reflection
     /// reader). Names the type and, for a divergence, the draw and both
@@ -687,7 +683,7 @@ module JsonDecoders =
         | DecoderUndrawable(wireType, reason) ->
             sprintf "JSON decoder for %s refused: no draw of the type could be produced — %s" wireType reason
 
-    /// Phase 840 — register the JSON decoder for `'T`, UNSCOPED, ONLY if
+    /// Register the JSON decoder for `'T`, UNSCOPED, ONLY if
     /// it agrees with `oracle` over `RemotingDecoders.DefaultDraws` draws
     /// (seed `RemotingDecoders.DefaultSeed` — the MessagePack gate's
     /// pair). A refusal leaves the table untouched, so the type keeps the
@@ -695,8 +691,8 @@ module JsonDecoders =
     /// does on the MessagePack wire: the Fable client has no oracle and
     /// registers what a build gate verified.
     ///
-    /// Phase 885 — agreement is over BOTH writers (`verifyBothWith`): the
-    /// server's, and the browser's that `oracle`'s twin writes with.
+    /// Agreement is over BOTH writers (`verifyBothWith`): the server's, and
+    /// the browser's that `oracle`'s twin writes with.
     let registerVerifiedWith<'T>
         (oracle: JsonDecoderOracle)
         (decoder: JsonDecoder<'T>)
@@ -708,9 +704,9 @@ module JsonDecoders =
 
             verification)
 
-    /// Phase 840 — the record-scoped form of `registerVerifiedWith`: the
+    /// The record-scoped form of `registerVerifiedWith`: the
     /// verified twin of `registerFor`, registering for `recordName`'s
-    /// arguments only, and only on agreement (over both writers, Phase 885).
+    /// arguments only, and only on agreement (over both writers).
     let registerVerifiedForWith<'T>
         (oracle: JsonDecoderOracle)
         (recordName: string)
@@ -721,4 +717,169 @@ module JsonDecoders =
             JsonDecoders.registerByKey (Some recordName) (RemotingDecoders.keyFor typeof<'T>) (fun value ->
                 decoder value |> Result.map box)
 
+            verification)
+
+/// The JSON ENCODER gate: a generated encoder WINS over the System.Text.Json
+/// writer on the server's response leg, so it is registered only when, for
+/// every draw of its own type, its text equals the writer's byte for byte —
+/// the encode/decode law's writing half: a reader that agrees with the writer
+/// reads an encoder's output exactly when the two texts are the same text.
+/// Same draws, same seed discipline and same refusal vocabulary as the decoder
+/// gate; a divergence carries the encoder's text as `Candidate` and the
+/// writer's as `Reflection`.
+[<RequireQualifiedAccess>]
+module JsonEncoders =
+
+    /// The text of `value` as the converter set spells it under `encoder`
+    /// (`null` is the writer's default): compact, members in model order, each
+    /// number its lexical form. The two escapings are the converter set's two:
+    /// a member NAME is escaped by System.Text.Json's writer under `encoder`
+    /// (which escapes a supplementary-plane character to a surrogate pair), and
+    /// a string VALUE as the converter set's string converter writes it — only
+    /// what RFC 8259 requires, which is `JsonEncode.toText`'s escaping. The
+    /// response leg writes a registered encoder's value through this.
+    let render (encoder: System.Text.Encodings.Web.JavaScriptEncoder) (value: JsonValue) : string =
+        use buffer = new IO.MemoryStream()
+
+        do
+            use writer =
+                new System.Text.Json.Utf8JsonWriter(
+                    buffer,
+                    System.Text.Json.JsonWriterOptions(Encoder = encoder, SkipValidation = true)
+                )
+
+            let rec write (v: JsonValue) =
+                match v with
+                | JsonValue.Null -> writer.WriteNullValue()
+                | JsonValue.Bool b -> writer.WriteBooleanValue b
+                | JsonValue.Number lexical -> writer.WriteRawValue(lexical, skipInputValidation = true)
+                | JsonValue.String _ -> writer.WriteRawValue(JsonEncode.toText v, skipInputValidation = true)
+                | JsonValue.Array items ->
+                    writer.WriteStartArray()
+                    Array.iter write items
+                    writer.WriteEndArray()
+                | JsonValue.Object members ->
+                    writer.WriteStartObject()
+
+                    for name, item in members do
+                        writer.WritePropertyName name
+                        write item
+
+                    writer.WriteEndObject()
+
+            write value
+            writer.Flush()
+
+        Text.Encoding.UTF8.GetString(buffer.ToArray())
+
+    /// The escaping the shipped converter set writes under
+    /// (`FableConverters` sets it on every options instance it builds).
+    let shippedEncoder =
+        System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+
+    /// Draw `draws` values of `target` from `seed`, write each with `write`
+    /// (the shipped writer) and with `encoder` through `render`, and refuse on
+    /// the first draw whose texts differ. An encoder that throws is a
+    /// divergence; a type that cannot be drawn, or a draw the writer refuses,
+    /// is `DecoderUndrawable`.
+    let verifyByTypeWith
+        (write: Type -> obj -> string)
+        (draws: int)
+        (seed: int)
+        (target: Type)
+        (encoder: RegisteredJsonEncoder)
+        : Result<DecoderVerification, DecoderRefusal> =
+        let wireType = Codecs.keyFor target
+        let rng = Random seed
+
+        let record divergence = {
+            WireType = wireType
+            Draws = draws
+            Seed = seed
+            Divergence = divergence
+        }
+
+        let rec go (i: int) =
+            if i >= draws then
+                Ok(record None)
+            else
+                match DecoderShapes.draw rng DecoderShapes.DefaultDepth target with
+                | Error reason -> Error(DecoderUndrawable(wireType, reason))
+                | Ok drawn ->
+                    let written =
+                        try
+                            Ok(write target drawn)
+                        with ex ->
+                            Error(sprintf "the shipped writer refused a draw: %s: %s" (ex.GetType().Name) ex.Message)
+
+                    match written with
+                    | Error reason -> Error(DecoderUndrawable(wireType, reason))
+                    | Ok reference ->
+                        let candidate =
+                            try
+                                render shippedEncoder (encoder drawn)
+                            with ex ->
+                                sprintf "<the encoder threw %s: %s>" (ex.GetType().Name) ex.Message
+
+                        if candidate = reference then
+                            go (i + 1)
+                        else
+                            Error(
+                                DecoderDiverges(
+                                    record (
+                                        Some {
+                                            Draw = i
+                                            Candidate = candidate
+                                            Reflection = reference
+                                        }
+                                    )
+                                )
+                            )
+
+        go 0
+
+    /// `verifyByTypeWith` for `'T`.
+    let verifyWith<'T>
+        (write: Type -> obj -> string)
+        (draws: int)
+        (seed: int)
+        (encoder: JsonEncoder<'T>)
+        : Result<DecoderVerification, DecoderRefusal> =
+        verifyByTypeWith write draws seed typeof<'T> (fun value -> encoder (unbox<'T> value))
+
+    /// The gate over `oracle`'s writer, as the value a generated encoder
+    /// module's `verifyAll` takes. The shipped one is
+    /// `JsonEncoders.gateWith FableConverters.decoderOracle`.
+    let gateWith (oracle: JsonDecoderOracle) : JsonEncoderGate = verifyByTypeWith oracle.Write
+
+    /// A refusal rendered for a boot log or a test failure, naming the writer
+    /// the encoder was compared against.
+    let describeRefusal (refusal: DecoderRefusal) : string =
+        match refusal with
+        | DecoderDiverges v ->
+            match v.Divergence with
+            | Some d ->
+                sprintf
+                    "JSON encoder for %s refused: draw %d of %d (seed %d) writes different text from the STJ converter set — encoder: %s; converter set: %s"
+                    v.WireType
+                    d.Draw
+                    v.Draws
+                    v.Seed
+                    d.Candidate
+                    d.Reflection
+            | None -> sprintf "JSON encoder for %s refused (no divergence recorded)" v.WireType
+        | DecoderUndrawable(wireType, reason) ->
+            sprintf "JSON encoder for %s refused: no draw of the type could be produced — %s" wireType reason
+
+    /// Register `encoder` for `'T`, UNSCOPED, ONLY if it agrees with
+    /// `oracle`'s writer over `RemotingDecoders.DefaultDraws` draws (seed
+    /// `RemotingDecoders.DefaultSeed`). A refusal leaves the table untouched,
+    /// so the type keeps the writer it had.
+    let registerVerifiedWith<'T>
+        (oracle: JsonDecoderOracle)
+        (encoder: JsonEncoder<'T>)
+        : Result<DecoderVerification, DecoderRefusal> =
+        verifyWith<'T> oracle.Write RemotingDecoders.DefaultDraws RemotingDecoders.DefaultSeed encoder
+        |> Result.map (fun verification ->
+            Codecs.register<'T> Scope.Unscoped (Codec.jsonEncoder encoder)
             verification)

@@ -10,25 +10,25 @@ open ToolUp.Platform.Audit
 
 open System
 open System.Text
-// Phase 785 — the remoting decoder registry the composition-profile
+// The remoting decoder registry the composition-profile
 // facet at the foot of this file classifies an API record against.
 open ToolUp.Remoting
 
-// ─── Phase 657 — boot verification preflight + the verified profile ──
+// ─── Boot verification preflight + the verified profile ──
 //
 // Two things were promise-tier before this file existed, and both looked
 // like guarantees from the outside.
 //
 // The first: **nothing checked at startup that the running composition is
-// the one that was sealed.** Phase 656 records what was deployed and seals
-// it, and Phase 655 supplies the scheme — but a sealed record is a
+// the one that was sealed.** The deploy records say what was deployed and
+// seal it, with the artefact-signing scheme — but a sealed record is a
 // statement filed away at deploy time. A process could start from a
 // different composition entirely and no part of the substrate would
 // notice, because no part of the substrate ever asked. `run` below is
 // that question, asked once, at boot.
 //
 // The second: **runtime capability enforcement was opt-in and nothing
-// required it.** `CompositionCapabilityGate` (Phase 300) is complete,
+// required it.** `CompositionCapabilityGate` is complete,
 // default-deny and tested — and a deployment that simply never composes
 // it is unenforced, indistinguishable from one that composed it and had
 // nothing to refuse. The **verified composition profile** below is the
@@ -43,7 +43,7 @@ open ToolUp.Remoting
 //      verdict rather than folded into a failure, because "unsealed" and
 //      "sealed and wrong" call for opposite operator responses.
 //   2. *Does the seal hold, and do the recorded artifacts match the
-//      files?* — Phase 656's `DeployRecords.verify`, unchanged and
+//      files?* — `DeployRecords.verify`, unchanged and
 //      un-reimplemented.
 //   3. *Does the binding belong to THIS record?* — the binding carries
 //      the digest of the record's canonical bytes, so a binding minted
@@ -51,7 +51,7 @@ open ToolUp.Remoting
 //   4. *Is the running composition the one the binding recorded?* — a
 //      component-by-component, knob-by-knob comparison that names every
 //      difference rather than reporting a digest that did not match.
-//      **Phase 694 added the canonical-method selector to that
+//      **The canonical-method selector was added to that
 //      comparison**, and it is worth saying why it needed adding: the
 //      manifest recorded a metric as its id alone, so two boots either
 //      side of a canonical-method flip — the one grounding mutation that
@@ -60,7 +60,7 @@ open ToolUp.Remoting
 //      reads a binding sealed before that field existed as SILENT on it
 //      (`VerifiedUnrecorded`) rather than as agreeing.
 //
-// **Phase 774 added a fifth, asked only of an affirmative answer to the
+// **A fifth is asked only of an affirmative answer to the
 // four:** *under what environment guarantee does this boot stand?* The
 // sealed record declares a `VerificationLevel` inside its signed bytes
 // (a record sealed before the level existed is read as `Attributed`,
@@ -88,7 +88,7 @@ open ToolUp.Remoting
 //     property needs a freeze, and does not have one here.
 //   * It proves nothing about the **truth of the recorded inputs**. A
 //     seal makes a statement attributable and tamper-evident; it does not
-//     make it correct. That is Phase 656's bound and it is inherited
+//     make it correct. That is the deploy records' bound and it is inherited
 //     whole.
 //   * It proves nothing about **code that was never composed**. The
 //     manifest enumerates composed units. A library linked into the
@@ -109,11 +109,11 @@ open ToolUp.Remoting
 
 // ─── The composition binding ─────────────────────────────────────────
 
-/// Phase 657 — the composition as it stood when a deployment was sealed,
+/// The composition as it stood when a deployment was sealed,
 /// bound to the sealed deploy record it accompanies.
 ///
 /// **A separate sealed statement, not a field on `DeployRecord`.** The
-/// same call Phase 656 made one phase earlier, for the same reason:
+/// same call the deploy records make, for the same reason:
 /// adding a field to `DeployRecord` would retype its constructor and
 /// break every consumer that builds one literally, for the benefit of
 /// consumers that fill it — none, today. As a separate record, an
@@ -140,7 +140,7 @@ type CompositionBinding = {
 
 /// A `CompositionBinding` plus the seal over its canonical bytes. The
 /// seal is minted by the same `IDeployRecordSealer` a deployment already
-/// seals its deploy records with (Phase 656), so a deployment adopting
+/// seals its deploy records with, so a deployment adopting
 /// this needs no second key, no second scheme, and no second trust root.
 type SealedCompositionBinding = {
     Binding: CompositionBinding
@@ -173,18 +173,18 @@ type CompositionDrift =
     /// A config knob the sealed composition recorded that is absent at
     /// boot.
     | ConfigKnobRemoved of name: string * value: string
-    /// Phase 694 — a metric present in both compositions whose
+    /// A metric present in both compositions whose
     /// canonical-method selector moved: a method-less query over that
     /// metric now resolves to a different method's lineage than the sealed
     /// composition declared. Nothing else about the composition need have
     /// changed for this to change what a recorded number means.
     | CanonicalMethodChanged of metricId: string * recorded: string * observed: string
-    /// Phase 694 — a metric the sealed composition recorded WITHOUT a
+    /// A metric the sealed composition recorded WITHOUT a
     /// canonical method that now declares one. A first declaration is a
     /// change of resolution behaviour, not an addition to a blank slate:
     /// before it, a method-less query surfaced every competing head.
     | CanonicalMethodDeclared of metricId: string * observed: string
-    /// Phase 694 — a metric whose recorded canonical method is no longer
+    /// A metric whose recorded canonical method is no longer
     /// declared. The twin of `CanonicalMethodDeclared`, and equally a
     /// change in what a method-less query returns.
     | CanonicalMethodWithdrawn of metricId: string * recorded: string
@@ -235,7 +235,7 @@ module CompositionDrift =
             $"contribution '{kind}' by '{owner}' runs at plan position {observedPosition}, recorded at {recordedPosition}"
         | ConfigKeyChanged(key, recorded, observed) -> $"config key {key} is '{observed}', recorded as '{recorded}'"
 
-// ─── Phase 694 — what an older binding could not record ──────────────
+// ─── What an older binding could not record ──────────────
 
 /// One declaration the running composition makes that the sealed binding
 /// is too old to have recorded — so the comparison could not be
@@ -299,7 +299,7 @@ type BootVerificationVerdict =
     /// the record is sealed, its artifacts match, the binding belongs to
     /// it, and the running composition is the one it recorded.
     | Verified
-    /// Phase 694 — everything the sealed binding recorded matched, and the
+    /// Everything the sealed binding recorded matched, and the
     /// binding is too old to have recorded one or more declarations, so
     /// those could not be compared. Carries each.
     ///
@@ -319,13 +319,13 @@ type BootVerificationVerdict =
     /// conflating them teaches operators to ignore both.
     | Unsealed of reason: string
     /// The seal did not hold, an artifact did not match, or the binding
-    /// belongs to a different deploy. Carries Phase 656's own failure
+    /// belongs to a different deploy. Carries the deploy records' own failure
     /// list plus any binding-level finding, each already self-describing.
     | VerificationFailed of failures: DeployRecords.DeployRecordVerificationFailure list * bindingFindings: string list
     /// Everything sealed verified, and the running composition is not
     /// the one that was sealed. Carries every difference found.
     | Drifted of drift: CompositionDrift list
-    /// Phase 678 — the sealed deploy record this deployment was started
+    /// The sealed deploy record this deployment was started
     /// from has been RETIRED: a signed terminal op closed its audit
     /// ledger and a retirement reference binds the two.
     ///
@@ -344,7 +344,7 @@ type BootVerificationVerdict =
     /// grace period for serving a deployment somebody signed a
     /// decommission for.
     | Retired of retirement: DeployRetirement
-    /// Phase 774 — every other question was answered affirmatively, and
+    /// Every other question was answered affirmatively, and
     /// the verification level this boot is credited with is below the floor
     /// the deployment declared (`BootVerificationOptions.MinimumLevel`).
     /// Carries the reading (the level, where it came from, what the runtime
@@ -448,10 +448,10 @@ module BootVerificationPolicy =
         | BootVerificationPolicy.LogAndServe -> "log-and-serve"
         | BootVerificationPolicy.RefuseOnDrift -> "refuse-on-drift"
 
-/// Phase 657 — how much the platform binds a composition to what it
+/// How much the platform binds a composition to what it
 /// declared.
 ///
-/// Deliberately a composition-level sibling of Phase 478's
+/// Deliberately a composition-level sibling of the compute dispatcher's
 /// `ExecutionProfile` rather than a case added to it: one is about the
 /// environment a unit of external work runs in, the other about the
 /// authority the composition itself carries, and a deployment can want
@@ -474,7 +474,7 @@ type CompositionProfile =
     ///      declares no `CapabilitySignature` is refused rather than
     ///      quietly granted everything, so each module's runtime
     ///      authority is bound to its declared envelope.
-    ///   3. External compute is submitted through Phase 478's
+    ///   3. External compute is submitted through the
     ///      `ExecutionProfileGate`, so an `Isolated` spec a backend
     ///      cannot honour is refused before submission. This profile is
     ///      that profile's enforcement layer — one build, two products.
@@ -496,7 +496,7 @@ module CompositionProfile =
         | CompositionProfile.Standard -> policy
         | CompositionProfile.Verified -> BootVerificationPolicy.RefuseOnDrift
 
-    /// Phase 688 — whether declared reachable-seam sets are required
+    /// Whether declared reachable-seam sets are required
     /// rather than optional. Same ladder as `requiresCapabilityGate`, and
     /// deliberately a separate predicate: a deployment reading the profile
     /// to decide what to demand should not have to know that the two
@@ -523,31 +523,31 @@ type CompositionProfileRefusal =
     /// The verified profile was declared and a backend asked to run
     /// isolated work does not assert the clauses that make it isolating.
     | IsolationPostureShortfall of backend: string * missing: string list
-    /// Phase 688 — the verified profile was declared and one or more
+    /// The verified profile was declared and one or more
     /// components declared no reachable-seam set, so their outbound
     /// authority is bound to nothing. An EMPTY component list means no
     /// `SeamGrantSignature` was supplied at all.
     | SeamGrantsUndeclared of components: string list
-    /// Phase 785 — the verified profile was declared and one or more
+    /// The verified profile was declared and one or more
     /// registered API records carry a wire type with no closed-algebra
     /// decoder, so their responses decode by reflection over an open type
     /// graph. `records` names each one, because "some record" is not a
     /// finding an operator can act on.
     | RemotingDecodersUnregistered of records: string list
-    /// Phase 842 — the verified profile was declared and one or more
+    /// The verified profile was declared and one or more
     /// registered API records take an argument type with no registered
     /// JSON decoder, so that record decodes some of its arguments by
-    /// reflection at the Phase 783 seam instead of through the closed
+    /// reflection at the argument seam instead of through the closed
     /// JSON algebra. Each entry pairs the record with the argument
     /// type(s) it carries that have no decoder — an operator reading
     /// "IPresenceApi" alone would still have to go find what is
     /// missing; the pair names what to register.
     | RemotingArgumentDecodersUnregistered of records: (string * string list) list
-    /// Phase 793 — the verified profile was declared and one or more
+    /// The verified profile was declared and one or more
     /// registered AI tools declare no effects, so their bodies are bound to
     /// no envelope. `tools` names each one.
     | ToolEffectsUndeclared of tools: string list
-    /// Phase 771 — the verified profile was declared with a hardening-baseline
+    /// The verified profile was declared with a hardening-baseline
     /// floor, and one or more controls that floor names were observed off on
     /// the composed pipeline at boot. Each entry names the control and what
     /// was observed, because "the baseline" is not something an operator can
@@ -576,7 +576,7 @@ module CompositionProfileRefusal =
                 |> List.map (fun (record, uncovered) -> sprintf "%s (%s)" record (String.concat ", " uncovered))
                 |> String.concat "; "
 
-            $"the verified composition profile requires every registered API record to decode its arguments through the closed JSON decoder algebra, and these carry an argument type with none: {named}. Register a JSON decoder for each type named (JsonDecoders.register), or generate one — Phase 804 packages the generator for a consumer's own records too, see docs/platform/remoting-decoder-algebra.md — or run CompositionProfile.Standard."
+            $"the verified composition profile requires every registered API record to decode its arguments through the closed JSON decoder algebra, and these carry an argument type with none: {named}. Register a JSON decoder for each type named (JsonDecoders.register), or generate one — the generator runs over a consumer's own records too, see docs/platform/remoting-decoder-algebra.md — or run CompositionProfile.Standard."
         | ToolEffectsUndeclared tools ->
             let named = String.concat "; " tools
 
@@ -602,7 +602,7 @@ type BootVerificationResult = {
     Policy: BootVerificationPolicy
     /// Whether this verdict refused the process a start.
     RefusedStart: bool
-    /// Phase 774 — the verification level this boot is credited with, and
+    /// The verification level this boot is credited with, and
     /// where it came from. `Some` whenever the sealed record verified and
     /// the binding belongs to it (an affirmative, drifted or below-floor
     /// verdict); `None` when there was no record, its seal failed, or it
@@ -637,7 +637,7 @@ type BootVerificationOptions = {
     Binding: SealedCompositionBinding option
     /// The build transcript to check the record's transcript digest
     /// against, when the deployment holds it. `None` SKIPS that question
-    /// rather than answering it affirmatively — Phase 656's contract,
+    /// rather than answering it affirmatively — the deploy records' contract,
     /// inherited unchanged.
     Transcript: BuildTranscript option
     /// Where the verdict is recorded. `None` records nothing, which is
@@ -645,11 +645,11 @@ type BootVerificationOptions = {
     AuditLog: IAuditLog option
     /// Scope the verdict is recorded under.
     ScopeId: string
-    /// Phase 774 — the verification level the deployment requires. `None`
+    /// The verification level the deployment requires. `None`
     /// declares no floor: the level is still read and reported, and never
     /// refuses anything.
     MinimumLevel: VerificationLevel option
-    /// Phase 774 — the runtime attestor asked what it observed of the
+    /// The runtime attestor asked what it observed of the
     /// running binary. `RuntimeAttestor.unattested` is the honest default:
     /// it observes nothing, so the boot is credited with exactly what the
     /// sealed record is.
@@ -721,7 +721,7 @@ module BootVerificationPreflight =
         |> List.distinctBy _.Name
         |> List.sortBy _.Name
 
-    /// Framing version for the Phase 694 canonical-method block. Part of
+    /// Framing version for the canonical-method block. Part of
     /// the framed bytes, so a manifest canonicalised under a future
     /// scheme can never collide with one canonicalised under this.
     [<Literal>]
@@ -761,14 +761,14 @@ module BootVerificationPreflight =
 
     /// Length-framed canonical text for a composition manifest.
     ///
-    /// Framed with the same injective scheme Phase 656 uses, for the same
+    /// Framed with the same injective scheme the deploy records use, for the same
     /// reason: without it, two distinct compositions could canonicalise
     /// to the same text by concatenation and a digest over them would be
     /// meaningless.
     ///
-    /// **Phase 694: the canonical-method block is emitted only for a
+    /// **The canonical-method block is emitted only for a
     /// manifest that records it, and that gate is load-bearing.** A
-    /// binding sealed before Phase 694 must canonicalise to the exact
+    /// binding sealed before the block existed must canonicalise to the exact
     /// bytes its seal was minted over — for ever, on every host that
     /// re-reads it. Appending even a `"0"` length for an absent block
     /// would change the canonical form of every manifest in existence, and
@@ -894,7 +894,7 @@ module BootVerificationPreflight =
 
     // ─── Comparing compositions ──────────────────────────────────────
 
-    /// Phase 1051 — whether `recorded` is the pre-1051 `%A` rendering of
+    /// Whether `recorded` is the pre-1051 `%A` rendering of
     /// the case `observed` names, for a knob `CompositionManifest.caseKnob`
     /// now renders by case name.
     ///
@@ -1034,7 +1034,7 @@ module BootVerificationPreflight =
                     ConfigKnobRemoved(name, recordedValue)
         ]
 
-        // Phase 694 — the canonical-method selectors, compared ONLY when
+        // The canonical-method selectors, compared ONLY when
         // both manifests record them. When the recorded side does not, the
         // comparison is not performed at all and `unrecorded` below says
         // so; silently treating the legacy side's empty list as "no metric
@@ -1121,7 +1121,7 @@ module BootVerificationPreflight =
         @ contributionFindings
         @ configKeyFindings
 
-    /// Phase 694 — every declaration the running composition makes that
+    /// Every declaration the running composition makes that
     /// the sealed binding is too old to have recorded.
     ///
     /// Separate from `compare` rather than folded into its return, because
@@ -1216,7 +1216,7 @@ module BootVerificationPreflight =
                 | Error reason -> return Error [ $"composition binding seal does not cover this binding: {reason}" ]
         }
 
-    /// The four questions in the file header, without the Phase 678
+    /// The four questions in the file header, without the
     /// retirement question. Private: every caller reaches it through
     /// `verifyWithRetirement`, which is the whole check.
     let private verifyUnretired (options: BootVerificationOptions) (observed: CompositionManifest) = async {
@@ -1267,7 +1267,7 @@ module BootVerificationPreflight =
             else
                 match compare sealedBinding.Binding.Composition observed with
                 | [] ->
-                    // Phase 694 — drift first, then what could not be
+                    // Drift first, then what could not be
                     // compared. A drifted verdict already names an
                     // actionable difference whose remedy (re-seal the
                     // binding from the running composition) is the same
@@ -1280,16 +1280,16 @@ module BootVerificationPreflight =
                 | drift -> return BootVerificationVerdict.Drifted drift
     }
 
-    /// Phase 678 — the four questions in the file header, preceded by the
+    /// The four questions in the file header, preceded by the
     /// retirement question — *has this deployment been retired?* — and
-    /// followed by Phase 774's level question (`assessLevel`).
+    /// followed by the level question (`assessLevel`).
     ///
     /// **The retirement is a parameter rather than a field on
     /// `BootVerificationOptions`.** Widening that record would retype its
     /// constructor and break every consumer that builds one literally, for
     /// a feature no existing consumer supplies — the repo's standing
-    /// design corollary, and the same call Phase 656 and Phase 657 each
-    /// made for their own records. `verify` below delegates here with
+    /// design corollary, and the same call the deploy records and the
+    /// verified profile each made for their own records. `verify` below delegates here with
     /// `None`, so a deployment that never retires is byte-for-byte what it
     /// was (GP 11 / GP 13).
     ///
@@ -1302,7 +1302,7 @@ module BootVerificationPreflight =
     /// binding-mismatch family the composition binding already uses, and
     /// emphatically not a reason to refuse the boot of a deployment nobody
     /// retired.
-    /// Phase 774 — the fifth question, asked of a verdict the first four
+    /// The fifth question, asked of a verdict the first four
     /// answered: read the verification level, and hold it against the
     /// declared floor.
     ///
@@ -1380,7 +1380,7 @@ module BootVerificationPreflight =
                 | _, _ -> return BootVerificationVerdict.VerificationFailed([], misbound), None
         }
 
-    /// Phase 678 — the questions in the file header, preceded by the
+    /// The questions in the file header, preceded by the
     /// retirement question; see `assessWithRetirement`. Returns the verdict
     /// alone.
     let verifyWithRetirement
@@ -1424,7 +1424,7 @@ module BootVerificationPreflight =
             do! auditLog.Record(options.ScopeId, AuditEvent.CompositionVerificationRecorded payload)
     }
 
-    /// Phase 678 — run the preflight against a deployment that may have
+    /// Run the preflight against a deployment that may have
     /// been retired, record the verdict, and decide whether the process
     /// may serve.
     ///
@@ -1496,7 +1496,7 @@ module BootVerificationPreflight =
 module VerifiedCompositionProfile =
 
     /// Render a capability as `effect/determinism/readiness` for an audit
-    /// payload. Stable and lowercase; the axis vocabulary is Phase 282's.
+    /// payload. Stable and lowercase; the axis vocabulary is the capability gate's.
     let renderCapability (capability: CompanionCapability) : string =
         let effect =
             match capability.Effect with
@@ -1539,7 +1539,7 @@ module VerifiedCompositionProfile =
         : Async<unit> =
         auditLog.Record(scopeId, AuditEvent.CompositionCapabilityRefused(refusalPayload profile denial))
 
-    /// Phase 1026 — the warning a failed refusal audit write is logged as.
+    /// The warning a failed refusal audit write is logged as.
     let private refusalWarn =
         Background.writeFailureLogger
             "BootVerificationPreflight"
@@ -1553,7 +1553,7 @@ module VerifiedCompositionProfile =
     /// contract: a refusal is already fail-closed by the time this runs,
     /// and blocking the refusing call site on an audit write would make
     /// the security control's cost depend on the audit backend's latency.
-    /// Observed (Phase 1026): started through `Background.startAudit`, so a
+    /// Observed: started through `Background.startAudit`, so a
     /// sink that throws is a Warning to the console and never kills the
     /// host. The refusal itself is unaffected either way.
     let auditingObserver
@@ -1596,7 +1596,7 @@ module VerifiedCompositionProfile =
         : Result<ICompositionCapabilityGate, CompositionProfileRefusal> =
         resolveGate profile (auditingObserver auditLog scopeId profile) signature
 
-    // ─── Phase 688 — the seam-authority arm of the profile ────────────
+    // ─── The seam-authority arm of the profile ────────────
 
     /// Every component that appears in the capability signature but has
     /// declared no reachable-seam set, ordinally sorted so the refusal
@@ -1607,7 +1607,7 @@ module VerifiedCompositionProfile =
     /// so "declared an effect envelope but no seam set" is exactly the
     /// half-declared state the verified profile must not accept. A
     /// component absent from both is invisible to the effect gate too,
-    /// and Phase 300's default-deny already covers it.
+    /// and the capability gate's default-deny already covers it.
     let undeclaredSeamComponents (signature: CapabilitySignature) (grants: SeamGrantSignature) : string list =
         signature
         |> Map.toList
@@ -1660,7 +1660,7 @@ module VerifiedCompositionProfile =
 
     /// Bind an external-compute dispatcher to the profile.
     ///
-    /// Under `Verified` the dispatcher is wrapped in Phase 478's
+    /// Under `Verified` the dispatcher is wrapped in the
     /// `ExecutionProfileGate`, so an `Isolated` spec a backend does not
     /// declare the posture for is refused before the payload leaves the
     /// process. Under `Standard` the dispatcher is returned exactly as
@@ -1680,7 +1680,7 @@ module VerifiedCompositionProfile =
     /// Check a backend can honour the execution profile it will be asked
     /// for, at composition time rather than at first submission.
     ///
-    /// Under `Standard` the question is not asked — Phase 478's own
+    /// Under `Standard` the question is not asked — the dispatcher's own
     /// per-submission check remains the gate. Under `Verified` a backend
     /// that will be handed `Isolated` work and does not assert the
     /// clauses is refused up front, naming every clause it is missing.
@@ -1698,7 +1698,7 @@ module VerifiedCompositionProfile =
             else
                 Error(IsolationPostureShortfall(backend, IsolationPosture.shortfall posture))
 
-// ─── Phase 785 — the remoting-decoder facet ──────────────────────────
+// ─── The remoting-decoder facet ──────────────────────────
 //
 // Opting a record onto the closed decoder algebra is REQUIRED under the
 // verified composition profile and optional everywhere else, and
@@ -1709,15 +1709,9 @@ module VerifiedCompositionProfile =
 // to check, so the lightweight platform is untouched and an existing
 // verified deployment that upgrades does not suddenly refuse to boot.
 //
-// **The record set is DECLARED by the composition root rather than
-// discovered.** Nothing in this tier holds a registry of composed API
-// records: the dispatcher classifies a record's methods when it mounts
-// one, and it keeps no list afterwards. Inventing a discovery mechanism
-// for this facet would put a second, differently-derived answer beside
-// the dispatcher's, which is the shape Phase 686's header rejects for
-// every section it gathers ("this file mints NO verification logic").
-// So the root names what it mounted, exactly as it names its seam
-// grants and its capability signature.
+// **The record set is what `Api.make` mounted** (`ServedApiRecords`), so a
+// record a root forgot to declare is a `Reflection` line rather than an
+// absence; corpus coverage alone stays declared.
 //
 // **Corpus coverage is declared too, and it is a separate axis from
 // registration for a reason the report depends on.** A record can decode
@@ -1727,7 +1721,7 @@ module VerifiedCompositionProfile =
 // the conjunction and `Observed` for everything else — a deployment's
 // assertion about itself never reading as a pass.
 
-/// Phase 785 — how one API record's responses decode.
+/// How one API record's responses decode.
 [<RequireQualifiedAccess>]
 type RemotingDecoderClass =
     /// Every wire type this record carries has a registered
@@ -1737,7 +1731,7 @@ type RemotingDecoderClass =
     /// type graph instead.
     | Reflection
 
-/// Phase 785 — one API record's classification.
+/// One API record's classification.
 type RemotingDecoderBinding = {
     /// The API record's name, as the composition root calls it.
     DecoderApiRecord: string
@@ -1753,7 +1747,7 @@ type RemotingDecoderBinding = {
     DecoderCorpusCovered: bool
 }
 
-/// Phase 785 — what the facet found.
+/// What the facet found.
 type RemotingDecoderFacet = {
     /// The profile the deployment declared.
     FacetProfile: CompositionProfile
@@ -1820,9 +1814,9 @@ module RemotingDecoderFacet =
     /// generator declared for every platform record. A root with its own
     /// API records composes its declarations with it and passes the whole
     /// list to `inspect`; the two go through the same function, so a
-    /// consumer's record and a platform one are graded identically. Since
-    /// Phase 801 the form a root usually wants is `inspectServed`, which
-    /// reads what was MOUNTED rather than what was declared.
+    /// consumer's record and a platform one are graded identically. The
+    /// form a root usually wants is `inspectServed`, which reads what was
+    /// MOUNTED rather than what was declared.
     ///
     /// It does NOT register anything. `PlatformDecoders.registerAll` is
     /// an explicit act the root performs; a facet that registered what
@@ -1830,7 +1824,7 @@ module RemotingDecoderFacet =
     let inspectPlatform (profile: CompositionProfile) : RemotingDecoderFacet =
         inspect profile PlatformDecoders.coveredApiRecords
 
-    /// Phase 801 — the wire types an API record's methods return, by the
+    /// The wire types an API record's methods return, by the
     /// key the registry uses: each field's curried function chain walked
     /// to its `Async<'r>` and `'r` taken. A field that does not end in an
     /// `Async<_>` is not a remoting method and carries nothing to decode.
@@ -1864,7 +1858,7 @@ module RemotingDecoderFacet =
         let tick = n.IndexOf '`'
         if tick >= 0 then n.Substring(0, tick) else n
 
-    /// Phase 801 — classify every API record this process has SERVED.
+    /// Classify every API record this process has SERVED.
     ///
     /// The denominator is what `Api.make` mounted (`ServedApiRecords`),
     /// not what a root declared, so a record a root forgot to declare is
@@ -1890,7 +1884,7 @@ module RemotingDecoderFacet =
             name, returnTypesOf t, (Map.tryFind name corpusCovered |> Option.defaultValue false))
         |> inspect profile
 
-    /// Phase 801 — the served set, with the platform's own declarations
+    /// The served set, with the platform's own declarations
     /// supplying corpus coverage. The one-liner for a root that mounts
     /// the SDK's surfaces and its own modules and declares nothing
     /// further: every platform record reads `Algebra` and corpus-covered
@@ -1899,11 +1893,8 @@ module RemotingDecoderFacet =
     let inspectServedPlatform (profile: CompositionProfile) : RemotingDecoderFacet =
         inspectServed profile PlatformDecoders.coveredApiRecords
 
-    /// Phase 801 — coverage: how many of the facet's records decode
-    /// through the algebra, over how many there are. The number Phase
-    /// 69k found the facet could not report — its `Reflection` count was
-    /// structurally zero because only declared records were classified —
-    /// and the facet's measure since.
+    /// Coverage: how many of the facet's records decode through the
+    /// algebra, over how many there are.
     let coverage (facet: RemotingDecoderFacet) : int * int =
         let algebra =
             facet.FacetBindings
@@ -1924,32 +1915,16 @@ module RemotingDecoderFacet =
             (CompositionProfile.label facet.FacetProfile)
             (if facet.FacetRequired then "mandatory" else "advisory")
 
-    // ─── Phase 799 — the ARGUMENT side, on the JSON wire ─────────────
+    // ─── The ARGUMENT side, on the JSON wire ─────────────────────────
     //
     // The facet above is about what the CLIENT decodes: a record's method
-    // RETURN types, on the binary wire, against `RemotingDecoders`. The
-    // server's own decode edge is the other direction — the ARGUMENT
-    // types its methods take, arriving as JSON and decoded at the Phase
-    // 783 seam, which since Phase 799 consults `JsonDecoders` first. This
-    // is that facet: the same served set, the same classifier, the same
-    // binding shape, over argument types against the JSON registry.
-    //
-    // Phase 799 shipped it ADVISORY under every profile
-    // (`FacetRequired = false` whatever the profile said), and
-    // deliberately: the JSON algebra's first set was hand-written and
-    // narrow, and a `Verified` deployment that refused on a served
-    // record with no JSON decoder would have refused nearly every
-    // deployment on the day the facet shipped.
-    //
-    // Phase 842 — it follows the profile now, the same predicate the
-    // response facet has used since Phase 801
-    // (`RemotingDecoderFacet.requiresAlgebraDecoders`). Phase 841 gave
-    // the generator an argument leg (`Emit.jsonCompilationUnit` /
-    // `Plan.forJsonTypes`), so every platform record's arguments are
-    // covered by construction and the road this facet travels between
-    // Phases 785 and 801 for the response side is now travelled here
-    // too. This comment replaces the one that explained why it was
-    // advisory — the record of when that stopped being true.
+    // RETURN types, on the binary wire. The server's own decode edge is the
+    // other direction — the ARGUMENT types its methods take, arriving as JSON
+    // and decoded at the argument seam, which consults `Codecs.resolveJson`
+    // first. This is that facet: the same served set, the same classifier,
+    // the same binding shape, over argument types against the JSON decoders.
+    // It follows the profile (`requiresAlgebraDecoders`): the generator's
+    // argument leg covers every platform record's arguments by construction.
 
     /// The wire types an API record's methods TAKE, by the registry key:
     /// each field's curried function chain walked to its `Async<_>`,
@@ -1978,17 +1953,14 @@ module RemotingDecoderFacet =
         |> List.distinct
         |> List.map RemotingDecoders.keyFor
 
-    /// Phase 799 — classify every SERVED API record by its argument
+    /// Classify every SERVED API record by its argument
     /// types against the JSON algebra registry. Corpus coverage is
     /// `false` throughout: the wire corpus draws the corpus's own types,
     /// and no platform argument type is among them yet.
     ///
-    /// Phase 839 — the registry key widened to `(record option) * (wire
-    /// key)`, so a record's argument is covered when EITHER its own
-    /// record-scoped registration exists, OR an unscoped one does —
-    /// exactly the same two-step lookup `JsonDecoders.tryGet` does at the
-    /// seam, read here off the process-wide table instead of a live
-    /// per-request call.
+    /// A record's argument is covered when EITHER its own record-scoped
+    /// registration exists, OR an unscoped one does — the same two-step
+    /// lookup the seam does, read here off the process-wide table.
     let inspectServedArguments (profile: CompositionProfile) : RemotingDecoderFacet =
         let registered = ToolUp.Remoting.Json.JsonDecoders.registered () |> Set.ofList
 
@@ -2032,6 +2004,62 @@ module RemotingDecoderFacet =
             (CompositionProfile.label facet.FacetProfile)
             (if facet.FacetRequired then "mandatory" else "advisory")
 
+    // ─── The codec posture: one walk over every mounted contract ─────
+    //
+    // The two facets above read the registries' census. This one walks what
+    // the dispatcher itself resolves: every argument and every answer of
+    // every SERVED API record's contract, through `Codecs`, under
+    // `VerifiedOnly` (`Proxy.codecMisses`, the same walk a `VerifiedOnly`
+    // mount refuses on). Its misses are what the strict posture would refuse,
+    // so a `ReflectionFallback` deployment reads, at boot, what turning the
+    // switch would cost.
+
+    /// Every served API record with the wire types its contract carries that
+    /// `Codecs` does not resolve, in first-mount order; a record with none is
+    /// listed with an empty list.
+    let inspectCodecs () : (string * ToolUp.Remoting.Server.Proxy.CodecMiss list) list =
+        ServedApiRecords.all ()
+        |> List.filter (fun t ->
+            Reflection.FSharpType.IsRecord(t, Reflection.BindingFlags.Public ||| Reflection.BindingFlags.NonPublic))
+        |> List.map (fun t ->
+            recordName t, ToolUp.Remoting.Server.Proxy.codecMisses (ToolUp.Remoting.Server.Contract.read t))
+
+    /// One line for the boot log: the posture, how many served records
+    /// resolve every argument and answer through a registered codec, and the
+    /// records the strict posture would refuse, each with its first miss.
+    let describeCodecs (policy: DecodePolicy) (inspected: (string * ToolUp.Remoting.Server.Proxy.CodecMiss list) list) =
+        let refused = inspected |> List.filter (snd >> List.isEmpty >> not)
+
+        let posture =
+            match policy with
+            | DecodePolicy.ReflectionFallback -> "ReflectionFallback"
+            | DecodePolicy.VerifiedOnly -> "VerifiedOnly"
+
+        let tail =
+            match refused with
+            | [] -> "none would be refused under VerifiedOnly"
+            | records ->
+                records
+                |> List.map (fun (record, misses) ->
+                    let first = List.head misses
+
+                    sprintf
+                        "%s (%d miss(es), first: %s %A %s)"
+                        record
+                        (List.length misses)
+                        first.Method
+                        first.Leg
+                        first.WireType)
+                |> String.concat "; "
+                |> sprintf "would be refused under VerifiedOnly: %s"
+
+        sprintf
+            "remoting codecs: %d of %d served API record(s) read every argument and write every answer through a registered codec (posture %s); %s"
+            (List.length inspected - List.length refused)
+            (List.length inspected)
+            posture
+            tail
+
     /// The records this facet classifies as `Reflection`, in declaration
     /// order.
     let reflectionRecords (facet: RemotingDecoderFacet) : string list =
@@ -2055,7 +2083,7 @@ module RemotingDecoderFacet =
             | [] -> Ok()
             | records -> Error(RemotingDecodersUnregistered records)
 
-    /// Phase 842 — the boot check for the ARGUMENT facet.
+    /// The boot check for the ARGUMENT facet.
     ///
     /// A cousin of `verify` rather than a reuse of it: `verify`'s
     /// `RemotingDecodersUnregistered` names records only, matching the
@@ -2079,12 +2107,12 @@ module RemotingDecoderFacet =
             | [] -> Ok()
             | records -> Error(RemotingArgumentDecodersUnregistered records)
 
-    /// Mirror the facet into the tier-neutral shape the Phase 686 report
+    /// Mirror the facet into the tier-neutral shape the verification report
     /// carries.
     ///
     /// The mapping lives HERE, beside the facet, rather than in the
-    /// report — the shape Phase 693 established for the seam-authority
-    /// posture and Phase 686's header requires of every section: the
+    /// report — the shape the seam-authority posture established and the
+    /// report's header requires of every section: the
     /// report mints no verification logic and re-labels a substrate's
     /// own verdict, so the substrate is what does the labelling.
     let toIntegrity (facet: RemotingDecoderFacet) : RemotingDecoderIntegrity = {

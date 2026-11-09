@@ -27,8 +27,17 @@ module ToolUp.Platform.Tests.Remoting.StjRoundTripTests
 
 open System
 open System.IO
+open System.Net.Http
+open System.Text
 open System.Text.Json
 open Expecto
+open Giraffe
+open Microsoft.AspNetCore.Builder
+open Microsoft.AspNetCore.Hosting
+open Microsoft.AspNetCore.TestHost
+open Microsoft.Extensions.Hosting
+open ToolUp.Remoting.Server
+open ToolUp.Remoting.Giraffe
 open ToolUp.Platform.Tests.Remoting.WireCorpus
 
 let private roundTrip (c: WireCase) =
@@ -289,7 +298,7 @@ let private timeSpanTickLoss =
         Expect.isEmpty
             algebraLossy
             (sprintf
-                "%d drawn TimeSpan value(s) lose precision through the JSON ALGEBRA, which reads the millisecond text as a decimal and must be exact over this population (Phase 799)"
+                "%d drawn TimeSpan value(s) lose precision through the JSON ALGEBRA, which reads the millisecond text as a decimal and must be exact over this population"
                 (List.length algebraLossy))
 
         let worst = lossy |> List.map snd |> List.max
@@ -497,6 +506,167 @@ let private differentialShape =
 
         printfn "%s" (adequacyReport "STJ population (pinned + generated)" (pinnedCases @ generatedCases ()))
 
+// ─── The response leg: a registered encoder writes the writer's bytes ──
+//
+// The server's response writer consults `Codecs.resolveJsonEncoder` for the
+// method's answer type before System.Text.Json, and so does a streaming
+// method's chunk encoder. The pin is end to end, over a mounted API: the same
+// call answered with nothing registered (the converter set wrote it) and with
+// an encoder registered (the algebra wrote it — a counter proves it ran)
+// carries the SAME bytes, unary and streamed.
+
+/// The probe's answer: a string member carrying characters the converter
+/// set's string writer escapes, a number, an option and a union.
+type ResponseLegProbe = {
+    Name: string
+    Count: int
+    Note: string option
+    Kind: ResponseLegKind
+}
+
+and ResponseLegKind =
+    | Plain
+    | Tagged of string
+
+type ResponseLegApi = {
+    Get: unit -> Async<ResponseLegProbe>
+    Stream: int -> System.Collections.Generic.IAsyncEnumerable<ResponseLegProbe>
+}
+
+let private probeValue (i: int) = {
+    Name = sprintf "a \"quoted\" <name> & é \t %d" i
+    Count = i
+    Note = if i % 2 = 0 then Some "even" else None
+    Kind = if i % 2 = 0 then Plain else Tagged "odd"
+}
+
+let private probeApi: ResponseLegApi = {
+    Get = fun () -> async { return probeValue 7 }
+    Stream =
+        fun upto ->
+            { new System.Collections.Generic.IAsyncEnumerable<ResponseLegProbe> with
+                member _.GetAsyncEnumerator _ =
+                    let mutable current = 0
+
+                    { new System.Collections.Generic.IAsyncEnumerator<ResponseLegProbe> with
+                        member _.Current = probeValue current
+
+                        member _.MoveNextAsync() =
+                            current <- current + 1
+                            System.Threading.Tasks.ValueTask<bool>(current <= upto)
+
+                        member _.DisposeAsync() = System.Threading.Tasks.ValueTask()
+                    }
+            }
+}
+
+let private encodeKind: ToolUp.Remoting.Json.JsonEncoder<ResponseLegKind> =
+    function
+    | Plain -> ToolUp.Remoting.Json.JsonEncode.case0 "Plain"
+    | Tagged text -> ToolUp.Remoting.Json.JsonEncode.payload "Tagged" (ToolUp.Remoting.Json.JsonEncode.string text)
+
+let private encoded = ref 0
+
+/// A hand-written encoder in the generator's shape, counting its calls.
+let private encodeProbe: ToolUp.Remoting.Json.JsonEncoder<ResponseLegProbe> =
+    fun value ->
+        encoded.Value <- encoded.Value + 1
+
+        ToolUp.Remoting.Json.JsonEncode.record [
+            "Name", ToolUp.Remoting.Json.JsonEncode.string value.Name
+            "Count", ToolUp.Remoting.Json.JsonEncode.int32 value.Count
+            "Note",
+            (match value.Note with
+             | Some note -> ToolUp.Remoting.Json.JsonEncode.string note
+             | None -> ToolUp.Remoting.Json.JsonValue.Null)
+            "Kind", encodeKind value.Kind
+        ]
+
+/// One mounted `ResponseLegApi`, the bodies of a unary call and a stream.
+let private callProbe () = async {
+    let handler =
+        Remoting.createApi ()
+        |> Remoting.fromValue probeApi
+        |> Remoting.buildHttpHandler
+
+    use host =
+        Host
+            .CreateDefaultBuilder()
+            .ConfigureWebHostDefaults(fun webHost ->
+                webHost
+                    .UseTestServer()
+                    .ConfigureServices(fun services -> services.AddGiraffe() |> ignore)
+                    .Configure(fun (app: IApplicationBuilder) -> app.UseGiraffe handler)
+                |> ignore)
+            .Build()
+
+    do! host.StartAsync() |> Async.AwaitTask
+    use client = host.GetTestClient()
+
+    let post (path: string) (body: string) = async {
+        use content = new StringContent(body, Encoding.UTF8, "application/json")
+        let! response = client.PostAsync(path, content) |> Async.AwaitTask
+        return! response.Content.ReadAsByteArrayAsync() |> Async.AwaitTask
+    }
+
+    let! unary = post "/ResponseLegApi/Get" "[]"
+    let! streamed = post "/ResponseLegApi/Stream" "[3]"
+    do! host.StopAsync() |> Async.AwaitTask
+    return unary, streamed
+}
+
+/// The `data:` payloads of an SSE body's chunk events, in order.
+let private chunkData (body: byte[]) =
+    let text = Encoding.UTF8.GetString body
+
+    text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries)
+    |> Array.filter (fun frame -> frame.Contains "event: chunk")
+    |> Array.map (fun frame ->
+        frame.Split '\n'
+        |> Array.filter (fun line -> line.StartsWith "data: ")
+        |> Array.map (fun line -> line.Substring 6)
+        |> String.concat "\n")
+    |> Array.toList
+
+let private responseLeg =
+    testList "the response leg" [
+        testCase "a registered encoder's response is byte-identical to the converter set's, unary and streamed"
+        <| fun () ->
+            let key = ToolUp.Remoting.Codecs.keyFor typeof<ResponseLegProbe>
+
+            Expect.isNone
+                (ToolUp.Remoting.Codecs.tryJsonEncoder ToolUp.Remoting.Scope.Unscoped typeof<ResponseLegProbe>)
+                (sprintf "nothing is registered for %s before the pin" key)
+
+            let stjUnary, stjStreamed = callProbe () |> Async.RunSynchronously
+            Expect.equal encoded.Value 0 "the converter set wrote the reference bytes"
+
+            ToolUp.Remoting.Codecs.register<ResponseLegProbe>
+                ToolUp.Remoting.Scope.Unscoped
+                (ToolUp.Remoting.Codec.jsonEncoder encodeProbe)
+
+            try
+                let algebraUnary, algebraStreamed = callProbe () |> Async.RunSynchronously
+                Expect.isGreaterThanOrEqual encoded.Value 4 "the algebra wrote the unary answer and every chunk"
+
+                Expect.equal
+                    (Encoding.UTF8.GetString algebraUnary)
+                    (Encoding.UTF8.GetString stjUnary)
+                    "the unary answer is the converter set's text"
+
+                Expect.sequenceEqual algebraUnary stjUnary "byte for byte"
+
+                Expect.equal (List.length (chunkData stjStreamed)) 3 "the stream carried three chunks"
+
+                Expect.equal
+                    (chunkData algebraStreamed)
+                    (chunkData stjStreamed)
+                    "and each chunk is the converter set's text"
+            finally
+                ToolUp.Remoting.Codecs.resetLegForTests ToolUp.Remoting.CodecLeg.EncodeJson
+                ToolUp.Remoting.Json.PlatformJsonEncoders.registerAll ()
+    ]
+
 [<Tests>]
 let tests =
     testList "Remoting STJ wire corpus" [
@@ -509,4 +679,5 @@ let tests =
         timeSpanTickLoss
         generatedShapeMutations
         differentialShape
+        responseLeg
     ]

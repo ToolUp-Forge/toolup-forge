@@ -51,8 +51,8 @@ open Microsoft.FSharp.Reflection
 // A type the algebra cannot express is REFUSED BY NAME, never guessed at.
 // A refusal is not a failure of the generator: a wire type with no generated
 // decoder simply keeps the reflection path, which is what it had before, and
-// `RemotingDecoders.tryGet` returning `None` is that path (see
-// `DecoderRegistry.fs` — "a miss costs the algebra, never correctness"). A
+// `Codecs.resolveJson` returning `None` is that path (see `Codecs.fs` — a miss
+// is the reflective path, or a refusal naming the type, never a wrong codec). A
 // generator that guessed would instead produce a decoder that compiles, runs,
 // and is wrong, which is the one outcome worse than not generating.
 
@@ -84,7 +84,7 @@ type CasePayload =
     | OneField of decoder: string
     /// `[tag; [field; …]]` — `Decode.fields n` over a `field` pipeline in
     /// the case's own declared field order, which is the order
-    /// `Write.writeUnion` emits (Phase 800). The pipeline is the record
+    /// `Write.writeUnion` emits. The pipeline is the record
     /// shape, because on the wire the inner array IS a record of the
     /// case's fields; `fields` adds the arity check that makes a case of
     /// the wrong width a named refusal.
@@ -144,7 +144,7 @@ type GenerationPlan = {
     /// The roots that could not be, and every type underneath them that
     /// could not be, deduplicated and ordered by name.
     Refusals: Refusal list
-    /// The recursive binding groups (Phase 816): one entry per strongly
+    /// The recursive binding groups: one entry per strongly
     /// connected component of the binding dependency graph that carries a
     /// cycle, each listing its members' binding names in emission order.
     /// `Bindings` is ordered so every group is CONTIGUOUS, and the emitter
@@ -207,7 +207,7 @@ type ClientRecordPlan = {
     RecordSpelling: string
     /// Every method, in the record's declaration order.
     Methods: ClientMethodPlan list
-    /// The read policies its attributes declare (Phase 854), emitted as
+    /// The read policies its attributes declare, emitted as
     /// the registration a Fable client cannot read off the record itself.
     ReadPolicies: ClientReadPolicy list
 }
@@ -304,7 +304,7 @@ module Plan =
     /// `aiDenialGroupCount`. The rule is the usual one: lower the whole
     /// leading uppercase run, except that when the run is followed by a
     /// lowercase letter its LAST character starts the next word and stays
-    /// capital. Matched against the hand-written Phase 785 decoder names,
+    /// capital. Matched against the hand-written decoder names,
     /// which is what the fidelity test asserts.
     let camelCase (name: string) : string =
         if String.IsNullOrEmpty name then
@@ -618,6 +618,26 @@ module Plan =
         Tuple = "JsonEncode.tuple"
     }
 
+    /// The JSON wire as the server's converter set writes it, for a
+    /// response: `jsonWriting` (the browser's convention, which the argument
+    /// seam reads) except where the two writers differ — a `DateTimeOffset`
+    /// with its fraction's trailing zeros trimmed, and a map keyed by a value
+    /// as an object whose member names are the keys' JSON text rather than an
+    /// array of pairs. Both combinators are `JsonEncoders`' (Core).
+    let private jsonResponseWriting = {
+        jsonWriting with
+            Primitives =
+                dict [
+                    for KeyValue(t, encoder) in jsonPrimitiveEncoders ->
+                        t,
+                        (if t = typeof<DateTimeOffset> then
+                             "JsonEncoders.dateTimeOffset"
+                         else
+                             encoder)
+                ]
+            MapOf = "JsonEncoders.mapOf"
+    }
+
     /// A map key the browser writes in its own JSON form, in
     /// an ARRAY of `[key, value]` pairs: `Fable.SimpleJson` does so for
     /// every key that is neither one of its primitives nor a union whose
@@ -642,16 +662,16 @@ module Plan =
     /// that could drift from it.
     type private Wire =
         /// `Decode` over `MsgPack.Value` — positional records, tagged
-        /// unions (Phases 69k–817).
+        /// unions.
         | MessagePack
         /// `JsonDecode` over `JsonValue` — NAMED records, unions on the
-        /// case name (Phase 799), the argument side's wire (Phase 841).
+        /// case name, the argument side's wire.
         | Json
         /// `JsonEncode` into `JsonValue`: the same wire
         /// WRITTEN, by the client's generated proxies. The walk, the
         /// refusals and the naming are the `Json` run's; only the
         /// combinator each shape takes is the writing one.
-        | JsonEncoding
+        | JsonEncoding of names: JsonNames
 
     /// Mutable planning state, private to one `plan` call.
     type private State = {
@@ -675,7 +695,7 @@ module Plan =
         Used: Collections.Generic.HashSet<string>
         /// The planning path — the in-progress types, innermost first —
         /// so a reference can be recorded as an EDGE from the type being
-        /// planned to the type it reaches (Phase 816). The edges are what
+        /// planned to the type it reaches. The edges are what
         /// the recursive groups are computed from.
         mutable Path: Type list
         Edges: Collections.Generic.Dictionary<Type, Collections.Generic.HashSet<Type>>
@@ -737,7 +757,7 @@ module Plan =
         match state.Wire with
         | MessagePack -> messagePackDecoderFor state t
         | Json
-        | JsonEncoding -> jsonDecoderFor state t
+        | JsonEncoding _ -> jsonDecoderFor state t
 
     /// The MessagePack wire's decoder expression for `t`.
     and private messagePackDecoderFor (state: State) (t: Type) : string option =
@@ -821,10 +841,9 @@ module Plan =
     /// wire has that the binary one does not.
     and private jsonDecoderFor (state: State) (t: Type) : string option =
         let names =
-            if state.Wire = JsonEncoding then
-                jsonWriting
-            else
-                jsonReading
+            match state.Wire with
+            | JsonEncoding names -> names
+            | _ -> jsonReading
 
         match names.Primitives.TryGetValue t with
         | true, d -> Some d
@@ -935,7 +954,7 @@ module Plan =
         // A written member is its type's encoder; the emitter
         // supplies the name (a record member) or the position (a case's
         // field), so the plan carries only the value's writing.
-        | JsonEncoding -> jsonDecoderFor state f.PropertyType
+        | JsonEncoding _ -> jsonDecoderFor state f.PropertyType
         | Json when inUnionCase ->
             jsonDecoderFor state f.PropertyType
             |> Option.map (fun d -> sprintf "JsonDecode.index %d %s" position (arg d))
@@ -1218,15 +1237,14 @@ module Plan =
 
     /// `forTypes` for the JSON wire: the same walk, naming,
     /// ordering, cycle grouping and refusal discipline, rendering
-    /// `JsonDecode` combinators (Phase 799's surface) instead of `Decode`
+    /// `JsonDecode` combinators instead of `Decode`
     /// ones. A record field's `FieldPlan.Decoder` is its whole member read
     /// on this wire (`JsonDecode.field` / `optionalField` by name, or
     /// `JsonDecode.index` for a union case's several fields), because the
     /// combinator depends on how the field is declared, not only on its
     /// type. Refused beyond the MessagePack set: an option of an option
     /// (the writer flattens `Some None`) and a map whose key `JsonDecode.Key`
-    /// cannot parse and `JsonDecode.asMapOf` does not read as a value
-    /// (Phase 899).
+    /// cannot parse and `JsonDecode.asMapOf` does not read as a value.
     let forJsonTypes (roots: Type seq) : GenerationPlan = forTypesOn Json "" roots
 
     /// The JSON wire WRITTEN: `forJsonTypes`' walk over
@@ -1238,7 +1256,16 @@ module Plan =
     /// vocabularies — so a type is written by a generated encoder if and
     /// only if the server's argument seam can read it through a generated
     /// decoder.
-    let forJsonEncoders (roots: Type seq) : GenerationPlan = forTypesOn JsonEncoding "encode" roots
+    let forJsonEncoders (roots: Type seq) : GenerationPlan =
+        forTypesOn (JsonEncoding jsonWriting) "encode" roots
+
+    /// The JSON wire as the SERVER's converter set writes a RESPONSE:
+    /// `forJsonEncoders`' walk, refusals and naming, with the two combinators
+    /// whose argument-side convention (the browser's writer) differs from the
+    /// converter set's (`jsonResponseWriting`). What the generator's
+    /// `json-encoders` command plans.
+    let forJsonResponseEncoders (roots: Type seq) : GenerationPlan =
+        forTypesOn (JsonEncoding jsonResponseWriting) "encode" roots
 
     /// `forJsonTypes` with every binding named `decode<Type>`,
     /// for a module that also carries `forJsonEncoders`' bindings (the
@@ -1272,8 +1299,7 @@ module Plan =
     /// A Remoting API contract: a record with ≥1 field, every field a
     /// function type. The same shape test the analyzer applies to the
     /// syntax tree, applied here to metadata. A record marked with
-    /// `NotRemotingApiAttributeName` is not one, whatever its shape
-    /// (Phase 946).
+    /// `NotRemotingApiAttributeName` is not one, whatever its shape.
     let isApiRecord (t: Type) : bool =
         isRecord t
         && not (isExcludedFromApiCensus t)
@@ -1328,7 +1354,7 @@ module Plan =
     /// Every wire type an API record's methods TAKE, in
     /// declaration order, deduplicated: the argument side's roots, the
     /// keys the server's argument seam looks a decoder up under (scoped to
-    /// this record, Phase 839).
+    /// this record).
     let argumentTypes (apiRecord: Type) : Type list =
         FSharpType.GetRecordFields(apiRecord, true)
         |> Array.toList
@@ -1337,7 +1363,7 @@ module Plan =
 
     /// Every API record an assembly declares, ordered by name.
     ///
-    /// The census the Phase 785 facet's coverage question needs: the facet
+    /// The census the boot facet's coverage question needs: the facet
     /// classifies the records a composition root DECLARES, so "how many did
     /// it not declare" cannot be read from the facet itself.
     let apiRecordsIn (assembly: Assembly) : Type list =

@@ -6889,7 +6889,7 @@ ToolUp.Remoting.Client.RemoteBuilderOptions.IsMultipartEnabled : System.Boolean 
 ToolUp.Remoting.Client.RemoteBuilderOptions.RouteBuilder : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]] { get }
 ToolUp.Remoting.Client.RemoteBuilderOptions.WithCredentials : System.Boolean { get }
 ToolUp.Remoting.Client.RemoteStream (class)
-ToolUp.Remoting.Client.RemoteStream.create`1(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]], System.String, System.Boolean, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Remoting.DecodeError]], Fable.SimpleJson.TypeInfo) : ToolUp.Remoting.Client.RemoteStream`1[T]
+ToolUp.Remoting.Client.RemoteStream.create`1(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]], System.String, System.Boolean, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Remoting.DecodeError]], System.Type, Fable.SimpleJson.TypeInfo) : ToolUp.Remoting.Client.RemoteStream`1[T]
 ToolUp.Remoting.Client.RemoteStream.subscribe`1(System.Collections.Generic.IAsyncEnumerable`1[T], ToolUp.Remoting.Client.StreamObserver`1[T]) : System.IDisposable
 ToolUp.Remoting.Client.RemoteStream`1 (class)
 ToolUp.Remoting.Client.RemoteStream`1..ctor(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Client.StreamObserver`1[T], System.IDisposable])

@@ -140,6 +140,8 @@ let private registeredTests =
         GeneratorFidelityTests.tests
         ClientProxyGenerationTests.tests
         PlatformDecodersGenerationTests.tests
+        PlatformJsonEncodersGenerationTests.tests
+        CodecsTests.tests
         ApiRecordCensusTests.tests
         ApiContractTests.tests
         ProofOracleTests.tests

@@ -4253,7 +4253,7 @@ module ServerApp =
                 Contributions = contributionPlan app
             }
 
-        // Phase 801 — the remoting decode edge's coverage, one boot line:
+        // The remoting decode edge's coverage, one boot line:
         // how many of the API records this process mounted (every
         // `Api.make`, platform and module alike, has run by now) decode
         // through the closed algebra in the client. Logged under the
@@ -4268,10 +4268,11 @@ module ServerApp =
         // itself (or through `registerAllVerified`) is unaffected.
         ToolUp.Remoting.PlatformDecoders.registerAll ()
 
-        // Phase 799 — and the platform's own ARGUMENT decoders, on the
-        // JSON wire, for the server's own decode edge (the Phase 783
-        // seam consults `JsonDecoders` before System.Text.Json).
+        // And the platform's own ARGUMENT decoders and RESPONSE encoders, on
+        // the JSON wire, for the server's own edges: the argument seam and
+        // the response writer consult `Codecs` before System.Text.Json.
         ToolUp.Remoting.Json.PlatformJsonDecoders.registerAll ()
+        ToolUp.Remoting.Json.PlatformJsonEncoders.registerAll ()
 
         app.Logger
         |> Option.iter (fun logger ->
@@ -4284,6 +4285,12 @@ module ServerApp =
                     RemotingDecoderFacet.describeArguments (
                         RemotingDecoderFacet.inspectServedArguments CompositionProfile.Standard
                     )
+                )
+
+                logger.Info(
+                    RemotingDecoderFacet.describeCodecs
+                        ToolUp.Remoting.DecodePolicy.ReflectionFallback
+                        (RemotingDecoderFacet.inspectCodecs ())
                 ))
 
         // Phase 771 — the hardening baseline, observed on the composed
