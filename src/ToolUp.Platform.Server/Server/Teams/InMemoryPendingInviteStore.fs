@@ -67,7 +67,7 @@ exception PendingInvitesBlobCorrupt of quarantinePath: string * reason: string
 /// remains until every in-tree caller has migrated.
 module PendingInviteStore =
 
-    let private jsonOptions = FableConverters.create ()
+    let private jsonOptions = PlatformJson.options
 
     type private CacheEntry = {
         Map: Map<string, PendingInviteByEmail>
