@@ -711,6 +711,7 @@ type ToolUp.Platform BlobCrdtLayout ToolUp.Platform.Jobs
 type ToolUp.Platform BlobDatasetStore ToolUp.Platform.Infra
 type ToolUp.Platform BlobDocumentStore ToolUp.Platform.Infra
 type ToolUp.Platform BlobDocumentStoreLimits ToolUp.Platform.Infra
+type ToolUp.Platform BlobDocuments ToolUp.Platform.Infra
 type ToolUp.Platform BlobDpKeyRing ToolUp.Platform.Infra
 type ToolUp.Platform BlobEncryption ToolUp.Platform.Infra
 type ToolUp.Platform BlobExternalHandleStore ToolUp.Platform.Infra
