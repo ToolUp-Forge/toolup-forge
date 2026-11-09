@@ -3,6 +3,7 @@
 
 module ToolUp.Platform.Tests.InProcess.TeamStoreReadPathTests
 
+open System
 open System.Collections.Concurrent
 open Expecto
 open ToolUp.Platform
@@ -168,5 +169,103 @@ let tests =
             match outcome (faulted.IsPlatformAdmin(UserId "root")) with
             | Choice1Of2 answer -> failtest $"an unreadable admin list answered {answer}"
             | Choice2Of2 _ -> ()
+        }
+    ]
+// ─── Byte fixtures: no persisted document changes shape ─────────────
+//
+// Today's bytes for a populated team record, membership list, active-team
+// pointer and admin list. The codecs behind them may change; these bytes may
+// not, and a document written before a field existed still reads.
+
+let private at = DateTime(2026, 1, 2, 3, 4, 5, DateTimeKind.Utc)
+
+/// A JSON unicode escape (backslash, u, four hex digits), built rather
+/// than written into this source.
+let private escaped (hex: string) = string (char 92) + "u" + hex
+
+let private utf8 (bytes: byte[]) = Text.Encoding.UTF8.GetString bytes
+
+let fixtureTests =
+    testList "Phase 1061 — team and admin documents keep their bytes" [
+        test "a team record" {
+            let team: TeamInfo = {
+                TeamId = "t-1"
+                Name = "Team \"One\" + <two>"
+                CreatedAt = at
+                Archived = true
+            }
+
+            Expect.equal
+                (utf8 (teamCodec.Encode team))
+                ("""{"archived":true,"createdAt":"2026-01-02T03:04:05.0000000Z","name":"Team """
+                 + escaped "0022"
+                 + "One"
+                 + escaped "0022"
+                 + " "
+                 + escaped "002B"
+                 + " "
+                 + escaped "003C"
+                 + "two"
+                 + escaped "003E"
+                 + """","teamId":"t-1"}""")
+                "the team record's bytes"
+
+            Expect.equal (teamCodec.Decode(teamCodec.Encode team)) (Ok team) "it round-trips"
+        }
+
+        test "a team record written before `archived` existed reads as not archived" {
+            let legacy =
+                Text.Encoding.UTF8.GetBytes
+                    """{"teamId":"t-1","name":"Old","createdAt":"2026-01-02T03:04:05.0000000Z"}"""
+
+            match teamCodec.Decode legacy with
+            | Ok team -> Expect.isFalse team.Archived "absent `archived` is false"
+            | Error e -> failtest $"a legacy team record did not decode: {e}"
+        }
+
+        test "a membership list" {
+            let rows: StoredMembership list = [
+                {
+                    TeamId = TeamId "t-1"
+                    Role = Owner
+                    JoinedAt = at
+                }
+                {
+                    TeamId = TeamId "t-2"
+                    Role = Member
+                    JoinedAt = at
+                }
+            ]
+
+            Expect.equal
+                (utf8 (membershipCodec.Encode rows))
+                """[{"joinedAt":"2026-01-02T03:04:05.0000000Z","role":"Owner","teamId":"t-1"},{"joinedAt":"2026-01-02T03:04:05.0000000Z","role":"Member","teamId":"t-2"}]"""
+                "the membership list's bytes"
+
+            Expect.equal (membershipCodec.Decode(membershipCodec.Encode rows)) (Ok rows) "it round-trips"
+        }
+
+        test "an active-team pointer is the bare team id" {
+            Expect.equal (utf8 (activeTeamCodec.Encode "t-1")) "t-1" "the pointer's bytes"
+            Expect.equal (activeTeamCodec.Decode(Text.Encoding.UTF8.GetBytes "t-1\n")) (Ok "t-1") "it trims"
+        }
+
+        test "the admin list" {
+            let backing = InMemoryBlobStorage() :> IBlobStorage
+            let store = adminStoreOver backing
+
+            for admin in [ "root"; "a+b@example.com" ] do
+                Expect.isOk
+                    (store.AssignPlatformAdmin(UserId "_bootstrap", UserId admin)
+                     |> Async.RunSynchronously)
+                    $"seed {admin}"
+
+            match backing.Download("_platform", "platform-admins.json") |> Async.RunSynchronously with
+            | Ok bytes ->
+                Expect.equal
+                    (utf8 bytes)
+                    ("""["a""" + escaped "002B" + """b@example.com","root"]""")
+                    "the admin list's bytes"
+            | Error e -> failtest e
         }
     ]
