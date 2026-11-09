@@ -176,14 +176,6 @@ module AsyncStream =
 
 module internal Streaming =
 
-    // Reflect over public AND non-public records so an internal / private
-    // streaming API record arms the classifier (and the unenforceable-
-    // attribute refusal) exactly like a public one — the same fail-open
-    // hole the auth classifier closed. Without it a
-    // non-public record's streaming method carrying `[<RequiresRole>]`
-    // would silently start with the requirement UNenforced.
-    let private reflectionFlags = BindingFlags.Public ||| BindingFlags.NonPublic
-
     /// True if `t` is a closed generic `IAsyncEnumerable<'T>`.
     let isAsyncEnumerable (t: Type) : bool =
         t.IsGenericType && t.GetGenericTypeDefinition() = typedefof<IAsyncEnumerable<_>>
@@ -191,7 +183,7 @@ module internal Streaming =
     /// Pair of `(argType, elementType)` for a streaming method shape
     /// `'arg -> IAsyncEnumerable<'element>`. Returns `None` for non-
     /// streaming shapes.
-    let private streamingShape (apiField: PropertyInfo) : (Type * Type) option =
+    let shapeOf (apiField: PropertyInfo) : (Type * Type) option =
         let fieldType = apiField.PropertyType
 
         if FSharpType.IsFunction fieldType then
@@ -210,15 +202,9 @@ module internal Streaming =
     /// methods; non-streaming methods are absent so per-call lookup is
     /// a fast Map.tryFind miss.
     let classify (apiType: Type) : Map<string, Type * Type> =
-        if not (FSharpType.IsRecord(apiType, reflectionFlags)) then
-            Map.empty
-        else
-            FSharpType.GetRecordFields(apiType, reflectionFlags)
-            |> Array.choose (fun apiField ->
-                match streamingShape apiField with
-                | Some shape -> Some(apiField.Name, shape)
-                | None -> None)
-            |> Map.ofArray
+        ApiRecord.fields apiType
+        |> Array.choose (fun apiField -> shapeOf apiField |> Option.map (fun shape -> apiField.Name, shape))
+        |> Map.ofArray
 
     // ── Align this diagnostic with the dispatch classifiers.
     //
@@ -326,25 +312,22 @@ module internal Streaming =
     /// "no auth needed" markers — those are honoured (they're
     /// requirements only at the level of the auth classifier, not
     /// enforced per-request).
-    let streamingMethodsCarryingUnenforceableAttributes (apiType: Type) : (string * string list) list =
-        if not (FSharpType.IsRecord(apiType, reflectionFlags)) then
-            []
-        else
-            FSharpType.GetRecordFields(apiType, reflectionFlags)
-            |> Array.choose (fun apiField ->
-                match streamingShape apiField with
-                | None -> None
-                | Some _ ->
-                    let unenforceable =
-                        apiField.GetCustomAttributes(true)
-                        |> Array.choose describeUnenforceable
-                        |> Array.toList
-
-                    if List.isEmpty unenforceable then
-                        None
-                    else
-                        Some(apiField.Name, unenforceable))
+    let unenforceableOf (apiField: PropertyInfo) : string list =
+        match shapeOf apiField with
+        | None -> []
+        | Some _ ->
+            apiField.GetCustomAttributes(true)
+            |> Array.choose describeUnenforceable
             |> Array.toList
+
+    /// Every streaming method with its unenforceable attributes, in field order.
+    let streamingMethodsCarryingUnenforceableAttributes (apiType: Type) : (string * string list) list =
+        ApiRecord.fields apiType
+        |> Array.toList
+        |> List.choose (fun apiField ->
+            match unenforceableOf apiField with
+            | [] -> None
+            | attrs -> Some(apiField.Name, attrs))
 
     /// Read the request body and deserialise the first array element
     /// as the streaming method's argument. Same shape as the validation
