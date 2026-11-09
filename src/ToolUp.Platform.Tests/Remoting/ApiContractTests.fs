@@ -93,6 +93,13 @@ type DuplicateSchemaApi = {
     Get_V1: int -> Async<int>
 }
 
+type StreamOnlyApi = { Ticks: int -> IAsyncEnumerable<int> }
+
+type LongOpApi = {
+    Run: int -> Async<JobHandle<int>>
+    Echo: int -> Async<int>
+}
+
 let private echo (x: int) = async { return x }
 
 let private ticks (_: int) : IAsyncEnumerable<int> =
@@ -136,9 +143,8 @@ let private nl = Environment.NewLine
 
 /// The thirteen pins: twelve compose-time sentences and the evaluator's
 /// defensive arm over the legacy `Unclassified` case (I77).
-[<Tests>]
-let tests =
-    testList "Phase 1055 — the compose-time refusals, byte for byte" [
+let private refusalPins =
+    testList "the compose-time refusals, byte for byte" [
 
         testCase "I01 — a non-record API type with a record seam composed" (fun () ->
             let message =
@@ -329,3 +335,100 @@ let tests =
                 (Deny "unclassified-method")
                 "the defensive arm denies, by its reason")
     ]
+
+let private model =
+    testList "the contract" [
+
+        testCase "an unmarked method has no classification, never an Unclassified value" (fun () ->
+            match Contract.ofType ContractFlags.defaults typeof<UnclassifiedApi> with
+            | Error refusals -> failtestf "refused without a resolver: %A" refusals
+            | Ok contract ->
+                let bare = contract.Methods |> List.find (fun m -> m.Name = "Bare")
+                Expect.isNone bare.Classification "no marker, no classification"
+
+            let underResolver = {
+                ContractFlags.defaults with
+                    AuthResolverComposed = true
+                    RecordSeamsComposed = true
+            }
+
+            Expect.equal
+                (Contract.ofType underResolver typeof<UnclassifiedApi>)
+                (Error [ ContractRefusal.UnclassifiedMethods("UnclassifiedApi", [ "Bare" ]) ])
+                "under a resolver the unmarked method is a refusal")
+
+        testCase "a long-running method's companions are synthesised, with typed calls built once" (fun () ->
+            let contract = Contract.read typeof<LongOpApi>
+            let run = contract.Methods |> List.find (fun m -> m.Name = "Run")
+
+            match run.Shape with
+            | MethodShape.LongRunning calls ->
+                Expect.equal calls.ResultType typeof<int> "closed over the handle's 'T"
+                Expect.equal calls (JobCompanionCalls.For<int>()) "equal to the calls the generator emits"
+            | other -> failtestf "Run is long-running, read %A" other
+
+            Expect.equal
+                (contract.Companions |> List.map (fun c -> c.Name, c.Kind))
+                [
+                    "Run/status", JobCompanion.Status
+                    "Run/progress", JobCompanion.Progress
+                    "Run/cancel", JobCompanion.Cancel
+                ]
+                "three companions, in order"
+
+            Expect.equal
+                (Contract.refusedBatchRoutes contract)
+                [
+                    "/LongOpApi/Run"
+                    "/LongOpApi/Run/status"
+                    "/LongOpApi/Run/progress"
+                    "/LongOpApi/Run/cancel"
+                ]
+                "the method and its companions are never batched; the unary method is")
+
+        testCase "bind rebinds every route through the composed RouteBuilder" (fun () ->
+            let flags = {
+                ContractFlags.defaults with
+                    RouteBuilder = sprintf "/api/%s/%s"
+            }
+
+            match Contract.ofType flags typeof<LongOpApi> with
+            | Error refusals -> failtestf "%A" refusals
+            | Ok contract ->
+                Expect.equal
+                    (contract.Methods |> List.map _.Route)
+                    [ "/api/LongOpApi/Run"; "/api/LongOpApi/Echo" ]
+                    "methods"
+
+                Expect.equal (contract.Companions |> List.head).Route "/api/LongOpApi/Run/status" "companions")
+
+        testCase "one route grammar: a method is its route's last segment" (fun () ->
+            Expect.equal (Route.methodSegment "/api/Orders/Place") "Place" "a nested route"
+            Expect.equal (Route.methodSegment "Place") "Place" "a bare name"
+            Expect.equal (Route.methodSegment "/Orders/") "" "a trailing slash names nothing")
+
+        testCase "building a table writes nothing process-wide; mounting records the batch refusals" (fun () ->
+            let options =
+                Remoting.createApi ()
+                |> Remoting.fromValue { StreamOnlyApi.Ticks = ticks }
+                |> Remoting.withRouteBuilder (sprintf "/purity/%s/%s")
+
+            let contract = GiraffeUtil.contractFor options
+            GiraffeUtil.buildDispatcherTableFor contract options |> ignore
+
+            Expect.isFalse (MountedContracts.isRefused "/purity/StreamOnlyApi/Ticks") "a built table mounted nothing"
+
+            Remoting.buildHttpHandler options |> ignore
+
+            Expect.isTrue (MountedContracts.isRefused "/purity/StreamOnlyApi/Ticks") "the mount recorded the route")
+
+        testCase "a generated table carries its contract; one emitted before the contract reads it lazily" (fun () ->
+            let contract = Contract.read typeof<LongOpApi>
+            let withContract = GeneratedInvocation.tableWith<LongOpApi> contract []
+            Expect.equal withContract.Contract contract "the emitted contract, as given"
+            let legacy = GeneratedInvocation.table<LongOpApi> []
+            Expect.equal legacy.Contract contract "read off the record when first asked")
+    ]
+
+[<Tests>]
+let tests = testList "Phase 1055 — ApiContract" [ refusalPins; model ]

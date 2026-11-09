@@ -86,7 +86,6 @@
         <Compile Include="..\ToolUp.Platform.Server\Server\Remoting\Jobs.fs" />
         <Compile Include="..\ToolUp.Platform.Server\Server\Remoting\Streaming.fs" />
         <Compile Include="..\ToolUp.Platform.Server\Server\Remoting\LongRunning.fs" />
-        <Compile Include="..\ToolUp.Platform.Server\Server\Remoting\SourceGenDispatch.fs" />
         <!-- The `X-Remoting-Schema` negotiation half: the
              [<SupportsSchema>] / [<DeprecatedSchema>] attributes, the
              per-method version table and the pure routing decision both
@@ -94,6 +93,8 @@
              Documentation.fs, which publishes the version vector, and before
              the two adapters. -->
         <Compile Include="..\ToolUp.Platform.Server\Server\Remoting\SchemaVersion.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Remoting\Contract.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Remoting\SourceGenDispatch.fs" />
         <Compile Include="..\ToolUp.Platform.Server\Server\Remoting\Errors.fs" />
         <Compile Include="..\ToolUp.Platform.Server\Server\Remoting\Diagnostics.fs" />
         <Compile Include="..\ToolUp.Platform.Server\Server\Remoting\Patterns.fs" />

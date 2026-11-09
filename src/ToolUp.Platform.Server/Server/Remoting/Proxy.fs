@@ -818,6 +818,13 @@ let internal makeApiProxyWithParse<'impl, 'ctx> (options: RemotingOptions<'ctx, 
     | Some(:? GeneratedInvocationTable<'impl> as table) -> makeGeneratedApiProxy table options
     | _ -> makeReflectiveApiProxy options
 
+/// The contract of `'impl`: the registered generated table's, when there is
+/// one, so the record is not walked at boot; otherwise `Contract.read`.
+let internal contractOf<'impl> () : ApiContract =
+    match GeneratedDispatchRegistry.tryGet<'impl> () with
+    | Some(:? GeneratedInvocationTable<'impl> as table) -> table.Contract
+    | _ -> Contract.read typeof<'impl>
+
 /// The proxy the adapters dispatch through: `InvocationProps` in,
 /// `InvocationResult` out. Phase 856.B left its shape unchanged — it is
 /// `makeApiProxyWithParse` with nothing parsed ahead of dispatch.

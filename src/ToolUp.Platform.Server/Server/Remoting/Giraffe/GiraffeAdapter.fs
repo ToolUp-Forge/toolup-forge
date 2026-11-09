@@ -8,36 +8,29 @@ open ToolUp.Remoting.Server
 open ToolUp.Remoting.Server.Proxy
 open System.Threading.Tasks
 
-/// The routes a batch envelope may not name, recorded by every
-/// dispatcher table as it is built (streaming methods; long-running
-/// methods and their `/status`, `/progress`, `/cancel` companions), and
-/// the `HttpContext.Items` key that marks a request as a batch element.
-/// Process-wide by design: the batch middleware sits in front of every
-/// API the process mounts, and a route is non-batchable by its SHAPE,
-/// which is the same wherever it is mounted.
-module internal RemotingBatchRoutes =
+/// The batch route's wire constants: the `error` code of a refusal and the
+/// `HttpContext.Items` key that marks a request as a batch element.
+module internal BatchElement =
     [<Literal>]
-    let ElementItemsKey = "ToolUp.Remoting.BatchElement"
+    let ItemsKey = "ToolUp.Remoting.BatchElement"
 
     [<Literal>]
     let RefusalCode = "remoting_batch_refused"
 
-    let private exact =
+/// The routes of every contract this process has mounted that a batch
+/// envelope may never name (`Contract.refusedBatchRoutes`). Recorded when a
+/// dispatcher is MOUNTED, never while a contract or table is built: the batch
+/// middleware sits in front of every API the process mounts, and a route is
+/// non-batchable by its shape, which the mounted contract states.
+module internal MountedContracts =
+    let private refused =
         System.Collections.Concurrent.ConcurrentDictionary<string, unit>(System.StringComparer.OrdinalIgnoreCase)
 
-    let private prefixes =
-        System.Collections.Concurrent.ConcurrentDictionary<string, unit>(System.StringComparer.OrdinalIgnoreCase)
+    let mount (contract: ApiContract) =
+        for route in Contract.refusedBatchRoutes contract do
+            refused.TryAdd(route, ()) |> ignore
 
-    let refuse (route: string) = exact.TryAdd(route, ()) |> ignore
-
-    let refuseWithCompanions (route: string) =
-        refuse route
-        prefixes.TryAdd(route.TrimEnd('/') + "/", ()) |> ignore
-
-    let isRefused (route: string) =
-        exact.ContainsKey route
-        || prefixes.Keys
-           |> Seq.exists (fun prefix -> route.StartsWith(prefix, System.StringComparison.OrdinalIgnoreCase))
+    let isRefused (route: string) = refused.ContainsKey route
 
 // Assembly-private: the adapter's own build/dispatch plumbing, reached by consumers
 // only through `Remoting.buildHttpHandler`. Tests see it through InternalsVisibleTo.
@@ -64,7 +57,7 @@ module internal GiraffeUtil =
                 return! setBodyFromString responseBody next ctx
             | None ->
                 ctx.Response.ContentType <- "application/json; charset=utf-8"
-                // 0.5.9 — use async overload. Kestrel runs with
+                // Use async overload. Kestrel runs with
                 // `AllowSynchronousIO=false` by default, which rejects the
                 // sync `JsonSerializer.Serialize(stream,...)` overload
                 // when `stream` is `HttpResponse.Body` with
@@ -161,291 +154,75 @@ module internal GiraffeUtil =
         }
         :> System.Threading.Tasks.Task
 
-    /// Build the dispatcher table ONCE for a given `options`
-    /// record. All substrate construction (proxy + classifier maps +
-    /// `rmsManager`) and compose-time guards (record-shape check +
-    /// unclassified-method refusal + streaming-attribute refusal) happen
-    /// here, not per request. The returned function accepts a per-request
-    /// `implBuilder` and yields the `HttpHandler` that dispatches a single
-    /// request against that builder.
-    let buildDispatcherTable<'impl> (options: RemotingOptions<HttpContext, 'impl>) =
-        // The proxy with its argument parse exposed, so the
-        // validation pre-flight decodes the first argument through the
-        // dispatch path's own decode and hands the result on (see
-        // `Proxy.ApiProxy`): one parse, one decode, and validation sees the
-        // value the handler receives.
-        //
-        // For a record whose generated table is registered
-        // (`GeneratedInvocation.register`), the proxy serves each covered
-        // method through its GENERATED invocation, and the rest through the
-        // reflective proxy (built lazily, on the first request that needs
-        // it). The table is composed inside the proxy, not beside it: every
-        // stage below is keyed off this one `apiProxy`, so auth, rate limit,
-        // validation, idempotency, audit and telemetry run around a
-        // generated method exactly as around a reflective one — the
-        // generated call is the chain's innermost stage, never a route of
-        // its own. `GeneratedInvocationChainTests` pins it stage by stage.
+    /// The contract a composition dispatches over — the registered generated
+    /// table's, or the record read once — bound to the composition's flags.
+    /// A composition that makes a refusal of the record refuses to start,
+    /// naming every refusal.
+    let contractFor<'impl> (options: RemotingOptions<HttpContext, 'impl>) : ApiContract =
+        match Contract.bind (ContractFlags.ofOptions options) (contractOf<'impl> ()) with
+        | Error refusals -> invalidOp (ContractRefusal.render refusals)
+        | Ok contract -> contract
+
+    /// Build the dispatcher table ONCE for a contract. The proxy and every
+    /// per-method lookup the request path reads are projections of the
+    /// contract, built here, not per request. The returned function accepts
+    /// a per-request `implBuilder` and yields the `HttpHandler` that
+    /// dispatches a single request against that builder. Pure: building a
+    /// table writes nothing process-wide.
+    let buildDispatcherTableFor<'impl> (contract: ApiContract) (options: RemotingOptions<HttpContext, 'impl>) =
+        // The proxy with its argument parse exposed, so the validation
+        // pre-flight decodes the first argument through the dispatch path's
+        // own decode and hands the result on: one parse, one decode, and
+        // validation sees the value the handler receives. A record whose
+        // generated table is registered is served through its generated
+        // invocations INSIDE this proxy, so every stage below runs around a
+        // generated method exactly as around a reflective one.
         let apiProxy = makeApiProxyWithParse options
         let rmsManager = getRecyclableMemoryStreamManager options
 
-        // Fail-fast: every attribute-driven seam reflects over F# record
-        // fields. A non-record API type silently bypasses all enforcement
-        // (every classifier returns empty), which makes the "refuses to
-        // start on unclassified methods" guarantee fall through unnoticed.
-        // Refuse at compose time whenever a seam expecting record reflection
-        // is composed against a non-record `'impl`.
-        // NonPublic flags — internal/private API records (module-internal
-        // contracts, test fixtures) are records too; without the flags
-        // `IsRecord` reports false for them and this guard would refuse
-        // compositions the classifiers handle fine (the classifiers
-        // reflect with the same flags — see `AuthClassifier`).
-        let isRecordImpl =
-            Microsoft.FSharp.Reflection.FSharpType.IsRecord(typeof<'impl>, AuthClassifier.reflectionFlags)
+        let byMethod (slice: MethodContract -> 'a option) : Map<string, 'a> =
+            contract.Methods
+            |> List.choose (fun m -> slice m |> Option.map (fun value -> m.Name, value))
+            |> Map.ofList
 
-        let seamsRequiringRecord =
-            options.AuthContextResolver.IsSome
-            || options.RateLimitStore.IsSome
-            || options.AuditEmitter.IsSome
-            || options.IdempotencyStore.IsSome
+        // A method with no classification is absent: under a resolver the
+        // contract has refused it, and without one nothing is evaluated.
+        let classifications =
+            byMethod (fun m -> m.Classification |> Option.map AuthClassifier.ofClassified)
 
-        if seamsRequiringRecord && not isRecordImpl then
-            invalidOp (
-                sprintf
-                    "ToolUp.Remoting refused to start: API type '%s' is not an F# record, but at least one attribute-driven seam (authorisation / rate-limit / audit / idempotency / validation) was composed. These seams require record-field reflection. Convert '%s' to an F# record, or remove the seam composition."
-                    typeof<'impl>.Name
-                    typeof<'impl>.Name
-            )
+        let rateLimits = byMethod (fun m -> Some(m.Budgets |> List.map RateLimit.ofBudget))
 
-        // Startup classification.
-        //
-        // Opt-in semantics: when an `AuthContextResolver` is composed,
-        // every API record field must carry one of the authorisation
-        // attributes (refuse to start on unclassified). When NO resolver
-        // is composed, the auth system is dormant — unclassified methods
-        // are treated as `Public`, matching the unguarded behaviour for
-        // consumers who haven't opted in.
-        let classifications = AuthClassifier.classify typeof<'impl>
+        let audits = byMethod (fun m -> m.Audit |> Option.map _.Kind)
 
-        if options.AuthContextResolver.IsSome then
-            // Name-collision refusal, BEFORE the unclassified
-            // check so the specific diagnostic wins. A foreign attribute
-            // whose simple name matches a marker no longer classifies
-            // anything (identity matching in `AuthClassifier`); refusing
-            // here names the field AND the offending attribute's
-            // assembly-qualified type, rather than leaving the consumer
-            // to read "unclassified method" about a field they believe
-            // they annotated. It also catches the case the unclassified
-            // gate structurally cannot see: a foreign open marker sitting
-            // beside a genuine requirement, where the record starts fine
-            // and the consumer believes the method is open.
-            let foreign = AuthClassifier.foreignMarkers typeof<'impl>
+        // The audited method's input record, so the payload is built even when
+        // the input carries no validation attribute.
+        let auditInputTypes = byMethod (fun m -> m.Audit |> Option.bind _.Input)
 
-            if not (List.isEmpty foreign) then
-                raise (AuthClassifier.foreignMarkerException typeof<'impl>.Name foreign)
+        let idempotentMethods =
+            contract.Methods |> List.filter _.Idempotent |> List.map _.Name |> Set.ofList
 
-            let unclassified = AuthClassifier.unclassified classifications
+        let validationInputTypes = byMethod _.Validated
 
-            if not (List.isEmpty unclassified) then
-                raise (AuthClassifier.unclassifiedException typeof<'impl>.Name unclassified)
+        let streamingShapes =
+            byMethod (fun m ->
+                match m.Shape with
+                | MethodShape.Streaming element -> Some(List.head m.Arguments, element)
+                | _ -> None)
 
-            // Round-trip assertion (safety net for the
-            // deny-on-miss default below). The per-request auth key is the
-            // trailing path segment of the built route; the classification
-            // map is keyed by field name. If a custom `RouteBuilder` /
-            // casing / alias breaks that equivalence, the per-request
-            // lookup would miss and — now that a miss denies rather than
-            // fails open to `Public` — deny *every* call to that method.
-            // Refuse at startup instead, naming the offending fields, so a
-            // key divergence surfaces at compose time rather than as a
-            // silent always-deny in production.
-            let divergences =
-                AuthClassifier.nonRoundTripping options.RouteBuilder typeof<'impl>.Name classifications
+        // Consulted ONLY when an `IJobDispatcher` is composed — without one
+        // the methods dispatch exactly as before (GP 11).
+        let longRunningShapes =
+            byMethod (fun m ->
+                match m.Shape with
+                | MethodShape.LongRunning calls -> Some calls
+                | _ -> None)
 
-            if not (List.isEmpty divergences) then
-                raise (AuthClassifier.roundTripException typeof<'impl>.Name divergences)
+        let schemaVersions = contract.Schemas
 
-        // Cache rate-limit attributes per method at startup.
-        // The map is empty for API records that carry no [<RateLimit>]
-        // attributes; per-call evaluation skips quickly in that case.
-        let rateLimits = RateLimit.classify typeof<'impl>
-
-        // Cache audit attributes per method at startup.
-        // Empty for non-audited methods; emission on each successful
-        // invocation looks up the kind here.
-        let audits = Audit.classify typeof<'impl>
-
-        // Cache the first-argument record type per
-        // audited method so payload extraction works even when the input
-        // type carries no ValidationAttribute (the validation classifier
-        // only caches input types for validated methods).
-        let auditInputTypes = Audit.inputTypes typeof<'impl>
-
-        // Admin-must-be-audited startup gate. Role-gated
-        // methods are admin-shaped; when the gate is composed
-        // (TOOLUP_AUDIT_ADMIN_REQUIRED=true via forge's Api.make, or
-        // Remoting.withAuditRequiredOnRoleGated directly), every method
-        // carrying a [<RequiresRole>] requirement must also carry an
-        // [<Audit>] annotation or the dispatcher refuses to start.
-        if options.RequireAuditOnRoleGated then
-            let roleGatedUnaudited =
-                classifications
-                |> Map.toList
-                |> List.choose (fun (name, cls) ->
-                    match cls with
-                    | RequiresAuth requirements when
-                        requirements
-                        |> List.exists (function
-                            | RoleRequired _ -> true
-                            | _ -> false)
-                        && not (audits.ContainsKey name)
-                        ->
-                        Some name
-                    | _ -> None)
-
-            if not (List.isEmpty roleGatedUnaudited) then
-                invalidOp (
-                    sprintf
-                        "ToolUp.Remoting refused to start: audit-required-on-role-gated is composed (TOOLUP_AUDIT_ADMIN_REQUIRED), but API record '%s' has %d role-gated method(s) without an [<Audit>] annotation: [%s]. Annotate each with [<Audit \"<kind>\">] (see ToolUp.Remoting README §69h), or unset the gate."
-                        typeof<'impl>.Name
-                        roleGatedUnaudited.Length
-                        (String.concat "; " roleGatedUnaudited)
-                )
-
-        // Cache idempotency classifications per method at
-        // startup. Empty set means no methods are idempotent; per-call
-        // evaluation skips quickly when the lookup misses.
-        let idempotentMethods = Idempotency.classify typeof<'impl>
-
-        // The collision refusal the auth
-        // markers have, extended to the three OTHER families whose recognition
-        // this dispatch path drives: audit emission, PII-safe payload
-        // inclusion, rate limiting and idempotency. Each family now
-        // matches by CLR type identity (see the per-family severity
-        // assessments at the head of Audit.fs / RateLimit.fs /
-        // Idempotency.fs), and for all three the refusal is the
-        // load-bearing half rather than a nicety: identity matching alone
-        // would silently DISARM a guard a consumer believed declared, and
-        // a guard that stops applying with nothing saying so is the
-        // failure each of these families exists to prevent.
-        //
-        // Deliberately NOT gated on `AuthContextResolver.IsSome` — unlike
-        // the auth classifier above, these three are armed independently
-        // of whether an auth-context resolver is composed.
-        //
-        // The validation family is deliberately absent: it keeps
-        // simple-name matching, with the reasoning recorded in
-        // Validation.fs. Its marker names collide with
-        // `System.ComponentModel.DataAnnotations`, which legitimately sits
-        // on the same consumer DTOs, so a refusal here would break a
-        // correct deployment for no defect (GP 11).
-        let preflightMarkerCollisions =
-            Audit.foreignMarkers typeof<'impl>
-            @ RateLimit.foreignMarkers typeof<'impl>
-            @ Idempotency.foreignMarkers typeof<'impl>
-
-        if not (List.isEmpty preflightMarkerCollisions) then
-            raise (MarkerCollision.refusal typeof<'impl>.Name preflightMarkerCollisions)
-
-        // Cache per-method input types when their record
-        // shape carries at least one ValidationAttribute. Empty map
-        // means no methods need pre-flight validation; per-call lookup
-        // is a fast miss.
-        let validationInputTypes = Validation.classify typeof<'impl>
-
-        // Cache per-method (argType, elementType) for
-        // streaming methods returning IAsyncEnumerable<'T>. Empty map
-        // means no streaming methods; per-request lookup is a fast miss.
-        let streamingShapes = Streaming.classify typeof<'impl>
-
-        // Cache per-method result type for long-running
-        // methods (function shape finally returning `Async<JobHandle<'T>>`).
-        // Empty map means no long-running methods; the companion lookup
-        // below is then a fast miss. The map is consulted ONLY when an
-        // `IJobDispatcher` is composed (`Remoting.withJobDispatcher`) —
-        // without one the classification is inert and the methods dispatch
-        // exactly as before (GP 11).
-        let longRunningShapes = LongRunning.classify typeof<'impl>
-
-        // Neither shape may travel inside a batch envelope:
-        // the batch route refuses an envelope naming one of these routes
-        // before any element runs.
-        for KeyValue(methodName, _) in streamingShapes do
-            RemotingBatchRoutes.refuse (options.RouteBuilder typeof<'impl>.Name methodName)
-
-        for KeyValue(methodName, _) in longRunningShapes do
-            RemotingBatchRoutes.refuseWithCompanions (options.RouteBuilder typeof<'impl>.Name methodName)
-
-        // Refuse to start when a streaming method carries pre-flight
-        // attributes the SSE short-circuit doesn't honour (auth /
-        // rate-limit / audit / idempotency). The v0 streaming path
-        // bypasses the pre-flight chain; silently dropping the
-        // enforcement would route around RBAC. Force the composer to
-        // either drop the attribute or move the method off streaming
-        // until per-frame composition lands.
-        let streamingViolations =
-            Streaming.streamingMethodsCarryingUnenforceableAttributes typeof<'impl>
-
-        if not (List.isEmpty streamingViolations) then
-            let pretty =
-                streamingViolations
-                |> List.map (fun (methodName, attrs) ->
-                    sprintf "  '%s' carries: [%s]" methodName (String.concat "; " attrs))
-                |> String.concat System.Environment.NewLine
-
-            invalidOp (
-                sprintf
-                    "ToolUp.Remoting refused to start: API record '%s' has streaming method(s) carrying pre-flight attributes the SSE dispatch path does not enforce today. Silently honouring them would route around the declared guard.%s%s%sFix: either remove the attribute, or convert the method off the IAsyncEnumerable<'T> return shape until per-frame seam composition lands."
-                    typeof<'impl>.Name
-                    System.Environment.NewLine
-                    pretty
-                    System.Environment.NewLine
-            )
-
-        // Cache the per-method wire-schema table at startup.
-        // Empty for every API record that has not opted into versioning,
-        // which is all of them today, so the per-request lookup is a fast
-        // `Map.tryFind` miss (GP 13). `classify` is also where the
-        // compose-time refusals live (duplicate version for one method,
-        // non-positive version, unparseable retirement date), so composing
-        // a malformed annotation fails here rather than at the first call.
-        let schemaVersions = SchemaVersion.classify typeof<'impl>
-
-        // This API record's own addressable method names. The
-        // membership test is what keeps the refusal below safe in a
-        // multi-API `choose` composition: a request for ANOTHER API's
-        // method reaches this handler first and must fall through
-        // untouched, whatever `X-Remoting-Schema` says. Failing closed on a
-        // miss is the defect this dispatcher already records on
-        // the auth pre-flight — it let whichever API was composed first
-        // deny every other API's methods.
-        let schemaAddressable = SchemaVersion.addressableMethods typeof<'impl>
-
-        // The same refusal the streaming guard above makes, for
-        // the same reason. Version routing rewrites the dispatched route's
-        // trailing segment and then runs the non-streaming pre-flight chain
-        // against the rewritten name; the SSE short-circuit resolves its
-        // handler from `streamingShapes` BEFORE that chain and would ignore
-        // the negotiated version entirely. A streaming method that declares
-        // versions it does not actually serve differently is worse than one
-        // that declares none, so refuse rather than accept an annotation
-        // that cannot take effect.
-        let versionedStreamingMethods =
-            let streaming = Streaming.classify typeof<'impl>
-
-            schemaVersions
-            |> Map.toList
-            |> List.filter (fun (logical, schema) ->
-                streaming.ContainsKey logical
-                || (schema.Handlers |> Map.exists (fun _ field -> streaming.ContainsKey field)))
-            |> List.map fst
-
-        if not (List.isEmpty versionedStreamingMethods) then
-            invalidOp (
-                sprintf
-                    "ToolUp.Remoting refused to start: API record '%s' has streaming method(s) carrying wire-schema versioning the SSE dispatch path does not honour: [%s]. The SSE short-circuit resolves its handler before the negotiated version is applied, so the declared versions would be silently ignored. Fix: drop the [<SupportsSchema>] / [<DeprecatedSchema>] annotation, or move the method off the IAsyncEnumerable<'T> return shape."
-                    typeof<'impl>.Name
-                    (String.concat "; " versionedStreamingMethods)
-            )
+        // This record's own addressable names: a request for ANOTHER API's
+        // method reaches this handler first in a multi-API `choose` and must
+        // fall through untouched, whatever `X-Remoting-Schema` says.
+        let schemaAddressable = Contract.addressableMethods contract
 
         // Returned closure-of-closures: `dispatch implBuilder`
         // produces an `HttpHandler` that dispatches one request. The outer
@@ -456,7 +233,7 @@ module internal GiraffeUtil =
             fun (next: HttpFunc) (ctx: HttpContext) -> task {
                 let isProxyHeaderPresent = ctx.Request.Headers.ContainsKey "x-remoting-proxy"
 
-                // 0.1.16 — correlation-id + telemetry shared between the
+                // Correlation-id + telemetry shared between the
                 // streaming and non-streaming branches. Previously the
                 // streaming short-circuit ran BEFORE `CallContext.beginRequest`
                 // / response-header stamping / `IRemotingTelemetry` emission,
@@ -488,16 +265,9 @@ module internal GiraffeUtil =
                 // streaming methods in v0 — those seams compose with non-streaming
                 // dispatch only. Future enhancements compose them per-frame.
                 //
-                // 0.1.16 — telemetry IS emitted on streaming methods (start ⇒
+                // Telemetry IS emitted on streaming methods (start ⇒
                 // completion); audit + auth remain non-streaming-only.
-                let streamingPath =
-                    let path = ctx.Request.Path.Value
-                    let lastSlash = path.LastIndexOf '/'
-
-                    if lastSlash >= 0 then
-                        path.Substring(lastSlash + 1)
-                    else
-                        path
+                let streamingPath = Route.methodSegment ctx.Request.Path.Value
 
                 let streamingShape = streamingShapes |> Map.tryFind streamingPath
 
@@ -591,26 +361,21 @@ module internal GiraffeUtil =
                         )
                     | None ->
                         match companion with
-                        | Some(dispatcher, (methodName, JobCompanion.Progress, resultType)) ->
+                        | Some(dispatcher, (methodName, JobCompanion.Progress, calls)) ->
                             Some(
                                 methodName + "/progress",
-                                LongRunning.statusType resultType,
+                                calls.StatusType,
                                 fun bodyText ->
                                     let handle =
-                                        Streaming.parseFirstArg bodyText (LongRunning.handleType resultType) stjOptions
-                                        |> Option.defaultWith (fun () -> LongRunning.emptyHandle resultType)
+                                        Streaming.parseFirstArg bodyText calls.HandleType stjOptions
+                                        |> Option.defaultValue calls.EmptyHandle
 
-                                    LongRunning.subscribeCompanion
-                                        dispatcher
-                                        resultType
-                                        companionSubject
-                                        companionIsAdmin
-                                        handle
+                                    calls.Subscribe dispatcher companionSubject companionIsAdmin handle
                             )
                         | _ -> None
 
                 if
-                    ctx.Items.ContainsKey RemotingBatchRoutes.ElementItemsKey
+                    ctx.Items.ContainsKey BatchElement.ItemsKey
                     && (sseSource.IsSome
                         || companion.IsSome
                         || longRunningShapes.ContainsKey addressedMethod)
@@ -625,7 +390,7 @@ module internal GiraffeUtil =
 
                     let payload =
                         box {|
-                            error = RemotingBatchRoutes.RefusalCode
+                            error = BatchElement.RefusalCode
                             methodName = addressedMethod
                             reason = "a streaming or long-running method is never batched"
                         |}
@@ -658,7 +423,7 @@ module internal GiraffeUtil =
                     return! setJsonBody options.JsonSerializer envelope options.DiagnosticsLogger next ctx
                 elif sseSource.IsSome then
                     let sseLabel, sseElementType, produce = sseSource.Value
-                    // 0.1.16 — streaming-method telemetry stopwatch.
+                    // Streaming-method telemetry stopwatch.
                     // Started at SSE entry; stopped at terminal frame
                     // (complete / error). Bridges the streaming branch
                     // back into the per-method-completion contract of
@@ -701,7 +466,7 @@ module internal GiraffeUtil =
                                 }
                             | None -> ()
 
-                    // 0.1.16 — wrap the streaming setup in a try/with so
+                    // Wrap the streaming setup in a try/with so
                     // setup-time exceptions (null funcObj from invokeMethod,
                     // missing serializer, etc.) emit a single error frame
                     // before failing the response, rather than NRE-ing
@@ -724,7 +489,7 @@ module internal GiraffeUtil =
                         // companion's subscription).
                         let asyncEnumerable = produce bodyText
 
-                        // 0.1.16 — guard against a streaming method that
+                        // Guard against a streaming method that
                         // returns null (a legitimate-looking but broken
                         // impl). Without this, `getEnumeratorMethod.Invoke`
                         // NREs and the response goes out as a 500 with no
@@ -764,7 +529,7 @@ module internal GiraffeUtil =
                         let currentProperty = enumeratorInterface.GetProperty "Current"
                         let disposeMethod = typeof<System.IAsyncDisposable>.GetMethod "DisposeAsync"
 
-                        // 0.1.16 — track terminal-frame outcome so the
+                        // Track terminal-frame outcome so the
                         // dispose-task path can `do!` await without losing
                         // the exception (you can't bind inside the
                         // catch arm of an enclosing try-finally).
@@ -827,7 +592,7 @@ module internal GiraffeUtil =
                                 // reason as the complete frame above.
                                 do! ctx.Response.Body.FlushAsync()
                         finally
-                            // 0.1.16 — the dispose-await CANNOT use `do!` here
+                            // The dispose-await CANNOT use `do!` here
                             // because F# `task` doesn't allow binds inside
                             // `finally`. Block-wait is restricted to the
                             // dispose path (no I/O latency expected) — every
@@ -844,13 +609,13 @@ module internal GiraffeUtil =
                             with _ ->
                                 ()
 
-                        // 0.1.16 — emit per-method-completion telemetry now
+                        // Emit per-method-completion telemetry now
                         // that the stream has terminated (success or error).
                         match streamingFailure with
                         | Some ex -> emitStreamingTelemetry (MethodOutcome.Failed ex)
                         | None -> emitStreamingTelemetry MethodOutcome.Succeeded
                     with setupEx ->
-                        // 0.1.16 — setup-time exception (null funcObj, missing
+                        // Setup-time exception (null funcObj, missing
                         // STJ, etc.) BEFORE we entered the iteration loop.
                         // The response may already have status set; emit a
                         // single error frame as a courtesy and let the
@@ -882,7 +647,7 @@ module internal GiraffeUtil =
                     // the pre-flight chain does not run here — ownership is
                     // the guard (the companion caller resolved above), and
                     // the SUBMIT method already ran the full chain.
-                    let dispatcher, (methodName, kind, resultType) = companion.Value
+                    let dispatcher, (methodName, kind, calls) = companion.Value
 
                     let companionLabel =
                         match kind with
@@ -931,20 +696,17 @@ module internal GiraffeUtil =
                             let! bodyText = reader.ReadToEndAsync()
 
                             let handle =
-                                Streaming.parseFirstArg bodyText (LongRunning.handleType resultType) stjOptions
-                                |> Option.defaultWith (fun () -> LongRunning.emptyHandle resultType)
+                                Streaming.parseFirstArg bodyText calls.HandleType stjOptions
+                                |> Option.defaultValue calls.EmptyHandle
 
                             use _caller = CallContext.beginSubject companionSubject companionIsAdmin
 
-                            let! result =
-                                LongRunning.invokeCompanion kind dispatcher resultType handle
-                                |> Async.StartAsTask
-
-                            let payloadType =
+                            let call, payloadType =
                                 match kind with
-                                | JobCompanion.Status
-                                | JobCompanion.Progress -> LongRunning.statusType resultType
-                                | JobCompanion.Cancel -> typeof<unit>
+                                | JobCompanion.Cancel -> calls.Cancel, typeof<unit>
+                                | _ -> calls.Status, calls.StatusType
+
+                            let! result = call dispatcher handle |> Async.StartAsTask
 
                             ctx.Response.StatusCode <- 200
                             ctx.Response.ContentType <- "application/json; charset=utf-8"
@@ -979,7 +741,7 @@ module internal GiraffeUtil =
 
                             return! setJsonBody options.JsonSerializer envelope options.DiagnosticsLogger next ctx
                 else
-                    // 0.1.16 — correlation-id is now established above
+                    // Correlation-id is now established above
                     // (covers both streaming and non-streaming branches).
                     // The non-streaming branch continues with body buffering
                     // + the pre-flight chain.
@@ -1002,7 +764,7 @@ module internal GiraffeUtil =
                     // needs no guard and no comment.
                     // `PostDispatchBodyReadTests` is the contract.
                     //
-                    // 0.1.15 — unconditional on the non-streaming branch.
+                    // Unconditional on the non-streaming branch.
                     // ASP.NET only allocates the buffer when the body is
                     // read more than once, so the cost is zero for the
                     // common single-read path AND every downstream stage
@@ -1049,15 +811,9 @@ module internal GiraffeUtil =
                         SchemaVersion.logDeprecation options.DiagnosticsLogger addressedMethod version retireAfter
                     | _ -> ()
 
-                    let methodNameForAuth =
-                        let lastSlash = endpointName.LastIndexOf '/'
+                    let methodNameForAuth = Route.methodSegment endpointName
 
-                        if lastSlash >= 0 then
-                            endpointName.Substring(lastSlash + 1)
-                        else
-                            endpointName
-
-                    // 0.1.16 — lazy body cache built on a shared bytes
+                    // Lazy body cache built on a shared bytes
                     // cell. Materialised once on first downstream demand,
                     // then the hash derives from the cached bytes
                     // without re-reading ctx.Request.Body. The 0.1.15 fix
@@ -1139,7 +895,7 @@ module internal GiraffeUtil =
                                 return raise fault
                     }
 
-                    // 0.1.16 — body-hash is raw-bytes SHA-256, lazy, and
+                    // Body-hash is raw-bytes SHA-256, lazy, and
                     // memoised against the same bytes cell as the text
                     // cache. Correct for multipart bodies (the 0.1.15
                     // string-shape produced false matches when invalid
@@ -1193,7 +949,7 @@ module internal GiraffeUtil =
                     // the rate-limit pre-flight below — avoids a double
                     // resolver invocation per request.
                     //
-                    // 0.1.15 — awaited via `let!` instead of sync-over-async
+                    // Awaited via `let!` instead of sync-over-async
                     // `GetAwaiter().GetResult()`. The previous shape blocked a
                     // thread-pool worker for the full duration of the resolver
                     // (auth / idempotency / rate-limit ALL did this), starving
@@ -1326,7 +1082,7 @@ module internal GiraffeUtil =
                         // the first argument decoded ONCE per request.
                         let validationParsedArguments: ParsedArguments voption ref = ref ValueNone
 
-                        // 0.1.16 — lazy body read: validation only forces
+                        // Lazy body read: validation only forces
                         // the cache when its method actually has validation
                         // attributes AND the STJ backend is composed.
                         let! validationViolations = task {
@@ -1395,7 +1151,7 @@ module internal GiraffeUtil =
                             //                  the response on success after the handler.
                             let isMethodIdempotent = idempotentMethods.Contains methodNameForAuth
 
-                            // 0.1.15 — RemoteIpResolver hook. When a consumer
+                            // RemoteIpResolver hook. When a consumer
                             // wires a resolver (typically reading
                             // X-Forwarded-For after ASP.NET's
                             // ForwardedHeadersMiddleware has rewritten
@@ -1470,7 +1226,7 @@ module internal GiraffeUtil =
                                 let! _ = readCachedBodyBytes ()
                                 ()
 
-                            // 0.1.15 — async lookup via `let!` instead of
+                            // Async lookup via `let!` instead of
                             // sync-over-async GetAwaiter().GetResult().
                             let! cachedResponse = task {
                                 if idempotencyArmed && idempotencyKey.IsSome then
@@ -1485,7 +1241,7 @@ module internal GiraffeUtil =
                                     return None
                             }
 
-                            // 0.1.16 — body-hash mismatch detection is now
+                            // Body-hash mismatch detection is now
                             // lazy: only computed when (a) idempotency is
                             // armed AND (b) there's a stored response with
                             // a non-empty hash to compare against. The
@@ -1520,7 +1276,7 @@ module internal GiraffeUtil =
 
                                 return! setJsonBody options.JsonSerializer envelope options.DiagnosticsLogger next ctx
                             elif idempotencyBodyMismatch then
-                                // 0.1.15 — same idempotency key reused with a
+                                // Same idempotency key reused with a
                                 // different body → 409 Conflict + User
                                 // envelope. The cached response is NOT
                                 // replayed (it belonged to a different
@@ -1588,7 +1344,7 @@ module internal GiraffeUtil =
                                 let methodBudgets =
                                     rateLimits |> Map.tryFind methodNameForAuth |> Option.defaultValue []
 
-                                // 0.1.15 — async evaluation via `let!` instead of
+                                // Async evaluation via `let!` instead of
                                 // sync-over-async GetAwaiter().GetResult().
                                 // Reuses the subjectKey computed once above.
                                 let! rateLimitDecision = task {
@@ -1680,10 +1436,7 @@ module internal GiraffeUtil =
                                     // matching against it. For telemetry we surface just the
                                     // trailing segment — the method-name conventions the
                                     // routeBuilder produced.
-                                    let methodName =
-                                        let p = props.EndpointName
-                                        let lastSlash = p.LastIndexOf '/'
-                                        if lastSlash >= 0 then p.Substring(lastSlash + 1) else p
+                                    let methodName = Route.methodSegment props.EndpointName
 
                                     // Telemetry-allocation gate. Skips the
                                     // Stopwatch + MethodTelemetry alloc + Map.ofList tags
@@ -1804,7 +1557,7 @@ module internal GiraffeUtil =
                                         if not (isNull capturedBody) then
                                             let scope = Idempotency.deriveScope subjectKey methodNameForAuth
 
-                                            // 0.1.16 — body-hash is only
+                                            // Body-hash is only
                                             // materialised on the store path
                                             // (a previously-missed cache
                                             // store). For mismatch-check
@@ -1920,7 +1673,7 @@ module internal GiraffeUtil =
 
                                         return! next ctx
                                     | Exception(e, functionName, requestBodyText) ->
-                                        // 0.1.16 — categorise multipart-cap
+                                        // Categorise multipart-cap
                                         // breaches as `User` + 413 Payload
                                         // Too Large rather than the generic
                                         // `System` / unhandled categorisation
@@ -1962,7 +1715,7 @@ module internal GiraffeUtil =
                                                 requestBodyText = requestBodyText
                                             }
 
-                                            // 0.5.13 — unconditional stderr breadcrumb.
+                                            // Unconditional stderr breadcrumb.
                                             // The Remoting transport otherwise swallows
                                             // the exception into the `Errors.unhandled`
                                             // envelope with no detail, leaving operators
@@ -2046,9 +1799,18 @@ module internal GiraffeUtil =
                                     | EndpointNotFound -> return! notFound options next ctx
             }
 
+
+    /// Mount a composition: its contract (refused at compose time when the
+    /// composition makes a refusal of the record), its non-batchable routes
+    /// recorded for the batch route, and its dispatcher table, built once.
+    let buildDispatcherTable<'impl> (options: RemotingOptions<HttpContext, 'impl>) =
+        let contract = contractFor options
+        MountedContracts.mount contract
+        buildDispatcherTableFor contract options
+
 module Remoting =
 
-    // 0.1.16 — once-per-type registry so the Empty-impl warning
+    // Once-per-type registry so the Empty-impl warning
     // doesn't spam the log when a test harness composes the same
     // shape repeatedly. Keyed on `typeof<'t>.FullName` so two
     // unrelated API records each emit their own one-shot warning.
@@ -2063,7 +1825,7 @@ module Remoting =
     let buildHttpHandler (options: RemotingOptions<HttpContext, 't>) =
         match options.Implementation with
         | Empty ->
-            // 0.1.16 — once-per-process warning. The Giraffe adapter
+            // Once-per-process warning. The Giraffe adapter
             // supports the full from* surface, so the warning lists
             // every option.
             warnEmptyOnce
@@ -2149,11 +1911,11 @@ module RemotingBatch =
 
     /// The `error` code of a refused envelope (and of a refused element).
     [<Literal>]
-    let RefusalCode = RemotingBatchRoutes.RefusalCode
+    let RefusalCode = BatchElement.RefusalCode
 
     /// The `HttpContext.Items` key present on every element's request.
     [<Literal>]
-    let ElementItemsKey = RemotingBatchRoutes.ElementItemsKey
+    let ElementItemsKey = BatchElement.ItemsKey
 
     /// `DefaultRoute`, `DefaultMaxElements`, no element pipeline.
     let defaults: RemotingBatchOptions = {
@@ -2165,8 +1927,7 @@ module RemotingBatch =
     /// Whether an envelope may name `route` — false for a streaming or
     /// long-running method's route (or its companions) of any API this
     /// process has mounted.
-    let isBatchable (route: string) : bool =
-        not (RemotingBatchRoutes.isRefused route)
+    let isBatchable (route: string) : bool = not (MountedContracts.isRefused route)
 
     type private Element = { Route: string; Body: string option }
 
@@ -2212,7 +1973,7 @@ module RemotingBatch =
                 Error(sprintf "the element route '%s' is not a plain absolute path" routeText)
             elif String.Equals(routeText, options.Route, StringComparison.OrdinalIgnoreCase) then
                 Error "an envelope may not name the batch route"
-            elif RemotingBatchRoutes.isRefused routeText then
+            elif MountedContracts.isRefused routeText then
                 Error(sprintf "'%s' is a streaming or long-running route, which is never batched" routeText)
             else
                 bodyText |> Result.map (fun bodyText -> { Route = routeText; Body = bodyText })
