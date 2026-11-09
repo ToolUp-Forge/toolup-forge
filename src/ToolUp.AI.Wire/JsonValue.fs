@@ -273,19 +273,33 @@ module JsonValue =
         isNumberToken text
         && not (text.Contains "." || text.Contains "e" || text.Contains "E")
 
+    /// The host's parse of a token, as an option — the one place the numeric
+    /// readers differ by host. .NET parses with the styles the token grammar
+    /// admits and the invariant culture; Fable's readers are culture-free,
+    /// take the text alone, and would ignore a style with a warning.
+    let inline private tryParse< ^n
+        when ^n: (static member TryParse: string * byref< ^n > -> bool)
+        and ^n: (static member TryParse: string * NumberStyles * IFormatProvider * byref< ^n > -> bool)>
+        (styles: NumberStyles)
+        (text: string)
+        : ^n option =
+        let mutable n = Unchecked.defaultof< ^n>
+#if FABLE_COMPILER
+        let parsed = (^n: (static member TryParse: string * byref< ^n > -> bool) (text, &n))
+#else
+        let parsed =
+            (^n: (static member TryParse: string * NumberStyles * IFormatProvider * byref< ^n > -> bool) (text,
+                                                                                                          styles,
+                                                                                                          CultureInfo.InvariantCulture,
+                                                                                                          &n))
+#endif
+        if parsed then Some n else None
+
     /// The token as an `int64`, or `None` when it is not an integral
     /// token or does not fit. Exact: no `float` on the way.
     let tryInt64 (text: string) : int64 option =
         if isIntegralToken text then
-#if FABLE_COMPILER
-            match Int64.TryParse text with
-            | true, n -> Some n
-            | _ -> None
-#else
-            match Int64.TryParse(text, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture) with
-            | true, n -> Some n
-            | _ -> None
-#endif
+            tryParse NumberStyles.AllowLeadingSign text
         else
             None
 
@@ -293,15 +307,7 @@ module JsonValue =
     /// outright rather than parsed and range-checked.
     let tryUInt64 (text: string) : uint64 option =
         if isIntegralToken text && not (text.StartsWith "-") then
-#if FABLE_COMPILER
-            match UInt64.TryParse text with
-            | true, n -> Some n
-            | _ -> None
-#else
-            match UInt64.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture) with
-            | true, n -> Some n
-            | _ -> None
-#endif
+            tryParse NumberStyles.None text
         else
             None
 
@@ -310,15 +316,7 @@ module JsonValue =
     /// the token is not a number or exceeds `decimal`'s range or scale.
     let tryDecimal (text: string) : decimal option =
         if isNumberToken text then
-#if FABLE_COMPILER
-            match Decimal.TryParse text with
-            | true, d -> Some d
-            | _ -> None
-#else
-            match Decimal.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture) with
-            | true, d -> Some d
-            | _ -> None
-#endif
+            tryParse NumberStyles.Float text
         else
             None
 
@@ -327,15 +325,7 @@ module JsonValue =
     /// "declared float" means on a text wire.
     let tryFloat (text: string) : float option =
         if isNumberToken text then
-#if FABLE_COMPILER
-            match Double.TryParse text with
-            | true, f -> Some f
-            | _ -> None
-#else
-            match Double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture) with
-            | true, f -> Some f
-            | _ -> None
-#endif
+            tryParse NumberStyles.Float text
         else
             None
 
