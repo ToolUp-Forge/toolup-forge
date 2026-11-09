@@ -366,4 +366,46 @@ let tests =
             Expect.equal (cursors.Load("s1", "t1") |> run) cursor "the saved cursor reads back"
             expectSetAside storage platform name
         }
+
+        test "BackgroundExportStore — the status sidecar keeps its bytes, and one that does not decode refuses" {
+            let ticketFor (guid: string) =
+                let scope =
+                    Convert.ToBase64String(Encoding.UTF8.GetBytes "t1").TrimEnd('=').Replace('+', '-').Replace('/', '_')
+
+                $"dsr.{scope}.{guid}"
+
+            let good = Guid.NewGuid().ToString "N"
+            let goodName = $"data-subject-requests/t1/{good}.status"
+
+            let statusBytes (status: string) =
+                Encoding.UTF8.GetBytes(
+                    "{\"status\":\""
+                    + status
+                    + "\",\"subjectUserId\":\"u1\",\"requestId\":\"r1\",\"createdAt\":\"2099-01-01T00:00:00.0000000\\u002B00:00\",\"expiresAt\":\"2099-01-08T00:00:00.0000000\\u002B00:00\"}"
+                )
+
+            let bad = Guid.NewGuid().ToString "N"
+            let badName = $"data-subject-requests/t1/{bad}.status"
+            let storage = planted platform badName
+            storage.Upload(platform, goodName, statusBytes "Preparing") |> run |> ignore
+
+            let store = ToolUp.Platform.Audit.BlobBackedBackgroundExportStore.create storage
+
+            Expect.equal (store.GetStatus(ticketFor good) |> run) ExportStatus.Preparing "today's bytes read"
+            store.Cancel(ticketFor good) |> run
+
+            Expect.equal
+                (storage.Download(platform, goodName) |> run)
+                (Ok(statusBytes "Cancelled"))
+                "a transition writes the same shape, field order and escapes included"
+
+            expectRefusedRead "GetStatus" (fun () -> store.GetStatus(ticketFor bad) |> run |> ignore)
+            expectRefusedRead "Download" (fun () -> store.Download(ticketFor bad) |> run |> ignore)
+
+            Expect.throws
+                (fun () -> store.Cancel(ticketFor bad) |> run)
+                "a transition refuses rather than writing over it"
+
+            expectQuarantined storage platform badName
+        }
     ]

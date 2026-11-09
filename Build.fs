@@ -4420,7 +4420,9 @@ let main args =
     // line in the same commit.
     //
     // The scan is textual (`.Download(` or `.Download (`), over the server
-    // tier's own sources; companions are outside it.
+    // tier's own sources; companions are outside it. A member DEFINITION
+    // named `Download` (`member _.Download(`, a store's own verb) is not a
+    // call and does not count.
     //
     // Usage: `dotnet run --project Build.fsproj -- VerifyBlobDownloads`
     //        `… -- VerifyBlobDownloads --root <dir>` scans that tree instead.
@@ -4452,7 +4454,6 @@ let main args =
     ]
 
     let blobDownloadAllowList = [
-        "BlobBackedBackgroundExportStore.fs"
         "BlobCrdtDocumentStore.fs"
         "BudgetLedger.fs"
         "ConfigDriftDetector.fs"
@@ -4476,7 +4477,7 @@ let main args =
 
             1
         else
-            let download = System.Text.RegularExpressions.Regex(@"\.Download\s*\(")
+            let download = System.Text.RegularExpressions.Regex(@"(?<!\bmember\s+\w+)\.Download\s*\(")
 
             let callers =
                 Directory.EnumerateFiles(serverDir, "*.fs", SearchOption.AllDirectories)
