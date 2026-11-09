@@ -453,4 +453,42 @@ let tests =
             Expect.equal (after.InFlight, after.Spent) (1, 2M) "and it is durable"
             expectSetAside storage platform name
         }
+
+        test "UsageLog — a rollup that does not decode refuses the query, and the next flush sets it aside" {
+            let day = DateTime(2026, 11, 9, 10, 0, 0, DateTimeKind.Utc)
+            let name = "usage/t1/2026-11-09.json"
+            let storage = planted platform name
+
+            let policy: ToolUp.Platform.Usage.BatchFlushPolicy = {
+                FlushAtCount = 1
+                FlushInterval = TimeSpan.FromMilliseconds 50.0
+                ChannelCapacity = 16
+                ProducerWaitTimeout = TimeSpan.FromSeconds 1.0
+            }
+
+            use flusher =
+                new ToolUp.Platform.Infra.UsageLog.UsageBatchFlusher(storage, policy, silentLogger, None)
+
+            let log =
+                ToolUp.Platform.Infra.UsageLog.BlobUsageLog(storage, flusher) :> ToolUp.Platform.Infra.Usage.IUsageLog
+
+            expectRefusedRead "Query" (fun () -> log.Query("t1", None, None) |> run |> ignore)
+
+            let record: ToolUp.Platform.Usage.UsageRecord = {
+                RecordId = Guid.NewGuid()
+                ScopeId = "t1"
+                ResourceKind = "test"
+                Quantity = 3M
+                Unit = "unit"
+                Origin = None
+                Metadata = Map.empty
+                Timestamp = day
+            }
+
+            log.Record record |> run
+            flusher.DrainAndFlush() |> run
+
+            Expect.equal (log.Query("t1", None, None) |> run) [ record ] "the new record landed in the restarted day"
+            expectSetAside storage platform name
+        }
     ]

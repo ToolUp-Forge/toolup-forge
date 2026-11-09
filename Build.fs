@@ -4460,7 +4460,6 @@ let main args =
         "EntityOutbox.fs"
         "Remoting/Idempotency.fs"
         "ResultStore.fs"
-        "UsageLog.fs"
     ]
 
     let runVerifyBlobDownloads (root: string) : int =
