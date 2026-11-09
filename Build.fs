@@ -4452,7 +4452,6 @@ let main args =
     ]
 
     let blobDownloadAllowList = [
-        "AuditReplicator.fs"
         "BlobBackedBackgroundExportStore.fs"
         "BlobCrdtDocumentStore.fs"
         "BudgetLedger.fs"

@@ -343,4 +343,27 @@ let tests =
             Expect.equal (store.GetLast "t1" |> run) (Some summary) "the new summary reads back"
             expectSetAside storage platform name
         }
+
+        test "AuditReplicator cursor — an undecodable cursor re-delivers by decision, and the next save replaces it" {
+            let name = "audit-replicator/s1/t1.cursor"
+            let storage = planted platform name
+
+            let cursors =
+                ToolUp.Platform.Audit.AuditReplicator.BlobAuditReplicatorCursorStore(storage, silentLogger)
+                :> ToolUp.Platform.Audit.AuditReplicator.IAuditReplicatorCursorStore
+
+            Expect.equal
+                (cursors.Load("s1", "t1") |> run)
+                ToolUp.Platform.Audit.AuditReplicatorCursor.empty
+                "at-least-once: the scope's history is re-delivered to an idempotent sink"
+
+            let cursor: ToolUp.Platform.Audit.AuditReplicatorCursor = {
+                LastDeliveredAt = DateTime(2026, 11, 9, 9, 0, 0, DateTimeKind.Utc)
+                LastDeliveredEventId = Guid.NewGuid()
+            }
+
+            cursors.Save("s1", "t1", cursor) |> run
+            Expect.equal (cursors.Load("s1", "t1") |> run) cursor "the saved cursor reads back"
+            expectSetAside storage platform name
+        }
     ]
