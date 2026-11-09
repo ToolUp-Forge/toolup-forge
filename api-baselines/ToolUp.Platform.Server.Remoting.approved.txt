@@ -93,6 +93,14 @@ ToolUp.Remoting.Json.SystemTextJson.FSharpCliMutableRecordConverter`1 (class)
 ToolUp.Remoting.Json.SystemTextJson.FSharpCliMutableRecordConverter`1..ctor()
 ToolUp.Remoting.Json.SystemTextJson.FSharpCliMutableRecordConverter`1.Read(System.Text.Json.Utf8JsonReader&, System.Type, System.Text.Json.JsonSerializerOptions) : T
 ToolUp.Remoting.Json.SystemTextJson.FSharpCliMutableRecordConverter`1.Write(System.Text.Json.Utf8JsonWriter, T, System.Text.Json.JsonSerializerOptions) : System.Void
+ToolUp.Remoting.Json.SystemTextJson.FSharpErasedWrapperConverterFactory (class)
+ToolUp.Remoting.Json.SystemTextJson.FSharpErasedWrapperConverterFactory..ctor()
+ToolUp.Remoting.Json.SystemTextJson.FSharpErasedWrapperConverterFactory.CanConvert(System.Type) : System.Boolean
+ToolUp.Remoting.Json.SystemTextJson.FSharpErasedWrapperConverterFactory.CreateConverter(System.Type, System.Text.Json.JsonSerializerOptions) : System.Text.Json.Serialization.JsonConverter
+ToolUp.Remoting.Json.SystemTextJson.FSharpErasedWrapperConverter`1 (class)
+ToolUp.Remoting.Json.SystemTextJson.FSharpErasedWrapperConverter`1..ctor()
+ToolUp.Remoting.Json.SystemTextJson.FSharpErasedWrapperConverter`1.Read(System.Text.Json.Utf8JsonReader&, System.Type, System.Text.Json.JsonSerializerOptions) : T
+ToolUp.Remoting.Json.SystemTextJson.FSharpErasedWrapperConverter`1.Write(System.Text.Json.Utf8JsonWriter, T, System.Text.Json.JsonSerializerOptions) : System.Void
 ToolUp.Remoting.Json.SystemTextJson.FSharpListConverterFactory (class)
 ToolUp.Remoting.Json.SystemTextJson.FSharpListConverterFactory..ctor()
 ToolUp.Remoting.Json.SystemTextJson.FSharpListConverterFactory.CanConvert(System.Type) : System.Boolean

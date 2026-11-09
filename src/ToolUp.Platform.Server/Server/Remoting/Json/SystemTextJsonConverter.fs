@@ -419,6 +419,14 @@ module private UnionAttributes =
         t.GetCustomAttributes(false)
         |> Array.exists (fun a -> a.GetType().FullName = "Fable.Core.StringEnumAttribute")
 
+    /// A single-case, single-field union marked `[<Fable.Core.Erase>]`: Fable
+    /// compiles its value AS the field, so the wire carries the bare field.
+    let isErasedWrapper (t: Type) =
+        t.GetCustomAttributes(false)
+        |> Array.exists (fun a -> a.GetType().FullName = "Fable.Core.EraseAttribute")
+        && (let cases = FSharpType.GetUnionCases(t, UnionReflection.bindingFlags)
+            cases.Length = 1 && cases.[0].GetFields().Length = 1)
+
 type FSharpUnionConverterFactory() =
     inherit JsonConverterFactory()
 
@@ -428,6 +436,7 @@ type FSharpUnionConverterFactory() =
         && FSharpType.IsUnion(t, UnionReflection.bindingFlags)
         && not (UnionAttributes.hasPojoAttribute t)
         && not (UnionAttributes.hasStringEnumAttribute t)
+        && not (UnionAttributes.isErasedWrapper t)
 
     override _.CanConvert(typeToConvert: Type) = isUnionTypeWeConvert typeToConvert
 
@@ -562,6 +571,42 @@ type FSharpStringEnumConverterFactory() =
 
     override _.CreateConverter(t: Type, _options: JsonSerializerOptions) =
         let converterType = typedefof<FSharpStringEnumConverter<_>>.MakeGenericType(t)
+        Activator.CreateInstance(converterType) :?> JsonConverter
+
+// =============================================================================
+// F# `[<Fable.Core.Erase>]` single-case wrapper converter (Kind.Erased)
+// =============================================================================
+//
+// Wire format: the wrapped field, exactly as it would be written on its own.
+// Fable compiles an erased single-case union to its field (no allocation, and
+// its reflection reports the field's type), so a browser writes `"alice"` for
+// a `UserId "alice"`; this converter writes and reads the same bytes on .NET,
+// which is what lets a typed identity field replace a `string` one without
+// moving a byte on the wire or at rest.
+
+type FSharpErasedWrapperConverter<'T>() =
+    inherit JsonConverter<'T>()
+
+    let case = (UnionReflection.getInfo typeof<'T>).Cases.[0]
+    let fieldType = case.FieldTypes.[0]
+
+    override _.Write(writer: Utf8JsonWriter, value: 'T, options: JsonSerializerOptions) =
+        let field = (case.FieldReader.Value(box value)).[0]
+        JsonSerializer.Serialize(writer, field, fieldType, options)
+
+    override _.Read(reader: byref<Utf8JsonReader>, _: Type, options: JsonSerializerOptions) =
+        let field = JsonSerializer.Deserialize(&reader, fieldType, options)
+        case.Constructor [| field |] :?> 'T
+
+type FSharpErasedWrapperConverterFactory() =
+    inherit JsonConverterFactory()
+
+    override _.CanConvert(t: Type) =
+        FSharpType.IsUnion(t, UnionReflection.bindingFlags)
+        && UnionAttributes.isErasedWrapper t
+
+    override _.CreateConverter(t: Type, _options: JsonSerializerOptions) =
+        let converterType = typedefof<FSharpErasedWrapperConverter<_>>.MakeGenericType(t)
         Activator.CreateInstance(converterType) :?> JsonConverter
 
 // =============================================================================
@@ -1573,12 +1618,13 @@ module FableConverters =
         options.Converters.Add(FSharpTupleConverterFactory())
         options.Converters.Add(FSharpCliMutableRecordConverterFactory())
         options.Converters.Add(FSharpRecordConverterFactory())
-        // Pojo + StringEnum DU factories must come BEFORE the regular union
-        // factory so the attribute-tagged DUs are caught first (the regular
+        // Pojo, StringEnum and erased-wrapper DU factories must come BEFORE the
+        // regular union factory so the attribute-tagged DUs are caught first (the regular
         // union factory's CanConvert excludes them, but ordering guards
         // against future factory edits that might forget the exclusion).
         options.Converters.Add(FSharpPojoDUConverterFactory())
         options.Converters.Add(FSharpStringEnumConverterFactory())
+        options.Converters.Add(FSharpErasedWrapperConverterFactory())
         options.Converters.Add(FSharpUnionConverterFactory())
 
         // Single-type converters — strings (raw UTF-8 passthrough), then numbers/dates.

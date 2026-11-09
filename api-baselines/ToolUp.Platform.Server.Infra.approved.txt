@@ -230,8 +230,10 @@ ToolUp.Platform.Infra.BlobMapStore`1 (class)
 ToolUp.Platform.Infra.BlobMapStore`1..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.Infra.BlobCodec`1[T], ToolUp.Platform.ILogger)
 ToolUp.Platform.Infra.BlobMapStore`1..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.Infra.BlobCodec`1[T], ToolUp.Platform.ILogger, ToolUp.Platform.Infra.BlobMapStoreOptions)
 ToolUp.Platform.Infra.BlobMapStore`1.Read(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[T], ToolUp.Platform.Infra.BlobMapStoreError]]
+ToolUp.Platform.Infra.BlobMapStore`1.Read(ToolUp.Platform.ScopeKey, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[T], ToolUp.Platform.Infra.BlobMapStoreError]]
 ToolUp.Platform.Infra.BlobMapStore`1.SupportsConditionalWrites(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.Boolean]
 ToolUp.Platform.Infra.BlobMapStore`1.Update`1(System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpOption`1[T], ToolUp.Platform.Infra.BlobUpdate`2[T, R]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[R, ToolUp.Platform.Infra.BlobMapStoreError]]
+ToolUp.Platform.Infra.BlobMapStore`1.Update`1(ToolUp.Platform.ScopeKey, System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpOption`1[T], ToolUp.Platform.Infra.BlobUpdate`2[T, R]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[R, ToolUp.Platform.Infra.BlobMapStoreError]]
 ToolUp.Platform.Infra.BlobModelRegistry (class)
 ToolUp.Platform.Infra.BlobModelRegistry..ctor(ToolUp.Platform.Infra.IDataObjectStore, ToolUp.Platform.IAuditLog, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.ILineageStore], ToolUp.Platform.Infra.ProvenanceAttachmentLimits)
 ToolUp.Platform.Infra.BlobModelRegistryModule (class)

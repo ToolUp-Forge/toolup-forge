@@ -119,12 +119,6 @@ module ScopeKey =
         | ScopeKey.Session sessionId -> sessionId
         | ScopeKey.Claim claimScopeId -> claimScopeId
 
-    /// An id is well formed when it is non-empty and carries no leading or
-    /// trailing whitespace — the rule the typed identity wrappers' smart
-    /// constructors apply.
-    let private isWellFormedId (id: string) =
-        id.Length > 0 && id.Trim().Length = id.Length
-
     /// The prefixed cases of the grammar, each with the case it builds.
     let private prefixed: (string * (string -> ScopeKey)) list = [
         TeamPrefix, ScopeKey.Team
@@ -156,7 +150,7 @@ module ScopeKey =
             Some platform
         else
             match stripPrefix container with
-            | Some(id, case) when isWellFormedId id -> Some(case id)
+            | Some(id, case) when Identity.isWellFormed id -> Some(case id)
             | _ -> None
 
     /// The bare id a container written before the grammar had a type was read back to,

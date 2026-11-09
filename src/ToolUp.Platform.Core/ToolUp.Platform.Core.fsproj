@@ -71,6 +71,7 @@
              placed early so module / companion / datatype / tool
              registration surfaces in every later tier can reference it. -->
         <Compile Include="Shared\ComponentId.fs" />
+        <Compile Include="Shared\Types\Identity.fs" />
         <!-- Tier-shared module identity: the name→id
              derivation both tiers apply, derived-vs-explicit
              classification, and the compose-time duplicate-id gate the

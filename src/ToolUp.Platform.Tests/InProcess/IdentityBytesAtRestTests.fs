@@ -11,6 +11,7 @@ module ToolUp.Platform.Tests.InProcess.IdentityBytesAtRestTests
 // (the expected strings are literals) once the store takes `UserId` / `TeamId`.
 
 open System.Text
+open System.Text.Json
 open System.Text.RegularExpressions
 open Expecto
 open ToolUp.Platform
@@ -18,6 +19,7 @@ open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Config.NotificationChannel
 open ToolUp.Platform.Config.TeamManagement
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Remoting.Json.SystemTextJson
 
 let private run a = Async.RunSynchronously a
 
@@ -30,8 +32,68 @@ let private blobText (storage: IBlobStorage) (name: string) =
     | Ok bytes -> Encoding.UTF8.GetString bytes
     | Error e -> failtestf "blob %s did not read: %s" name e
 
+/// A persisted record carrying typed ids, and its string-typed twin: the
+/// converter set must write both to the same bytes.
+type private Typed = {
+    Owner: UserId
+    Team: TeamId
+    Delegate: UserId option
+    Members: UserId list
+}
+
+type private Untyped = {
+    Owner: string
+    Team: string
+    Delegate: string option
+    Members: string list
+}
+
+let private json = FableConverters.create ()
+
 let tests =
     testList "typed identity — the bytes at rest do not move" [
+        testCase "a typed id field is written as the bare string it wraps"
+        <| fun _ ->
+            let typed: Typed = {
+                Owner = UserId "alice"
+                Team = TeamId "acme"
+                Delegate = Some(UserId "bob")
+                Members = [ UserId "alice"; UserId "carol" ]
+            }
+
+            let untyped: Untyped = {
+                Owner = "alice"
+                Team = "acme"
+                Delegate = Some "bob"
+                Members = [ "alice"; "carol" ]
+            }
+
+            let bytes = JsonSerializer.Serialize(typed, json)
+            Expect.equal bytes (JsonSerializer.Serialize(untyped, json)) "byte-identical to the string twin"
+            Expect.equal (JsonSerializer.Deserialize<Typed>(bytes, json)) typed "and it reads back"
+
+            Expect.equal
+                (JsonSerializer.Deserialize<Typed>(JsonSerializer.Serialize(untyped, json), json))
+                typed
+                "a document written before the retype reads as the typed record"
+
+        testCase "the smart constructors refuse empty and padded ids"
+        <| fun _ ->
+            Expect.equal (UserId.tryCreate "alice") (Ok(UserId "alice")) "well formed"
+            Expect.equal (TeamId.tryParse "acme") (Some(TeamId "acme")) "well formed"
+
+            for bad in [ null; ""; " alice"; "alice "; "	" ] do
+                Expect.isError (UserId.tryCreate bad) (sprintf "user id %A refused" bad)
+                Expect.isError (TeamId.tryCreate bad) (sprintf "team id %A refused" bad)
+                Expect.isNone (UserId.tryParse bad) "tryParse agrees"
+
+        testCase "a typed id renders as its string on .NET"
+        <| fun _ ->
+            let user = UserId "alice"
+            Expect.equal $"memberships/{user}.json" "memberships/alice.json" "interpolation"
+            Expect.equal (string (TeamId "acme")) "acme" "string"
+            Expect.equal user.Value "alice" "Value"
+
         testCase "the team store's blob names and documents"
         <| fun _ ->
             let storage = InMemoryBlobStorage() :> IBlobStorage

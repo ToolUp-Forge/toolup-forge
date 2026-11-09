@@ -7720,6 +7720,8 @@ ToolUp.Platform.IdempotencyKey.Key : System.String { get }
 ToolUp.Platform.IdempotencyKey.TtlSeconds : System.Int32 { get }
 ToolUp.Platform.IdempotentAttribute (class)
 ToolUp.Platform.IdempotentAttribute..ctor()
+ToolUp.Platform.Identity (class)
+ToolUp.Platform.Identity.isWellFormed(System.String) : System.Boolean
 ToolUp.Platform.InboundRateLimitDecision (class)
 ToolUp.Platform.InboundRateLimitDecision.IsAllowWithRemaining : System.Boolean { get }
 ToolUp.Platform.InboundRateLimitDecision.IsDenyWithError : System.Boolean { get }
@@ -12777,6 +12779,15 @@ ToolUp.Platform.TeamDeletedPayload..ctor(System.String, System.String, System.St
 ToolUp.Platform.TeamDeletedPayload.TeamId : System.String { get }
 ToolUp.Platform.TeamDeletedPayload.TeamName : System.String { get }
 ToolUp.Platform.TeamDeletedPayload.UserId : System.String { get }
+ToolUp.Platform.TeamId (class)
+ToolUp.Platform.TeamId.Item : System.String { get }
+ToolUp.Platform.TeamId.Tag : System.Int32 { get }
+ToolUp.Platform.TeamId.ToString() : System.String
+ToolUp.Platform.TeamId.Value : System.String { get }
+ToolUp.Platform.TeamIdModule (class)
+ToolUp.Platform.TeamIdModule.tryCreate(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TeamId, System.String]
+ToolUp.Platform.TeamIdModule.tryParse(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamId]
+ToolUp.Platform.TeamIdModule.value(ToolUp.Platform.TeamId) : System.String
 ToolUp.Platform.TeamInfo (class)
 ToolUp.Platform.TeamInfo..ctor(System.String, System.String, System.DateTime, System.Boolean)
 ToolUp.Platform.TeamInfo.Archived : System.Boolean { get }
@@ -13667,6 +13678,15 @@ ToolUp.Platform.UserContact.PushTokens : Microsoft.FSharp.Collections.FSharpList
 ToolUp.Platform.UserContact.UserId : System.String { get }
 ToolUp.Platform.UserContactModule (class)
 ToolUp.Platform.UserContactModule.empty(System.String) : ToolUp.Platform.UserContact
+ToolUp.Platform.UserId (class)
+ToolUp.Platform.UserId.Item : System.String { get }
+ToolUp.Platform.UserId.Tag : System.Int32 { get }
+ToolUp.Platform.UserId.ToString() : System.String
+ToolUp.Platform.UserId.Value : System.String { get }
+ToolUp.Platform.UserIdModule (class)
+ToolUp.Platform.UserIdModule.tryCreate(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.UserId, System.String]
+ToolUp.Platform.UserIdModule.tryParse(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.UserId]
+ToolUp.Platform.UserIdModule.value(ToolUp.Platform.UserId) : System.String
 ToolUp.Platform.UserLoggedInPayload (class)
 ToolUp.Platform.UserLoggedInPayload..ctor(System.String, System.String)
 ToolUp.Platform.UserLoggedInPayload.AuthProvider : System.String { get }

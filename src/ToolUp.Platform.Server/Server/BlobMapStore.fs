@@ -405,6 +405,18 @@ type BlobMapStore<'T>(storage: IBlobStorage, codec: BlobCodec<'T>, logger: ILogg
         | Some c -> confirmConditional c container blobName
         | None -> async.Return false
 
+    /// `Read` of one blob in a scope's container (`ScopeKey.container`): the
+    /// typed form, so a store keyed by a team or a user names the scope by
+    /// value and never spells its container.
+    member this.Read(scope: ScopeKey, blobName: string) : Async<Result<'T option, BlobMapStoreError>> =
+        this.Read(ScopeKey.container scope, blobName)
+
+    /// `Update` of one blob in a scope's container (`ScopeKey.container`).
+    member this.Update
+        (scope: ScopeKey, blobName: string, transform: 'T option -> BlobUpdate<'T, 'R>)
+        : Async<Result<'R, BlobMapStoreError>> =
+        this.Update(ScopeKey.container scope, blobName, transform)
+
     /// Guarded read-modify-write. `transform` is pure over the decoded
     /// value (`None` = absent) and may run more than once: on a lost
     /// precondition it is replayed over the fresh read. Nothing is written
