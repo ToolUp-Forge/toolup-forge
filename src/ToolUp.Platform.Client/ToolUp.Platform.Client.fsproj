@@ -99,7 +99,7 @@
         <Compile Include="Client\Logger.fs" />
         <!-- Phase 444 — client-shell localization. The catalog's types and
              the built-in English catalog (`LocalizationTypes.fs`,
-             `MessageCatalog.fs`) live in Core since Phase 1072, because
+             `MessageCatalog.fs`) live in Core, because
              `ClientModuleContext` carries the resolved catalog; the two files
              here are the client half, placed this early because the sidebar
              and the toolkit-adjacent chrome compile well before

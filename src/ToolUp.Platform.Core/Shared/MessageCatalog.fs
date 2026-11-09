@@ -8,9 +8,9 @@ namespace ToolUp.Platform
 // Two modules, both Feliz-free so they compile and run on .NET as well
 // as under Fable: the DECISION (which locale wins, what the resolved
 // catalog is) is pure, so the in-process test harness exercises it
-// without a browser, a React renderer, or a Fable build. In Core since
-// Phase 1072, because `ClientModuleContext.empty` (ConfigTypes.fs, next
-// in the compile order) carries `english`. The React context + hook that
+// without a browser, a React renderer, or a Fable build. In Core because
+// `ClientModuleContext.empty` (ConfigTypes.fs, next in the compile order)
+// carries `english`. The React context + hook that
 // publish the result to the view tree live in Platform.Client's
 // `MessageCatalogProvider.fs`, which is where the Feliz dependency
 // starts.

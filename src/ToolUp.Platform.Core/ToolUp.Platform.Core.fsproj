@@ -344,13 +344,12 @@
              client renders SessionRecord directly. -->
         <Compile Include="Shared\SessionTypes.fs" />
         <Compile Include="Shared\IModuleQueryBus.fs" />
-        <!-- Phase 444 / 1072 — the client-shell localization substrate:
+        <!-- The client-shell localization substrate:
              `LocalizationTypes.fs` declares `MessageCatalog` and its section
              records (FSharp.Core only), `MessageCatalog.fs` the built-in English
              catalog, locale resolution and the switch-request seam. Both are
              Feliz-free, so the resolution runs on the .NET in-process harness as
-             well as under Fable. In Core (moved from Platform.Client by Phase
-             1072) because `ClientModuleContext` in ConfigTypes.fs, next, carries
+             well as under Fable. In Core (moved from Platform.Client) because `ClientModuleContext` in ConfigTypes.fs, next, carries
              the resolved catalog and `ClientModuleContext.empty` carries
              `MessageCatalog.english`; the namespace is unchanged. -->
         <Compile Include="Shared\LocalizationTypes.fs" />
