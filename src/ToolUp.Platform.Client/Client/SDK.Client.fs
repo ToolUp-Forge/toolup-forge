@@ -27,20 +27,12 @@ module Client =
 
     let private log = Logger.forCategory "client.bootstrap"
 
-    // 0.4.1 — boot-time prefetch gates use `Prefetch<unit>` from
-    // ToolUp.Elmish (the primitive that codifies the dual-drain
-    // pattern). The actual loaded values still live in `ModuleConfigs`
-    // / `PlatformConfig` / `ResolvedFlags`; `ConfigsPrefetch` /
-    // `FlagsPrefetch` are pure gates flipped from `Pending` to `Loaded
-    // ()` as each source resolves. The "re-init exactly once when the
-    // last source drains" semantic is enforced by `Prefetch.onAllReady`
-    // (consumed in `ConfigsLoaded` / `FlagsLoaded`).
-    //
-    // The previous `PrefetchKind` enum + `PrefetchPending: Set<...>`
-    // bookkeeping is retired — the typed primitive replaces it
-    // verbatim, and a future prefetch source (e.g. boot-time tenant
-    // resolution) gets its own `Prefetch<unit>` rather than another
-    // enum case to add + remove from the set.
+    // The boot-time gates are `Remote<unit, string>` values. The loaded
+    // values themselves live in `ModuleConfigs` / `PlatformConfig` /
+    // `ResolvedFlags`; `ConfigsPrefetch` / `FlagsPrefetch` only say whether
+    // each source has drained (`Loading` until it answers, `Loaded ()` once
+    // it has, failure included), and the active module re-inits exactly once,
+    // when the last of them settles (`ConfigsLoaded` / `FlagsLoaded`).
 
     /// 0.5.16 — shell lifecycle phase. Gates whether the active module's
     /// `Init` has run and whether its view is mounted. Eliminates the
@@ -182,15 +174,14 @@ module Client =
         /// when nothing is hidden. Not persisted; resets each shell start.
         ShowAllModules: bool
         /// Boot-time prefetch gate for the persisted config fetch
-        /// (`/api/_platform/config/all`). Flips `Pending -> Loaded ()`
-        /// inside `ConfigsLoaded`. Combined with `FlagsPrefetch` via
-        /// `Prefetch.onAllReady` to fire the single active-module
-        /// re-init when the last source drains. See the module-level
-        /// comment above for rationale.
-        ConfigsPrefetch: Prefetch<unit>
+        /// (`/api/_platform/config/all`). Flips `Loading -> Loaded ()`
+        /// inside `ConfigsLoaded`; with `FlagsPrefetch` it decides when
+        /// the single active-module re-init fires. See the module-level
+        /// comment above.
+        ConfigsPrefetch: Remote<unit, string>
         /// Boot-time prefetch gate for the feature-flag resolution.
         /// Same semantics as `ConfigsPrefetch`.
-        FlagsPrefetch: Prefetch<unit>
+        FlagsPrefetch: Remote<unit, string>
         /// Phase 12c — per-module Reload counter. Incremented by
         /// `ResetModule`. Composed into the React `key` of
         /// `Components.ModuleBoundary` so the boundary instance unmounts
@@ -740,14 +731,19 @@ module Client =
     /// this is a `match` returning a constant plus a `None` branch, and no
     /// map read or browser call.
     ///
-    /// Phase 852 — the SAME catalog object comes back while the locale and
-    /// the override are unchanged (a one-entry cache below).
-    /// `MessageCatalog.resolve` stamps the locale onto a copy of the built-in
-    /// catalog, so without the cache every render handed
-    /// `MessageCatalogProvider` a new value and re-rendered every
-    /// `useMessages` reader — including readers inside a module subtree the
-    /// sliced shell's memo boundary would otherwise have held.
-    let mutable private catalogCache: (string * obj * MessageCatalog) option = None
+    /// The SAME catalog object comes back while the locale and the
+    /// override are unchanged (a one-entry memo, the locale compared by
+    /// value and the override by reference). `MessageCatalog.resolve`
+    /// stamps the locale onto a copy of the built-in catalog, so without
+    /// the memo every render handed `MessageCatalogProvider` a new value
+    /// and re-rendered every `useMessages` reader — including readers
+    /// inside a module subtree the sliced shell's memo boundary would
+    /// otherwise have held.
+    let private catalogFor =
+        Memo.oneEntryBy
+            (fun (locale1: string, override1) (locale2, override2) ->
+                locale1 = locale2 && obj.ReferenceEquals(override1, override2))
+            (fun (locale, catalogOverride) -> MessageCatalog.resolve locale catalogOverride)
 
     let private resolveCatalog
         (config: ClientConfig)
@@ -771,16 +767,7 @@ module Client =
                         (MessageCatalog.teamLocaleOf platformConfig)
                         (MessageCatalogProvider.browserLocale ())
 
-        match catalogCache with
-        | Some(cachedLocale, cachedOverride, catalog) when
-            cachedLocale = locale
-            && obj.ReferenceEquals(cachedOverride, box config.MessageCatalogOverride)
-            ->
-            catalog
-        | _ ->
-            let catalog = MessageCatalog.resolve locale config.MessageCatalogOverride
-            catalogCache <- Some(locale, box config.MessageCatalogOverride, catalog)
-            catalog
+        catalogFor (locale, config.MessageCatalogOverride)
 
     /// Sources the shell can re-run on demand. The auth bridge retries
     /// itself on its refresh interval, so its banner row carries no
@@ -1594,8 +1581,8 @@ module Client =
                 match restoredView with
                 | Some _ -> ClientConfig.effectiveArea moduleImpl.Area moduleImpl.Group
                 | None -> ModuleArea.Product
-            ConfigsPrefetch = Prefetch.none
-            FlagsPrefetch = Prefetch.none
+            ConfigsPrefetch = Remote.Loading
+            FlagsPrefetch = Remote.Loading
             ResetCounters = Map.empty
             InitPhase = initPhase
             Degradations = []
@@ -1695,10 +1682,10 @@ module Client =
             model with
                 ModuleConfigs = moduleCfgs
                 PlatformConfig = platformCfg
-                ConfigsPrefetch = Prefetch.loaded ()
+                ConfigsPrefetch = Remote.Loaded()
         }
 
-        if Prefetch.isComplete updated.FlagsPrefetch then
+        if Remote.isSettled updated.FlagsPrefetch then
             match updated.InitPhase with
             | Prefetching -> initActiveOnFirstPrefetchReady _config queryBus modules updated
             | Ready
@@ -1721,10 +1708,10 @@ module Client =
         let updated = {
             model with
                 ResolvedFlags = flags
-                FlagsPrefetch = Prefetch.loaded ()
+                FlagsPrefetch = Remote.Loaded()
         }
 
-        if Prefetch.isComplete updated.ConfigsPrefetch then
+        if Remote.isSettled updated.ConfigsPrefetch then
             match updated.InitPhase with
             | Prefetching -> initActiveOnFirstPrefetchReady _config queryBus modules updated
             | Ready
@@ -1970,15 +1957,14 @@ module Client =
                 Cmd.none
 
             | ConfigsLoaded configs ->
-                // Cold-load gate via `Prefetch<unit>` + `Prefetch.onAllReady`
-                // (ToolUp.Elmish 0.4.0 primitive). The persisted value is
-                // recorded on `ModuleConfigs` / `PlatformConfig`; the gate is
-                // a `Prefetch<unit>` that flips to `Loaded ()`. When *both*
-                // prefetches are complete the second handler promotes the
+                // Cold-load gate. The persisted value is recorded on
+                // `ModuleConfigs` / `PlatformConfig`; the gate is a
+                // `Remote<unit, string>` that flips to `Loaded ()`. When *both*
+                // gates have settled the second handler promotes the
                 // shell out of the `Prefetching` skeleton (first-load) OR
                 // re-inits the active module via the skip-when-unchanged
                 // guard (Ready / Reprefetching follow-ups). Body factored
-                // into `applyConfigsLoaded` (Phase 121) so the
+                // into `applyConfigsLoaded` so the
                 // `BootLoadFailed("configs", _)` path can flip the same
                 // gate without synthesising a fake success message.
                 let cleared = {
@@ -2042,8 +2028,8 @@ module Client =
                         AccessibleModules = None
                         ModuleStates = Map.empty
                         ResetCounters = Map.empty
-                        ConfigsPrefetch = Prefetch.none
-                        FlagsPrefetch = Prefetch.none
+                        ConfigsPrefetch = Remote.Loading
+                        FlagsPrefetch = Remote.Loading
                         InitPhase = Prefetching
                         // Phase 121 — degradations from the prior boot
                         // cycle are stale against the new scope; the
@@ -2112,8 +2098,8 @@ module Client =
                             AccessibleModules = None
                             ModuleStates = Map.empty
                             ResetCounters = Map.empty
-                            ConfigsPrefetch = Prefetch.none
-                            FlagsPrefetch = Prefetch.none
+                            ConfigsPrefetch = Remote.Loading
+                            FlagsPrefetch = Remote.Loading
                             InitPhase = Prefetching
                             Degradations = []
                             AppAccessRefused = false
@@ -2251,8 +2237,8 @@ module Client =
                     {
                         model with
                             InitPhase = Reprefetching
-                            ConfigsPrefetch = Prefetch.none
-                            FlagsPrefetch = Prefetch.none
+                            ConfigsPrefetch = Remote.Loading
+                            FlagsPrefetch = Remote.Loading
                     },
                     bootLoadCommandsFor _config
 
@@ -2902,51 +2888,18 @@ module Client =
             ]
         ]
 
-    // ─── One dispatcher per module per loop ─────────────────────────────
+    // ─── The shell's dispatch wrappers, built once per loop ─────────────
     //
     // A module view receives `dispatch` wrapped in `ModuleMsg` with its own
-    // id. Built inline in `view`, that wrapper is a FRESH closure on every
-    // render, so the one prop every module view receives changes identity
-    // every time the shell re-renders, and any memo boundary a module puts
-    // around its view (`React.memo`, a `[<ReactComponent>]` keyed on props)
-    // re-renders regardless. The loop's own `dispatch'` is created once per
-    // `Program.runWithDispatch` and handed to every render unchanged, so the
-    // wrappers can be too: one per module, cached against the `dispatch` they
-    // wrap by reference, and rebuilt only when a different loop is rendering
-    // (HMR re-runs the program; the cache follows). The key is REFERENCE
-    // identity because that is the property the module's memo boundary keys
-    // on.
-    let mutable private moduleDispatchCache: ((Msg -> unit) * Map<string, obj -> unit>) option =
-        None
-
-    /// The dispatcher for one module's view: the same function every render,
-    /// for as long as the same loop is running, and bound to that module.
-    /// Internal so the Fable pack can pin the identity
-    /// (`ModuleDispatchStabilityTests`).
-    let internal moduleDispatchFor (moduleId: string) (dispatch: Msg -> unit) : obj -> unit =
-        let thisLoop =
-            match moduleDispatchCache with
-            | Some(cached, byModule) when obj.ReferenceEquals(cached, dispatch) -> byModule
-            | _ -> Map.empty
-
-        match thisLoop |> Map.tryFind moduleId with
-        | Some forModule -> forModule
-        | None ->
-            let forModule: obj -> unit = fun message -> dispatch (ModuleMsg(moduleId, message))
-
-            moduleDispatchCache <- Some(dispatch, thisLoop |> Map.add moduleId forModule)
-            forModule
-
-    // ─── Phase 883 — one set of sidebar callbacks per loop ──────────────
-    //
-    // The sidebar is its own memo boundary (`Layout.AppShellWith`), and a
-    // memo boundary holds only if its props do. Built inline in `view` —
-    // `ModuleSelected >> dispatch` and five siblings — the sidebar's
-    // callbacks were fresh closures on every render, so the boundary would
-    // see a change on every chrome render and hold nothing. Same discipline
-    // as `moduleDispatchFor` above: one set per loop, cached against the
-    // `dispatch` it wraps by reference, rebuilt only when a different loop
-    // renders.
+    // id, and the sidebar six callbacks over it. Built inline in `view`,
+    // each wrapper is a FRESH closure on every render, so the props of the
+    // module's memo boundary (`React.memo`, a `[<ReactComponent>]` keyed on
+    // props) and of the sidebar's (`Layout.AppShellWith`) change identity on
+    // every shell render and neither boundary holds. The loop's own
+    // dispatcher is one function for the loop's life, so the program builds
+    // the wrappers from it once (`Program.withStableDispatch dispatchers`)
+    // and every render hands out the same ones. The wrappers are compared by
+    // REFERENCE because that is the property the boundaries key on.
 
     /// The sidebar's six callbacks for one Elmish loop.
     type internal SidebarDispatchers = {
@@ -2958,109 +2911,92 @@ module Client =
         Reorder: string -> string list -> unit
     }
 
-    let mutable private sidebarDispatchCache: ((Msg -> unit) * SidebarDispatchers) option =
-        None
+    /// The shell's dispatch and the wrappers its views hand out, for one
+    /// loop. Build it with `Client.dispatchers` through
+    /// `Program.withStableDispatch`, so it is built once per loop: a set
+    /// built per render hands every boundary a new callback and holds none.
+    [<Sealed>]
+    type Dispatchers internal (dispatch: Msg -> unit) =
+        let byModule = System.Collections.Generic.Dictionary<string, obj -> unit>()
 
-    /// The sidebar's callbacks for the shell's `dispatch`: the same
-    /// functions every render, for as long as the same loop is running.
-    /// Internal so the Fable pack can pin the identity (`SlicedStoreTests`).
-    let internal sidebarDispatchersFor (dispatch: Msg -> unit) : SidebarDispatchers =
-        match sidebarDispatchCache with
-        | Some(cached, dispatchers) when obj.ReferenceEquals(cached, dispatch) -> dispatchers
-        | _ ->
-            let dispatchers = {
-                Select = ModuleSelected >> dispatch
-                ToggleGroup = SidebarGroupToggled >> dispatch
-                TogglePin = SidebarModulePinToggled >> dispatch
-                ToggleModule = SidebarModuleExpandToggled >> dispatch
-                ToggleHidden = SidebarEntryHideToggled >> dispatch
-                Reorder = fun groupKey orderedIds -> dispatch (SidebarModuleReordered(groupKey, orderedIds))
-            }
+        let sidebar = {
+            Select = ModuleSelected >> dispatch
+            ToggleGroup = SidebarGroupToggled >> dispatch
+            TogglePin = SidebarModulePinToggled >> dispatch
+            ToggleModule = SidebarModuleExpandToggled >> dispatch
+            ToggleHidden = SidebarEntryHideToggled >> dispatch
+            Reorder = fun groupKey orderedIds -> dispatch (SidebarModuleReordered(groupKey, orderedIds))
+        }
 
-            sidebarDispatchCache <- Some(dispatch, dispatchers)
-            dispatchers
+        /// The loop's dispatcher.
+        member _.Dispatch: Msg -> unit = dispatch
 
-    // ─── Phase 910 — the chrome's context values, memoised per input ────
+        /// The dispatcher one module's view receives: the same function on
+        /// every call for this set, bound to that module.
+        member _.ForModule(moduleId: string) : obj -> unit =
+            match byModule.TryGetValue moduleId with
+            | true, forModule -> forModule
+            | _ ->
+                let forModule: obj -> unit = fun message -> dispatch (ModuleMsg(moduleId, message))
+                byModule[moduleId] <- forModule
+                forModule
+
+        /// The sidebar's callbacks.
+        member internal _.Sidebar: SidebarDispatchers = sidebar
+
+    /// The shell's wrapper set over a loop's dispatcher — the `build` a
+    /// program hands `Program.withStableDispatch`.
+    let dispatchers (dispatch: Dispatch<Msg>) : Dispatchers = Dispatchers dispatch
+
+    // ─── The chrome's context values, memoised per input ────────────────
     //
     // The shell publishes shared state to every view through React
     // contexts (feature flags, branding, administration tiles, the message
     // catalog), and a context re-renders every reader whenever its value
-    // changes identity — through any memo boundary. Three of those values
-    // were rebuilt on every chrome render (a fresh `Set`, a fresh `Branding`
-    // record, a fresh tile list), so a chrome message that moved none of
-    // their inputs re-rendered every reader of each, including readers
-    // inside the active module the sliced shell's boundary would otherwise
-    // have held. Each is now the SAME object while its inputs are the same
-    // objects (a one-entry cache per value, as `resolveCatalog` has kept for
-    // the catalog since Phase 852); a change to any input builds a new one.
-
-    let mutable private declaredKeysCache: (obj * obj * Set<string>) option = None
+    // changes identity — through any memo boundary. Each value is therefore
+    // the SAME object while its inputs are the same objects (a one-entry
+    // `Memo` per value, as `resolveCatalog` keeps for the catalog); a change
+    // to any input builds a new one.
 
     /// The flag keys the client knows about — every module's declared
     /// `FeatureFlags` and every key the server resolved — the same `Set`
     /// while the module list and the resolved map are unchanged.
-    let private declaredFlagKeys (modules: ErasedModule list) (resolved: Map<string, FlagValue>) : Set<string> =
-        match declaredKeysCache with
-        | Some(cachedModules, cachedResolved, keys) when
-            obj.ReferenceEquals(cachedModules, modules)
-            && obj.ReferenceEquals(cachedResolved, resolved)
-            ->
-            keys
-        | _ ->
+    let private declaredFlagKeys: ErasedModule list -> Map<string, FlagValue> -> Set<string> =
+        Memo.byRef2 (fun modules resolved ->
             let moduleKeys =
                 modules |> List.collect _.FeatureFlags |> List.map _.Key |> Set.ofList
 
             let serverKeys = resolved |> Map.toSeq |> Seq.map fst |> Set.ofSeq
-            let keys = Set.union moduleKeys serverKeys
-            declaredKeysCache <- Some(box modules, box resolved, keys)
-            keys
-
-    let mutable private brandingCache: (obj * obj * Branding) option = None
+            Set.union moduleKeys serverKeys)
 
     /// The active team's branding resolved against the composition root's
     /// defaults — the same record while the config and the team's
     /// `_platform` config are unchanged.
-    let private resolveBranding (config: ClientConfig) (platformConfig: Map<string, string>) : Branding =
-        match brandingCache with
-        | Some(cachedConfig, cachedPlatform, branding) when
-            obj.ReferenceEquals(cachedConfig, config)
-            && obj.ReferenceEquals(cachedPlatform, platformConfig)
-            ->
-            branding
-        | _ ->
-            let branding =
-                Branding.resolve
-                    {
-                        AppName = config.AppName
-                        PrimaryColor = Branding.DefaultPrimaryColor
-                        LogoUrl = config.AppLogo
-                        FaviconUrl = config.AppLogo
-                        PaletteOverrides = []
-                    }
-                    platformConfig
+    let private resolveBranding: ClientConfig -> Map<string, string> -> Branding =
+        Memo.byRef2 (fun config platformConfig ->
+            Branding.resolve
+                {
+                    AppName = config.AppName
+                    PrimaryColor = Branding.DefaultPrimaryColor
+                    LogoUrl = config.AppLogo
+                    FaviconUrl = config.AppLogo
+                    PaletteOverrides = []
+                }
+                platformConfig)
 
-            brandingCache <- Some(box config, box platformConfig, branding)
-            branding
+    /// The tiles of `registered` whose owning module is in `visibleIds` —
+    /// the same list while the registered tiles (by reference) and the
+    /// visible ids (by value: the visible-module list is re-derived on every
+    /// chrome render) are unchanged.
+    let private adminTilesFor =
+        Memo.oneEntryBy
+            (fun (registered1, ids1: string list) (registered2, ids2) ->
+                obj.ReferenceEquals(registered1, registered2) && ids1 = ids2)
+            (fun (registered, visibleIds) -> AdminTiles.forOwners AdminTileRegistry.facts visibleIds registered)
 
-    let mutable private adminTilesCache: (obj * string list * AdminTile list) option =
-        None
-
-    /// The administration tiles whose owning module is in `visibleIds` — the
-    /// same list while the registered tiles and the visible ids are
-    /// unchanged. The ids are compared by value: the visible-module list is
-    /// re-derived on every chrome render.
+    /// The administration tiles whose owning module is in `visibleIds`.
     let private visibleAdminTiles (visibleIds: string list) : AdminTile list =
-        let registered = AdminTileRegistry.tiles ()
-
-        match adminTilesCache with
-        | Some(cachedRegistered, cachedIds, tiles) when
-            obj.ReferenceEquals(cachedRegistered, registered) && cachedIds = visibleIds
-            ->
-            tiles
-        | _ ->
-            let tiles = AdminTiles.forOwners AdminTileRegistry.facts visibleIds registered
-            adminTilesCache <- Some(box registered, visibleIds, tiles)
-            tiles
+        adminTilesFor (AdminTileRegistry.tiles (), visibleIds)
 
     /// The active module's error boundary around its view — one
     /// construction site for both render paths (the whole-tree `view` and
@@ -3073,11 +3009,11 @@ module Client =
         (moduleId: string)
         (pageRoute: string option)
         (resetKey: string)
-        (dispatch: Msg -> unit)
+        (dispatchers: Dispatchers)
         (currentState: obj)
         : ReactElement =
-        // Referentially stable across renders (see `moduleDispatchFor`).
-        let dispatchMsg = moduleDispatchFor moduleId dispatch
+        let dispatch = dispatchers.Dispatch
+        let dispatchMsg = dispatchers.ForModule moduleId
 
         let renderInner () : PageContent =
             match moduleImpl.PageViews, pageRoute with
@@ -3188,7 +3124,8 @@ module Client =
         ModuleId: string
         PageRoute: string option
         ResetKey: string
-        Dispatch: Msg -> unit
+        /// The loop's wrapper set — the module's dispatcher comes from it.
+        Dispatchers: Dispatchers
     }
 
     let private renderModuleHost (props: obj) : ReactElement =
@@ -3217,7 +3154,7 @@ module Client =
                 p.ModuleId
                 p.PageRoute
                 p.ResetKey
-                p.Dispatch
+                p.Dispatchers
                 state
 
     /// Equal when every prop is the same object, the store compared by the
@@ -3234,7 +3171,7 @@ module Client =
         && obj.ReferenceEquals(p.ModuleId, n.ModuleId)
         && obj.ReferenceEquals(p.PageRoute, n.PageRoute)
         && obj.ReferenceEquals(p.ResetKey, n.ResetKey)
-        && obj.ReferenceEquals(p.Dispatch, n.Dispatch)
+        && obj.ReferenceEquals(p.Dispatchers, n.Dispatchers)
 
     /// The active module's store-subscribed memo boundary. The comparer goes
     /// to React as a two-argument JS function (see `shellChrome`).
@@ -3256,9 +3193,11 @@ module Client =
         (modules: ErasedModule list)
         (chrome: ExtraChrome)
         (model: Model)
-        (dispatch: Msg -> unit)
+        (dispatchers: Dispatchers)
         =
-        // Phase 444 — the catalog every string in this render comes from.
+        let dispatch = dispatchers.Dispatch
+
+        // The catalog every string in this render comes from.
         // Resolved once at the top of `view` because chrome is built at
         // several depths below (the page-route placeholder, the area
         // switcher entries, the header actions) and they must all read the
@@ -3371,7 +3310,7 @@ module Client =
                             ModuleId = model.ActiveModuleId
                             PageRoute = model.ActivePageRoute
                             ResetKey = resetKey
-                            Dispatch = dispatch
+                            Dispatchers = dispatchers
                         }
 
                         Custom(ReactLegacy.createElement (unbox<ReactElement> activeModuleHost, box props))
@@ -3388,7 +3327,7 @@ module Client =
                                     model.ActiveModuleId
                                     model.ActivePageRoute
                                     resetKey
-                                    dispatch
+                                    dispatchers
                                     currentState
                             )
                 | None -> SplitPanel(Html.div shellMsgs.ModuleNotFound, Html.div "")
@@ -3743,19 +3682,18 @@ module Client =
         // and no browser call (GP 11 / GP 13) — and the same catalog object
         // while nothing it depends on moved (Phase 852, `resolveCatalog`).
         //
-        // Phase 910 — the same record while the config and the team's
-        // `_platform` config are unchanged (`resolveBranding`), so a chrome
+        // The same record while the config and the team's `_platform`
+        // config are unchanged (`resolveBranding`), so a chrome
         // render does not re-render every branding reader.
         let resolvedBranding = resolveBranding config model.PlatformConfig
 
-        // Phase 883 — the sidebar renders behind its own memo boundary, on
-        // every render path (`view`, `viewWithSignIn` and the sliced
-        // `Client.run` shell alike): a chrome render that leaves these
-        // values alone renders no sidebar. `sidebarSections` is rebuilt on
-        // every chrome render and compared by value at the boundary; the
-        // callbacks are the loop's own (`sidebarDispatchersFor`), so they
-        // compare equal by reference.
-        let sidebarDispatch = sidebarDispatchersFor dispatch
+        // The sidebar renders behind its own memo boundary, on every render
+        // path (`view`, `viewWithSignIn` and the sliced `Client.run` shell
+        // alike): a chrome render that leaves these values alone renders no
+        // sidebar. `sidebarSections` is rebuilt on every chrome render and
+        // compared by value at the boundary; the callbacks are the loop's
+        // own (`Dispatchers`), so they compare equal by reference.
+        let sidebarDispatch = dispatchers.Sidebar
 
         let sidebar: Toolup.UIToolkit.Layout.SidebarProps = {
             AppName = resolvedBranding.AppName
@@ -3998,7 +3936,7 @@ module Client =
         (modules: ErasedModule list)
         (chrome: ExtraChrome)
         (model: Model)
-        (dispatch: Msg -> unit)
+        (dispatchers: Dispatchers)
         =
         if model.AppAccessRefused then
             let catalog = resolveCatalog config model.LocaleOverride model.PlatformConfig
@@ -4010,17 +3948,31 @@ module Client =
             Components.NotAuthorised.AppAccessRefusedView signOut
             |> MessageCatalogProvider.provider catalog
         else
-            viewShell slot config modules chrome model dispatch
+            viewShell slot config modules chrome model dispatchers
 
     /// The shell's view: chrome, sidebar and the active module, built from
-    /// the model it is handed.
-    let view (config: ClientConfig) (modules: ErasedModule list) (chrome: ExtraChrome) model dispatch =
-        viewWith ModuleSlot.Inline config modules chrome model dispatch
+    /// the model it is handed. `dispatchers` is the loop's wrapper set
+    /// (`Client.dispatchers` through `Program.withStableDispatch`).
+    let view
+        (config: ClientConfig)
+        (modules: ErasedModule list)
+        (chrome: ExtraChrome)
+        model
+        (dispatchers: Dispatchers)
+        =
+        viewWith ModuleSlot.Inline config modules chrome model dispatchers
 
-    let private viewWithSignInWith (slot: ModuleSlot) (config: ClientConfig) modules chrome (model: Model) dispatch =
+    let private viewWithSignInWith
+        (slot: ModuleSlot)
+        (config: ClientConfig)
+        modules
+        chrome
+        (model: Model)
+        (dispatchers: Dispatchers)
+        =
         let resolvedSubjectKind = ClientConfig.resolveSubjectKind model.ActiveTeamId config
 
-        viewWith slot config modules chrome model dispatch
+        viewWith slot config modules chrome model dispatchers
         |> AuthUIProvider.gate config.AuthUI resolvedSubjectKind
         // Phase 751 — the catalog provider is mounted OUTSIDE the auth
         // gate as well as inside `view`, because the gate WRAPS the
@@ -4048,8 +4000,8 @@ module Client =
     /// applies. Calling `Client.view` directly from an outer view bypasses
     /// the gate entirely — the OIDC sign-in screen never renders and the
     /// shell drops into a 401 storm for any unauthenticated visit.
-    let viewWithSignIn (config: ClientConfig) modules chrome (model: Model) dispatch =
-        viewWithSignInWith ModuleSlot.Inline config modules chrome model dispatch
+    let viewWithSignIn (config: ClientConfig) modules chrome (model: Model) (dispatchers: Dispatchers) =
+        viewWithSignInWith ModuleSlot.Inline config modules chrome model dispatchers
 
     /// The props of the chrome memo boundary: the model plus what the
     /// program run fixes (config, module list, chrome, the loop's dispatch,
@@ -4060,7 +4012,7 @@ module Client =
         Modules: ErasedModule list
         Chrome: ExtraChrome
         Model: Model
-        Dispatch: Msg -> unit
+        Dispatchers: Dispatchers
     }
 
     /// The model field the chrome does not read — the active module reads
@@ -4085,7 +4037,7 @@ module Client =
         && obj.ReferenceEquals(p.Config, n.Config)
         && obj.ReferenceEquals(p.Modules, n.Modules)
         && obj.ReferenceEquals(p.Chrome, n.Chrome)
-        && obj.ReferenceEquals(p.Dispatch, n.Dispatch)
+        && obj.ReferenceEquals(p.Dispatchers, n.Dispatchers)
         && chromeSliceEqual p.Model n.Model
 
     let private renderShellChrome (props: obj) : ReactElement =
@@ -4096,7 +4048,7 @@ module Client =
         let lastGood = useRef null
 
         buildHoldingLastGood lastGood (fun () ->
-            viewWithSignInWith (ModuleSlot.Subscribed p.Store) p.Config p.Modules p.Chrome p.Model p.Dispatch)
+            viewWithSignInWith (ModuleSlot.Subscribed p.Store) p.Config p.Modules p.Chrome p.Model p.Dispatchers)
 
     let private shellChrome: obj =
         // The comparer goes to React as a two-argument JS function: a boxed
@@ -4107,23 +4059,23 @@ module Client =
     /// Phase 852 / 910 — the store-bound shell view: the same tree
     /// `viewWithSignIn` builds, behind two boundaries — the chrome, which
     /// re-renders only when a shell-model field other than `ModuleStates`
-    /// (or the `chrome` record, or `dispatch`) changes, and the active
+    /// (or the `chrome` record, or the `Dispatchers`) changes, and the active
     /// module, which reads its own state from the store `shell` names.
     /// Mount it on that same store (`Program.withReactStore`): the module
     /// host reads the store, so the store and the binding must be one.
     /// `Client.run` renders it over the shell's own store; a composer that
     /// wraps the shell in a model of its own renders it over its store
     /// (`Client.shellStore store _.Shell`), passing a `chrome` record and a
-    /// `dispatch` that keep their identity from render to render — a fresh
-    /// one per render re-renders the chrome every time, which is correct
-    /// output at the whole-tree cost.
+    /// `Dispatchers` set that keep their identity from render to render
+    /// (`Program.withStableDispatch`) — a fresh one per render re-renders
+    /// the chrome every time, which is correct output at the whole-tree cost.
     let viewSlicedOver
         (shell: ShellStore)
         (config: ClientConfig)
         (modules: ErasedModule list)
         (chrome: ExtraChrome)
         (model: Model)
-        (dispatch: Msg -> unit)
+        (dispatchers: Dispatchers)
         : ReactElement =
         let props: ShellChromeProps = {
             Store = shell
@@ -4131,7 +4083,7 @@ module Client =
             Modules = modules
             Chrome = chrome
             Model = model
-            Dispatch = dispatch
+            Dispatchers = dispatchers
         }
 
         ReactLegacy.createElement (unbox<ReactElement> shellChrome, box props)
@@ -4144,9 +4096,9 @@ module Client =
         (modules: ErasedModule list)
         (chrome: ExtraChrome)
         (model: Model)
-        (dispatch: Msg -> unit)
+        (dispatchers: Dispatchers)
         : ReactElement =
-        viewSlicedOver (shellStore store id) config modules chrome model dispatch
+        viewSlicedOver (shellStore store id) config modules chrome model dispatchers
 
     // ─── Phase 580 — client-shell module identity gate ────────────────
     //
@@ -4573,10 +4525,6 @@ module Client =
         // `POST /api/auth/session`; `ClientCookieAndLocalStorage` (default)
         // preserves the legacy behaviour.
         UserSession.configureAuthTokenStorage config.AuthTokenStorage
-        // Phase 908 — another tab's sign-in / sign-out changes the identity
-        // this tab's requests carry; the watch routes it through the one
-        // identity-change seam. Idempotent, like the rest of this function.
-        UserSession.watchIdentityAcrossTabs () |> ignore
 
         // Phase 13a — install the per-request guard with explicit
         // seam thunks (replaces the legacy module-load do block in
@@ -4990,6 +4938,18 @@ module Client =
                     member _.Dispose() = unsubscribe ()
                 })
 
+        // Another tab's sign-in / sign-out changes the identity this tab's
+        // requests carry; the watch routes it through the one identity-change
+        // seam. A program-lifetime effect, so a hot reload disposes the
+        // listener with the loop that installed it.
+        let identityAcrossTabsEffect =
+            EffectHandle.programLifetime "identity-across-tabs" (fun _ ->
+                let unsubscribe = UserSession.watchIdentityAcrossTabs ()
+
+                { new System.IDisposable with
+                    member _.Dispose() = unsubscribe ()
+                })
+
         // Phase 1240 — Back and Forward reach the shell as the ordinary
         // `ModuleSelected`, so the route guard, the area flip and the lazy
         // `Init` all apply. Attached only under `HashHistory`: by default the
@@ -5016,6 +4976,7 @@ module Client =
             notificationsEffect
             authTokenAcquiredEffect
             bridgeHealthEffect
+            identityAcrossTabsEffect
         ]
         @ browserHistoryEffects
 
@@ -5049,9 +5010,58 @@ module Client =
         ||> List.fold (fun p effect -> p |> Program.withEffect (EffectHandle.map wrap effect))
         |> Program.withDispatcherHandle captureShellDispatcher
 
+    /// The program builder every shell-hosting program shares — the shell's
+    /// own and any composer that embeds the shell in a model of its own.
+    /// Runtime errors go to `ClientConfig.OnElmishError` (else the
+    /// `client.elmish` logger), each update is traced through the
+    /// `client.elmish.trace` logger when `EnableElmishConsoleTrace` is set,
+    /// and the view receives the loop's wrapper set, built once per loop
+    /// from its dispatcher by `build` (`Program.withStableDispatch`).
+    let programOver
+        (config: ClientConfig)
+        (init: unit -> 'model * Cmd<'msg>)
+        (update: 'msg -> 'model -> 'model * Cmd<'msg>)
+        (build: Dispatch<'msg> -> 'stable)
+        (view: 'model -> 'stable -> ReactElement)
+        : Program<unit, 'model, 'msg, ReactElement> =
+        let elmishLog = Logger.forCategory "client.elmish"
+
+        let elmishReporter (ctx: ErrorContext) =
+            match config.OnElmishError with
+            | Some sink ->
+                try
+                    sink ctx
+                with ex ->
+                    // A throwing sink must not crash the reporter.
+                    elmishLog.Error("OnElmishError sink raised", Some ex)
+            | None -> elmishLog.Error(ctx.Message, Some ctx.Exception)
+
+        let traceLog = Logger.forCategory "client.elmish.trace"
+
+        // Formatted defensively: a message may carry a large payload (an
+        // uploaded file's contents) and `sprintf "%A"` over multi-megabyte
+        // data overflows the JS call stack. Tracing must never crash message
+        // handling.
+        let traceUpdate (msg: 'msg) (model: 'model) =
+            let next = update msg model
+            traceLog.Debug("msg=" + Program.safeMsgRepr msg)
+            next
+
+        // The view is set by `withStableDispatch` below; `mkProgram` only
+        // needs a placeholder for it.
+        Program.mkProgram
+            init
+            (if config.EnableElmishConsoleTrace then
+                 traceUpdate
+             else
+                 update)
+            (fun _ _ -> Html.none)
+        |> Program.withStableDispatch build view
+        |> Program.withErrorReporter elmishReporter
+
     /// The shell Program over a given shell view (whole-tree or sliced).
     let private programWith
-        (shellView: ClientConfig -> ErasedModule list -> ExtraChrome -> Model -> Dispatch<Msg> -> ReactElement)
+        (shellView: ClientConfig -> ErasedModule list -> ExtraChrome -> Model -> Dispatchers -> ReactElement)
         (config: ClientConfig)
         (modules: ErasedModule list)
         : Program<unit, Model, Msg, ReactElement> =
@@ -5062,48 +5072,13 @@ module Client =
 
         // AuthUI gating is driven by ClientConfig.AuthUI — default
         // NoAuthUI is pass-through, so DEBUG and RELEASE behave the
-        // same unless the app opts into a sign-in mode. Apps that
-        // want the old "no sign-in in DEBUG, sign-in in RELEASE"
-        // behaviour set AuthUI conditionally in their own Client.fs.
-        // Structured Elmish error reporter (ToolUp.Elmish 0.4.0 primitive).
-        // Routes runtime exceptions through `ClientConfig.OnElmishError`
-        // when set; otherwise falls back to the categorised default
-        // logger so devtools still surface them. Replaces the previous
-        // unstructured `(string * exn) -> unit` `onError` shape.
-        let elmishLog = Logger.forCategory "client.elmish"
-
-        let elmishReporter (ctx: ErrorContext) =
-            match config.OnElmishError with
-            | Some sink ->
-                try
-                    sink ctx
-                with ex ->
-                    // Defensive: a throwing sink mustn't crash the reporter.
-                    elmishLog.Error("OnElmishError sink raised", Some ex)
-            | None -> elmishLog.Error(ctx.Message, Some ctx.Exception)
-
-        // 0.4.1 — the upstream-shape `withConsoleTrace` shim (removed in
-        // Phase 815) is replaced by an update interceptor that logs each
-        // transition through the category logger. Same shape (initial
-        // state / message / updated state) but now grep-able by category.
-        let traceLog = Logger.forCategory "client.elmish.trace"
-
-        let traceUpdate (msg: Msg) (model: Model) =
-            let nextModel, nextCmd = update config queryBus allModules msg model
-            traceLog.Debug(sprintf "msg=%A activeModule=%s" msg nextModel.ActiveModuleId)
-            nextModel, nextCmd
-
-        let prog =
-            Program.mkProgram
-                (init config queryBus allModules)
-                (if config.EnableElmishConsoleTrace then
-                     traceUpdate
-                 else
-                     update config queryBus allModules)
-                (fun model dispatch -> shellView config allModules emptyChrome model dispatch)
-
-        prog
-        |> Program.withErrorReporter elmishReporter
+        // same unless the app opts into a sign-in mode.
+        programOver
+            config
+            (init config queryBus allModules)
+            (update config queryBus allModules)
+            dispatchers
+            (fun model stable -> shellView config allModules emptyChrome model stable)
         |> withModuleStateObserver allModules Some id
         |> withShellLifetimeEffects config id
 

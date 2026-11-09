@@ -5,6 +5,7 @@ module KnowledgeBaseView
 
 open Feliz
 open ToolUp.Elmish
+open Toolup.UIToolkit
 open ToolUp.Platform
 open ClientModel
 open SharedTypes
@@ -170,24 +171,6 @@ let private UploadZone (model: Model) (dispatch: Msg -> unit) =
             ]
         ]
     ]
-
-// ─── Error banner ─────────────────────────────────────────────────
-
-let private errorBanner (model: Model) (dispatch: Msg -> unit) : ReactElement =
-    match model.UploadError with
-    | None -> Html.none
-    | Some err ->
-        Html.div [
-            prop.className "bg-red-50 border border-red-200 rounded-md px-4 py-3 flex items-start gap-3"
-            prop.children [
-                Html.p [ prop.className "text-sm text-red-700 flex-1"; prop.text err ]
-                Html.button [
-                    prop.className "text-red-400 hover:text-red-600 text-lg"
-                    prop.text "×"
-                    prop.onClick (fun _ -> dispatch DismissError)
-                ]
-            ]
-        ]
 
 // ─── Batch import roll-up (Phase 511.D) ───────────────────────────
 //
@@ -660,7 +643,9 @@ let private MainPanel (model: Model) (dispatch: Msg -> unit) =
                     ]
                 ]
             ]
-            errorBanner model dispatch
+            model.UploadError
+            |> Option.map (Notice.Problem >> StateViews.noticeStatic)
+            |> Option.defaultValue Html.none
             bulkImportPanel msgs model dispatch
             UploadZone model dispatch
             documentList msgs model dispatch
@@ -682,22 +667,6 @@ let private MainPanel (model: Model) (dispatch: Msg -> unit) =
 // keeps the list current; there is no server-side live-refresh
 // notification today (admin uploads are infrequent — a manual Reload
 // button covers the gap).
-
-let private platformLibraryErrorBanner (model: Model) (dispatch: Msg -> unit) : ReactElement =
-    match model.PlatformDocsLoadError with
-    | None -> Html.none
-    | Some err ->
-        Html.div [
-            prop.className "bg-red-50 border border-red-200 rounded-md px-4 py-3 flex items-start gap-3"
-            prop.children [
-                Html.p [ prop.className "text-sm text-red-700 flex-1"; prop.text err ]
-                Html.button [
-                    prop.className "text-red-400 hover:text-red-600 text-lg"
-                    prop.text "×"
-                    prop.onClick (fun _ -> dispatch DismissError)
-                ]
-            ]
-        ]
 
 [<ReactComponent>]
 let private PlatformLibraryPanel (model: Model) (dispatch: Msg -> unit) =
@@ -752,28 +721,14 @@ let private PlatformLibraryPanel (model: Model) (dispatch: Msg -> unit) =
                     ]
                 ]
             ]
-            platformLibraryErrorBanner model dispatch
+            model.PlatformDocsLoadError
+            |> Option.map (Notice.Problem >> StateViews.noticeStatic)
+            |> Option.defaultValue Html.none
             KnowledgeListView.KnowledgeListView config model.PlatformDocuments
         ]
     ]
 
 // ─── Notes page ───────────────────────────────────────────────────
-
-let private notesErrorBanner (model: Model) (dispatch: Msg -> unit) : ReactElement =
-    match model.NoteSaveError with
-    | None -> Html.none
-    | Some err ->
-        Html.div [
-            prop.className "bg-red-50 border border-red-200 rounded-md px-4 py-3 flex items-start gap-3"
-            prop.children [
-                Html.p [ prop.className "text-sm text-red-700 flex-1"; prop.text err ]
-                Html.button [
-                    prop.className "text-red-400 hover:text-red-600 text-lg"
-                    prop.text "×"
-                    prop.onClick (fun _ -> dispatch DismissError)
-                ]
-            ]
-        ]
 
 /// Inline note editor. Title + body drafts live in `React.useState` —
 /// the Elmish model only tracks open/closed. Pre-populated from the
@@ -993,7 +948,9 @@ let private NotesPanel (model: Model) (dispatch: Msg -> unit) =
                     ]
                 ]
             ]
-            notesErrorBanner model dispatch
+            model.NoteSaveError
+            |> Option.map (Notice.Problem >> StateViews.noticeStatic)
+            |> Option.defaultValue Html.none
             editorElement
             (if notes.IsEmpty && model.NoteEditor.IsNone then
                  Html.div [
@@ -1011,25 +968,6 @@ let private NotesPanel (model: Model) (dispatch: Msg -> unit) =
     ]
 
 // ─── AI Context page ──────────────────────────────────────────────
-
-let private aiContextErrorBanner (model: Model) (dispatch: Msg -> unit) : ReactElement =
-    match model.AIContextSaveError, model.AIContextLoadError with
-    | None, None -> Html.none
-    | err, _ ->
-        let message =
-            err |> Option.orElse model.AIContextLoadError |> Option.defaultValue ""
-
-        Html.div [
-            prop.className "bg-red-50 border border-red-200 rounded-md px-4 py-3 flex items-start gap-3"
-            prop.children [
-                Html.p [ prop.className "text-sm text-red-700 flex-1"; prop.text message ]
-                Html.button [
-                    prop.className "text-red-400 hover:text-red-600 text-lg"
-                    prop.text "×"
-                    prop.onClick (fun _ -> dispatch DismissError)
-                ]
-            ]
-        ]
 
 [<ReactComponent>]
 let private AIContextEditor (initialBody: string) (saving: bool) (dispatch: Msg -> unit) =
@@ -1169,7 +1107,10 @@ let private AIContextPanel (model: Model) (dispatch: Msg -> unit) =
                     editButton
                 ]
             ]
-            aiContextErrorBanner model dispatch
+            model.AIContextSaveError
+            |> Option.orElse model.AIContextLoadError
+            |> Option.map (Notice.Problem >> StateViews.noticeStatic)
+            |> Option.defaultValue Html.none
             body
         ]
     ]

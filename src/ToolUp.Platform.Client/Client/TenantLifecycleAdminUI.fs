@@ -53,9 +53,10 @@ type Model = {
     Loaded: bool
     /// True while a `GetLifecycleSummary` call is in flight.
     Loading: bool
-    /// Error banner (non-admin caller, transport failure, disabled
-    /// substrate). Cleared by `DismissError` or the next submit.
-    Error: string option
+    /// Failure notice (non-admin caller, transport failure, disabled
+    /// substrate), as a `Notice.Problem`. Cleared by `DismissError` or the
+    /// next submit.
+    Error: Notice option
 }
 
 type Msg =
@@ -125,7 +126,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Summary = None
                 Loaded = true
                 Loading = false
-                Error = Some err
+                Error = Some(Notice.Problem err)
         },
         Cmd.none
 
@@ -327,23 +328,6 @@ let private ScopeForm (loading: bool) (onSubmit: string -> unit) =
 let private TenantLifecycleAdminBody (model: Model) (dispatch: Msg -> unit) : ReactElement =
     let msgs = (MessageCatalogProvider.useMessages ()).TenantLifecycleAdmin
 
-    let errorBanner =
-        match model.Error with
-        | Some msg ->
-            Html.div [
-                prop.className
-                    "mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm flex items-center justify-between"
-                prop.children [
-                    Html.span [ prop.text msg ]
-                    Html.button [
-                        prop.className "text-xs text-red-600 hover:underline"
-                        prop.text msgs.Dismiss
-                        prop.onClick (fun _ -> dispatch DismissError)
-                    ]
-                ]
-            ]
-        | None -> Html.none
-
     let resultPane =
         match model.Summary with
         | Some summary -> summaryTable msgs summary
@@ -373,7 +357,7 @@ let private TenantLifecycleAdminBody (model: Model) (dispatch: Msg -> unit) : Re
         prop.children [
             Html.h2 [ prop.className "text-lg font-semibold mb-1"; prop.text msgs.Heading ]
             Html.p [ prop.className "text-sm text-gray-600 mb-4"; prop.text msgs.Subheading ]
-            errorBanner
+            StateViews.notice { Dismiss = msgs.Dismiss } model.Error (fun () -> dispatch DismissError)
             ScopeForm model.Loading (fun scope -> dispatch (SubmitScope scope))
             resultPane
         ]

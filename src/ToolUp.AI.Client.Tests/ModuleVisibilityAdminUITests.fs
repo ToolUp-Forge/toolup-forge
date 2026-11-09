@@ -113,8 +113,8 @@ let tests =
 
             let withStatus = {
                 m0 with
-                    Status = Some "stale"
-                    Error = Some "stale"
+                    Status = Some(Notice.Info "stale")
+                    Error = Some(Notice.Problem "stale")
             }
 
             let m1, _ = update (Save "  a fresh note  ") withStatus
@@ -124,7 +124,7 @@ let tests =
 
             let m2, _ = update (SaveCompleted(Ok())) m1
             Expect.isFalse m2.Busy "save completed: busy cleared"
-            Expect.equal m2.Status (Some "Profile saved.") "save completed: confirmation shown"
+            Expect.equal m2.Status (Some(Notice.Info "Profile saved.")) "save completed: confirmation shown"
             Expect.equal m2.Error None "save completed: no error"
 
         testCase "save is refused before the profile has loaded, and while one is in flight"
@@ -138,11 +138,11 @@ let tests =
             let busy = {
                 loaded None with
                     Busy = true
-                    Status = Some "in flight"
+                    Status = Some(Notice.Info "in flight")
             }
 
             let m2, _ = update (Save "note") busy
-            Expect.equal m2.Status (Some "in flight") "already busy: the second save was refused, not run"
+            Expect.equal m2.Status (Some(Notice.Info "in flight")) "already busy: the second save was refused, not run"
 
         testCase "the SetProfile payload round-trips exclusions the editor does not surface"
         <| fun _ ->
@@ -179,7 +179,11 @@ let tests =
             let m1, _ = update (Save "note") m0
             let m2, _ = update (SaveCompleted(Error "team owner or admin required")) m1
 
-            Expect.equal m2.Error (Some "team owner or admin required") "error: banner carries the server message"
+            Expect.equal
+                m2.Error
+                (Some(Notice.Problem "team owner or admin required"))
+                "error: banner carries the server message"
+
             Expect.isFalse m2.Busy "error: form released"
             Expect.equal m2.Status None "error: no success confirmation"
 
@@ -200,7 +204,12 @@ let tests =
             Expect.equal m3.Status None "dismiss: confirmation cleared"
 
             let m4, _ = update (ClearCompleted(Error "store unreachable")) m1
-            Expect.equal m4.Error (Some "store unreachable") "clear error: banner carries the server message"
+
+            Expect.equal
+                m4.Error
+                (Some(Notice.Problem "store unreachable"))
+                "clear error: banner carries the server message"
+
             Expect.isFalse m4.Busy "clear error: form released"
 
         testCase "the resolution loads independently of the profile and drives the per-module badge"
@@ -245,6 +254,10 @@ let tests =
             let m0, _ = init ()
             let m1, _ = update (RegisteredLoaded(Error "module visibility is not enabled")) m0
 
-            Expect.equal m1.Error (Some "module visibility is not enabled") "banner carries the server message"
+            Expect.equal
+                m1.Error
+                (Some(Notice.Problem "module visibility is not enabled"))
+                "banner carries the server message"
+
             Expect.equal m1.RegisteredModuleIds [] "no candidates"
     ]

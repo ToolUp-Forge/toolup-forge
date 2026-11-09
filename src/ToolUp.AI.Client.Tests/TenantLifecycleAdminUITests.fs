@@ -91,7 +91,11 @@ let tests =
             let m1, _ = update (SubmitScope "team-abc123") m0
             let m2, _ = update (SummaryLoaded(Error "platform admin role required")) m1
 
-            Expect.equal m2.Error (Some "platform admin role required") "error: banner carries the server message"
+            Expect.equal
+                m2.Error
+                (Some(Notice.Problem "platform admin role required"))
+                "error: banner carries the server message"
+
             Expect.isFalse m2.Loading "error: Loading cleared"
             Expect.isTrue m2.Loaded "error: Loaded set"
             Expect.equal m2.Summary None "error: no summary shown"

@@ -256,6 +256,26 @@ module Program =
     /// Return the current setState callback.
     let setState (program: Program<'arg, 'model, 'msg, 'view>) = program.setState
 
+    /// Sets the view to one that receives a set of dispatch wrappers built
+    /// ONCE per loop, instead of the raw `dispatch`. `build` turns the loop's
+    /// dispatcher into whatever the view hands out — a message lifted into a
+    /// module's route, a sidebar's callbacks — and runs again only when a
+    /// different loop renders (a hot reload re-runs the program), because the
+    /// loop's dispatcher is one function for the loop's life. So a memo
+    /// boundary keyed on those callbacks holds across renders, and no cache
+    /// outside the program keys on `dispatch`.
+    let withStableDispatch
+        (build: Dispatch<'msg> -> 'stable)
+        (view: 'model -> 'stable -> 'view)
+        (program: Program<'arg, 'model, 'msg, 'view>)
+        : Program<'arg, 'model, 'msg, 'view> =
+        let stableFor = Memo.byRef build
+
+        {
+            program with
+                view = fun model dispatch -> view model (stableFor dispatch)
+        }
+
     /// Return the view function.
     let view (program: Program<'arg, 'model, 'msg, 'view>) = program.view
 

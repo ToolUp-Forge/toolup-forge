@@ -165,6 +165,7 @@ IProviderProfileContract
 IPublicContentApiContract
 IRateLimitStoreContract
 IRateLimiterContract
+IRemotingRateLimitStoreContract
 IServiceAccountStoreContract
 ISessionRegistryContract
 IShareTokenRateLimiterContract

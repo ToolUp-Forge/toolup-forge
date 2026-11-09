@@ -6,6 +6,7 @@ module JobsAdminUI
 open System
 open ToolUp.Elmish
 open Feliz
+open Toolup.UIToolkit
 open ToolUp.Platform
 
 // ─── Phase 1106 — built-in background-jobs admin ────────────────────
@@ -204,11 +205,6 @@ let formatDuration (span: TimeSpan) : string =
 
 // ─── Model ──────────────────────────────────────────────────────────
 
-type LoadState<'T> =
-    | Loading
-    | Loaded of 'T
-    | LoadError of string
-
 /// Where a re-run asked for in this session stands.
 [<RequireQualifiedAccess>]
 type RerunProgress =
@@ -225,7 +221,7 @@ type RerunProgress =
     | Refused of string
 
 type Model = {
-    Jobs: LoadState<JobDefinition list>
+    Jobs: Remote<JobDefinition list, string>
     /// The job whose re-run is awaiting confirmation, if any.
     Confirming: Guid option
     /// Re-runs asked for in this session, by job id.
@@ -233,11 +229,11 @@ type Model = {
     /// Each listed job's recent attempts, newest first, by job id. Read
     /// for every job when the list loads, so the summary row can say when
     /// the record is behind its newest attempt.
-    Attempts: Map<Guid, LoadState<JobRun list>>
+    Attempts: Map<Guid, Remote<JobRun list, string>>
     /// The jobs whose attempts list is expanded.
     Expanded: Set<Guid>
     /// Transient error from a poll. Read failures land in `Jobs`.
-    LastError: string option
+    LastError: Notice option
 }
 
 type Msg =
@@ -277,7 +273,7 @@ let private pollCmd (jobId: Guid) : Cmd<Msg> =
 
 let init () =
     {
-        Jobs = Loading
+        Jobs = Remote.Loading
         Confirming = None
         Reruns = Map.empty
         Attempts = Map.empty
@@ -287,21 +283,20 @@ let init () =
     loadJobsCmd ()
 
 let private findJob (model: Model) (jobId: Guid) : JobDefinition option =
-    match model.Jobs with
-    | Loaded jobs -> jobs |> List.tryFind (fun j -> j.JobId = jobId)
-    | _ -> None
+    model.Jobs
+    |> Remote.toOption
+    |> Option.bind (List.tryFind (fun j -> j.JobId = jobId))
 
-let private replaceJob (job: JobDefinition) (model: Model) : Model =
-    match model.Jobs with
-    | Loaded jobs -> {
-        model with
-            Jobs = Loaded(jobs |> List.map (fun j -> if j.JobId = job.JobId then job else j))
-      }
-    | _ -> model
+let private replaceJob (job: JobDefinition) (model: Model) : Model = {
+    model with
+        Jobs =
+            model.Jobs
+            |> Remote.map (List.map (fun j -> if j.JobId = job.JobId then job else j))
+}
 
 let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
     match msg with
-    | Refresh -> { model with Jobs = Loading }, loadJobsCmd ()
+    | Refresh -> { model with Jobs = Remote.Loading }, loadJobsCmd ()
 
     | JobsLoaded(Ok jobs) ->
         // A job already showing attempts keeps them on screen while the
@@ -309,17 +304,22 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         // as loading.
         let attempts =
             jobs
-            |> List.map (fun job -> job.JobId, model.Attempts.TryFind job.JobId |> Option.defaultValue Loading)
+            |> List.map (fun job -> job.JobId, model.Attempts.TryFind job.JobId |> Option.defaultValue Remote.Loading)
             |> Map.ofList
 
         {
             model with
-                Jobs = Loaded jobs
+                Jobs = Remote.Loaded jobs
                 Attempts = attempts
         },
         Cmd.batch (jobs |> List.map (fun job -> loadAttemptsCmd job.JobId))
 
-    | JobsLoaded(Error message) -> { model with Jobs = LoadError message }, Cmd.none
+    | JobsLoaded(Error message) ->
+        {
+            model with
+                Jobs = Remote.Failed message
+        },
+        Cmd.none
 
     | ToggleAttempts jobId ->
         if model.Expanded.Contains jobId then
@@ -340,14 +340,14 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
     | AttemptsLoaded(jobId, Ok runs) ->
         {
             model with
-                Attempts = model.Attempts |> Map.add jobId (Loaded(newestFirst runs))
+                Attempts = model.Attempts |> Map.add jobId (Remote.Loaded(newestFirst runs))
         },
         Cmd.none
 
     | AttemptsLoaded(jobId, Error message) ->
         {
             model with
-                Attempts = model.Attempts |> Map.add jobId (LoadError message)
+                Attempts = model.Attempts |> Map.add jobId (Remote.Failed message)
         },
         Cmd.none
 
@@ -433,7 +433,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
             {
                 model with
                     Reruns = model.Reruns |> Map.add jobId RerunProgress.StillRunning
-                    LastError = Some message
+                    LastError = Some(Notice.Problem message)
             },
             Cmd.none
         | _ -> model, Cmd.none
@@ -464,20 +464,6 @@ let private standingPill (msgs: JobsAdminMessages) (standing: JobStanding) =
     Html.span [
         prop.className $"inline-block px-2 py-0.5 text-xs rounded border {cls}"
         prop.text (standingLabel msgs standing)
-    ]
-
-let private errorBanner (msgs: JobsAdminMessages) (message: string) (dispatch: Msg -> unit) =
-    Html.div [
-        prop.className
-            "flex items-start justify-between p-3 mb-4 text-sm border rounded bg-red-50 border-red-200 text-red-800"
-        prop.children [
-            Html.span [ prop.text message ]
-            Html.button [
-                prop.className "ml-4 text-xs underline"
-                prop.text msgs.Dismiss
-                prop.onClick (fun _ -> dispatch DismissError)
-            ]
-        ]
     ]
 
 let private formatTime (time: DateTime) =
@@ -627,14 +613,19 @@ let private attemptsRow (msgs: JobsAdminMessages) (model: Model) (job: JobDefini
                 prop.children [
                     match model.Attempts.TryFind job.JobId with
                     | None
-                    | Some Loading -> Html.p [ prop.className "text-xs text-gray-500"; prop.text msgs.AttemptsLoading ]
-                    | Some(LoadError message) ->
+                    | Some Remote.NotAsked
+                    | Some Remote.Loading ->
+                        Html.p [ prop.className "text-xs text-gray-500"; prop.text msgs.AttemptsLoading ]
+                    | Some(Remote.Failed message) ->
                         Html.p [
                             prop.className "text-xs text-red-700"
                             prop.text (msgs.AttemptsLoadFailed message)
                         ]
-                    | Some(Loaded []) -> Html.p [ prop.className "text-xs text-gray-500"; prop.text msgs.NoAttempts ]
-                    | Some(Loaded runs) -> Html.ul (runs |> List.map (attemptItem msgs job))
+                    | Some(Remote.Reloading [])
+                    | Some(Remote.Loaded []) ->
+                        Html.p [ prop.className "text-xs text-gray-500"; prop.text msgs.NoAttempts ]
+                    | Some(Remote.Reloading runs)
+                    | Some(Remote.Loaded runs) -> Html.ul (runs |> List.map (attemptItem msgs job))
                 ]
             ]
         ]
@@ -646,7 +637,7 @@ let private summaryRow (msgs: JobsAdminMessages) (model: Model) (dispatch: Msg -
 
     let newer =
         match model.Attempts.TryFind job.JobId with
-        | Some(Loaded runs) -> newerThanRecord job runs
+        | Some(Remote.Loaded runs) -> newerThanRecord job runs
         | _ -> None
 
     Html.tr [
@@ -760,10 +751,7 @@ let private jobsTable (msgs: JobsAdminMessages) (model: Model) (dispatch: Msg ->
 let private JobsAdminBody (model: Model) (dispatch: Msg -> unit) =
     let msgs = (MessageCatalogProvider.useMessages ()).JobsAdmin
 
-    let loading =
-        match model.Jobs with
-        | Loading -> true
-        | _ -> false
+    let loading = Remote.isLoading model.Jobs
 
     Html.div [
         prop.className "flex-1 p-6 overflow-y-auto"
@@ -785,13 +773,13 @@ let private JobsAdminBody (model: Model) (dispatch: Msg -> unit) =
                     ]
                 ]
             ]
-            match model.LastError with
-            | Some message -> errorBanner msgs message dispatch
-            | None -> Html.none
+            StateViews.notice { Dismiss = msgs.Dismiss } model.LastError (fun () -> dispatch DismissError)
             match model.Jobs with
-            | Loading -> Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.Loading ]
-            | LoadError message -> errorBanner msgs message dispatch
-            | Loaded jobs -> jobsTable msgs model dispatch jobs
+            | Remote.NotAsked
+            | Remote.Loading -> Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.Loading ]
+            | Remote.Failed message -> StateViews.noticeStatic (Notice.Problem message)
+            | Remote.Reloading jobs
+            | Remote.Loaded jobs -> jobsTable msgs model dispatch jobs
         ]
     ]
 

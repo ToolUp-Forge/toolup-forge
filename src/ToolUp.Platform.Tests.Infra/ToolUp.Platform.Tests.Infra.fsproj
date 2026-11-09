@@ -30,6 +30,7 @@
         <Compile Include="..\ToolUp.Platform.Tests\Contracts\IMetricsSinkContract.fs" Link="Contracts\IMetricsSinkContract.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Contracts\InMemoryBlobStorage.fs" Link="Contracts\InMemoryBlobStorage.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Contracts\IRateLimitStoreContract.fs" Link="Contracts\IRateLimitStoreContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\IRemotingRateLimitStoreContract.fs" Link="Contracts\IRemotingRateLimitStoreContract.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Contracts\ITimeSeriesStoreContract.fs" Link="Contracts\ITimeSeriesStoreContract.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Contracts\ILogStoreContract.fs" Link="Contracts\ILogStoreContract.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Contracts\IDatasetStoreContract.fs" Link="Contracts\IDatasetStoreContract.fs" />

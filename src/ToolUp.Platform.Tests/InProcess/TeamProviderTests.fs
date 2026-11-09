@@ -544,7 +544,10 @@ let private teamSurfaceTests =
             Expect.isTrue opened.Loaded "a load result is applied"
 
             let dismissed, _ =
-                TeamProviderUI.update config ProviderProfileUI.DismissError { opened with Error = Some "something" }
+                TeamProviderUI.update config ProviderProfileUI.DismissError {
+                    opened with
+                        Error = Some(Notice.Problem "something")
+                }
 
             Expect.isNone dismissed.Error "and an error can still be dismissed"
 

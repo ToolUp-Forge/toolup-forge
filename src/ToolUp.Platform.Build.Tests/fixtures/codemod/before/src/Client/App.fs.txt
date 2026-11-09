@@ -26,3 +26,5 @@ let program = Elmish.Program.mkProgram init update view
 let navigable = Elmish.Navigation.Program.toNavigable parser urlUpdate program
 
 Elmish.React.Program.withReactSynchronous "app" program |> Program.run
+
+let stalled = Prefetch.warnIfStalled "configs" startedAt 30.0 [ configsReady; flagsReady ]

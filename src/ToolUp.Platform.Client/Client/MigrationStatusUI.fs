@@ -6,6 +6,7 @@ module MigrationStatusUI
 open ToolUp.Elmish
 open Feliz
 open ToolUp.Platform
+open Toolup.UIToolkit
 
 // ─── Phase 10a — built-in data-migration admin ──────────────────────
 //
@@ -28,16 +29,10 @@ open ToolUp.Platform
 
 // ─── Model ──────────────────────────────────────────────────────────
 
-type LoadState<'T> =
-    | NotLoaded
-    | Loading
-    | Loaded of 'T
-    | LoadError of string
-
 type Model = {
     /// Registered data types with their declared versions and any
     /// chain problem the server found.
-    DataTypes: LoadState<MigrationDataTypeInfo list>
+    DataTypes: Remote<MigrationDataTypeInfo list, string>
     /// Latest recorded status per data type for the caller's scope.
     /// Missing keys render as "not yet run" rather than as an error.
     Statuses: Map<string, MigrationStatus>
@@ -48,8 +43,8 @@ type Model = {
     /// the same row twice collapses it.
     ExpandedFailures: string option
     /// Transient error from a trigger. Read failures land in
-    /// `DataTypes` as `LoadError` instead.
-    LastError: string option
+    /// `DataTypes` as `Remote.Failed` instead.
+    LastError: Notice option
 }
 
 type Msg =
@@ -85,7 +80,7 @@ let private refreshCmd () =
 
 let init () =
     let model = {
-        DataTypes = Loading
+        DataTypes = Remote.Loading
         Statuses = Map.empty
         Triggering = Set.empty
         ExpandedFailures = None
@@ -96,19 +91,17 @@ let init () =
 
 let update (msg: Msg) (model: Model) =
     match msg with
-    | Refresh -> { model with DataTypes = Loading }, refreshCmd ()
-
-    | DataTypesLoaded(Ok dataTypes) ->
+    | Refresh ->
         {
             model with
-                DataTypes = Loaded dataTypes
+                DataTypes = Remote.Loading
         },
-        Cmd.none
+        refreshCmd ()
 
-    | DataTypesLoaded(Error message) ->
+    | DataTypesLoaded result ->
         {
             model with
-                DataTypes = LoadError message
+                DataTypes = Remote.ofResult result
         },
         Cmd.none
 
@@ -148,7 +141,7 @@ let update (msg: Msg) (model: Model) =
         {
             model with
                 Triggering = model.Triggering |> Set.remove dataTypeId
-                LastError = Some message
+                LastError = Some(Notice.Problem message)
         },
         Cmd.none
 
@@ -197,20 +190,6 @@ let private progressText
         | MigrationComplete -> msgs.CompleteText s.TotalObjects s.TargetVersion
         | MigrationCompleteWithFailures ->
             msgs.CompleteWithFailuresText done' s.TotalObjects s.TargetVersion s.FailedObjects
-
-let private errorBanner (msgs: MigrationStatusMessages) (message: string) (dispatch: Msg -> unit) =
-    Html.div [
-        prop.className
-            "flex items-start justify-between p-3 mb-4 text-sm border rounded bg-red-50 border-red-200 text-red-800"
-        prop.children [
-            Html.span [ prop.text message ]
-            Html.button [
-                prop.className "ml-4 text-xs underline"
-                prop.text msgs.Dismiss
-                prop.onClick (fun _ -> dispatch DismissError)
-            ]
-        ]
-    ]
 
 let private failureRows (msgs: MigrationStatusMessages) (status: MigrationStatus) =
     if status.Failures.IsEmpty then
@@ -364,10 +343,8 @@ let private refreshButton (msgs: MigrationStatusMessages) (loading: bool) (dispa
 let private MigrationStatusBody (model: Model) (dispatch: Msg -> unit) =
     let msgs = (MessageCatalogProvider.useMessages ()).MigrationStatus
 
-    let loading =
-        match model.DataTypes with
-        | Loading -> true
-        | _ -> false
+    let loading = Remote.isLoading model.DataTypes
+    let noticeMsgs = { Dismiss = msgs.Dismiss }
 
     Html.div [
         prop.className "flex-1 p-6 overflow-y-auto"
@@ -385,13 +362,21 @@ let private MigrationStatusBody (model: Model) (dispatch: Msg -> unit) =
                 ]
             ]
             match model.LastError with
-            | Some message -> Html.div [ prop.className "mb-4"; prop.children [ errorBanner msgs message dispatch ] ]
+            | Some _ ->
+                Html.div [
+                    prop.className "mb-4"
+                    prop.children [
+                        StateViews.notice noticeMsgs model.LastError (fun () -> dispatch DismissError)
+                    ]
+                ]
             | None -> Html.none
             match model.DataTypes with
-            | NotLoaded
-            | Loading -> Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.LoadingDataTypes ]
-            | LoadError message -> errorBanner msgs message dispatch
-            | Loaded dataTypes -> dataTypesTable msgs model dispatch dataTypes
+            | Remote.NotAsked
+            | Remote.Loading
+            | Remote.Reloading _ -> Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.LoadingDataTypes ]
+            | Remote.Failed message ->
+                StateViews.notice noticeMsgs (Some(Notice.Problem message)) (fun () -> dispatch DismissError)
+            | Remote.Loaded dataTypes -> dataTypesTable msgs model dispatch dataTypes
         ]
     ]
 

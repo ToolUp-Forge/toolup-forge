@@ -46,6 +46,7 @@ let private registeredTests =
         DegradedCapabilityRegistryTests.tests
         InMemoryRateLimitStoreTests.tests
         InMemoryRateLimitStoreTests.contractTests
+        InMemoryRateLimitStoreTests.remotingContractTests
         BuildTranscriptTests.transcriptDeterminismTests
         BuildTranscriptTests.transcriptSensitivityTests
         BuildTranscriptTests.provenanceTests

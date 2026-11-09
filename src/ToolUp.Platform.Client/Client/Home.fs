@@ -5,6 +5,7 @@ module Home
 
 open ToolUp.Elmish
 open Feliz
+open Toolup.UIToolkit
 open ToolUp.Platform
 open ProcessedDataTypes
 
@@ -22,13 +23,8 @@ open ProcessedDataTypes
 // dependency on the shell's internal `Msg` type. Mirrors
 // `UsageDashboard`'s shape: `_sdk.home` reserved Id.
 
-type LoadState<'T> =
-    | Loading
-    | Loaded of 'T
-    | LoadError of string
-
 type Model = {
-    Overview: LoadState<HomeOverview>
+    Overview: Remote<HomeOverview, string>
     // Phase 217 — recents/pinning. `Recents` mirrors
     // `ClientConfig.HomeRecents` (captured at module creation); when
     // false the surface is byte-for-byte Phase 171 (GP 13).
@@ -68,7 +64,7 @@ let private loadPinningCmd =
 /// so a non-recents deployment makes exactly the Phase 171 call set.
 let init (recents: bool) () =
     let model = {
-        Overview = Loading
+        Overview = Remote.Loading
         Recents = recents
         Pinning = HomePinningState.empty
     }
@@ -90,9 +86,13 @@ let update msg model =
             else
                 loadOverviewCmd
 
-        { model with Overview = Loading }, cmd
-    | OverviewLoaded(Ok ov) -> { model with Overview = Loaded ov }, Cmd.none
-    | OverviewLoaded(Error err) -> { model with Overview = LoadError err }, Cmd.none
+        { model with Overview = Remote.Loading }, cmd
+    | OverviewLoaded result ->
+        {
+            model with
+                Overview = Remote.ofResult result
+        },
+        Cmd.none
     | PinningLoaded p -> { model with Pinning = p }, Cmd.none
     | OpenTool moduleId ->
         // Navigate the same way a sidebar click does, and record the
@@ -414,13 +414,11 @@ let private HomeBody (model: Model) (dispatch: Msg -> unit) =
             ]
 
             match model.Overview with
-            | Loading -> Html.div [ prop.className "text-sm text-gray-500"; prop.text msgs.Loading ]
-            | Loaded ov -> renderOverview msgs model dispatch ov
-            | LoadError err ->
-                Html.div [
-                    prop.className "p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700"
-                    prop.text err
-                ]
+            | Remote.NotAsked
+            | Remote.Loading -> Html.div [ prop.className "text-sm text-gray-500"; prop.text msgs.Loading ]
+            | Remote.Reloading ov
+            | Remote.Loaded ov -> renderOverview msgs model dispatch ov
+            | Remote.Failed err -> StateViews.noticeStatic (Notice.Problem err)
         ]
     ]
 

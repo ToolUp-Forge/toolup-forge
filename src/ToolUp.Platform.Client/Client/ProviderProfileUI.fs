@@ -191,7 +191,9 @@ type Model = {
     Verification: VerificationState
     /// True while a mutation is in flight.
     Busy: bool
-    Error: string option
+    /// The last failure, for the dismissible notice.
+    Error: Notice option
+    /// The catalog key of the last success ("saved", "routing", …).
     Status: string option
 }
 
@@ -291,7 +293,7 @@ let update (config: ProviderProfileConfig) (msg: Msg) (model: Model) : Model * C
         {
             model with
                 Loaded = true
-                Error = Some err
+                Error = Some(Notice.Problem err)
         },
         Cmd.none
 
@@ -429,7 +431,7 @@ let update (config: ProviderProfileConfig) (msg: Msg) (model: Model) : Model * C
         {
             model with
                 Busy = false
-                Error = Some err
+                Error = Some(Notice.Problem err)
         },
         Cmd.none
 
@@ -479,7 +481,7 @@ let update (config: ProviderProfileConfig) (msg: Msg) (model: Model) : Model * C
         {
             model with
                 Busy = false
-                Error = Some err
+                Error = Some(Notice.Problem err)
         },
         Cmd.none
 
@@ -488,19 +490,6 @@ let update (config: ProviderProfileConfig) (msg: Msg) (model: Model) : Model * C
     | DismissStatus -> { model with Status = None }, Cmd.none
 
 // ─── View helpers ────────────────────────────────────────────────────
-
-let private banner (dismiss: string) (cls: string) (text: string) (onDismiss: unit -> unit) =
-    Html.div [
-        prop.className $"mb-4 p-3 border rounded text-sm flex items-center justify-between {cls}"
-        prop.children [
-            Html.span [ prop.text text ]
-            Html.button [
-                prop.className "text-xs hover:underline"
-                prop.text dismiss
-                prop.onClick (fun _ -> onDismiss ())
-            ]
-        ]
-    ]
 
 /// Health badge. Advisory by the store's own contract — resolution does
 /// not gate on it — so the badge warns and never blocks.
@@ -954,16 +943,12 @@ let ProviderProfilePanel (config: ProviderProfileConfig) (model: Model) (dispatc
     Html.div [
         prop.className "space-y-4"
         prop.children [
-            match model.Error with
-            | Some err ->
-                banner msgs.Dismiss "bg-red-50 border-red-200 text-red-700" err (fun () -> dispatch DismissError)
-            | None -> Html.none
+            Toolup.UIToolkit.StateViews.notice { Dismiss = msgs.Dismiss } model.Error (fun () -> dispatch DismissError)
 
-            match statusText with
-            | Some text ->
-                banner msgs.Dismiss "bg-green-50 border-green-200 text-green-700" text (fun () ->
-                    dispatch DismissStatus)
-            | None -> Html.none
+            Toolup.UIToolkit.StateViews.notice
+                { Dismiss = msgs.Dismiss }
+                (statusText |> Option.map Notice.Info)
+                (fun () -> dispatch DismissStatus)
 
             Html.div [
                 prop.className "bg-white rounded-lg border border-border"

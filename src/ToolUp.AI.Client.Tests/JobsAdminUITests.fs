@@ -297,7 +297,7 @@ let tests =
                 "the new attempt's result is shown"
 
             match m5.Jobs with
-            | Loaded jobs ->
+            | Remote.Loaded jobs ->
                 let row = jobs |> List.find (fun j -> j.JobId = id)
                 Expect.equal row.LastRunStatus (Some JobRunStatus.Succeeded) "the row carries the new attempt"
             | _ -> failwith "jobs should stay loaded"
@@ -433,8 +433,12 @@ let tests =
             let m0, _ = init ()
             let m1, cmd = update (JobsLoaded(Ok [ scheduled; deadLettered ])) m0
 
-            Expect.equal (m1.Attempts.TryFind scheduled.JobId) (Some Loading) "attempts read for the scheduled job"
-            Expect.equal (m1.Attempts.TryFind deadLettered.JobId) (Some Loading) "and for the failed one"
+            Expect.equal
+                (m1.Attempts.TryFind scheduled.JobId)
+                (Some Remote.Loading)
+                "attempts read for the scheduled job"
+
+            Expect.equal (m1.Attempts.TryFind deadLettered.JobId) (Some Remote.Loading) "and for the failed one"
             Expect.equal (List.length cmd) 2 "one attempts read per job"
 
             let older =
@@ -445,10 +449,13 @@ let tests =
 
             let m2, _ = update (AttemptsLoaded(scheduled.JobId, Ok [ older; newer ])) m1
 
-            Expect.equal (m2.Attempts.TryFind scheduled.JobId) (Some(Loaded [ newer; older ])) "stored newest first"
+            Expect.equal
+                (m2.Attempts.TryFind scheduled.JobId)
+                (Some(Remote.Loaded [ newer; older ]))
+                "stored newest first"
 
             let m3, _ = update (AttemptsLoaded(deadLettered.JobId, Error "boom")) m2
-            Expect.equal (m3.Attempts.TryFind deadLettered.JobId) (Some(LoadError "boom")) "a failed read says so"
+            Expect.equal (m3.Attempts.TryFind deadLettered.JobId) (Some(Remote.Failed "boom")) "a failed read says so"
 
             let m4, expandCmd = update (ToggleAttempts scheduled.JobId) m3
             Expect.isTrue (m4.Expanded.Contains scheduled.JobId) "expanded"
@@ -461,7 +468,10 @@ let tests =
             // A refresh keeps what was on screen while the new read runs.
             let m6, _ = update (JobsLoaded(Ok [ scheduled ])) m5
 
-            Expect.equal (m6.Attempts.TryFind scheduled.JobId) (Some(Loaded [ newer; older ])) "kept while re-read"
+            Expect.equal
+                (m6.Attempts.TryFind scheduled.JobId)
+                (Some(Remote.Loaded [ newer; older ]))
+                "kept while re-read"
 
             Expect.isFalse (m6.Attempts.ContainsKey deadLettered.JobId) "a job no longer listed is dropped"
 
@@ -484,7 +494,7 @@ let tests =
             let m4, _ = update (AttemptsLoaded(id, Ok [ started ])) m3
 
             match m4.Attempts.TryFind id with
-            | Some(Loaded runs) ->
+            | Some(Remote.Loaded runs) ->
                 Expect.equal
                     (newerThanRecord scheduled runs)
                     (Some started)

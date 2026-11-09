@@ -60,28 +60,52 @@ module StateViews =
             ]
         ]
 
-    /// Dismissible error banner. Generalises the bespoke red-50 banners each
-    /// module hand-rolled. Pass `None` for a non-dismissible banner.
-    /// `dismissLabel` is the dismiss button's tooltip / accessible name
-    /// (Phase 767 — caller-supplied; the toolkit carries no string of its
-    /// own).
-    let errorBanner (message: string) (dismissLabel: string) (onDismiss: (unit -> unit) option) =
+    let private noticeClasses (notice: Notice) =
+        match notice with
+        | Notice.Info _ -> "border-[var(--pos)] text-[var(--pos)]", "status"
+        | Notice.Problem _ -> "border-[var(--neg)] text-[var(--neg)]", "alert"
+
+    let private noticeText (notice: Notice) =
+        match notice with
+        | Notice.Info text
+        | Notice.Problem text -> text
+
+    let private noticeBox (notice: Notice) (dismiss: (string * (unit -> unit)) option) =
+        let tone, role = noticeClasses notice
+
         Html.div [
-            prop.className "flex items-start gap-3 rounded-[var(--radius)] border border-red-200 bg-red-50 px-4 py-3"
+            prop.role role
+            prop.className (
+                "flex items-start gap-3 rounded-[var(--radius)] border bg-[var(--surface)] px-4 py-3 "
+                + tone
+            )
             prop.children [
-                Html.span [ prop.className "text-base flex-1 text-[var(--neg)]"; prop.text message ]
-                match onDismiss with
-                | Some dismiss ->
+                Html.span [ prop.className "text-base flex-1"; prop.text (noticeText notice) ]
+                match dismiss with
+                | Some(label, onDismiss) ->
                     Html.button [
-                        prop.className
-                            "text-[var(--neg)] hover:text-[var(--neg)]/80 transition-colors flex-shrink-0 text-lg leading-none"
-                        prop.title dismissLabel
-                        prop.onClick (fun _ -> dismiss ())
+                        prop.className "hover:opacity-80 transition-opacity flex-shrink-0 text-lg leading-none"
+                        prop.title label
+                        prop.ariaLabel label
+                        prop.onClick (fun _ -> onDismiss ())
                         prop.text "×"
                     ]
                 | None -> Html.none
             ]
         ]
+
+    /// A notice that stays until the state behind it changes — a failed
+    /// load's description, a standing warning. Its polarity is its case:
+    /// `Info` reads in the positive token, `Problem` in the negative one.
+    let noticeStatic (notice: Notice) : ReactElement = noticeBox notice None
+
+    /// The user-dismissible notice of a page: nothing for `None`, otherwise
+    /// the notice with a dismiss button that calls `onDismiss`. The text is
+    /// the caller's, already localised; `msgs` carries the dismiss label.
+    let notice (msgs: NoticeMessages) (notice: Notice option) (onDismiss: unit -> unit) : ReactElement =
+        match notice with
+        | Some shown -> noticeBox shown (Some(msgs.Dismiss, onDismiss))
+        | None -> Html.none
 
     /// Inline "working" mark + label, for "recomputing while showing stale
     /// results". Renders the ToolUp brand mark (`Icons.dataLoading` — the
@@ -102,3 +126,24 @@ module StateViews =
                 Html.span [ prop.text label ]
             ]
         ]
+
+    /// One read's state, rendered: nothing while it is not asked for, the
+    /// inline loading mark while it is in flight (above the previous answer
+    /// on a reload), the answer through `render`, and a failure as a
+    /// `Problem` notice described by the caller's `describe`.
+    let remote
+        (state: Remote<'T, 'E>)
+        (describe: 'E -> string)
+        (loading: string)
+        (render: 'T -> ReactElement)
+        : ReactElement =
+        match state with
+        | Remote.NotAsked -> Html.none
+        | Remote.Loading -> inlineLoading loading
+        | Remote.Reloading stale ->
+            Html.div [
+                prop.className "flex flex-col gap-2"
+                prop.children [ inlineLoading loading; render stale ]
+            ]
+        | Remote.Loaded value -> render value
+        | Remote.Failed error -> noticeStatic (Notice.Problem(describe error))

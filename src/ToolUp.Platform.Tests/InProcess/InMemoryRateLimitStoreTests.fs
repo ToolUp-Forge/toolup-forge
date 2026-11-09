@@ -22,7 +22,7 @@ let private loseOrderMarkers (store: ToolUp.Remoting.Server.InMemoryRateLimitSto
 
 let private remotingStore (cap: int) =
     let store = ToolUp.Remoting.Server.InMemoryRateLimitStore(maxBuckets = cap)
-    store, (store :> ToolUp.Remoting.Server.IRateLimitStore)
+    store, (store :> ToolUp.Remoting.Server.IRemotingRateLimitStore)
 
 /// Smoke tests for `InMemoryRateLimitStore` — the
 /// single-instance default. Covers the atomic-increment-and-check
@@ -60,7 +60,7 @@ let tests =
             let! second = limiter.TryAcquire("only", 1, window)
 
             match first, second with
-            | ToolUp.Remoting.Server.RateLimitAllowed, ToolUp.Remoting.Server.RateLimitDenied _ -> ()
+            | Admission.Admit _, Admission.Deny _ -> ()
             | other -> failtestf "the second call must be denied; a wiped bucket forgets the first: %A" other
         }
 
@@ -77,23 +77,23 @@ let tests =
             let! newest = limiter.TryAcquire(sprintf "k%d" (cap + 1), 1, window)
 
             match newest with
-            | ToolUp.Remoting.Server.RateLimitDenied _ -> ()
-            | ToolUp.Remoting.Server.RateLimitAllowed -> failtest "the newest bucket keeps its count through eviction"
+            | Admission.Deny _ -> ()
+            | Admission.Admit _ -> failtest "the newest bucket keeps its count through eviction"
 
             Expect.isLessThanOrEqual store.BucketCount cap "the store stays within its cap"
         }
 
-        testCaseAsync "first request below threshold returns AllowWithRemaining"
+        testCaseAsync "first request below threshold admits with the remaining count"
         <| async {
             let store = InMemoryRateLimitStore.create ()
             let! result = store.IncrementAndCheck(IpAddressKey "1.2.3.4", PerMinute, 10)
 
             match result with
-            | Ok(AllowWithRemaining remaining) -> Expect.equal remaining 9 "first request leaves 9 of 10"
-            | other -> failwithf "expected AllowWithRemaining 9, got %A" other
+            | Ok(Admission.Admit remaining) -> Expect.equal remaining 9 "first request leaves 9 of 10"
+            | other -> failwithf "expected Admission.Admit 9, got %A" other
         }
 
-        testCaseAsync "request that would exceed threshold returns DenyWithError with Retry-After"
+        testCaseAsync "request that would exceed threshold is denied with a Retry-After"
         <| async {
             let store = InMemoryRateLimitStore.create ()
             let key = IpAddressKey "9.9.9.9"
@@ -106,10 +106,14 @@ let tests =
             let! fourth = store.IncrementAndCheck(key, PerMinute, 3)
 
             match fourth with
-            | Ok(DenyWithError err) ->
-                Expect.equal err.Limit 3 "Limit reflects policy threshold"
-                Expect.isTrue (err.RetryAfterSeconds > 0) "RetryAfterSeconds positive"
-            | other -> failwithf "expected DenyWithError, got %A" other
+            | Ok(Admission.Deny retryAfter) ->
+                Expect.isGreaterThan retryAfter TimeSpan.Zero "retry-after positive"
+
+                Expect.isLessThanOrEqual
+                    retryAfter
+                    (TimeSpan.FromMinutes 1.0)
+                    "a calendar minute frees within the minute"
+            | other -> failwithf "expected Admission.Deny, got %A" other
         }
 
         testCaseAsync "distinct keys do not share counts"
@@ -119,7 +123,7 @@ let tests =
             let! b = store.IncrementAndCheck(IpAddressKey "2.2.2.2", PerMinute, 5)
 
             match a, b with
-            | Ok(AllowWithRemaining ra), Ok(AllowWithRemaining rb) ->
+            | Ok(Admission.Admit ra), Ok(Admission.Admit rb) ->
                 Expect.equal ra 4 "key A has 4 remaining"
                 Expect.equal rb 4 "key B has 4 remaining — independent"
             | _ -> failwithf "expected both Allow, got %A / %A" a b
@@ -197,7 +201,7 @@ let tests =
             let! result = store.IncrementAndCheck(key, PerSecond, 5)
 
             match result with
-            | Ok(AllowWithRemaining remaining) ->
+            | Ok(Admission.Admit remaining) ->
                 Expect.equal remaining 4 "post-boundary call sees a fresh window (threshold - 1)"
             | other -> failwithf "expected a fresh-window Allow, got %A" other
 
@@ -221,14 +225,14 @@ let tests =
             let! denied = store.IncrementAndCheck(key, PerSecond, 2)
 
             match denied with
-            | Ok(DenyWithError _) -> ()
+            | Ok(Admission.Deny _) -> ()
             | other -> failwithf "expected a deny at threshold, got %A" other
 
             now.Value <- now.Value.AddSeconds 1.0
             let! allowed = store.IncrementAndCheck(key, PerSecond, 2)
 
             match allowed with
-            | Ok(AllowWithRemaining remaining) -> Expect.equal remaining 1 "budget is spendable again next window"
+            | Ok(Admission.Admit remaining) -> Expect.equal remaining 1 "budget is spendable again next window"
             | other -> failwithf "expected an allow in the new window, got %A" other
         }
 
@@ -249,3 +253,10 @@ let tests =
 /// the conformance bar is uniform.
 let contractTests =
     IRateLimitStoreContract.tests "InMemoryRateLimitStore" InMemoryRateLimitStore.create
+
+/// Bind `IRemotingRateLimitStoreContract` (the `TryAcquire` pack) against
+/// the in-memory remoting store. Phase 1068: the two packs above and here
+/// hold both interfaces over one implementation.
+let remotingContractTests =
+    IRemotingRateLimitStoreContract.tests "InMemoryRateLimitStore (remoting)" (fun () ->
+        ToolUp.Remoting.Server.InMemoryRateLimitStore() :> ToolUp.Remoting.Server.IRemotingRateLimitStore)

@@ -121,6 +121,7 @@ let private registeredTests =
         DataPropTests.tests
         AriaPropTests.tests
         ClientToolkitThemingTests.tests
+        RemoteAndMemoTests.tests
         DomAttrCustomAuditTests.tests
         StjBackwardCompatTests.tests
         RemotingAnalyzerRecognitionTests.tests

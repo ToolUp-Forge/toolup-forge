@@ -145,13 +145,13 @@ type Model = {
     Loaded: bool
     /// A call is outstanding.
     Busy: bool
-    /// The last failure, shown in the banner until dismissed.
-    Error: string option
+    /// The last failure, shown as a notice until dismissed.
+    Error: Notice option
 }
 
 /// Everything the module can be asked to do. Every remoting call is a
 /// request / response pair, and every response carries a `Result` so a
-/// failure lands in the banner rather than in an exception.
+/// failure lands in the error notice rather than in an exception.
 type Msg =
     /// Re-read the contact list.
     | LoadContacts
@@ -187,7 +187,7 @@ type Msg =
     | WithdrawOptIn of contactId: string * channel: string
     /// A consent record or withdrawal came back.
     | OptInChanged of Result<ExternalContact, string>
-    /// Clear the error banner.
+    /// Clear the error notice.
     | DismissError
 
 // ─── API proxy ───────────────────────────────────────────────────────
@@ -244,7 +244,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
             model with
                 Loaded = true
                 Busy = false
-                Error = Some err
+                Error = Some(Notice.Problem err)
         },
         Cmd.none
 
@@ -326,7 +326,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         {
             model with
                 Busy = false
-                Error = Some err
+                Error = Some(Notice.Problem err)
         },
         Cmd.none
 
@@ -347,7 +347,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         {
             model with
                 Busy = false
-                Error = Some err
+                Error = Some(Notice.Problem err)
         },
         Cmd.none
 
@@ -410,7 +410,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         {
             model with
                 Busy = false
-                Error = Some err
+                Error = Some(Notice.Problem err)
         },
         Cmd.none
 
@@ -446,18 +446,6 @@ let private consentSummary (msgs: ExternalContactMessages) (contact: ExternalCon
         Html.div [
             prop.className "flex gap-1 flex-wrap"
             prop.children [ for channel in channels -> pill channel "bg-green-100 text-green-700" ]
-        ]
-
-let private errorBanner (msgs: ExternalContactMessages) (model: Model) (dispatch: Msg -> unit) =
-    match model.Error with
-    | None -> Html.none
-    | Some err ->
-        Html.div [
-            prop.className "mb-3 p-3 rounded bg-red-50 text-red-800 text-sm flex justify-between items-start gap-3"
-            prop.children [
-                Html.span [ prop.text err ]
-                Forms.Button.secondary msgs.Dismiss (fun () -> dispatch DismissError)
-            ]
         ]
 
 let private contactFormPanel (msgs: ExternalContactMessages) (form: ContactForm) (dispatch: Msg -> unit) =
@@ -744,7 +732,7 @@ let private ExternalContactManagerBody (model: Model) (dispatch: Msg -> unit) =
         prop.children [
             Html.h2 [ prop.className "text-lg font-semibold mb-1"; prop.text msgs.Heading ]
             Html.p [ prop.className "text-sm text-gray-600 mb-4"; prop.text msgs.Subheading ]
-            errorBanner msgs model dispatch
+            StateViews.notice { Dismiss = msgs.Dismiss } model.Error (fun () -> dispatch DismissError)
             body
         ]
     ]

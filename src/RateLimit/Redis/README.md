@@ -39,7 +39,8 @@ ServerApp.empty
               Key = ByIp
               Window = SlidingWindow(TimeSpan.FromSeconds 10.0, 10)
               Threshold = 20
-              OnExceeded = Return429 }
+              OnExceeded = Return429
+              StorePosture = StorePosture.FailOpen }
         ]
 }
 |> ServerApp.withExtensions

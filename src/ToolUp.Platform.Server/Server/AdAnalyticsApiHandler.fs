@@ -183,8 +183,8 @@ let private rateGate
             let! decision = store.IncrementAndCheck(key, PerMinute, threshold) |> Async.StartAsTask
 
             match decision with
-            | Ok(AllowWithRemaining _) -> return None
-            | Ok(DenyWithError rle) -> return Some rle
+            | Ok(Admission.Admit _) -> return None
+            | Ok(Admission.Deny retryAfter) -> return Some(RateLimitedError.ofDenial threshold PerMinute retryAfter)
             | Error err ->
                 let reason =
                     match err with

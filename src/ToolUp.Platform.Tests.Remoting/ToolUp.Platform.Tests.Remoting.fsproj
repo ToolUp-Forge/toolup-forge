@@ -107,6 +107,7 @@
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\DataPropTests.fs" Link="InProcess\DataPropTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\AriaPropTests.fs" Link="InProcess\AriaPropTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\ClientToolkitThemingTests.fs" Link="InProcess\ClientToolkitThemingTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\RemoteAndMemoTests.fs" Link="InProcess\RemoteAndMemoTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\DomAttrCustomAuditTests.fs" Link="InProcess\DomAttrCustomAuditTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\StjBackwardCompatTests.fs" Link="InProcess\StjBackwardCompatTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\ConsentProviderTests.fs" Link="InProcess\ConsentProviderTests.fs" />

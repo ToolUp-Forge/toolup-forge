@@ -80,10 +80,9 @@ type Model = {
     /// The caller's role in each team they belong to. Drives the
     /// Admin-only UI (Add / Remove / Role change).
     RoleInTeam: Map<string, TeamRole>
-    /// A single error message bubble at the bottom of the page. The
-    /// whole page dismisses on action — simpler than per-form error
-    /// state for an admin UI.
-    Error: string option
+    /// A single page-level error notice. The whole page dismisses on
+    /// action — simpler than per-form error state for an admin UI.
+    Error: Notice option
     /// Add-member form state for a given teamId.
     AddMemberUserId: string
     AddMemberRole: TeamRole
@@ -362,7 +361,12 @@ let update (msg: Msg) (model: Model) =
         },
         Cmd.none
 
-    | ActiveTeamSwitched(_, Error e) -> { model with Error = Some e }, Cmd.none
+    | ActiveTeamSwitched(_, Error e) ->
+        {
+            model with
+                Error = Some(Notice.Problem e)
+        },
+        Cmd.none
 
     | SetAddMemberUserId id -> { model with AddMemberUserId = id }, Cmd.none
 
@@ -379,7 +383,7 @@ let update (msg: Msg) (model: Model) =
         if raw = "" then
             {
                 model with
-                    Error = Some(MessageCatalog.english.TeamManager.IdentifierRequired)
+                    Error = Some(Notice.Problem MessageCatalog.english.TeamManager.IdentifierRequired)
             },
             Cmd.none
         // 0.5.7 — Detect email format and route through the
@@ -447,7 +451,7 @@ let update (msg: Msg) (model: Model) =
         {
             model with
                 AddMemberSubmitting = false
-                Error = Some e
+                Error = Some(Notice.Problem e)
         },
         Cmd.none
 
@@ -462,7 +466,12 @@ let update (msg: Msg) (model: Model) =
 
         { model with Error = None }, refresh
 
-    | MemberRemoved(Error e) -> { model with Error = Some e }, Cmd.none
+    | MemberRemoved(Error e) ->
+        {
+            model with
+                Error = Some(Notice.Problem e)
+        },
+        Cmd.none
 
     | ChangeMemberRole(teamId, targetUserId, newRole) ->
         model,
@@ -477,7 +486,12 @@ let update (msg: Msg) (model: Model) =
 
         { model with Error = None }, refresh
 
-    | MemberRoleChanged(Error e) -> { model with Error = Some e }, Cmd.none
+    | MemberRoleChanged(Error e) ->
+        {
+            model with
+                Error = Some(Notice.Problem e)
+        },
+        Cmd.none
 
     | IsPlatformAdminLoaded isAdmin ->
         {
@@ -714,7 +728,7 @@ let update (msg: Msg) (model: Model) =
         // 0.5.7 — when triggered from the modal, surface the error
         // inside the modal (modal stays open for retry). When
         // triggered from the email-detect path of "Add a member" (no
-        // modal), surface as the page-level Error banner so the
+        // modal), surface as the page-level error notice so the
         // operator sees what happened.
         match model.IssueByEmailModal with
         | Some m ->
@@ -732,7 +746,7 @@ let update (msg: Msg) (model: Model) =
             {
                 model with
                     AddMemberSubmitting = false
-                    Error = Some e
+                    Error = Some(Notice.Problem e)
             },
             Cmd.none
 
@@ -766,7 +780,12 @@ let update (msg: Msg) (model: Model) =
 
     | RevokeByEmailDone(teamId, _, Ok()) -> model, Cmd.ofMsg (LoadPendingByEmail teamId)
 
-    | RevokeByEmailDone(_, _, Error e) -> { model with Error = Some e }, Cmd.none
+    | RevokeByEmailDone(_, _, Error e) ->
+        {
+            model with
+                Error = Some(Notice.Problem e)
+        },
+        Cmd.none
 
     // ─── Phase 547.B — expired-invite visibility + re-issue ───────
 
@@ -817,7 +836,12 @@ let update (msg: Msg) (model: Model) =
             // Both lists shift: the email gains a live pending entry (which
             // also removes it from the server's expired projection).
             cleared, Cmd.batch [ Cmd.ofMsg (LoadPendingByEmail teamId); Cmd.ofMsg (LoadExpiredInvites teamId) ]
-        | Error e -> { cleared with Error = Some e }, Cmd.none
+        | Error e ->
+            {
+                cleared with
+                    Error = Some(Notice.Problem e)
+            },
+            Cmd.none
 
     | DirectoryResolved(Ok summaries) ->
         let directory =
@@ -830,7 +854,12 @@ let update (msg: Msg) (model: Model) =
     // leaves the raw ids on screen; never blocks the member list.
     | DirectoryResolved(Error _) -> model, Cmd.none
 
-    | ApiError message -> { model with Error = Some message }, Cmd.none
+    | ApiError message ->
+        {
+            model with
+                Error = Some(Notice.Problem message)
+        },
+        Cmd.none
 
     | DismissError -> { model with Error = None }, Cmd.none
 
@@ -1665,33 +1694,22 @@ let private pendingInvitesView (msgs: TeamManagerMessages) (teamId: string) (mod
 let private TeamManagerBody (model: Model) (dispatch: Msg -> unit) =
     let msgs = (MessageCatalogProvider.useMessages ()).TeamManager
 
-    let errorBanner =
-        match model.Error with
-        | Some msg ->
-            Html.div [
-                prop.className
-                    "p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm flex items-center justify-between"
-                prop.children [
-                    Html.span [ prop.text msg ]
-                    Html.button [
-                        prop.className "text-xs text-red-600 hover:underline"
-                        prop.text msgs.Dismiss
-                        prop.onClick (fun _ -> dispatch DismissError)
-                    ]
-                ]
-            ]
-        | None -> Html.none
-
     let body =
         match model.CurrentView with
         | MyTeams -> myTeamsView msgs model dispatch
         | TeamDetails teamId -> teamDetailsView msgs teamId model dispatch
         | PendingInvites teamId -> pendingInvitesView msgs teamId model dispatch
 
-    // 0.5.6 — settings-shape FullWidth render. Error banner stacks
+    // 0.5.6 — settings-shape FullWidth render. The error notice stacks
     // above the body so it's immediately above the user's current
     // context instead of in a separate squashed right pane.
-    Html.div [ prop.className "flex flex-col gap-3"; prop.children [ errorBanner; body ] ]
+    Html.div [
+        prop.className "flex flex-col gap-3"
+        prop.children [
+            StateViews.notice { Dismiss = msgs.Dismiss } model.Error (fun () -> dispatch DismissError)
+            body
+        ]
+    ]
 
 let private view (model: Model) (dispatch: Msg -> unit) : ReactElement = TeamManagerBody model dispatch
 
