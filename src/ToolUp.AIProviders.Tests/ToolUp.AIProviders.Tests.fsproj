@@ -31,6 +31,7 @@
         <!-- forge#1242 — the effort a Claude call is sent with. -->
         <Compile Include="Tests\ClaudeEffortTests.fs" />
         <Compile Include="Tests\ConnectorRequestBytesTests.fs" />
+        <Compile Include="Tests\ProviderCallTests.fs" />
         <!-- Phase 1105 - a refused AI-settings revert is reported, offline. -->
         <Compile Include="Tests\AISettingsRevertTests.fs" />
         <!-- Phase 722 — the unregistered-[<Tests>]-list guard, source-linked from

@@ -26,6 +26,7 @@ let private registeredTests =
         ClaudeRetryFloorTests.tests
         ClaudeEffortTests.tests
         ConnectorRequestBytesTests.tests
+        ProviderCallTests.tests
         // Phase 1105 - a refused AI-settings revert is reported, never as "not saved".
         AISettingsRevertTests.tests
     ]

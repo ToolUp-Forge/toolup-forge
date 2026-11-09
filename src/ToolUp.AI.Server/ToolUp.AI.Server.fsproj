@@ -12,10 +12,17 @@
         <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
         <ProjectReference Include="..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
         <ProjectReference Include="..\ToolUp.AI.Core\ToolUp.AI.Core.fsproj" />
+        <ProjectReference Include="..\ToolUp.AI.Wire\ToolUp.AI.Wire.fsproj" />
     </ItemGroup>
     <ItemGroup>
         <!-- The parent companion README, packed into each tier's nupkg. -->
         <None Include="..\ToolUp.AI\README.md" Pack="true" PackagePath="\" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- The connector kernel: one provider call, a connector as data, and
+             the one IAIProvider over it. Depends on Core, AI.Wire and the
+             server tier's HTTP transport only. -->
+        <Compile Include="Server\Providers\ProviderCall.fs" />
     </ItemGroup>
     <ItemGroup>
         <!-- AISurfaceDerivationMode + signed capability
