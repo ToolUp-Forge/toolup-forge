@@ -48,13 +48,6 @@ type Busy =
     | RunningPreview
     | RunningConfirm
 
-/// Inline status banner after a flow completes. Lives at the page
-/// bottom; dismissed on next action or via the `×` button.
-type Banner =
-    | NoBanner
-    | OkBanner of message: string
-    | ErrorBanner of message: string
-
 type Model = {
     ActiveTab: Tab
     /// Shared form state — subject id and reason fields are reused
@@ -83,7 +76,9 @@ type Model = {
     ActiveTicket: ExportTicket option
     TicketStatus: ExportStatus option
     Busy: Busy
-    Banner: Banner
+    /// Status notice after a flow completes; cleared on the next action or
+    /// dismissed by the user.
+    Banner: Notice option
 }
 
 type Msg =
@@ -169,7 +164,7 @@ let init () : Model * Cmd<Msg> =
         ActiveTicket = None
         TicketStatus = None
         Busy = Idle
-        Banner = NoBanner
+        Banner = None
     }
 
     model, Cmd.none
@@ -221,7 +216,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
             model with
                 ActiveTab = tab
                 PendingPreview = None
-                Banner = NoBanner
+                Banner = None
         },
         Cmd.none
 
@@ -235,7 +230,12 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
 
     | SubmitExport ->
         match validateForm model with
-        | Some err -> { model with Banner = ErrorBanner err }, Cmd.none
+        | Some err ->
+            {
+                model with
+                    Banner = Some(Notice.Problem err)
+            },
+            Cmd.none
         | None when model.AsyncMode ->
             let cmd =
                 Cmd.OfRemoting.call dsrApi.RequestExportAsync (exportInput model) AsyncExportStarted (fun ex ->
@@ -244,7 +244,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
             {
                 model with
                     Busy = RunningExport
-                    Banner = NoBanner
+                    Banner = None
                     ActiveTicket = None
                     TicketStatus = None
             },
@@ -257,7 +257,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
             {
                 model with
                     Busy = RunningExport
-                    Banner = NoBanner
+                    Banner = None
             },
             cmd
 
@@ -269,7 +269,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Busy = RunningExport
                 ActiveTicket = Some ticket
                 TicketStatus = Some ExportStatus.Preparing
-                Banner = OkBanner msgs.BackgroundExportQueued
+                Banner = Some(Notice.Info msgs.BackgroundExportQueued)
         },
         pollDelay
 
@@ -277,7 +277,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         {
             model with
                 Busy = Idle
-                Banner = ErrorBanner err
+                Banner = Some(Notice.Problem err)
         },
         Cmd.none
 
@@ -323,7 +323,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                     Busy = Idle
                     ActiveTicket = None
                     TicketStatus = Some status
-                    Banner = ErrorBanner(msgs.ExportFailed reason)
+                    Banner = Some(Notice.Problem(msgs.ExportFailed reason))
             },
             Cmd.none
         | ExportStatus.Cancelled ->
@@ -332,7 +332,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                     Busy = Idle
                     ActiveTicket = None
                     TicketStatus = Some status
-                    Banner = OkBanner msgs.ExportCancelled
+                    Banner = Some(Notice.Info msgs.ExportCancelled)
             },
             Cmd.none
         | ExportStatus.Expired
@@ -342,7 +342,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                     Busy = Idle
                     ActiveTicket = None
                     TicketStatus = Some status
-                    Banner = ErrorBanner msgs.ExportTicketExpiredOrUnknown
+                    Banner = Some(Notice.Problem msgs.ExportTicketExpiredOrUnknown)
             },
             Cmd.none
 
@@ -351,7 +351,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
             model with
                 Busy = Idle
                 ActiveTicket = None
-                Banner = ErrorBanner err
+                Banner = Some(Notice.Problem err)
         },
         Cmd.none
 
@@ -363,7 +363,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Busy = Idle
                 ActiveTicket = None
                 TicketStatus = None
-                Banner = OkBanner(msgs.BackgroundExportReady bytes.Length)
+                Banner = Some(Notice.Info(msgs.BackgroundExportReady bytes.Length))
         },
         Cmd.ofEffect (fun _ -> downloadExport subject bytes)
 
@@ -372,7 +372,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
             model with
                 Busy = Idle
                 ActiveTicket = None
-                Banner = ErrorBanner err
+                Banner = Some(Notice.Problem err)
         },
         Cmd.none
 
@@ -392,11 +392,16 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Busy = Idle
                 ActiveTicket = None
                 TicketStatus = Some ExportStatus.Cancelled
-                Banner = OkBanner msgs.ExportCancelled
+                Banner = Some(Notice.Info msgs.ExportCancelled)
         },
         Cmd.none
 
-    | CancelResolved(Result.Error err) -> { model with Banner = ErrorBanner err }, Cmd.none
+    | CancelResolved(Result.Error err) ->
+        {
+            model with
+                Banner = Some(Notice.Problem err)
+        },
+        Cmd.none
 
     | ExportResolved(Ok bytes) ->
         let subject = model.SubjectInput.Trim()
@@ -404,7 +409,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         {
             model with
                 Busy = Idle
-                Banner = OkBanner(msgs.ExportReady bytes.Length)
+                Banner = Some(Notice.Info(msgs.ExportReady bytes.Length))
         },
         Cmd.ofEffect (fun _ -> downloadExport subject bytes)
 
@@ -412,13 +417,18 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         {
             model with
                 Busy = Idle
-                Banner = ErrorBanner err
+                Banner = Some(Notice.Problem err)
         },
         Cmd.none
 
     | SubmitPreview ->
         match validateForm model with
-        | Some err -> { model with Banner = ErrorBanner err }, Cmd.none
+        | Some err ->
+            {
+                model with
+                    Banner = Some(Notice.Problem err)
+            },
+            Cmd.none
         | None ->
             let cmd =
                 Cmd.OfRemoting.call dsrApi.PreviewErasure (erasureInput model) PreviewResolved (fun ex ->
@@ -427,7 +437,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
             {
                 model with
                     Busy = RunningPreview
-                    Banner = NoBanner
+                    Banner = None
                     PendingPreview = None
             },
             cmd
@@ -437,7 +447,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
             model with
                 Busy = Idle
                 PendingPreview = Some preview
-                Banner = NoBanner
+                Banner = None
         },
         Cmd.none
 
@@ -445,7 +455,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         {
             model with
                 Busy = Idle
-                Banner = ErrorBanner err
+                Banner = Some(Notice.Problem err)
         },
         Cmd.none
 
@@ -453,7 +463,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         {
             model with
                 PendingPreview = None
-                Banner = NoBanner
+                Banner = None
         },
         Cmd.none
 
@@ -462,7 +472,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         | None ->
             {
                 model with
-                    Banner = ErrorBanner msgs.RunPreviewFirst
+                    Banner = Some(Notice.Problem msgs.RunPreviewFirst)
             },
             Cmd.none
         | Some preview ->
@@ -473,16 +483,16 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
             {
                 model with
                     Busy = RunningConfirm
-                    Banner = NoBanner
+                    Banner = None
             },
             cmd
 
     | ConfirmResolved(Ok(Completed summary)) ->
         let banner =
             if summary.OverallSuccess then
-                OkBanner(msgs.EraseConfirmedSuccess summary.PerHandler.Count)
+                Some(Notice.Info(msgs.EraseConfirmedSuccess summary.PerHandler.Count))
             else
-                ErrorBanner(msgs.EraseConfirmedPartialFailure summary.PerHandler.Count)
+                Some(Notice.Problem(msgs.EraseConfirmedPartialFailure summary.PerHandler.Count))
 
         {
             model with
@@ -497,7 +507,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         {
             model with
                 Busy = Idle
-                Banner = ErrorBanner(msgs.EraseRefused reason)
+                Banner = Some(Notice.Problem(msgs.EraseRefused reason))
         },
         Cmd.none
 
@@ -505,7 +515,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         {
             model with
                 Busy = Idle
-                Banner = ErrorBanner(msgs.EraseNotImplemented detail)
+                Banner = Some(Notice.Problem(msgs.EraseNotImplemented detail))
         },
         Cmd.none
 
@@ -513,11 +523,11 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         {
             model with
                 Busy = Idle
-                Banner = ErrorBanner err
+                Banner = Some(Notice.Problem err)
         },
         Cmd.none
 
-    | DismissBanner -> { model with Banner = NoBanner }, Cmd.none
+    | DismissBanner -> { model with Banner = None }, Cmd.none
 
 // ─── View ────────────────────────────────────────────────────────────
 
@@ -821,25 +831,6 @@ let private eraseTabView (msgs: DataSubjectRequestAdminMessages) (model: Model) 
         ]
     ]
 
-let private bannerView (msgs: DataSubjectRequestAdminMessages) (model: Model) (dispatch: Msg -> unit) =
-    let render (cls: string) (msg: string) =
-        Html.div [
-            prop.className $"mt-3 p-3 border rounded text-sm flex items-center justify-between {cls}"
-            prop.children [
-                Html.span [ prop.text msg ]
-                Html.button [
-                    prop.className "text-xs hover:underline"
-                    prop.text msgs.DismissBanner
-                    prop.onClick (fun _ -> dispatch DismissBanner)
-                ]
-            ]
-        ]
-
-    match model.Banner with
-    | NoBanner -> Html.none
-    | OkBanner msg -> render "bg-green-50 border-green-200 text-green-700" msg
-    | ErrorBanner msg -> render "bg-red-50 border-red-200 text-red-700" msg
-
 /// Phase 444 — the module body as a React COMPONENT rather than a plain
 /// render function, so it has a hook site from which to read the resolved
 /// catalog. A module's `view` is invoked inline by the shell's own render,
@@ -866,10 +857,13 @@ let private DataSubjectRequestAdminBody (model: Model) (dispatch: Msg -> unit) =
             ]
         ]
 
-    // 0.5.6 — FullWidth render. Banner stacks above the body.
+    // 0.5.6 — FullWidth render. The notice stacks above the body.
     Html.div [
         prop.className "flex flex-col gap-3 h-full"
-        prop.children [ bannerView msgs model dispatch; body ]
+        prop.children [
+            StateViews.notice { Dismiss = msgs.DismissBanner } model.Banner (fun () -> dispatch DismissBanner)
+            body
+        ]
     ]
 
 let private view (model: Model) (dispatch: Msg -> unit) : ReactElement =
