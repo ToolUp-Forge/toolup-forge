@@ -715,6 +715,7 @@ type ToolUp.Platform BlobDocuments ToolUp.Platform.Infra
 type ToolUp.Platform BlobDpKeyRing ToolUp.Platform.Infra
 type ToolUp.Platform BlobEncryption ToolUp.Platform.Infra
 type ToolUp.Platform BlobExternalHandleStore ToolUp.Platform.Infra
+type ToolUp.Platform BlobIdempotencyStore ToolUp.Platform.Infra
 type ToolUp.Platform BlobMapStore ToolUp.Platform.Infra
 type ToolUp.Platform BlobMapStoreError ToolUp.Platform.Infra
 type ToolUp.Platform BlobMapStoreOptions ToolUp.Platform.Infra
@@ -1393,6 +1394,7 @@ type ToolUp.Platform IWhatsAppTemplateRegistry ToolUp.Platform.Jobs
 type ToolUp.Platform IWorkProvenanceSource ToolUp.Platform.Infra
 type ToolUp.Platform IWorkerKeyRegistry ToolUp.Platform.Infra
 type ToolUp.Platform IdempotencyStoreInstanceValidator ToolUp.Platform.Config
+type ToolUp.Platform IdempotencyStoreWriteException ToolUp.Platform.Infra
 type ToolUp.Platform IdempotencySweep ToolUp.Platform.Jobs
 type ToolUp.Platform IdempotencySweepJob ToolUp.Platform.Jobs
 type ToolUp.Platform InHandlerGateDeclaration ToolUp.Platform.Compose

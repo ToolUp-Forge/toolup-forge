@@ -378,8 +378,6 @@ ToolUp.Remoting.Server.BlobIdempotencyLayout (class)
 ToolUp.Remoting.Server.BlobIdempotencyLayout.BlobPrefix : System.String (literal)
 ToolUp.Remoting.Server.BlobIdempotencyLayout.DefaultContainer : System.String (literal)
 ToolUp.Remoting.Server.BlobIdempotencyLayout.tryReadExpiryTicks(System.Byte[]) : Microsoft.FSharp.Core.FSharpOption`1[System.Int64]
-ToolUp.Remoting.Server.BlobIdempotencyStore (class)
-ToolUp.Remoting.Server.BlobIdempotencyStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Remoting.Server.BodyNormalisation (class)
 ToolUp.Remoting.Server.BodyNormalisation.Disabled : ToolUp.Remoting.Server.BodyNormalisation { get }
 ToolUp.Remoting.Server.BodyNormalisation.Enabled : ToolUp.Remoting.Server.BodyNormalisation { get }
