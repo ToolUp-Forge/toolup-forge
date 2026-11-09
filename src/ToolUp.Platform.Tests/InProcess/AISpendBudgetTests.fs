@@ -40,7 +40,7 @@ open ToolUp.Platform.Compose
 //   * the monetary refusal must be distinguishable from Phase 9s's
 //     token refusal by LABEL, which is the whole of Phase 499.D.
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 // ─── Fakes ───────────────────────────────────────────────────────
 

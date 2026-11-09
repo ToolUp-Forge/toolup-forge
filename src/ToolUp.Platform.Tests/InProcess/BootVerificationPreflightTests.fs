@@ -1860,7 +1860,7 @@ let tests =
             }
 
             test "a pre-level record read back from JSON without the field coerces and keeps its bytes" {
-                let json = ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()
+                let json = ToolUp.Remoting.Json.SystemTextJson.PlatformJson.options
 
                 let node =
                     Text.Json.Nodes.JsonNode.Parse(Text.Json.JsonSerializer.Serialize(baseRecord, json)).AsObject()

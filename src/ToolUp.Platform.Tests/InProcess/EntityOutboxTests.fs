@@ -228,7 +228,7 @@ let tests =
             let json =
                 System.Text.Json.JsonSerializer.Serialize(
                     intent,
-                    ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()
+                    ToolUp.Remoting.Json.SystemTextJson.PlatformJson.options
                 )
 
             let blobName =
@@ -273,7 +273,7 @@ let tests =
             let json =
                 System.Text.Json.JsonSerializer.Serialize(
                     intent,
-                    ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()
+                    ToolUp.Remoting.Json.SystemTextJson.PlatformJson.options
                 )
 
             let blobName =

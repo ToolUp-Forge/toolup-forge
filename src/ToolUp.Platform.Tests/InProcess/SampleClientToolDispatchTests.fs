@@ -94,7 +94,7 @@ type private SampleTestAuthorizer(denyTool: string) =
 /// returns a `CalcResponse` JSON. STJ + FableConverters serialises the
 /// records in PascalCase — matches what the agent loop ships to the
 /// model.
-let private calcSimulatorOptions = FableConverters.create ()
+let private calcSimulatorOptions = PlatformJson.options
 
 let private calcSimulator (evt: AIStreamEvent) : string option =
     match evt with

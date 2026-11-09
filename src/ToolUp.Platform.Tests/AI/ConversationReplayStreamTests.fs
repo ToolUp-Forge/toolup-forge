@@ -176,7 +176,7 @@ let private seededStore (userTurns: int) = seededStoreWith [] userTurns
 // message holding block parts is asserted to survive the persisted format
 // and the read path the browser actually calls.
 
-let private blobOptions = FableConverters.create ()
+let private blobOptions = PlatformJson.options
 
 let private blobContainer = "replay-blocks"
 

@@ -35,7 +35,7 @@ type private CapturingChannel() =
         member _.Publish(scope, notification) = async {
             match notification with
             | CustomNotification(key, json) when key = IngestionStatusNotificationKey ->
-                let options = ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()
+                let options = ToolUp.Remoting.Json.SystemTextJson.PlatformJson.options
                 published.Enqueue(scope, JsonSerializer.Deserialize<IngestionStatusUpdate>(json, options))
             | _ -> ()
         }

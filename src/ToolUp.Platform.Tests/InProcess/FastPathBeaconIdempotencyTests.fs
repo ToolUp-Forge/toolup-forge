@@ -222,8 +222,7 @@ let private scanTests =
 // the bytes the assistant handler writes (the canonical wire types through
 // `FableConverters`) and reading them back the way it reads them.
 
-let private wireOptions =
-    ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()
+let private wireOptions = ToolUp.Remoting.Json.SystemTextJson.PlatformJson.options
 
 let private historyScope: StorageScope = {
     ScopeId = "t862"

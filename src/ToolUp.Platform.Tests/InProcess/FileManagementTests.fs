@@ -208,7 +208,7 @@ let tests =
             let entry =
                 System.Text.Json.JsonSerializer.Deserialize<ProcessedFileEntry>(
                     json,
-                    ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()
+                    ToolUp.Remoting.Json.SystemTextJson.PlatformJson.options
                 )
 
             Expect.equal entry.FileName "old.csv" "the old fields read as before"

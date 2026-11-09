@@ -439,7 +439,7 @@ let private gateCheck (fixture: GateFixture) (scopeId: string) (elements: Narrat
 /// The sealed certificate a narrative certificate carries, read back from its
 /// interchange JSON.
 let private sealedOf (certificate: NarrativeGroundingCertificate) : GroundingCertificate =
-    JsonSerializer.Deserialize<GroundingCertificate>(certificate.CertificateJson, FableConverters.create ())
+    JsonSerializer.Deserialize<GroundingCertificate>(certificate.CertificateJson, PlatformJson.options)
 
 let factGateTests =
     testList "Phase 985 B — the fact-tier gate resolves against the store" [
@@ -516,7 +516,7 @@ let factGateTests =
                 Expect.equal cert.CitedFactIds [ fact.FactId ] "naming its facts"
 
                 let sealedCert =
-                    JsonSerializer.Deserialize<GroundingCertificate>(cert.CertificateJson, FableConverters.create ())
+                    JsonSerializer.Deserialize<GroundingCertificate>(cert.CertificateJson, PlatformJson.options)
 
                 Expect.isTrue
                     (sealedCert.Body.Nodes
@@ -3170,7 +3170,7 @@ let projectionTests =
                 match assemble summaryRun drafts [ "summary", [ NarrativeElement.Divider ] ] [] provenance with
                 | Ok document ->
                     let json (d: NarrativeDocument) =
-                        JsonSerializer.Serialize(d, ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ())
+                        JsonSerializer.Serialize(d, ToolUp.Remoting.Json.SystemTextJson.PlatformJson.options)
 
                     Expect.equal (json document) (json before) "the document is byte-identical"
                 | Error reason -> failtestf "assemble refused: %s" reason
@@ -3470,7 +3470,7 @@ let repairTests =
     testList "Phase 1175 — a refused draft is repaired while it improves, then its grounded remainder is published" [
 
         test "a job row and a definition written before the warning fields read the warning as None (GP 11)" {
-            let options = FableConverters.create ()
+            let options = PlatformJson.options
 
             let strip (field: string) (json: string) =
                 let node = System.Text.Json.Nodes.JsonNode.Parse(json).AsObject()

@@ -164,7 +164,7 @@ let private errorOf (json: string) : string option =
     | JsonValueKind.Object, (true, e) -> Some(e.GetString())
     | _ -> None
 
-let private readOptions = FableConverters.create ()
+let private readOptions = PlatformJson.options
 
 let private reportOf (json: string) : DeploymentVerification.DeploymentVerificationReport =
     JsonSerializer.Deserialize<DeploymentVerification.DeploymentVerificationReport>(json, readOptions)

@@ -514,7 +514,7 @@ let private publicationEvents (w: World) (scopeId: string) : (ModuleEvent * Fact
         e,
         JsonSerializer.Deserialize<FactPublicationEvent>(
             e.Payload,
-            ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()
+            ToolUp.Remoting.Json.SystemTextJson.PlatformJson.options
         ))
 
 let private ledgerBlobs (w: World) (scopeId: string) : string list =
@@ -1292,7 +1292,7 @@ type private RecordingChannel() =
                 Some(
                     JsonSerializer.Deserialize<FactTableRunNotice>(
                         payload,
-                        ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()
+                        ToolUp.Remoting.Json.SystemTextJson.PlatformJson.options
                     )
                 )
             | _ -> None)

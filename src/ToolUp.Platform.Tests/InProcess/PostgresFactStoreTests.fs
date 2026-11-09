@@ -1121,7 +1121,7 @@ let private migrationLiveTests (dataSource: NpgsqlDataSource) =
             let payload =
                 JsonSerializer.Deserialize<FactStoreMigratedEvent>(
                     rows.Head.Payload,
-                    ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()
+                    ToolUp.Remoting.Json.SystemTextJson.PlatformJson.options
                 )
 
             Expect.equal payload.Verification "verified" "the verification result is recorded"
@@ -1660,7 +1660,7 @@ let private liveTests (conn: string) =
                 SeedRaw =
                     fun facts -> async {
                         let source, storage = blobSource ()
-                        let json = ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()
+                        let json = ToolUp.Remoting.Json.SystemTextJson.PlatformJson.options
 
                         for f in facts do
                             let bytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(f, json))

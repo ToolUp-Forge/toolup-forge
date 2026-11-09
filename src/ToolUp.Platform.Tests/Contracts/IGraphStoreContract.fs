@@ -74,7 +74,7 @@ module StoreTier =
         | ByTier(interpreterRows, _), InterpreterSubset -> interpreterRows
         | ByTier(_, engineRows), FullEngine -> engineRows
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 let private okOrFail label result =
     match result with

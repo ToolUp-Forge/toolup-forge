@@ -129,7 +129,7 @@ let private collect (source: IAsyncEnumerable<'T>) : 'T list =
     }
     |> fun t -> t.Result
 
-let private fableJson = FableConverters.create ()
+let private fableJson = PlatformJson.options
 
 /// The typed channel's payload for one event: what the dispatcher writes
 /// inside the `event: chunk` frame (`JsonSerializer.Serialize` with the

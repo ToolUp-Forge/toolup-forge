@@ -18,7 +18,7 @@ open ToolUp.Platform.Jobs
 // roster by heartbeat-window math. Any external implementation can run
 // the same bar.
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 /// A channel that records every publish so the pack can assert the
 /// `_platform.presence` fan-out shape without async subscription timing.

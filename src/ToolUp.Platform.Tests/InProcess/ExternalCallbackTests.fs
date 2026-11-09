@@ -161,7 +161,7 @@ let private storeTests =
                 | Some r -> r
                 | None -> failtest "precondition"
 
-            let options = ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()
+            let options = ToolUp.Remoting.Json.SystemTextJson.PlatformJson.options
 
             let bytes =
                 System.Text.Json.JsonSerializer.Serialize(planted, options)

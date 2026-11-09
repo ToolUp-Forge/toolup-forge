@@ -663,7 +663,7 @@ let tests =
                             Decision = token
                         }
                         : ToolApprovalDecisionRequest),
-                        ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()
+                        ToolUp.Remoting.Json.SystemTextJson.PlatformJson.options
                     )
 
                 ctx.Request.Body <- new MemoryStream(Encoding.UTF8.GetBytes body)

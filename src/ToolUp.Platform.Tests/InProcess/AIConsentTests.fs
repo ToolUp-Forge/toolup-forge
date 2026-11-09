@@ -66,8 +66,7 @@ open ToolUp.Platform.Compose
 
 let private Read = ModulePermission.Read
 
-let private jsonOptions =
-    ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()
+let private jsonOptions = ToolUp.Remoting.Json.SystemTextJson.PlatformJson.options
 
 let private scope = {
     ScopeId = "t1"

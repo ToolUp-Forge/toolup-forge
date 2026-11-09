@@ -75,7 +75,7 @@ let private ended: (string * FactTableRunRecord) list = [
 let private identity (run: FactTableRunRecord) =
     run.TableId, run.RunId, run.SchemaVersion, run.OpenedAt, run.BaseSequence, run.Options, run.RecordVersion
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 let private lifecycleTests =
     testList "Phase 1092 — FactTableRun, the run lifecycle as a pure state machine" [

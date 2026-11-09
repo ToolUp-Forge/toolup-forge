@@ -174,7 +174,7 @@ let tests =
         ]
 
         testList "persistence round-trip" [
-            let opts = FableConverters.create ()
+            let opts = PlatformJson.options
 
             let conv = {
                 Fingerprint = "fp"

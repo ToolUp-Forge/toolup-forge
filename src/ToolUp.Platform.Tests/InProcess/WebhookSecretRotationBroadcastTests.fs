@@ -61,7 +61,7 @@ let private scopeId = "_platform"
 
 let private body = Encoding.UTF8.GetBytes """{"event":"FlagChanged"}"""
 
-let private envelopeJson = FableConverters.create ()
+let private envelopeJson = PlatformJson.options
 
 /// Recording `ILogger` — the unwired-rotation warning is emitted once per
 /// process at security class, and "was it logged?" is a distinct question

@@ -66,7 +66,7 @@ open ToolUp.Platform.Compose
 // keep feeding — the counter is half the acceptance there and none of
 // it here.
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 /// The four bytes a client sends when it serialises an absent value and
 /// posts it anyway. Written as a literal on purpose — round-tripping a

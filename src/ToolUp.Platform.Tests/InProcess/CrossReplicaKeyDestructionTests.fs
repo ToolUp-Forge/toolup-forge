@@ -103,7 +103,7 @@ let private waitForEvent (log: RecordingAuditLog) (eventType: string) (count: in
 /// in which a stray `Async.Start` could still land.
 let private settleForAbsence () = Async.Sleep 300
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 // ── Fanout + eviction + audit, with two in-process "replicas" ──
 
