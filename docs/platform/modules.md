@@ -585,11 +585,12 @@ composition root over `Client.view` / `Client.viewWithSignIn` (GP 11) — apart 
 boundary above, which holds there too. A custom composer that wraps the shell in a model of its own
 opts in the way the AI composer does: create a store per run, build `Client.shellStore store
 _.Shell`, render the shell with `Client.viewSlicedOver shell config modules chrome model.Shell
-shellDispatch`, and mount with `Program.withReactStore store`. Pass a `chrome` record and a
-`shellDispatch` that keep their identity from render to render (build the dispatch once per loop,
-not as `ShellMsg >> dispatch` inline; rebuild the chrome only when what it shows changed) — a fresh
-one per render is correct output, but it re-renders the chrome, and a fresh dispatch defeats the
-module's and the sidebar's boundaries as well.
+shellDispatchers`, and mount with `Program.withReactStore store`. Pass a `chrome` record and a
+`Client.Dispatchers` set that keep their identity from render to render: build the program with
+`Client.programOver` (or `Program.withStableDispatch`), whose `build` makes the set once per loop —
+`Client.dispatchers (ShellMsg >> dispatch)` there, never inline in the view — and rebuild the chrome
+only when what it shows changed. A fresh one per render is correct output, but it re-renders the
+chrome, and a fresh set defeats the module's and the sidebar's boundaries as well.
 
 **Shared context values keep their identity.** The shell's React contexts — feature flags,
 branding, administration tiles, the message catalog — hand every reader the same value object while

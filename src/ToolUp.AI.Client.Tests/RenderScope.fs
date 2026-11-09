@@ -227,8 +227,8 @@ let run (sliced: bool) (report: ScopeRun -> unit) : unit =
         PlatformRole = None
         ActiveTeamRole = None
         CurrentArea = ModuleArea.Product
-        ConfigsPrefetch = Prefetch.none
-        FlagsPrefetch = Prefetch.none
+        ConfigsPrefetch = Remote.Loading
+        FlagsPrefetch = Remote.Loading
         ResetCounters = Map.empty
         InitPhase = Client.Ready
         Degradations = []
@@ -242,24 +242,30 @@ let run (sliced: bool) (report: ScopeRun -> unit) : unit =
 
     let mutable dispatch: (Client.Msg -> unit) option = None
 
-    let capture (view: Client.Model -> (Client.Msg -> unit) -> ReactElement) =
-        fun model d ->
-            dispatch <- Some d
-            view model d
+    // The shell's own builder: the view receives the loop's wrapper set,
+    // built once per loop, exactly as `Client.program` / `Client.run` hand it.
+    let capture (view: Client.Model -> Client.Dispatchers -> ReactElement) =
+        fun model (dispatchers: Client.Dispatchers) ->
+            dispatch <- Some dispatchers.Dispatch
+            view model dispatchers
 
     let program =
         if sliced then
             let store = ModelStore.create<Client.Model, Client.Msg> ()
 
-            Program.mkProgram
+            Client.programOver
+                config
                 (fun () -> model0, Cmd.none)
                 update
+                Client.dispatchers
                 (capture (Client.viewSliced store config modules Client.emptyChrome))
             |> Program.withReactStore store placeholder
         else
-            Program.mkProgram
+            Client.programOver
+                config
                 (fun () -> model0, Cmd.none)
                 update
+                Client.dispatchers
                 (capture (Client.viewWithSignIn config modules Client.emptyChrome))
             |> Program.withReactSynchronous placeholder
 

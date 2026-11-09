@@ -114,8 +114,8 @@ let private shellModel (activeId: string) (states: (string * obj) list) : Client
     PlatformRole = None
     ActiveTeamRole = None
     CurrentArea = ModuleArea.Product
-    ConfigsPrefetch = Prefetch.none
-    FlagsPrefetch = Prefetch.none
+    ConfigsPrefetch = Remote.Loading
+    FlagsPrefetch = Remote.Loading
     ResetCounters = Map.empty
     InitPhase = Client.Ready
     Degradations = []

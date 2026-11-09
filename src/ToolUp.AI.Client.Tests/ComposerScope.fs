@@ -124,8 +124,8 @@ let shellModel0 () : Client.Model = {
     PlatformRole = None
     ActiveTeamRole = None
     CurrentArea = ModuleArea.Product
-    ConfigsPrefetch = Prefetch.none
-    FlagsPrefetch = Prefetch.none
+    ConfigsPrefetch = Remote.Loading
+    FlagsPrefetch = Remote.Loading
     ResetCounters = Map.empty
     InitPhase = Client.Ready
     Degradations = []
@@ -267,12 +267,14 @@ let run (route: Route) (report: Run -> unit) : unit =
             Client.CommandPaletteDismissed
         |]
 
-        Program.mkProgram
+        Client.programOver
+            config
             (fun () -> shellModel0 (), Cmd.none)
             (fun msg model -> Client.update config bus modules msg model)
-            (fun model d ->
-                send <- Some(fun i -> d messages[i])
-                Client.viewSliced store config modules Client.emptyChrome model d)
+            Client.dispatchers
+            (fun model (dispatchers: Client.Dispatchers) ->
+                send <- Some(fun i -> dispatchers.Dispatch messages[i])
+                Client.viewSliced store config modules Client.emptyChrome model dispatchers)
         |> Program.withReactStore store placeholder
         |> Program.run
     | Route.ComposerWholeTree
@@ -295,20 +297,30 @@ let run (route: Route) (report: Run -> unit) : unit =
         let capture shellView =
             let view = AIClientConfig.composerView NoAIAssistant modules shellView
 
-            fun model d ->
-                send <- Some(fun i -> d messages[i])
-                view model d
+            fun model (dispatchers: AIClientConfig.ComposerDispatchers) ->
+                send <- Some(fun i -> dispatchers.Dispatch messages[i])
+                view model dispatchers
 
         if route = Route.ComposerStore then
             let store = ModelStore.create<AIClientConfig.OuterModel, AIClientConfig.OuterMsg> ()
 
             let shell = Client.shellStore store _.Shell
 
-            Program.mkProgram init update (capture (Client.viewSlicedOver shell config modules))
+            Client.programOver
+                config
+                init
+                update
+                AIClientConfig.composerDispatchersFor
+                (capture (Client.viewSlicedOver shell config modules))
             |> Program.withReactStore store placeholder
             |> Program.run
         else
-            Program.mkProgram init update (capture (Client.viewWithSignIn config modules))
+            Client.programOver
+                config
+                init
+                update
+                AIClientConfig.composerDispatchersFor
+                (capture (Client.viewWithSignIn config modules))
             |> Program.withReactSynchronous placeholder
             |> Program.run
 

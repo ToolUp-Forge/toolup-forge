@@ -750,39 +750,30 @@ let appendAssistantModule (mode: AIAssistantMode) (modules: ErasedModule list) :
 
 // ─── The composer's view, with one set of dispatchers per loop ──
 //
-// The shell holds two memo boundaries that key on its `dispatch` by
-// reference — the active module's dispatch prop (`moduleDispatchFor`) and
-// the sidebar's callbacks (`sidebarDispatchersFor`) — and each caches its
-// wrappers against the `dispatch` it is handed. Built inline in the view —
-// `ShellMsg >> dispatch` — the shell's `dispatch` was a fresh closure on
-// every render, so both caches missed on every render and neither boundary
-// held in this composer. The loop's own `dispatch` is created once per
-// `Program.runWithDispatch`, so the wrappers can be too: one set per loop,
-// cached against that `dispatch` by reference and rebuilt only when a
-// different loop renders (HMR re-runs the program; the cache follows).
+// The shell holds two memo boundaries that key on its dispatch wrappers by
+// reference — the active module's dispatcher and the sidebar's callbacks —
+// and both come from the `Client.Dispatchers` set the shell's view is
+// handed. Built inline in the view — `ShellMsg >> dispatch` — the set would
+// be a fresh one on every render and neither boundary would hold in this
+// composer. The loop's own `dispatch` is one function for the loop's life,
+// so the program builds the composer's routes from it once
+// (`Program.withStableDispatch`, through `Client.programOver`).
 
 /// The two message routes the composer's view hands out, for one loop.
 type internal ComposerDispatchers = {
-    Shell: Client.Msg -> unit
+    /// The loop's own dispatcher.
+    Dispatch: OuterMsg -> unit
+    Shell: Client.Dispatchers
     SidePanel: SidePanelMsg -> unit
 }
 
-let mutable private composerDispatchCache: ((OuterMsg -> unit) * ComposerDispatchers) option =
-    None
-
-/// The composer's dispatchers for the loop's `dispatch`: the same functions
-/// every render, for as long as the same loop is running.
-let internal composerDispatchersFor (dispatch: OuterMsg -> unit) : ComposerDispatchers =
-    match composerDispatchCache with
-    | Some(cached, dispatchers) when obj.ReferenceEquals(cached, dispatch) -> dispatchers
-    | _ ->
-        let dispatchers = {
-            Shell = ShellMsg >> dispatch
-            SidePanel = SidePanelMsg >> dispatch
-        }
-
-        composerDispatchCache <- Some(dispatch, dispatchers)
-        dispatchers
+/// The composer's routes over a loop's `dispatch` — the `build` the
+/// composer's program hands `Program.withStableDispatch`.
+let internal composerDispatchersFor (dispatch: OuterMsg -> unit) : ComposerDispatchers = {
+    Dispatch = dispatch
+    Shell = Client.dispatchers (ShellMsg >> dispatch)
+    SidePanel = SidePanelMsg >> dispatch
+}
 
 // The side-panel chrome handed to the shell, memoised per input. The
 // store-bound shell's chrome is a memo boundary that compares the chrome
@@ -792,22 +783,25 @@ let internal composerDispatchersFor (dispatch: OuterMsg -> unit) : ComposerDispa
 // narrative too: a module that provides one re-renders the chrome when its
 // extractor returns a new document, which is the chrome reading what it
 // shows). The mode and the module list are fixed for the view's life, so
-// the cache belongs to the view (`composerView`), not to the module.
+// the memo belongs to the view (`composerView`), not to the module.
 
 let private sameInputs (a: obj array) (b: obj array) =
     a.Length = b.Length && Array.forall2 (fun x y -> obj.ReferenceEquals(x, y)) a b
 
 /// The composer's view over a shell view: the side-panel chrome, and the
-/// shell rendered with the loop's stable shell dispatch. `shellView` is the
-/// whole-tree `Client.viewWithSignIn` (`withSidePanel`) or the store-bound
-/// `Client.viewSlicedOver` (`run`). Build it once per program: the view it
-/// returns keeps the last chrome record it built.
+/// shell rendered with the loop's stable shell dispatchers. `shellView` is
+/// the whole-tree `Client.viewWithSignIn` (`withSidePanel`) or the
+/// store-bound `Client.viewSlicedOver` (`run`). Build it once per program:
+/// the view it returns keeps the last chrome record it built.
 let internal composerView
     (mode: AIAssistantMode)
     (allModules: ErasedModule list)
-    (shellView: Client.ExtraChrome -> Client.Model -> (Client.Msg -> unit) -> ReactElement)
-    : OuterModel -> (OuterMsg -> unit) -> ReactElement =
-    let lastChrome: (obj array * Client.ExtraChrome) option ref = ref None
+    (shellView: Client.ExtraChrome -> Client.Model -> Client.Dispatchers -> ReactElement)
+    : OuterModel -> ComposerDispatchers -> ReactElement =
+    let chromeOf =
+        Memo.oneEntryBy
+            (fun (key1: obj array, _) (key2, _) -> sameInputs key1 key2)
+            (fun (_, build: unit -> Client.ExtraChrome) -> build ())
 
     let chromeFor (model: OuterModel) (sidePanelDispatch: SidePanelMsg -> unit) : Client.ExtraChrome =
         let activeModule = Client.activeModuleId model.Shell
@@ -822,19 +816,15 @@ let internal composerView
             box sidePanelDispatch
         |]
 
-        match lastChrome.Value with
-        | Some(cachedKey, chrome) when sameInputs cachedKey key -> chrome
-        | _ ->
-            let chrome: Client.ExtraChrome = {
+        chromeOf (
+            key,
+            fun () -> {
                 HeaderAction = sidePanelHeaderAction mode model.SidePanel sidePanelDispatch
                 SidePanel = sidePanelView mode activeModule activePage narrative model.SidePanel sidePanelDispatch
             }
+        )
 
-            lastChrome.Value <- Some(key, chrome)
-            chrome
-
-    fun (model: OuterModel) (dispatch: OuterMsg -> unit) ->
-        let dispatchers = composerDispatchersFor dispatch
+    fun (model: OuterModel) (dispatchers: ComposerDispatchers) ->
         shellView (chromeFor model dispatchers.SidePanel) model.Shell dispatchers.Shell
 
 /// The composer's update: shell messages to the shell, side-panel messages
@@ -879,7 +869,7 @@ let private composerProgram
     (mode: AIAssistantMode)
     (config: ClientConfig)
     (modules: ErasedModule list)
-    (shellViewFor: ErasedModule list -> Client.ExtraChrome -> Client.Model -> (Client.Msg -> unit) -> ReactElement)
+    (shellViewFor: ErasedModule list -> Client.ExtraChrome -> Client.Model -> Client.Dispatchers -> ReactElement)
     : Program<unit, OuterModel, OuterMsg, ReactElement> =
 
     // `Client.boot` performs the boot-time composition
@@ -935,38 +925,11 @@ let private composerProgram
     // `AIClientConfig.run` never rendered the sign-in screen.
     let outerView = composerView mode allModules (shellViewFor allModules)
 
-    // 0.4.1 — structured `withErrorReporter` replaces the upstream-shape
-    // `withConsoleTrace` shim here too. Trace and error routing follow the
-    // shape Client.program already uses (see SDK.Client.fs program/run).
-    let elmishLog = Logger.forCategory "client.elmish"
-
-    let elmishReporter (ctx: ErrorContext) =
-        match config.OnElmishError with
-        | Some sink ->
-            try
-                sink ctx
-            with ex ->
-                elmishLog.Error("OnElmishError sink raised", Some ex)
-        | None -> elmishLog.Error(ctx.Message, Some ctx.Exception)
-
-    let traceLog = Logger.forCategory "client.elmish.trace"
-
-    let traceUpdate (msg: OuterMsg) (model: OuterModel) =
-        let nextModel, nextCmd = outerUpdate msg model
-        // Format defensively — a message may carry a large payload (e.g. an
-        // uploaded file's raw contents) and `sprintf "%A"` on multi-MB data
-        // blows the JS call stack. Tracing must never crash message handling.
-        traceLog.Debug("outerMsg=" + ToolUp.Elmish.Program.safeMsgRepr msg)
-        nextModel, nextCmd
-
+    // The reporter, the trace and the stable dispatch are the shell's own
+    // builder's (`Client.programOver`), so this composer and `Client.program`
+    // route errors and trace updates alike.
     let prog =
-        Program.mkProgram
-            outerInit
-            (if config.EnableElmishConsoleTrace then
-                 traceUpdate
-             else
-                 outerUpdate)
-            outerView
+        Client.programOver config outerInit outerUpdate composerDispatchersFor outerView
 
     // The module-state observer publish left the shell's
     // `update`; it is the shell program's post-update hook now, so a
@@ -974,7 +937,6 @@ let private composerProgram
     // `ShellMsg` / `Shell` projection, or no AI deployment would publish.
     let progWithReporter =
         prog
-        |> Program.withErrorReporter elmishReporter
         |> Client.withModuleStateObserver
             allModules
             (function

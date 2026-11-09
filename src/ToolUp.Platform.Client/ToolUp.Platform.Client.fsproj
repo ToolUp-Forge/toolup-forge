@@ -82,6 +82,7 @@
         <Compile Include="Client\Elmish\ErrorContext.fs" />
         <Compile Include="Client\Elmish\EffectHandle.fs" />
         <Compile Include="Client\Elmish\Ring.fs" />
+        <Compile Include="Client\Elmish\Memo.fs" />
         <Compile Include="Client\Elmish\Program.fs" />
         <Compile Include="Client\Elmish\React.fs" />
         <Compile Include="Client\Elmish\HMR.fs" />

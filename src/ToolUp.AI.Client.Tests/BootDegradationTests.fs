@@ -67,8 +67,8 @@ let private baseModel: Client.Model = {
     PlatformRole = None
     ActiveTeamRole = None
     CurrentArea = ModuleArea.Product
-    ConfigsPrefetch = Prefetch.none
-    FlagsPrefetch = Prefetch.none
+    ConfigsPrefetch = Remote.Loading
+    FlagsPrefetch = Remote.Loading
     ResetCounters = Map.empty
     InitPhase = Client.Prefetching
     Degradations = []
@@ -193,7 +193,7 @@ let tests =
             testCase "failed configs load still flips the prefetch gate (no skeleton dead-lock)" (fun () ->
                 let m, _ = update (Client.BootLoadFailed("configs", "boom")) baseModel
 
-                Expect.isTrue (Prefetch.isComplete m.ConfigsPrefetch) "gate flipped despite the failure"
+                Expect.isTrue (Remote.isSettled m.ConfigsPrefetch) "gate flipped despite the failure"
                 Expect.equal (m.Degradations |> List.map _.Source) [ "configs" ] "and the failure is recorded")
 
             testCase "dismiss clears every entry; auth-bridge entry is not retryable" (fun () ->
@@ -248,7 +248,9 @@ let tests =
                 }
 
                 let msgs = MessageCatalog.english
-                let html = renderToString (Client.view config [] Client.emptyChrome refused ignore)
+
+                let html =
+                    renderToString (Client.view config [] Client.emptyChrome refused (Client.dispatchers ignore))
 
                 // React escapes the apostrophe in the rendered text.
                 let title = msgs.NotAuthorised.TitleAppAccessRefused.Replace("'", "&#x27;")
