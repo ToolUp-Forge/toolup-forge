@@ -38,12 +38,15 @@ open ToolUp.Platform.Compose
 // `OnProvisioned` is a no-op `Skipped`: vector chunks are written on
 // document ingestion, so provisioning has nothing to do.
 
-/// Strip the `team-` container prefix if present so the hook accepts
-/// either the bare team id or the `team-{id}` container form.
-let private teamIdOf (scopeId: string) =
-    match ScopeKey.tryParseContainer scopeId with
-    | Some(ScopeKey.Team teamId) -> teamId.Value
-    | _ -> scopeId
+/// The vector scope of the offboarded scope: a container in the scope
+/// grammar (`team-{id}`, `user-{id}`) reads back to its key, and a bare id
+/// is a team id; the scope's chunks are the ones ingestion keyed by
+/// `VectorScope.ofContainer`.
+let private vectorScopeOf (scopeId: string) : VectorScope =
+    ScopeKey.tryParseContainer scopeId
+    |> Option.defaultWith (fun () -> ScopeKey.Team(TeamId scopeId))
+    |> StorageScope.ofKey true
+    |> VectorScope.ofContainer
 
 type RagVectorStoreLifecycle(services: IServiceProvider) =
     interface ITenantLifecycle with
@@ -57,7 +60,7 @@ type RagVectorStoreLifecycle(services: IServiceProvider) =
         member _.OnDeprovisioned(scopeId, _actorUserId) = async {
             match services.GetService(typeof<IVectorStore>) with
             | :? IVectorStore as store ->
-                do! store.DeleteByScope(Team(teamIdOf scopeId))
+                do! store.DeleteByScope(vectorScopeOf scopeId)
                 return LifecycleHookResult.Completed
             | _ -> return LifecycleHookResult.Skipped "no IVectorStore registered (RAG pipeline not composed)"
         }

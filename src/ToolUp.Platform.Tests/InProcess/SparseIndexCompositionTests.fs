@@ -110,7 +110,7 @@ let private externalVectorStore () =
         member _.Erase(s, u, p, d) = inner.Erase(s, u, p, d)
     }
 
-/// Phase 963 — a planted pass-through decorator (telemetry, caching or a
+/// A planted pass-through decorator (telemetry, caching or a
 /// disclosure gate would have this shape). No vector-store decorator exists
 /// in `src/`, so the blind spot a name match has for one is shown here. It
 /// forwards its inner store's locality declaration, as the
@@ -130,7 +130,7 @@ type private TracingVectorStore(inner: IVectorStore) =
         member _.ListScopes() = inner.ListScopes()
         member _.Erase(s, u, p, d) = inner.Erase(s, u, p, d)
 
-/// Phase 964 — a planted pass-through decorator over a keyword index, the
+/// A planted pass-through decorator over a keyword index, the
 /// sparse twin of `TracingVectorStore`. No keyword-index decorator exists
 /// in `src/`, so the blind spot a type test has for one is shown here. It
 /// forwards its inner index's locality declaration, as the
@@ -146,7 +146,7 @@ type private TracingSparseIndex(inner: ISparseIndex) =
         member _.DeleteChunk s c = inner.DeleteChunk s c
         member _.Erase(s, u, p, d) = inner.Erase(s, u, p, d)
 
-/// Phase 963 — a type that only BORROWS the HNSW companion's name. It holds
+/// A type that only BORROWS the HNSW companion's name. It holds
 /// no index of its own: every call goes to the external (cross-replica)
 /// store it was handed.
 module private Impostor =
@@ -630,7 +630,7 @@ let tests =
                 Expect.isFalse (message.Contains "InMemoryBM25Index") "no keyword index is composed"
             }
 
-            // Phase 963 — the vector half reads the store's DECLARED locality,
+            // The vector half reads the store's DECLARED locality,
             // never its type name.
             test "a decorator over the HNSW store still warns, naming the composed store" {
                 use hnsw = newHnswStore ()
@@ -695,7 +695,7 @@ let tests =
             }
         ]
 
-        // Phase 964 — the keyword half reads the index's DECLARED locality
+        // The keyword half reads the index's DECLARED locality
         // (`ISparseIndexLocality`), never a type test, as 963 made the
         // vector half do.
         testList "InProcessIndexReplicaValidator — the keyword index declares its locality (Phase 964)" [
@@ -955,6 +955,49 @@ let tests =
                         (Some ToolUp.RAG.RetrievalPipeline.RetrievalScoreSpace.Cosine)
                         (Some 0.99))
                     "0.99 is reachable in cosine"
+            }
+        ]
+
+        testList "Phase 1083 — one threshold rule, admits, in every space" [
+            test "no threshold admits every score, in every space" {
+                for space in
+                    [
+                        RetrievalScoreSpace.Cosine
+                        RetrievalScoreSpace.Fused
+                        RetrievalScoreSpace.Reranked
+                    ] do
+                    Expect.isTrue (RetrievalScoreSpace.admits space None -5.0) (sprintf "%A" space)
+            }
+
+            test "cosine: a similarity floor admits only scores strictly above it" {
+                Expect.isTrue (RetrievalScoreSpace.admits RetrievalScoreSpace.Cosine (Some 0.5) 0.51) "above"
+                Expect.isFalse (RetrievalScoreSpace.admits RetrievalScoreSpace.Cosine (Some 0.5) 0.5) "at"
+                Expect.isFalse (RetrievalScoreSpace.admits RetrievalScoreSpace.Cosine (Some 0.5) 0.2) "below"
+            }
+
+            test "fused: the pool's best candidate (1.0) clears any threshold the validator accepts" {
+                Expect.isTrue (RetrievalScoreSpace.admits RetrievalScoreSpace.Fused (Some 0.99) 1.0) "the best match"
+                Expect.isFalse (RetrievalScoreSpace.admits RetrievalScoreSpace.Fused (Some 0.3) 0.0) "the weakest"
+                Expect.isFalse (RetrievalScoreSpace.admits RetrievalScoreSpace.Fused (Some 1.0) 1.0) "a 1.0 threshold"
+            }
+
+            test "reranked: the threshold is read on the reranker's own scale" {
+                Expect.isTrue (RetrievalScoreSpace.admits RetrievalScoreSpace.Reranked (Some 2.0) 3.0) "above"
+                Expect.isFalse (RetrievalScoreSpace.admits RetrievalScoreSpace.Reranked (Some 2.0) 2.0) "at"
+            }
+
+            test "the validator reads the same rule: a threshold the space's bound does not clear is a finding" {
+                Expect.isSome
+                    (ToolUp.RAG.RetrievalPipeline.RetrievalScoreSpace.thresholdFinding
+                        (Some RetrievalScoreSpace.Cosine)
+                        (Some 1.0))
+                    "1.0 is not admitted at cosine's bound"
+
+                Expect.isNone
+                    (ToolUp.RAG.RetrievalPipeline.RetrievalScoreSpace.thresholdFinding
+                        (Some RetrievalScoreSpace.Fused)
+                        (Some 0.5))
+                    "0.5 is admitted at the fused bound"
             }
         ]
 

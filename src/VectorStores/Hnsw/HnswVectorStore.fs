@@ -99,7 +99,7 @@ type private LocalRandomGenerator() =
 // We persist `(chunkId, vector, content, metadata)` per scope as JSON
 // (same on-disk shape as `InMemoryVectorStore`'s index). The HNSW graph
 // itself is built from this list on the first search after a cold load
-// and kept current incrementally after that (Phase 1007): a write adds
+// and kept current incrementally after that: a write adds
 // its vector to the built graph, and a delete or overwrite retires the
 // old node, so a write never costs a rebuild of the scope.
 //
@@ -120,17 +120,12 @@ type IndexEntry = {
 
 // ─── Scope key + blob name ────────────────────────────────────────
 
-let private scopeToKey (scope: VectorScope) =
-    match scope with
-    | Platform -> "platform"
-    | Deployment -> "deployment"
-    | Team teamId -> $"team:{teamId}"
-    | User userId -> $"user:{userId}"
+let private scopeToKey (scope: VectorScope) = VectorScope.key scope
 
 let private blobName (scope: VectorScope) =
     $"_rag/{scopeToKey scope}/hnsw-index.json"
 
-/// Phase 861 — raised by a mutating member of `HnswVectorStore` when the
+/// Raised by a mutating member of `HnswVectorStore` when the
 /// scope's persisted snapshot EXISTS but could not be read (the storage
 /// returned an error for a blob it still reports as present). The store
 /// persists a scope by writing back everything it holds for it in memory,
@@ -163,7 +158,7 @@ let private rethrow (ex: exn) : 'a =
     System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex).Throw()
     Unchecked.defaultof<'a>
 
-/// Phase 861 — the scope key a persisted HNSW snapshot belongs to, for
+/// The scope key a persisted HNSW snapshot belongs to, for
 /// `ListScopes`: `_rag/{scopeKey}/hnsw-index.json`, and only a key this
 /// store writes.
 let private scopeKeyOfBlob (name: string) =
@@ -173,28 +168,16 @@ let private scopeKeyOfBlob (name: string) =
     if name.StartsWith prefix && name.EndsWith suffix then
         let key = name.Substring(prefix.Length, name.Length - prefix.Length - suffix.Length)
 
-        if
-            not (key.Contains "/")
-            && (key = "platform"
-                || key = "deployment"
-                || key.StartsWith "team:"
-                || key.StartsWith "user:")
-        then
+        if not (key.Contains "/") && (VectorScope.tryOfKey key).IsSome then
             Some key
         else
             None
     else
         None
 
-let private scopeFromKey (sk: string) =
-    if sk = "platform" then
-        Platform
-    elif sk = "deployment" then
-        Deployment
-    elif sk.StartsWith "user:" then
-        User(sk.Substring("user:".Length))
-    else
-        Team(sk.Substring("team:".Length))
+/// The scope a key this store wrote names (every key it holds was written
+/// by `VectorScope.key`).
+let private scopeFromKey (sk: string) = (VectorScope.tryOfKey sk).Value
 
 // ─── Vector math ──────────────────────────────────────────────────
 
@@ -235,7 +218,7 @@ let private fromJson<'T> (s: string) =
 /// graph. The lock is per-scope, so concurrent searches across scopes
 /// proceed in parallel — scope isolation is structural, not just contractual.
 ///
-/// Phase 1007 — the graph is kept current incrementally rather than rebuilt
+/// The graph is kept current incrementally rather than rebuilt
 /// after every write. HNSW.Net's graph is append-only (a node cannot be
 /// removed), so the scope keeps its own node bookkeeping: the chunk each
 /// node was added for, the node holding each chunk's CURRENT vector, and the
@@ -379,7 +362,7 @@ type private ScopeState() =
 /// random unit vectors with mismatched-dim entries mapped to max distance
 /// — a deliberately hard ANN graph case where the simple neighbour-
 /// selection heuristic alone underperforms), and recall@10 of 1.000 on
-/// BEIR SciFact (Phase 970). `fastBuild` is the measured cheaper build.
+/// BEIR SciFact. `fastBuild` is the measured cheaper build.
 /// Tune further with `{ HnswParameters.defaults with … }`.
 type HnswParameters = {
     M: int
@@ -406,9 +389,9 @@ module HnswParameters =
         TombstoneRebuildFraction = 0.25
     }
 
-    /// Phase 1007 — the cheaper build: `defaults` without
+    /// The cheaper build: `defaults` without
     /// `ExpandBestSelection`. Measured at `efSearch` 800 (RAG technical
-    /// guide, "Measured scale (Phase 1007)"): graph build 9.3 vs 149 ms
+    /// guide, "Measured scale"): graph build 9.3 vs 149 ms
     /// per chunk on BEIR SciFact and 7.9 vs 69 ms on a real-text corpus,
     /// recall@10 against the flat scan 1.000 on both. `ConstructionPruning`
     /// 100 and `KeepPrunedConnections = false` were measured too and are
@@ -494,7 +477,7 @@ let private isTombstoned (entry: IndexEntry) =
 
 // ─── HnswVectorStore ──────────────────────────────────────────────
 
-/// Phase 1007 — one scope's graph as the store holds it, for the test pack
+/// One scope's graph as the store holds it, for the test pack
 /// (`InternalsVisibleTo`). `Builds` counts full builds since the scope's
 /// state was created; an incremental write never moves it.
 type internal HnswGraphStats = {
@@ -513,7 +496,7 @@ type internal HnswGraphStats = {
 /// Persistence is debounced JSON-on-disk per scope (same shape and cadence
 /// as `InMemoryVectorStore`). The HNSW graph itself is built lazily from
 /// the persisted entries on the first search of a scope after process
-/// start, and kept current incrementally after that (Phase 1007): writes
+/// start, and kept current incrementally after that: writes
 /// are added to the built graph at the next search, deletes and
 /// overwrites retire the old node, and the scope rebuilds only when
 /// retired nodes pass `HnswParameters.TombstoneRebuildFraction`.
@@ -635,7 +618,7 @@ type HnswVectorStore(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs: 
 
         state.SetGraph(graph, nodes, live |> Array.map _.ChunkId, items)
 
-    /// Phase 1007 — bring a built graph up to date with the writes recorded
+    /// Bring a built graph up to date with the writes recorded
     /// since it last read them. Caller must hold `state.Lock`. Each pending
     /// chunk is compared with the node holding its vector: a live chunk
     /// whose vector the graph already holds keeps (or revives) that node; a
@@ -742,7 +725,7 @@ type HnswVectorStore(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs: 
             with ex ->
                 log.Warn $"[HnswVectorStore] Corrupt index for {scopeKey}: {ex.Message} — starting empty."
         | Error reason ->
-            // Phase 861 — a failed download is ABSENT only when the blob is
+            // A failed download is ABSENT only when the blob is
             // not there. A snapshot that is there but could not be read must
             // not be taken for an empty scope: the next mutation's flush
             // would replace the whole persisted corpus. Refuse, and leave the
@@ -758,7 +741,7 @@ type HnswVectorStore(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs: 
         lock scopesLock (fun () -> loadedScopes.Add scopeKey |> ignore)
     }
 
-    // Phase 861 — cold loads are single-flight, so a mutation cannot land
+    // Cold loads are single-flight, so a mutation cannot land
     // between a concurrent load's download and its replay (`loadScope`
     // clears the scope's state before replaying the snapshot).
     let loadGate = new SemaphoreSlim(1, 1)
@@ -767,7 +750,7 @@ type HnswVectorStore(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs: 
         lock scopesLock (fun () -> loadedScopes.Contains scopeKey)
 
     /// Guarantee this scope's persisted snapshot has been read into memory.
-    /// Phase 861 — EVERY mutating member calls this first, so a mutation
+    /// EVERY mutating member calls this first, so a mutation
     /// never lands on an un-hydrated scope. Raises
     /// `HnswScopeSnapshotUnreadableException` when the snapshot exists but
     /// cannot be read.
@@ -818,7 +801,7 @@ type HnswVectorStore(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs: 
 
     do Async.Start(flushLoop, cts.Token)
 
-    /// Phase 1007 — the graph state of `scope` as it stands, without
+    /// The graph state of `scope` as it stands, without
     /// applying pending writes; `None` when the store holds no state for it.
     member internal _.GraphStats(scope: VectorScope) : HnswGraphStats option =
         match lock scopesLock (fun () -> scopes.TryGetValue(scopeToKey scope)) with
@@ -832,7 +815,7 @@ type HnswVectorStore(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs: 
                 })
         | _ -> None
 
-    /// Phase 963 — the HNSW graph is built and searched in this process's
+    /// The HNSW graph is built and searched in this process's
     /// memory. It persists to blob storage, but each replica searches its
     /// own graph, so the index is per-process for the replica warning.
     interface IVectorStoreLocality with
@@ -841,7 +824,7 @@ type HnswVectorStore(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs: 
     interface IVectorStore with
 
         member _.Upsert scope chunkId vector chunk = async {
-            // Phase 861 — hydrate first. An upload that is the first thing a
+            // Hydrate first. An upload that is the first thing a
             // restarted process does to a lazily-loaded scope would otherwise
             // land on fresh, empty state, and the next flush would replace
             // the persisted corpus with just the new document's chunks.
@@ -960,7 +943,7 @@ type HnswVectorStore(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs: 
         }
 
         member _.DeleteByScope scope = async {
-            // Phase 861 — hydrate first (the Phase 726 fix, which this store
+            // Hydrate first (the Phase 726 fix, which this store
             // never had): a wipe of an un-hydrated scope found no state,
             // persisted nothing, and the next read brought the corpus back.
             do! ensureScopeLoaded scope
@@ -974,7 +957,7 @@ type HnswVectorStore(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs: 
         }
 
         member _.DeleteChunk scope chunkId = async {
-            // Phase 861 — hydrate first: a tombstone for an un-hydrated scope
+            // Hydrate first: a tombstone for an un-hydrated scope
             // found no entry to stamp and left the chunk live at rest.
             do! ensureScopeLoaded scope
             let scopeKey = scopeToKey scope
@@ -999,7 +982,7 @@ type HnswVectorStore(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs: 
         }
 
         member _.RestoreChunk scope chunkId = async {
-            // Phase 861 — hydrate first: a restore for an un-hydrated scope
+            // Hydrate first: a restore for an un-hydrated scope
             // found no tombstone to lift and silently no-opped.
             do! ensureScopeLoaded scope
             let scopeKey = scopeToKey scope
@@ -1022,7 +1005,7 @@ type HnswVectorStore(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs: 
         }
 
         member _.Vacuum scope olderThan = async {
-            // Phase 861 — hydrate first: an un-hydrated scope purged nothing
+            // Hydrate first: an un-hydrated scope purged nothing
             // and reported zero while its tombstones stayed at rest.
             do! ensureScopeLoaded scope
             let scopeKey = scopeToKey scope
@@ -1056,7 +1039,7 @@ type HnswVectorStore(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs: 
         }
 
         member _.ListScopes() = async {
-            // Phase 861 — persisted scopes too, not only the ones this process
+            // Persisted scopes too, not only the ones this process
             // has loaded: after a restart a cold scope has no state yet, and a
             // re-embed sweep driven from this list would skip it.
             let! persisted = storage.List("_rag", "_rag/")
@@ -1070,11 +1053,11 @@ type HnswVectorStore(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs: 
 
                     Seq.append scopes.Keys cold |> Seq.distinct |> Seq.toList)
 
-            return keys |> List.map scopeFromKey
+            return keys |> List.choose VectorScope.tryOfKey
         }
 
         member this.Erase(scope, subjectUserId, policy, dryRun) = async {
-            // Phase 861 — an unreadable snapshot surfaces as the interface's
+            // An unreadable snapshot surfaces as the interface's
             // own typed failure rather than an exception out of the erasure
             // fan-out; the orchestrator retries `StoreUnreachable`.
             match!

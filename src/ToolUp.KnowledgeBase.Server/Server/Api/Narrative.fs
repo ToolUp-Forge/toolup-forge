@@ -15,7 +15,7 @@ open KnowledgeBase.ServerApiDeps
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Compose
 
-/// Phase 525.D — the narrative-commit egress door. When the fact
+/// The narrative-commit egress door. When the fact
 /// companion's disclosure gate is composed, a document whose Metric spans
 /// reference facts the gate denies at the `FactNarrativePublication`
 /// surface is refused commit to the (surfaceable) knowledge base — the
@@ -29,7 +29,7 @@ open ToolUp.Platform.Compose
 /// This commit-time judgement is the cheaper FIRST filter, not the last
 /// word: the chunks a committed document produces carry its refs under
 /// `_factRefs`, and the retrieval pipeline re-checks every cited fact at
-/// the `FactRetrieval` surface on every retrieval (Phase 775). A fact that
+/// the `FactRetrieval` surface on every retrieval. A fact that
 /// becomes non-disclosable after commit therefore drops the chunks citing
 /// it without re-indexing; the retrieval-time check is the authoritative
 /// one.
@@ -67,7 +67,7 @@ let ingestNarrative
     (request: IngestNarrativeRequest)
     : Async<Result<KnowledgeDocument, IngestNarrativeError>> =
     async {
-        // Phase 525.D — disclosure egress check before anything is
+        // Disclosure egress check before anything is
         // persisted; the refusal diagnostic rides the existing
         // `IngestFailed` wire case (additive — no client change).
         let! disclosureDiagnostic = disclosureRefusalFor deps request.Document
@@ -135,11 +135,11 @@ let ingestNarrative
                         let header = sprintf "Section %d · %s" (i + 1) section.Heading
                         let chunk = makeChunk Narrative fileName header body src
 
-                        // Phase 521.D — record the fact ids this section's
+                        // Record the fact ids this section's
                         // metric spans reference in chunk metadata, so a
                         // retrieval of the narrative chunk can surface its
                         // underlying facts (transitive citation) and the
-                        // fact→narrative join (Phase 522.E) can prefer this
+                        // fact→narrative join can prefer this
                         // chunk when one of those facts is resolved. Absent
                         // any reference the chunk is stamped as before.
                         match NarrativeFacts.factRefsInSection section |> Set.toList with
@@ -169,10 +169,10 @@ let ingestNarrative
                             SettingsDisplay = prov.SettingsDisplay
                             GeneratedAt = prov.GeneratedAt
                         }
-                    // Phase 14x — narratives dedup by provenance
+                    // Narratives dedup by provenance
                     // (`DuplicateExists` + `Overwrite`), not content hash.
                     ContentHash = None
-                    // Phase 510 — narrative overwrite is an in-place
+                    // Narrative overwrite is an in-place
                     // regeneration under an unchanged provenance key, not
                     // a revision of an authored document, so it advances
                     // no version lineage. (The orphan-tail cleanup this
@@ -182,7 +182,7 @@ let ingestNarrative
                         match duplicate with
                         | Some existingDoc -> existingDoc.Version
                         | None -> 1
-                    // Phase 502.C — narrative documents carry no tags.
+                    // Narrative documents carry no tags.
                     // `SetDocumentTags` refuses them outright rather than
                     // writing a tag that could never reach a retrieval
                     // filter: these chunks are produced by the owning
@@ -219,7 +219,7 @@ let ingestNarrative
                     // surfacing them under the live document id with no
                     // operator signal.
                     //
-                    // Phase 115 — the tail delete routes through the unified
+                    // The tail delete routes through the unified
                     // lifecycle seam so the sparse index sheds the stale
                     // sections too (pre-115 the `vs.DeleteChunk` loop left
                     // them retrievable through the hybrid sparse leg). The
@@ -230,7 +230,7 @@ let ingestNarrative
                         let mutable orphanIds: string list = []
 
                         for i in chunks.Length .. existingDoc.ChunkCount - 1 do
-                            let chunkId = sprintf "%s:chunk:%d" docId i
+                            let chunkId = ChunkId.render { DocumentId = docId; Ordinal = i }
                             let! report = lifecycle.DeleteChunk deps.VectorScope chunkId
 
                             if not (ToolUp.Platform.Infra.IIndexLifecycle.IndexLifecycleReport.isClean report) then
@@ -255,7 +255,7 @@ let ingestNarrative
                             )
                     | _ -> ()
 
-                    // Phase 116 — atomic index RMW (see `upsertIndexEntry`).
+                    // Atomic index RMW (see `upsertIndexEntry`).
                     // Released before the enqueue block below (which can route
                     // through `MarkIngestionFailed` → `updateIndexStatus`). The
                     // provenance duplicate-check above still reads outside the
@@ -277,9 +277,10 @@ let ingestNarrative
                             | other -> other)
 
                         let chunkPairs =
-                            chunks |> List.mapi (fun i chunk -> sprintf "%s:chunk:%d" docId i, chunk)
+                            chunks
+                            |> List.mapi (fun i chunk -> ChunkId.render { DocumentId = docId; Ordinal = i }, chunk)
 
-                        // Phase 867 — record the attempt before the enqueue.
+                        // Record the attempt before the enqueue.
                         let! attempt =
                             beginIngestionAttempt deps.Storage deps.Logger deps.Scope.Container docId chunkPairs.Length
 
@@ -294,7 +295,7 @@ let ingestNarrative
                             Attempt = Some attempt
                         }
 
-                        // Phase 723 — async enqueue: the sync form is a
+                        // Async enqueue: the sync form is a
                         // blocking store round-trip on the request thread
                         // once a deployment composes a durable queue.
                         let! accepted = deps.Queue.EnqueueAsync(job)
@@ -366,12 +367,12 @@ let private performReset (deps: KnowledgeApiDeps) : Async<Result<unit, string>> 
     // cleanup (using the prior KnowledgeDocument's ChunkCount
     // captured before re-ingestion), so by the time we reach this
     // sweep there are no orphan tails left to chase.
-    // Phase 115 — captured under the lock, emitted as a structured
+    // Captured under the lock, emitted as a structured
     // `KnowledgeScopeErased` audit row after release (GP 6 + GP 9): the
     // scope's document count and any chunks the fan-out left retrievable.
     let mutable documentCount = 0
     let mutable orphanChunkCount = 0
-    // Phase 971 — the blobs the wipe could not remove (each with its
+    // The blobs the wipe could not remove (each with its
     // refusal); non-empty fails the reset.
     let mutable wipeRefusals: string list = []
 
@@ -389,7 +390,7 @@ let private performReset (deps: KnowledgeApiDeps) : Async<Result<unit, string>> 
 
         documentCount <- priorDocs.Length
 
-        // Phase 971 — every delete is attempted and every refusal
+        // Every delete is attempted and every refusal
         // collected. The index blob is what lists the scope's documents,
         // so it goes LAST and only once every other blob went: deleting
         // it while a refused upload stays at rest would leave bytes no
@@ -438,7 +439,7 @@ let private performReset (deps: KnowledgeApiDeps) : Async<Result<unit, string>> 
         // surfacing them. Falls through if no index seam is wired
         // (tests).
         //
-        // Phase 115 — routes through the unified lifecycle seam so the
+        // Routes through the unified lifecycle seam so the
         // sparse index sheds the wiped documents too (pre-115 the
         // `vs.DeleteChunk` loop left them retrievable through the
         // hybrid sparse leg and at rest in `bm25.json`). Deliberately
@@ -516,7 +517,7 @@ let private performReset (deps: KnowledgeApiDeps) : Async<Result<unit, string>> 
                 )
         | None -> ()
 
-        // Phase 14z — drop the scope's embedder state alongside its
+        // Drop the scope's embedder state alongside its
         // chunks. Under a scope-keyed embedding provider each scope owns
         // an IDF dictionary built from exactly the documents just wiped;
         // leaving it behind would keep a deleted corpus shaping this
@@ -568,7 +569,7 @@ let private performReset (deps: KnowledgeApiDeps) : Async<Result<unit, string>> 
         return
             Error(sprintf "Some of the knowledge base's stored files could not be deleted (%s). Try again." survivors)
     else
-        // Phase 115 — structured erasure-outcome audit for the scope wipe.
+        // Structured erasure-outcome audit for the scope wipe.
         // Complements the dispatcher's generic `Custom:KnowledgeIndexReset`
         // action row: that records who reset; this records what the fan-out
         // across the retrieval indexes actually did, and whether it left

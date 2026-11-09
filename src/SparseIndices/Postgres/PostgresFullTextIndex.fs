@@ -90,12 +90,7 @@ let private fail (message: string) =
 /// vocabulary across every store.
 module Scope =
     /// Encode a `VectorScope` as its `scope` column value.
-    let toKey (scope: VectorScope) : string =
-        match scope with
-        | Platform -> "platform"
-        | Deployment -> "deployment"
-        | Team teamId -> $"team:{teamId}"
-        | User userId -> $"user:{userId}"
+    let toKey (scope: VectorScope) : string = VectorScope.key scope
 
 // ─── Metadata codec ──────────────────────────────────────────────────
 
@@ -466,7 +461,7 @@ type PostgresFullTextIndex
         return ()
     }
 
-    /// Phase 964 — every replica searches the one table.
+    /// Every replica searches the one table.
     interface ISparseIndexLocality with
         member _.IndexLocality =
             Some ToolUp.Platform.Infra.IVectorStore.VectorIndexLocality.Shared

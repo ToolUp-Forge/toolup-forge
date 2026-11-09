@@ -4,6 +4,7 @@ open System
 open System.Text
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Platform.Infra.IVectorStore
 open ToolUp.RAG.IngestionTypes
 open SharedTypes
@@ -54,15 +55,15 @@ let addNote (deps: KnowledgeApiDeps) (req: AddNoteRequest) : Async<Result<Knowle
                 SizeBytes = sizeBytes
                 ChunkCount = chunks.Length
                 Source = Note noteSource
-                // Phase 14x — dedup applies to uploaded files only; a
+                // Dedup applies to uploaded files only; a
                 // note whose body happens to match an upload must not
                 // hijack it.
                 ContentHash = None
-                // Phase 510 — notes are not versioned by the upload
+                // Notes are not versioned by the upload
                 // lineage: `UpdateNote` already edits in place, so a note
                 // is permanently version 1 of itself.
                 Version = 1
-                // Phase 502.C — a fresh note starts untagged; tags are
+                // A fresh note starts untagged; tags are
                 // applied afterwards through `SetDocumentTags`, which
                 // re-chunks the note body and stamps them.
                 Tags = []
@@ -76,7 +77,7 @@ let addNote (deps: KnowledgeApiDeps) (req: AddNoteRequest) : Async<Result<Knowle
             match! deps.Storage.Upload(deps.Scope.Container, rawBlobName, Encoding.UTF8.GetBytes body) with
             | Error storageError -> return Error(sprintf "The note could not be saved: %s" storageError)
             | Ok _ ->
-                // Phase 116 — atomic index RMW (see `upsertIndexEntry`).
+                // Atomic index RMW (see `upsertIndexEntry`).
                 // Released before the enqueue block below, which can route
                 // through `MarkIngestionFailed` → `updateIndexStatus` and
                 // re-acquire the same container lock.
@@ -93,9 +94,10 @@ let addNote (deps: KnowledgeApiDeps) (req: AddNoteRequest) : Async<Result<Knowle
                         | other -> other)
 
                     let chunkPairs =
-                        chunks |> List.mapi (fun i chunk -> sprintf "%s:chunk:%d" docId i, chunk)
+                        chunks
+                        |> List.mapi (fun i chunk -> ChunkId.render { DocumentId = docId; Ordinal = i }, chunk)
 
-                    // Phase 867 — record the attempt before the enqueue.
+                    // Record the attempt before the enqueue.
                     let! attempt =
                         beginIngestionAttempt deps.Storage deps.Logger deps.Scope.Container docId chunkPairs.Length
 
@@ -110,7 +112,7 @@ let addNote (deps: KnowledgeApiDeps) (req: AddNoteRequest) : Async<Result<Knowle
                         Attempt = Some attempt
                     }
 
-                    // Phase 723 — async enqueue: the sync form is a blocking
+                    // Async enqueue: the sync form is a blocking
                     // store round-trip on the request thread once a
                     // deployment composes a durable queue.
                     let! accepted = deps.Queue.EnqueueAsync(job)
@@ -155,7 +157,7 @@ let updateNote (deps: KnowledgeApiDeps) (req: UpdateNoteRequest) : Async<Result<
             | Some prior ->
                 match prior.Source with
                 | Note priorNote ->
-                    // Phase 863 — persist the raw body FIRST, ahead of the chunk drop,
+                    // Persist the raw body FIRST, ahead of the chunk drop,
                     // the index entry and the enqueue, so a refused write fails the
                     // update with nothing else moved.
                     let rawBlobName = sprintf "knowledge/%s/note.md" req.DocId
@@ -163,7 +165,7 @@ let updateNote (deps: KnowledgeApiDeps) (req: UpdateNoteRequest) : Async<Result<
                     match! deps.Storage.Upload(deps.Scope.Container, rawBlobName, Encoding.UTF8.GetBytes body) with
                     | Error storageError -> return Error(sprintf "The note could not be saved: %s" storageError)
                     | Ok _ ->
-                        // Phase 115 — drop the old chunks through the unified
+                        // Drop the old chunks through the unified
                         // lifecycle seam so the sparse index sheds them too
                         // (pre-115 the `vs.DeleteChunk` loop left the prior
                         // note text retrievable through the hybrid sparse
@@ -203,7 +205,7 @@ let updateNote (deps: KnowledgeApiDeps) (req: UpdateNoteRequest) : Async<Result<
                                 Source = Note updatedNote
                         }
 
-                        // Phase 116 — atomic index RMW (see `upsertIndexEntry`).
+                        // Atomic index RMW (see `upsertIndexEntry`).
                         // `updatedDoc.Id = req.DocId`, so the helper's
                         // filter-by-id replaces the prior entry in place. The
                         // existence check above still reads outside the lock —
@@ -219,9 +221,11 @@ let updateNote (deps: KnowledgeApiDeps) (req: UpdateNoteRequest) : Async<Result<
                             setStatus req.DocId initialStatus
 
                             let chunkPairs =
-                                chunks |> List.mapi (fun i chunk -> sprintf "%s:chunk:%d" req.DocId i, chunk)
+                                chunks
+                                |> List.mapi (fun i chunk ->
+                                    ChunkId.render { DocumentId = req.DocId; Ordinal = i }, chunk)
 
-                            // Phase 867 — a re-save is a new attempt: it
+                            // A re-save is a new attempt: it
                             // re-seeds the persisted status and retires the
                             // previous save's late callbacks.
                             let! attempt =
@@ -243,7 +247,7 @@ let updateNote (deps: KnowledgeApiDeps) (req: UpdateNoteRequest) : Async<Result<
                                 Attempt = Some attempt
                             }
 
-                            // Phase 723 — async enqueue; see `addNote`.
+                            // Async enqueue; see `addNote`.
                             let! accepted = deps.Queue.EnqueueAsync(job)
                             deps.RecordEnqueue accepted
 

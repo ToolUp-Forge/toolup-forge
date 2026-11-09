@@ -91,9 +91,9 @@ type ReembeddingBackgroundService
     let toJson o =
         JsonSerializer.Serialize(o, jsonOptions)
 
-    let scopeId = ToolUp.RAG.RetrievalTracers.auditScopeId
+    let scopeId = VectorScope.auditScopeId
 
-    // Phase 14z — staleness is measured against the SCOPE'S embedder.
+    // Staleness is measured against the SCOPE'S embedder.
     // `scanScope` already iterates by scope, and under a scope-keyed
     // provider each scope reports its own `ModelId`, so comparing every
     // scope's chunks against one composed embedder would mark every chunk

@@ -13788,6 +13788,14 @@ ToolUp.Platform.VectorKnowledgeTypes+AdaptiveKHint..ctor(System.Int32, System.In
 ToolUp.Platform.VectorKnowledgeTypes+AdaptiveKHint.MaxK : System.Int32 { get }
 ToolUp.Platform.VectorKnowledgeTypes+AdaptiveKHint.MinK : System.Int32 { get }
 ToolUp.Platform.VectorKnowledgeTypes+AdaptiveKHint.ScoreFloor : System.Double { get }
+ToolUp.Platform.VectorKnowledgeTypes+ChunkId (class)
+ToolUp.Platform.VectorKnowledgeTypes+ChunkId..ctor(System.String, System.Int32)
+ToolUp.Platform.VectorKnowledgeTypes+ChunkId.DocumentId : System.String { get }
+ToolUp.Platform.VectorKnowledgeTypes+ChunkId.Ordinal : System.Int32 { get }
+ToolUp.Platform.VectorKnowledgeTypes+ChunkIdModule (class)
+ToolUp.Platform.VectorKnowledgeTypes+ChunkIdModule.ofDocument(System.String, System.Int32) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+ChunkId]
+ToolUp.Platform.VectorKnowledgeTypes+ChunkIdModule.render(ToolUp.Platform.VectorKnowledgeTypes+ChunkId) : System.String
+ToolUp.Platform.VectorKnowledgeTypes+ChunkIdModule.tryParse(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VectorKnowledgeTypes+ChunkId]
 ToolUp.Platform.VectorKnowledgeTypes+ChunkMetadata (class)
 ToolUp.Platform.VectorKnowledgeTypes+ChunkMetadata.DeletedAtKey : System.String (literal)
 ToolUp.Platform.VectorKnowledgeTypes+ChunkMetadata.FactFreshnessKey : System.String (literal)
@@ -14055,6 +14063,13 @@ ToolUp.Platform.VectorKnowledgeTypes+VectorScope+Team (class)
 ToolUp.Platform.VectorKnowledgeTypes+VectorScope+Team.teamId : System.String { get }
 ToolUp.Platform.VectorKnowledgeTypes+VectorScope+User (class)
 ToolUp.Platform.VectorKnowledgeTypes+VectorScope+User.userId : System.String { get }
+ToolUp.Platform.VectorKnowledgeTypes+VectorScopeModule (class)
+ToolUp.Platform.VectorKnowledgeTypes+VectorScopeModule.DeploymentContainer : System.String (literal)
+ToolUp.Platform.VectorKnowledgeTypes+VectorScopeModule.auditScopeId(ToolUp.Platform.VectorKnowledgeTypes+VectorScope) : System.String
+ToolUp.Platform.VectorKnowledgeTypes+VectorScopeModule.container(ToolUp.Platform.VectorKnowledgeTypes+VectorScope) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.Platform.VectorKnowledgeTypes+VectorScopeModule.key(ToolUp.Platform.VectorKnowledgeTypes+VectorScope) : System.String
+ToolUp.Platform.VectorKnowledgeTypes+VectorScopeModule.ofContainer(ToolUp.Platform.StorageScope) : ToolUp.Platform.VectorKnowledgeTypes+VectorScope
+ToolUp.Platform.VectorKnowledgeTypes+VectorScopeModule.tryOfKey(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VectorKnowledgeTypes+VectorScope]
 ToolUp.Platform.VectorisationTypes (class)
 ToolUp.Platform.VectorisationTypes+VectorisationHandler (class)
 ToolUp.Platform.VectorisationTypes+VectorisationHandler..ctor(System.String, Microsoft.FSharp.Core.FSharpFunc`2[ProcessedDataTypes+ProcessedData, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+TextChunk]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ProcessedDataTypes+ProcessedData, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VectorKnowledgeTypes+TextChunk]]]])

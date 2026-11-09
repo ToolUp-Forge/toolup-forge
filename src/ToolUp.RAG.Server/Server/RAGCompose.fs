@@ -124,7 +124,7 @@ let resolveFraming (mode: GroundingMode) (framing: string) : string =
         else
             framing + "\n\n" + strictlyGroundedDirective
 
-/// Phase 14r — companion sentence appended to the retrieval framing when
+/// Companion sentence appended to the retrieval framing when
 /// the deployment has live-interface tools loaded. Teaches the model that
 /// a knowledge-base miss is not a dead end: "what is on the user's screen
 /// right now" is answered by the interface inspection tool, not the KB. It
@@ -139,7 +139,7 @@ let uiToolFramingCompanion =
      The knowledge base stays authoritative for saved documents, notes, and prior analyses; only live on-screen state defers to the inspection tool. \
      So an empty knowledge-base result is not a dead end when the user is asking about their current screen — inspect the live interface instead of saying the search found nothing."
 
-/// Phase 14r — resolve the framing text, then append the live-interface
+/// Resolve the framing text, then append the live-interface
 /// companion (`uiToolFramingCompanion`) when the deployment has such tools.
 /// The companion is added only under `Preferred` — the default grounding
 /// stance. `Permissive` emits no framing at all (the model is already free
@@ -161,7 +161,7 @@ let resolveFramingWithTools
             baseFraming + "\n\n" + uiToolFramingCompanion
     | _ -> baseFraming
 
-/// Phase 541 — the deployment's live-interface posture, derived from the
+/// The deployment's live-interface posture, derived from the
 /// same tool list and the same predicate the framing uses
 /// (`RAGPromptBuilder.ToolFraming.fromTools`, Phase 538: a tool declaring
 /// `IsLiveInterface`, or a `ClientResident` one — never a name match), so
@@ -186,7 +186,7 @@ let liveInterfaceSummary
 
     DeploymentReadiness.LiveInterfaceSummary.derive liveInterfaceTools (string mode) framingEligible
 
-/// Phase 541 — the `/dev/inspect` panel for the live-interface posture.
+/// The `/dev/inspect` panel for the live-interface posture.
 /// Closed over at compose time (no I/O, GP 13), unconditional for the same
 /// reason as the RAG durability panel: "UI-awareness: off" is often the
 /// fine answer, and hiding it would hide exactly what an operator wants to
@@ -235,7 +235,7 @@ type LiveInterfaceContributor(summary: DeploymentReadiness.LiveInterfaceSummary)
 /// add latency to the upload response.
 let private enqueueRetryDelaysMs: int list = [ 100; 250; 500; 1000 ]
 
-/// Phase 303 — sustained-saturation threshold for
+/// Sustained-saturation threshold for
 /// `IngestionOverflowPolicy.Refuse`. Once this many documents have been
 /// dropped inside the queue's rolling 60s window, `Refuse` raises
 /// `ConfigPreflightFailedException` from the drop path. A handful of drops
@@ -245,7 +245,7 @@ let private enqueueRetryDelaysMs: int list = [ 100; 250; 500; 1000 ]
 [<Literal>]
 let private refuseSaturationThreshold = 5
 
-/// Phase 303 — emit the drop-observability triple for one document the
+/// Emit the drop-observability triple for one document the
 /// ingestion queue could not accept: record it on the queue's `Dropped`
 /// counters, write a `KnowledgeIngestionDropped` audit under
 /// `_platform.knowledge` (deployment-wide, like the corrupt-index trail),
@@ -393,19 +393,19 @@ let internal makeVectorisationHook
 
             if not chunks.IsEmpty then
                 // The vector scope is the one the storage container names
-                // (GP 4): a team container is the team's, the deployment
-                // container is deployment-wide, and every other container
-                // (`user-{id}`, a session) is one caller's own, so its
-                // chunks stay in that caller's `User` scope. Routing them
-                // to `Deployment` served one caller's file to every other.
-                let vectorScope =
-                    match StorageScope.tryTeamId scope with
-                    | Some teamId -> Team teamId.Value
-                    | None when scope.Container = ScopeEnumeration.DeploymentContainer -> Deployment
-                    | None -> VectorScope.User scope.ScopeId
+                // (GP 4): a per-user container's chunks stay in that
+                // caller's `User` scope, never `Deployment`.
+                let vectorScope = VectorScope.ofContainer scope
 
+                // Keyed by the file name in the chunk-id grammar.
                 let basePairs =
-                    chunks |> List.mapi (fun i chunk -> $"{entry.FileName}:chunk:{i}", chunk)
+                    chunks
+                    |> List.mapi (fun i chunk ->
+                        ChunkId.render {
+                            DocumentId = entry.FileName
+                            Ordinal = i
+                        },
+                        chunk)
 
                 // Optional document-level summary (WS4.1). When the
                 // handler exposes a `Summarise` and the deployment hasn't
@@ -524,7 +524,7 @@ let internal makeVectorisationHook
                             else
                                 Some(UserId createdBy)
                         // The Data Manager status store tracks a file, not
-                        // an attempt (Phase 867 attempts are the KB's).
+                        // an attempt.
                         Attempt = None
                     }
 
@@ -532,7 +532,7 @@ let internal makeVectorisationHook
                     // running behind, so a short backoff usually clears space
                     // rather than dropping the document. Fire-and-forget path,
                     // so the sleeps don't delay the upload response.
-                    // Phase 509 — `EnqueueAsync`, not `Enqueue`: on a durable
+                    // `EnqueueAsync`, not `Enqueue`: on a durable
                     // queue the append is I/O, and this path is already
                     // inside an async workflow, so there is no reason to
                     // block a thread on it.
@@ -549,20 +549,13 @@ let internal makeVectorisationHook
                                 return! tryEnqueue rest
                     }
 
-                    let scopeKey =
-                        match vectorScope with
-                        | Platform -> "platform"
-                        | Deployment -> "deployment"
-                        | Team teamId -> $"team:{teamId}"
-                        // Qualified: `ParticipantType.User` is also in scope
-                        // here, so an unqualified `User` binds to the wrong DU.
-                        | VectorScope.User userId -> $"user:{userId}"
+                    let scopeKey = VectorScope.key vectorScope
 
                     let chunkCount = List.length chunkPairs
 
                     match overflowPolicy with
                     | Block ->
-                        // Phase 303 — never drop. Await queue space instead of
+                        // Never drop. Await queue space instead of
                         // retrying-then-dropping; the upload response has already
                         // returned, so the wait delays indexing under sustained
                         // load but never loses a document.
@@ -577,7 +570,7 @@ let internal makeVectorisationHook
                         if accepted then
                             // Mark the file `Pending` with its chunk total so the
                             // ingestion observer can flip it to `Indexed` once the
-                            // last chunk lands (Phase 173).
+                            // last chunk lands.
                             do! setPending scope.Container entry.FileName chunkCount
                         else
                             // Retries exhausted — permanent data loss for this
@@ -606,7 +599,7 @@ let internal makeVectorisationHook
                                     Reason = reason
                                 |}
 
-                            // Phase 303 — deployment-wide `KnowledgeIngestionDropped`
+                            // Deployment-wide `KnowledgeIngestionDropped`
                             // audit + Warning `SystemMessage` to the uploader +
                             // queue `Dropped` counters (rolling 60s + cumulative,
                             // surfaced on /health/rag).
@@ -624,7 +617,7 @@ let internal makeVectorisationHook
 
                             do! setStatus scope.Container entry.FileName (FileIngestionStatus.Failed reason)
 
-                            // Phase 303 — compliance-grade fail-loud. Under
+                            // Compliance-grade fail-loud. Under
                             // `Refuse`, sustained saturation (≥ threshold drops in
                             // the rolling 60s window) raises
                             // `ConfigPreflightFailedException`. The post-save hook
@@ -649,7 +642,7 @@ let internal makeVectorisationHook
 
 let private makeNullBlobStorage () : IBlobStorage =
     { new IBlobStorage with
-        // Phase 741 — no bounded multi-part commit primitive here; callers assemble through memory.
+        // No bounded multi-part commit primitive here; callers assemble through memory.
         member _.CanComposeFrom = false
 
         member _.ComposeFrom(_, _, _) =
@@ -694,7 +687,7 @@ let private makeNullBlobStorage () : IBlobStorage =
 //     |> RAGCompose.withRAG (RagOptions.create factory providerProfile embedder |> RagOptions.withTopK 8)
 //     |> ServerApp.run
 
-/// Phase 893 — which keyword (sparse) index a composition runs hybrid
+/// Which keyword (sparse) index a composition runs hybrid
 /// retrieval over. The default, `InProcessSparseIndex`, constructs exactly
 /// the index every composition constructed before this type existed.
 [<RequireQualifiedAccess>]
@@ -739,12 +732,12 @@ type RagOptions = {
     /// inflates its candidate pool and reorders it by joint (query, document)
     /// relevance before the boosts, MMR and topK truncation. Every returned
     /// match is reranked: a pool larger than the reranker's `MaxBatchSize`
-    /// is capped at it, and the trace says so (Phase 978). Companion
+    /// is capped at it, and the trace says so. Companion
     /// packages under `src/Rerankers/<Name>/` provide the implementation.
     Reranker: IReranker option
     /// Enable MMR diversity reranking after retrieval (and rerank and the
     /// boosts, when present). MMR is the last step that orders the result:
-    /// the `Interleaved` merge does not re-sort after it (Phase 978). Off by
+    /// the `Interleaved` merge does not re-sort after it. Off by
     /// default — MMR helps duplicate-heavy corpora and hurts
     /// fact-extraction queries; opt in per deployment.
     EnableMmr: bool
@@ -757,7 +750,7 @@ type RagOptions = {
     /// supply alternatives — wire one in via `withVectorStore` for larger
     /// corpora or specific latency / scale targets.
     VectorStore: IVectorStore option
-    /// Phase 501 — optional language-aware analyzer for the sparse (BM25)
+    /// Optional language-aware analyzer for the sparse (BM25)
     /// index. When `None`, the index uses `SparseAnalysis.identity` — the
     /// pre-501 tokenisation — so an existing deployment is byte-for-byte
     /// unchanged (GP 11). Companion packages under `src/SparseIndices/<Name>/`
@@ -790,7 +783,7 @@ type RagOptions = {
     /// raise for deployments with bursty bulk uploads, lower for tight
     /// memory budgets.
     IngestionQueueCapacity: int
-    /// Phase 14t — retry / dead-letter policy for transient embedder
+    /// Retry / dead-letter policy for transient embedder
     /// failures during ingestion (429 rate limits, 5xx, timeouts,
     /// network faults). A transient per-chunk `Index` failure is retried
     /// with exponential backoff + jitter (via `IJobScheduler` when one is
@@ -826,7 +819,7 @@ type RagOptions = {
     /// `StrictlyGrounded` (refuse to answer without a retrieval hit).
     /// Tune via `withGroundingMode`.
     GroundingMode: GroundingMode
-    /// Phase 708 — whether the AI request pipeline compiles each user turn
+    /// Whether the AI request pipeline compiles each user turn
     /// into a `RetrievalRequest.FactClause` before retrieval, and how long
     /// it may spend doing so. Defaults to on with a 3-second budget; inert
     /// unless the deployment composed the fact tier, which registers the
@@ -842,7 +835,7 @@ type RagOptions = {
     /// even if a handler defines one — useful for cost-sensitive
     /// deployments. Has no effect if no handler defines `Summarise`.
     EnableDocumentSummaries: bool
-    /// Phase 6q — post-stream citation handling. `Strict` (default)
+    /// Post-stream citation handling. `Strict` (default)
     /// normalises drift variants (`(1)`, `[1]`, `Source 1`, bare
     /// `¹`, `^1`) onto the canonical `[¹]` marker when the digit
     /// binds to a real retrieved source; replaces phantoms (digit >
@@ -874,7 +867,7 @@ type RagOptions = {
     /// (default) preserves no-limit behaviour. Tune via
     /// `RagOptions.withMaxDocumentBytes`.
     MaxDocumentBytes: int option
-    /// Phase 14y — hard cap on the character length of a retrieval query
+    /// Hard cap on the character length of a retrieval query
     /// reaching `IRetrievalPipeline.Retrieve`. Above the cap the pipeline
     /// refuses with a `KnowledgeQueryTooLargeException` and emits a
     /// `KnowledgeQueryRejected` audit — a query this long is almost always a
@@ -884,14 +877,14 @@ type RagOptions = {
     /// via `RagOptions.withMaxQueryChars`. `None` disables the guard (not
     /// reachable through the public builder — the default is always on).
     MaxQueryChars: int option
-    /// Phase 14w — tombstone retention window. `IVectorStore.DeleteChunk`
+    /// Tombstone retention window. `IVectorStore.DeleteChunk`
     /// soft-deletes (stamps `_deletedAt`); the scheduled vacuum
     /// hard-removes tombstones older than `now - TombstoneRetention`.
     /// Default 7 days — long enough for an accidental delete to be
     /// restored, short enough that soft-deleted content doesn't pin
     /// memory indefinitely. Tune via `RagOptions.withTombstoneRetention`.
     TombstoneRetention: System.TimeSpan
-    /// Phase 14w — cron expression for the tombstone auto-vacuum sweep.
+    /// Cron expression for the tombstone auto-vacuum sweep.
     /// `None` (default) = no scheduled vacuum: soft-deleted chunks are only
     /// reclaimed when an operator calls `IVectorStore.Vacuum` manually, so
     /// a long-running replica's memory grows without bound. `Some cron`
@@ -901,7 +894,7 @@ type RagOptions = {
     /// InProcessJobScheduler` (or a distributed scheduler companion) — the
     /// `VacuumScheduleValidator` warns when the pair is misconfigured.
     VacuumSchedule: string option
-    /// Phase 303 — behaviour when the ingestion queue is full. `DropWrite`
+    /// Behaviour when the ingestion queue is full. `DropWrite`
     /// (default) retries with a short bounded backoff then drops the
     /// document, emitting a `KnowledgeIngestionDropped` audit + a Warning
     /// `SystemMessage` to the uploader + the queue `Dropped` counters.
@@ -911,7 +904,7 @@ type RagOptions = {
     /// on sustained saturation for compliance-grade fail-loud. Tune via
     /// `RagOptions.withIngestionQueueOverflowPolicy`.
     OverflowPolicy: IngestionOverflowPolicy
-    /// Phase 63.A — substitute the entire `IRetrievalPipeline`. `None`
+    /// Substitute the entire `IRetrievalPipeline`. `None`
     /// (default) builds the standard dense/hybrid `RetrievalPipeline` over
     /// the composed `IVectorStore` / `ISparseIndex` / `IEmbeddingProvider`.
     /// `Some p` registers `p` as the `IRetrievalPipeline` verbatim and skips
@@ -924,7 +917,7 @@ type RagOptions = {
     /// registered `IEmbeddingProvider`; only chunk embeddings move to build
     /// time. Set via `RagOptions.withRetrievalPipeline`.
     RetrievalPipelineOverride: IRetrievalPipeline option
-    /// Phase 509 — durable backing for the ingestion queue. `None`
+    /// Durable backing for the ingestion queue. `None`
     /// (default) keeps the process-local `System.Threading.Channels`
     /// queue: correct for one replica and one process lifetime, and the
     /// reason `RagIngestionInstanceValidator` refuses `ReplicaCount > 1`.
@@ -934,7 +927,7 @@ type RagOptions = {
     /// shipped durable backing is the `ToolUp.IngestionQueues.Redis`
     /// companion. Set via `RagOptions.withDurableIngestionQueue`.
     IngestionQueueStore: IIngestionQueueStore option
-    /// Phase 509 — storage containers swept at startup for documents
+    /// Storage containers swept at startup for documents
     /// left `Pending` by a process that died mid-ingestion. Empty
     /// (default) ⇒ no sweep, so an existing deployment is unchanged
     /// (GP 11). The sweep matters most on the IN-MEMORY queue, where a
@@ -943,20 +936,20 @@ type RagOptions = {
     /// on a durable queue the job is redelivered instead, so the sweep is
     /// belt-and-braces. Set via `RagOptions.withIngestionRecoverySweep`.
     ///
-    /// Phase 723 — no longer the ONLY way to name the containers. A
+    /// No longer the ONLY way to name the containers. A
     /// deployment that composes `withScopeEnumerator` has them
     /// enumerated instead, and the two compose (the union is swept), so
     /// migrating from a hand-written list to an enumerator never loses
     /// coverage in the gap.
     IngestionRecoveryScopes: string list
-    /// Phase 723 — the composed scope-enumeration seam, answering "what
+    /// The composed scope-enumeration seam, answering "what
     /// storage scopes does this deployment hold?" for the restart
     /// recovery sweep. `None` (default) ⇒ scopes come only from
     /// `IngestionRecoveryScopes`, exactly as before (GP 11 / GP 13). Set
     /// via `RagOptions.withScopeEnumerator`; the SDK default is
     /// `ScopeEnumeration.fromTeamStore`.
     ScopeEnumerator: IScopeEnumerator option
-    /// Phase 633 — substitute the `IEmbeddingCache` the composition wraps
+    /// Substitute the `IEmbeddingCache` the composition wraps
     /// the supplied `IEmbeddingProvider` in. `None` (default) constructs
     /// the process-local `InMemoryEmbeddingCache`, so an existing
     /// deployment is byte-for-byte unchanged (GP 11).
@@ -970,7 +963,7 @@ type RagOptions = {
     /// divergence **and lifts that warning**, because the premise it rests
     /// on no longer holds. Set via `RagOptions.withEmbeddingCache`.
     EmbeddingCache: IEmbeddingCache option
-    /// Phase 894 — the per-turn retrieval budgets: the query-time embed
+    /// The per-turn retrieval budgets: the query-time embed
     /// policy (attempts, wall-clock budget, concurrency ceiling) and the
     /// fact-stage budget. Default `RetrievalBudgets.defaults` (one attempt,
     /// 5 s, no ceiling; 3 s for facts): a healthy provider's results are
@@ -980,14 +973,14 @@ type RagOptions = {
     /// `withQueryEmbedAttempts` / `withQueryEmbedConcurrency` /
     /// `withFactStageTimeout`.
     RetrievalBudgets: RetrievalBudgets
-    /// Phase 894 — bound on retrieval-trace emissions queued for the
+    /// Bound on retrieval-trace emissions queued for the
     /// background writer that takes the trace write off the request path.
     /// Default 1,024. A full queue drops the trace and counts it
     /// (`BackgroundRetrievalTracer.Lost`). `0` writes traces inline on the
     /// request path, the pre-894 behaviour. Set via
     /// `withRetrievalTraceQueueCapacity`.
     RetrievalTraceQueueCapacity: int
-    /// Phase 893 — the keyword index hybrid retrieval runs over. Default
+    /// The keyword index hybrid retrieval runs over. Default
     /// `InProcessSparseIndex`, the in-process BM25 index exactly as every
     /// earlier composition built it. Set via `withSparseIndex` (a supplied
     /// index, e.g. the `ToolUp.SparseIndices.Postgres` companion, which is
@@ -1001,7 +994,7 @@ type RagOptions = {
     FactTier: (ServerApp -> ServerApp) option
 }
 
-/// Phase 633 — does this app's composed `IEmbeddingCache` span replicas?
+/// Does this app's composed `IEmbeddingCache` span replicas?
 ///
 /// This is the exact predicate `composeWithRAG` feeds into
 /// `TeamModeSharedEmbeddingCacheValidator`, exposed so the lift can be
@@ -1021,7 +1014,7 @@ let hasCrossReplicaEmbeddingCache (options: RagOptions) : bool =
     | Some composed -> EmbeddingCacheLocality.isCrossReplica (box composed)
     | None -> false
 
-/// Phase 14z — does this app's composed `IEmbeddingProvider` key its
+/// Does this app's composed `IEmbeddingProvider` key its
 /// state per `VectorScope`?
 ///
 /// The predicate `composeWithRAG` feeds into
@@ -1040,46 +1033,51 @@ let hasCrossReplicaEmbeddingCache (options: RagOptions) : bool =
 let hasScopeKeyedEmbeddingProvider (options: RagOptions) : bool =
     ScopedEmbedding.isScopeKeyed options.EmbeddingProvider
 
-/// Phase 893 — is `store` an in-process vector store, whose index lives in
+/// Is `store` an in-process vector store, whose index lives in
 /// one process's memory (and so differs between replicas)? Keyed on the
 /// composed instance, like `hasCrossReplicaEmbeddingCache`: what lifts the
 /// replica warning is the store that removes its premise, not a builder
 /// having been called.
 ///
-/// Phase 963 — read from the store's own `IVectorStoreLocality`
+/// Read from the store's own `IVectorStoreLocality`
 /// declaration, never its type name, so a decorator that forwards the
 /// declaration keeps the warning and a type that merely shares a
 /// companion's name does not trip it. An undeclared store reads as not
 /// in-process (GP 11), as an unrecognised store did before.
 let isInProcessVectorStore (store: IVectorStore) : bool = VectorIndexLocality.isInProcess store
 
-/// Phase 893 — is `index` an in-process keyword index, whose postings live
+/// Is `index` an in-process keyword index, whose postings live
 /// in one process's memory?
 ///
-/// Phase 964 — read from the index's own `ISparseIndexLocality`
+/// Read from the index's own `ISparseIndexLocality`
 /// declaration, never a type test, so a decorator that forwards the
 /// declaration keeps the warning. An undeclared index reads as not
 /// in-process (GP 11).
 let isInProcessSparseIndex (index: ISparseIndex) : bool = SparseIndexLocality.isInProcess index
 
-/// Phase 866 — the score space the composed pipeline's scores reach the
-/// `MinScore` gate in, or `None` when a supplied pipeline owns retrieval
-/// (`withRetrievalPipeline`) and its space is not the SDK's to see. Every
-/// keyword-index composition but `withoutSparseIndex` fuses.
+/// The score space the composition implies: every keyword-index
+/// composition but `withoutSparseIndex` fuses, and a reranker rescores.
+/// What a reader falls back to for a pipeline that declares no space of
+/// its own (`ScoredPool.declaring`).
+let private composedSpace (options: RagOptions) : RetrievalScoreSpace =
+    let keywordIndex =
+        match options.SparseIndex with
+        | SparseIndexComposition.NoSparseIndex -> false
+        | SparseIndexComposition.InProcessSparseIndex
+        | SparseIndexComposition.SuppliedSparseIndex _
+        | SparseIndexComposition.AnalyzedSparseIndex _ -> true
+
+    RetrievalScoreSpace.ofComposition keywordIndex options.Reranker.IsSome
+
+/// The preflight question's space: the composed pipeline's, or `None` when
+/// a supplied pipeline owns retrieval (`withRetrievalPipeline`) and its
+/// space is not the SDK's to see before it runs.
 let private composedScoreSpace (options: RagOptions) : RetrievalScoreSpace option =
     match options.RetrievalPipelineOverride with
     | Some _ -> None
-    | None ->
-        let keywordIndex =
-            match options.SparseIndex with
-            | SparseIndexComposition.NoSparseIndex -> false
-            | SparseIndexComposition.InProcessSparseIndex
-            | SparseIndexComposition.SuppliedSparseIndex _
-            | SparseIndexComposition.AnalyzedSparseIndex _ -> true
+    | None -> Some(composedSpace options)
 
-        Some(RetrievalScoreSpace.ofComposition keywordIndex options.Reranker.IsSome)
-
-/// Phase 866 — warns at startup when a configured `MinScore` cannot be met,
+/// Warns at startup when a configured `MinScore` cannot be met,
 /// or cannot be confirmed reachable, in the composed pipeline's score space
 /// (`RetrievalScoreSpace.thresholdFinding`). Silent without a threshold and
 /// in the two spaces the SDK can bound, so a deployment that tunes nothing
@@ -1235,7 +1233,7 @@ let composeRAG (options: RagOptions) (app: ServerApp) : ServerApp =
 
     let config = ServerApp.effectiveConfig b
 
-    // Phase 14r — derive the tool-aware framing summary once, from the
+    // Derive the tool-aware framing summary once, from the
     // deployment's aggregated module tool list (tools land here via
     // `withAITools`). Phase 538 — the derivation reads each tool's typed
     // `IsLiveInterface` declaration (or its `ClientResident` location),
@@ -1245,12 +1243,12 @@ let composeRAG (options: RagOptions) (app: ServerApp) : ServerApp =
     // framing, no regression.
     let toolFraming = RAGPromptBuilder.ToolFraming.fromTools (b.AITools |> List.map fst)
 
-    // Phase 541 — the same derivation, surfaced: which live-interface tools
+    // The same derivation, surfaced: which live-interface tools
     // are loaded and whether the framing above is consequently active.
     let liveInterface =
         liveInterfaceSummary (b.AITools |> List.map fst) options.GroundingMode
 
-    // Phase 63.A — retrieval-pipeline override seam. When a consumer supplies
+    // Retrieval-pipeline override seam. When a consumer supplies
     // a pipeline via `withRetrievalPipeline` (e.g. a build-time-precomputed
     // static-corpus pipeline), it is registered verbatim and the default
     // `RetrievalPipeline` construction is skipped. `suppressIngestion`
@@ -1262,7 +1260,7 @@ let composeRAG (options: RagOptions) (app: ServerApp) : ServerApp =
     let suppressIngestion =
         options.RetrievalPipelineOverride.IsSome && b.VectorisationHandlers.IsEmpty
 
-    // Phase 509 — one queue type, two backings. No store composed ⇒ the
+    // One queue type, two backings. No store composed ⇒ the
     // historical process-local channel, byte for byte (GP 11 / GP 13);
     // `Some store` ⇒ the same surface over durable storage, with
     // lease-based at-least-once delivery and cross-replica draining.
@@ -1271,7 +1269,7 @@ let composeRAG (options: RagOptions) (app: ServerApp) : ServerApp =
         | Some store -> IngestionQueue(options.IngestionQueueCapacity, options.OverflowPolicy, store)
         | None -> IngestionQueue(options.IngestionQueueCapacity, options.OverflowPolicy)
 
-    // Phase 893 — a supplied or analyzer-built keyword index is resolved
+    // A supplied or analyzer-built keyword index is resolved
     // HERE, at composition, rather than inside the service registration: an
     // index that cannot serve the composed analyzer refuses now, naming it,
     // and the replica validator below sees the instance the deployment
@@ -1329,7 +1327,7 @@ let composeRAG (options: RagOptions) (app: ServerApp) : ServerApp =
                         toolFraming
                         runtime.ClausePlanner
                         options.FactClausePlan
-                        runtime.Pipeline)
+                        (ScoredPool.declaring (composedSpace options) runtime.Pipeline))
                         ctx
 
                 // Server-side strict-grounding guard. Under `StrictlyGrounded`,
@@ -2056,7 +2054,7 @@ let composeRAG (options: RagOptions) (app: ServerApp) : ServerApp =
     let ragValidators: ConfigValidation.IConfigValidator list = [
         // Phase 4b commit 3 — IDF-leak warning when LocalEmbeddingProvider is
         // active in Team / MultiTeam mode.
-        // Phase 14z — the warning is lifted when the composed provider is
+        // The warning is lifted when the composed provider is
         // SCOPE-KEYED: the premise it rests on (one IDF dictionary shared
         // by every team in the process) no longer holds. Still fires for
         // the unscoped `create ()` / `createPersistent`, which leak exactly
@@ -2070,13 +2068,13 @@ let composeRAG (options: RagOptions) (app: ServerApp) : ServerApp =
         ToolUp.RAG.RagConfigValidator.RagPersistenceValidator(config, b.Storage.IsSome, options.VectorStore.IsSome)
         // Phase 9j follow-up — refuse the in-process ingestion queue under
         // ReplicaCount > 1 (no leasing/redelivery ⇒ silent corpus loss).
-        // Phase 509 — the refusal is lifted when a DURABLE queue is
+        // The refusal is lifted when a DURABLE queue is
         // composed: the premise it rests on (process-local, no
         // redelivery) no longer holds.
         ToolUp.RAG.RagConfigValidator.RagIngestionInstanceValidator(config, queue.IsDurable)
         // Wave 2A Gap #1 — warn when default InMemoryEmbeddingCache is active
         // under multi-instance Team mode (cache key has no tenant component).
-        // Phase 633 — the warning is lifted when a CROSS-REPLICA cache is
+        // The warning is lifted when a CROSS-REPLICA cache is
         // composed: the premise it rests on (each replica keeps its own
         // entries) no longer holds.
         ToolUp.RAG.RagConfigValidator.TeamModeSharedEmbeddingCacheValidator(
@@ -2089,22 +2087,22 @@ let composeRAG (options: RagOptions) (app: ServerApp) : ServerApp =
         // 2026-06-12 audit (RAG Gap 8) — warn when the citation-dev-
         // endpoint override is configured as the retired force-on shape.
         ToolUp.RAG.RagConfigValidator.CitationDevEndpointValidator config
-        // Phase 14w — surface the steady-state-memory contract: warn when a
+        // Surface the steady-state-memory contract: warn when a
         // vacuum schedule is set without a scheduler, or when a persistent
         // deployment has no vacuum schedule at all (tombstones accumulate).
         ToolUp.RAG.RagConfigValidator.VacuumScheduleValidator(config, options.VacuumSchedule.IsSome)
-        // Phase 14y — warn when an authenticated RAG deployment runs with no
+        // Warn when an authenticated RAG deployment runs with no
         // rate limiter: retrieval embeds every query, so an unbounded request
         // loop burns embedding spend even behind a proxy (per-query cost, not
         // per-connection). Mode ≠ Anonymous AND RateLimit = RateLimitConfig.none.
         ToolUp.RAG.RagConfigValidator.RAGRateLimitConfiguredValidator config
-        // Phase 9m.B (2026-05-06 audit, Gap 4) — warn when the dev-only,
+        // Warn when the dev-only,
         // process-stateful LocalEmbeddingProvider serves a non-team
         // production shape. The team half is TeamModeLocalEmbedderValidator
         // above; the two partition the deployment space so one problem is
         // never reported twice.
         ToolUp.RAG.RagConfigValidator.LocalEmbeddingProviderInProductionModeValidator(config, options.EmbeddingProvider)
-        // Phase 9m.B (Gap 6) — warn when data types are registered but NO
+        // Warn when data types are registered but NO
         // module contributes a VectorisationHandler: nothing is ever
         // indexed and there is no error anywhere in that path. Skipped
         // when a retrieval-pipeline override owns the corpus (the same
@@ -2114,7 +2112,7 @@ let composeRAG (options: RagOptions) (app: ServerApp) : ServerApp =
             b.VectorisationHandlers |> List.map _.DataTypeId,
             options.RetrievalPipelineOverride.IsSome
         )
-        // Phase 9m.B (Gap 7) — explicit bounds on the tuning knobs. The
+        // Explicit bounds on the tuning knobs. The
         // `with*` setters clamp lower bounds only, so nothing today
         // rejects `withTopK 200` or `withIngestionQueueCapacity 10`.
         ToolUp.RAG.RagConfigValidator.RAGConfigBoundsValidator {
@@ -2126,10 +2124,10 @@ let composeRAG (options: RagOptions) (app: ServerApp) : ServerApp =
             IngestionConcurrency = options.IngestionConcurrency
             IngestionQueueCapacity = options.IngestionQueueCapacity
         }
-        // Phase 866 — warn when the configured MinScore cannot be met, or
+        // Warn when the configured MinScore cannot be met, or
         // cannot be confirmed reachable, in the composed score space.
         minScoreSpaceValidator (composedScoreSpace options) options.RetrievalDefaults.MinScore
-        // Phase 893 — warn when more than one replica runs over an
+        // Warn when more than one replica runs over an
         // in-process vector store or keyword index: each replica keeps its
         // own, so retrieval differs by which replica served the turn.
         // Skipped when a retrieval-pipeline override owns the corpus.
@@ -2313,7 +2311,7 @@ module RagOptions =
     /// returns the RRF-fused (or cosine-only) candidate list directly. With
     /// one, the reranker scores every match retrieval returns — a pool
     /// larger than its `MaxBatchSize` is capped at it — and the boosts then
-    /// nudge on its scale (Phase 978).
+    /// nudge on its scale.
     let withReranker (reranker: IReranker) (options: RagOptions) : RagOptions = {
         options with
             Reranker = Some reranker
@@ -2321,7 +2319,7 @@ module RagOptions =
 
     /// Enable MMR diversity reranking after retrieval (and rerank and the
     /// boosts, when present). MMR's order is the order the caller receives
-    /// (Phase 978). Off by default. Use `withMmrLambda` to tune the
+    /// . Off by default. Use `withMmrLambda` to tune the
     /// relevance/diversity balance.
     let withMmr (options: RagOptions) : RagOptions = { options with EnableMmr = true }
 
@@ -2347,7 +2345,7 @@ module RagOptions =
     /// implementations. Without one, RAG uses the in-memory flat-scan
     /// `InMemoryVectorStore` — fine up to ~50k chunks per scope.
     ///
-    /// Phase 869 — a supplied store stays the caller's: the composition
+    /// A supplied store stays the caller's: the composition
     /// flushes and disposes at stop only the store it constructed, so dispose
     /// a supplied one yourself once the host has stopped.
     let withVectorStore (store: IVectorStore) (options: RagOptions) : RagOptions = {
@@ -2355,7 +2353,7 @@ module RagOptions =
             VectorStore = Some store
     }
 
-    /// Phase 633 — substitute the `IEmbeddingCache` the composition wraps
+    /// Substitute the `IEmbeddingCache` the composition wraps
     /// the supplied `IEmbeddingProvider` in, so a model's embedding is paid
     /// for once per FLEET rather than once per process.
     ///
@@ -2381,7 +2379,7 @@ module RagOptions =
             EmbeddingCache = Some cache
     }
 
-    /// Phase 501 — compose a language-aware analyzer for the sparse (BM25)
+    /// Compose a language-aware analyzer for the sparse (BM25)
     /// index. Companion packages under `src/SparseIndices/<Name>/` provide
     /// implementations: `ToolUp.SparseIndices.Snowball` for stemming and
     /// stop-word removal in European languages,
@@ -2404,7 +2402,7 @@ module RagOptions =
             SparseAnalyzer = Some analyzer
     }
 
-    /// Phase 63.A — substitute the entire retrieval pipeline. `p` is
+    /// Substitute the entire retrieval pipeline. `p` is
     /// registered as the `IRetrievalPipeline` verbatim; the default
     /// `RetrievalPipeline` (and, when no `VectorisationHandler` is present,
     /// the ingestion + reembedding background services) are skipped. Slots a
@@ -2442,7 +2440,7 @@ module RagOptions =
             IngestionQueueCapacity = max 1 capacity
     }
 
-    /// Phase 303 — choose what happens when the ingestion queue is full.
+    /// Choose what happens when the ingestion queue is full.
     /// `DropWrite` (default) retries with a short bounded backoff then drops
     /// the document, emitting a `KnowledgeIngestionDropped` audit under
     /// `_platform.knowledge`, a Warning `SystemMessage` to the uploader, and
@@ -2459,7 +2457,7 @@ module RagOptions =
             OverflowPolicy = policy
     }
 
-    /// Phase 509 — back the ingestion queue with a durable store, so
+    /// Back the ingestion queue with a durable store, so
     /// queued documents survive a process restart and N replicas drain
     /// ONE queue.
     ///
@@ -2482,7 +2480,7 @@ module RagOptions =
             IngestionQueueStore = Some store
     }
 
-    /// Phase 509 — sweep these storage containers at startup for
+    /// Sweep these storage containers at startup for
     /// documents left `Pending` by a process that died mid-ingestion,
     /// marking each `Failed` with a restart-interrupted reason.
     ///
@@ -2512,7 +2510,7 @@ module RagOptions =
             IngestionRecoveryScopes = containers
     }
 
-    /// Phase 723 — compose the scope-enumeration seam, so the restart
+    /// Compose the scope-enumeration seam, so the restart
     /// recovery sweep discovers the containers to visit instead of being
     /// handed a list.
     ///
@@ -2538,7 +2536,7 @@ module RagOptions =
             ScopeEnumerator = Some enumerator
     }
 
-    /// Phase 14t — set the retry / dead-letter policy for transient
+    /// Set the retry / dead-letter policy for transient
     /// embedder failures during ingestion. Transient per-chunk failures
     /// (429 / 5xx / timeout / network) retry with exponential backoff +
     /// jitter and dead-letter after `MaxAttempts`; permanent failures
@@ -2610,7 +2608,7 @@ module RagOptions =
     /// Use a small positive value (e.g. `0.4`) to refuse weak matches in
     /// regulated-brand or low-tolerance deployments.
     ///
-    /// Phase 866 — the threshold applies in the composed pipeline's score
+    /// The threshold applies in the composed pipeline's score
     /// space (`RetrievalScoreSpace`). The default composition builds a
     /// keyword index, so scores are FUSED and normalised onto `[0, 1]`
     /// within each query's candidate pool: the best match scores `1.0` and
@@ -2640,7 +2638,7 @@ module RagOptions =
     /// score regardless of scope (default); `Separate` keeps per-scope
     /// grouping for callers presenting platform vs team knowledge
     /// separately. With MMR enabled the `Interleaved` re-sort is skipped,
-    /// because it would undo the diversity order MMR produced (Phase 978).
+    /// because it would undo the diversity order MMR produced.
     let withMergeStrategy (strategy: MergeStrategy) (options: RagOptions) : RagOptions = {
         options with
             RetrievalDefaults = {
@@ -2678,7 +2676,7 @@ module RagOptions =
             }
     }
 
-    /// Phase 502.D — set the deployment-level metadata-equality filter every
+    /// Set the deployment-level metadata-equality filter every
     /// prompt-path retrieval is scoped by. AND-combined, strict equality, and
     /// a chunk MISSING the key does not pass — the same semantics
     /// `RetrievalRequest.Filters` carries on both shipped pipelines.
@@ -2719,7 +2717,7 @@ module RagOptions =
             GroundingMode = mode
     }
 
-    /// Phase 708 — turn the fact-clause feeder on or off, keeping the
+    /// Turn the fact-clause feeder on or off, keeping the
     /// current budget. On (the default) and with the fact tier composed,
     /// each user turn is compiled into a `FactClause` so a question naming
     /// registered vocabulary gets its facts pushed into the prompt ahead
@@ -2734,7 +2732,7 @@ module RagOptions =
             }
     }
 
-    /// Phase 708 — replace the whole fact-clause-planning options record
+    /// Replace the whole fact-clause-planning options record
     /// (enabled flag + compile budget). Clamped into `[1 ms, 30 s]`: a
     /// non-positive budget is not a bound `Async.StartChild` will accept,
     /// and a budget past half a minute is not bounding a chat turn.
@@ -2765,7 +2763,7 @@ module RagOptions =
             RetrievalFraming = framing
     }
 
-    /// Phase 6q — set the post-stream citation-normaliser policy.
+    /// Set the post-stream citation-normaliser policy.
     /// Default is `Strict` — drift variants (`(1)`, `[1]`, `Source 1`,
     /// bare `¹`, `^1`) are normalised onto `[¹]` when they bind to a
     /// real retrieved source, and phantoms (digit > retrieved count)
@@ -2799,7 +2797,7 @@ module RagOptions =
             MaxDocumentBytes = Some(max 1 maxBytes)
     }
 
-    /// Phase 14y — cap the character length of a retrieval query reaching
+    /// Cap the character length of a retrieval query reaching
     /// the pipeline. Above the cap, `IRetrievalPipeline.Retrieve` refuses
     /// with a `KnowledgeQueryTooLargeException` and emits a
     /// `KnowledgeQueryRejected` audit. Default `Some 16384` (~4k tokens) —
@@ -2811,7 +2809,7 @@ module RagOptions =
             MaxQueryChars = Some(max 1 maxChars)
     }
 
-    /// Phase 14w — set the tombstone retention window. Soft-deleted chunks
+    /// Set the tombstone retention window. Soft-deleted chunks
     /// (`_deletedAt` stamped by `IVectorStore.DeleteChunk`) become
     /// vacuum-eligible once older than `retention`. Default 7 days.
     /// Clamped to a floor of one minute so a fat-fingered `TimeSpan.Zero`
@@ -2829,7 +2827,7 @@ module RagOptions =
                 TombstoneRetention = clamped
         }
 
-    /// Phase 14w — enable the tombstone auto-vacuum on the default daily
+    /// Enable the tombstone auto-vacuum on the default daily
     /// 03:00 UTC schedule. Registers a `RAGVacuumJobHandler` on the
     /// `IJobScheduler` that sweeps every scope, hard-removing tombstones
     /// older than `TombstoneRetention`. REQUIRES `ServerConfig.JobScheduler
@@ -2842,7 +2840,7 @@ module RagOptions =
             VacuumSchedule = Some RAGVacuumJobHandler.DefaultVacuumCron
     }
 
-    /// Phase 14w — enable the tombstone auto-vacuum on a custom cron
+    /// Enable the tombstone auto-vacuum on a custom cron
     /// (`Minute Hour DayOfMonth Month DayOfWeek`; the in-process scheduler
     /// supports `*`, integers, comma lists, and `*/N`). An invalid
     /// expression is rejected at schedule time with
@@ -2855,14 +2853,14 @@ module RagOptions =
 
     // ─── Phase 894 — per-turn retrieval budgets ─────────────────────
 
-    /// Phase 894 — replace the whole per-turn budget record. Default
+    /// Replace the whole per-turn budget record. Default
     /// `RetrievalBudgets.defaults`.
     let withRetrievalBudgets (budgets: RetrievalBudgets) (options: RagOptions) : RagOptions = {
         options with
             RetrievalBudgets = budgets
     }
 
-    /// Phase 894 — wall-clock budget for the query-time embed. On overrun
+    /// Wall-clock budget for the query-time embed. On overrun
     /// the dense branch returns nothing and the sparse branch, when
     /// composed, answers alone (stage mark `DenseDegraded:TimedOut`).
     /// Default 5 s. Non-positive disables the budget.
@@ -2877,7 +2875,7 @@ module RagOptions =
             }
     }
 
-    /// Phase 894 — attempts the query-time embed makes inside its budget.
+    /// Attempts the query-time embed makes inside its budget.
     /// Default 1 (no retry inside a chat turn); clamped to at least 1.
     let withQueryEmbedAttempts (attempts: int) (options: RagOptions) : RagOptions = {
         options with
@@ -2890,7 +2888,7 @@ module RagOptions =
             }
     }
 
-    /// Phase 894 — ceiling on query-time embeds in flight at once. A call
+    /// Ceiling on query-time embeds in flight at once. A call
     /// that finds it reached is refused at once, as a value — the dense
     /// branch degrades (stage mark `DenseDegraded:Refused`) rather than
     /// queueing. Default: no ceiling. Clamped to at least 1.
@@ -2905,7 +2903,7 @@ module RagOptions =
             }
     }
 
-    /// Phase 894 — budget for fact resolution plus the disclosure check.
+    /// Budget for fact resolution plus the disclosure check.
     /// On overrun or fault the turn proceeds without pushed facts (stage
     /// mark `FactsDegraded:TimedOut` / `FactsDegraded:Failed`); a fact whose
     /// disclosure check did not complete is never admitted. Default 3 s.
@@ -2917,7 +2915,7 @@ module RagOptions =
             }
     }
 
-    /// Phase 894 — bound on retrieval traces queued for the background
+    /// Bound on retrieval traces queued for the background
     /// writer. Default 1,024; a full queue drops and counts the trace.
     /// `0` writes traces inline on the request path (pre-894).
     let withRetrievalTraceQueueCapacity (capacity: int) (options: RagOptions) : RagOptions = {
@@ -2925,7 +2923,7 @@ module RagOptions =
             RetrievalTraceQueueCapacity = max 0 capacity
     }
 
-    /// Phase 893 — substitute the keyword (sparse) index hybrid retrieval
+    /// Substitute the keyword (sparse) index hybrid retrieval
     /// runs over, in the shape of `withVectorStore`. Companion packages under
     /// `src/SparseIndices/<Name>/` provide implementations — the
     /// `ToolUp.SparseIndices.Postgres` companion holds the index in the
@@ -2938,14 +2936,14 @@ module RagOptions =
     /// `withAnalyzedSparseIndex` to have the index built for the analyzer.
     /// Ignored when `withRetrievalPipeline` replaces the whole pipeline.
     ///
-    /// Phase 869 — as with `withVectorStore`, a supplied index stays the
+    /// As with `withVectorStore`, a supplied index stays the
     /// caller's to dispose; the composition flushes only what it constructed.
     let withSparseIndex (index: ISparseIndex) (options: RagOptions) : RagOptions = {
         options with
             SparseIndex = SparseIndexComposition.SuppliedSparseIndex index
     }
 
-    /// Phase 893 — substitute the keyword index with one BUILT FOR the
+    /// Substitute the keyword index with one BUILT FOR the
     /// composed analyzer: `build` receives the analyzer `withSparseAnalyzer`
     /// composed (the identity analyzer when none) at composition. The seam an
     /// index that tokenises inside its own engine uses to map the analyzer
@@ -2956,7 +2954,7 @@ module RagOptions =
             SparseIndex = SparseIndexComposition.AnalyzedSparseIndex build
     }
 
-    /// Phase 893 — compose NO keyword index: dense retrieval only. Fusion
+    /// Compose NO keyword index: dense retrieval only. Fusion
     /// over one list is that list, so the pipeline takes its dense-only path
     /// (the one it takes with no reranker and no keyword leg), and no
     /// `ISparseIndex` is registered — the entity store's optional full-text

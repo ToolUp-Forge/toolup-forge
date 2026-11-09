@@ -74,6 +74,18 @@ type private RetrievalSample = {
     TopScore: float
 }
 
+/// The scored sibling of `IRagTelemetry.RecordRetrieval`: a recorder handed
+/// the pool itself, so it classifies a retrieval in the space the pool's
+/// scores are in. A capability by probe — the prompt builder records
+/// through it when the composed telemetry implements it, and through
+/// `RecordRetrieval` otherwise.
+type IScoredRagTelemetry =
+    /// Record one retrieval's pool of similarity chunks (facts excluded)
+    /// against the deployment's `MinScore`: empty, a hit when its best
+    /// score clears the threshold (`RetrievalScoreSpace.admits`), and a
+    /// low-score miss otherwise.
+    abstract RecordScoredRetrieval: pool: IRetrievalPipeline.ScoredPool * minScore: float option -> unit
+
 /// In-memory `IRagTelemetry` keeping a 1-minute rolling window of every
 /// recorded event. Hot-path recorders (`RecordEmbedding`,
 /// `RecordEnqueue`, `RecordFlush`, `RecordRetrieval`) are O(1) — they
@@ -92,7 +104,7 @@ type RollingRagTelemetry(?windowSeconds: int) =
     let embeddingSamples = ConcurrentQueue<TimedSample>()
     let flushSamples = ConcurrentQueue<TimedSample>()
     let retrievalSamples = ConcurrentQueue<RetrievalSample>()
-    // Per-call stage-timing breakdowns (Phase 122). Each entry is one
+    // Per-call stage-timing breakdowns. Each entry is one
     // retrieval call's `(stageName, elapsedMs)` list; the snapshot
     // flattens, groups by stage, and computes P50/P95 per stage.
     let stageSamples = ConcurrentQueue<DateTimeOffset * (string * float) list>()
@@ -108,13 +120,20 @@ type RollingRagTelemetry(?windowSeconds: int) =
     // (the snapshot exposes one aggregate count); the per-observer
     // breakdown lives in the existing `event=observer_threw` log line.
     let observerFailures = ConcurrentQueue<DateTimeOffset>()
-    // Phase 14v — corrupt-index scope-load-failure timestamps. The
+    // Corrupt-index scope-load-failure timestamps. The
     // `scopeKey` label is dropped here (the snapshot exposes one
     // aggregate count, keeping the privacy contract scope-free); the
     // per-scope detail lives in the `KnowledgeIndexLoadFailed` audit trail.
     let indexLoadErrors = ConcurrentQueue<DateTimeOffset>()
 
     let now () = DateTimeOffset.UtcNow
+
+    let recordRetrieval (outcome: RetrievalOutcome) (topScore: float) =
+        retrievalSamples.Enqueue {
+            Timestamp = now ()
+            Outcome = outcome
+            TopScore = topScore
+        }
 
     let evict (q: ConcurrentQueue<'T>) (cutoff: DateTimeOffset) (ts: 'T -> DateTimeOffset) =
         let mutable head = Unchecked.defaultof<'T>
@@ -187,11 +206,7 @@ type RollingRagTelemetry(?windowSeconds: int) =
                 elif topScore > minScoreThreshold then Hit
                 else LowScoreMiss
 
-            retrievalSamples.Enqueue {
-                Timestamp = now ()
-                Outcome = outcome
-                TopScore = topScore
-            }
+            recordRetrieval outcome topScore
 
         member _.RecordObserverFailure(_) = observerFailures.Enqueue(now ())
 
@@ -266,7 +281,22 @@ type RollingRagTelemetry(?windowSeconds: int) =
             }
         }
 
-// ─── Total latency + in-flight on the retrieval path (Phase 886) ──
+    interface IScoredRagTelemetry with
+        member _.RecordScoredRetrieval(pool, minScore) =
+            match pool.Matches with
+            | [] -> recordRetrieval Empty 0.0
+            | matches ->
+                let top = matches |> List.map _.Score |> List.max
+
+                let outcome =
+                    if IRetrievalPipeline.RetrievalScoreSpace.admits pool.Space minScore top then
+                        Hit
+                    else
+                        LowScoreMiss
+
+                recordRetrieval outcome top
+
+// ─── Total latency + in-flight on the retrieval path ──────────────
 
 /// The pseudo-stage name under which `RetrievalMeter` records the TOTAL
 /// latency of one `Retrieve` call. It rides `RecordRetrievalStages` — the
@@ -280,7 +310,7 @@ type RollingRagTelemetry(?windowSeconds: int) =
 let TotalStage = "Total"
 
 
-/// Phase 886 — an `IRetrievalPipeline` decorator that meters the
+/// An `IRetrievalPipeline` decorator that meters the
 /// retrieval path as a whole: the TOTAL latency of every `Retrieve` (from
 /// entry to exit, including every stage and the glue between them), and
 /// the number of calls in flight. The per-stage percentiles the pipeline
@@ -343,7 +373,7 @@ type RetrievalMeter
 
         member _.DeleteByScope scope = inner.DeleteByScope scope
 
-/// Phase 886 — wrap `pipeline` in a `RetrievalMeter` recording into
+/// Wrap `pipeline` in a `RetrievalMeter` recording into
 /// `telemetry`. The meter is returned concretely so its caller can read
 /// the in-flight gauge; it is also an `IRetrievalPipeline`.
 let meter (telemetry: IRagTelemetry) (pipeline: IRetrievalPipeline.IRetrievalPipeline) : RetrievalMeter =

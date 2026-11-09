@@ -52,6 +52,153 @@ type VectorScope =
     /// authenticated `AccessContext.UserId` at retrieval.
     | User of userId: string
 
+/// The three renderings of a `VectorScope` and their inverses — the only
+/// places a vector scope becomes a string. `key` is the store key every
+/// vector store and keyword index persists under (`_rag/{key}/…` blob
+/// names, the `scope` column); `container` is the storage container the
+/// scope's documents live in, rendered by `ScopeKey.container`;
+/// `auditScopeId` is the event-store stream a scope's RAG audit rows are
+/// written under. Each is a projection: no other code spells one by hand.
+[<RequireQualifiedAccess>]
+module VectorScope =
+
+    /// The deployment-wide container: deployment-scoped documents live
+    /// here, and a storage scope naming it projects to `Deployment`.
+    [<Literal>]
+    let DeploymentContainer = "_deployment"
+
+    [<Literal>]
+    let private PlatformKey = "platform"
+
+    [<Literal>]
+    let private DeploymentKey = "deployment"
+
+    [<Literal>]
+    let private TeamKeyPrefix = "team:"
+
+    [<Literal>]
+    let private UserKeyPrefix = "user:"
+
+    /// The store key: `platform`, `deployment`, `team:{id}` or `user:{id}`.
+    /// Every persisted vector-store and keyword-index name is built from it,
+    /// so its bytes never move.
+    let key (scope: VectorScope) : string =
+        match scope with
+        | Platform -> PlatformKey
+        | Deployment -> DeploymentKey
+        | Team teamId -> TeamKeyPrefix + teamId
+        | User userId -> UserKeyPrefix + userId
+
+    /// The scope a store key names: the inverse of `key`, so
+    /// `tryOfKey (key s) = Some s` for every scope. `None` for any string
+    /// `key` does not produce (`null` included) — the caller decides what a
+    /// foreign key means.
+    let tryOfKey (storeKey: string) : VectorScope option =
+        if isNull storeKey then
+            None
+        elif storeKey = PlatformKey then
+            Some Platform
+        elif storeKey = DeploymentKey then
+            Some Deployment
+        elif storeKey.StartsWith(TeamKeyPrefix, System.StringComparison.Ordinal) then
+            Some(Team(storeKey.Substring TeamKeyPrefix.Length))
+        elif storeKey.StartsWith(UserKeyPrefix, System.StringComparison.Ordinal) then
+            Some(User(storeKey.Substring UserKeyPrefix.Length))
+        else
+            None
+
+    /// The storage container a principal's scope lives in —
+    /// `ScopeKey.container` of its team or user key. `None` for `Platform`
+    /// and `Deployment`, which belong to no principal.
+    let container (scope: VectorScope) : string option =
+        match scope with
+        | Team teamId -> Some(ScopeKey.container (ScopeKey.Team(TeamId teamId)))
+        | User userId -> Some(ScopeKey.container (ScopeKey.User(UserId userId)))
+        | Platform
+        | Deployment -> None
+
+    /// The vector scope a storage scope's chunks belong to (GP 4): a team
+    /// container is the team's, the deployment container is
+    /// deployment-wide, and every other container (`user-{id}`, a session,
+    /// an unparseable shape) is one caller's own `User` scope keyed by the
+    /// scope id. Never `Platform`: only the platform knowledge API writes
+    /// there, so no storage scope projects to it.
+    let ofContainer (scope: StorageScope) : VectorScope =
+        match StorageScope.tryTeamId scope with
+        | Some teamId -> Team teamId.Value
+        | None when scope.Container = DeploymentContainer -> Deployment
+        | None -> User scope.ScopeId
+
+    /// The event-store stream every RAG audit row for `scope` is written
+    /// under (the retrieval trace and miss, the over-length-query refusal,
+    /// the re-embedding run, the vacuum sweep): a team by
+    /// `AuditScope.streamKey` (its bare id, the stream every other team
+    /// audit row uses), the platform by the platform trail, the deployment
+    /// by its container's name, and a user by its store `key`.
+    let auditScopeId (scope: VectorScope) : string =
+        match scope with
+        | Platform -> AuditScope.streamKey AuditScope.PlatformScope
+        | Deployment -> DeploymentContainer
+        | Team teamId -> AuditScope.streamKey (AuditScope.Scoped(ScopeKey.Team(TeamId teamId)))
+        | User _ -> key scope
+
+/// The id of one chunk of a document: the document id and the chunk's
+/// position in it, rendered `{documentId}:chunk:{ordinal}`. The vector
+/// stores and keyword indices keep `chunkId: string` (the wire); every
+/// producer renders through `ChunkId.render` and every reader parses
+/// through `ChunkId.tryParse`. The post-save vectorisation hook keys its
+/// chunks by the uploaded FILE NAME rather than a document id, in the same
+/// grammar, so its ids render through the same function with the file
+/// name as `DocumentId`.
+type ChunkId = { DocumentId: string; Ordinal: int }
+
+/// The chunk-id grammar, spelled once.
+[<RequireQualifiedAccess>]
+module ChunkId =
+
+    [<Literal>]
+    let private Marker = ":chunk:"
+
+    /// `{documentId}:chunk:{ordinal}`.
+    let render (chunkId: ChunkId) : string =
+        chunkId.DocumentId + Marker + string chunkId.Ordinal
+
+    /// The chunk id a string renders, read at the LAST marker so a document
+    /// id that itself contains the marker reads back whole. `None` for a
+    /// string with no marker, an empty document id, or an ordinal that is
+    /// not a non-negative integer — never a throw on a foreign id.
+    let tryParse (chunkId: string) : ChunkId option =
+        if isNull chunkId then
+            None
+        else
+            let at = chunkId.LastIndexOf(Marker, System.StringComparison.Ordinal)
+
+            if at <= 0 then
+                None
+            else
+                let digits = chunkId.Substring(at + Marker.Length)
+
+                if digits.Length > 0 && digits |> Seq.forall System.Char.IsDigit then
+                    match System.Int32.TryParse digits with
+                    | true, ordinal ->
+                        Some {
+                            DocumentId = chunkId.Substring(0, at)
+                            Ordinal = ordinal
+                        }
+                    | _ -> None
+                else
+                    None
+
+    /// The ids of a document's first `count` chunks, in order: ordinals
+    /// `0 .. count - 1`. Empty for a non-positive count.
+    let ofDocument (documentId: string) (count: int) : ChunkId list = [
+        for ordinal in 0 .. count - 1 ->
+            {
+                DocumentId = documentId
+                Ordinal = ordinal
+            }
+    ]
+
 /// A unit of text content ready to be embedded and indexed. `Metadata` is
 /// a free-form string map that travels with the vector through storage and
 /// retrieval — use it to carry provenance (`"_source"`), module context
@@ -100,7 +247,7 @@ module ChunkMetadata =
     [<Literal>]
     let IsSummaryKey = "_isSummary"
 
-    /// Structured original-document reference (Phase 103) — JSON-serialised
+    /// Structured original-document reference — JSON-serialised
     /// `OriginalDocumentRef` stamped by the chunk producer at ingestion
     /// when the chunk's source has a fetchable binary original. Retrieval
     /// reads the ref instead of rebuilding the producer's blob-name
@@ -111,33 +258,33 @@ module ChunkMetadata =
     [<Literal>]
     let OriginalRefKey = "_originalRef"
 
-    /// Referenced fact ids (Phase 521.D) — a comma-separated list of the
+    /// Referenced fact ids — a comma-separated list of the
     /// content-addressed fact ids the chunk's narrative spans cite
     /// (`InlineSpan.Metric.factRef`). Stamped by narrative-commit when a
     /// section carries fact-referencing metric spans; absent for chunks
     /// with no fact references. Retrieval's fact→narrative join (Phase
     /// 522.E) reads this so a resolved fact can prefer the narrative
     /// chunks that cite it over generic similarity matches, and the
-    /// derived-disclosure stage (Phase 775) re-checks every cited fact
+    /// derived-disclosure stage re-checks every cited fact
     /// at the `FactRetrieval` surface on each retrieval, dropping the
     /// chunk when any of them is not disclosable to the caller today.
     [<Literal>]
     let FactRefsKey = "_factRefs"
 
-    // ─── Fact-match metadata (Phase 522) ─────────────────────────────
+    // ─── Fact-match metadata ─────────────────────────────
     // A fact resolved by the pre-vector stage rides the retrieval result
     // set as a `VectorMatch` stamped `_origin = "Fact"` plus the keys
     // below, so `RAGPromptBuilder.toRetrievedSource` can project the fact
     // fields onto `RetrievedSource` without RAG depending on the fact
     // companion's types.
 
-    /// Content-addressed id of a resolved fact (Phase 522.C). Present only
+    /// Content-addressed id of a resolved fact. Present only
     /// on a `ChunkOrigin.Fact` match.
     [<Literal>]
     let FactIdKey = "_factId"
 
     /// Canonical value rendering of a resolved fact — the number quoted
-    /// verbatim into the answer (Phase 522.C).
+    /// verbatim into the answer.
     [<Literal>]
     let FactRenderingKey = "_factRendering"
 
@@ -157,7 +304,7 @@ module ChunkMetadata =
     let FactMetricKey = "_factMetric"
 
     /// Character-offset span of the source text the chunk was derived from
-    /// (Phase 505) — a JSON-serialised `SourceSpan`, stamped by a chunk
+    ///  — a JSON-serialised `SourceSpan`, stamped by a chunk
     /// producer that knows the offsets. Absent for producers that do not
     /// (synthesised chunks, notes, narratives, every chunk ingested before
     /// the producer stamped spans), and absence degrades the citation to
@@ -232,7 +379,7 @@ type VectorMatch = {
     Metadata: Map<string, string>
 }
 
-/// Neutral within-document locator for the cited location (Phase 106).
+/// Neutral within-document locator for the cited location.
 /// A deliberately small mirror of the producer-side provenance cases
 /// (page / slide / sheet / section / row-group) so a Sources panel can
 /// construct a deep link / scroll target into the original document —
@@ -255,7 +402,7 @@ type SourceLocator =
     | RowGroup of startRow: int * endRow: int
 
 /// Character-offset span into the *source text* a chunk was derived from
-/// (Phase 505). Where `SourceLocator` answers "which page / sheet / row
+/// . Where `SourceLocator` answers "which page / sheet / row
 /// range", this answers "which characters" — the precision a
 /// deep-link-and-highlight consumer needs to scroll to and mark the exact
 /// quoted region rather than the whole chunk.
@@ -340,7 +487,7 @@ module SourceSpan =
         | _ -> None
 
 /// Structured reference to the *original* ingested document behind a
-/// retrieved chunk (Phase 103). Value-typed and producer-neutral — no
+/// retrieved chunk. Value-typed and producer-neutral — no
 /// server handles, no KB-layer types — so it can live in
 /// `ToolUp.Platform` and cross the AI/RAG/KB tri-package boundary the
 /// same way `RetrievedSource` does. The ref carries no bytes and is
@@ -359,13 +506,13 @@ type OriginalDocumentRef = {
     /// Size of the original blob in bytes. Lets the UI show a download
     /// size before fetching.
     SizeBytes: int64
-    /// Within-document locator for the cited location (Phase 106).
+    /// Within-document locator for the cited location.
     /// `None` when the chunk has no precise anchor (plain-text bodies,
     /// producers that don't stamp locations) — never fabricated (GP 9).
     Location: SourceLocator option
 }
 
-// ─── Fact-first retrieval seam (Phase 522) ───────────────────────────
+// ─── Fact-first retrieval seam ───────────────────────────
 //
 // The types that let the retrieval pipeline resolve facts *before* vector
 // search and merge them into the result set as a distinct origin. They are
@@ -408,7 +555,7 @@ type FactClause = {
     AsOf: System.DateTime option
 }
 
-/// A fact resolved by the pre-vector stage (Phase 522.B), projected
+/// A fact resolved by the pre-vector stage, projected
 /// fact-companion-free so the RAG pipeline can carry it as a distinct
 /// result origin without a `ToolUp.Facts` compile-time edge.
 type ResolvedFact = {
@@ -425,7 +572,7 @@ type ResolvedFact = {
     Metric: string
 }
 
-/// Scope-filtered fact-resolution seam (Phase 522.B). Implemented over the
+/// Scope-filtered fact-resolution seam. Implemented over the
 /// fact store in the fact companion; the RAG pipeline consumes it as an
 /// optional dependency (`None` ⇒ dormant, GP 13). `Resolve` is handed the
 /// caller's resolved storage scope, so tenant isolation is structural (GP
@@ -442,7 +589,7 @@ type ResolvedFact = {
 type IFactResolver =
     abstract Resolve: scope: ResolvedScope * clause: FactClause -> Async<ResolvedFact list>
 
-// ─── Fact-clause planning seam (Phase 708) ───────────────────────────
+// ─── Fact-clause planning seam ───────────────────────────
 //
 // `IFactResolver` above answers a clause; nothing in the request pipeline
 // ever *produced* one. Every non-test construction of `RetrievalRequest`
@@ -462,7 +609,7 @@ type IFactResolver =
 // match.
 
 /// The clauses one user turn compiled to, plus the identity of the plan
-/// that produced them (Phase 708).
+/// that produced them.
 ///
 /// **The plan id is the reuse handle.** Compiling a question is the one
 /// expensive step on this path — it can cost a provider round-trip — so
@@ -493,7 +640,7 @@ module PlannedFactClauses =
     /// only is `false` here — a refusal is an honest answer, not a clause.
     let isEmpty (planned: PlannedFactClauses) : bool = List.isEmpty planned.Clauses
 
-/// Question-to-clause compilation seam (Phase 708). Implemented in the
+/// Question-to-clause compilation seam. Implemented in the
 /// fact companion over the Phase 560 answer planner; the AI request
 /// pipeline consumes it as an optional dependency (`None` ⇒ dormant, and
 /// the composition is byte-for-byte its fact-less self — GP 13).
@@ -518,7 +665,7 @@ type IFactClausePlanner =
     /// that named no vocabulary does.
     abstract PlanClauses: scope: ResolvedScope * principal: string * question: string -> Async<PlannedFactClauses>
 
-// ─── Disclosure egress seam (Phase 525) ──────────────────────────────
+// ─── Disclosure egress seam ──────────────────────────────
 //
 // The fact-level `Disclosure` classification (carried on every fact from
 // birth) is *enforced* at the enumerable egress choke points — retrieval
@@ -531,8 +678,8 @@ type IFactClausePlanner =
 // re-implemented per surface; every choke point consults this seam.
 
 /// The egress surface a disclosure check is being made for — the first
-/// choke points (Phase 525), extended additively as later doors land
-/// with their surfaces (Phase 564: exports + webhooks). Remaining doors
+/// choke points, extended additively as later doors land
+/// with their surfaces. Remaining doors
 /// (external write-back, certificates) extend this DU the same way.
 type FactEgressSurface =
     /// Fact resolution into retrieval results / prompt context. Default-
@@ -547,7 +694,7 @@ type FactEgressSurface =
     | FactNarrativePublication
     /// A rendered export leaving the deployment as a document — the
     /// Reporting render path over fact-referencing narrative content
-    /// (Phase 564.B). Denied values are redacted to the policy-naming
+    /// . Denied values are redacted to the policy-naming
     /// marker before rendering; the output notes withheld refs (id +
     /// policy, never the value).
     | FactExport
@@ -565,7 +712,7 @@ type FactEgressSurface =
     /// federation edge must not have to also narrow what may reach a
     /// webhook, and an audit row must say which one it was.
     | FactPeerEgress
-    /// A fact row served to a person browsing the fact tables (Phase 895).
+    /// A fact row served to a person browsing the fact tables.
     /// Its own door, as exports and webhooks are, so an operator can
     /// narrow what a browsing user sees without narrowing what the model
     /// or an export sees, and an audit row says which one it was. A row
@@ -573,7 +720,7 @@ type FactEgressSurface =
     /// posture), and the page reports a withheld count and no value.
     | FactBrowse
     /// A fact table row leaving its team for another team's table under a
-    /// publication grant (Phase 897). Its own door, so the SOURCE team
+    /// publication grant. Its own door, so the SOURCE team
     /// controls what leaves: an operator narrows what one team may publish
     /// to another without narrowing what its own members, the model or an
     /// export see. The audience is the target team, wider than whoever
@@ -614,7 +761,7 @@ module FactDisclosureVerdict =
     let refusalText (policyRef: string) : string =
         sprintf "computed, but not disclosable under policy %s" policyRef
 
-/// Scope-filtered disclosure gate over the fact base (Phase 525.A).
+/// Scope-filtered disclosure gate over the fact base.
 /// Implemented in the fact companion over the fact store + the one
 /// `DisclosureEgress` predicate; registered in DI whenever the fact store
 /// is composed, so a deployment without facts pays nothing (GP 13) and one
@@ -638,7 +785,7 @@ type IFactDisclosureGate =
         scope: ResolvedScope * principal: string * surface: FactEgressSurface * factIds: string list ->
             Async<Map<string, FactDisclosureVerdict>>
 
-// ─── Webhook egress contract (Phase 564.C) ───────────────────────────
+// ─── Webhook egress contract ───────────────────────────
 //
 // The outbound fact-event webhook emitter is a later surface that does
 // not exist yet; its gate contract lands FIRST so the emitter is born
@@ -663,7 +810,7 @@ type IFactDisclosureGate =
 //      the emitter adds nothing.
 
 /// The `FactWebhook`-surface egress filter every outbound fact-event
-/// emitter consults at birth (Phase 564.C). No gate composed ⇒ the
+/// emitter consults at birth. No gate composed ⇒ the
 /// emitter must not emit fact ids at all or must treat the payload as
 /// unclassified per its own composition contract — this helper takes
 /// the gate, so "forgot the gate" is unrepresentable at the call site.
@@ -754,7 +901,7 @@ type RetrievedSource = {
     /// normalised). Always `Some` at production time; `None` only for
     /// pre-widening persisted conversation payloads (GP 11).
     ChunkId: string option
-    /// Phase 522.C — when this source is a resolved fact (`Origin =
+    /// When this source is a resolved fact (`Origin =
     /// Fact`), its content-addressed id; `None` for document / note /
     /// narrative / AI-context sources. Additive + backward-compatible (GP
     /// 11): pre-existing wire payloads without the field deserialise to
@@ -769,7 +916,7 @@ type RetrievedSource = {
     /// lineage's current head). `None` for a fresh fact or a non-fact
     /// source.
     FactSupersededBy: string option
-    /// Phase 505 — character-offset span of the source text this chunk was
+    /// Character-offset span of the source text this chunk was
     /// derived from, read from the `ChunkMetadata.SpanKey` metadata the
     /// chunk producer stamped at ingestion and validated for
     /// well-formedness on the way out (`SourceSpan.sanitise`). `Some` only
@@ -828,7 +975,7 @@ type RetrievalRequest = {
     /// byte-identical to a filter-unaware one (GP 11). Honoured by every
     /// shipped `IRetrievalPipeline` — the default pipeline and the
     /// static-corpus pipeline are held to the same behaviour by the
-    /// `MetadataFilterContract` parity pack (Phase 502).
+    /// `MetadataFilterContract` parity pack.
     Filters: Map<string, string> option
     /// Prior conversation turns, oldest-first. Consumed by the Phase 506
     /// query-rewrite stage to resolve a follow-up query ("what about it?",
@@ -858,7 +1005,7 @@ type RetrievalRequest = {
     /// content first when the user asks from a specific module's view.
     /// `None` (default) preserves prior behaviour.
     ActiveModule: string option
-    /// Optional fact clause (Phase 522.A). When `Some`, the pipeline
+    /// Optional fact clause. When `Some`, the pipeline
     /// resolves the (subject, metric, period) query against the fact store
     /// *before* vector search and merges the exact fact hits ahead of the
     /// similarity chunks as a distinct `ChunkOrigin.Fact` origin. `None`
@@ -866,7 +1013,7 @@ type RetrievalRequest = {
     /// plan D17). The clause has no effect unless a fact resolver is wired
     /// into the pipeline (GP 13).
     FactClause: FactClause option
-    /// The scope the fact stage reads in (Phase 820) — the `ResolvedScope`
+    /// The scope the fact stage reads in — the `ResolvedScope`
     /// the platform's scope resolution minted for the request this
     /// retrieval serves, the same value the fact tools read through
     /// `ScopeResolution.forRequest`. The pipeline hands it to the fact
@@ -878,7 +1025,7 @@ type RetrievalRequest = {
     /// a retrieval built without a request (ingestion, evaluation, tests)
     /// reads the anonymous shard, never a scope inferred from a user or
     /// team id. A clause-bearing request's fact stage reads it, and so
-    /// does the derived-disclosure check (Phase 775) whenever a candidate
+    /// does the derived-disclosure check whenever a candidate
     /// chunk cites facts, so an anonymous-scope request sees no derived
     /// chunk (its cited facts are unresolvable there, hence denied).
     FactScope: ResolvedScope
@@ -930,7 +1077,7 @@ type RetrievalDefaults = {
     /// re-retrieving would double-inject. Operators wanting AI-context
     /// chunks back in the retrieval set pass `None` to clear the gate.
     OriginFilter: Set<ChunkOrigin> option
-    /// Phase 502.D — deployment-level metadata-equality filter applied to
+    /// Deployment-level metadata-equality filter applied to
     /// every retrieval the prompt-builder path performs. Same semantics as
     /// `RetrievalRequest.Filters`: AND-combined, strict equality, and a
     /// chunk MISSING the key does not pass. `None` (the default) = no
@@ -965,7 +1112,7 @@ module RetrievalDefaults =
         Filters = None
     }
 
-    /// Merge a deployment-level filter with a per-request one (Phase 502.D).
+    /// Merge a deployment-level filter with a per-request one.
     ///
     /// Both are narrowing intents, so the merge is a union of key/value
     /// pairs — the result constrains at least as much as either input. On a
@@ -1048,7 +1195,7 @@ module FactClausePlanOptions =
         o with
             TimeoutMs = max 1 (min 30_000 o.TimeoutMs)
     }
-// ─── Fact browse links (Phase 895) ───────────────────────────────────
+// ─── Fact browse links ───────────────────────────────────
 //
 // The fact tier's browse surface is its own client companion, and two
 // OTHER companions link into it: the knowledge base list (a coverage
@@ -1062,7 +1209,7 @@ module FactClausePlanOptions =
 // module is in the shell's published module list, so a composition
 // without it renders exactly as it did before this phase (GP 13).
 
-/// Shared names for linking into the fact browse surface (Phase 895)
+/// Shared names for linking into the fact browse surface
 /// without taking a dependency on the fact client companion.
 [<RequireQualifiedAccess>]
 module FactBrowseLinks =
@@ -1111,7 +1258,7 @@ module FactBrowseLinks =
     [<Literal>]
     let OpenFactTopic = "facts/open-fact"
 
-    /// `NarrativeDocSource.ModuleId` of a coverage narrative (Phase 707) —
+    /// `NarrativeDocSource.ModuleId` of a coverage narrative —
     /// the fact store's `_facts` source suffixed `.coverage`. Pinned
     /// against the producing constant by the fact tier's tests.
     [<Literal>]

@@ -1847,6 +1847,33 @@ ToolUp.Platform.Infra.IRetrievalPipeline+IRetrievalPipeline (interface)
 ToolUp.Platform.Infra.IRetrievalPipeline+IRetrievalPipeline.DeleteByScope(ToolUp.Platform.VectorKnowledgeTypes+VectorScope) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.Infra.IRetrievalPipeline+IRetrievalPipeline.Index(System.String, ToolUp.Platform.VectorKnowledgeTypes+TextChunk, ToolUp.Platform.VectorKnowledgeTypes+VectorScope) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.Infra.IRetrievalPipeline+IRetrievalPipeline.Retrieve(ToolUp.Platform.VectorKnowledgeTypes+RetrievalRequest, ToolUp.Platform.AccessContext) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+VectorMatch]]
+ToolUp.Platform.Infra.IRetrievalPipeline+IScoredRetrievalPipeline (interface)
+ToolUp.Platform.Infra.IRetrievalPipeline+IScoredRetrievalPipeline.RetrieveScored(ToolUp.Platform.VectorKnowledgeTypes+RetrievalRequest, ToolUp.Platform.AccessContext) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.Infra.IRetrievalPipeline+ScoredPool]
+ToolUp.Platform.Infra.IRetrievalPipeline+RetrievalScoreSpace (class)
+ToolUp.Platform.Infra.IRetrievalPipeline+RetrievalScoreSpace.Cosine : ToolUp.Platform.Infra.IRetrievalPipeline+RetrievalScoreSpace { get }
+ToolUp.Platform.Infra.IRetrievalPipeline+RetrievalScoreSpace.Fused : ToolUp.Platform.Infra.IRetrievalPipeline+RetrievalScoreSpace { get }
+ToolUp.Platform.Infra.IRetrievalPipeline+RetrievalScoreSpace.IsCosine : System.Boolean { get }
+ToolUp.Platform.Infra.IRetrievalPipeline+RetrievalScoreSpace.IsFused : System.Boolean { get }
+ToolUp.Platform.Infra.IRetrievalPipeline+RetrievalScoreSpace.IsReranked : System.Boolean { get }
+ToolUp.Platform.Infra.IRetrievalPipeline+RetrievalScoreSpace.Reranked : ToolUp.Platform.Infra.IRetrievalPipeline+RetrievalScoreSpace { get }
+ToolUp.Platform.Infra.IRetrievalPipeline+RetrievalScoreSpace.Tag : System.Int32 { get }
+ToolUp.Platform.Infra.IRetrievalPipeline+RetrievalScoreSpace+Tags (class)
+ToolUp.Platform.Infra.IRetrievalPipeline+RetrievalScoreSpace+Tags.Cosine : System.Int32 (literal)
+ToolUp.Platform.Infra.IRetrievalPipeline+RetrievalScoreSpace+Tags.Fused : System.Int32 (literal)
+ToolUp.Platform.Infra.IRetrievalPipeline+RetrievalScoreSpace+Tags.Reranked : System.Int32 (literal)
+ToolUp.Platform.Infra.IRetrievalPipeline+RetrievalScoreSpaceModule (class)
+ToolUp.Platform.Infra.IRetrievalPipeline+RetrievalScoreSpaceModule.admits(ToolUp.Platform.Infra.IRetrievalPipeline+RetrievalScoreSpace, Microsoft.FSharp.Core.FSharpOption`1[System.Double], System.Double) : System.Boolean
+ToolUp.Platform.Infra.IRetrievalPipeline+ScoredPool (class)
+ToolUp.Platform.Infra.IRetrievalPipeline+ScoredPool..ctor(ToolUp.Platform.Infra.IRetrievalPipeline+RetrievalScoreSpace, System.Double, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+VectorMatch], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+VectorMatch]])
+ToolUp.Platform.Infra.IRetrievalPipeline+ScoredPool.Matches : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+VectorMatch] { get }
+ToolUp.Platform.Infra.IRetrievalPipeline+ScoredPool.Relevance : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+VectorMatch]] { get }
+ToolUp.Platform.Infra.IRetrievalPipeline+ScoredPool.Space : ToolUp.Platform.Infra.IRetrievalPipeline+RetrievalScoreSpace { get }
+ToolUp.Platform.Infra.IRetrievalPipeline+ScoredPool.Unit : System.Double { get }
+ToolUp.Platform.Infra.IRetrievalPipeline+ScoredPoolModule (class)
+ToolUp.Platform.Infra.IRetrievalPipeline+ScoredPoolModule.declaring(ToolUp.Platform.Infra.IRetrievalPipeline+RetrievalScoreSpace, ToolUp.Platform.Infra.IRetrievalPipeline+IRetrievalPipeline) : ToolUp.Platform.Infra.IRetrievalPipeline+IRetrievalPipeline
+ToolUp.Platform.Infra.IRetrievalPipeline+ScoredPoolModule.ofMatches(ToolUp.Platform.Infra.IRetrievalPipeline+RetrievalScoreSpace, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+VectorMatch]) : ToolUp.Platform.Infra.IRetrievalPipeline+ScoredPool
+ToolUp.Platform.Infra.IRetrievalPipeline+ScoredPoolModule.retrieve(ToolUp.Platform.Infra.IRetrievalPipeline+RetrievalScoreSpace, ToolUp.Platform.Infra.IRetrievalPipeline+IRetrievalPipeline, ToolUp.Platform.VectorKnowledgeTypes+RetrievalRequest, ToolUp.Platform.AccessContext) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.Infra.IRetrievalPipeline+ScoredPool]
+ToolUp.Platform.Infra.IRetrievalPipeline+ScoredPoolModule.unitOf(ToolUp.Platform.Infra.IRetrievalPipeline+RetrievalScoreSpace, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+VectorMatch]) : System.Double
 ToolUp.Platform.Infra.IRetrievalTracer (class)
 ToolUp.Platform.Infra.IRetrievalTracer.KnowledgeRetrievalMissEventType : System.String (literal)
 ToolUp.Platform.Infra.IRetrievalTracer.KnowledgeRetrievedEventType : System.String (literal)

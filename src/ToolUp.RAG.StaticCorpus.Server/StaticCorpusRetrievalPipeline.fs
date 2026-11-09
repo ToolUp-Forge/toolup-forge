@@ -81,68 +81,76 @@ module StaticCorpusRetrievalPipeline =
                     op
             )
 
-        interface IRetrievalPipeline with
-            member _.Retrieve (request: RetrievalRequest) (_access: AccessContext) : Async<VectorMatch list> = async {
-                if String.IsNullOrWhiteSpace request.Query || normChunks.Length = 0 then
-                    return []
-                else
-                    let! queryRaw = embedder.GenerateEmbedding request.Query
+        /// A flat cosine scan: the scores are cosine similarities of
+        /// pre-normalised embeddings.
+        let retrieve (request: RetrievalRequest) : Async<VectorMatch list> = async {
+            if String.IsNullOrWhiteSpace request.Query || normChunks.Length = 0 then
+                return []
+            else
+                let! queryRaw = embedder.GenerateEmbedding request.Query
 
-                    if queryRaw.Length <> corpus.EmbeddingDimensions then
-                        return
-                            raise (
-                                InvalidOperationException(
-                                    sprintf
-                                        "StaticCorpus embedding-dimension mismatch: the query embedder produced %d dims but the index was built at %d (model '%s'). Rebuild the index with the same embedding model the runtime uses."
-                                        queryRaw.Length
-                                        corpus.EmbeddingDimensions
-                                        corpus.EmbeddingModel
-                                )
+                if queryRaw.Length <> corpus.EmbeddingDimensions then
+                    return
+                        raise (
+                            InvalidOperationException(
+                                sprintf
+                                    "StaticCorpus embedding-dimension mismatch: the query embedder produced %d dims but the index was built at %d (model '%s'). Rebuild the index with the same embedding model the runtime uses."
+                                    queryRaw.Length
+                                    corpus.EmbeddingDimensions
+                                    corpus.EmbeddingModel
                             )
+                        )
 
-                    let query = normalise queryRaw
+                let query = normalise queryRaw
 
-                    // Metadata-equality filter (request.Filters) + origin filter.
-                    // Static chunks are deployment documents, so they carry
-                    // origin `Document` for `OriginFilter` purposes.
-                    let passesFilters (c: DocChunk) =
-                        match request.Filters with
-                        | None -> true
-                        | Some f -> f |> Map.forall (fun k v -> c.Metadata.TryFind k = Some v)
+                // Metadata-equality filter (request.Filters) + origin filter.
+                // Static chunks are deployment documents, so they carry
+                // origin `Document` for `OriginFilter` purposes.
+                let passesFilters (c: DocChunk) =
+                    match request.Filters with
+                    | None -> true
+                    | Some f -> f |> Map.forall (fun k v -> c.Metadata.TryFind k = Some v)
 
-                    let passesOrigin =
-                        match request.OriginFilter with
-                        | None -> true
-                        | Some origins -> origins.Contains ChunkOrigin.Document
+                let passesOrigin =
+                    match request.OriginFilter with
+                    | None -> true
+                    | Some origins -> origins.Contains ChunkOrigin.Document
 
-                    let matches =
-                        if not passesOrigin then
-                            []
-                        else
-                            normChunks
-                            |> Array.filter (fun (c, _) -> passesFilters c)
-                            |> Array.map (fun (c, e) -> c, dot query e)
-                            |> Array.sortByDescending snd
-                            |> Array.truncate (max 0 request.TopK)
-                            |> Array.toList
-                            |> List.map (fun (c, score) ->
-                                let metadata =
-                                    c.Metadata
-                                    |> Map.add
-                                        ChunkMetadata.OriginKey
-                                        (ChunkOrigin.toMetadataValue ChunkOrigin.Document)
-                                    |> Map.add "_source" (sourceJson c.Source)
+                let matches =
+                    if not passesOrigin then
+                        []
+                    else
+                        normChunks
+                        |> Array.filter (fun (c, _) -> passesFilters c)
+                        |> Array.map (fun (c, e) -> c, dot query e)
+                        |> Array.sortByDescending snd
+                        |> Array.truncate (max 0 request.TopK)
+                        |> Array.toList
+                        |> List.map (fun (c, score) ->
+                            let metadata =
+                                c.Metadata
+                                |> Map.add ChunkMetadata.OriginKey (ChunkOrigin.toMetadataValue ChunkOrigin.Document)
+                                |> Map.add "_source" (sourceJson c.Source)
 
-                                {
-                                    ChunkId = c.Id
-                                    Content = c.Body
-                                    Score = score
-                                    Scope = Deployment
-                                    Metadata = metadata
-                                })
+                            {
+                                ChunkId = c.Id
+                                Content = c.Body
+                                Score = score
+                                Scope = Deployment
+                                Metadata = metadata
+                            })
 
-                    return matches
+                return matches
+        }
+
+        interface IScoredRetrievalPipeline with
+            member _.RetrieveScored request _access = async {
+                let! matches = retrieve request
+                return ScoredPool.ofMatches RetrievalScoreSpace.Cosine matches
             }
+
+        interface IRetrievalPipeline with
+            member _.Retrieve request _access = retrieve request
 
             member _.Index _ _ _ = raise (notSupported "Index")
             member _.DeleteByScope _ = raise (notSupported "DeleteByScope")

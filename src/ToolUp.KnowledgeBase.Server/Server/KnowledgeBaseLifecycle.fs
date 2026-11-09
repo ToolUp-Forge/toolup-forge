@@ -46,14 +46,8 @@ open ToolUp.Platform.Compose
 // `OnProvisioned` is a no-op `Skipped`: documents are ingested on demand,
 // so provisioning has nothing to seed.
 
-/// Resolve the KB blob container for the offboarded scope, mirroring
-/// `AccessContext`'s `team-{id}` / `user-{id}` convention. A `user-`
-/// prefix is honoured verbatim; everything else (bare id or `team-{id}`)
-/// resolves to the team container.
-let private containerOf (scopeId: string) =
-    match ScopeKey.tryParseContainer scopeId with
-    | Some(ScopeKey.User _) -> scopeId
-    | _ -> ScopeEnumeration.containerForTeam scopeId
+/// The KB blob container for the offboarded scope (`RetentionSweep.containerOf`).
+let private containerOf = KnowledgeBase.ServerRetentionSweep.containerOf
 
 type KnowledgeBaseLifecycle(services: IServiceProvider) =
     interface ITenantLifecycle with

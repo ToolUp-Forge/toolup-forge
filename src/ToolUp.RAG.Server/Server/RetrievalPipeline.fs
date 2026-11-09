@@ -16,7 +16,7 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Compose
 
-// ─── Query-size guard (Phase 14y) ─────────────────────────────────
+// ─── Query-size guard ─────────────────────────────────
 
 /// Reserved event-type literal for the `KnowledgeQueryRejected` audit
 /// emitted when a retrieval query exceeds the pipeline's configured
@@ -63,7 +63,7 @@ let private queryRejectedJsonOptions =
 /// - `Platform` is readable when `ServerConfig.PlatformKnowledgeBase = Enabled`
 ///   AND the caller is authenticated. When `Disabled`, this scope is filtered
 ///   out regardless of caller — Platform chunks stay on disk but are invisible
-///   to retrieval (Phase 4b commit 5). The toggle is the read-side gate;
+///   to retrieval. The toggle is the read-side gate;
 ///   write-side is gated by `canModifyPlatformConfig` and structurally
 ///   restricted to `IPlatformKnowledgeApi`.
 /// - `Deployment` is readable by all authenticated users.
@@ -144,39 +144,12 @@ let private fuseRRF (dense: VectorMatch list) (sparse: VectorMatch list) : Vecto
     ]
     |> List.sortBy (fun m -> -m.Score, m.Scope, m.ChunkId)
 
-// ─── Score space (Phase 866) ──────────────────────────────────────
+// ─── Score space ──────────────────────────────────────────────────
 
-/// Phase 866 — which scale a retrieved match's `Score` is in.
-///
-/// A score is only meaningful against the stage that produced it, and the
-/// stages disagree by orders of magnitude: a cosine similarity sits in
-/// `[-1, 1]`, while a raw reciprocal-rank-fusion score tops out at
-/// `2 / (60 + 1) ≈ 0.033`. Before this type existed the pipeline returned
-/// whichever it had produced with nothing to say which, so a `MinScore`
-/// documented as a cosine gate dropped every fused chunk and the additive
-/// boosts (`0.05`–`0.15`) each exceeded the whole fused range. The pipeline
-/// now carries the space from the producing stage to the stages that read
-/// a score, normalises the fused space onto `[0, 1]`, and states the space
-/// on the trace as a `ScoreSpace:<space>` stage mark.
-[<RequireQualifiedAccess>]
-type RetrievalScoreSpace =
-    /// Dense cosine similarity exactly as the vector store scored it — the
-    /// dense-only composition (`RagOptions.withoutSparseIndex`). Absolute:
-    /// a threshold is a similarity floor, and a pool of weak matches can
-    /// fall below it entirely.
-    | Cosine
-    /// Reciprocal rank fusion of the dense and keyword rankings, min-max
-    /// normalised onto `[0, 1]` within the candidate pool (after the scoping
-    /// filters, before the boosts) — the default composition, which always
-    /// builds a keyword index. Relative: the pool's best candidate scores
-    /// `1.0` and its weakest `0.0`, so a threshold trims the weak tail
-    /// relative to the best match rather than refusing a pool outright.
-    | Fused
-    /// A cross-encoder reranker's own scale (`RagOptions.withReranker`).
-    /// `IReranker` promises an ordering, not a calibrated scale, so the SDK
-    /// cannot say what range these scores occupy. The boosts read it too
-    /// (Phase 978): each nudges in units of the reranked pool's range.
-    | Reranked
+/// Which scale a retrieved match's `Score` is in — the seam's
+/// `ToolUp.Platform.Infra.IRetrievalPipeline.RetrievalScoreSpace`, named here
+/// so a caller that opens only this module keeps compiling.
+type RetrievalScoreSpace = ToolUp.Platform.Infra.IRetrievalPipeline.RetrievalScoreSpace
 
 module RetrievalScoreSpace =
     /// The stage mark recorded on the trace when the fused pool is
@@ -239,7 +212,7 @@ module RetrievalScoreSpace =
                             (label space)
                             t
                     )
-                | Some bound when t >= bound ->
+                | Some bound when not (RetrievalScoreSpace.admits space threshold bound) ->
                     Some(
                         sprintf
                             "MinScore = %g cannot be met in the %s score space, which tops out at %g: the gate keeps only scores strictly above the threshold, so it drops every unboosted chunk and the assistant answers with no retrieved context. Lower it (RagOptions.withMinScore)."
@@ -249,7 +222,7 @@ module RetrievalScoreSpace =
                     )
                 | Some _ -> None
 
-/// Phase 866 — min-max normalisation of a pool's scores onto `[0, 1]`: the
+/// Min-max normalisation of a pool's scores onto `[0, 1]`: the
 /// best candidate maps to `1.0`, the weakest to `0.0`, and a pool whose
 /// scores are all equal (a single candidate included) maps every score to
 /// `1.0`. Affine and increasing, so it never changes the pool's order.
@@ -266,28 +239,11 @@ let private minMaxNormaliser (scores: float list) : float -> float =
         else
             (fun s -> (s - minS) / range)
 
-/// Phase 866 — normalise a fused pool onto `[0, 1]` (see `Fused`).
+/// Normalise a fused pool onto `[0, 1]` (see `Fused`).
 let private normaliseWithinPool (pool: VectorMatch list) : VectorMatch list =
     let normalise = minMaxNormaliser (pool |> List.map _.Score)
 
     pool |> List.map (fun m -> { m with Score = normalise m.Score })
-
-/// Phase 978 — the unit a boost is measured in, so a boost of `b` is the
-/// same nudge in every space. The normalised fused pool spans `[0, 1]`, so
-/// there the unit is `1.0` and `b` is the share of the pool's range Phase 866
-/// made it; on the cosine scale the unit is `1.0` too, where the same
-/// magnitudes are the same kind of nudge. A reranker's scale is uncalibrated,
-/// so there the unit is the reranked pool's own range: `b` lifts a match over
-/// one at most `b` of the range better, and never over one further ahead. A
-/// pool with no spread (one candidate, or every score equal) falls back to
-/// `1.0`, where any positive nudge breaks the tie the same way.
-let private boostUnit (space: RetrievalScoreSpace) (pool: VectorMatch list) : float =
-    match space, pool with
-    | RetrievalScoreSpace.Reranked, _ :: _ ->
-        let scores = pool |> List.map _.Score
-        let range = List.max scores - List.min scores
-        if range > 0.0 then range else 1.0
-    | _ -> 1.0
 
 // ─── Tokenisation for MMR similarity ──────────────────────────────
 
@@ -326,7 +282,7 @@ let private jaccard (a: Set<string>) (b: Set<string>) =
 /// truncate by absolute score should not chain MMR with another scoring
 /// stage. The pipeline applies MMR after the rerank and the boosts, and its
 /// order is the order the caller receives — nothing re-sorts after it
-/// (Phase 978).
+/// .
 let private applyMmr (lambda: float) (candidates: VectorMatch list) : VectorMatch list =
     if candidates.Length <= 1 then
         candidates
@@ -440,7 +396,7 @@ type RetrievalPipelineOptions = {
     /// truncation. `None` skips rerank. The candidate pool is inflated when
     /// a reranker is present so the reranker sees a meaningful working set.
     ///
-    /// Phase 978 — the reranker scores every candidate the pipeline returns:
+    /// The reranker scores every candidate the pipeline returns:
     /// a pool larger than `MaxBatchSize` is capped at it (the trace records
     /// `Rerank:<n>/<pool>`), so a reranker whose `MaxBatchSize` is below the
     /// request's `TopK` returns at most `MaxBatchSize` matches. The pool is
@@ -462,7 +418,7 @@ type RetrievalPipelineOptions = {
     /// outranks a weak module-match, large enough to break ties when
     /// multiple chunks score similarly. Set to `0.0` to disable.
     ///
-    /// Phase 866 — every boost is an additive NUDGE within the pool's
+    /// Every boost is an additive NUDGE within the pool's
     /// score space (`RetrievalScoreSpace`), applied after the fused pool is
     /// normalised onto `[0, 1]`: a boost of `b` lifts a match over one at
     /// most `b` better and never over one further ahead. The three defaults
@@ -471,7 +427,7 @@ type RetrievalPipelineOptions = {
     /// magnitudes are the same kind of nudge. Before 866 each exceeded the
     /// whole raw fused range (`≈ 0.033`) and sorted matches into tiers.
     ///
-    /// Phase 978 — the boosts apply AFTER the reranker, when one is
+    /// The boosts apply AFTER the reranker, when one is
     /// composed, and there `b` is measured in units of the reranked pool's
     /// range: the same share of the pool it is on the normalised fused
     /// scale. Before 978 they ran ahead of the reranker, which replaced
@@ -485,13 +441,13 @@ type RetrievalPipelineOptions = {
     SummaryBoost: float
     /// Score boost applied to a chunk whose `_factRefs` metadata (Phase
     /// 521.D) cites a fact the pre-vector stage resolved for this request
-    /// (Phase 522.E) — the fact→narrative join. A fact's own narrative
+    ///  — the fact→narrative join. A fact's own narrative
     /// context should outrank generic similarity, so the default `+0.15`
     /// is larger than `SummaryBoost`. Set to `0.0` to disable, or when no
     /// fact clause / resolver is present it simply never fires.
     FactNarrativeJoinBoost: float
     /// Wall-clock bound, in milliseconds, on a single `IQueryRewriter`
-    /// call (Phase 506). The rewrite sits in front of retrieval, which
+    /// call. The rewrite sits in front of retrieval, which
     /// sits in front of the answering call, so a wedged rewriter would
     /// stall the whole turn; on overrun the pipeline abandons the rewrite
     /// and searches the raw query, recording `Failed` on the trace. Bounds
@@ -511,7 +467,7 @@ module RetrievalPipelineOptions =
         QueryRewriteTimeoutMs = 2_000
     }
 
-/// Phase 894 — the wall-clock budgets a chat turn's retrieval runs under.
+/// The wall-clock budgets a chat turn's retrieval runs under.
 /// A slow embedding provider or a slow fact store degrades the turn's
 /// retrieval and never stalls the turn: each bounded stage that overruns
 /// or faults contributes nothing, and says so with a stage mark (GP 9 —
@@ -533,7 +489,7 @@ type RetrievalBudgets = {
     /// trace carries `FactsDegraded:<TimedOut|Failed>`. Fail-closed by
     /// construction: a fact whose disclosure check did not complete is
     /// absent, never admitted. The same bound applies, separately, to the
-    /// derived-disclosure check (Phase 775): on overrun or fault every
+    /// derived-disclosure check: on overrun or fault every
     /// chunk citing facts is dropped and the trace carries
     /// `DerivedDisclosureDegraded:<TimedOut|Failed>`.
     FactStage: System.TimeSpan
@@ -547,7 +503,7 @@ module RetrievalBudgets =
         FactStage = System.TimeSpan.FromSeconds 3.0
     }
 
-/// Phase 894 (carrying 892.t6) — an optional batched write path beside
+/// An optional batched write path beside
 /// `IRetrievalPipeline.Index`. The ingestion drainer probes for it and,
 /// when `SupportsBatch` holds, indexes a whole document in one call —
 /// one batched embed and one `IVectorStoreBatch.UpsertBatch` round-trip
@@ -573,7 +529,7 @@ type IBatchIndexer =
 /// with a single dense and single sparse hit produces no signal for either.
 let private inflateForHybridOrRerank (topK: int) = max (topK * 4) 32
 
-// ─── Metadata-equality filter (Phase 502) ─────────────────────────
+// ─── Metadata-equality filter ─────────────────────────
 
 /// Normalise `RetrievalRequest.Filters` to "is there an actual narrowing
 /// intent here?". `None` and `Some (empty map)` both mean "no filter" —
@@ -607,7 +563,7 @@ let private matchesMetadataFilters (filters: Map<string, string>) (m: VectorMatc
 /// bounded, best-effort promise) as the hybrid/rerank inflation above.
 let private inflateForMetadataFilter (topK: int) = max (topK * 8) 64
 
-// ─── Fact-first stage (Phase 522) ─────────────────────────────────
+// ─── Fact-first stage ─────────────────────────────────
 
 /// Score stamped on a resolved-fact match. Facts are exact hits, not
 /// similarity matches — they are prepended ahead of the similarity chunks
@@ -664,7 +620,7 @@ let private factScopeFor (scopes: VectorScope list) : VectorScope =
         | _ -> false)
     |> Option.defaultValue Deployment
 
-// ─── Derived-corpus disclosure (Phase 775) ────────────────────────
+// ─── Derived-corpus disclosure ────────────────────────
 
 /// The fact ids a chunk cites through its `_factRefs` metadata (Phase
 /// 521.D) — the comma-separated list narrative-commit stamps. Empty for a
@@ -703,26 +659,26 @@ type RetrievalPipeline
         ?tracer: IRetrievalTracer,
         ?platformKnowledgeBase: FeatureMode,
         ?platformKnowledgeBaseSnapshot: unit -> FeatureMode,
-        // Phase 122 — when supplied, each `Retrieve` reports its per-stage
+        // When supplied, each `Retrieve` reports its per-stage
         // timing breakdown via `RecordRetrievalStages` so `/health/rag`
         // can expose per-stage P50/P95. `None` costs nothing (GP 13).
         ?telemetry: IRagTelemetry,
-        // Phase 14y — hard cap on query length. A query longer than this is
+        // Hard cap on query length. A query longer than this is
         // refused at the top of `Retrieve` (before any embedding call) with a
         // `KnowledgeQueryTooLargeException`. `None` disables the guard.
         ?maxQueryChars: int,
-        // Phase 14y — audit sink for the `KnowledgeQueryRejected` event a
+        // Audit sink for the `KnowledgeQueryRejected` event a
         // refusal emits. `None` ⇒ the refusal still raises, just without the
         // audit row (GP 13 — zero cost when unwired, e.g. eval / benchmark).
         ?eventStore: IEventStore,
-        // Phase 522 — optional fact resolver. When supplied AND the request
+        // Optional fact resolver. When supplied AND the request
         // carries a `FactClause`, the pipeline resolves the (subject,
         // metric, period) query against the fact store BEFORE vector search
         // and merges the exact fact hits ahead of the similarity chunks as
         // a distinct `ChunkOrigin.Fact` origin. `None` (or a clause-less
         // request) ⇒ no fact stage, byte-identical retrieval (GP 11 / GP 13).
         ?factResolver: IFactResolver,
-        // Phase 525.B — the retrieval egress door. When supplied, every
+        // The retrieval egress door. When supplied, every
         // resolved fact is checked against the disclosure gate at the
         // `FactRetrieval` surface BEFORE merge: a denied fact is simply
         // absent from the results and the prompt block — never annotated
@@ -732,7 +688,7 @@ type RetrievalPipeline
         // `None` ⇒ pass-through (GP 11; a resolver-less or fact-less
         // deployment is byte-identical either way).
         ?disclosureGate: IFactDisclosureGate,
-        // Phase 506 — conversation-aware query rewrite. When supplied AND
+        // Conversation-aware query rewrite. When supplied AND
         // the request carries non-empty `History`, a follow-up query
         // ("what about it?", "and the second one?") is resolved against the
         // recent turns before anything embeds it. `None` (or a
@@ -743,7 +699,7 @@ type RetrievalPipeline
         // the raw query on any failure — retrieval never fails because a
         // rewrite did.
         ?queryRewriter: IQueryRewriter,
-        // Phase 894 — the per-turn budgets (query embed, fact stage). `None`
+        // The per-turn budgets (query embed, fact stage). `None`
         // ⇒ every stage unbounded, the pre-894 pipeline byte for byte
         // (GP 11); `RagOptions` passes `RetrievalBudgets.defaults` unless
         // configured otherwise.
@@ -752,8 +708,8 @@ type RetrievalPipeline
 
     let sparse = sparseIndex
     let opts = defaultArg options RetrievalPipelineOptions.defaults
-    // Phase 4b — read the toggle via a thunk so runtime mutation
-    // (Phase 4b deferred follow-up — `IPlatformRuntimeConfigStore`)
+    // Read the toggle via a thunk so runtime mutation
+    //
     // takes effect immediately on the next request without rebuilding
     // the pipeline. When supplied, the snapshot thunk wins; otherwise
     // fall back to the static `platformKnowledgeBase` constructor
@@ -792,7 +748,7 @@ type RetrievalPipeline
     // cost lands on the in-process dev embedder alone.
     let scopedEmbedderFactory = ScopedEmbedding.tryFactory embedder
 
-    // Phase 894 — one gate per pipeline, so the concurrency ceiling spans
+    // One gate per pipeline, so the concurrency ceiling spans
     // every request it serves. `None` when no budgets were supplied.
     let embedGate = budgets |> Option.map (fun b -> QueryEmbedGate(b.QueryEmbed))
 
@@ -842,7 +798,7 @@ type RetrievalPipeline
     /// *retrievers*; applying it here would flatten the score signal the
     /// boosts and MMR stages read.)
     ///
-    /// Phase 894 — returns the degradation alongside the matches: `Some`
+    /// Returns the degradation alongside the matches: `Some`
     /// when a bounded query embed produced no vector (for any authorised
     /// scope, on the scope-keyed branch), in which case that scope
     /// contributes nothing. Always `None` when no budgets were supplied.
@@ -883,7 +839,7 @@ type RetrievalPipeline
             return merged, perScope |> Array.tryPick snd
           }
 
-    // Phase 14y — emit the `KnowledgeQueryRejected` audit for an over-length
+    // Emit the `KnowledgeQueryRejected` audit for an over-length
     // query. Privacy contract matches `RetrievalTrace`: the plaintext query
     // is NEVER persisted — only its SHA256 hash + character count. Best-
     // effort (try/with): a failed audit write must never mask the primary
@@ -912,703 +868,704 @@ type RetrievalPipeline
 
                     let scopeId =
                         match teamId with
-                        | Some id -> ToolUp.RAG.RetrievalTracers.auditScopeId (Team id)
-                        | None -> ToolUp.RAG.RetrievalTracers.auditScopeId Platform
+                        | Some id -> VectorScope.auditScopeId (Team id)
+                        | None -> VectorScope.auditScopeId Platform
 
                     do! es.Write(Events.create scopeId "ToolUp.RAG" KnowledgeQueryRejectedEventType json)
                 with _ ->
                     ()
         }
 
+    /// The space this pipeline's returned scores are in: a reranker replaces
+    /// every score it is handed with its own, otherwise the keyword index
+    /// means fusion. The boosts nudge within it and the caller reads it.
+    let composedSpace =
+        RetrievalScoreSpace.ofComposition sparse.IsSome opts.Reranker.IsSome
+
+    let retrieveScored (request: RetrievalRequest) (ctx: AccessContext) : Async<ScoredPool> = async {
+        // Query-size guard. Refuse an over-length query at the
+        // contract boundary, before any embedding call: it is almost always
+        // a programming bug (an entire document pasted into the query slot),
+        // and embedding it wastes provider spend / can trip the provider's
+        // own token cap with an opaque error. Emit a `KnowledgeQueryRejected`
+        // audit (hash + length only) then raise a structured exception
+        // naming `MaxQueryChars`.
+        let queryChars = if isNull request.Query then 0 else request.Query.Length
+
+        match maxQueryChars with
+        | Some limit when queryChars > limit ->
+            do! emitQueryRejected request.Query queryChars limit request.Scopes ctx.TeamId
+            raise (KnowledgeQueryTooLargeException(queryChars, limit))
+        | _ -> ()
+
+        let stopwatch = System.Diagnostics.Stopwatch.StartNew()
+        let stages = ResizeArray<string>()
+        // Per-stage `(name, elapsedMs)` pairs. Appended
+        // sequentially — the concurrent dense/sparse branches return
+        // their elapsed time and the join appends both, so no two
+        // threads touch this list.
+        let timings = ResizeArray<string * float>()
+        stages.Add "AuthoriseScopes"
+
+        let permitted = authorisedScopes (readPlatformKbMode ()) ctx request.Scopes
+
+        // Pre-vector fact-resolution stage. When a fact
+        // resolver is wired AND the request carries a fact clause,
+        // resolve the (subject, metric, period) query against the fact
+        // store FIRST. The resolver is scope-filtered (GP 4): it is
+        // handed the request's resolved fact scope and reads only within
+        // it, so a fact from another tenant is structurally unreachable.
+        // That scope is `request.FactScope`, the value the
+        // platform's scope resolution minted for the request (the one
+        // the fact tools read). The pipeline derives no scope of its own
+        // from the access context: a second derivation here would let
+        // the retrieval turn and the fact tools read different shards
+        // for one request.
+        // Resolution is independent of the vector-scope authorisation
+        // below — a fact clause is answerable even for a caller with no
+        // readable KB scope. Clause-less / resolver-less ⇒ no facts,
+        // byte-identical retrieval (GP 11 / GP 13).
+        let! factMatches =
+            match factResolver, request.FactClause with
+            | Some resolver, Some clause -> async {
+                stages.Add "FactResolve"
+                let factScope = request.FactScope
+
+                // The stage body touches no shared state:
+                // an overrunning run is abandoned under a budget and may
+                // still be executing when the turn moves on, so it
+                // returns its stage marks instead of appending them.
+                let resolveAndDisclose = async {
+                    let! resolved = resolver.Resolve(factScope, clause)
+
+                    // Disclosure egress filter, applied to the
+                    // resolved facts BEFORE merge. Default-deny at retrieval:
+                    // a fact the gate does not affirmatively disclose (denied,
+                    // or missing from the verdict map) never enters the
+                    // result set, the `RetrievedSource`s, or the prompt block
+                    // — absent, not annotated. The gate is handed the same
+                    // resolved fact scope as the resolver (GP 4), so
+                    // scope never overrides a deny and disclosure never
+                    // widens scope. No gate wired ⇒ pass-through (GP 11).
+                    let! disclosed =
+                        match disclosureGate, resolved with
+                        | Some gate, _ :: _ -> async {
+                            let ids = resolved |> List.map _.FactId
+                            let! verdicts = gate.Check(factScope, ctx.UserId, FactRetrieval, ids)
+
+                            let permitted =
+                                resolved
+                                |> List.filter (fun rf ->
+                                    match verdicts.TryFind rf.FactId with
+                                    | Some FactDisclosable -> true
+                                    | Some(FactNotDisclosable _)
+                                    | None -> false)
+
+                            let marks =
+                                if permitted.Length < resolved.Length then
+                                    [ "DisclosureFilter" ]
+                                else
+                                    []
+
+                            return permitted, marks
+                          }
+                        | _ -> async.Return(resolved, [])
+
+                    let disclosed, marks = disclosed
+                    let scope = factScopeFor request.Scopes
+                    return disclosed |> List.map (factToMatch scope), marks
+                }
+
+                match budgets with
+                | None ->
+                    // Unbounded — the pre-894 stage: a fault raises out
+                    // of `Retrieve` (fail-closed, and loud).
+                    let! matches, marks = resolveAndDisclose
+                    stages.AddRange marks
+                    return matches
+                | Some b ->
+                    let bounded = async {
+                        let! child = Async.StartChild(resolveAndDisclose, max 1 (int b.FactStage.TotalMilliseconds))
+
+                        return! child
+                    }
+
+                    match! Async.Catch bounded with
+                    | Choice1Of2(matches, marks) ->
+                        stages.AddRange marks
+                        return matches
+                    | Choice2Of2(:? System.TimeoutException) ->
+                        // Fail-closed: nothing the stage produced is
+                        // admitted — a fact whose disclosure check did
+                        // not complete is absent.
+                        stages.Add "FactsDegraded:TimedOut"
+                        return []
+                    | Choice2Of2 _ ->
+                        stages.Add "FactsDegraded:Failed"
+                        return []
+              }
+            | _ -> async.Return []
+
+        // The ids of the facts resolved this turn — drives the
+        // fact→narrative join boost below.
+        let resolvedFactIds =
+            factMatches
+            |> List.choose (fun m -> m.Metadata.TryFind ChunkMetadata.FactIdKey)
+            |> Set.ofList
+
+        // What the query-rewrite stage decided, read by
+        // `emitTrace` after retrieval finishes. Ref cells rather than
+        // `let mutable` because the trace emitter is a closure and F#
+        // cannot capture a mutable local; `None` on both is the "no
+        // rewrite stage ran" state every pre-506 deployment stays in.
+        let rewriteDecision: string option ref = ref None
+        let rewrittenQueryHash: string option ref = ref None
+        // Set when a bounded query embed produced no vector,
+        // so the trace reports the dense branch as not used.
+        let denseDegraded: bool ref = ref false
+
+        let emitTrace (results: VectorMatch list) (poolSize: int) (sparseRan: bool) (rerankerName: string option) = async {
+            match tracer with
+            | None -> ()
+            | Some t ->
+                stopwatch.Stop()
+
+                let trace: RetrievalTrace = {
+                    QueryHash = ToolUp.RAG.RetrievalTracers.hashQuery request.Query
+                    QueryLength = if isNull request.Query then 0 else request.Query.Length
+                    RequestedScopes = request.Scopes
+                    PermittedScopes = permitted
+                    TopK = request.TopK
+                    AdaptiveK = request.AdaptiveK.IsSome
+                    CandidatePoolSize = poolSize
+                    TopScore =
+                        match results with
+                        | top :: _ -> top.Score
+                        | [] -> 0.0
+                    DenseUsed = not denseDegraded.Value
+                    SparseUsed = sparseRan
+                    RerankerName = rerankerName
+                    LatencyMs = stopwatch.ElapsedMilliseconds
+                    Stages = stages |> List.ofSeq
+                    ResultCount = results.Length
+                    StageTimings = timings |> List.ofSeq
+                    RewriteDecision = rewriteDecision.Value
+                    RewrittenQueryHash = rewrittenQueryHash.Value
+                }
+
+                do! t.Trace trace ctx
+        }
+
+        if permitted.IsEmpty then
+            // No readable vector scope — but any resolved facts still
+            // surface (fact resolution is independent of KB-scope
+            // authorisation). Clause-less ⇒ `factMatches` is empty and
+            // this returns `[]` exactly as before (GP 11).
+            do! emitTrace factMatches 0 false None
+            return ScoredPool.ofMatches composedSpace factMatches
+        else
+            // Conversation-aware query rewrite.
+            //
+            // Retrieval embeds the query text, so a follow-up whose
+            // subject lives only in the previous turn ("what about
+            // it?") embeds to nothing useful and multi-turn recall
+            // collapses even when the corpus holds the answer.
+            // `RetrievalRequest.History` was documented as feeding
+            // exactly this stage but no stage existed, so the field was
+            // inert. This is the stage.
+            //
+            // Three properties, and each is load-bearing:
+            //
+            // - **Nothing wired ⇒ nothing changes.** No rewriter, or a
+            //   request with no history, and the match below returns the
+            //   raw query with no stage recorded and no timing entry —
+            //   the pipeline is byte-for-byte its pre-506 self (GP 11).
+            // - **Bounded.** The call runs under
+            //   `QueryRewriteTimeoutMs`; the rewrite sits in front of
+            //   retrieval which sits in front of the answering call, so
+            //   an unbounded rewriter would stall the user's whole turn.
+            // - **Degrades, never fails.** Any exception (including the
+            //   timeout) falls back to the raw query and records
+            //   `Failed`. A rewrite is an enhancement over a path that
+            //   already works; it must never be able to break it.
+            //
+            // Placed inside the authorised branch deliberately: a
+            // caller with no readable scope is going to retrieve nothing
+            // regardless, and must not spend a provider call finding
+            // that out.
+            let! effectiveQuery =
+                match queryRewriter, request.History with
+                | Some rewriter, Some(_ :: _ as history) when not (System.String.IsNullOrWhiteSpace request.Query) -> async {
+                    stages.Add "QueryRewrite"
+                    let sw = System.Diagnostics.Stopwatch.StartNew()
+
+                    // `StartChild` + its millisecond timeout is the
+                    // bound: the child raises `TimeoutException` when
+                    // awaited past it, which `Async.Catch` turns into
+                    // the same degradation path as any other failure.
+                    // The overrunning child is ABANDONED, not cancelled
+                    // — it finishes on its own and its result is
+                    // discarded. That is the right trade here: the
+                    // guarantee this bound owes the user is that the
+                    // turn proceeds, and a rewriter's in-flight HTTP
+                    // call is the implementation's to bound (the
+                    // shipped one passes the same budget to its
+                    // provider as a `RetryPolicy.Timeout`).
+                    let bounded = async {
+                        let! child =
+                            Async.StartChild(rewriter.Rewrite request.Query history, max 1 opts.QueryRewriteTimeoutMs)
+
+                        return! child
+                    }
+
+                    let! outcome = Async.Catch bounded
+                    sw.Stop()
+                    timings.Add("QueryRewrite", sw.Elapsed.TotalMilliseconds)
+
+                    match outcome with
+                    | Choice1Of2 QuerySelfContained ->
+                        rewriteDecision.Value <- Some QueryRewriteDecision.SelfContained
+                        return request.Query
+                    | Choice1Of2(QueryRewritten rewritten) when not (System.String.IsNullOrWhiteSpace rewritten) ->
+                        rewriteDecision.Value <- Some QueryRewriteDecision.Rewritten
+
+                        rewrittenQueryHash.Value <- Some(ToolUp.RAG.RetrievalTracers.hashQuery rewritten)
+
+                        return rewritten
+                    | Choice1Of2 _ ->
+                        // A blank rewrite is not a rewrite. Searching
+                        // it would replace a usable query with an
+                        // empty embedding — worse than doing nothing.
+                        rewriteDecision.Value <- Some QueryRewriteDecision.SelfContained
+                        return request.Query
+                    | Choice2Of2 _ ->
+                        rewriteDecision.Value <- Some QueryRewriteDecision.Failed
+                        return request.Query
+                  }
+                | _ -> async.Return request.Query
+
+            // The request's metadata-equality filter, if it
+            // carries a live one. Resolved once here: it drives both the
+            // candidate-pool size below and the post-search filter stage.
+            let metadataFilters = activeFilters request.Filters
+
+            // Stage 1: candidate retrieval (dense [+ sparse]).
+            //
+            // A metadata filter narrows the pool *after* the
+            // store has ranked it, so over-fetch when one is present or
+            // the filtered result set is short-changed. Take the larger
+            // of the two inflations when both apply. `Filters = None`
+            // leaves the pool exactly as before (GP 11).
+            let pool =
+                match needsHybridPool, metadataFilters with
+                | false, None -> request.TopK
+                | true, None -> inflateForHybridOrRerank request.TopK
+                | false, Some _ -> inflateForMetadataFilter request.TopK
+                | true, Some _ -> max (inflateForHybridOrRerank request.TopK) (inflateForMetadataFilter request.TopK)
+
+            stages.Add "Dense"
+
+            // A bounded query embed that produced no vector
+            // leaves the dense branch empty; mark it so the degradation
+            // is visible on the trace (GP 9). Called from the join, never
+            // from a concurrent branch.
+            let markDenseDegraded (degraded: QueryEmbedOutcome option) =
+                match degraded with
+                | Some outcome ->
+                    denseDegraded.Value <- true
+                    stages.Add("DenseDegraded:" + QueryEmbedOutcome.label outcome)
+                | None -> ()
+
+            let! rawInitial =
+                match sparse with
+                | None -> async {
+                    // Cosine-only path. When no sparse index AND no
+                    // reranker is wired, this is byte-equivalent to the
+                    // pre-Phase-14e pipeline.
+                    let denseSw = System.Diagnostics.Stopwatch.StartNew()
+                    let! results, degraded = denseSearch effectiveQuery permitted pool
+                    denseSw.Stop()
+                    timings.Add("Dense", denseSw.Elapsed.TotalMilliseconds)
+                    markDenseDegraded degraded
+                    return results
+                  }
+
+                | Some sparseIdx -> async {
+                    stages.Add "Sparse"
+
+                    // Each branch times itself and returns the elapsed
+                    // ms alongside its matches; the post-join appends
+                    // keep `timings` single-threaded.
+                    let denseAsync = async {
+                        let sw = System.Diagnostics.Stopwatch.StartNew()
+                        let! results, degraded = denseSearch effectiveQuery permitted pool
+                        sw.Stop()
+                        return results, degraded, sw.Elapsed.TotalMilliseconds
+                    }
+
+                    let sparseAsync = async {
+                        let sw = System.Diagnostics.Stopwatch.StartNew()
+                        let! results = sparseIdx.Search permitted effectiveQuery pool
+                        sw.Stop()
+                        return results, sw.Elapsed.TotalMilliseconds
+                    }
+
+                    let! denseChild = Async.StartChild denseAsync
+                    let! sparseResults, sparseMs = sparseAsync
+                    let! denseResults, degraded, denseMs = denseChild
+                    timings.Add("Dense", denseMs)
+                    timings.Add("Sparse", sparseMs)
+                    markDenseDegraded degraded
+
+                    stages.Add "RRF"
+                    let fuseSw = System.Diagnostics.Stopwatch.StartNew()
+                    let fused = fuseRRF denseResults sparseResults
+                    fuseSw.Stop()
+                    timings.Add("RRF", fuseSw.Elapsed.TotalMilliseconds)
+                    return fused
+                  }
+
+            // Optional `Filters`: drop chunks whose metadata
+            // does not match every requested key/value pair exactly.
+            // Applied at the same site as `OriginFilter` (immediately
+            // below), before rerank / MMR / topK, so every downstream
+            // stage sees a pool that already respects the caller's
+            // scoping intent.
+            //
+            // This field was documented and honoured by the static-corpus
+            // pipeline but never read here, so a caller passing `Filters`
+            // silently got unfiltered results — content they had asked to
+            // exclude reached the model with no diagnostic. GP 10: a
+            // shared contract field must mean the same thing on both
+            // pipelines; `MetadataFilterContract` pins the parity.
+            //
+            // Scope note: like `OriginFilter`, this applies to the vector
+            // candidate set only. Resolved facts are merged
+            // in separately after every ranking stage and do not carry
+            // chunk metadata, so a chunk-metadata filter is not a
+            // meaningful predicate over them.
+            let metadataFiltered =
+                match metadataFilters with
+                | None -> rawInitial
+                | Some pairs ->
+                    stages.Add "MetadataFilter"
+                    rawInitial |> List.filter (matchesMetadataFilters pairs)
+
+            // Optional `OriginFilter`: drop chunks whose `_origin`
+            // metadata isn't in the request's allow-set. Applied here,
+            // before rerank / MMR / topK, so the pool fed to those
+            // downstream stages already respects the filter.
+            let filtered =
+                match request.OriginFilter with
+                | None -> metadataFiltered
+                | Some allowed ->
+                    stages.Add "OriginFilter"
+
+                    metadataFiltered
+                    |> List.filter (fun m ->
+                        match m.Metadata.TryFind ChunkMetadata.OriginKey with
+                        | None ->
+                            // No `_origin` stamped — keep the chunk so
+                            // pre-filter producers aren't silently dropped.
+                            true
+                        | Some value -> allowed.Contains(ChunkOrigin.fromMetadataValue value))
+
+            // Derived-corpus disclosure, re-gated at retrieval.
+            // A chunk DERIVED from facts (a narrative committed with
+            // `_factRefs`, Phase 521.D — the coverage narratives among
+            // them) was judged for disclosure once, at commit (525.D, the
+            // `FactNarrativePublication` surface). That judgement is the
+            // cheap first filter and it stays; THIS one is authoritative:
+            // a policy tightened, a fact reclassified or superseded under
+            // a restricted lineage, a purpose taxonomy declared since the
+            // chunk was written — each is honoured here without
+            // re-indexing. Every distinct fact id cited across the
+            // candidate pool goes through ONE gate call at the
+            // `FactRetrieval` surface, in the request's resolved fact
+            // scope (the scope 525.B hands the gate above), and a chunk
+            // with ANY ref lacking an affirmative verdict is dropped —
+            // absent, not annotated. The pool is already top-K-bounded,
+            // and refs are deduped, so one fact cited by fifty chunks is
+            // one verdict. Applied after the scoping filters (the pool the
+            // caller may see) and before normalisation and rerank, so no
+            // ranking stage ever sees a dropped chunk. No gate wired, or
+            // no chunk carrying refs ⇒ the pool is untouched and no stage
+            // is recorded (GP 11). Under a budget the check shares the
+            // fact stage's bound; a check that overruns or faults drops
+            // every derived chunk (fail-closed) and says so.
+            let! filtered =
+                match disclosureGate with
+                | None -> async.Return filtered
+                | Some gate ->
+                    match filtered |> List.collect factRefsOf |> List.distinct with
+                    | [] -> async.Return filtered
+                    | cited -> async {
+                        let sw = System.Diagnostics.Stopwatch.StartNew()
+                        let check = gate.Check(request.FactScope, ctx.UserId, FactRetrieval, cited)
+
+                        let! verdicts =
+                            match budgets with
+                            | None -> async {
+                                let! v = check
+                                return Ok v
+                              }
+                            | Some b -> async {
+                                let bounded = async {
+                                    let! child = Async.StartChild(check, max 1 (int b.FactStage.TotalMilliseconds))
+                                    return! child
+                                }
+
+                                match! Async.Catch bounded with
+                                | Choice1Of2 v -> return Ok v
+                                | Choice2Of2(:? System.TimeoutException) ->
+                                    return Error "DerivedDisclosureDegraded:TimedOut"
+                                | Choice2Of2 _ -> return Error "DerivedDisclosureDegraded:Failed"
+                              }
+
+                        sw.Stop()
+                        timings.Add("DerivedDisclosure", sw.Elapsed.TotalMilliseconds)
+
+                        let admitted =
+                            match verdicts with
+                            | Ok v -> filtered |> List.filter (derivedChunkDisclosed v)
+                            | Error mark ->
+                                stages.Add mark
+                                filtered |> List.filter (fun m -> List.isEmpty (factRefsOf m))
+
+                        if admitted.Length < filtered.Length then
+                            stages.Add "DerivedDisclosure"
+
+                            stages.Add(
+                                sprintf "DerivedDisclosure:%d/%d" (filtered.Length - admitted.Length) filtered.Length
+                            )
+
+                        return admitted
+                      }
+
+            // The space the pool's scores are in, carried
+            // from the stage that produced them (Dense → cosine, RRF →
+            // fused) to every stage below that reads a score: the
+            // boosts, adaptive-K's score gaps, and — through the
+            // returned scores — the `MinScore` gate downstream. A raw
+            // fused score tops out at 2/61, so the fused pool is
+            // normalised onto [0, 1] here, after the scoping filters
+            // (the pool the caller may see) and before the boosts (so
+            // they act as nudges within it). Min-max is affine and
+            // increasing: the pool's order is unchanged (GP 11). The
+            // cosine-only path is left exactly as the store scored it.
+            let producedSpace = RetrievalScoreSpace.ofComposition sparse.IsSome false
+
+            let filtered =
+                match producedSpace with
+                | RetrievalScoreSpace.Fused when not filtered.IsEmpty ->
+                    stages.Add RetrievalScoreSpace.NormaliseStage
+                    normaliseWithinPool filtered
+                | _ -> filtered
+
+            // Stage 2: optional cross-encoder rerank. Phase 978 — the
+            // reranker scores the WHOLE pool the pipeline goes on to
+            // return. A pool larger than one call takes is capped at
+            // `MaxBatchSize`, and the trace says so (`Rerank:<n>/<pool>`).
+            // The pool is not chunked through several calls and merged:
+            // `IReranker` promises an ordering within a call, not a scale
+            // shared across calls. Nor is an unreranked tail kept: its
+            // fused scores share no scale with the reranked head, and the
+            // boosts, MMR, the merge and the `MinScore` gate downstream
+            // would each read across the two.
+            let ordering = ref (if sparse.IsSome then "RRF" else "Dense")
+
+            let! reranked =
+                match opts.Reranker with
+                | None -> async.Return filtered
+                | Some r ->
+                    stages.Add "Rerank"
+                    let cap = max 0 (min filtered.Length r.MaxBatchSize)
+
+                    if cap < filtered.Length then
+                        stages.Add(sprintf "Rerank:%d/%d" cap filtered.Length)
+
+                    ordering.Value <- "Rerank"
+
+                    async {
+                        let sw = System.Diagnostics.Stopwatch.StartNew()
+                        let! reordered = r.Rerank effectiveQuery (List.truncate cap filtered)
+                        sw.Stop()
+                        timings.Add("Rerank", sw.Elapsed.TotalMilliseconds)
+                        return reordered
+                    }
+
+            // The boosts run AFTER the reranker, on the scale
+            // it returned. Before, they ran ahead of it and a composed
+            // reranker replaced every boosted score with its own, so a
+            // deployment with a reranker got none of the boosts it
+            // configured. `boostScale` keeps a boost of `b` the nudge
+            // Phase 866 made it on the normalised fused scale.
+            let boostScale = ScoredPool.unitOf composedSpace reranked
+
+            // Optional `ActiveModule` boost: nudge chunks whose
+            // `_originModule` matches the caller's active module up
+            // the ranking. Re-sorts after applying the boost so
+            // downstream stages see a coherent ordering.
+            let moduleBoosted =
+                match request.ActiveModule, opts.ActiveModuleBoost with
+                | Some _, b when b <= 0.0 -> reranked
+                | None, _ -> reranked
+                | Some moduleName, boost ->
+                    stages.Add "ActiveModuleBoost"
+                    ordering.Value <- "ActiveModuleBoost"
+
+                    reranked
+                    |> List.map (fun m ->
+                        match m.Metadata.TryFind ChunkMetadata.OriginModuleKey with
+                        | Some value when value = moduleName -> {
+                            m with
+                                Score = m.Score + boost * boostScale
+                          }
+                        | _ -> m)
+                    |> List.sortBy (fun m -> -m.Score, m.Scope, m.ChunkId)
+
+            // Optional summary-chunk boost (WS4.1): chunks stamped
+            // `_isSummary = "true"` are the document-level entry
+            // point and should outrank paragraph chunks for "what is
+            // this about?" queries. Applied after the module boost
+            // so a summary in the matching module gets both nudges.
+            let boosted =
+                if opts.SummaryBoost <= 0.0 then
+                    moduleBoosted
+                else
+                    let mutable applied = false
+
+                    let result =
+                        moduleBoosted
+                        |> List.map (fun m ->
+                            match m.Metadata.TryFind ChunkMetadata.IsSummaryKey with
+                            | Some "true" ->
+                                applied <- true
+
+                                {
+                                    m with
+                                        Score = m.Score + opts.SummaryBoost * boostScale
+                                }
+                            | _ -> m)
+
+                    if applied then
+                        stages.Add "SummaryBoost"
+                        ordering.Value <- "SummaryBoost"
+                        result |> List.sortBy (fun m -> -m.Score, m.Scope, m.ChunkId)
+                    else
+                        result
+
+            // Fact→narrative join. A chunk whose
+            // `_factRefs` metadata cites a fact the
+            // pre-vector stage resolved this turn gets a boost, so the
+            // fact's own narrative context outranks generic similarity.
+            // No resolved facts (the common clause-less path) ⇒ no-op,
+            // byte-identical ordering (GP 11).
+            let boosted =
+                if Set.isEmpty resolvedFactIds || opts.FactNarrativeJoinBoost <= 0.0 then
+                    boosted
+                else
+                    let mutable joined = false
+
+                    let result =
+                        boosted
+                        |> List.map (fun m ->
+                            if factRefsOf m |> List.exists resolvedFactIds.Contains then
+                                joined <- true
+
+                                {
+                                    m with
+                                        Score = m.Score + opts.FactNarrativeJoinBoost * boostScale
+                                }
+                            else
+                                m)
+
+                    if joined then
+                        stages.Add "FactNarrativeJoin"
+                        ordering.Value <- "FactNarrativeJoin"
+                        result |> List.sortBy (fun m -> -m.Score, m.Scope, m.ChunkId)
+                    else
+                        result
+
+            // Stage 3: optional MMR diversification — the last step that
+            // orders the pool.
+            let diversified =
+                if opts.EnableMmr then
+                    stages.Add "MMR"
+                    ordering.Value <- "MMR"
+                    let sw = System.Diagnostics.Stopwatch.StartNew()
+                    let result = applyMmr opts.MmrLambda boosted
+                    sw.Stop()
+                    timings.Add("MMR", sw.Elapsed.TotalMilliseconds)
+                    result
+                else
+                    boosted
+
+            // Stage 4: adaptive top-K (if hint present) else fixed top-K.
+            let truncated =
+                match request.AdaptiveK with
+                | Some hint ->
+                    stages.Add "AdaptiveK"
+                    adaptiveTruncate hint diversified
+                | None ->
+                    stages.Add "TopK"
+                    diversified |> List.truncate request.TopK
+
+            // MMR's order is the final order. The Interleaved
+            // merge re-sorts by score, which undid the diversity order MMR
+            // had just produced, so when MMR ran the merge only bounds the
+            // result to `TopK`. The trace names the step whose order the
+            // caller receives (`FinalOrder:<step>`).
+            stages.Add "Merge"
+            let mergeSw = System.Diagnostics.Stopwatch.StartNew()
+
+            let final =
+                match request.Merge with
+                | Interleaved when not opts.EnableMmr ->
+                    ordering.Value <- "Interleaved"
+                    applyMerge Interleaved request.TopK truncated
+                | Interleaved -> truncated |> List.truncate request.TopK
+                | Separate -> applyMerge Separate request.TopK truncated
+
+            mergeSw.Stop()
+            timings.Add("Merge", mergeSw.Elapsed.TotalMilliseconds)
+
+            let rerankerName = opts.Reranker |> Option.map _.Name
+
+            stages.Add("FinalOrder:" + ordering.Value)
+            stages.Add(RetrievalScoreSpace.stageMark composedSpace)
+
+            match telemetry with
+            | Some t -> t.RecordRetrievalStages(timings |> List.ofSeq)
+            | None -> ()
+
+            do! emitTrace final pool sparse.IsSome rerankerName
+
+            // Resolved facts merge AHEAD of the similarity
+            // chunks. Facts are exact hits, not similarity matches, so
+            // they bypass rerank / MMR / topK (which only shaped the
+            // chunk set) and lead the result. `factMatches` is empty on
+            // the clause-less path, so this is `final` unchanged (GP 11).
+            return {
+                Space = composedSpace
+                Unit = boostScale
+                Matches = factMatches @ final
+                Relevance = if opts.EnableMmr then Some boosted else None
+            }
+    }
+
+    interface IScoredRetrievalPipeline with
+        member _.RetrieveScored request ctx = retrieveScored request ctx
+
     interface IRetrievalPipeline with
 
         member _.Retrieve request ctx = async {
-            // Phase 14y — query-size guard. Refuse an over-length query at the
-            // contract boundary, before any embedding call: it is almost always
-            // a programming bug (an entire document pasted into the query slot),
-            // and embedding it wastes provider spend / can trip the provider's
-            // own token cap with an opaque error. Emit a `KnowledgeQueryRejected`
-            // audit (hash + length only) then raise a structured exception
-            // naming `MaxQueryChars`.
-            let queryChars = if isNull request.Query then 0 else request.Query.Length
-
-            match maxQueryChars with
-            | Some limit when queryChars > limit ->
-                do! emitQueryRejected request.Query queryChars limit request.Scopes ctx.TeamId
-                raise (KnowledgeQueryTooLargeException(queryChars, limit))
-            | _ -> ()
-
-            let stopwatch = System.Diagnostics.Stopwatch.StartNew()
-            let stages = ResizeArray<string>()
-            // Per-stage `(name, elapsedMs)` pairs (Phase 122). Appended
-            // sequentially — the concurrent dense/sparse branches return
-            // their elapsed time and the join appends both, so no two
-            // threads touch this list.
-            let timings = ResizeArray<string * float>()
-            stages.Add "AuthoriseScopes"
-
-            let permitted = authorisedScopes (readPlatformKbMode ()) ctx request.Scopes
-
-            // Phase 522.B — pre-vector fact-resolution stage. When a fact
-            // resolver is wired AND the request carries a fact clause,
-            // resolve the (subject, metric, period) query against the fact
-            // store FIRST. The resolver is scope-filtered (GP 4): it is
-            // handed the request's resolved fact scope and reads only within
-            // it, so a fact from another tenant is structurally unreachable.
-            // Phase 820 — that scope is `request.FactScope`, the value the
-            // platform's scope resolution minted for the request (the one
-            // the fact tools read). The pipeline derives no scope of its own
-            // from the access context: a second derivation here would let
-            // the retrieval turn and the fact tools read different shards
-            // for one request.
-            // Resolution is independent of the vector-scope authorisation
-            // below — a fact clause is answerable even for a caller with no
-            // readable KB scope. Clause-less / resolver-less ⇒ no facts,
-            // byte-identical retrieval (GP 11 / GP 13).
-            let! factMatches =
-                match factResolver, request.FactClause with
-                | Some resolver, Some clause -> async {
-                    stages.Add "FactResolve"
-                    let factScope = request.FactScope
-
-                    // Phase 894 — the stage body touches no shared state:
-                    // an overrunning run is abandoned under a budget and may
-                    // still be executing when the turn moves on, so it
-                    // returns its stage marks instead of appending them.
-                    let resolveAndDisclose = async {
-                        let! resolved = resolver.Resolve(factScope, clause)
-
-                        // Phase 525.B — disclosure egress filter, applied to the
-                        // resolved facts BEFORE merge. Default-deny at retrieval:
-                        // a fact the gate does not affirmatively disclose (denied,
-                        // or missing from the verdict map) never enters the
-                        // result set, the `RetrievedSource`s, or the prompt block
-                        // — absent, not annotated. The gate is handed the same
-                        // resolved fact scope as the resolver (GP 4), so
-                        // scope never overrides a deny and disclosure never
-                        // widens scope. No gate wired ⇒ pass-through (GP 11).
-                        let! disclosed =
-                            match disclosureGate, resolved with
-                            | Some gate, _ :: _ -> async {
-                                let ids = resolved |> List.map _.FactId
-                                let! verdicts = gate.Check(factScope, ctx.UserId, FactRetrieval, ids)
-
-                                let permitted =
-                                    resolved
-                                    |> List.filter (fun rf ->
-                                        match verdicts.TryFind rf.FactId with
-                                        | Some FactDisclosable -> true
-                                        | Some(FactNotDisclosable _)
-                                        | None -> false)
-
-                                let marks =
-                                    if permitted.Length < resolved.Length then
-                                        [ "DisclosureFilter" ]
-                                    else
-                                        []
-
-                                return permitted, marks
-                              }
-                            | _ -> async.Return(resolved, [])
-
-                        let disclosed, marks = disclosed
-                        let scope = factScopeFor request.Scopes
-                        return disclosed |> List.map (factToMatch scope), marks
-                    }
-
-                    match budgets with
-                    | None ->
-                        // Unbounded — the pre-894 stage: a fault raises out
-                        // of `Retrieve` (fail-closed, and loud).
-                        let! matches, marks = resolveAndDisclose
-                        stages.AddRange marks
-                        return matches
-                    | Some b ->
-                        let bounded = async {
-                            let! child = Async.StartChild(resolveAndDisclose, max 1 (int b.FactStage.TotalMilliseconds))
-
-                            return! child
-                        }
-
-                        match! Async.Catch bounded with
-                        | Choice1Of2(matches, marks) ->
-                            stages.AddRange marks
-                            return matches
-                        | Choice2Of2(:? System.TimeoutException) ->
-                            // Fail-closed: nothing the stage produced is
-                            // admitted — a fact whose disclosure check did
-                            // not complete is absent.
-                            stages.Add "FactsDegraded:TimedOut"
-                            return []
-                        | Choice2Of2 _ ->
-                            stages.Add "FactsDegraded:Failed"
-                            return []
-                  }
-                | _ -> async.Return []
-
-            // The ids of the facts resolved this turn — drives the
-            // fact→narrative join boost (Phase 522.E) below.
-            let resolvedFactIds =
-                factMatches
-                |> List.choose (fun m -> m.Metadata.TryFind ChunkMetadata.FactIdKey)
-                |> Set.ofList
-
-            // Phase 506 — what the query-rewrite stage decided, read by
-            // `emitTrace` after retrieval finishes. Ref cells rather than
-            // `let mutable` because the trace emitter is a closure and F#
-            // cannot capture a mutable local; `None` on both is the "no
-            // rewrite stage ran" state every pre-506 deployment stays in.
-            let rewriteDecision: string option ref = ref None
-            let rewrittenQueryHash: string option ref = ref None
-            // Phase 894 — set when a bounded query embed produced no vector,
-            // so the trace reports the dense branch as not used.
-            let denseDegraded: bool ref = ref false
-
-            let emitTrace (results: VectorMatch list) (poolSize: int) (sparseRan: bool) (rerankerName: string option) = async {
-                match tracer with
-                | None -> ()
-                | Some t ->
-                    stopwatch.Stop()
-
-                    let trace: RetrievalTrace = {
-                        QueryHash = ToolUp.RAG.RetrievalTracers.hashQuery request.Query
-                        QueryLength = if isNull request.Query then 0 else request.Query.Length
-                        RequestedScopes = request.Scopes
-                        PermittedScopes = permitted
-                        TopK = request.TopK
-                        AdaptiveK = request.AdaptiveK.IsSome
-                        CandidatePoolSize = poolSize
-                        TopScore =
-                            match results with
-                            | top :: _ -> top.Score
-                            | [] -> 0.0
-                        DenseUsed = not denseDegraded.Value
-                        SparseUsed = sparseRan
-                        RerankerName = rerankerName
-                        LatencyMs = stopwatch.ElapsedMilliseconds
-                        Stages = stages |> List.ofSeq
-                        ResultCount = results.Length
-                        StageTimings = timings |> List.ofSeq
-                        RewriteDecision = rewriteDecision.Value
-                        RewrittenQueryHash = rewrittenQueryHash.Value
-                    }
-
-                    do! t.Trace trace ctx
-            }
-
-            if permitted.IsEmpty then
-                // No readable vector scope — but any resolved facts still
-                // surface (fact resolution is independent of KB-scope
-                // authorisation). Clause-less ⇒ `factMatches` is empty and
-                // this returns `[]` exactly as before (GP 11).
-                do! emitTrace factMatches 0 false None
-                return factMatches
-            else
-                // Phase 506 — conversation-aware query rewrite.
-                //
-                // Retrieval embeds the query text, so a follow-up whose
-                // subject lives only in the previous turn ("what about
-                // it?") embeds to nothing useful and multi-turn recall
-                // collapses even when the corpus holds the answer.
-                // `RetrievalRequest.History` was documented as feeding
-                // exactly this stage but no stage existed, so the field was
-                // inert. This is the stage.
-                //
-                // Three properties, and each is load-bearing:
-                //
-                // - **Nothing wired ⇒ nothing changes.** No rewriter, or a
-                //   request with no history, and the match below returns the
-                //   raw query with no stage recorded and no timing entry —
-                //   the pipeline is byte-for-byte its pre-506 self (GP 11).
-                // - **Bounded.** The call runs under
-                //   `QueryRewriteTimeoutMs`; the rewrite sits in front of
-                //   retrieval which sits in front of the answering call, so
-                //   an unbounded rewriter would stall the user's whole turn.
-                // - **Degrades, never fails.** Any exception (including the
-                //   timeout) falls back to the raw query and records
-                //   `Failed`. A rewrite is an enhancement over a path that
-                //   already works; it must never be able to break it.
-                //
-                // Placed inside the authorised branch deliberately: a
-                // caller with no readable scope is going to retrieve nothing
-                // regardless, and must not spend a provider call finding
-                // that out.
-                let! effectiveQuery =
-                    match queryRewriter, request.History with
-                    | Some rewriter, Some(_ :: _ as history) when not (System.String.IsNullOrWhiteSpace request.Query) -> async {
-                        stages.Add "QueryRewrite"
-                        let sw = System.Diagnostics.Stopwatch.StartNew()
-
-                        // `StartChild` + its millisecond timeout is the
-                        // bound: the child raises `TimeoutException` when
-                        // awaited past it, which `Async.Catch` turns into
-                        // the same degradation path as any other failure.
-                        // The overrunning child is ABANDONED, not cancelled
-                        // — it finishes on its own and its result is
-                        // discarded. That is the right trade here: the
-                        // guarantee this bound owes the user is that the
-                        // turn proceeds, and a rewriter's in-flight HTTP
-                        // call is the implementation's to bound (the
-                        // shipped one passes the same budget to its
-                        // provider as a `RetryPolicy.Timeout`).
-                        let bounded = async {
-                            let! child =
-                                Async.StartChild(
-                                    rewriter.Rewrite request.Query history,
-                                    max 1 opts.QueryRewriteTimeoutMs
-                                )
-
-                            return! child
-                        }
-
-                        let! outcome = Async.Catch bounded
-                        sw.Stop()
-                        timings.Add("QueryRewrite", sw.Elapsed.TotalMilliseconds)
-
-                        match outcome with
-                        | Choice1Of2 QuerySelfContained ->
-                            rewriteDecision.Value <- Some QueryRewriteDecision.SelfContained
-                            return request.Query
-                        | Choice1Of2(QueryRewritten rewritten) when not (System.String.IsNullOrWhiteSpace rewritten) ->
-                            rewriteDecision.Value <- Some QueryRewriteDecision.Rewritten
-
-                            rewrittenQueryHash.Value <- Some(ToolUp.RAG.RetrievalTracers.hashQuery rewritten)
-
-                            return rewritten
-                        | Choice1Of2 _ ->
-                            // A blank rewrite is not a rewrite. Searching
-                            // it would replace a usable query with an
-                            // empty embedding — worse than doing nothing.
-                            rewriteDecision.Value <- Some QueryRewriteDecision.SelfContained
-                            return request.Query
-                        | Choice2Of2 _ ->
-                            rewriteDecision.Value <- Some QueryRewriteDecision.Failed
-                            return request.Query
-                      }
-                    | _ -> async.Return request.Query
-
-                // Phase 502 — the request's metadata-equality filter, if it
-                // carries a live one. Resolved once here: it drives both the
-                // candidate-pool size below and the post-search filter stage.
-                let metadataFilters = activeFilters request.Filters
-
-                // Stage 1: candidate retrieval (dense [+ sparse]).
-                //
-                // Phase 502 — a metadata filter narrows the pool *after* the
-                // store has ranked it, so over-fetch when one is present or
-                // the filtered result set is short-changed. Take the larger
-                // of the two inflations when both apply. `Filters = None`
-                // leaves the pool exactly as before (GP 11).
-                let pool =
-                    match needsHybridPool, metadataFilters with
-                    | false, None -> request.TopK
-                    | true, None -> inflateForHybridOrRerank request.TopK
-                    | false, Some _ -> inflateForMetadataFilter request.TopK
-                    | true, Some _ ->
-                        max (inflateForHybridOrRerank request.TopK) (inflateForMetadataFilter request.TopK)
-
-                stages.Add "Dense"
-
-                // Phase 894 — a bounded query embed that produced no vector
-                // leaves the dense branch empty; mark it so the degradation
-                // is visible on the trace (GP 9). Called from the join, never
-                // from a concurrent branch.
-                let markDenseDegraded (degraded: QueryEmbedOutcome option) =
-                    match degraded with
-                    | Some outcome ->
-                        denseDegraded.Value <- true
-                        stages.Add("DenseDegraded:" + QueryEmbedOutcome.label outcome)
-                    | None -> ()
-
-                let! rawInitial =
-                    match sparse with
-                    | None -> async {
-                        // Cosine-only path. When no sparse index AND no
-                        // reranker is wired, this is byte-equivalent to the
-                        // pre-Phase-14e pipeline.
-                        let denseSw = System.Diagnostics.Stopwatch.StartNew()
-                        let! results, degraded = denseSearch effectiveQuery permitted pool
-                        denseSw.Stop()
-                        timings.Add("Dense", denseSw.Elapsed.TotalMilliseconds)
-                        markDenseDegraded degraded
-                        return results
-                      }
-
-                    | Some sparseIdx -> async {
-                        stages.Add "Sparse"
-
-                        // Each branch times itself and returns the elapsed
-                        // ms alongside its matches; the post-join appends
-                        // keep `timings` single-threaded.
-                        let denseAsync = async {
-                            let sw = System.Diagnostics.Stopwatch.StartNew()
-                            let! results, degraded = denseSearch effectiveQuery permitted pool
-                            sw.Stop()
-                            return results, degraded, sw.Elapsed.TotalMilliseconds
-                        }
-
-                        let sparseAsync = async {
-                            let sw = System.Diagnostics.Stopwatch.StartNew()
-                            let! results = sparseIdx.Search permitted effectiveQuery pool
-                            sw.Stop()
-                            return results, sw.Elapsed.TotalMilliseconds
-                        }
-
-                        let! denseChild = Async.StartChild denseAsync
-                        let! sparseResults, sparseMs = sparseAsync
-                        let! denseResults, degraded, denseMs = denseChild
-                        timings.Add("Dense", denseMs)
-                        timings.Add("Sparse", sparseMs)
-                        markDenseDegraded degraded
-
-                        stages.Add "RRF"
-                        let fuseSw = System.Diagnostics.Stopwatch.StartNew()
-                        let fused = fuseRRF denseResults sparseResults
-                        fuseSw.Stop()
-                        timings.Add("RRF", fuseSw.Elapsed.TotalMilliseconds)
-                        return fused
-                      }
-
-                // Phase 502 — optional `Filters`: drop chunks whose metadata
-                // does not match every requested key/value pair exactly.
-                // Applied at the same site as `OriginFilter` (immediately
-                // below), before rerank / MMR / topK, so every downstream
-                // stage sees a pool that already respects the caller's
-                // scoping intent.
-                //
-                // This field was documented and honoured by the static-corpus
-                // pipeline but never read here, so a caller passing `Filters`
-                // silently got unfiltered results — content they had asked to
-                // exclude reached the model with no diagnostic. GP 10: a
-                // shared contract field must mean the same thing on both
-                // pipelines; `MetadataFilterContract` pins the parity.
-                //
-                // Scope note: like `OriginFilter`, this applies to the vector
-                // candidate set only. Resolved facts (Phase 522) are merged
-                // in separately after every ranking stage and do not carry
-                // chunk metadata, so a chunk-metadata filter is not a
-                // meaningful predicate over them.
-                let metadataFiltered =
-                    match metadataFilters with
-                    | None -> rawInitial
-                    | Some pairs ->
-                        stages.Add "MetadataFilter"
-                        rawInitial |> List.filter (matchesMetadataFilters pairs)
-
-                // Optional `OriginFilter`: drop chunks whose `_origin`
-                // metadata isn't in the request's allow-set. Applied here,
-                // before rerank / MMR / topK, so the pool fed to those
-                // downstream stages already respects the filter.
-                let filtered =
-                    match request.OriginFilter with
-                    | None -> metadataFiltered
-                    | Some allowed ->
-                        stages.Add "OriginFilter"
-
-                        metadataFiltered
-                        |> List.filter (fun m ->
-                            match m.Metadata.TryFind ChunkMetadata.OriginKey with
-                            | None ->
-                                // No `_origin` stamped — keep the chunk so
-                                // pre-filter producers aren't silently dropped.
-                                true
-                            | Some value -> allowed.Contains(ChunkOrigin.fromMetadataValue value))
-
-                // Phase 775 — derived-corpus disclosure, re-gated at retrieval.
-                // A chunk DERIVED from facts (a narrative committed with
-                // `_factRefs`, Phase 521.D — the coverage narratives among
-                // them) was judged for disclosure once, at commit (525.D, the
-                // `FactNarrativePublication` surface). That judgement is the
-                // cheap first filter and it stays; THIS one is authoritative:
-                // a policy tightened, a fact reclassified or superseded under
-                // a restricted lineage, a purpose taxonomy declared since the
-                // chunk was written — each is honoured here without
-                // re-indexing. Every distinct fact id cited across the
-                // candidate pool goes through ONE gate call at the
-                // `FactRetrieval` surface, in the request's resolved fact
-                // scope (the scope 525.B hands the gate above), and a chunk
-                // with ANY ref lacking an affirmative verdict is dropped —
-                // absent, not annotated. The pool is already top-K-bounded,
-                // and refs are deduped, so one fact cited by fifty chunks is
-                // one verdict. Applied after the scoping filters (the pool the
-                // caller may see) and before normalisation and rerank, so no
-                // ranking stage ever sees a dropped chunk. No gate wired, or
-                // no chunk carrying refs ⇒ the pool is untouched and no stage
-                // is recorded (GP 11). Under a budget the check shares the
-                // fact stage's bound; a check that overruns or faults drops
-                // every derived chunk (fail-closed) and says so.
-                let! filtered =
-                    match disclosureGate with
-                    | None -> async.Return filtered
-                    | Some gate ->
-                        match filtered |> List.collect factRefsOf |> List.distinct with
-                        | [] -> async.Return filtered
-                        | cited -> async {
-                            let sw = System.Diagnostics.Stopwatch.StartNew()
-                            let check = gate.Check(request.FactScope, ctx.UserId, FactRetrieval, cited)
-
-                            let! verdicts =
-                                match budgets with
-                                | None -> async {
-                                    let! v = check
-                                    return Ok v
-                                  }
-                                | Some b -> async {
-                                    let bounded = async {
-                                        let! child = Async.StartChild(check, max 1 (int b.FactStage.TotalMilliseconds))
-                                        return! child
-                                    }
-
-                                    match! Async.Catch bounded with
-                                    | Choice1Of2 v -> return Ok v
-                                    | Choice2Of2(:? System.TimeoutException) ->
-                                        return Error "DerivedDisclosureDegraded:TimedOut"
-                                    | Choice2Of2 _ -> return Error "DerivedDisclosureDegraded:Failed"
-                                  }
-
-                            sw.Stop()
-                            timings.Add("DerivedDisclosure", sw.Elapsed.TotalMilliseconds)
-
-                            let admitted =
-                                match verdicts with
-                                | Ok v -> filtered |> List.filter (derivedChunkDisclosed v)
-                                | Error mark ->
-                                    stages.Add mark
-                                    filtered |> List.filter (fun m -> List.isEmpty (factRefsOf m))
-
-                            if admitted.Length < filtered.Length then
-                                stages.Add "DerivedDisclosure"
-
-                                stages.Add(
-                                    sprintf
-                                        "DerivedDisclosure:%d/%d"
-                                        (filtered.Length - admitted.Length)
-                                        filtered.Length
-                                )
-
-                            return admitted
-                          }
-
-                // Phase 866 — the space the pool's scores are in, carried
-                // from the stage that produced them (Dense → cosine, RRF →
-                // fused) to every stage below that reads a score: the
-                // boosts, adaptive-K's score gaps, and — through the
-                // returned scores — the `MinScore` gate downstream. A raw
-                // fused score tops out at 2/61, so the fused pool is
-                // normalised onto [0, 1] here, after the scoping filters
-                // (the pool the caller may see) and before the boosts (so
-                // they act as nudges within it). Min-max is affine and
-                // increasing: the pool's order is unchanged (GP 11). The
-                // cosine-only path is left exactly as the store scored it.
-                let producedSpace =
-                    match sparse with
-                    | None -> RetrievalScoreSpace.Cosine
-                    | Some _ -> RetrievalScoreSpace.Fused
-
-                let filtered =
-                    match producedSpace with
-                    | RetrievalScoreSpace.Fused when not filtered.IsEmpty ->
-                        stages.Add RetrievalScoreSpace.NormaliseStage
-                        normaliseWithinPool filtered
-                    | _ -> filtered
-
-                // Stage 2: optional cross-encoder rerank. Phase 978 — the
-                // reranker scores the WHOLE pool the pipeline goes on to
-                // return. A pool larger than one call takes is capped at
-                // `MaxBatchSize`, and the trace says so (`Rerank:<n>/<pool>`).
-                // The pool is not chunked through several calls and merged:
-                // `IReranker` promises an ordering within a call, not a scale
-                // shared across calls. Nor is an unreranked tail kept: its
-                // fused scores share no scale with the reranked head, and the
-                // boosts, MMR, the merge and the `MinScore` gate downstream
-                // would each read across the two.
-                let ordering = ref (if sparse.IsSome then "RRF" else "Dense")
-
-                let! reranked =
-                    match opts.Reranker with
-                    | None -> async.Return filtered
-                    | Some r ->
-                        stages.Add "Rerank"
-                        let cap = max 0 (min filtered.Length r.MaxBatchSize)
-
-                        if cap < filtered.Length then
-                            stages.Add(sprintf "Rerank:%d/%d" cap filtered.Length)
-
-                        ordering.Value <- "Rerank"
-
-                        async {
-                            let sw = System.Diagnostics.Stopwatch.StartNew()
-                            let! reordered = r.Rerank effectiveQuery (List.truncate cap filtered)
-                            sw.Stop()
-                            timings.Add("Rerank", sw.Elapsed.TotalMilliseconds)
-                            return reordered
-                        }
-
-                // Phase 866 — a reranker replaces every score it is handed
-                // with its own, so its space is the one the boosts nudge
-                // within and the caller reads.
-                let returnedSpace =
-                    match opts.Reranker with
-                    | Some _ -> RetrievalScoreSpace.Reranked
-                    | None -> producedSpace
-
-                // Phase 978 — the boosts run AFTER the reranker, on the scale
-                // it returned. Before, they ran ahead of it and a composed
-                // reranker replaced every boosted score with its own, so a
-                // deployment with a reranker got none of the boosts it
-                // configured. `boostScale` keeps a boost of `b` the nudge
-                // Phase 866 made it on the normalised fused scale.
-                let boostScale = boostUnit returnedSpace reranked
-
-                // Optional `ActiveModule` boost: nudge chunks whose
-                // `_originModule` matches the caller's active module up
-                // the ranking. Re-sorts after applying the boost so
-                // downstream stages see a coherent ordering.
-                let moduleBoosted =
-                    match request.ActiveModule, opts.ActiveModuleBoost with
-                    | Some _, b when b <= 0.0 -> reranked
-                    | None, _ -> reranked
-                    | Some moduleName, boost ->
-                        stages.Add "ActiveModuleBoost"
-                        ordering.Value <- "ActiveModuleBoost"
-
-                        reranked
-                        |> List.map (fun m ->
-                            match m.Metadata.TryFind ChunkMetadata.OriginModuleKey with
-                            | Some value when value = moduleName -> {
-                                m with
-                                    Score = m.Score + boost * boostScale
-                              }
-                            | _ -> m)
-                        |> List.sortBy (fun m -> -m.Score, m.Scope, m.ChunkId)
-
-                // Optional summary-chunk boost (WS4.1): chunks stamped
-                // `_isSummary = "true"` are the document-level entry
-                // point and should outrank paragraph chunks for "what is
-                // this about?" queries. Applied after the module boost
-                // so a summary in the matching module gets both nudges.
-                let boosted =
-                    if opts.SummaryBoost <= 0.0 then
-                        moduleBoosted
-                    else
-                        let mutable applied = false
-
-                        let result =
-                            moduleBoosted
-                            |> List.map (fun m ->
-                                match m.Metadata.TryFind ChunkMetadata.IsSummaryKey with
-                                | Some "true" ->
-                                    applied <- true
-
-                                    {
-                                        m with
-                                            Score = m.Score + opts.SummaryBoost * boostScale
-                                    }
-                                | _ -> m)
-
-                        if applied then
-                            stages.Add "SummaryBoost"
-                            ordering.Value <- "SummaryBoost"
-                            result |> List.sortBy (fun m -> -m.Score, m.Scope, m.ChunkId)
-                        else
-                            result
-
-                // Phase 522.E — fact→narrative join. A chunk whose
-                // `_factRefs` metadata (Phase 521.D) cites a fact the
-                // pre-vector stage resolved this turn gets a boost, so the
-                // fact's own narrative context outranks generic similarity.
-                // No resolved facts (the common clause-less path) ⇒ no-op,
-                // byte-identical ordering (GP 11).
-                let boosted =
-                    if Set.isEmpty resolvedFactIds || opts.FactNarrativeJoinBoost <= 0.0 then
-                        boosted
-                    else
-                        let mutable joined = false
-
-                        let result =
-                            boosted
-                            |> List.map (fun m ->
-                                if factRefsOf m |> List.exists resolvedFactIds.Contains then
-                                    joined <- true
-
-                                    {
-                                        m with
-                                            Score = m.Score + opts.FactNarrativeJoinBoost * boostScale
-                                    }
-                                else
-                                    m)
-
-                        if joined then
-                            stages.Add "FactNarrativeJoin"
-                            ordering.Value <- "FactNarrativeJoin"
-                            result |> List.sortBy (fun m -> -m.Score, m.Scope, m.ChunkId)
-                        else
-                            result
-
-                // Stage 3: optional MMR diversification — the last step that
-                // orders the pool (Phase 978).
-                let diversified =
-                    if opts.EnableMmr then
-                        stages.Add "MMR"
-                        ordering.Value <- "MMR"
-                        let sw = System.Diagnostics.Stopwatch.StartNew()
-                        let result = applyMmr opts.MmrLambda boosted
-                        sw.Stop()
-                        timings.Add("MMR", sw.Elapsed.TotalMilliseconds)
-                        result
-                    else
-                        boosted
-
-                // Stage 4: adaptive top-K (if hint present) else fixed top-K.
-                let truncated =
-                    match request.AdaptiveK with
-                    | Some hint ->
-                        stages.Add "AdaptiveK"
-                        adaptiveTruncate hint diversified
-                    | None ->
-                        stages.Add "TopK"
-                        diversified |> List.truncate request.TopK
-
-                // Phase 978 — MMR's order is the final order. The Interleaved
-                // merge re-sorts by score, which undid the diversity order MMR
-                // had just produced, so when MMR ran the merge only bounds the
-                // result to `TopK`. The trace names the step whose order the
-                // caller receives (`FinalOrder:<step>`).
-                stages.Add "Merge"
-                let mergeSw = System.Diagnostics.Stopwatch.StartNew()
-
-                let final =
-                    match request.Merge with
-                    | Interleaved when not opts.EnableMmr ->
-                        ordering.Value <- "Interleaved"
-                        applyMerge Interleaved request.TopK truncated
-                    | Interleaved -> truncated |> List.truncate request.TopK
-                    | Separate -> applyMerge Separate request.TopK truncated
-
-                mergeSw.Stop()
-                timings.Add("Merge", mergeSw.Elapsed.TotalMilliseconds)
-
-                let rerankerName = opts.Reranker |> Option.map _.Name
-
-                stages.Add("FinalOrder:" + ordering.Value)
-                stages.Add(RetrievalScoreSpace.stageMark returnedSpace)
-
-                match telemetry with
-                | Some t -> t.RecordRetrievalStages(timings |> List.ofSeq)
-                | None -> ()
-
-                do! emitTrace final pool sparse.IsSome rerankerName
-
-                // Phase 522.D — resolved facts merge AHEAD of the similarity
-                // chunks. Facts are exact hits, not similarity matches, so
-                // they bypass rerank / MMR / topK (which only shaped the
-                // chunk set) and lead the result. `factMatches` is empty on
-                // the clause-less path, so this is `final` unchanged (GP 11).
-                return factMatches @ final
+            let! pool = retrieveScored request ctx
+            return pool.Matches
         }
 
         member _.Index chunkId chunk scope = async {
-            // Phase 14z — the write side of the same geometry. A chunk
+            // The write side of the same geometry. A chunk
             // must be embedded under the vocabulary the queries for its
             // scope will be embedded under; indexing everything through
             // one global embedder while retrieval queried per scope would
@@ -1636,7 +1593,7 @@ type RetrievalPipeline
             | None -> ()
         }
 
-    // Phase 894 (carrying 892.t6) — the batched write path. Same stamp and
+    // The batched write path. Same stamp and
     // the same sparse upsert as `Index`; the difference is one batched embed
     // (a cache hit after the drainer's warm-up) and one `upsertBatch`, which
     // reaches `IVectorStoreBatch.UpsertBatch` in a single round-trip.

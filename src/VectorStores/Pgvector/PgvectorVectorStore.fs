@@ -88,27 +88,13 @@ let private fail (message: string) = raise (PgvectorStoreException message)
 
 module Scope =
     /// Encode a `VectorScope` as its `scope` column value.
-    let toKey (scope: VectorScope) : string =
-        match scope with
-        | Platform -> "platform"
-        | Deployment -> "deployment"
-        | Team teamId -> $"team:{teamId}"
-        | User userId -> $"user:{userId}"
+    let toKey (scope: VectorScope) : string = VectorScope.key scope
 
     /// Decode a `scope` column value. Total: an unrecognised prefix is
     /// read as a team id rather than throwing, matching the in-tree
     /// stores — an unknown scope key is a stale row, not a corrupt one.
     let fromKey (key: string) : VectorScope =
-        if key = "platform" then
-            Platform
-        elif key = "deployment" then
-            Deployment
-        elif key.StartsWith "user:" then
-            User(key.Substring "user:".Length)
-        elif key.StartsWith "team:" then
-            Team(key.Substring "team:".Length)
-        else
-            Team key
+        VectorScope.tryOfKey key |> Option.defaultWith (fun () -> Team key)
 
 // ─── Vector literal ──────────────────────────────────────────────────
 //
@@ -306,7 +292,7 @@ module PgvectorOptions =
                 else
                     Ok()
 
-// ─── Tuning (Phase 892) ──────────────────────────────────────────────
+// ─── Tuning ──────────────────────────────────────────────
 //
 // Search-time and write-time posture, kept OUT of `PgvectorOptions` so a
 // deployment that constructs the options record in full keeps compiling,
@@ -541,7 +527,7 @@ module Sql =
     [<Literal>]
     let ExtensionPresent = "SELECT 1 FROM pg_extension WHERE extname = 'vector';"
 
-    /// Table-presence probe for `VerifyOnly`. Cast to `text` (Phase 968):
+    /// Table-presence probe for `VerifyOnly`. Cast to `text`:
     /// Npgsql cannot read a `regclass` value as `obj`, so the bare
     /// `to_regclass(@table)` threw `InvalidCastException` whether the table
     /// was present or absent, and `VerifyOnly` refused every table with that
@@ -562,7 +548,7 @@ SET content = EXCLUDED.content,
     deleted_at = NULL;"""
             o.Table
 
-    /// Phase 892 — batched upsert on the composite key: ONE statement per
+    /// Batched upsert on the composite key: ONE statement per
     /// batch whatever its size. The rows arrive as parallel arrays
     /// (`unnest … WITH ORDINALITY`) and the embeddings as ONE flat `real[]`
     /// sliced per row, so every vector travels as a binary float4 array
@@ -600,7 +586,7 @@ ORDER BY embedding <=> @embedding::vector, chunk_id
 LIMIT @top_k;"""
             o.Table
 
-    /// Phase 892 — per-scope KNN whose `ORDER BY` is the distance operator
+    /// Per-scope KNN whose `ORDER BY` is the distance operator
     /// alone. The total order `search` states in SQL is restored by the
     /// caller re-sorting the returned page. Since Phase 939 it is the
     /// statement for every search with an approximate index configured.
@@ -616,7 +602,7 @@ ORDER BY embedding <=> @embedding::vector
 LIMIT @top_k;"""
             o.Table
 
-    /// Phase 928 — per-scope KNN that NO approximate index can serve: the
+    /// Per-scope KNN that NO approximate index can serve: the
     /// scope's live rows are materialised first, and only then ranked, so
     /// the ordering operator never reaches an index scan. This is the
     /// short-page fallback's statement. `search` is not exact once an
@@ -682,7 +668,7 @@ WHERE scope = @scope AND deleted_at IS NOT NULL AND deleted_at < @older_than;"""
     let listScopes (o: PgvectorOptions) =
         sprintf "SELECT DISTINCT scope FROM %s ORDER BY scope;" o.Table
 
-    /// Phase 892 — the database settings a search applies for its own
+    /// The database settings a search applies for its own
     /// transaction, as `(setting, value)` pairs: the search width and the
     /// iterative-scan mode of the configured index family. Empty under
     /// `NoAnnIndex`, and empty when nothing is tuned — in which case the
@@ -713,7 +699,7 @@ WHERE scope = @scope AND deleted_at IS NOT NULL AND deleted_at < @older_than;"""
                 iterativeSetting, "relaxed_order"
           ]
 
-    /// Phase 892 — one statement applying `count` settings for the current
+    /// One statement applying `count` settings for the current
     /// transaction only (`set_config(…, true)` is `SET LOCAL`). Names and
     /// values are bound as parameters `@setting_i` / `@value_i`.
     let setLocal (count: int) =
@@ -722,7 +708,7 @@ WHERE scope = @scope AND deleted_at IS NOT NULL AND deleted_at < @older_than;"""
 
         sprintf "SELECT %s;" (String.concat ", " calls)
 
-    /// Phase 892 — the posture read behind the health probe and the
+    /// The posture read behind the health probe and the
     /// preflight validator, in one round-trip: the installed extension
     /// version, the approximate-index access methods present on the table,
     /// the database's current search-width settings, and an estimated row
@@ -789,7 +775,7 @@ WHERE scope = @scope AND deleted_at IS NOT NULL AND deleted_at < @older_than;"""
         "DeleteByScope", ScopePredicated, deleteByScope o
     ]
 
-// ─── Batched write preparation (Phase 892) ───────────────────────────
+// ─── Batched write preparation ───────────────────────────
 
 /// The parallel arrays one `Sql.upsertBatch` statement binds: one entry
 /// per DISTINCT chunk id, embeddings flattened row-major into one array
@@ -853,7 +839,7 @@ module BatchUpsert =
             Embeddings = embeddings
         }
 
-// ─── Diagnostics (Phase 892) ─────────────────────────────────────────
+// ─── Diagnostics ─────────────────────────────────────────
 
 /// A live read of the store's posture — what the health probe reports and
 /// the preflight validator judges. Produced by `PgvectorVectorStore.Diagnose`.
@@ -975,7 +961,7 @@ type PgvectorVectorStore
         | NoAnnIndex -> false
         | _ -> true
 
-    // Phase 939: with an approximate index configured, the statement
+    // With an approximate index configured, the statement
     // orders by distance alone and `Search` re-sorts the page; under
     // `NoAnnIndex` it keeps the total order in SQL.
     let sqlSearch =
@@ -1083,15 +1069,15 @@ type PgvectorVectorStore
     /// probe and useful in diagnostics.
     member _.Options = options
 
-    /// Phase 892 — the search / write tuning this store was built with.
+    /// The search / write tuning this store was built with.
     member _.Tuning = tuning
 
-    /// Phase 892 — the `vector` extension version read at `create`, which
+    /// The `vector` extension version read at `create`, which
     /// decides whether iterative scanning is applied. `None` for a store
     /// constructed directly without one.
     member _.ExtensionVersionAtCreate = extensionVersionAtCreate
 
-    /// Phase 892 — read the store's live posture in one round-trip: the
+    /// Read the store's live posture in one round-trip: the
     /// installed extension version, the approximate indexes present on the
     /// table, the database's search-width settings and an estimated row
     /// count. Feeds the health probe and the preflight validator.
@@ -1138,7 +1124,7 @@ type PgvectorVectorStore
     new(dataSource: NpgsqlDataSource, options: PgvectorOptions, ownsDataSource: bool, ?logger: ILogger) =
         new PgvectorVectorStore(dataSource, options, PgvectorTuning.unchanged, None, ownsDataSource, logger)
 
-    /// Phase 963 — every replica searches the one pgvector table, so a
+    /// Every replica searches the one pgvector table, so a
     /// write on one replica is visible to every replica's next search.
     interface IVectorStoreLocality with
         member _.IndexLocality = Some VectorIndexLocality.Shared
@@ -1297,7 +1283,7 @@ type PgvectorVectorStore
                 policy
                 dryRun
 
-    // Phase 892 — one `INSERT … SELECT … FROM unnest(…)` per batch, the
+    // One `INSERT … SELECT … FROM unnest(…)` per batch, the
     // vectors bound as one binary `real[]`. The statement count is one for
     // every non-empty batch, whatever its size.
     interface IVectorStoreBatch with
@@ -1323,7 +1309,7 @@ type PgvectorVectorStore
 
 // ─── create-time probe (507.C) ───────────────────────────────────────
 
-/// Phase 964 — whether `AutoMigrate` builds the IVFFlat index now. IVFFlat
+/// Whether `AutoMigrate` builds the IVFFlat index now. IVFFlat
 /// clusters the rows present when it is built, so an index built on an
 /// empty table has nothing to cluster: measured (live arm), 10,000 clustered
 /// rows loaded after an empty-table build answered recall@10 = 0.017 at
@@ -1425,7 +1411,7 @@ let private probeAndMigrate (dataSource: NpgsqlDataSource) (options: PgvectorOpt
 
     // 3. Schema. The approximate index is the last statement, built after
     //    the table — or, for an IVFFlat index over a table too small to
-    //    cluster, deferred (Phase 964).
+    //    cluster, deferred.
     let run (statement: string) = async {
         try
             use cmd = dataSource.CreateCommand statement
@@ -1471,7 +1457,7 @@ let private probeAndMigrate (dataSource: NpgsqlDataSource) (options: PgvectorOpt
         return None
 }
 
-/// Phase 964 — log the IVFFlat deferral, once, at `create`.
+/// Log the IVFFlat deferral, once, at `create`.
 let private warnIfIvfFlatDeferred (log: ILogger option) (deferred: string option) =
     match deferred with
     | None -> ()
@@ -1481,7 +1467,7 @@ let private warnIfIvfFlatDeferred (log: ILogger option) (deferred: string option
 
         logger.Warn warning
 
-/// Phase 892 — the installed extension version, read once at `create` by
+/// The installed extension version, read once at `create` by
 /// the tuned entry points; it decides whether iterative scanning is sent.
 let private readExtensionVersion (dataSource: NpgsqlDataSource) : Async<string option> = async {
     use cmd = dataSource.CreateCommand Sql.ExtensionVersionRead
@@ -1533,7 +1519,7 @@ let private warnIfIterativeUnavailable
                 ExtensionVersion.iterativeScanSince
         )
 
-/// Phase 892 — `createWithDataSource` with an explicit `PgvectorTuning`
+/// `createWithDataSource` with an explicit `PgvectorTuning`
 /// (start from `PgvectorTuning.recommended`). The tuning is validated with
 /// the options before any I/O, and the extension version is read once so
 /// iterative scanning is sent only to a server that supports it. The
@@ -1559,7 +1545,7 @@ let createTunedWithDataSource
     warnIfIterativeUnavailable logger tuning options version
     new PgvectorVectorStore(dataSource, options, tuning, version, false, logger) :> IVectorStore
 
-/// Phase 892 — `create` with an explicit `PgvectorTuning` (start from
+/// `create` with an explicit `PgvectorTuning` (start from
 /// `PgvectorTuning.recommended`). The store owns the resulting
 /// `NpgsqlDataSource` and disposes it with itself.
 ///
