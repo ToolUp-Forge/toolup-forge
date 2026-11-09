@@ -78,7 +78,7 @@ module GcsArchiveSettings =
         PathPrefix = None
     }
 
-let private archiveJsonOptions = FableConverters.create ()
+let private archiveJsonOptions = PlatformJson.options
 
 /// Wire-format wrapper for one persisted JSONL line. Each line of the
 /// archive is one of these records — `Subject`, `OccurredAt`,

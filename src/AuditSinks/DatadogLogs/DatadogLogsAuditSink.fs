@@ -73,7 +73,7 @@ module DatadogLogsSettings =
         Host = None
     }
 
-let private logsJsonOptions = FableConverters.create ()
+let private logsJsonOptions = PlatformJson.options
 
 // Phase 9g shipped a 132-arm `extractEventScopeId` here, mapping each
 // `AuditEvent` case to a payload-level scope id. Phase 66 Stream B.7
