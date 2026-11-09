@@ -1,0 +1,15 @@
+module MyApp.Client.Hosting
+
+open ToolUp.Platform
+
+let activeState (model: Client.Model) =
+    model |> Client.moduleState model.ActiveModuleId
+
+let empty: Client.Model = {
+    ModuleStates = Map.empty
+    AwaitingFirstInit = Client.firstInitGates
+    FlagsPrefetch = Remote.Loading
+    ResetCounters = Map.empty
+}
+
+let increment dispatch = dispatch (Client.ModuleMsg(box Increment))

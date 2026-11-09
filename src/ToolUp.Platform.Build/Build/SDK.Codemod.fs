@@ -82,6 +82,11 @@ type CodemodMigration =
     /// `Enable` and `IWebhookDispatcher.Dispatch` answer a `Result`, and a
     /// live-session handler is asynchronous.
     | FailureAsData
+    /// The client shell hosts every module through one function over
+    /// `Model.Hosts`, and the boot sources are one table: `ModuleStates`
+    /// and `ResetCounters` are `Hosts`, and the two first-init gate fields
+    /// are `AwaitingFirstInit`.
+    | ModuleHost
 
 /// Helpers over `CodemodMigration`.
 module CodemodMigration =
@@ -113,6 +118,7 @@ module CodemodMigration =
         | CodemodMigration.RemoteAndMemo -> "docs/migrations/1070-redesign-e-remote-and-memo-primitives.md"
         | CodemodMigration.ConnectorKernel -> "docs/migrations/1079-redesign-f-the-connector-kernel.md"
         | CodemodMigration.FailureAsData -> "docs/migrations/873-portable-infrastructure-interfaces.md"
+        | CodemodMigration.ModuleHost -> "docs/migrations/1071-redesign-e-bootsources-table-and-initmodule-by-id.md"
 
     /// The phase label the renderings print.
     let label migration =
@@ -138,6 +144,7 @@ module CodemodMigration =
         | CodemodMigration.RemoteAndMemo -> "Phase 1070"
         | CodemodMigration.ConnectorKernel -> "Phase 1079"
         | CodemodMigration.FailureAsData -> "Phase 873"
+        | CodemodMigration.ModuleHost -> "Phase 1071"
 
 /// Which files a rule applies to. The Phase 11.C.5 Tier 2 renames are
 /// PACKAGE ids — they live in `.fsproj` / `Directory.Packages.props` —
@@ -995,6 +1002,22 @@ module Codemod =
             @"\bdo!\s+(\w*[jJ]obStore)\.(Save|Update|RecordRun)\b"
             "do! JobStoreWrite.orRaise <| $1.$2"
             "`do! jobStore.Save job` (and `Update` / `RecordRun`) → `do! JobStoreWrite.orRaise <| jobStore.Save job` (a refused write still raises, now carrying `JobStoreError`)"
+        // A module's state is read through its host.
+        rewrite
+            "1071-module-state-read"
+            CodemodMigration.ModuleHost
+            CodemodFileClass.Source
+            @"\b([\w.]+)\.ModuleStates\s*\|>\s*Map\.tryFind\s+"
+            "$1 |> Client.moduleState "
+            "`model.ModuleStates |> Map.tryFind id` → `model |> Client.moduleState id` (the shell keeps a `ModuleHost` per module in `Model.Hosts`)"
+        // The two first-init gate fields are one set.
+        rewrite
+            "1071-first-init-gates"
+            CodemodMigration.ModuleHost
+            CodemodFileClass.Source
+            @"^(\s*)ConfigsPrefetch\s*=.*$"
+            "$1AwaitingFirstInit = Client.firstInitGates"
+            "`ConfigsPrefetch = …` in a full `Client.Model` literal → `AwaitingFirstInit = Client.firstInitGates` (delete the `FlagsPrefetch` line beside it)"
     ]
 
     // ── The review rules ──────────────────────────────────────────────
@@ -1549,6 +1572,27 @@ module Codemod =
             CodemodFileClass.Source
             @"\bmember\s+\w+\.(?:Cancel|Disable|Enable)\s*\(\s*\w+\s*,\s*\w+\s*\)"
             "if this implements `IJobScheduler`, `Cancel` / `Disable` / `Enable` answer `Result<unit, JobTransitionError>`: a scheduler over `SchedulerPolicy.setStatus` maps its `JobStoreError` with `JobTransitionError.StoreFailed`, and a lease it could not take is `Busy`"
+        // Every other read or write of the module-state map.
+        review
+            "1071-module-states"
+            CodemodMigration.ModuleHost
+            CodemodFileClass.Source
+            @"\bModuleStates\b"
+            "`Model.ModuleStates` is `Model.Hosts : Map<string, ModuleHost>`: a module's state is `host.State` (`Client.moduleState id model`), and a full model literal writes `Hosts = Map.empty` or `Hosts = Map.ofList [ id, { State = box state; Generation = 0 } ]`; `Client.observeModuleStates` takes the prior `Hosts`"
+        // Fields with no successor of their own.
+        review
+            "1071-removed-shell-fields"
+            CodemodMigration.ModuleHost
+            CodemodFileClass.Source
+            @"\b(?:FlagsPrefetch|ResetCounters)\b"
+            "`FlagsPrefetch` and `ResetCounters` are gone: delete the line from a full `Client.Model` literal. The first-init gates are `AwaitingFirstInit` (a set of boot-source keys), and a module's reset count is its host's `Generation`"
+        // Since 0.41.0 the shell's module message names its module.
+        review
+            "1071-module-msg-id"
+            CodemodMigration.ModuleHost
+            CodemodFileClass.Source
+            @"\bModuleMsg\s*\(\s*box\b|\bModuleMsg\s+\w+\s*->"
+            "`ModuleMsg` carries the module id: construct `ModuleMsg(moduleId, box message)` and match `ModuleMsg(moduleId, message)`; a message for a module with no host is dropped"
     ]
 
 
@@ -2551,6 +2595,7 @@ module Codemod =
             CodemodMigration.RemoteAndMemo
             CodemodMigration.ConnectorKernel
             CodemodMigration.FailureAsData
+            CodemodMigration.ModuleHost
         ]
         |> List.tryFind (fun m -> CodemodMigration.label m = "Phase " + phase.Trim())
 
