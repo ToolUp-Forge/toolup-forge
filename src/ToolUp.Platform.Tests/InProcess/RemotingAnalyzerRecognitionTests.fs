@@ -85,7 +85,7 @@ let private analyzerUnclassified (t: Type) : Set<string> =
     |> Set.ofList
 
 let private runtimeUnclassified (t: Type) : Set<string> =
-    AuthClassifier.classify t |> AuthClassifier.unclassified |> Set.ofList
+    AuthClassifier.unclassified t |> Set.ofList
 
 let private parityFor (t: Type) =
     Expect.equal

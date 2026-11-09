@@ -123,11 +123,10 @@ type private CountingEmitter() =
     interface IAuditEmitter with
         member _.Emit e = async { events.Add e }
 
-// Faithful mirror of the dispatcher's Success-branch emission rule
-// (GiraffeAdapter.fs: `match options.AuditEmitter, audits |> Map.tryFind
-// methodName with | Some emitter, Some kind -> ...`). The source-pin in
-// Section E asserts the real dispatcher uses exactly this `audits |>
-// Map.tryFind` gate, so a method absent from `Audit.classify`'s map can
+// Faithful mirror of the audit stage's emission rule (Stages/Audit.fs: the
+// method's contract carries an audit kind, `match m.Audit with | Some audit
+// -> ...`). The source-pin in Section E asserts the real stage gates on
+// exactly that slice, so a method absent from `Audit.classify`'s map can
 // NEVER emit — the omission is structurally observable through this mirror.
 let private simulateSuccessfulInvocation
     (emitter: IAuditEmitter)
@@ -206,39 +205,26 @@ let tests =
         }
 
         // ── C — the deny path returns before the handler runs ──
-        test "the dispatcher deny path builds an Auth envelope and returns BEFORE the proxy invocation" {
-            // No TestServer scaffold in this runner; pin the ordering in the
-            // adapter source instead. The deny branch (`if denyReason.IsSome
-            // then`) builds an `ErrorCategory.Auth` envelope and `return!`s —
-            // it sits textually before `match! apiProxy.Invoke propsWithCache` (Phase
-            // 856.B renamed the call site from `proxy propsWithCache`), the
-            // single site the handler body runs. So a denied call can never
-            // reach the handler: fail-closed before dispatch.
-            let adapter = serverSource [ "Remoting"; "Giraffe"; "GiraffeAdapter.fs" ]
+        test "the authorize stage answers a denial with the Auth envelope, and runs before the call" {
+            // The order is the pipeline's list literal: a denied call is
+            // answered by `authorize` and never reaches `invoke`, the single
+            // place the handler runs. Fail-closed before dispatch.
+            let pipeline = serverSource [ "Remoting"; "Stages"; "Pipeline.fs" ]
+            let authorize = serverSource [ "Remoting"; "Stages"; "Authorize.fs" ]
 
-            let denyIdx = adapter.IndexOf "if denyReason.IsSome then"
-            let authEnvelopeIdx = adapter.IndexOf "ErrorCategory.Auth"
-            let proxyIdx = adapter.IndexOf "match! apiProxy.Invoke propsWithCache"
+            let authorizeIdx = pipeline.IndexOf "Authorize.stage"
+            let invokeIdx = pipeline.IndexOf "Invoke.stage"
 
-            Expect.isGreaterThan denyIdx -1 "the deny branch must exist"
-            Expect.isGreaterThan authEnvelopeIdx -1 "the Auth envelope must exist"
-            Expect.isGreaterThan proxyIdx -1 "the proxy invocation must exist"
-
-            Expect.isLessThan
-                denyIdx
-                proxyIdx
-                "the deny branch must precede the proxy invocation — a denied call returns \
-                 before the handler body runs (fail-closed before dispatch)"
-
-            Expect.isLessThan
-                authEnvelopeIdx
-                proxyIdx
-                "the categorised Auth envelope is built on the deny path, before invocation"
+            Expect.isGreaterThan authorizeIdx -1 "the authorize stage must be in the pipeline"
+            Expect.isGreaterThan invokeIdx -1 "the invoke stage must be in the pipeline"
+            Expect.isLessThan authorizeIdx invokeIdx "a denied call is answered before the handler runs"
 
             Expect.stringContains
-                adapter
-                "ctx.Response.StatusCode <- 401"
-                "the deny path sets 401 — the call is rejected, not handled"
+                authorize
+                "Response.Json(401, box envelope)"
+                "the deny path answers 401 — the call is rejected, not handled"
+
+            Expect.stringContains authorize "ErrorCategory.Auth" "with the categorised Auth envelope"
         }
 
         // ── D — the deny signal on the wire is the opaque generic category;
@@ -261,20 +247,20 @@ let tests =
             // deny envelope is built with the constant `"auth-denied"` message,
             // and `denyReason.Value` is handed to the diagnostics logger, never
             // boxed into the envelope.
-            let adapter = serverSource [ "Remoting"; "Giraffe"; "GiraffeAdapter.fs" ]
+            let authorize = serverSource [ "Remoting"; "Stages"; "Authorize.fs" ]
 
             Expect.stringContains
-                adapter
+                authorize
                 "ErrorCategory.Auth (box \"auth-denied\")"
                 "the deny envelope error payload is the constant \"auth-denied\" — no per-request reason on the wire"
 
             Expect.isFalse
-                (adapter.Contains "(box (sprintf \"%s: auth-denied: %s\" methodNameForAuth denyReason.Value))")
-                "the leaky envelope-message interpolation of denyReason.Value must be gone"
+                (authorize.Contains "(box (sprintf \"%s: auth-denied: %s\"")
+                "the leaky envelope-message interpolation of the deny reason must be gone"
 
             Expect.stringContains
-                adapter
-                "log (sprintf \"%s: auth-denied: %s\" methodNameForAuth denyReason.Value)"
+                authorize
+                "log (sprintf \"%s: auth-denied: %s\" ctx.Method reason)"
                 "the per-request deny reason is routed to the diagnostics logger (server-side only)"
         }
 
@@ -304,7 +290,7 @@ let tests =
 
             let reasonOf name context =
                 match AuthClassifier.evaluate cls[name] context with
-                | Deny r -> r
+                | AuthDecision.Deny r -> r
                 | AuthDecision.Allow -> failtestf "%s: expected Deny" name
 
             let roleReason = reasonOf "NeedsRole" (Some(reasonProbeCtx [] false))
@@ -375,19 +361,17 @@ let tests =
             Expect.equal emitter.Events[0].MethodName "MoveMoney" "the row names the method"
         }
 
-        test "the dispatcher gates audit emission on the `audits |> Map.tryFind methodName` lookup" {
-            // Anchors the emission mirror above to the real dispatcher: a
-            // method absent from `Audit.classify`'s map can never emit
-            // because the adapter's emission block is gated on exactly this
-            // lookup. (Twin of the existing AuditTests pin, kept here so the
-            // omission-observability claim is self-contained.)
-            let adapter = serverSource [ "Remoting"; "Giraffe"; "GiraffeAdapter.fs" ]
+        test "the audit stage gates emission on the method contract's audit slice" {
+            // Anchors the emission mirror above to the real stage: a method
+            // whose contract carries no audit kind can never emit, because
+            // the stage's emission is gated on exactly this slice (read by
+            // the same `Audit.kindOf` that `Audit.classify` projects).
+            let audit = serverSource [ "Remoting"; "Stages"; "Audit.fs" ]
 
             Expect.stringContains
-                adapter
-                "options.AuditEmitter, audits |> Map.tryFind methodName"
-                "audit emission is gated on the classification-map lookup — a method absent \
-                 from Audit.classify can never emit"
+                audit
+                "match m.Audit with"
+                "audit emission is gated on the method's audit slice — a method absent from Audit.classify can never emit"
         }
 
         // ── F — forgetting [<PiiSafe>] keeps PII out of the row ──

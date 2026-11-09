@@ -245,19 +245,18 @@ module internal RateLimit =
         (methodName: string)
         (budgets: RateLimitAttribute list)
         : Async<RateLimitDecision> =
-        async {
-            let mutable decision = RateLimitAllowed
-            let mutable budgetsRemaining = budgets
-
-            while decision = RateLimitAllowed && not (List.isEmpty budgetsRemaining) do
-                let budget = List.head budgetsRemaining
-                budgetsRemaining <- List.tail budgetsRemaining
+        let rec charge (remaining: RateLimitAttribute list) : Async<RateLimitDecision> = async {
+            match remaining with
+            | [] -> return RateLimitAllowed
+            | budget :: rest ->
                 let key = sprintf "%s|%s|%ds" subjectKey methodName budget.WindowSeconds
-                let! d = store.TryAcquire(key, budget.Count, budget.Window)
-                decision <- d
 
-            return decision
+                match! store.TryAcquire(key, budget.Count, budget.Window) with
+                | RateLimitAllowed -> return! charge rest
+                | denied -> return denied
         }
+
+        charge budgets
 
     /// Derive a stable subject key for the rate-limit bucket. Uses the
     /// resolved auth context's `SubjectId` when available; otherwise

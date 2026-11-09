@@ -3,40 +3,33 @@ namespace ToolUp.Remoting.Server
 open System
 open System.Collections.Generic
 open System.Reflection
+open System.Text.Json
 open Microsoft.FSharp.Reflection
+open ToolUp.Remoting
 
 // =============================================================================
-// Phase 69i.B/C/D/G — long-running method classification + the companions
+// Long-running methods and their companions
 // =============================================================================
 //
-// API record fields whose F# function shape finally returns
-// `Async<JobHandle<'T>>` are classified as LONG-RUNNING at startup — the
-// same startup reflection `Streaming.classify` performs for
-// `IAsyncEnumerable<'T>` — and, when an `IJobDispatcher` is composed via
-// `Remoting.withJobDispatcher`, the dispatcher serves three COMPANION routes
-// beside the method's own route, none of which the consumer authors:
+// An API record field whose function shape finally returns
+// `Async<JobHandle<'T>>` is LONG-RUNNING. When an `IJobDispatcher` is
+// composed via `Remoting.withJobDispatcher`, the dispatcher serves three
+// COMPANION routes beside the method's own route, none of which the consumer
+// authors; the contract synthesises one `CompanionContract` per route:
 //
-//   * `<route>/status`   — `JobHandle<'T> -> Async<JobStatus<'T>>`   (69i.C)
-//   * `<route>/progress` — `JobHandle<'T> -> IAsyncEnumerable<JobStatus<'T>>`
-//                          over the Phase 69c SSE framing                (69i.D)
-//   * `<route>/cancel`   — `JobHandle<'T> -> Async<unit>`               (69i.G)
+//   * `<route>/status`   — `JobHandle<'T> -> Async<JobStatus<'T>>`
+//   * `<route>/progress` — `JobHandle<'T> -> IAsyncEnumerable<JobStatus<'T>>`, streamed
+//   * `<route>/cancel`   — `JobHandle<'T> -> Async<unit>`
 //
 // The submit method itself is an ORDINARY method: it runs the whole
-// pre-flight chain (auth / validation / idempotency / rate-limit / audit)
-// and its handler enqueues through the composed dispatcher — which is how
-// 69i.E (authorization before enqueue) and 69i.F (an idempotency key
-// replays the same handle without a second job) hold by construction rather
-// than by a second mechanism. The companions are served by the dispatcher
-// directly, off the same instance, so the handle a client holds resolves.
-//
-// Why routes off the classification rather than generated members: Phase
-// 69k's generator is build-time over built metadata with checked-in output,
-// so "auto-acquire at compose time" through it would mean a generation step
-// and a consumer edit per adopting record. A route the dispatcher exposes
-// from the classification it already computes needs neither, and the
+// request pipeline and its handler enqueues through the composed
+// dispatcher, so authorisation before enqueue and an idempotency key that
+// replays the same handle hold by construction. A companion runs through the
+// same pipeline too; it carries no marker of its own, and ownership of the
+// job is its guard. Why routes rather than generated members: the
 // companion's `'T` is fixed per METHOD (a record field cannot be generic),
-// which is exactly the shape the per-method route carries. Recorded as the
-// 69i.C decision in `docs/migrations/69i-long-running-handle.md`.
+// which is exactly the shape a per-method route carries
+// (`docs/migrations/69i-long-running-handle.md`).
 
 /// Which companion of a long-running method a request addresses.
 [<RequireQualifiedAccess>]
@@ -91,36 +84,6 @@ module internal LongRunning =
         ApiRecord.fields apiType
         |> Array.choose (fun apiField -> resultOf apiField |> Option.map (fun resultType -> apiField.Name, resultType))
         |> Map.ofArray
-
-    /// Resolve `<method>/<companion>` from a request path: the last two
-    /// segments name a classified long-running method and one of the three
-    /// companion suffixes. Every ordinary method route ends in ONE segment
-    /// after the record name, so a real method can never match unless a
-    /// record is itself named for a long-running method AND a method is
-    /// named `status` / `progress` / `cancel` — and even then only when the
-    /// record carries long-running methods, since the map is otherwise
-    /// empty and this is a fast miss.
-    let tryResolveCompanion (shapes: Map<string, 'calls>) (path: string) : (string * JobCompanion * 'calls) option =
-        if Map.isEmpty shapes || String.IsNullOrEmpty path then
-            None
-        else
-            let segments = path.Split('/', StringSplitOptions.RemoveEmptyEntries)
-
-            if segments.Length < 2 then
-                None
-            else
-                let methodName = segments[segments.Length - 2]
-
-                let companion =
-                    match segments[segments.Length - 1] with
-                    | "status" -> Some JobCompanion.Status
-                    | "progress" -> Some JobCompanion.Progress
-                    | "cancel" -> Some JobCompanion.Cancel
-                    | _ -> None
-
-                match companion, Map.tryFind methodName shapes with
-                | Some c, Some calls -> Some(methodName, c, calls)
-                | _ -> None
 
     /// The subject a resolved auth context contributes to the
     /// call context: its `SubjectId`, unless the caller is anonymous (an
@@ -191,26 +154,22 @@ type JobCompanionCalls
     private
     (
         resultType: Type,
-        handleType: Type,
         statusType: Type,
-        emptyHandle: obj,
+        decodeHandle: JsonSerializerOptions -> JsonElement -> Result<obj, DecodeError>,
         status: IJobDispatcher -> obj -> Async<obj>,
         cancel: IJobDispatcher -> obj -> Async<obj>,
-        subscribe: IJobDispatcher -> string option -> bool -> obj -> obj
+        progress: IJobDispatcher -> string option -> bool -> obj -> JsonSerializerOptions -> StreamSource
     ) =
 
     /// The job's result type `'T`.
     member _.ResultType = resultType
 
-    /// `JobHandle<'T>`: the type a companion's body decodes to.
-    member internal _.HandleType = handleType
-
     /// `JobStatus<'T>`: what the status and progress companions answer with.
     member internal _.StatusType = statusType
 
-    /// A handle naming no job, for a body that carried none: the call then
-    /// resolves through the dispatcher's own not-found arm.
-    member internal _.EmptyHandle = emptyHandle
+    /// A companion's argument, `JobHandle<'T>`, decoded through the same seam
+    /// as any method's argument.
+    member internal _.DecodeHandle = decodeHandle
 
     /// The poll companion: `GetStatus` on the composed dispatcher.
     member internal _.Status = status
@@ -218,8 +177,8 @@ type JobCompanionCalls
     /// The cancel companion: `Cancel` on the composed dispatcher.
     member internal _.Cancel = cancel
 
-    /// The progress companion's `IAsyncEnumerable<JobStatus<'T>>`, boxed.
-    member internal _.Subscribe = subscribe
+    /// The progress companion's stream of `JobStatus<'T>`.
+    member internal _.Progress = progress
 
     override _.Equals(other: obj) =
         match other with
@@ -232,10 +191,15 @@ type JobCompanionCalls
     static member For<'T>() : JobCompanionCalls =
         JobCompanionCalls(
             typeof<'T>,
-            typeof<JobHandle<'T>>,
             typeof<JobStatus<'T>>,
-            box (JobHandle "": JobHandle<'T>),
+            (fun options element ->
+                ToolUp.Remoting.Json.SystemTextJson.FableConverters.tryDeserialiseFor<JobHandle<'T>>
+                    None
+                    element
+                    options
+                |> Result.map box),
             LongRunning.statusOf<'T>,
             LongRunning.cancelOf<'T>,
-            fun dispatcher subject jobAdmin handle -> box (LongRunning.subscribe<'T> dispatcher subject jobAdmin handle)
+            fun dispatcher subject jobAdmin handle options ->
+                Streaming.sourceOf options (LongRunning.subscribe<'T> dispatcher subject jobAdmin handle)
         )

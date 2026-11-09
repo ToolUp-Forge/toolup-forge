@@ -346,6 +346,14 @@
 @@ L40 [66-platform-mode-env]
 -    Environment.SetEnvironmentVariable("TOOLUP_PLATFORM_MODE", "individual")
 +    Environment.SetEnvironmentVariable("TOOLUP_PLATFORM_SURFACES", "individual")
+--- a/src/Server/Remoting.fs
++++ b/src/Server/Remoting.fs
+@@ L7 [1056-error-result]
+-    | :? System.ArgumentException -> PropagateCategorised(ErrorCategory.User, box ex.Message)
++    | :? System.ArgumentException -> ErrorResult.PropagateCategorised(ErrorCategory.User, box ex.Message)
+@@ L8 [1056-error-result]
+-    | _ -> Propagate ex.Message
++    | _ -> ErrorResult.Propagate ex.Message
 --- a/src/Server/Server.fsproj
 +++ b/src/Server/Server.fsproj
 @@ L13 [11c5-package-audit-sinks]
@@ -374,4 +382,4 @@
 @@ L41 [73-remoting-namespace]
 -let legacyJson = Fable.Remoting.Json.FableJsonConverter()
 +let legacyJson = ToolUp.Remoting.Json.FableJsonConverter()
-Codemod: 94 rewrite(s) across 15 file(s) pending.
+Codemod: 96 rewrite(s) across 16 file(s) pending.

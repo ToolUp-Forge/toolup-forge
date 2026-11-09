@@ -62,6 +62,10 @@ type CodemodMigration =
     /// `UserId` / `TeamId` are typed at every store and service seam, in
     /// `ScopeKey`'s payloads and in the Core records off the wire.
     | TypedIdentity
+    /// The request pipeline is one list of stages with streaming inside it:
+    /// `InvocationResult` is gone, the fork's unions are qualified, and a
+    /// streaming method may carry the pre-flight markers.
+    | RequestPipeline
 
 /// Helpers over `CodemodMigration`.
 module CodemodMigration =
@@ -87,6 +91,8 @@ module CodemodMigration =
         | CodemodMigration.NestedConfig -> "docs/migrations/877-nested-server-config.md"
         | CodemodMigration.SubsystemNamespaces -> "docs/migrations/1198-subsystem-namespaces.md"
         | CodemodMigration.TypedIdentity -> "docs/migrations/878-typed-identity.md"
+        | CodemodMigration.RequestPipeline ->
+            "docs/migrations/1056-redesign-b-request-pipeline-as-stages-with-streaming-inside.md"
 
     /// The phase label the renderings print.
     let label migration =
@@ -107,6 +113,7 @@ module CodemodMigration =
         | CodemodMigration.NestedConfig -> "Phase 877"
         | CodemodMigration.SubsystemNamespaces -> "Phase 1198"
         | CodemodMigration.TypedIdentity -> "Phase 878"
+        | CodemodMigration.RequestPipeline -> "Phase 1056"
 
 /// Which files a rule applies to. The Phase 11.C.5 Tier 2 renames are
 /// PACKAGE ids — they live in `.fsproj` / `Directory.Packages.props` —
@@ -927,6 +934,15 @@ module Codemod =
             @"(?<=(?:(?<!:):|\bof|\*|<)\s*)\b(?:EntityId|TenantId|ScopeId)\b|(?<=,\s*)\b(?:EntityId|TenantId|ScopeId)\b(?=\s*>)"
             "string"
             "`id: EntityId` / `of TenantId` / `Map<string, ScopeId>` (a retired `string` abbreviation in a type position) → `string`"
+        // The fork's error-handler result is qualified: an error handler's
+        // `Propagate x` / `PropagateCategorised(c, x)` names its union.
+        rewrite
+            "1056-error-result"
+            CodemodMigration.RequestPipeline
+            CodemodFileClass.Source
+            @"(?<![.\w])(PropagateCategorised|Propagate)\b(?=\s*[(\w""])"
+            "ErrorResult.$1"
+            "`Propagate x` / `PropagateCategorised(category, x)` in an error handler → `ErrorResult.Propagate x` / `ErrorResult.PropagateCategorised(category, x)`"
     ]
 
     // ── The review rules ──────────────────────────────────────────────
@@ -1353,6 +1369,31 @@ module Codemod =
             CodemodFileClass.Source
             @"(?<![.\w""])(?:EntityId|TenantId|ScopeId)\b(?!\s*(?:=|:(?!:)))"
             "`EntityId`, `TenantId` and `ScopeId` are gone: each was an abbreviation for `string`. If this names the type, write `string`; if it is a value or a field of your own with the same name, it is unchanged"
+        // `InvocationResult` folded into the request pipeline's response.
+        review
+            "1056-invocation-result"
+            CodemodMigration.RequestPipeline
+            CodemodFileClass.Source
+            @"\bInvocationResult\b|\bProxy\.makeApiProxy\b"
+            "`InvocationResult` and `Proxy.makeApiProxy` are gone: the proxy is the request pipeline's `invoke` stage and nothing outside it sees its result. Serve the record through `Remoting.buildHttpHandler` (Giraffe) or `app.UseRemoting` (ASP.NET Core), which run every seam; a test that drove the proxy alone drives the handler instead"
+        review
+            "1056-unclassified"
+            CodemodMigration.RequestPipeline
+            CodemodFileClass.Source
+            @"\bMethodClassification\.Unclassified\b|\bRemoting\.Server\.Unclassified\b|\bAuthClassifier\.unclassified\s*\(\s*AuthClassifier\.classify\b"
+            "`MethodClassification.Unclassified` is gone: an unmarked method has no classification (`AuthClassifier.classify` omits it) and a composition with a resolver refuses it at start. `AuthClassifier.unclassified` takes the API record's type: `AuthClassifier.unclassified typeof<MyApi>`"
+        review
+            "1056-qualified-union"
+            CodemodMigration.RequestPipeline
+            CodemodFileClass.Source
+            @"(?<![.\w])(?:Ignore|StaticValue|FromContextAsync|FromContext|MessagePack)\b(?!\s*[:=])"
+            "if this is a case of `ErrorResult` (`Ignore`), `ProtocolImplementation` (`Empty` / `StaticValue` / `FromContext` / `FromContextAsync`), `SerializationType` (`Json` / `MessagePack`), `BodyNormalisation` (`Enabled` / `Disabled`) or `AuthDecision` (`Allow` / `Deny`), it is qualified now: `ErrorResult.Ignore`, `ProtocolImplementation.StaticValue impl`, …"
+        review
+            "1056-streaming-producer"
+            CodemodMigration.RequestPipeline
+            CodemodFileClass.Source
+            @"\bAsyncStream\.from(?:Callback|Subscription)\b"
+            "a streaming producer now runs under the request's abort token (a client that leaves cancels it) and behind a bounded channel: a `fromCallback` producer that outruns its consumer is held in `emit` until it reads; a `fromSubscription` feed drops its oldest waiting value instead. A producer that relied on unbounded buffering, or on running past a disconnect, is reviewed here"
     ]
 
 
@@ -2350,6 +2391,7 @@ module Codemod =
             CodemodMigration.NestedConfig
             CodemodMigration.TypedIdentity
             CodemodMigration.SubsystemNamespaces
+            CodemodMigration.RequestPipeline
         ]
         |> List.tryFind (fun m -> CodemodMigration.label m = "Phase " + phase.Trim())
 

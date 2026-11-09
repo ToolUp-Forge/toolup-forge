@@ -1,4 +1,4 @@
-Codemod: 82 site(s) in 16 file(s) need human review (not rewritten):
+Codemod: 86 site(s) in 17 file(s) need human review (not rewritten):
   src/Client/App.fs
     L14 [66-dev-default-user-id] DevDefaultUserId = "dev-admin"
       -> Phase 66: `ClientConfig.DevDefaultUserId` is deleted — the public-utility-with-admin shape it approximated is `Surfaces = Surfaces.anonymousAndIndividual` (worked example 4)
@@ -149,6 +149,15 @@ Codemod: 82 site(s) in 16 file(s) need human review (not rewritten):
       -> Phase 66: `PlatformMode` is retired: `ServerConfig.Mode` / `ClientConfig.Mode` became `Surfaces: SurfaceProfile list`, `AccessContext.Mode` became `Subject: Subject`, and a handler-factory `mode: PlatformMode` parameter drops (§6 — read the subject from `HttpContext.Items["ToolUp.Subject"]`)
     L39 [66-anonymous-route-prefix] |> ServerApp.withAnonymousRoute "/api/forms/public/"
       -> Phase 66: §5 — anonymous route prefixes are deleted; declare a per-route `SurfaceRequirement.claimBearerOnly` / `.anonymousOnly` / `.public_` via `ServerModule.withRouteSurfaceRequirement`
+  src/Server/Remoting.fs
+    L10 [1056-unclassified] let unclassified () = MethodClassification.Unclassified
+      -> Phase 1056: `MethodClassification.Unclassified` is gone: an unmarked method has no classification (`AuthClassifier.classify` omits it) and a composition with a resolver refuses it at start. `AuthClassifier.unclassified` takes the API record's type: `AuthClassifier.unclassified typeof<MyApi>`
+    L12 [1056-qualified-union] let options = { Remoting.createApi () with ResponseSerialization = MessagePack }
+      -> Phase 1056: if this is a case of `ErrorResult` (`Ignore`), `ProtocolImplementation` (`Empty` / `StaticValue` / `FromContext` / `FromContextAsync`), `SerializationType` (`Json` / `MessagePack`), `BodyNormalisation` (`Enabled` / `Disabled`) or `AuthDecision` (`Allow` / `Deny`), it is qualified now: `ErrorResult.Ignore`, `ProtocolImplementation.StaticValue impl`, …
+    L14 [1056-invocation-result] let describe (result: InvocationResult) = string result
+      -> Phase 1056: `InvocationResult` and `Proxy.makeApiProxy` are gone: the proxy is the request pipeline's `invoke` stage and nothing outside it sees its result. Serve the record through `Remoting.buildHttpHandler` (Giraffe) or `app.UseRemoting` (ASP.NET Core), which run every seam; a test that drove the proxy alone drives the handler instead
+    L16 [1056-streaming-producer] let ticks = AsyncStream.fromCallback (fun n -> n > 3) (fun emit -> async { emit 1 })
+      -> Phase 1056: a streaming producer now runs under the request's abort token (a client that leaves cancels it) and behind a bounded channel: a `fromCallback` producer that outruns its consumer is held in `emit` until it reads; a `fromSubscription` feed drops its oldest waiting value instead. A producer that relied on unbounded buffering, or on running past a disconnect, is reviewed here
   src/Server/RemotingLeftovers.fs
     L3 [1053-thread-safe-cell] let summary = ThreadSafeCell.computeOnce expensive
       -> Phase 1053: `ThreadSafeCell` is removed with no replacement; a `Lazy<'T>` covers `computeOnce`
@@ -181,6 +190,7 @@ Codemod: 82 site(s) in 16 file(s) need human review (not rewritten):
       -> Phase 73: the Newtonsoft-backed `FableJsonConverter` was retired in the STJ migration — use `ToolUp.Remoting.Json.SystemTextJson.FableConverters.create()` and `System.Text.Json.JsonSerializer` (see the Phase 73 doc's Remoting note)
   Read:
     Phase 1053 — docs/migrations/1053-redesign-b-defects-remoting.md
+    Phase 1056 — docs/migrations/1056-redesign-b-request-pipeline-as-stages-with-streaming-inside.md
     Phase 1066 — docs/migrations/1066-redesign-d-schedulerpolicy-coalesced-and-joblifecycle-transition.md
     Phase 1067 — docs/migrations/1067-redesign-d-hosting-register-placement-and-options-records.md
     Phase 1077 — docs/migrations/1077-redesign-f-turnoutcome-loopstate-and-loop-step.md

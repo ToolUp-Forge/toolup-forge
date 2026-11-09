@@ -132,6 +132,7 @@
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\PostDispatchBodyReadTests.fs" Link="InProcess\PostDispatchBodyReadTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\StreamingTests.fs" Link="InProcess\StreamingTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\StreamingDispatchTests.fs" Link="InProcess\StreamingDispatchTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\StreamingPipelineTests.fs" Link="InProcess\StreamingPipelineTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\JobHandleTests.fs" Link="InProcess\JobHandleTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\GeneratedInvocationChainTests.fs" Link="InProcess\GeneratedInvocationChainTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\RemotingAnalyzerRecognitionTests.fs" Link="InProcess\RemotingAnalyzerRecognitionTests.fs" />

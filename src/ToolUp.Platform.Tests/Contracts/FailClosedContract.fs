@@ -57,7 +57,7 @@ let private ctx
 
 let private mustDeny (label: string) (decision: AuthDecision) =
     match decision with
-    | Deny _ -> ()
+    | AuthDecision.Deny _ -> ()
     | AuthDecision.Allow -> failtestf "%s: FAIL-OPEN — expected Deny, got Allow" label
 
 // ── the contract ────────────────────────────────────────────────────────
@@ -76,23 +76,13 @@ let internal classifierFailClosedContract (family: string) (cls: Map<string, Met
     let requiresAuthMethods = [ "AdminOnly"; "NeedsScope"; "TenantOnly"; "AdminAndTenant" ]
 
     [
-        // 1 — Unclassified denies even god-mode. The startup classifier
-        //     should have refused, but if a miss ever reaches runtime it
-        //     must fail closed (belt + braces), never fall open to Public.
-        test (sprintf "%s: Unclassified denies even a god-mode caller (belt+braces fail-closed)" family) {
-            mustDeny "Unclassified/god-mode" (AuthClassifier.evaluate Unclassified (Some godMode))
-            mustDeny "Unclassified/no-context" (AuthClassifier.evaluate Unclassified None)
-        }
-
-        // 2 — A classification-map MISS defaults to Unclassified → denies
-        //     (Phase 132 deny-on-miss). A typo'd / aliased runtime key must
-        //     not fall open to Public for any caller.
-        test (sprintf "%s: a classification-map miss denies (deny-on-miss, not fall-open-to-Public)" family) {
-            let missed =
-                cls |> Map.tryFind "MethodThatDoesNotExist" |> Option.defaultValue Unclassified
-
-            Expect.equal missed Unclassified "a miss must default to Unclassified, not Public"
-            mustDeny "miss/god-mode" (AuthClassifier.evaluate missed (Some godMode))
+        // 1 — A name the record does not carry has no classification: there
+        //     is no case that could fall open to Public. A method the record
+        //     DOES carry without a marker is refused at compose under a
+        //     resolver (`ContractRefusal.UnclassifiedMethods`), so it never
+        //     reaches the evaluator.
+        test (sprintf "%s: a classification-map miss classifies nothing" family) {
+            Expect.isNone (cls |> Map.tryFind "MethodThatDoesNotExist") "a miss carries no classification"
         }
 
         // 3 — RequiresRole: wrong role, absent role, and no resolved context

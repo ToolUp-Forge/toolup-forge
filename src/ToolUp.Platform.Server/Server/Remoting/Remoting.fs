@@ -23,15 +23,15 @@ module Remoting =
     /// Option as inner-value-or-null). Verified by byte-pin tests in the
     /// Remoting suite.
     let createApi () = {
-        Implementation = Empty
+        Implementation = ProtocolImplementation.Empty
         RouteBuilder = sprintf "/%s/%s"
         ErrorHandler = None
         DiagnosticsLogger = None
         Docs = None, None
-        ResponseSerialization = Json
+        ResponseSerialization = SerializationType.Json
         JsonSerializer = SystemTextJson defaultStjOptions
         RmsManager = None
-        BodyNormalisation = Enabled
+        BodyNormalisation = BodyNormalisation.Enabled
         Telemetry = None
         TelemetryGate = None
         AuthContextResolver = None
@@ -73,7 +73,7 @@ module Remoting =
     /// Specifies that the API only uses binary serialization
     let withBinarySerialization (options: RemotingOptions<'t, 'implementation>) = {
         options with
-            ResponseSerialization = MessagePack
+            ResponseSerialization = SerializationType.MessagePack
     }
 
     /// Override the System.Text.Json options used by this API.
@@ -114,7 +114,7 @@ module Remoting =
             RmsManager = Some rmsManager
     }
 
-    /// Phase 69b.C — compose an `IRemotingTelemetry` sink that receives
+    /// Compose an `IRemotingTelemetry` sink that receives
     /// a `MethodTelemetry` record per method invocation (success or
     /// error, with wall-clock `ElapsedMs`). The sink is invoked AFTER
     /// the handler completes and BEFORE the response is written, so the
@@ -142,7 +142,7 @@ module Remoting =
             Telemetry = Some sink
     }
 
-    /// Phase 69l — compose a telemetry-allocation gate paired with a
+    /// Compose a telemetry-allocation gate paired with a
     /// `Telemetry` sink. The dispatcher invokes the gate before every
     /// per-request `Stopwatch` + `MethodTelemetry` allocation; a `false`
     /// return skips the entire path. Use to honour GP 13 ("zero cost
@@ -160,7 +160,7 @@ module Remoting =
             TelemetryGate = Some gate
     }
 
-    /// Phase 69d — compose an `IAuthContext` resolver. The resolver is
+    /// Compose an `IAuthContext` resolver. The resolver is
     /// invoked per request (between body normalisation and dispatch).
     /// The resolved `IAuthContext` is evaluated against each method's
     /// authorisation attributes (`[<RequiresRole>]`, `[<RequiresClaim>]`,
@@ -176,7 +176,7 @@ module Remoting =
             AuthContextResolver = Some resolver
     }
 
-    /// Phase 69g — compose an `IRateLimitStore` against which per-method
+    /// Compose an `IRateLimitStore` against which per-method
     /// `[<RateLimit(count, windowSeconds)>]` attributes are enforced. The
     /// `InMemoryRateLimitStore` is the in-process default; distributed
     /// deployments wire a Redis / DynamoDB / etc. impl against the same
@@ -195,7 +195,7 @@ module Remoting =
             RateLimitStore = Some store
     }
 
-    /// Phase 69h — compose an `IAuditEmitter` that receives an
+    /// Compose an `IAuditEmitter` that receives an
     /// `AuditEvent` after every successful invocation of an
     /// `[<Audit(...)>]`-attributed method. PII redaction applies
     /// by default — input-record fields without `[<PiiSafe>]` appear
@@ -209,7 +209,7 @@ module Remoting =
             AuditEmitter = Some emitter
     }
 
-    /// Phase 69h.tail — admin-must-be-audited startup gate. With this
+    /// Admin-must-be-audited startup gate. With this
     /// composed, the dispatcher refuses to start when any method carrying
     /// a `[<RequiresRole>]` requirement lacks an `[<Audit>]` annotation.
     /// Role-gated methods are admin-shaped; compliance-edition deployments
@@ -221,7 +221,7 @@ module Remoting =
             RequireAuditOnRoleGated = true
     }
 
-    /// Phase 69e.C — compose a validation-message resolver. The dispatcher
+    /// Compose a validation-message resolver. The dispatcher
     /// hands every typed-validation violation through `messages.Resolve`,
     /// which returns `Some localised` to override the built-in English
     /// message or `None` to keep it. Build one from a `ViolationCode ->
@@ -235,7 +235,7 @@ module Remoting =
             ValidationMessages = Some messages
     }
 
-    /// Phase 69f — compose an `IIdempotencyStore` against which
+    /// Compose an `IIdempotencyStore` against which
     /// `[<Idempotent>]`-attributed methods are enforced. Calls against
     /// idempotent methods require an `X-Idempotency-Key` request header;
     /// the first call's response is captured + cached against
@@ -252,7 +252,7 @@ module Remoting =
             IdempotencyStore = Some store
     }
 
-    /// Phase 69i.B — compose the `IJobDispatcher` behind this API record's
+    /// Compose the `IJobDispatcher` behind this API record's
     /// long-running methods. Every field returning `Async<JobHandle<'T>>`
     /// is classified as long-running at startup and gains three companion
     /// routes served by the dispatcher against THIS instance:
@@ -261,14 +261,14 @@ module Remoting =
     ///     exactly as a hand-wired `JobHandle<'T> -> Async<JobStatus<'T>>`
     ///     method would (same STJ shape, same content type);
     ///   * `POST <route>/progress` — body `[handle]`, an SSE stream of
-    ///     `JobStatus<'T>` frames (Phase 69c framing) ending on the first
+    ///     `JobStatus<'T>` frames (the SSE framing) ending on the first
     ///     terminal status;
     ///   * `POST <route>/cancel`   — body `[handle]`, replies as an
     ///     `Async<unit>` method would; the job transitions to `Cancelled`.
     ///
     /// The handler's `Enqueue` must go through the same instance, or the
     /// companions answer `Failed "job-not-found"` for every handle. Pass
-    /// the dispatcher you give the handlers. Ownership (69i.E / 69i.G): a
+    /// the dispatcher you give the handlers. Ownership: a
     /// job is stamped with the submitting subject when an auth context is
     /// composed; the companions serve it to that subject and to callers
     /// holding `JobAdminRole`, and answer not-found to anyone else.
@@ -281,14 +281,14 @@ module Remoting =
             JobDispatcher = Some dispatcher
     }
 
-    /// Phase 69i.G — the role that may read / cancel jobs it did not
+    /// The role that may read / cancel jobs it did not
     /// submit through the companion routes. Default `"Admin"`.
     let withJobAdminRole (role: string) (options: RemotingOptions<'t, 'implementation>) = {
         options with
             JobAdminRole = role
     }
 
-    /// Phase 69f — override the default idempotency-cache TTL (1h).
+    /// Override the default idempotency-cache TTL (1h).
     /// The TTL applies uniformly to every idempotent method; per-method
     /// TTL is a future seam.
     let withIdempotencyTtl (ttl: System.TimeSpan) (options: RemotingOptions<'t, 'implementation>) = {
@@ -296,9 +296,9 @@ module Remoting =
             IdempotencyTtl = ttl
     }
 
-    /// Phase 69j — set the `__schema_version` integer stamped on every
+    /// Set the `__schema_version` integer stamped on every
     /// dispatcher-emitted envelope (errors today; success-shape wrapping
-    /// is a future evolution). Defaults to `1` (post-69b.E baseline).
+    /// is a future evolution). Defaults to `1`.
     /// Bump when shipping a wire-format evolution so clients
     /// negotiating via `X-Remoting-Schema` can branch on the version.
     let withSchemaVersion (version: int) (options: RemotingOptions<'t, 'implementation>) = {
@@ -314,22 +314,22 @@ module Remoting =
     /// same routes and needs to receive literal empty bodies. Most
     /// consumers should leave it on.
     ///
-    /// Phase 69b.A — folds the behaviour that previously lived in a
+    /// Folds the behaviour that previously lived in a
     /// separate consumer-side middleware into the dispatcher itself.
     /// Idempotent on the wire: a request that's already `[]` flows
     /// through unchanged.
     let withoutBodyNormalisation (options: RemotingOptions<'t, 'implementation>) = {
         options with
-            BodyNormalisation = Disabled
+            BodyNormalisation = BodyNormalisation.Disabled
     }
 
     /// Builds the API using a function that takes the incoming Http context and returns a protocol implementation. You can use the Http context to read information about the incoming request and also use the Http context to resolve dependencies using the underlying dependency injection mechanism.
     let fromContext (f: 'ctx -> 't) (options: RemotingOptions<'ctx, 't>) = {
         options with
-            Implementation = FromContext f
+            Implementation = ProtocolImplementation.FromContext f
     }
 
-    /// Phase 69b.B — builds the API using an **async** function that takes
+    /// Builds the API using an **async** function that takes
     /// the incoming Http context and returns an `Async<'impl>`. The resolver
     /// is invoked per call (per HTTP request), not snapshotted at proxy /
     /// `Api.make` time, so any value that's populated lazily after composition
@@ -343,12 +343,9 @@ module Remoting =
     /// time. The recommended pattern for any platform integration that needs
     /// async-resolved per-request context.
     ///
-    /// Phase 69n: the Giraffe adapter builds the dispatcher table (TypeShape
-    /// proxy + the six attribute-driven classifier maps) ONCE at compose
-    /// time. Only the async resolver runs per request; the substrate cost
-    /// is amortised across every dispatch. (Pre-69n the Giraffe adapter
-    /// rebuilt the substrate per request; the caveat that recommended
-    /// avoiding `fromContextAsync` at high RPS is retired.)
+    /// Both adapters mount the pipeline (the contract and the proxy) ONCE at
+    /// compose time. Only the async resolver runs per request, so
+    /// `fromContextAsync` costs no more per request than `fromContext`.
     ///
     /// ```fsharp
     /// open ToolUp.Remoting.Server
@@ -364,16 +361,16 @@ module Remoting =
     /// ```
     let fromContextAsync (f: 'ctx -> Async<'t>) (options: RemotingOptions<'ctx, 't>) = {
         options with
-            Implementation = FromContextAsync f
+            Implementation = ProtocolImplementation.FromContextAsync f
     }
 
     /// Builds the API using the provided static protocol implementation
     let fromValue (serverImpl: 'implementation) (options: RemotingOptions<'t, 'implementation>) = {
         options with
-            Implementation = StaticValue serverImpl
+            Implementation = ProtocolImplementation.StaticValue serverImpl
     }
 
-    /// 0.1.15 — override the per-section byte cap inside
+    /// Override the per-section byte cap inside
     /// `multipart/form-data` request bodies. Default is 16 MiB; raise
     /// for genuine large-file upload paths, lower for tighter DoS
     /// posture. A section that exceeds the cap returns
@@ -383,7 +380,7 @@ module Remoting =
             MaxMultipartSectionBytes = bytes
     }
 
-    /// 0.1.15 — override the per-request multipart section count cap.
+    /// Override the per-request multipart section count cap.
     /// Default is 64. A request carrying more parts returns
     /// `ErrorCategory.User` / 400 without iterating further.
     let withMaxMultipartSections (count: int) (options: RemotingOptions<'t, 'implementation>) = {
@@ -391,7 +388,7 @@ module Remoting =
             MaxMultipartSections = count
     }
 
-    /// 0.1.15 — compose a custom remote-IP resolver for the rate-limit
+    /// Compose a custom remote-IP resolver for the rate-limit
     /// per-IP partition. Use when the host runs behind a reverse proxy
     /// / CDN (Cloudflare, CloudFront, ALB, nginx) so anonymous traffic
     /// partitions by client IP, not by proxy IP. The supplied function

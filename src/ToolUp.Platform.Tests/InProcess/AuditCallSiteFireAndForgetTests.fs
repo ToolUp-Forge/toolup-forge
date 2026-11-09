@@ -586,8 +586,8 @@ let private admitted: Admitted list = [
     }
     {
         File = "Remoting/Streaming.fs"
-        Anchor = "let channel = Channel.CreateUnbounded<'T>()"
-        Reason = "runProducer runs under try/with; a fault completes the channel"
+        Anchor = "Channel.CreateBounded<'T>(BoundedChannelOptions(Capacity, FullMode = BoundedChannelFullMode.Wait))"
+        Reason = "runProducer runs under try/with, and emit never throws; a fault completes the channel"
     }
     {
         File = "WebhookDispatcher.fs"

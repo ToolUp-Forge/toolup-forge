@@ -34,6 +34,7 @@ let private registeredTests =
         PostDispatchBodyReadTests.tests
         StreamingTests.tests
         StreamingDispatchTests.tests
+        StreamingPipelineTests.tests
         JobHandleTests.tests
         MarkdownRendererTests.tests
         HtmlRendererTests.tests

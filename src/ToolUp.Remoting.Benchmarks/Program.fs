@@ -303,11 +303,16 @@ let private dispatchArms (fixtures: Fixture list) : DispatchArm list =
             impl.Consignment
     ]
 
+/// The proxy the request pipeline builds, called with nothing parsed ahead.
+let private proxyOf (options: RemotingOptions<_, ICorpusApi>) : InvocationProps<ICorpusApi> -> Task<Proxy.Invoked> =
+    let proxy = Proxy.makeApiProxyWithParse options
+    fun props -> proxy.Invoke props ValueNone
+
 /// A dispatch through the proxy the adapter builds — generated or
 /// reflective, whichever it composed — invoked as the adapter invokes it
 /// (body bytes cached, JSON content type, POST).
 let private invokeProxy
-    (proxy: InvocationProps<ICorpusApi> -> Task<InvocationResult>)
+    (proxy: InvocationProps<ICorpusApi> -> Task<Proxy.Invoked>)
     (arm: DispatchArm)
     (output: MemoryStream)
     : unit =
@@ -325,7 +330,7 @@ let private invokeProxy
     }
 
     match (proxy props).Result with
-    | InvocationResult.Success _ -> ()
+    | Proxy.Invoked.Written _ -> ()
     | other -> failwithf "dispatch of %s through the proxy did not succeed: %A" arm.Label other
 
 // ─── Cold start: one arm, in this (fresh) process ───────────────────────
@@ -363,7 +368,7 @@ let private cold (path: string) (armName: string) : float =
 
         timeOnce (fun () ->
             ICorpusApiDispatch.register ()
-            let proxy = Proxy.makeApiProxy options
+            let proxy = proxyOf options
 
             for a in arms do
                 invokeProxy proxy a output)
@@ -372,7 +377,7 @@ let private cold (path: string) (armName: string) : float =
         use output = new MemoryStream()
 
         timeOnce (fun () ->
-            let proxy = Proxy.makeApiProxy options
+            let proxy = proxyOf options
 
             for a in arms do
                 invokeProxy proxy a output)
@@ -441,9 +446,9 @@ let private report (boots: int) (rounds: int) =
     // The reflective proxy is built BEFORE the table is registered — the
     // proxy reads the registry when it is built — and the generated one
     // after, so one process holds both.
-    let reflective = Proxy.makeApiProxy options
+    let reflective = proxyOf options
     ICorpusApiDispatch.register ()
-    let generated = Proxy.makeApiProxy options
+    let generated = proxyOf options
     use output = new MemoryStream()
     use reflectiveOutput = new MemoryStream()
 
@@ -585,7 +590,7 @@ let private probe (rounds: int) =
     let fixture = fixtures |> List.find (fun f -> f.Case.Name = "primitive-int")
     let body = Encoding.UTF8.GetBytes("[" + fixture.Json + "]")
     let elements = parseArgs body
-    let proxy = Proxy.makeApiProxy options
+    let proxy = proxyOf options
     let arms = dispatchArms fixtures
     let intArm = arms |> List.find (fun a -> a.Label = "int")
     use output = new MemoryStream()

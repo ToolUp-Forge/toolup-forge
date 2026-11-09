@@ -383,7 +383,7 @@ let tests =
             Expect.stringContains message "positive integers" "the refusal says why"
         }
 
-        test "a streaming method carrying versioning refuses at compose time" {
+        test "a streaming method carrying versioning composes: negotiation runs before the call" {
             let impl: StreamingVersionedApi = {
                 Ticks_V1 =
                     fun _ ->
@@ -392,34 +392,22 @@ let tests =
                         }
             }
 
-            let message =
-                refusalMessage "the SSE path cannot honour a negotiated version" (fun () ->
-                    Remoting.createApi ()
-                    |> Remoting.fromValue impl
-                    |> Remoting.buildHttpHandler
-                    |> ignore)
-
-            Expect.stringContains message "does not honour" "the refusal says the annotation would be ignored"
+            Remoting.createApi ()
+            |> Remoting.fromValue impl
+            |> Remoting.buildHttpHandler
+            |> ignore
         }
 
-        test "the AspNetCore adapter refuses a schema-versioned record rather than ignoring it" {
-            // The parity posture this adapter already takes to every other
-            // Phase 69b–69k seam. It reads no header, so a record that
-            // declares versions would dispatch by the addressed name
-            // whatever the caller asked for.
+        test "the AspNetCore adapter composes a schema-versioned record: it runs the same negotiation" {
             let impl: VersionedApi = {
                 Shape_V1 = fun s -> async { return s }
                 Shape_V2 = fun s -> async { return s }
             }
 
-            let message =
-                refusalMessage "an annotation this adapter cannot honour is refused, not dropped" (fun () ->
-                    Remoting.createApi ()
-                    |> Remoting.fromValue impl
-                    |> ToolUp.Remoting.AspNetCore.Middleware.buildFromImplementation (fun _ -> impl)
-                    |> ignore)
-
-            Expect.stringContains message "SupportsSchema" "the refusal names the annotation"
+            Remoting.createApi ()
+            |> Remoting.fromValue impl
+            |> ToolUp.Remoting.AspNetCore.Middleware.buildFromImplementation
+            |> ignore
         }
 
         // ── 69j.D — the deploy-time discovery vector ──────────────────
