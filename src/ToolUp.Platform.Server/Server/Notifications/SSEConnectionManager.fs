@@ -1,6 +1,7 @@
 namespace ToolUp.Platform.Jobs
 
 open ToolUp.Platform
+open ToolUp.Remoting
 
 open System
 open System.Collections.Concurrent
@@ -16,7 +17,7 @@ open Microsoft.AspNetCore.Http
 /// non-HTTP test fake or a future runtime-neutral companion can
 /// implement it without fabricating ASP.NET Core shapes.
 ///
-/// Phase 1c retrofit: replaces a prior public `SSEConnection` record
+/// Replaces a prior public `SSEConnection` record
 /// (`HttpResponse * CancellationToken`) which coupled the connection
 /// model to ASP.NET Core. The SSE-specific implementation is private
 /// to this file under `SseConnectionSink.fromHttpResponse`.
@@ -37,19 +38,20 @@ type IConnectionSink =
 /// Every caller that writes to `SSEConnectionManager.Broadcast`
 /// should use these so the wire format stays consistent — browser
 /// `EventSource` parsers are strict about the `data:`/`event:`
-/// framing and the terminating double newline.
+/// framing and the terminating double newline; both frame through
+/// Core's `Sse.encode`, the one grammar every host reads.
 module SSE =
     /// Frame a JSON payload as a default `message`-type SSE event.
     /// Consumer-side: `eventSource.onmessage` receives it.
     let dataFrame (json: string) : byte[] =
-        Encoding.UTF8.GetBytes $"data: {json}\n\n"
+        Encoding.UTF8.GetBytes(Sse.encode (StreamFrame.Other("message", None, json)))
 
     /// Frame a JSON payload with a named event type. Consumer-side:
     /// `eventSource.addEventListener(name, handler)` receives it.
     /// Used by the notification channel so the client router can
     /// dispatch by kind without parsing the payload first.
     let namedFrame (eventName: string) (json: string) : byte[] =
-        Encoding.UTF8.GetBytes $"event: {eventName}\ndata: {json}\n\n"
+        Encoding.UTF8.GetBytes(Sse.encode (StreamFrame.Other(eventName, None, json)))
 
     /// Server-side keepalive comment. SSE spec: any line starting
     /// with `:` is a comment that clients ignore. Sending one every
@@ -148,7 +150,7 @@ module SseConnectionSink =
 /// mutation. Enumeration during `Broadcast` is lock-free; a
 /// subscriber added mid-broadcast may or may not see the current
 /// write, which is expected "best effort" behaviour for SSE.
-/// Phase 6h follow-up — Workstream B. Bounded ring-buffer entry for the
+/// Bounded ring-buffer entry for the
 /// last N broadcasts on this `SSEConnectionManager`. Surfaced via
 /// `Snapshot()` and rendered by `SseTraceContributor` on `/dev/inspect`,
 /// so a developer can see at a glance which scopeIds events landed on
@@ -177,7 +179,7 @@ type SseBroadcastTraceEntry = {
 /// slice for "last N events" without re-sorting. `RegisteredScopes`
 /// pairs each scopeId with its current connection count.
 ///
-/// Phase 6l.D — `RefusalCounts` carries running totals of
+/// `RefusalCounts` carries running totals of
 /// `Add`-time scope-at-capacity refusals per scope. Operators reading
 /// `/dev/sse-trace` see which scopes are hitting the
 /// `MaxSseConnectionsPerScope` cap.
@@ -187,7 +189,7 @@ type SseManagerSnapshot = {
     RefusalCounts: Map<string, int>
 }
 
-/// Phase 6l.D — outcome of `SSEConnectionManager.Add` when the new
+/// Outcome of `SSEConnectionManager.Add` when the new
 /// connection would push the scope past `MaxSseConnectionsPerScope`.
 /// SSE handlers translate this to HTTP 429 + `Retry-After: 30`.
 type ScopeAtCapacity = {
@@ -196,7 +198,7 @@ type ScopeAtCapacity = {
     CurrentCount: int
 }
 
-/// Phase 6k — one connection's outbound queue and the single loop that
+/// One connection's outbound queue and the single loop that
 /// drains it.
 ///
 /// Before this, `Broadcast` fanned out with `Task.WhenAll` over every
@@ -220,7 +222,7 @@ type ScopeAtCapacity = {
 /// is what SSE delta streams require. Cross-connection order never was
 /// guaranteed and still is not.
 ///
-/// Phase 870 — `internal` rather than private so the live-session
+/// `internal` rather than private so the live-session
 /// endpoint (`LiveSessionHandler`) writes its frames through the same
 /// writer. It depends on `IConnectionSink` alone, so sharing it couples
 /// that endpoint to nothing of this manager's: no registry, no keepalive
@@ -331,7 +333,7 @@ type internal ConnectionWriter(sink: IConnectionSink, queueCapacity: int, perWri
     /// host is tearing down.
     member _.Completion: Task = loop
 
-/// Phase 870 — the two `ConnectionWriter` bounds, named once so every
+/// The two `ConnectionWriter` bounds, named once so every
 /// endpoint that writes through one uses the same answer. The reasoning
 /// for each value is on the `SSEConnectionManager` fields that read them.
 module internal ConnectionWriterDefaults =
@@ -344,23 +346,21 @@ module internal ConnectionWriterDefaults =
 type SSEConnectionManager(?maxConnectionsPerScope: int) =
     let connections = ConcurrentDictionary<string, ConnectionWriter list>()
 
-    /// Phase 6l.D — per-scope cap; `None` = unbounded (legacy
+    /// Per-scope cap; `None` = unbounded (legacy
     /// behaviour). When set, `Add` returns `Result.Error
     /// ScopeAtCapacity` once the scope's connection count reaches
     /// the cap.
     let cap: int option = maxConnectionsPerScope
 
-    /// Phase 6h follow-up: per-connection write/flush timeout.
+    /// Per-connection write/flush timeout.
     /// Without this cap, a stalled subscriber (slow client, wedged
     /// proxy) blocks `Task.WhenAll` in `broadcastAsync` and freezes
     /// every other subscriber in the same scope. On timeout, the
     /// connection's linked cancellation fires and the existing
-    /// dead-connection eviction path removes it. Phase 6k will
-    /// replace the WhenAll fan-out with a per-connection writer
-    /// queue; this is the bounded-by-default fix in the meantime.
+    /// dead-connection eviction path removes it.
     let perWriteTimeoutMs = ConnectionWriterDefaults.PerWriteTimeoutMs
 
-    /// Phase 6k — how many frames one connection may fall behind
+    /// How many frames one connection may fall behind
     /// before it is treated as dead. Deliberately an internal constant
     /// rather than a config knob: it is not a tuning dial, it is the
     /// point past which "slow" is indistinguishable from "gone", and a
@@ -370,7 +370,7 @@ type SSEConnectionManager(?maxConnectionsPerScope: int) =
     /// KB per idle connection.
     let queueCapacity = ConnectionWriterDefaults.QueueCapacity
 
-    /// Phase 6h follow-up — Workstream B. Bounded ring-buffer of recent
+    /// Bounded ring-buffer of recent
     /// broadcasts. Capacity 100 (we keep the most-recent 100 entries
     /// across all scopes — small enough to fit comfortably in memory,
     /// large enough to span a typical reproduction window). Pushes are
@@ -388,7 +388,7 @@ type SSEConnectionManager(?maxConnectionsPerScope: int) =
             while traceBuffer.Count > traceCapacity do
                 traceBuffer.RemoveLast())
 
-    /// Phase 6l.D — running count of scope-at-capacity refusals,
+    /// Running count of scope-at-capacity refusals,
     /// keyed by scopeId. Surfaced via `Snapshot()` so
     /// `SseTraceContributor` can render an operator-visible refusal
     /// summary on `/dev/sse-trace`.
@@ -409,7 +409,7 @@ type SSEConnectionManager(?maxConnectionsPerScope: int) =
         |> ignore
 
     /// Hand one frame to every connection in the scope. Non-blocking by
-    /// construction — this is the whole point of the phase. A connection
+    /// construction. A connection
     /// whose token has already fired, or whose queue is full, is stopped
     /// and evicted here; every other connection has its frame queued and
     /// is written to by its own loop, at its own pace.
@@ -460,7 +460,7 @@ type SSEConnectionManager(?maxConnectionsPerScope: int) =
     ///      this, a closed tab lingers in `connections` until the
     ///      next inbound publish — possibly hours.
     let keepaliveTimer =
-        // Phase 6h follow-up — keepalive bypasses the trace ring buffer.
+        // Keepalive bypasses the trace ring buffer.
         // It fires every 30 s for every registered scope, which would
         // otherwise dominate the last-100 trace and obscure the actual
         // application events. Direct manager-internal write path: same
@@ -485,14 +485,14 @@ type SSEConnectionManager(?maxConnectionsPerScope: int) =
     /// per scope are supported (a user with two browser tabs open
     /// sees notifications on both).
     ///
-    /// Phase 6l.D — when `MaxSseConnectionsPerScope` is set, returns
+    /// When `MaxSseConnectionsPerScope` is set, returns
     /// `Result.Error ScopeAtCapacity` if the current scope count is
     /// already at or above the cap. SSE handlers translate the error
     /// to HTTP 429. Returns `Result.Ok ()` on successful registration.
     member this.Add(scopeId: string, conn: IConnectionSink) : Result<unit, ScopeAtCapacity> =
         this.AddWriter(scopeId, conn) |> Result.map ignore
 
-    /// Phase 1064 — `Add`, handing back the connection's `ConnectionWriter`
+    /// `Add`, handing back the connection's `ConnectionWriter`
     /// so an endpoint that owns the subscription (`NotificationHandler`)
     /// enqueues its frames through the same writer the manager's keepalive
     /// uses: one writer per response, as for live sessions since 870.
@@ -514,7 +514,7 @@ type SSEConnectionManager(?maxConnectionsPerScope: int) =
                 CurrentCount = currentCount
             }
         | _ ->
-            // Phase 6k — the connection gets its own queue and its own
+            // The connection gets its own queue and its own
             // reader loop at registration. `onDead` closes over this
             // scope and sink so the loop can evict itself the moment a
             // write fails, without the manager having to notice on the
@@ -557,7 +557,7 @@ type SSEConnectionManager(?maxConnectionsPerScope: int) =
     /// Dead connections (cancellation fired, write threw, flush
     /// threw) are collected and removed before returning.
     member _.Broadcast(scopeId: string, bytes: byte[]) =
-        // Phase 6k — this used to block the caller on `Task.WhenAll`
+        // This used to block the caller on `Task.WhenAll`
         // over every connection in the scope. It now queues one frame
         // per connection and returns; each connection's own loop does
         // the writing. The call is still ordered per connection, and a
@@ -566,7 +566,7 @@ type SSEConnectionManager(?maxConnectionsPerScope: int) =
         // `WaitForDelivery`.
         broadcastWithKindInternal scopeId bytes "data"
 
-    /// Phase 6h follow-up — Workstream B. Variant of `Broadcast` that
+    /// Variant of `Broadcast` that
     /// takes a richer `kind` tag for the trace ring-buffer. Functional
     /// behaviour is identical to `Broadcast` — the tag flows only into
     /// `Snapshot()` for `/dev/sse-trace` rendering, never on the wire.
@@ -578,7 +578,7 @@ type SSEConnectionManager(?maxConnectionsPerScope: int) =
     member _.BroadcastWithKind(scopeId: string, bytes: byte[], kind: string) =
         broadcastWithKindInternal scopeId bytes kind
 
-    /// Phase 6h follow-up — Workstream B. Snapshot the recent-broadcast
+    /// Snapshot the recent-broadcast
     /// trace ring + the currently-registered scope set. Read by
     /// `SseTraceContributor` for `/dev/inspect`. Lock-free w.r.t.
     /// concurrent broadcasts (the trace push lock is held only for
@@ -600,7 +600,7 @@ type SSEConnectionManager(?maxConnectionsPerScope: int) =
             RefusalCounts = refusalCountsSnapshot
         }
 
-    /// Phase 6k — block until every frame queued so far has been handed
+    /// Block until every frame queued so far has been handed
     /// to its connection, or `timeoutMs` (default 5 s) elapses. Returns
     /// true when the queues drained.
     ///
@@ -629,7 +629,7 @@ type SSEConnectionManager(?maxConnectionsPerScope: int) =
         member _.Dispose() =
             keepaliveTimer.Dispose()
 
-            // Phase 6k — stop every reader loop before the manager goes
+            // Stop every reader loop before the manager goes
             // away. Without this a disposed manager leaves loops parked
             // on `ReadAsync` holding a response body the host is tearing
             // down.

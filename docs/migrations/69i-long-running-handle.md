@@ -59,7 +59,7 @@ Remoting.createApi ()
 |> Remoting.buildHttpHandler
 ```
 
-The client starts the operation, holds the handle, and either polls `<route>/status` until a terminal status (`Succeeded` / `Failed` / `Cancelled`) arrives, or subscribes to `<route>/progress` and reads frames with the public `SseFrame.parse` decoder — no casts, no bespoke status enum.
+The client starts the operation, holds the handle, and either polls `<route>/status` until a terminal status (`Succeeded` / `Failed` / `Cancelled`) arrives, or subscribes to `<route>/progress` and reads frames with the public `Sse.parse` decoder (`ToolUp.Platform.Core`) — no casts, no bespoke status enum.
 
 ## How the pre-flight seams compose
 
@@ -97,7 +97,7 @@ Additive — drop `Remoting.withJobDispatcher` and the companions disappear; the
 ## See also
 
 - [69-family-overview.md](69-family-overview.md) — family map and adoption sequence.
-- [69c-streaming-asyncseq-adoption.md](69c-streaming-asyncseq-adoption.md) — the SSE framing the progress companion rides, and `SseFrame.parse`.
+- [69c-streaming-asyncseq-adoption.md](69c-streaming-asyncseq-adoption.md) — the SSE framing the progress companion rides, and `Sse.parse`.
 - [69f-idempotency-keys.md](69f-idempotency-keys.md) — the replay that makes one key one job.
 - [69d-authorization-metadata.md](69d-authorization-metadata.md) — the resolver whose subject becomes the job's owner.
 - Substrate: `src/ToolUp.Platform.Server/Server/Remoting/Jobs.fs`, `LongRunning.fs`, `CallContext.fs`.

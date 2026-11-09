@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-/// Phase 843 — `JsonText`, the browser's JSON reader, held to the
+/// `JsonText`, the browser's JSON reader, held to the
 /// server's on the .NET host.
 ///
 /// `JsonText` is FSharpCore-only so that this pack can run it: the
@@ -150,4 +150,48 @@ let tests =
                 | Error _ -> ()
 
             Expect.isError (JsonText.tryParse null) "a null text is a refusal, not an exception"
+
+        // The client reads a refusal envelope with this reader and the
+        // `JsonDecode` combinators: the cases its retired scanner covered.
+        testList "refusal envelope" [
+            let read = ToolUp.Remoting.Client.Proxy.tryReadDecodeError
+
+            testCase "the server's envelope reads to its refusal"
+            <| fun () ->
+                Expect.equal
+                    (read
+                        """{"error":{"methodName":"Echo","decodeError":{"expected":"int","found":"an object","path":["Echo","args[0]","Count"]},"message":"m"},"ignored":false,"handled":true,"category":"validation","__schema_version":1}""")
+                    (Some(DecodeError.at [ "Echo"; "args[0]"; "Count" ] "int" "an object"))
+                    "expected, found and path"
+
+            testCase "escapes, braces and whitespace inside the detail are read, not scanned past"
+            <| fun () ->
+                Expect.equal
+                    (read
+                        """{ "error" : { "decodeError" : { "found" : "a string \"{x}\" é", "expected" : "int" , "path" : [ "a", "b\"c" ] } } }""")
+                    (Some(DecodeError.at [ "a"; "b\"c" ] "int" "a string \"{x}\" é"))
+                    "member order, escaped quotes, a brace in a value and a unicode escape"
+
+            testCase "an absent path is the empty path"
+            <| fun () ->
+                Expect.equal
+                    (read """{"error":{"decodeError":{"expected":"int","found":"string"}}}""")
+                    (Some(DecodeError.at [] "int" "string"))
+                    "no path member"
+
+            testCase "anything that is not a refusal envelope is None"
+            <| fun () ->
+                for body in
+                    [
+                        """{"error":{"methodName":"Echo","violations":[]},"category":"validation"}"""
+                        """{"error":{"message":"the word \"decodeError\": appears only in a value"}}"""
+                        """{"error":{"decodeError":{"expected":"int"}}}"""
+                        """{"decodeError":{"expected":"int","found":"string"}}"""
+                        """{"error":{"decodeError":{"expected":"int","found":"string"}"""
+                        "not json at all"
+                        ""
+                        "   "
+                    ] do
+                    Expect.isNone (read body) body
+        ]
     ]

@@ -9,15 +9,16 @@ open Microsoft.AspNetCore.Hosting
 open Microsoft.AspNetCore.TestHost
 open Microsoft.Extensions.Hosting
 open Giraffe
+open ToolUp.Remoting
 open ToolUp.Remoting.Server
 open ToolUp.Remoting.Giraffe
 
-// ─── Phase 69c.tail A — AsyncStream.fromCallback over the real dispatcher ──
+// ─── AsyncStream.fromCallback over the real dispatcher ──
 //
 // `AsyncStream.fromCallback` is the reusable bridge that turns a push-based
 // (callback / sink) producer into the `IAsyncEnumerable<'T>` a streaming
 // method returns — the shape the typed AI chat endpoint (StreamChatV2) and
-// the future Phase 53 / KB streaming adopters all need. These tests mount a
+// the KB streaming adopters need. These tests mount a
 // streaming API record whose method is built with `fromCallback` on a real
 // ToolUp.Remoting dispatcher (TestServer) and assert the end-to-end SSE
 // framing:
@@ -35,8 +36,8 @@ type CountEvent =
     | Tick of n: int
     | Done
 
-/// `FailAfter > 0` makes the producer fault after that many ticks (Phase
-/// 69c.C — pins the chunk count on the `error` terminal path).
+/// `FailAfter > 0` makes the producer fault after that many ticks (pins
+/// the chunk count on the `error` terminal path).
 type CountRequest = {
     Upto: int
     Detached: bool
@@ -88,7 +89,7 @@ let private impl: CounterStreamApi = {
                     })
 }
 
-/// Phase 69c.C — capturing `IRemotingTelemetry`: one record per call.
+/// Capturing `IRemotingTelemetry`: one record per call.
 type private CapturingTelemetry() =
     let events = System.Collections.Concurrent.ConcurrentQueue<MethodTelemetry>()
     member _.Events = events |> Seq.toList
@@ -157,6 +158,13 @@ let private streamBody (detached: bool) (upto: int) = async {
     return text
 }
 
+/// The `id:` of every `chunk` frame, in order.
+let private chunkIds (frames: StreamFrame list) : string option list =
+    frames
+    |> List.choose (function
+        | StreamFrame.Chunk(id, _) -> Some id
+        | _ -> None)
+
 [<Tests>]
 let tests =
     testList "Phase 69c.tail A — AsyncStream.fromCallback dispatch (integration)" [
@@ -191,7 +199,7 @@ let tests =
                 "the stream completes on the background terminal, not on foreground return"
         }
 
-        // ── Phase 69c.C — per-chunk correlation + the telemetry chunk-count dimension ──
+        // ── Per-chunk correlation + the telemetry chunk-count dimension ──
 
         testAsync "every chunk frame carries id: <correlation-id>-<chunk-index>, from the caller's header" {
             let! text, stamped =
@@ -203,8 +211,8 @@ let tests =
 
             Expect.equal stamped "corr-xyz" "the caller's correlation id is echoed on the response header"
 
-            let frames = SseFrame.parse text
-            let chunkIds = frames |> List.filter (fun f -> f.Event = "chunk") |> List.map _.Id
+            let frames = Sse.parse text
+            let chunkIds = chunkIds frames
 
             // 3 ticks + the Done terminal value = 4 chunks, zero-based.
             Expect.equal
@@ -212,7 +220,7 @@ let tests =
                 [ Some "corr-xyz-0"; Some "corr-xyz-1"; Some "corr-xyz-2"; Some "corr-xyz-3" ]
                 "chunk ids are the correlation id joined to the zero-based chunk index"
 
-            Expect.equal (frames |> List.last).Event "complete" "the terminal frame is `complete`"
+            Expect.equal (List.last frames) StreamFrame.Complete "the terminal frame is `complete`"
         }
 
         testAsync "chunk ids use the dispatcher-generated correlation id when the caller sends none" {
@@ -225,8 +233,7 @@ let tests =
 
             Expect.isNotEmpty stamped "the dispatcher generated a correlation id"
 
-            let chunkIds =
-                SseFrame.parse text |> List.filter (fun f -> f.Event = "chunk") |> List.map _.Id
+            let chunkIds = Sse.parse text |> chunkIds
 
             Expect.equal
                 chunkIds
@@ -266,14 +273,13 @@ let tests =
                     FailAfter = 2
                 }
 
-            let frames = SseFrame.parse text
+            let frames = Sse.parse text
 
-            Expect.equal
-                (frames |> List.filter (fun f -> f.Event = "chunk") |> List.length)
-                2
-                "two chunks reached the wire"
+            Expect.equal (chunkIds frames |> List.length) 2 "two chunks reached the wire"
 
-            Expect.equal (frames |> List.last).Event "error" "the terminal frame is `error`"
+            match List.last frames with
+            | StreamFrame.Error _ -> ()
+            | other -> failtestf "the terminal frame is `error`, got %A" other
 
             match sink.Events with
             | [ t ] ->
