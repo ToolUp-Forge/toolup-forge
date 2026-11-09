@@ -5,6 +5,7 @@ module ModuleVisibilityAdminUI
 
 open ToolUp.Elmish
 open Feliz
+open Toolup.UIToolkit
 open ToolUp.Platform
 
 // ─── Module-visibility profile editor (client-tier admin slice) ──────
@@ -87,10 +88,10 @@ type Model = {
     Loaded: bool
     /// True while a save / clear is in flight.
     Busy: bool
-    /// Error banner. Cleared by `DismissError` or the next mutation.
-    Error: string option
+    /// Error notice. Cleared by `DismissError` or the next mutation.
+    Error: Notice option
     /// Transient confirmation after a save / clear.
-    Status: string option
+    Status: Notice option
 }
 
 type Msg =
@@ -205,7 +206,12 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
 
     | RegisteredLoaded(Ok ids) -> { model with RegisteredModuleIds = ids }, Cmd.none
 
-    | RegisteredLoaded(Error err) -> { model with Error = Some err }, Cmd.none
+    | RegisteredLoaded(Error err) ->
+        {
+            model with
+                Error = Some(Notice.Problem err)
+        },
+        Cmd.none
 
     | ProfileLoaded(Ok profile) ->
         let kind, selection, note, excluded = seedEditor profile
@@ -225,7 +231,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         {
             model with
                 Loaded = true
-                Error = Some err
+                Error = Some(Notice.Problem err)
         },
         Cmd.none
 
@@ -241,7 +247,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         {
             model with
                 ResolvedLoaded = true
-                Error = Some err
+                Error = Some(Notice.Problem err)
         },
         Cmd.none
 
@@ -283,7 +289,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         {
             model with
                 Busy = false
-                Status = Some MessageCatalog.english.ModuleVisibilityAdmin.ProfileSaved
+                Status = Some(Notice.Info MessageCatalog.english.ModuleVisibilityAdmin.ProfileSaved)
         },
         Cmd.ofMsg Load
 
@@ -291,7 +297,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         {
             model with
                 Busy = false
-                Error = Some err
+                Error = Some(Notice.Problem err)
         },
         Cmd.none
 
@@ -311,7 +317,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         {
             model with
                 Busy = false
-                Status = Some MessageCatalog.english.ModuleVisibilityAdmin.ProfileCleared
+                Status = Some(Notice.Info MessageCatalog.english.ModuleVisibilityAdmin.ProfileCleared)
         },
         Cmd.ofMsg Load
 
@@ -319,7 +325,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         {
             model with
                 Busy = false
-                Error = Some err
+                Error = Some(Notice.Problem err)
         },
         Cmd.none
 
@@ -328,19 +334,6 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
     | DismissStatus -> { model with Status = None }, Cmd.none
 
 // ─── View helpers ────────────────────────────────────────────────────
-
-let private banner (msgs: ModuleVisibilityAdminMessages) (cls: string) (text: string) (onDismiss: unit -> unit) =
-    Html.div [
-        prop.className $"mb-4 p-3 border rounded text-sm flex items-center justify-between {cls}"
-        prop.children [
-            Html.span [ prop.text text ]
-            Html.button [
-                prop.className "text-xs hover:underline"
-                prop.text msgs.Dismiss
-                prop.onClick (fun _ -> onDismiss ())
-            ]
-        ]
-    ]
 
 let private kindButton (label: string) (description: string) (active: bool) (onClick: unit -> unit) =
     Html.button [
@@ -520,15 +513,7 @@ let private EditorForm (model: Model) (onSave: string -> unit) (onClear: unit ->
 let private ModuleVisibilityAdminBody (model: Model) (dispatch: Msg -> unit) =
     let msgs = (MessageCatalogProvider.useMessages ()).ModuleVisibilityAdmin
 
-    let errorBanner =
-        match model.Error with
-        | Some msg -> banner msgs "bg-red-50 border-red-200 text-red-700" msg (fun () -> dispatch DismissError)
-        | None -> Html.none
-
-    let statusBanner =
-        match model.Status with
-        | Some msg -> banner msgs "bg-green-50 border-green-200 text-green-700" msg (fun () -> dispatch DismissStatus)
-        | None -> Html.none
+    let noticeMsgs = { Dismiss = msgs.Dismiss }
 
     let candidateRows =
         if List.isEmpty model.RegisteredModuleIds then
@@ -588,8 +573,8 @@ let private ModuleVisibilityAdminBody (model: Model) (dispatch: Msg -> unit) =
         prop.children [
             Html.h2 [ prop.className "text-lg font-semibold mb-1"; prop.text msgs.Heading ]
             Html.p [ prop.className "text-sm text-gray-600 mb-4"; prop.text msgs.Subheading ]
-            errorBanner
-            statusBanner
+            StateViews.notice noticeMsgs model.Error (fun () -> dispatch DismissError)
+            StateViews.notice noticeMsgs model.Status (fun () -> dispatch DismissStatus)
             editor
             resolvedPane msgs model
         ]
