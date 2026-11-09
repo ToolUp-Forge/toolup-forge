@@ -4414,10 +4414,10 @@ let main args =
     // unreadable one and an undecodable one mean, which is the defect class the
     // document store exists to end (a fault read as "empty", then written back).
     // Every such file is either a named home below, with its reason, or on the
-    // allow-list of files not yet moved onto the store. The list only shrinks:
+    // allow-list of files not yet moved onto the store. The lists only shrink:
     // a file that calls `Download` and is on neither list is red, and so is a
-    // listed file that no longer calls it, so moving a store means deleting its
-    // line in the same commit.
+    // file on either list that no longer calls it, so moving a store means
+    // deleting its line in the same commit.
     //
     // The scan is textual (`.Download(` or `.Download (`), over the server
     // tier's own sources; companions are outside it. A member DEFINITION
@@ -4434,7 +4434,6 @@ let main args =
         "DataObjectStore.fs",
         "the append-only slot claim over versioned objects, kept by design beside the document store"
         "EncryptedBlobStorage.fs", "an IBlobStorage decorator: it implements Download, it does not read documents"
-        "Infra/LocalFileStorage.fs", "an IBlobStorage implementation"
         "Infra/ResilientBlobStorage.fs", "an IBlobStorage decorator"
         "BackupCoordinator.fs",
         "the backup plane copies and hashes opaque bytes (and decorates IBlobStorage); its one document, the manifest, already answers absent, unreadable and undecodable with typed BackupError cases"
@@ -4483,7 +4482,7 @@ let main args =
             let homes = blobDownloadHomes |> List.map fst |> Set.ofList
             let allowed = Set.ofList blobDownloadAllowList
             let unlisted = Set.difference callers (Set.union homes allowed)
-            let stale = Set.difference allowed callers
+            let stale = Set.difference (Set.union homes allowed) callers
             let listedTwice = Set.intersect homes allowed
 
             Trace.tracefn ""
@@ -4512,7 +4511,7 @@ let main args =
                 for file in stale do
                     Trace.traceError (
                         sprintf
-                            "  %s is on the allow-list but no longer calls Download: delete its line from blobDownloadAllowList."
+                            "  %s is listed but no longer calls Download: delete its line from blobDownloadAllowList or blobDownloadHomes."
                             file
                     )
 
