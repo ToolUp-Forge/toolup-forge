@@ -432,7 +432,7 @@
       "evidence": {
         "document": "proofs/README.md"
       },
-      "reason": "it is an interpreter over an open, possibly recursive type graph walked with a mutable cursor, so 'total on every input' is not a well-formed statement about it - the input includes the type graph. That asymmetry is the whole argument for the closed value model."
+      "reason": "it is an interpreter over an open, possibly recursive type graph walked with a mutable cursor, so 'total on every input' is not a well-formed statement about it - the input includes the type graph. That asymmetry is the whole argument for the closed value model. The path is reached through ONE seam on both hosts, `Codecs.resolveJson` / `resolveJsonEncoder` / `resolveMsgPack` (src/ToolUp.Platform.Core/Shared/Remoting/Codecs.fs), whose miss is the reflective path under `DecodePolicy.ReflectionFallback` and a refusal naming the type under `DecodePolicy.VerifiedOnly` (`Remoting.withDecodePolicy`): a deployment that composes the strict posture has no reflection decode or encode path left to be outside a claim."
     },
     {
       "id": "emitter-side-narrowing",
@@ -477,7 +477,7 @@
       "evidence": {
         "document": "proofs/README.md"
       },
-      "reason": "the algebra is an opt-in replacement for a decoder that already works; the shipped default is unchanged"
+      "reason": "the algebra is an opt-in replacement for a decoder that already works; the shipped default is unchanged. Which records those are is checkable: the boot line `RemotingDecoderFacet.describeCodecs` names every served record with a wire type `Codecs` does not resolve, and a `DecodePolicy.VerifiedOnly` mount refuses to start on one"
     },
     {
       "id": "disclosure-no-undisclosed-output",

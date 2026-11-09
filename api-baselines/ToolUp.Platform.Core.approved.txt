@@ -14644,6 +14644,44 @@ ToolUp.Platform.WorkflowTransitionedPayload.SubmissionId : System.String { get }
 ToolUp.Platform.WorkflowTransitionedPayload.ToState : System.String { get }
 ToolUp.Platform.WorkflowTransitionedPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.WorkflowTransitionedPayload.WorkflowId : System.String { get }
+ToolUp.Remoting.Codec (class)
+ToolUp.Remoting.Codec.empty`1() : ToolUp.Remoting.Codec`1[T]
+ToolUp.Remoting.Codec.erase`1(ToolUp.Remoting.Codec`1[T]) : ToolUp.Remoting.ErasedCodec
+ToolUp.Remoting.Codec.jsonDecoder`1(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]]) : ToolUp.Remoting.Codec`1[T]
+ToolUp.Remoting.Codec.jsonEncoder`1(Microsoft.FSharp.Core.FSharpFunc`2[T, ToolUp.Remoting.Json.JsonValue]) : ToolUp.Remoting.Codec`1[T]
+ToolUp.Remoting.Codec.json`1(Microsoft.FSharp.Core.FSharpFunc`2[T, ToolUp.Remoting.Json.JsonValue], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]]) : ToolUp.Remoting.Codec`1[T]
+ToolUp.Remoting.Codec.msgPack`1(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]]) : ToolUp.Remoting.Codec`1[T]
+ToolUp.Remoting.CodecLeg (class)
+ToolUp.Remoting.CodecLeg.DecodeJson : ToolUp.Remoting.CodecLeg { get }
+ToolUp.Remoting.CodecLeg.DecodeMsgPack : ToolUp.Remoting.CodecLeg { get }
+ToolUp.Remoting.CodecLeg.EncodeJson : ToolUp.Remoting.CodecLeg { get }
+ToolUp.Remoting.CodecLeg.IsDecodeJson : System.Boolean { get }
+ToolUp.Remoting.CodecLeg.IsDecodeMsgPack : System.Boolean { get }
+ToolUp.Remoting.CodecLeg.IsEncodeJson : System.Boolean { get }
+ToolUp.Remoting.CodecLeg.Tag : System.Int32 { get }
+ToolUp.Remoting.CodecLeg+Tags (class)
+ToolUp.Remoting.CodecLeg+Tags.DecodeJson : System.Int32 (literal)
+ToolUp.Remoting.CodecLeg+Tags.DecodeMsgPack : System.Int32 (literal)
+ToolUp.Remoting.CodecLeg+Tags.EncodeJson : System.Int32 (literal)
+ToolUp.Remoting.Codec`1 (class)
+ToolUp.Remoting.Codec`1..ctor(Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[T, ToolUp.Remoting.Json.JsonValue]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]]])
+ToolUp.Remoting.Codec`1.JsonDecoder : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]]] { get }
+ToolUp.Remoting.Codec`1.JsonEncoder : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[T, ToolUp.Remoting.Json.JsonValue]] { get }
+ToolUp.Remoting.Codec`1.MsgPack : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]]] { get }
+ToolUp.Remoting.Codecs (class)
+ToolUp.Remoting.Codecs.keyFor(System.Type) : System.String
+ToolUp.Remoting.Codecs.registerErased(ToolUp.Remoting.Scope, System.String, ToolUp.Remoting.ErasedCodec) : System.Void
+ToolUp.Remoting.Codecs.register`1(ToolUp.Remoting.Scope, ToolUp.Remoting.Codec`1[T]) : System.Void
+ToolUp.Remoting.Codecs.registered(ToolUp.Remoting.CodecLeg) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Remoting.Scope, System.String]]
+ToolUp.Remoting.Codecs.resetForTests() : System.Void
+ToolUp.Remoting.Codecs.resetLegForTests(ToolUp.Remoting.CodecLeg) : System.Void
+ToolUp.Remoting.Codecs.resolveJson(ToolUp.Remoting.DecodePolicy, ToolUp.Remoting.Scope, System.Type) : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[System.Object, ToolUp.Remoting.DecodeError]], ToolUp.Remoting.DecodeError]]
+ToolUp.Remoting.Codecs.resolveJsonEncoder(ToolUp.Remoting.DecodePolicy, ToolUp.Remoting.Scope, System.Type) : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpFunc`2[System.Object, ToolUp.Remoting.Json.JsonValue], ToolUp.Remoting.DecodeError]]
+ToolUp.Remoting.Codecs.resolveMsgPack(ToolUp.Remoting.DecodePolicy, ToolUp.Remoting.Scope, System.Type) : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[System.Object, ToolUp.Remoting.DecodeError]], ToolUp.Remoting.DecodeError]]
+ToolUp.Remoting.Codecs.tryJsonDecoder(ToolUp.Remoting.Scope, System.Type) : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[System.Object, ToolUp.Remoting.DecodeError]]]
+ToolUp.Remoting.Codecs.tryJsonEncoder(ToolUp.Remoting.Scope, System.Type) : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.Object, ToolUp.Remoting.Json.JsonValue]]
+ToolUp.Remoting.Codecs.tryMsgPack(ToolUp.Remoting.Scope, System.Type) : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[System.Object, ToolUp.Remoting.DecodeError]]]
+ToolUp.Remoting.Codecs.unverified(ToolUp.Remoting.CodecLeg, System.Type) : ToolUp.Remoting.DecodeError
 ToolUp.Remoting.Decode (class)
 ToolUp.Remoting.Decode.apply`2(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[A, ToolUp.Remoting.DecodeError]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpFunc`2[A, B], ToolUp.Remoting.DecodeError]], ToolUp.Remoting.MsgPack.Value) : Microsoft.FSharp.Core.FSharpResult`2[B, ToolUp.Remoting.DecodeError]
 ToolUp.Remoting.Decode.array`1(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]]) : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[T[], ToolUp.Remoting.DecodeError]]
@@ -14690,6 +14728,15 @@ ToolUp.Remoting.Decode.tuple2`2(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoti
 ToolUp.Remoting.Decode.tuple3`3(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[A, ToolUp.Remoting.DecodeError]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[B, ToolUp.Remoting.DecodeError]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[C, ToolUp.Remoting.DecodeError]]) : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`3[A, B, C], ToolUp.Remoting.DecodeError]]
 ToolUp.Remoting.Decode.tuple4`4(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[A, ToolUp.Remoting.DecodeError]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[B, ToolUp.Remoting.DecodeError]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[C, ToolUp.Remoting.DecodeError]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[D, ToolUp.Remoting.DecodeError]]) : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`4[A, B, C, D], ToolUp.Remoting.DecodeError]]
 ToolUp.Remoting.Decode.union`1(System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Remoting.MsgPack.Value], Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]]]], ToolUp.Remoting.MsgPack.Value) : Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.DecodePolicy (class)
+ToolUp.Remoting.DecodePolicy.IsReflectionFallback : System.Boolean { get }
+ToolUp.Remoting.DecodePolicy.IsVerifiedOnly : System.Boolean { get }
+ToolUp.Remoting.DecodePolicy.ReflectionFallback : ToolUp.Remoting.DecodePolicy { get }
+ToolUp.Remoting.DecodePolicy.Tag : System.Int32 { get }
+ToolUp.Remoting.DecodePolicy.VerifiedOnly : ToolUp.Remoting.DecodePolicy { get }
+ToolUp.Remoting.DecodePolicy+Tags (class)
+ToolUp.Remoting.DecodePolicy+Tags.ReflectionFallback : System.Int32 (literal)
+ToolUp.Remoting.DecodePolicy+Tags.VerifiedOnly : System.Int32 (literal)
 ToolUp.Remoting.DecoderDivergence (class)
 ToolUp.Remoting.DecoderDivergence..ctor(System.Int32, System.String, System.String)
 ToolUp.Remoting.DecoderDivergence.Candidate : System.String { get }
@@ -14715,6 +14762,11 @@ ToolUp.Remoting.DecoderVerification.Divergence : Microsoft.FSharp.Core.FSharpOpt
 ToolUp.Remoting.DecoderVerification.Draws : System.Int32 { get }
 ToolUp.Remoting.DecoderVerification.Seed : System.Int32 { get }
 ToolUp.Remoting.DecoderVerification.WireType : System.String { get }
+ToolUp.Remoting.ErasedCodec (class)
+ToolUp.Remoting.ErasedCodec..ctor(Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.Object, ToolUp.Remoting.Json.JsonValue]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[System.Object, ToolUp.Remoting.DecodeError]]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[System.Object, ToolUp.Remoting.DecodeError]]])
+ToolUp.Remoting.ErasedCodec.DecodeJson : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[System.Object, ToolUp.Remoting.DecodeError]]] { get }
+ToolUp.Remoting.ErasedCodec.DecodeMsgPack : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[System.Object, ToolUp.Remoting.DecodeError]]] { get }
+ToolUp.Remoting.ErasedCodec.Encode : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.Object, ToolUp.Remoting.Json.JsonValue]] { get }
 ToolUp.Remoting.Json.JsonDeclaredDifference (class)
 ToolUp.Remoting.Json.JsonDeclaredDifference..ctor(System.Int32, ToolUp.Remoting.Json.JsonOracleLoss, System.String, System.String)
 ToolUp.Remoting.Json.JsonDeclaredDifference.Candidate : System.String { get }
@@ -14791,6 +14843,10 @@ ToolUp.Remoting.Json.JsonDecoders.registered() : Microsoft.FSharp.Collections.FS
 ToolUp.Remoting.Json.JsonDecoders.resetForTests() : System.Void
 ToolUp.Remoting.Json.JsonDecoders.tryGet(Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Type) : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[System.Object, ToolUp.Remoting.DecodeError]]]
 ToolUp.Remoting.Json.JsonDecoders.verifyThrough`1(Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[System.Type, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[System.Object, ToolUp.Remoting.DecodeError]], Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Remoting.Json.JsonDecoderVerification, ToolUp.Remoting.DecoderRefusal]]]]], System.Int32, System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Remoting.Json.JsonDecoderVerification, ToolUp.Remoting.DecoderRefusal]
+ToolUp.Remoting.Json.JsonEncoders (class)
+ToolUp.Remoting.Json.JsonEncoders.dateTimeOffset(System.DateTimeOffset) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.JsonEncoders.mapOf`2(Microsoft.FSharp.Core.FSharpFunc`2[K, ToolUp.Remoting.Json.JsonValue], Microsoft.FSharp.Core.FSharpFunc`2[V, ToolUp.Remoting.Json.JsonValue], Microsoft.FSharp.Collections.FSharpMap`2[K, V]) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.JsonEncoders.verifyThrough`1(Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[System.Type, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[System.Object, ToolUp.Remoting.Json.JsonValue], Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Remoting.DecoderVerification, ToolUp.Remoting.DecoderRefusal]]]]], System.Int32, System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[T, ToolUp.Remoting.Json.JsonValue]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Remoting.DecoderVerification, ToolUp.Remoting.DecoderRefusal]
 ToolUp.Remoting.Json.JsonOracleLoss (class)
 ToolUp.Remoting.Json.JsonOracleLoss..ctor(System.Type, System.String)
 ToolUp.Remoting.Json.JsonOracleLoss.Reason : System.String { get }
@@ -14876,6 +14932,234 @@ ToolUp.Remoting.Json.PlatformJsonDecoders.wireProvenanceChainRequest : Microsoft
 ToolUp.Remoting.Json.PlatformJsonDecoders.wireProvenanceDirection : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.WireProvenanceDirection, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.Json.PlatformJsonDecoders.wireProvenanceRef : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.WireProvenanceRef, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.Json.PlatformJsonDecoders.withdrawOptInRequest : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.WithdrawOptInRequest, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.Json.PlatformJsonEncoders (class)
+ToolUp.Remoting.Json.PlatformJsonEncoders.covered : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Remoting.Json.PlatformJsonEncoders.coveredApiRecords : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeAIDenialGroupCount(ToolUp.Platform.AIDenialGroupCount) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeAIDenialRollup(ToolUp.Platform.AIDenialRollup) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeAIDenialToolModulePair(ToolUp.Platform.AIDenialToolModulePair) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeAccessibleModulesResponse(ToolUp.Platform.AccessibleModulesResponse) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeActiveAiSummary(ToolUp.Platform.ActiveAiSummary) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeAuditEventPage(ToolUp.Platform.AuditEventPage) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeAuditEventView(ToolUp.Platform.AuditEventView) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeAuthoredBy(ToolUp.Platform.AuthoredBy) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeBIFriendlyType(ToolUp.Platform.BIFriendlyType) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeCategoryChannelPreference(ToolUp.Platform.CategoryChannelPreference) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeCellTransform(ColumnMappingTypes+CellTransform) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeColumnExpr(ColumnMappingTypes+ColumnExpr) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeColumnType(DataManagementTypes+ColumnType) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeCompositionView(ToolUp.Platform.CompositionView) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeComputeBudgetDenial(ToolUp.Platform.ComputeBudgetDenial) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeConfigFieldKind(ToolUp.Platform.ConfigFieldKind) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeConfigFieldSchema(ToolUp.Platform.ConfigFieldSchema) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeContactOwner(ToolUp.Platform.ContactOwner) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeConversion(ColumnMappingTypes+Conversion) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeConversionRecord(ColumnMappingTypes+ConversionRecord) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeCredentialOrigin(ToolUp.Platform.CredentialOrigin) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeCredentialStatus(ToolUp.Platform.CredentialStatus) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeDataCatalogResponse(DataManagementTypes+DataCatalogResponse) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeDataFileUpload(DataManagementTypes+DataFileUpload) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeDataSourceConfig(ToolUp.Platform.DataSourceConfig) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeDataSubjectRequest(ToolUp.Platform.DataSubjectRequest) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeDataSubjectRequestKind(ToolUp.Platform.DataSubjectRequestKind) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeDataTypeCatalogEntry(DataManagementTypes+DataTypeCatalogEntry) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeDataTypeColumn(DataManagementTypes+DataTypeColumn) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeDataTypeInfo(DataManagementTypes+DataTypeInfo) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeDataTypeSchema(DataManagementTypes+DataTypeSchema) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeDateOrder(ColumnMappingTypes+DateOrder) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeDegradedCapability(ToolUp.Platform.DegradedCapability) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeDeliveryPreference(ToolUp.Platform.DeliveryPreference) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeDeploymentContext(ToolUp.Platform.DeploymentContext) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeDeploymentReadinessReport(ToolUp.Platform.DeploymentReadiness+DeploymentReadinessReport) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeDeploymentVerificationOutcome(ToolUp.Platform.DeploymentVerificationOutcome) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeDeploymentVerificationReport(ToolUp.Platform.DeploymentVerification+DeploymentVerificationReport) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeDerivedColumn(ColumnMappingTypes+DerivedColumn) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeDigestFrequency(ToolUp.Platform.DigestFrequency) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeDisclosureView(ToolUp.Platform.DisclosureView) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeDriftSummary(ToolUp.Platform.DeploymentReadiness+DriftSummary) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeDryRunCellIssue(ColumnMappingTypes+DryRunCellIssue) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeDryRunReport(ColumnMappingTypes+DryRunReport) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeDryRunRowIssue(ColumnMappingTypes+DryRunRowIssue) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeEntityLockRef(ToolUp.Platform.EntityLockRef) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeErasureError(ToolUp.Platform.ErasureError) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeErasurePolicy(ToolUp.Platform.ErasurePolicy) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeErasurePreview(ToolUp.Platform.DataSubjectRequestApi+ErasurePreview) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeErasureRunResult(ToolUp.Platform.DataSubjectRequestApi+ErasureRunResult) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeErasureRunSummary(ToolUp.Platform.DataSubjectRequestApi+ErasureRunSummary) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeErasureSummary(ToolUp.Platform.ErasureSummary) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeExportSignature(ToolUp.Platform.ExportSignature) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeExportStatus(ToolUp.Platform.ExportStatus) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeExportThenDeprovisionResult(ToolUp.Platform.ExportThenDeprovisionResult) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeExternalContact(ToolUp.Platform.ExternalContact) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeExternalHandle(ToolUp.Platform.ExternalHandle) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeFallbackChain(ToolUp.Platform.FallbackChain) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeFeatureFlag(ToolUp.Platform.FeatureFlag) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeFeatureMode(ToolUp.Platform.FeatureMode) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeFieldSensitivity(ToolUp.Platform.FieldSensitivity) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeFileIngestionStatus(DataManagementTypes+FileIngestionStatus) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeFileListSnapshot(ProcessedDataTypes+FileListSnapshot) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeFileUploadResponse(ProcessedDataTypes+FileUploadResponse) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeFlagScope(ToolUp.Platform.FlagScope) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeFlagValue(ToolUp.Platform.FlagValue) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeGrantPolicy(ToolUp.Platform.GrantPolicy) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeGrantState(ToolUp.Platform.GrantState) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeHealthProbeView(ToolUp.Platform.HealthProbeView) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeHealthSnapshot(ToolUp.Platform.HealthSnapshot) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeHealthSummary(ToolUp.Platform.DeploymentReadiness+HealthSummary) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeHomeOverview(ToolUp.Platform.HomeOverview) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeHomePinningState(ToolUp.Platform.HomePinningState) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeIdempotencyKey(ToolUp.Platform.IdempotencyKey) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeIngestionError(ToolUp.Platform.IngestionError) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeIngestionRun(ToolUp.Platform.IngestionRun) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeIngestionStatus(ToolUp.Platform.IngestionStatus) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeInspectedCanonicalMethod(ToolUp.Platform.InspectedCanonicalMethod) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeInspectedComponent(ToolUp.Platform.InspectedComponent) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeInspectedDeclaration(ToolUp.Platform.InspectedDeclaration) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeInspectedDefect(ToolUp.Platform.InspectedDefect) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeInspectedKnob(ToolUp.Platform.InspectedKnob) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeInspectedRule(ToolUp.Platform.InspectedRule) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeInspectedSurface(ToolUp.Platform.InspectedSurface) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeJobDefinition(ToolUp.Platform.JobDefinition) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeJobPrecision(ToolUp.Platform.JobPrecision) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeJobRetryPolicy(ToolUp.Platform.JobRetryPolicy) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeJobRun(ToolUp.Platform.JobRun) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeJobRunStatus(ToolUp.Platform.JobRunStatus) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeJobSchedulerTelemetryView(ToolUp.Platform.JobSchedulerTelemetryView) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeJobStatus(ToolUp.Platform.JobStatus) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeLifecycleExportArchive(ToolUp.Platform.LifecycleExportArchive) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeLifecycleHookOutcome(ToolUp.Platform.LifecycleHookOutcome) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeLifecycleHookResult(ToolUp.Platform.LifecycleHookResult) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeLifecycleJobHandle(ToolUp.Platform.LifecycleJobHandle) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeLifecyclePreview(ToolUp.Platform.LifecyclePreview) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeLifecyclePreviewItem(ToolUp.Platform.LifecyclePreviewItem) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeLifecycleSummary(ToolUp.Platform.LifecycleSummary) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeLiveInterfaceSummary(ToolUp.Platform.DeploymentReadiness+LiveInterfaceSummary) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeLockLease(ToolUp.Platform.LockLease) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeLockOutcome(ToolUp.Platform.LockOutcome) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeMigrationDataTypeInfo(ToolUp.Platform.MigrationDataTypeInfo) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeMigrationFailure(ToolUp.Platform.MigrationFailure) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeMigrationOutcome(ToolUp.Platform.MigrationOutcome) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeMigrationRunState(ToolUp.Platform.MigrationRunState) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeMigrationStatus(ToolUp.Platform.MigrationStatus) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeMintedServiceAccountTokenView(ToolUp.Platform.MintedServiceAccountTokenView) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeModelExecutionArtifactRef(ToolUp.Platform.ModelExecutionArtifactRef) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeModelExecutionCost(ToolUp.Platform.ModelExecutionCost) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeModelExecutionDatasetVersion(ToolUp.Platform.ModelExecutionDatasetVersion) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeModelExecutionGateVerdict(ToolUp.Platform.ModelExecutionGateVerdict) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeModelExecutionJobRef(ToolUp.Platform.ModelExecutionJobRef) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeModelExecutionOutcome(ToolUp.Platform.ModelExecutionOutcome) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeModelExecutionOutcomePage(ToolUp.Platform.ModelExecutionOutcomePage) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeModelExecutionReceipt(ToolUp.Platform.ModelExecutionReceipt) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeModelExecutionRefusal(ToolUp.Platform.ModelExecutionRefusal) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeModelExecutionScoreRefusal(ToolUp.Platform.ModelExecutionScoreRefusal) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeModelExecutionTiming(ToolUp.Platform.ModelExecutionTiming) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeModuleConfigEntry(ToolUp.Platform.ModuleConfigEntry) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeModuleConfigSchema(ToolUp.Platform.ModuleConfigSchema) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeModuleConfigView(ToolUp.Platform.ModuleConfigView) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeModuleExposure(ToolUp.Platform.ModuleExposure) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeModuleGrantRecord(ToolUp.Platform.ModuleGrantRecord) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeModulePermission(ToolUp.Platform.ModulePermission) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeModuleQueryError(ToolUp.Platform.ModuleQueryError) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeModuleQueryResponse(ToolUp.Platform.ModuleQueryResponse) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeModuleVisibilityProfile(ToolUp.Platform.ModuleVisibilityProfile) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeModuleVisibilityResolution(ToolUp.Platform.ModuleVisibilityResolution) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeModuleVisibilityRule(ToolUp.Platform.ModuleVisibilityRule) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeNotProvedStatement(ToolUp.Platform.DeploymentVerification+NotProvedStatement) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeNotificationCategory(ToolUp.Platform.NotificationCategory) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeNotificationPreferenceView(ToolUp.Platform.NotificationPreferenceView) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeOAuthRefreshOutcome(ToolUp.Platform.OAuthRefreshOutcome) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeOffboardConfirmation(ToolUp.Platform.OffboardConfirmation) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeOptInRecord(ToolUp.Platform.OptInRecord) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeOverallStatus(ToolUp.Platform.OverallStatus) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodePageGrant(ToolUp.Platform.PageGrant) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodePartyRef(ToolUp.Platform.PartyRef) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodePendingInviteByEmail(ToolUp.Platform.PendingInviteByEmail) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodePlatformInfo(ToolUp.Platform.PlatformInfo) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodePreferenceChannel(ToolUp.Platform.PreferenceChannel) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodePreflightOutcomeView(ToolUp.Platform.PreflightOutcomeView) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodePreflightSnapshotView(ToolUp.Platform.PreflightSnapshotView) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodePreflightSummary(ToolUp.Platform.DeploymentReadiness+PreflightSummary) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodePresenceLocation(ToolUp.Platform.PresenceLocation) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodePresencePeer(ToolUp.Platform.PresencePeer) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodePrincipalSummary(ToolUp.Platform.PrincipalSummary) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeProcessedData(ProcessedDataTypes+ProcessedData) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeProcessedFileEntry(ProcessedDataTypes+ProcessedFileEntry) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeProvenanceQueryError(ToolUp.Platform.ProvenanceQueryError) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeProvenanceView(ToolUp.Platform.ProvenanceView) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeProviderEntryView(ToolUp.Platform.ProviderEntryView) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeProviderHealth(ToolUp.Platform.ProviderHealth) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeProviderHealthStatus(ToolUp.Platform.ProviderHealthStatus) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeProviderOrigin(ToolUp.Platform.Usage.ProviderOrigin) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeProviderProfileView(ToolUp.Platform.ProviderProfileView) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodePublicationReaderEntry(ToolUp.Platform.PublicationReaderEntry) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodePublicationReaderRoster(ToolUp.Platform.PublicationReaderRoster) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodePushVariant(ToolUp.Platform.NotificationKind+PushVariant) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeQuietHours(ToolUp.Platform.QuietHours) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeReadinessVerdict(ToolUp.Platform.ReadinessVerdict) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeRecentAIDenial(ToolUp.Platform.RecentAIDenial) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeReportSection(ToolUp.Platform.DeploymentVerification+ReportSection) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeRoutingRule(ToolUp.Platform.RoutingRule) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeRulesView(ToolUp.Platform.RulesView) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeScheduleError(ToolUp.Platform.ScheduleError) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeScheduledDeprovision(ToolUp.Platform.ScheduledDeprovision) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeSchemaMigration(ToolUp.Platform.SchemaMigration) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeSectionSummary(ToolUp.Platform.SectionSummary) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeServiceAccount(ToolUp.Platform.ServiceAccount) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeServiceAccountStatus(ToolUp.Platform.ServiceAccountStatus) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeServiceAccountTokenView(ToolUp.Platform.ServiceAccountTokenView) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeServiceStatusSnapshot(ToolUp.Platform.ServiceStatusSnapshot) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeSessionRecord(ToolUp.Platform.SessionRecord) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeSessionStatus(ToolUp.Platform.SessionStatus) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeSessionStoreInfo(ProcessedDataTypes+SessionStoreInfo) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeSignedExportEnvelope(ToolUp.Platform.SignedExportEnvelope) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeSinkKind(ToolUp.Platform.NotificationKind+SinkKind) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeSmokeSummary(ToolUp.Platform.DeploymentReadiness+SmokeSummary) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeSourceStatus(ToolUp.Platform.SourceStatus) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeStatusSeverity(ToolUp.Platform.StatusSeverity) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeSurfacesView(ToolUp.Platform.SurfacesView) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeTeamCreationPolicy(ToolUp.Platform.TeamCreationPolicy) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeTeamInfo(ToolUp.Platform.TeamInfo) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeTeamInviteAcceptResult(ToolUp.Platform.TeamInviteAcceptResult) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeTeamInviteExpiredPayload(ToolUp.Platform.TeamInviteExpiredPayload) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeTeamInviteIssueResult(ToolUp.Platform.TeamInviteIssueResult) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeTeamInviteSummary(ToolUp.Platform.TeamInviteSummary) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeTeamMembership(ToolUp.Platform.TeamMembership) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeTeamOutputVisibilityView(ToolUp.Platform.TeamOutputVisibilityView) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeTeamPermissions(ToolUp.Platform.TeamPermissions) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeTeamRole(ToolUp.Platform.TeamRole) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeTeamSummary(ToolUp.Platform.TeamSummary) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeTeamVisibilityLevel(ToolUp.Platform.TeamVisibilityLevel) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeTenantLifecyclePhase(ToolUp.Platform.TenantLifecyclePhase) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeTokenStatus(ToolUp.Platform.TokenStatus) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeToolDataCount(ToolUp.Platform.ToolDataCount) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeToolSummary(ToolUp.Platform.ToolSummary) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeTrigger(ToolUp.Platform.Trigger) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeUploadedFileInfo(DataManagementTypes+UploadedFileInfo) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeUsageAggregateRow(ToolUp.Platform.Usage.UsageAggregateRow) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeUsageRecord(ToolUp.Platform.Usage.UsageRecord) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeUserAuthoredSchema(ToolUp.Platform.UserAuthoredSchema) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeUserNotificationPreferences(ToolUp.Platform.UserNotificationPreferences) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeUserSchemaError(ToolUp.Platform.UserSchemaError) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeUserSchemaField(ToolUp.Platform.UserSchemaField) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeUserSummary(ToolUp.Platform.UserSummary) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeVerificationSectionVerdict(ToolUp.Platform.VerificationSectionVerdict) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeWebhookDelivery(ToolUp.Platform.WebhookDelivery) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeWebhookDeliveryOutcome(ToolUp.Platform.WebhookDeliveryOutcome) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeWebhookStatus(ToolUp.Platform.WebhookStatus) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeWebhookSubscription(ToolUp.Platform.WebhookSubscription) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeWebhookTestResult(ToolUp.Platform.WebhookTestResult) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeWireProvenanceCaps(ToolUp.Platform.WireProvenanceCaps) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeWireProvenanceChainPage(ToolUp.Platform.WireProvenanceChainPage) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeWireProvenanceEdge(ToolUp.Platform.WireProvenanceEdge) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeWireProvenanceEdgeKind(ToolUp.Platform.WireProvenanceEdgeKind) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeWireProvenanceEdgeSet(ToolUp.Platform.WireProvenanceEdgeSet) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeWireProvenanceNode(ToolUp.Platform.WireProvenanceNode) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeWireProvenanceNodeAnswer(ToolUp.Platform.WireProvenanceNodeAnswer) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeWireProvenanceNodeKind(ToolUp.Platform.WireProvenanceNodeKind) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeWireWithheldNode(ToolUp.Platform.WireWithheldNode) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.registerAll() : System.Void
+ToolUp.Remoting.Json.PlatformJsonEncoders.registerAllVerified(Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[System.Type, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[System.Object, ToolUp.Remoting.Json.JsonValue], Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Remoting.DecoderVerification, ToolUp.Remoting.DecoderRefusal]]]]], System.Int32, System.Int32) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.DecoderVerification], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.DecoderRefusal]]
+ToolUp.Remoting.Json.PlatformJsonEncoders.verifyAll(Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[System.Type, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[System.Object, ToolUp.Remoting.Json.JsonValue], Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Remoting.DecoderVerification, ToolUp.Remoting.DecoderRefusal]]]]], System.Int32, System.Int32) : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Remoting.DecoderVerification, ToolUp.Remoting.DecoderRefusal]]
 ToolUp.Remoting.MsgPack.FloatWidth (class)
 ToolUp.Remoting.MsgPack.FloatWidth.Double : ToolUp.Remoting.MsgPack.FloatWidth { get }
 ToolUp.Remoting.MsgPack.FloatWidth.IsDouble : System.Boolean { get }
@@ -15265,6 +15549,16 @@ ToolUp.Remoting.RemotingDecoders.registered() : Microsoft.FSharp.Collections.FSh
 ToolUp.Remoting.RemotingDecoders.resetForTests() : System.Void
 ToolUp.Remoting.RemotingDecoders.tryGet(System.Type) : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[System.Object, ToolUp.Remoting.DecodeError]]]
 ToolUp.Remoting.RemotingDecoders.verifyThrough`1(Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[System.Type, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[System.Object, ToolUp.Remoting.DecodeError]], Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Remoting.DecoderVerification, ToolUp.Remoting.DecoderRefusal]]]]], System.Int32, System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Remoting.DecoderVerification, ToolUp.Remoting.DecoderRefusal]
+ToolUp.Remoting.Scope (class)
+ToolUp.Remoting.Scope.IsForRecord : System.Boolean { get }
+ToolUp.Remoting.Scope.IsUnscoped : System.Boolean { get }
+ToolUp.Remoting.Scope.Tag : System.Int32 { get }
+ToolUp.Remoting.Scope.Unscoped : ToolUp.Remoting.Scope { get }
+ToolUp.Remoting.Scope+ForRecord (class)
+ToolUp.Remoting.Scope+ForRecord.record : System.String { get }
+ToolUp.Remoting.Scope+Tags (class)
+ToolUp.Remoting.Scope+Tags.ForRecord : System.Int32 (literal)
+ToolUp.Remoting.Scope+Tags.Unscoped : System.Int32 (literal)
 ToolUp.Remoting.Sse (class)
 ToolUp.Remoting.Sse.encode(ToolUp.Remoting.StreamFrame) : System.String
 ToolUp.Remoting.Sse.parse(System.String) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.StreamFrame]

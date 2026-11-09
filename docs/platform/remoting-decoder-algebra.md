@@ -675,10 +675,11 @@ declared type or a named refusal, with bounded depth and width, before any handl
 
 * `src/ToolUp.Platform.Core/Shared/Remoting/MsgPack/Value.fs` — the value model and its measure.
 * `src/ToolUp.Platform.Core/Shared/Remoting/Decode.fs` — the combinators.
-* `src/ToolUp.Platform.Core/Shared/Remoting/DecoderRegistry.fs` — the opt-in seam.
+* `src/ToolUp.Platform.Core/Shared/Remoting/Codecs.fs` — the one codec table and its seam
+  (`resolveJson` / `resolveJsonEncoder` / `resolveMsgPack`, under a `DecodePolicy`).
 * `src/ToolUp.Platform.Core/Shared/Remoting/PlatformDecoders.fs` — the generated platform set.
 * `src/ToolUp.Platform.Core/Shared/Remoting/Json/JsonValue.fs`, `JsonDecode.fs`,
-  `JsonDecoderRegistry.fs`, `PlatformJsonDecoders.fs` — the JSON wire (Phase 799); the pass is
+  `JsonDecoderRegistry.fs`, `PlatformJsonDecoders.fs`, `PlatformJsonEncoders.fs` — the JSON wire; the pass is
   `src/ToolUp.Platform.Server/Server/Remoting/Json/JsonRead.fs`.
 * `src/ToolUp.Platform.Tests/Remoting/JsonDecoderAlgebraTests.fs` — the JSON differential.
 * `src/ToolUp.Platform.Core/Shared/Remoting/MsgPack/Format.fs` — the reader's three bounds.

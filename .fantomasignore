@@ -22,6 +22,9 @@ src/ToolUp.Platform.Core/Shared/Remoting/PlatformDecoders.fs
 # Phase 841 — the argument side's twin: the generator's JSON emission over every API
 # record's ARGUMENT types, held byte-for-byte to it by Remoting/GeneratorFidelityTests (841.C).
 src/ToolUp.Platform.Core/Shared/Remoting/Json/PlatformJsonDecoders.fs
+# The response side: the generator's json-encoders emission over every platform API record's
+# RETURN types, held byte-for-byte to it by Remoting/PlatformJsonEncodersGenerationTests.
+src/ToolUp.Platform.Core/Shared/Remoting/Json/PlatformJsonEncoders.fs
 # Phase 853 - the client side: the generator's client-proxies emission over every platform API
 # record, and over the ReadCatalogApi test fixture, each held byte-for-byte to it by
 # Remoting/ClientProxyGenerationTests (853.C).

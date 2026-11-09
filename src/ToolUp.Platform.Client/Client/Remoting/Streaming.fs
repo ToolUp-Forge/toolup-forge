@@ -357,9 +357,11 @@ module RemoteStream =
         with _ ->
             data
 
-    /// Build the cold stream for one streaming method. `elementType` is the
-    /// `'T` of the field's `IAsyncEnumerable<'T>`, resolved at proxy-build
-    /// time; `decodeErrorOf` reads a decode-refusal envelope out
+    /// Build the cold stream for one streaming method. `elementClrType` and
+    /// `elementType` are the `'T` of the field's `IAsyncEnumerable<'T>`,
+    /// resolved at proxy-build time: the first is the key the codec seam
+    /// resolves a chunk's decoder by, the second what the reflective reader
+    /// reads by. `decodeErrorOf` reads a decode-refusal envelope out
     /// of a non-200 body (the proxy's own reader, passed in so this module
     /// stays independent of it).
     let create
@@ -368,6 +370,7 @@ module RemoteStream =
         (body: string)
         (withCredentials: bool)
         (decodeErrorOf: string -> DecodeError option)
+        (elementClrType: Type)
         (elementType: TypeInfo)
         : RemoteStream<'T> =
         let holdsWideIntegers = ReflectiveWideIntegers.holdsWide elementType
@@ -392,22 +395,38 @@ module RemoteStream =
                         if not finished then
                             match frame with
                             | StreamFrame.Chunk(_, data) ->
-                                // An int64 / uint64 number in a chunk is read
-                                // exactly or refused by name, as on the
-                                // request/response path.
+                                // The one seam first, as on the
+                                // request/response path: a registered decoder
+                                // reads the chunk through the lexical model.
+                                // On the reflective path an int64 / uint64
+                                // number is read exactly or refused by name.
                                 let decoded =
                                     try
-                                        let parsed = SimpleJson.parseNative data
+                                        match
+                                            Codecs.resolveJson
+                                                DecodePolicy.ReflectionFallback
+                                                Scope.Unscoped
+                                                elementClrType
+                                        with
+                                        | Some(Ok decoder) ->
+                                            match
+                                                ToolUp.Remoting.Json.JsonText.tryParse data |> Result.bind decoder
+                                            with
+                                            | Ok value -> Ok(unbox<'T> value)
+                                            | Error error -> Error(DecodeError.render error, Some error)
+                                        | Some(Error refusal) -> Error(DecodeError.render refusal, Some refusal)
+                                        | None ->
+                                            let parsed = SimpleJson.parseNative data
 
-                                        let widened =
-                                            if holdsWideIntegers then
-                                                ReflectiveWideIntegers.widen [] parsed elementType
-                                            else
-                                                Ok parsed
+                                            let widened =
+                                                if holdsWideIntegers then
+                                                    ReflectiveWideIntegers.widen [] parsed elementType
+                                                else
+                                                    Ok parsed
 
-                                        match widened with
-                                        | Ok json -> Ok(Convert.fromJsonAs json elementType |> unbox<'T>)
-                                        | Error error -> Error(DecodeError.render error, Some error)
+                                            match widened with
+                                            | Ok json -> Ok(Convert.fromJsonAs json elementType |> unbox<'T>)
+                                            | Error error -> Error(DecodeError.render error, Some error)
                                     with ex ->
                                         Error(ex.Message, None)
 
