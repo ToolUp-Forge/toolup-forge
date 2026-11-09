@@ -295,10 +295,20 @@ let tests =
                 (ledger.GetCompleted("t1", TenantLifecyclePhase.Deprovisioning) |> run)
                 "nothing is vouched for: a full, idempotent re-run"
 
-            ledger.Record("t1", TenantLifecyclePhase.Deprovisioning, "erase", ToolUp.Platform.Compose.Completed)
+            ledger.Record(
+                "t1",
+                TenantLifecyclePhase.Deprovisioning,
+                "erase",
+                ToolUp.Platform.Compose.LedgerDisposition.Completed
+            )
             |> run
 
-            ledger.Record("t1", TenantLifecyclePhase.Deprovisioning, "cancel-jobs", ToolUp.Platform.Compose.Skipped)
+            ledger.Record(
+                "t1",
+                TenantLifecyclePhase.Deprovisioning,
+                "cancel-jobs",
+                ToolUp.Platform.Compose.LedgerDisposition.Skipped
+            )
             |> run
 
             Expect.equal
@@ -311,6 +321,26 @@ let tests =
                 (Ok(Encoding.UTF8.GetBytes "[\"cancel-jobs\",\"erase\"]"))
                 "the ledger's bytes at rest are the flat array it has always written"
 
+            expectSetAside storage platform name
+        }
+
+        test "LifecycleSummaryStore — an undecodable summary reads as none by decision, and the next run's replaces it" {
+            let name = "_tenant-lifecycle/t1.json"
+            let storage = planted platform name
+
+            let store = ToolUp.Platform.Compose.BlobBackedLifecycleSummaryStore.create storage
+
+            Expect.isNone (store.GetLast "t1" |> run) "the admin read path reports no last summary"
+
+            let summary: LifecycleSummary = {
+                ScopeId = "t1"
+                Phase = TenantLifecyclePhase.Deprovisioning
+                Outcomes = []
+                TotalElapsedMs = 12L
+            }
+
+            store.SetLast("t1", summary) |> run
+            Expect.equal (store.GetLast "t1" |> run) (Some summary) "the new summary reads back"
             expectSetAside storage platform name
         }
     ]

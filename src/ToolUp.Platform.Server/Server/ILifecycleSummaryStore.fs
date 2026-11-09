@@ -7,10 +7,8 @@ open ToolUp.Platform
 open ToolUp.Platform.Jobs
 
 open System
-open System.Text
-open System.Text.Json
-open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.Infra
 
 // ─── Phase 54e — durable last-`LifecycleSummary` store ───────────────
 //
@@ -68,11 +66,6 @@ type ILifecycleSummaryStore =
 
 [<AutoOpen>]
 module private BlobBackedLifecycleSummaryStoreInternal =
-    /// Reserved SDK-level container (see `IBlobStorage` scope-discipline
-    /// docs). Tenant-lifecycle summaries are platform metadata, not
-    /// tenant data, so they live under `_platform`, not a tenant scope.
-    let lifecycleContainer = ScopeKey.PlatformContainer
-
     /// Blob-name prefix under the container. Mirrors the
     /// `_platform/trusted-publishers/` convention.
     let lifecyclePrefix = "_tenant-lifecycle/"
@@ -100,53 +93,48 @@ module private BlobBackedLifecycleSummaryStoreInternal =
         |> Seq.toArray
         |> String
 
-    let blobNameFor (scopeId: string) : string =
-        lifecyclePrefix + (sanitiseScopeId scopeId) + ".json"
-
-    /// FableConverters-backed STJ options — the canonical wire shape for
-    /// F# records / DUs / options so the persisted `LifecycleSummary`
-    /// round-trips with its `TenantLifecyclePhase` DU + nested outcome
-    /// list intact. Constructed once at module level.
-    let jsonOptions = PlatformJson.options
+    /// Tenant-lifecycle summaries are platform metadata, not tenant data,
+    /// so they live in the reserved `_platform` container, not a tenant
+    /// scope.
+    let pathFor (scopeId: string) : DocPath =
+        DocPath.ofString (lifecyclePrefix + (sanitiseScopeId scopeId) + ".json")
 
 /// Phase 54e — `ILifecycleSummaryStore` backed by `IBlobStorage`. Each
 /// scope's last summary lives at
 /// `_platform/_tenant-lifecycle/{scopeId}.json`. Cluster-portable: any
 /// blob backend (filesystem / Azure / S3 / GCS) works, and every node
 /// reads the same last summary on each call.
+///
+/// A summary that cannot be read or decoded reads as "no last summary" —
+/// the audit trail is the durable record of truth, and this is the admin
+/// read path's convenience — and is logged (an undecodable one set aside
+/// by the store). `SetLast` replaces the summary whole, so the next run's
+/// summary takes the place of one that did not decode.
 type BlobBackedLifecycleSummaryStore(blobs: IBlobStorage) =
+    let logger = JsonConsoleLogger.JsonConsoleLogger() :> ILogger
+
+    let docs =
+        BlobDocumentStore<LifecycleSummary>(blobs, BlobCodec.json<LifecycleSummary>, logger)
+
     interface ILifecycleSummaryStore with
         member _.GetLast(scopeId: string) : Async<LifecycleSummary option> = async {
-            let name = blobNameFor scopeId
-            let! exists = blobs.Exists(lifecycleContainer, name)
-
-            if not exists then
+            match! docs.Read(ScopeKey.platform, pathFor scopeId) with
+            | Ok summary -> return summary
+            | Error e ->
+                logger.Warn($"[LifecycleSummaryStore] {BlobMapStoreError.describe e}; reporting no last summary")
                 return None
-            else
-                match! blobs.Download(lifecycleContainer, name) with
-                | Result.Ok bytes ->
-                    try
-                        return
-                            Some(
-                                JsonSerializer.Deserialize<LifecycleSummary>(Encoding.UTF8.GetString bytes, jsonOptions)
-                            )
-                    with _ ->
-                        // A corrupt / unreadable sidecar reads as "no last
-                        // summary" rather than throwing into the admin read
-                        // path — the audit trail is the durable record of truth.
-                        return None
-                | Result.Error _ -> return None
         }
 
         member _.SetLast(scopeId: string, summary: LifecycleSummary) : Async<unit> = async {
-            let name = blobNameFor scopeId
-            let bytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(summary, jsonOptions))
-            let! result = blobs.Upload(lifecycleContainer, name, bytes)
-
-            match result with
-            | Result.Ok _ -> return ()
-            | Result.Error err ->
-                return raise (InvalidOperationException(sprintf "Failed to persist tenant-lifecycle summary: %s" err))
+            match! docs.Replace(ScopeKey.platform, pathFor scopeId, summary) with
+            | Ok() -> return ()
+            | Error e ->
+                return
+                    raise (
+                        InvalidOperationException(
+                            sprintf "Failed to persist tenant-lifecycle summary: %s" (BlobMapStoreError.describe e)
+                        )
+                    )
         }
 
 module BlobBackedLifecycleSummaryStore =
