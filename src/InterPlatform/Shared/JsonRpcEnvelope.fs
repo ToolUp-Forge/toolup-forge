@@ -105,7 +105,7 @@ module JsonRpc =
 
     /// The universal F# converter set, constructed once. Mirrors the
     /// SDK convention for SSE / non-Remoting JSON (`CLAUDE.md`).
-    let options: JsonSerializerOptions = FableConverters.create ()
+    let options: JsonSerializerOptions = PlatformJson.options
 
     /// Serialise any F# value to JSON using the universal converter set.
     let serialize (value: 'T) : string =
