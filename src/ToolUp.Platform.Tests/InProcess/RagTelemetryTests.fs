@@ -25,6 +25,7 @@ open ToolUp.Platform.Infra.IEmbeddingProvider
 open ToolUp.Platform.Infra.IRetrievalPipeline
 open ToolUp.Platform.Infra.IRetrievalTracer
 open ToolUp.Platform.VectorKnowledgeTypes
+open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Jobs
@@ -404,5 +405,55 @@ let private scoredPoolTests =
         }
     ]
 
+/// The default pipeline in each composition, and a plain pipeline a
+/// composition declares a space for, held to the scored-sibling contract.
+let private scoredContractTests =
+    let subject keywordIndex reranker () = async {
+        let! pipeline = composed keywordIndex reranker hitCorpus
+
+        let subject: IScoredRetrievalPipelineContract.Subject = {
+            Pipeline = pipeline
+            Request = request ()
+            Access = teamAccess
+        }
+
+        return subject
+    }
+
+    let declared () = async {
+        let! inner = composed false false hitCorpus
+
+        let plain =
+            { new IRetrievalPipeline with
+                member _.Retrieve request context = inner.Retrieve request context
+                member _.Index chunkId chunk scope = inner.Index chunkId chunk scope
+                member _.DeleteByScope scope = inner.DeleteByScope scope
+            }
+
+        let subject: IScoredRetrievalPipelineContract.Subject = {
+            Pipeline = ScoredPool.declaring RetrievalScoreSpace.Cosine plain
+            Request = request ()
+            Access = teamAccess
+        }
+
+        return subject
+    }
+
+    testList "the scored sibling's contract" [
+        IScoredRetrievalPipelineContract.tests
+            "RetrievalPipeline (dense-only)"
+            RetrievalScoreSpace.Cosine
+            (subject false false)
+        IScoredRetrievalPipelineContract.tests
+            "RetrievalPipeline (fused)"
+            RetrievalScoreSpace.Fused
+            (subject true false)
+        IScoredRetrievalPipelineContract.tests
+            "RetrievalPipeline (reranked)"
+            RetrievalScoreSpace.Reranked
+            (subject true true)
+        IScoredRetrievalPipelineContract.tests "ScoredPool.declaring" RetrievalScoreSpace.Cosine declared
+    ]
+
 let tests =
-    testList "RAG telemetry and audit scope" [ scoreSpaceTests; auditScopeTests; scoredPoolTests ]
+    testList "RAG telemetry and audit scope" [ scoreSpaceTests; auditScopeTests; scoredPoolTests; scoredContractTests ]
