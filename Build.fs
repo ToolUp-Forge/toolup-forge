@@ -4477,7 +4477,6 @@ let main args =
         "Providers/BlobProviderProfile.fs"
         "Remoting/Idempotency.fs"
         "ResultStore.fs"
-        "SessionRegistry.fs"
         "ShareTokenStore.fs"
         "UsageLog.fs"
         "WebhookRegistry.fs"
