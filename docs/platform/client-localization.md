@@ -53,6 +53,19 @@ the team.
 Resolution is total: every arm ends at `"en"`, so no configuration produces a
 blank tag. (A blank tag matters — `new Intl.NumberFormat("")` throws.)
 
+## Where the catalog lives
+
+`MessageCatalog` (the record and its section records, `LocalizationTypes.fs`)
+and `MessageCatalog.english` with locale resolution and `LocaleRequest`
+(`MessageCatalog.fs`) are in **`ToolUp.Platform.Core`**, under
+`src/ToolUp.Platform.Core/Shared/`. They moved there from
+`ToolUp.Platform.Client` in Phase 1072 so that `ClientModuleContext`, a Core
+record, can carry the resolved catalog. The namespace is unchanged
+(`ToolUp.Platform`), and Platform.Client references Core, so source that
+names these types compiles as before; a binary compiled against
+Platform.Client for them is rebuilt. The provider, the hooks and the `Intl`
+helpers (`MessageCatalogProvider`) stay in Platform.Client.
+
 ## Writing a translation
 
 The override is handed the built-in catalog **stamped with the resolved
@@ -222,6 +235,10 @@ string during `Init` holds it in its own state, where a re-render cannot reach
 it. Passing a blank tag clears the in-session choice and falls back to
 whatever `Locale` resolves to.
 
+Every module is re-initialised by that reset, and the shell hands each one a
+`ClientModuleContext` whose `Messages` is the new language's catalog, so a
+banner its `update` writes afterwards is in the new language too.
+
 An in-session choice deliberately **survives a team switch**. A language is a
 property of the person reading, not of the team they are looking at.
 
@@ -244,8 +261,39 @@ from an ordinary helper as well as from a component body — pair them with
 
 ## Reading the catalog from your own module
 
-Module views are invoked inline by the shell's render, so they are not hook
-sites of their own. Read the catalog from a component:
+There are two tiers, and which one a piece of code uses depends on where it
+runs, not on what it renders.
+
+**`init` and `update` read the context (Phase 1072).** The shell resolves one
+catalog per session and hands it to every module as
+`ClientModuleContext.Messages` — the same value it publishes to the view tree.
+`update` is pure and has no hook site, but a value on its model is a pure
+input, so keep the section you need on the model from `init` and author
+banners, notices and validation sentences from it:
+
+```fsharp skip=fragment
+type Model = { Banner: Notice option; Messages: TeamManagerMessages }
+
+let init (ctx: ClientModuleContext) =
+    { Banner = None; Messages = ctx.Messages.TeamManager }, Cmd.none
+
+let update msg model =
+    match msg with
+    | Saved -> { model with Banner = Some(Notice.Info model.Messages.Saved) }, Cmd.none
+```
+
+Register such an `init` with `ClientModule.withContextInit`. The model keeps
+the catalog it was initialised with; a locale switch re-initialises the module
+through the shell's reset, so it never holds a stale language. Never reach for
+`MessageCatalog.english` from a reducer: that is English whatever the
+deployment's `Locale` says, and `LocalizationTests` fails on it in any SDK
+module file. A test that initialises a module directly passes
+`ClientModuleContext.empty`, which carries `MessageCatalog.english`, or a
+context `with Messages = …` for another language.
+
+**Views and chrome read the provider.** Module views are invoked inline by the
+shell's render, so they are not hook sites of their own. Read the catalog from
+a component:
 
 ```fsharp skip=fragment
 [<ReactComponent>]
@@ -259,6 +307,10 @@ let private view (model: Model) (dispatch: Msg -> unit) = Body model dispatch
 Outside a provider the hook returns the built-in English catalog, so an
 isolated component render in a test harness neither crashes nor renders
 blanks.
+
+A view-level `RenderContext` carrying the catalog, which retires these
+hook-site components, is the next step (Phase 1075); until then the provider is
+the view tier.
 
 Note that the catalog covers the **SDK's** strings. Your own module's strings
 are yours to localise — through this same mechanism if you thread your own
@@ -299,12 +351,11 @@ are worth knowing if you write a surface of the same shape:
   signed-out visitor sees the companion's screen and none of `view`. So
   `Client.viewWithSignIn` mounts the catalog provider *outside* the gate as
   well. Without that, a deployment's override would have reached every page
-  except the one a signed-out visitor actually sees. The screens themselves
-  are localised through additive `…With` entry points
-  (`OidcAuthUI.SignInScreenWith`, `PasskeyAuthUI.ErrorScreenWith`,
-  `GoogleIdentityAuthUI.ErrorScreenWith`, `OidcTokenStore.describeErrorWith`), never through a widened arity — that
-  would read as a removal in the public-API approval baseline. `ClerkUI`
-  contributes nothing: Clerk renders its own themed screens.
+  except the one a signed-out visitor actually sees. Each screen takes the
+  resolved section (`OidcAuthUI.SignInScreenWith`, `PasskeyAuthUI.ErrorScreenWith`,
+  `GoogleIdentityAuthUI.ErrorScreenWith`, `OidcTokenStore.describeErrorWith`);
+  the bare English-only arities beside them were removed in Phase 1072.
+  `ClerkUI` contributes nothing: Clerk renders its own themed screens.
 - **The invitation-accept page.** `InviteAccept.render ()` mounts its own
   React root from a `PublicEntryDispatchers` short-circuit, before
   `Client.program` exists at all, so neither provider mount reaches it. Use

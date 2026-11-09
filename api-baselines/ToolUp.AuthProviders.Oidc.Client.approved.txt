@@ -25,14 +25,10 @@ ToolUp.AuthProviders.Oidc.AuthTracer+AuthTransition.Detail : Microsoft.FSharp.Co
 ToolUp.AuthProviders.Oidc.AuthTracer+AuthTransition.Outcome : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AuthProviders.Oidc.OidcTypes+AuthDiagnostic] { get }
 ToolUp.AuthProviders.Oidc.AuthTracer+AuthTransition.Stage : System.String { get }
 ToolUp.AuthProviders.Oidc.OidcAuthUI (class)
-ToolUp.AuthProviders.Oidc.OidcAuthUI.ErrorScreen(ToolUp.AuthProviders.Oidc.OidcTypes+AuthError, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]) : Fable.React.ReactElement
 ToolUp.AuthProviders.Oidc.OidcAuthUI.ErrorScreenWith(ToolUp.Platform.AuthMessages, ToolUp.AuthProviders.Oidc.OidcTypes+AuthError, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]) : Fable.React.ReactElement
-ToolUp.AuthProviders.Oidc.OidcAuthUI.LoadingScreen() : Fable.React.ReactElement
 ToolUp.AuthProviders.Oidc.OidcAuthUI.LoadingScreenWith(ToolUp.Platform.AuthMessages) : Fable.React.ReactElement
 ToolUp.AuthProviders.Oidc.OidcAuthUI.OidcShell(ToolUp.Platform.OidcUIConfig, Fable.React.ReactElement) : Fable.React.ReactElement
-ToolUp.AuthProviders.Oidc.OidcAuthUI.SignInScreen(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]) : Fable.React.ReactElement
 ToolUp.AuthProviders.Oidc.OidcAuthUI.SignInScreenWith(ToolUp.Platform.AuthMessages, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.OidcSecondaryFlow], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]) : Fable.React.ReactElement
-ToolUp.AuthProviders.Oidc.OidcAuthUI.SignInScreenWithSecondary(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.OidcSecondaryFlow], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]) : Fable.React.ReactElement
 ToolUp.AuthProviders.Oidc.OidcAuthUI.UserMenu(ToolUp.Platform.OidcUIConfig) : Fable.React.ReactElement
 ToolUp.AuthProviders.Oidc.OidcClient (class)
 ToolUp.AuthProviders.Oidc.OidcClient.beginSignIn(ToolUp.Platform.OidcUIConfig) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.AuthProviders.Oidc.OidcTypes+AuthError]]
@@ -262,7 +258,6 @@ ToolUp.AuthProviders.Oidc.OidcStateMachine+Stage+Tags.ValidatingIdToken : System
 ToolUp.AuthProviders.Oidc.OidcTokenStore (class)
 ToolUp.AuthProviders.Oidc.OidcTokenStore.clearAll() : System.Void
 ToolUp.AuthProviders.Oidc.OidcTokenStore.clearPendingSignIn() : System.Void
-ToolUp.AuthProviders.Oidc.OidcTokenStore.describeError(ToolUp.AuthProviders.Oidc.OidcTypes+AuthError) : System.String
 ToolUp.AuthProviders.Oidc.OidcTokenStore.describeErrorWith(ToolUp.Platform.AuthErrorMessages, ToolUp.AuthProviders.Oidc.OidcTypes+AuthError) : System.String
 ToolUp.AuthProviders.Oidc.OidcTokenStore.diagnose(ToolUp.AuthProviders.Oidc.OidcTypes+AuthError) : ToolUp.AuthProviders.Oidc.OidcTypes+AuthDiagnostic
 ToolUp.AuthProviders.Oidc.OidcTokenStore.getAccessToken() : Microsoft.FSharp.Core.FSharpOption`1[System.String]
