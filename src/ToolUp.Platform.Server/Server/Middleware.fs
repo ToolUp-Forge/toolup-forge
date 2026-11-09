@@ -29,7 +29,14 @@ open ToolUp.Platform.Scope
 //                               this when `Surfaces` lands on
 //                               `ServerConfig`).
 //   * `"ToolUp.User"` / `"ToolUp.UserId"` — extracted from
-//                               `IAuthProvider.GetUser`, unchanged.
+//                               `IAuthProvider.GetUser`. `"ToolUp.User"`
+//                               carries the `AuthenticatedUser` (its
+//                               `UserId` typed, Phase 878); `"ToolUp.UserId"`
+//                               carries the BARE STRING, by contract: the
+//                               item is read with `:? string` across every
+//                               server assembly, the AI/Media/Offline
+//                               packages and consumer modules, and a typed
+//                               box would read as anonymous in all of them.
 //   * `"ToolUp.ScopeResult"`  — legacy-shape `Result<StorageScope,
 //                               ScopeResolutionError>` for handlers
 //                               that have not yet migrated to the
@@ -568,7 +575,7 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                     let user = request.User |> Option.defaultValue AuthenticatedUser.anonymous
 
                     ctx.Items["ToolUp.User"] <- box user
-                    ctx.Items["ToolUp.UserId"] <- box user.UserId
+                    ctx.Items["ToolUp.UserId"] <- box user.UserId.Value
 
                     do! claimPendingInvite ctx user
 

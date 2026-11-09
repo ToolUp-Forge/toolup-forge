@@ -61,7 +61,7 @@ let private permissionStore (fault: exn option) =
 
 /// Run the real middleware for a valid team member against `store`. Returns
 /// the response status, whether M's handler was reached, and the audit rows.
-let private run (store: IPermissionStore) = async {
+let private runWith (store: IPermissionStore) (onReached: HttpContext -> unit) = async {
     let rows = ConcurrentQueue<string * AuditEvent>()
     let services = ServiceCollection()
     services.AddMemoryCache() |> ignore
@@ -101,6 +101,7 @@ let private run (store: IPermissionStore) = async {
     let handler =
         RequestDelegate(fun c ->
             reached.Value <- true
+            onReached c
             let access = ComposeScopeResolver.accessContextOf c
 
             c.Response.StatusCode <-
@@ -117,6 +118,8 @@ let private run (store: IPermissionStore) = async {
     do! middleware.InvokeAsync ctx |> Async.AwaitTask
     return ctx.Response.StatusCode, reached.Value, rows
 }
+
+let private run (store: IPermissionStore) = runWith store ignore
 
 /// Poll `probe` until it finds something (or 3 s pass).
 let private settleOn (attempts: int) (probe: unit -> 'a list) = async {
@@ -169,5 +172,23 @@ let tests =
             let! status, reached, _ = run (permissionStore (Some(InvalidOperationException "store down")))
             Expect.isFalse reached "an untyped store fault is still a fault"
             Expect.equal status 503 "refused"
+        }
+
+        testCaseAsync
+            "Phase 878 — the ToolUp.UserId item stays the bare string (the cross-assembly item contract); the typed id rides ToolUp.User"
+        <| async {
+            let seen = ref None
+
+            let! _, reached, _ =
+                runWith (permissionStore None) (fun c ->
+                    seen.Value <- Some(c.Items["ToolUp.UserId"], c.Items["ToolUp.User"]))
+
+            Expect.isTrue reached "the handler runs for a healthy store"
+
+            match seen.Value with
+            | Some((:? string as id), (:? AuthenticatedUser as user)) ->
+                Expect.equal id memberUser.UserId.Value "readers match the item with `:? string`"
+                Expect.equal user.UserId memberUser.UserId "the typed id is on the user record"
+            | other -> failtestf "expected a string item and an AuthenticatedUser item, got %A" other
         }
     ]
