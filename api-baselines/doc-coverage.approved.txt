@@ -145,7 +145,7 @@ ToolUp.Platform.Server.Audit 373/694
 ToolUp.Platform.Server.Config 388/658
 ToolUp.Platform.Server.Infra 2092/3573
 ToolUp.Platform.Server.Jobs 905/1664
-ToolUp.Platform.Server.Remoting 273/856
+ToolUp.Platform.Server.Remoting 340/1045
 ToolUp.Platform.Server.Scope 435/778
 ToolUp.Platform.Testing 118/264
 ToolUp.Platform.Transport 44/90
@@ -158,7 +158,7 @@ ToolUp.RAG.StaticCorpus.Core 5/19
 ToolUp.RAG.StaticCorpus.Server 7/9
 ToolUp.RateLimit.AzureTableStorage 6/10
 ToolUp.RateLimit.Redis 5/9
-ToolUp.Remoting.Generator 97/148
+ToolUp.Remoting.Generator 98/149
 ToolUp.Reporting.Core 146/379
 ToolUp.Reporting.Docx 12/31
 ToolUp.Reporting.HtmlPdf 15/31
