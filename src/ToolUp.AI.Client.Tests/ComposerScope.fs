@@ -109,7 +109,15 @@ let RunMs = 480
 let shellModel0 () : Client.Model = {
     ActiveModuleId = ModuleId
     ActivePageRoute = None
-    ModuleStates = Map.ofList [ ModuleId, box { Count = 0 } ]
+    Hosts =
+        Map.ofList [
+            ModuleId,
+            ({
+                State = box { Count = 0 }
+                Generation = 0
+            }
+            : ModuleHost)
+        ]
     AccessibleModules = None
     ShowAllModules = false
     ModuleConfigs = Map.empty
@@ -124,9 +132,7 @@ let shellModel0 () : Client.Model = {
     PlatformRole = None
     ActiveTeamRole = None
     CurrentArea = ModuleArea.Product
-    ConfigsPrefetch = Remote.Loading
-    FlagsPrefetch = Remote.Loading
-    ResetCounters = Map.empty
+    AwaitingFirstInit = Client.firstInitGates
     InitPhase = Client.Ready
     Degradations = []
     AppAccessRefused = false

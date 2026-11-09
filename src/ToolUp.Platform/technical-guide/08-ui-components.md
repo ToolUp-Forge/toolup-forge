@@ -197,23 +197,21 @@ type ModuleErrorReport = {
 
 `ComponentStack` is best-effort — empty string when React did not provide one (rare, but possible if the throw happens in a context React's reconciler can't introspect). Telemetry consumers should treat the string as informational, not load-bearing.
 
-### Reset semantics — `Model.ResetCounters` and the React `key`
+### Reset semantics — the host's `Generation` and the React `key`
 
-`Model.ResetCounters: Map<string, int>` tracks Reload clicks per module Id. The boundary's React `key` composes the active team Id and the per-module reset counter (`$"{teamId}#{counter}"`). Either changing forces React to unmount the old boundary instance and mount a fresh one with `Error = None`:
+Each module's `ModuleHost` in `Model.Hosts` carries a `Generation`, the number of Reload clicks since it was first hosted. The boundary's React `key` composes the active team Id and that generation. Either changing forces React to unmount the old boundary instance and mount a fresh one with `Error = None`:
 
-- **Reload click** — `ResetModule` increments the counter; the boundary remounts; the error UI clears.
-- **Team switch** — `TeamSwitched` wipes `ResetCounters` and the team-Id slot in the key changes regardless; the boundary remounts even if the user was looking at the error UI for the previous team.
+- **Reload click** — `ResetModule` re-initialises the module and advances its generation; the boundary remounts; the error UI clears.
+- **Team switch** — the shell's reset clears every host and the team-Id slot in the key changes regardless; the boundary remounts even if the user was looking at the error UI for the previous team.
 
 Without the team-Id slot, switching teams while the boundary held `Error = Some` would leave the error UI stuck for the new team's data.
 
-### Reset-time `Init` crash — F# try/with at the handler
+### An `Init` that throws
 
-If `Init` itself throws during `ResetModule` (rare but possible — a misconfigured module, a bad config-store value, etc.), the unprotected handler would crash the shell's update tick. The handler wraps `Init` in F# try/with:
+Every module `Init` runs in one function, which catches a throw (a misconfigured module, a bad config-store value) so the shell's update tick survives, on every path: boot, the first init after the boot loads, navigation, an inbound action or event, a reset.
 
-- On success: re-store the state, route the cmd via `Cmd.map ModuleMsg`.
-- On failure: surface via `OnError` (or fallback `console.error`); leave `ModuleStates` without the key. The next `ModuleSelected` for this module retries from scratch.
-
-The cold-boot path at `SDK.Client.fs:459-460` (`reinitActiveAfterPrefetch` and seed init) does NOT have an analogous try/with — flagged as a Phase 12c follow-up if real cold-boot Init crashes are observed.
+- On success: the module is hosted and its command is addressed to it (`ModuleMsg(moduleId, message)`).
+- On failure: the module is left with no host, and a command reports the error through `OnError` (or `console.error`). The next `ModuleSelected` for this module retries from scratch.
 
 ### i18n placeholder
 

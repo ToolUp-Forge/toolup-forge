@@ -52,7 +52,7 @@ let private clearedIntervalIds () : int[] = jsNative
 let private baseModel: Client.Model = {
     ActiveModuleId = "m1"
     ActivePageRoute = None
-    ModuleStates = Map.empty
+    Hosts = Map.empty
     AccessibleModules = None
     ShowAllModules = false
     ModuleConfigs = Map.empty
@@ -67,9 +67,7 @@ let private baseModel: Client.Model = {
     PlatformRole = None
     ActiveTeamRole = None
     CurrentArea = ModuleArea.Product
-    ConfigsPrefetch = Remote.Loading
-    FlagsPrefetch = Remote.Loading
-    ResetCounters = Map.empty
+    AwaitingFirstInit = Client.firstInitGates
     InitPhase = Client.Prefetching
     Degradations = []
     AppAccessRefused = false
@@ -97,22 +95,8 @@ let private renderToString (element: Fable.React.ReactElement) : string = jsNati
 let private update msg model =
     Client.update ClientConfig.defaults Unchecked.defaultof<IModuleQueryBus> [] msg model
 
-/// Phase 1069 — every boot-source key the shell emits today: the eleven
-/// loader / bridge sources plus the sidebar-preference write.
-let private shellBootSources = [
-    "teams"
-    "active-team"
-    "team-auto-select"
-    "permissions"
-    "configs"
-    "flags"
-    "platform-role"
-    "platform-info"
-    "team-role"
-    "auth-bridge"
-    "data-snapshot"
-    "sidebar-prefs"
-]
+/// Every boot source, from the shell's one table.
+let private shellBootSources = Client.bootSources |> List.map _.Key
 
 let tests =
     installStubs ()
@@ -193,7 +177,10 @@ let tests =
             testCase "failed configs load still flips the prefetch gate (no skeleton dead-lock)" (fun () ->
                 let m, _ = update (Client.BootLoadFailed("configs", "boom")) baseModel
 
-                Expect.isTrue (Remote.isSettled m.ConfigsPrefetch) "gate flipped despite the failure"
+                Expect.isFalse
+                    (m.AwaitingFirstInit |> Set.contains BootSources.Key.Configs)
+                    "the gate released despite the failure"
+
                 Expect.equal (m.Degradations |> List.map _.Source) [ "configs" ] "and the failure is recorded")
 
             testCase "dismiss clears every entry; auth-bridge entry is not retryable" (fun () ->
@@ -326,15 +313,9 @@ let tests =
                 AuthDiagnostics.install AuthDiagnostics.nullTracer)
         ]
 
-        // Phase 1069 — the boot-source key is spelled in six tables
-        // (the loader call sites, `degradationRetryable`, `RetryBootLoad`,
-        // the fallback label, `BootSourceMessages` and `localisedLabel`).
-        // These pin the two that drifted: every source the shell emits
-        // today has a retry arm whenever its row offers Retry, and a
-        // catalog field for its label. Before 1069 `"data-snapshot"` had
-        // a Retry button that re-issued nothing, and `"platform-info"` /
-        // `"data-snapshot"` rendered English under every locale.
-        testList "boot-source tables agree (Phase 1069)" [
+        // The banner's rows read the table: Retry re-issues the row's load,
+        // and the label is the row's catalog field.
+        testList "the banner reads the boot-source table" [
             testCase "every retryable source re-issues its load on RetryBootLoad" (fun () ->
                 // `"team-auto-select"` only has something to re-issue when
                 // there is a sole team to select; the fixture provides one.
@@ -352,18 +333,25 @@ let tests =
                         ]
                 }
 
-                for source in shellBootSources do
-                    if Client.degradationRetryable source then
-                        let _, cmd = update (Client.RetryBootLoad source) model
+                for source in Client.bootSources do
+                    let degraded, _ = update (Client.BootLoadFailed(source.Key, "boom")) model
+
+                    Expect.equal
+                        degraded.Degradations.Head.Retryable
+                        source.Retryable
+                        $"`{source.Key}`'s banner row offers Retry exactly when its table row says so"
+
+                    if source.Retryable then
+                        let _, cmd = update (Client.RetryBootLoad source.Key) model
 
                         Expect.isFalse
                             (List.isEmpty cmd)
-                            $"`{source}` offers Retry but RetryBootLoad re-issues nothing for it")
+                            $"`{source.Key}` offers Retry but RetryBootLoad re-issues nothing for it")
 
             testCase "the non-retryable sources are exactly the self-retrying and the non-load ones" (fun () ->
                 Expect.equal
-                    (shellBootSources |> List.filter (Client.degradationRetryable >> not))
-                    [ "auth-bridge"; "sidebar-prefs" ]
+                    (Client.bootSources |> List.filter (_.Retryable >> not) |> List.map _.Key)
+                    [ BootSources.Key.AuthBridge; BootSources.Key.SidebarPrefs ]
                     "the auth bridge retries itself; a failed preference write has no load to re-issue")
 
             testCase "every source's banner label is a catalog field" (fun () ->

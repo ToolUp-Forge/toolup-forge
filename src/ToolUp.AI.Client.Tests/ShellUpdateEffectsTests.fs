@@ -99,7 +99,10 @@ let private counterModule (id: string) =
 let private shellModel (activeId: string) (states: (string * obj) list) : Client.Model = {
     ActiveModuleId = activeId
     ActivePageRoute = None
-    ModuleStates = Map.ofList states
+    Hosts =
+        states
+        |> List.map (fun (id, state) -> id, ({ State = state; Generation = 0 }: ModuleHost))
+        |> Map.ofList
     AccessibleModules = None
     ShowAllModules = false
     ModuleConfigs = Map.empty
@@ -114,9 +117,7 @@ let private shellModel (activeId: string) (states: (string * obj) list) : Client
     PlatformRole = None
     ActiveTeamRole = None
     CurrentArea = ModuleArea.Product
-    ConfigsPrefetch = Remote.Loading
-    FlagsPrefetch = Remote.Loading
-    ResetCounters = Map.empty
+    AwaitingFirstInit = Client.firstInitGates
     InitPhase = Client.Ready
     Degradations = []
     AppAccessRefused = false
@@ -290,12 +291,12 @@ type private ShellLoop(modules: ErasedModule list, start: Client.Model) =
         this.Drain()
 
 let private detailOf (loop: ShellLoop) =
-    loop.Model.ModuleStates
-    |> Map.tryFind readId
+    loop.Model
+    |> Client.moduleState readId
     |> Option.map (fun s -> (unbox<ReadModel> s).Detail)
 
 let private homeOf (loop: ShellLoop) =
-    loop.Model.ModuleStates |> Map.find homeId |> unbox<HomeModel>
+    (loop.Model.Hosts |> Map.find homeId).State |> unbox<HomeModel>
 
 let private tablesAsked (inFlight: ReadsInFlight) =
     inFlight |> Seq.map fst |> Seq.sort |> List.ofSeq
@@ -361,7 +362,7 @@ let tests =
                 let after, _ = update [ erased ] (Client.ModuleMsg(id, box Increment)) before
                 Expect.equal (List.ofSeq published) [] "update itself publishes nothing"
 
-                Client.observeModuleStates [ erased ] (Client.ModuleMsg(id, box Increment)) before.ModuleStates after
+                Client.observeModuleStates [ erased ] (Client.ModuleMsg(id, box Increment)) before.Hosts after
                 Expect.equal (List.ofSeq published) [ id ] "the hook publishes the changed module once")
 
             testCase
@@ -378,7 +379,7 @@ let tests =
                     Client.observeModuleStates
                         [ erased ]
                         (Client.ModuleActionReceived(target, "inc", ""))
-                        before.ModuleStates
+                        before.Hosts
                         afterAction
 
                     let afterEvent, _ =
@@ -387,7 +388,7 @@ let tests =
                     Client.observeModuleStates
                         [ erased ]
                         (Client.ModuleEventPublished("test1069.topic", ""))
-                        afterAction.ModuleStates
+                        afterAction.Hosts
                         afterEvent
 
                     // An action no decoder accepts leaves the state untouched.
@@ -397,7 +398,7 @@ let tests =
                     Client.observeModuleStates
                         [ erased ]
                         (Client.ModuleActionReceived(target, "unknown", ""))
-                        afterEvent.ModuleStates
+                        afterEvent.Hosts
                         afterDropped
 
                     Expect.equal (List.ofSeq published) [ target; target ] "two state changes, two publishes")
@@ -551,7 +552,7 @@ let tests =
                 // What a denied route leaves: the module active, with no state.
                 let denied = ShellLoop(modules, shellModel readId [])
                 denied.Send answerMsg
-                Expect.isTrue denied.Model.ModuleStates.IsEmpty "a message with no state to land on changes nothing")
+                Expect.isTrue denied.Model.Hosts.IsEmpty "a message with no state to land on changes nothing")
 
             testCase "a publish then a navigate opens the table, from a module never opened" (fun () ->
                 let inFlight = ReadsInFlight()
@@ -653,7 +654,7 @@ let tests =
                 loop.Send(Client.ModuleEventPublished(catalogTopic, "wake"))
 
                 let seen =
-                    (loop.Model.ModuleStates |> Map.find catalogId |> unbox<CatalogModel>).Seen
+                    ((loop.Model.Hosts |> Map.find catalogId).State |> unbox<CatalogModel>).Seen
 
                 Expect.equal seen.Locale "fr-FR" "the module was initialised under the session's locale"
 

@@ -58,7 +58,7 @@ let private counterModule (id: string) =
 let private shellModel (activeId: string) (state: obj) : Client.Model = {
     ActiveModuleId = activeId
     ActivePageRoute = None
-    ModuleStates = Map.ofList [ activeId, state ]
+    Hosts = Map.ofList [ activeId, ({ State = state; Generation = 0 }: ModuleHost) ]
     AccessibleModules = None
     ShowAllModules = false
     ModuleConfigs = Map.empty
@@ -73,9 +73,7 @@ let private shellModel (activeId: string) (state: obj) : Client.Model = {
     PlatformRole = None
     ActiveTeamRole = None
     CurrentArea = ModuleArea.Product
-    ConfigsPrefetch = Remote.Loading
-    FlagsPrefetch = Remote.Loading
-    ResetCounters = Map.empty
+    AwaitingFirstInit = Client.firstInitGates
     InitPhase = Client.Ready
     Degradations = []
     AppAccessRefused = false
@@ -90,7 +88,7 @@ let private update (modules: ErasedModule list) msg (model: Client.Model) =
     let next, cmd =
         Client.update ClientConfig.defaults Unchecked.defaultof<IModuleQueryBus> modules msg model
 
-    Client.observeModuleStates modules msg model.ModuleStates next
+    Client.observeModuleStates modules msg model.Hosts next
     next, cmd
 
 let tests =
@@ -170,7 +168,7 @@ let tests =
             let next, _ = update [ erased ] (Client.ModuleMsg(id, box Increment)) initial
 
             Expect.equal
-                (next.ModuleStates |> Map.find id |> unbox<CounterModel> |> _.Count)
+                ((next.Hosts |> Map.find id).State |> unbox<CounterModel> |> _.Count)
                 1
                 "the shell's update is unaffected by the projector"
 

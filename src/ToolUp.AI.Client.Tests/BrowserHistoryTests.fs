@@ -221,7 +221,7 @@ let private settle (config: ClientConfig) (modules: ErasedModule list) (model: C
     let waiting = {
         model with
             InitPhase = Client.Prefetching
-            ModuleStates = Map.empty
+            Hosts = Map.empty
     }
 
     let configs, _ =
@@ -425,7 +425,7 @@ let tests =
                     let model = boot on modules
 
                     Expect.equal model.ActiveModuleId "reports" "the URL's module"
-                    Expect.isTrue (model.ModuleStates |> Map.containsKey "reports") "initialised"
+                    Expect.isTrue (model.Hosts |> Map.containsKey "reports") "initialised"
                     Expect.equal (List.ofSeq inits) [ "reports" ] "and only it")
 
             testCase "a URL restores a page, and the first mount keeps it"
@@ -463,7 +463,7 @@ let tests =
                     let model = boot on modules
 
                     Expect.equal model.ActiveModuleId "secret" "the selection moves, so the denial can name it"
-                    Expect.isEmpty (Map.toList model.ModuleStates) "the module holds no state"
+                    Expect.isEmpty (Map.toList model.Hosts) "the module holds no state"
                     Expect.isEmpty (List.ofSeq inits) "and its Init never ran")
 
             testCase "a Back onto such a view is refused the same way"
@@ -477,7 +477,7 @@ let tests =
                     forward browser
 
                     Expect.equal (activeView shell) "secret" "the selection moves"
-                    Expect.isFalse ((shell.Model()).ModuleStates |> Map.containsKey "secret") "no state"
+                    Expect.isFalse ((shell.Model()).Hosts |> Map.containsKey "secret") "no state"
                     Expect.isEmpty (List.ofSeq inits) "no Init"
                     shell.Stop())
         ]
@@ -508,7 +508,7 @@ let tests =
                     let waiting = {
                         boot gated modules with
                             InitPhase = Client.Prefetching
-                            ModuleStates = Map.empty
+                            Hosts = Map.empty
                     }
 
                     let configs, _ =
@@ -519,13 +519,13 @@ let tests =
 
                     Expect.equal promoted.InitPhase Client.Ready "promoted with the team still unknown"
                     Expect.equal promoted.ActiveModuleId "reports" "the view is held, not sent to the landing"
-                    Expect.isFalse (promoted.ModuleStates |> Map.containsKey "reports") "the guard holds its Init back"
+                    Expect.isFalse (promoted.Hosts |> Map.containsKey "reports") "the guard holds its Init back"
 
                     let withTeam, _ =
                         Client.update gated bus modules (Client.ActiveTeamLoaded(Some "team-1")) promoted
 
                     Expect.equal withTeam.ActiveModuleId "reports" "the URL's view stands"
-                    Expect.isTrue (withTeam.ModuleStates |> Map.containsKey "reports") "and is mounted now")
+                    Expect.isTrue (withTeam.Hosts |> Map.containsKey "reports") "and is mounted now")
 
             testCase "a redirect replaces the entry rather than adding one"
             <| fun () ->
@@ -715,7 +715,7 @@ let tests =
 
                     Expect.equal settled.InitPhase Client.Ready "promoted"
                     Expect.equal settled.ActiveModuleId "secret" "the selection moves, so the denial can name it"
-                    Expect.isFalse (settled.ModuleStates |> Map.containsKey "secret") "the module holds no state"
+                    Expect.isFalse (settled.Hosts |> Map.containsKey "secret") "the module holds no state"
                     Expect.isFalse (inits.Contains "secret") "and its Init never ran")
 
             for failure in [ "quota"; "denied" ] do

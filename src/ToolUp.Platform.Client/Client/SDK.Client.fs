@@ -27,13 +27,6 @@ module Client =
 
     let private log = Logger.forCategory "client.bootstrap"
 
-    // The boot-time gates are `Remote<unit, string>` values. The loaded
-    // values themselves live in `ModuleConfigs` / `PlatformConfig` /
-    // `ResolvedFlags`; `ConfigsPrefetch` / `FlagsPrefetch` only say whether
-    // each source has drained (`Loading` until it answers, `Loaded ()` once
-    // it has, failure included), and the active module re-inits exactly once,
-    // when the last of them settles (`ConfigsLoaded` / `FlagsLoaded`).
-
     /// 0.5.16 — shell lifecycle phase. Gates whether the active module's
     /// `Init` has run and whether its view is mounted. Eliminates the
     /// cold-load "empty seed → real prefetched values" re-init that, on a
@@ -46,10 +39,9 @@ module Client =
     /// fire and populate real `ModuleConfigs` / `ResolvedFlags`). The
     /// shell renders chrome (sidebar + header) plus a content-area
     /// skeleton; the active module is NOT mounted and its `Init` has
-    /// NOT been called. `ConfigsLoaded` / `FlagsLoaded`'s second-arrival
-    /// promotes to `Ready` exactly once via
-    /// `initActiveOnFirstPrefetchReady`, calling `Init` against the now-
-    /// populated context.
+    /// NOT been called. The last of the `GatesFirstInit` boot sources to
+    /// answer promotes to `Ready` exactly once, initialising the active
+    /// module against the now-populated context.
     ///
     /// `Ready` — active module is mounted; `Init` has been called against
     /// real (or anonymous-empty) context. The steady-state phase.
@@ -59,10 +51,9 @@ module Client =
     /// deployment whose user just signed in, or a returning user whose
     /// token surfaced after first render). Current view stays rendered
     /// (stale) so the user keeps their place while loaders refresh.
-    /// Promoted back to `Ready` via the existing skip-when-unchanged
-    /// guard in `reinitActiveAfterPrefetch` — a true value change re-
-    /// inits (destroy / recreate softened by 0.5.15's `MemoizedGrid` +
-    /// `isDestroyed()`); a no-op refresh preserves the React subtree.
+    /// Promoted back to `Ready` through the skip-when-unchanged guard — a
+    /// true value change re-inits; a no-op refresh preserves the React
+    /// subtree.
     type InitPhase =
         | Prefetching
         | Ready
@@ -81,7 +72,11 @@ module Client =
         /// this field only — `Init` is not re-run, so per-page state is
         /// preserved across navigation.
         ActivePageRoute: string option
-        ModuleStates: Map<string, obj>
+        /// Every initialised module's host — its state and its reset
+        /// generation — keyed by module id. A module with no entry has not
+        /// been initialised (or a reset cleared it); `Client.moduleState`
+        /// reads one module's state.
+        Hosts: Map<string, ModuleHost>
         /// Server response describing which modules it RBAC-manages and
         /// which of those the caller can access. `None` = not yet loaded
         /// OR the fetch failed — the sidebar falls back to showing every
@@ -173,23 +168,12 @@ module Client =
         /// view. Admin-only and team-scoped: inert for non-admins and
         /// when nothing is hidden. Not persisted; resets each shell start.
         ShowAllModules: bool
-        /// Boot-time prefetch gate for the persisted config fetch
-        /// (`/api/_platform/config/all`). Flips `Loading -> Loaded ()`
-        /// inside `ConfigsLoaded`; with `FlagsPrefetch` it decides when
-        /// the single active-module re-init fires. See the module-level
-        /// comment above.
-        ConfigsPrefetch: Remote<unit, string>
-        /// Boot-time prefetch gate for the feature-flag resolution.
-        /// Same semantics as `ConfigsPrefetch`.
-        FlagsPrefetch: Remote<unit, string>
-        /// Phase 12c — per-module Reload counter. Incremented by
-        /// `ResetModule`. Composed into the React `key` of
-        /// `Components.ModuleBoundary` so the boundary instance unmounts
-        /// and remounts (clearing its internal `Error` state) when the
-        /// user clicks Reload. Wiped on `TeamSwitched` for the same
-        /// reason every other per-team field is wiped — counters from
-        /// the prior team don't apply to the new one.
-        ResetCounters: Map<string, int>
+        /// The keys of the `GatesFirstInit` boot sources (the persisted
+        /// configs and the resolved flags) that have not answered since the
+        /// last boot or reset. A failure counts as an answer. When the set
+        /// empties, the active module is initialised (first load) or
+        /// re-initialised if what it was built from changed.
+        AwaitingFirstInit: Set<string>
         /// 0.5.16 — shell lifecycle phase. See `InitPhase` doc-comment
         /// for the three-state contract. Drives the
         /// "defer-active-module-Init-until-prefetches-complete"
@@ -200,8 +184,8 @@ module Client =
         /// dismissible banner (deduped by source; empty on a clean boot,
         /// GP 13). A failed load keeps its benign default (empty teams,
         /// no active team, …) AND records an entry here so the failure
-        /// is distinguishable from genuinely-empty data (GP 9). Wiped on
-        /// `TeamSwitched` like every other per-boot-cycle field.
+        /// is distinguishable from genuinely-empty data (GP 9). Wiped by a
+        /// team or locale reset like every other per-boot-cycle field.
         Degradations: BootDegradation.BootDegradation list
         /// A boot load was refused because this principal is a publication
         /// reader, whom every `/api` route refuses. The shell then renders the
@@ -321,8 +305,8 @@ module Client =
         /// Server-driven `Notification.ModuleAction` targeting a module
         /// registered in this deployment. The shell looks up the module
         /// by Id, gates on `AccessibleModules`, calls the module's
-        /// `ActionDecoder`, and dispatches the decoded `Msg` against the
-        /// target module's state in `ModuleStates`. Silently drops on
+        /// `ActionDecoder`, and steps the target module with the decoded
+        /// `Msg`, initialising it first if it has no host. Silently drops on
         /// any gate failure — actions are best-effort UX, not an
         /// authorisation boundary (the server-side tool guard is the
         /// authorisation boundary). Phase 6c.
@@ -331,8 +315,8 @@ module Client =
         /// via `ModuleEvents.publish`. The shell fans the publication out
         /// to every registered module whose `EventSubscriptions` map
         /// carries a mapper for `topic`, decodes the `payload` into each
-        /// subscriber's `Msg`, and applies it against that module's state
-        /// in `ModuleStates` (init-on-demand for never-navigated modules).
+        /// subscriber's `Msg`, and steps that module with it (initialising
+        /// a never-navigated module first).
         /// Identity-free: a module receives its own publication only when
         /// it also subscribes to the same topic. Dispatched by the
         /// boot-time `ModuleEvents.subscribe` lifetime effect. Topics with
@@ -342,28 +326,21 @@ module Client =
         /// other path that calls `PlatformApi.SetActiveTeam`). Carries
         /// the new active team id, or `None` if the user was revoked
         /// from their active team and is now in the no-active-team
-        /// state. The handler clears every per-team piece of shell
-        /// state (`ModuleStates`, `ModuleConfigs`, `PlatformConfig`,
-        /// `ResolvedFlags`, `AccessibleModules`), re-issues the
-        /// bootstrap loaders, and re-inits the active module — the
-        /// same chain `ConfigsLoaded` and `FlagsLoaded` run, just
-        /// rebound to the new team's data (or no team).
+        /// state. The arm runs the shell's one `reset`: it clears the
+        /// per-scope state, re-issues the boot sources a team switch
+        /// clears, and re-inits the active module once they answer.
         | TeamSwitched of string option
         /// Phase 444 — the shell's active locale changed. Dispatched by
         /// the boot-time `LocaleRequest.subscribe` lifetime effect when a
         /// module (a settings page, a consumer's own language picker)
         /// calls `LocaleRequest.request`.
         ///
-        /// Runs the SAME reset path `TeamSwitched` runs, and for the same
-        /// reason: a module that formatted a string at `Init` — a column
-        /// header, a status label, a validation message it holds in its
-        /// own model — is not re-rendered into the new language by a
-        /// React re-render alone, because the string is in its state
-        /// rather than in its view. Clearing `ModuleStates` and re-initing
-        /// is the only reset that reaches those. The per-team loads are
-        /// re-issued too; that is redundant work for a pure language
-        /// change, and it is the price of having exactly one reset path
-        /// rather than two that can drift.
+        /// Runs the shell's one `reset`, as a team switch does: a module
+        /// that formatted a string at `Init` — a column header, a status
+        /// label it holds in its own model — is not re-rendered into the
+        /// new language by a React re-render, because the string is in its
+        /// state rather than its view. Clearing the hosts and re-initialising
+        /// is the only reset that reaches those.
         | LocaleSwitched of locale: string
         /// Server-driven equivalent of `TeamSwitched None` — fired by
         /// the notification subscriber when `MembershipChanged.Removed`
@@ -424,13 +401,11 @@ module Client =
         | ActiveTeamLoaded of string option
         /// Phase 12c — fired by the "Reload module" button inside the
         /// per-module error boundary (and available to any caller that
-        /// wants to reset a single module). Clears the named module's
-        /// `ModuleStates` entry, increments its `ResetCounters` (which
-        /// remounts the boundary), and re-runs `Init` against the
-        /// current `ClientModuleContext`. Other modules and per-team
-        /// state untouched. If `Init` itself throws during reset, the
-        /// `ModuleStates` entry stays empty, `OnError` fires, and the
-        /// next `ModuleSelected` for this module retries from scratch.
+        /// wants to reset a single module). Re-initialises the named
+        /// module and advances its host's generation, which remounts the
+        /// boundary. Other modules and per-team state untouched. If `Init`
+        /// throws, the module is left with no host, `OnError` reports it,
+        /// and the next `ModuleSelected` for this module retries.
         | ResetModule of moduleId: string
         /// Phase 121 — a boot loader threw (routed via `Cmd.OfAsync.either`
         /// in `bootLoadCmd`, or dispatched directly by a failing effect).
@@ -439,9 +414,9 @@ module Client =
         /// benign default, so rendering is unchanged except for the
         /// banner.
         | BootLoadFailed of source: string * error: string
-        /// Phase 121 — user clicked Retry on the degradation banner.
-        /// Optimistically clears the source's entry and re-fires the
-        /// matching loader Cmd; a re-failure re-adds via `BootLoadFailed`.
+        /// The user clicked Retry on the degradation banner. Optimistically
+        /// clears the source's entry and re-runs the source's `Load` from
+        /// `BootSources.all`; a re-failure re-adds via `BootLoadFailed`.
         | RetryBootLoad of source: string
         /// Phase 121 — a previously-degraded source recovered through its
         /// own channel (the auth bridge's refresh interval succeeding
@@ -613,16 +588,13 @@ module Client =
     /// the manual affordances — but Phase 121 surfaces the failure as
     /// a degradation (with retry) instead of swallowing it.
     let private autoSelectSoleTeamCmd (teamId: string) : Cmd<Msg> =
-        Cmd.ofEffect (fun dispatch ->
-            async {
-                try
-                    match! withCsrf (teamApi.SetActiveTeam teamId) with
-                    | Ok() -> dispatch (TeamSwitched(Some teamId))
-                    | Error err -> dispatch (BootLoadFailed("team-auto-select", sprintf "%A" err))
-                with ex ->
-                    dispatch (BootLoadFailed("team-auto-select", ex.Message))
-            }
-            |> Async.StartImmediate)
+        Cmd.OfRemoting.call
+            (fun id -> withCsrf (teamApi.SetActiveTeam id))
+            teamId
+            (function
+            | Ok() -> TeamSwitched(Some teamId)
+            | Error reason -> BootLoadFailed(BootSources.Key.TeamAutoSelect, reason))
+            (fun ex -> BootLoadFailed(BootSources.Key.TeamAutoSelect, ex.Message))
 
     /// Fire the sole-team auto-select when (and only when) all three
     /// hold: the boot-time active-team fetch has resolved, it resolved
@@ -709,14 +681,33 @@ module Client =
     /// definition of what the field means.
     let private activeTeamRoleCmd (teamId: string option) : Cmd<Msg> =
         match teamId with
-        | Some id -> bootLoadCmd "team-role" (withCsrf (loadActiveTeamRole id)) ActiveTeamRoleLoaded
+        | Some id -> bootLoadCmd BootSources.Key.TeamRole (withCsrf (loadActiveTeamRole id)) ActiveTeamRoleLoaded
         | None -> Cmd.ofMsg (ActiveTeamRoleLoaded None)
 
-    /// Banner row label per degradation source key — the built-in English
-    /// catalog's entry (Phase 1069: one table, not a second spelling of
-    /// it). An unknown source labels itself.
-    let private degradationLabel (source: string) =
-        BootDegradation.localisedLabel MessageCatalog.english.BootDegradation.Sources source source
+    /// The loaders the boot-source table's rows pick from.
+    let private bootLoads: BootSources.BootLoads<Model, Msg> = {
+        Permissions = bootLoadCmd BootSources.Key.Permissions (withCsrf loadAccessibleModules) AccessibleModulesLoaded
+        Configs = bootLoadCmd BootSources.Key.Configs (withCsrf loadAllConfigs) ConfigsLoaded
+        Flags = bootLoadCmd BootSources.Key.Flags (withCsrf loadResolvedFlags) FlagsLoaded
+        Teams = bootLoadCmd BootSources.Key.Teams (withCsrf loadMyTeams) MyTeamsLoaded
+        ActiveTeam = bootLoadCmd BootSources.Key.ActiveTeam (withCsrf loadActiveTeam) ActiveTeamLoaded
+        PlatformRole = bootLoadCmd BootSources.Key.PlatformRole loadPlatformRole PlatformRoleLoaded
+        PlatformInfo = bootLoadCmd BootSources.Key.PlatformInfo loadPlatformInfo PlatformInfoLoaded
+        DataSnapshot = bootLoadCmd BootSources.Key.DataSnapshot loadFileSnapshot DataSnapshotPrefetched
+        TeamRole = fun model -> activeTeamRoleCmd model.ActiveTeamId
+        TeamAutoSelect = maybeAutoSelectSoleTeam
+    }
+
+    /// The shell's boot sources: `BootSources.all` at the shell's types.
+    let internal bootSources: BootSources.BootSource<Model, Msg> list =
+        BootSources.all ()
+
+    /// Issue the loads of `sources` against `model`.
+    let private issueLoads (model: Model) (sources: BootSources.BootSource<Model, Msg> list) : Cmd<Msg> =
+        sources |> List.map (fun source -> source.Load bootLoads model) |> Cmd.batch
+
+    /// The source keys the active module's first `Init` waits for.
+    let firstInitGates: Set<string> = BootSources.firstInitGates bootSources
 
     /// Phase 444 — resolve the active locale and the message catalog the
     /// shell renders from. One definition, called from `view` (chrome +
@@ -771,28 +762,19 @@ module Client =
 
         catalogFor (locale, config.MessageCatalogOverride)
 
-    /// Sources the shell can re-run on demand. The auth bridge retries
-    /// itself on its refresh interval, so its banner row carries no
-    /// Retry button. Phase 1069 — a failed sidebar-preference write is not
-    /// a load: there is nothing to re-issue (the next preference change
-    /// writes again), so its row carries no Retry button either.
-    let internal degradationRetryable (source: string) =
-        source <> "auth-bridge" && source <> "sidebar-prefs"
-
     let private degradationEntry (source: string) (error: string) : BootDegradation.BootDegradation = {
         Source = source
-        Label = degradationLabel source
+        Label = BootDegradation.localisedLabel MessageCatalog.english.BootDegradation.Sources source source
         Error = error
-        Retryable = degradationRetryable source
+        Retryable = BootSources.retryable source bootSources
         OccurredAt = System.DateTime.UtcNow
     }
 
-    /// Phase 1069 — persist the sidebar preferences as an effect (B13). A
-    /// throwing store (quota, private window, blocked site data) surfaces as
-    /// the `"sidebar-prefs"` banner row rather than an exception out of
-    /// `update`.
+    /// Persist the sidebar preferences as an effect. A throwing store (quota,
+    /// private window, blocked site data) surfaces as the sidebar-preference
+    /// banner row rather than an exception out of `update`.
     let private persistSidebarPrefs (prefs: SidebarPreferences.UserSidebarPreferences) : Cmd<Msg> =
-        SidebarPreferences.persist (fun ex -> BootLoadFailed("sidebar-prefs", ex.Message)) prefs
+        SidebarPreferences.persist (fun ex -> BootLoadFailed(BootSources.Key.SidebarPrefs, ex.Message)) prefs
 
     /// The captured shell dispatcher as the shell reads it (see
     /// `shellDispatcher`).
@@ -857,9 +839,13 @@ module Client =
         |> Option.bind (fun m ->
             m.ProvidesNarrative
             |> Option.bind (fun extract ->
-                model.ModuleStates
+                model.Hosts
                 |> Map.tryFind model.ActiveModuleId
-                |> Option.bind (fun state -> extract state model.ActivePageRoute)))
+                |> Option.bind (fun host -> extract host.State model.ActivePageRoute)))
+
+    /// The named module's state, when it has been initialised.
+    let moduleState (moduleId: string) (model: Model) : obj option =
+        model.Hosts |> Map.tryFind moduleId |> Option.map _.State
 
     /// A command the named module's `Init` or `Update` returned, its messages
     /// addressed back to that module.
@@ -1099,18 +1085,13 @@ module Client =
                 // back meanwhile; `ActiveTeamLoaded` re-runs this with the answer.
                 model.ActiveModuleId
             else
-                // Gate active — the selection survives only if it's still a
-                // gate-visible surface (the landing, or an admin/management
+                // Gate active — the selection survives only if the gate's own
+                // stage still admits it (the landing, or an admin/management
                 // module for an admin); otherwise force the landing.
-                let isAdmin = model.PlatformRole = Some PlatformRole.PlatformAdmin
-
                 let selectionStillReachable =
-                    model.ActiveModuleId = landingId
-                    || (isAdmin
-                        && modules
-                           |> List.tryFind (fun m -> m.Definition.Id = model.ActiveModuleId)
-                           |> Option.map (fun m -> ClientConfig.isAdminSidebarGroup m.Group)
-                           |> Option.defaultValue false)
+                    match tryFind modules model.ActiveModuleId with
+                    | Some m -> SidebarVisibility.noActiveTeamAdmits (navigationInputs config model) (moduleFacts m)
+                    | None -> model.ActiveModuleId = landingId
 
                 if selectionStillReachable then
                     model.ActiveModuleId
@@ -1118,232 +1099,165 @@ module Client =
                     landingId
         | _ -> model.ActiveModuleId
 
-    /// Wipe `ModuleStates` and re-run the active module's `Init`
-    /// against the now-populated context. Shared by the cold-load
-    /// prefetch gate (`ConfigsLoaded` / `FlagsLoaded` after both have
-    /// arrived) — both handlers used to do this unconditionally on
-    /// every arrival, causing 3× active-module init per cold load.
+    // ─── The module host ──────────────────────────────────────────────
+    //
+    // One function answers "may this module init now, and where does its
+    // command go": `initModule`. Every path that initialises a module — boot,
+    // the first-init gate, a re-init, a guard input arriving, navigation, an
+    // inbound action or event, a reset — calls it, so none can differ in its
+    // guard, its deferral or its routing.
+
+    /// Report a module whose `Init` threw, as a command.
+    let private reportInitFailure (config: ClientConfig) (moduleId: string) (ex: exn) : Cmd<Msg> =
+        Cmd.ofEffect (fun _ ->
+            match config.OnError with
+            | Some report ->
+                report {
+                    ModuleId = moduleId
+                    Error = ex
+                    ComponentStack = ex.StackTrace |> Option.ofObj |> Option.defaultValue ""
+                }
+            | None -> log.Error(sprintf "[ModuleBoundary] %s Init crashed: %s" moduleId ex.Message, Some ex))
+
+    /// Initialise `moduleId`: the one call site of a module's `Init`.
     ///
-    /// Skip-when-unchanged guard: a fresh `AuthTokenAcquired` (token
-    /// refresh, silent SSO carry-over) re-fires `bootLoadCommandsFor`
-    /// and the prefetches typically return BYTE-IDENTICAL `ModuleConfigs`
-    /// / `PlatformConfig` / `ResolvedFlags` to what the active module
-    /// has already consumed. In that case the re-init is pure noise —
-    /// the new `Init` would build a context out of the same inputs,
-    /// returning the same model — and the wipe path destroys the
-    /// active module's React subtree (AG Grid lifecycle, focused form
-    /// state, scroll position) for no observable gain. Detect this by
-    /// comparing the outgoing model against the model `prior` to the
-    /// prefetch arrival; skip the re-init when the active module is
-    /// already initialised AND none of the prefetched-data fields
-    /// actually changed. On a true cold load (active module init'd
-    /// against empty seed, prefetch then fills the real values), the
-    /// equality check fails and the re-init proceeds as before.
-    let private reinitActiveAfterPrefetch
+    /// Deferred while the shell is `Prefetching` (the first init waits for
+    /// the `GatesFirstInit` boot sources). Refused when the navigation
+    /// decision refuses the module, so none of its boot calls go out to come
+    /// back as 403s; a guard input still loading reads as refused, and the
+    /// arm that receives it initialises the module then. Its command is
+    /// addressed to it. An `Init` that throws leaves the module with no host
+    /// and is reported through `ClientConfig.OnError`.
+    let private initModule
         (config: ClientConfig)
         (queryBus: IModuleQueryBus)
         (modules: ErasedModule list)
-        (prior: Model)
+        (moduleId: string)
         (model: Model)
         : Model * Cmd<Msg> =
-        // Re-resolve through the no-team gate: a team that arrived (or was
-        // lost) since the prior render can move the active surface between
-        // the landing and the default module.
-        let activeId = resolveActiveModuleId config modules model
+        match tryFind modules moduleId with
+        | Some moduleImpl when model.InitPhase <> Prefetching && canNavigateToModule config model moduleImpl ->
+            try
+                let context = buildContext config queryBus model moduleId
+                let state, cmd = moduleImpl.Init context
 
-        let activeModuleAlreadyInit =
-            model.ActiveModuleId = activeId
-            && model.ModuleStates |> Map.containsKey activeId
-
-        let configsUnchanged =
-            prior.ModuleConfigs = model.ModuleConfigs
-            && prior.PlatformConfig = model.PlatformConfig
-
-        let flagsUnchanged = prior.ResolvedFlags = model.ResolvedFlags
-
-        if activeModuleAlreadyInit && configsUnchanged && flagsUnchanged then
-            // No observable change to the active module's context inputs
-            // AND the gate didn't move the active surface — skip the
-            // destroy / re-init cycle.
-            model, Cmd.none
-        else
-            match tryFind modules activeId with
-            | Some moduleImpl ->
-                let reset = {
-                    model with
-                        ActiveModuleId = activeId
-                        ActivePageRoute = settledPageRoute config model moduleImpl
-                        ModuleStates = Map.empty
-                }
-
-                // Phase 569.B — the route guard, on the re-init path. A
-                // prefetch arrival can move a caller from permitted to
-                // denied (a team switch that hides the module, exposure
-                // revoked); re-initialising it here would fire the
-                // module's boot calls straight into 403s. Leave
-                // `ModuleStates` empty and let `view` render the denial.
-                if canNavigateToModule config reset moduleImpl then
-                    let ctx = buildContext config queryBus reset activeId
-                    let state, cmd = moduleImpl.Init ctx
-
-                    {
-                        reset with
-                            ModuleStates = Map.ofList [ activeId, state ]
-                    },
-                    moduleCmd activeId cmd
-                else
-                    reset, Cmd.none
-            | None ->
                 {
                     model with
-                        ActiveModuleId = activeId
-                        ModuleStates = Map.empty
+                        Hosts = model.Hosts |> Map.add moduleId { State = state; Generation = 0 }
                 },
-                Cmd.none
+                moduleCmd moduleId cmd
+            with ex ->
+                {
+                    model with
+                        Hosts = model.Hosts |> Map.remove moduleId
+                },
+                reportInitFailure config moduleId ex
+        | _ -> model, Cmd.none
 
-    /// 0.5.16 — first-load promotion helper: run the active module's
-    /// `Init` against the now-populated context and flip
-    /// `InitPhase = Ready`. Distinct from `reinitActiveAfterPrefetch`:
-    /// this is the FIRST init call for the active module, not a re-init.
-    /// There is no prior React subtree to preserve, so no wipe + no skip-
-    /// when-unchanged check applies. Called by `ConfigsLoaded` /
-    /// `FlagsLoaded` once the second prefetch lands AND `InitPhase` is
-    /// still `Prefetching` (the cold-load case). The shell's invariant
-    /// during `Prefetching` is `ModuleStates = Map.empty`; the helper
-    /// installs the first entry. Subsequent prefetch refreshes (token
-    /// acquired mid-session, team switch follow-on) take the
-    /// `reinitActiveAfterPrefetch` path instead.
-    let private initActiveOnFirstPrefetchReady
+    /// Initialise `moduleId` unless it already has a host.
+    let private ensureHost config queryBus modules (moduleId: string) (model: Model) : Model * Cmd<Msg> =
+        if model.Hosts |> Map.containsKey moduleId then
+            model, Cmd.none
+        else
+            initModule config queryBus modules moduleId model
+
+    /// Run one message through a hosted module's `Update`; its command comes
+    /// back to it. A module with no host (a reset or a team switch cleared
+    /// it) has nothing to land on, and the message is dropped.
+    let private applyToHost (modules: ErasedModule list) (moduleId: string) (message: obj) (model: Model) =
+        match tryFind modules moduleId, model.Hosts |> Map.tryFind moduleId with
+        | Some moduleImpl, Some host ->
+            let state, cmd = moduleImpl.Update message host.State
+
+            {
+                model with
+                    Hosts = model.Hosts |> Map.add moduleId { host with State = state }
+            },
+            moduleCmd moduleId cmd
+        | _ -> model, Cmd.none
+
+    /// Deliver a message the module's own view did not send — a decoded
+    /// action or a subscribed event — initialising the module first if it
+    /// has no host, active or not. `None` when the navigation decision
+    /// refuses the module: an inbound message is admitted by that decision
+    /// and by nothing else.
+    let private stepModule
         (config: ClientConfig)
         (queryBus: IModuleQueryBus)
         (modules: ErasedModule list)
+        (moduleImpl: ErasedModule)
+        (message: obj)
         (model: Model)
-        : Model * Cmd<Msg> =
-        // Resolve through the no-team gate so the first rendered surface is
-        // the landing module (not the sidebar-hidden Home) when the caller
-        // has no active team.
+        : (Model * Cmd<Msg>) option =
+        if canNavigateToModule config model moduleImpl then
+            let moduleId = moduleImpl.Definition.Id
+            let hosted, initCmd = ensureHost config queryBus modules moduleId model
+            let stepped, updateCmd = applyToHost modules moduleId message hosted
+            Some(stepped, Cmd.batch [ initCmd; updateCmd ])
+        else
+            None
+
+    /// Move the active surface through the no-active-team gate and settle its
+    /// page.
+    let private settleActive (config: ClientConfig) (modules: ErasedModule list) (model: Model) : Model =
         let activeId = resolveActiveModuleId config modules model
 
         match tryFind modules activeId with
-        | Some moduleImpl ->
-            let resolved = {
-                model with
-                    ActiveModuleId = activeId
-                    ActivePageRoute = settledPageRoute config model moduleImpl
-            }
-
-            // Phase 569.B — the route guard, on the deep-link path that
-            // matters most: a signed-in caller who pasted an admin URL
-            // reaches the shell with `InitPhase = Prefetching`, and this
-            // is the first place the module would be initialised. Denied
-            // ⇒ no `Init`, so none of the module's boot calls are made
-            // (each would 403). `InitPhase` still flips to `Ready` — the
-            // shell is loaded; it is the surface that is refused — and
-            // `view` renders the typed denial over the empty state map.
-            //
-            // A guard input that has not landed yet (the platform-role
-            // fetch racing the configs/flags pair) reads as denied here,
-            // exactly as the sidebar hides the same entry meanwhile;
-            // `ensureActiveInitialised` re-runs the decision when that
-            // fetch resolves, so a genuine admin is initialised then.
-            if canNavigateToModule config resolved moduleImpl then
-                let ctx = buildContext config queryBus resolved activeId
-                let state, cmd = moduleImpl.Init ctx
-
-                {
-                    resolved with
-                        ModuleStates = Map.ofList [ activeId, state ]
-                        InitPhase = Ready
-                },
-                moduleCmd activeId cmd
-            else
-                { resolved with InitPhase = Ready }, Cmd.none
-        | None ->
-            {
-                model with
-                    ActiveModuleId = activeId
-                    InitPhase = Ready
-            },
-            Cmd.none
-
-    /// Phase 569.B — re-run the route guard after one of its INPUTS
-    /// arrives (the platform role, the active-team role, or the
-    /// accessible-modules response) and initialise the active module if
-    /// it has become reachable.
-    ///
-    /// This is the other half of the deny-before-`Init` rule. The guard
-    /// necessarily refuses while the deciding fetch is in flight —
-    /// `PlatformRole = None` means "not an admin" and "not loaded yet"
-    /// alike, the same ambiguity the sidebar lives with — so without
-    /// this, a genuine platform admin who deep-links an admin route
-    /// would be permitted by the time the role lands but left with no
-    /// module state, and the shell would sit on the loading indicator
-    /// forever. Idempotent: a no-op when the module is already
-    /// initialised, still denied, or the shell is still `Prefetching`
-    /// (where `ModuleStates = Map.empty` is the invariant and
-    /// `initActiveOnFirstPrefetchReady` owns the first init).
-    let private ensureActiveInitialised
-        (config: ClientConfig)
-        (queryBus: IModuleQueryBus)
-        (modules: ErasedModule list)
-        (model: Model)
-        : Model * Cmd<Msg> =
-        if
-            model.InitPhase = Prefetching
-            || model.ModuleStates |> Map.containsKey model.ActiveModuleId
-        then
-            model, Cmd.none
-        else
-            match tryFind modules model.ActiveModuleId with
-            | Some moduleImpl when canNavigateToModule config model moduleImpl ->
-                let ctx = buildContext config queryBus model model.ActiveModuleId
-                let state, cmd = moduleImpl.Init ctx
-
-                {
-                    model with
-                        ModuleStates = model.ModuleStates |> Map.add model.ActiveModuleId state
-                },
-                moduleCmd model.ActiveModuleId cmd
-            | _ -> model, Cmd.none
-
-    /// Run one message through a module's `Update`, with its `Init` first if
-    /// it has no state yet, for a message the module's own view did not send:
-    /// a decoded action or a subscribed event. Both commands come back to the
-    /// module, active or not.
-    let private deliverToModule
-        (config: ClientConfig)
-        (queryBus: IModuleQueryBus)
-        (model: Model)
-        (moduleImpl: ErasedModule)
-        (message: obj)
-        : Model * Cmd<Msg> =
-        let moduleId = moduleImpl.Definition.Id
-
-        let state, initCmd =
-            match model.ModuleStates |> Map.tryFind moduleId with
-            | Some existing -> existing, Cmd.none
-            | None ->
-                let initial, cmd = moduleImpl.Init(buildContext config queryBus model moduleId)
-                initial, moduleCmd moduleId cmd
-
-        let newState, updateCmd = moduleImpl.Update message state
-
-        {
+        | Some moduleImpl -> {
             model with
-                ModuleStates = model.ModuleStates |> Map.add moduleId newState
-        },
-        Cmd.batch [ initCmd; moduleCmd moduleId updateCmd ]
+                ActiveModuleId = activeId
+                ActivePageRoute = settledPageRoute config model moduleImpl
+          }
+        | None -> { model with ActiveModuleId = activeId }
+
+    /// The first-init gates have all answered. On a first load, or after a
+    /// reset, the active module is initialised now. After a refresh it is
+    /// re-initialised only when what it was built from changed (the configs,
+    /// the flags, or the surface the no-team gate settles on), compared with
+    /// `prior`, the model before the answer: a refresh that brings the same
+    /// values keeps the module and its React subtree.
+    let private onFirstInitReady config queryBus modules (prior: Model) (model: Model) : Model * Cmd<Msg> =
+        let settled = settleActive config modules { model with InitPhase = Ready }
+
+        let unchanged =
+            model.InitPhase <> Prefetching
+            && settled.ActiveModuleId = model.ActiveModuleId
+            && model.Hosts |> Map.containsKey model.ActiveModuleId
+            && prior.ModuleConfigs = model.ModuleConfigs
+            && prior.PlatformConfig = model.PlatformConfig
+            && prior.ResolvedFlags = model.ResolvedFlags
+
+        if unchanged then
+            { model with InitPhase = Ready }, Cmd.none
+        else
+            initModule config queryBus modules settled.ActiveModuleId { settled with Hosts = Map.empty }
+
+    /// A first-init boot source answered, or failed, which also counts. When
+    /// it was the last such source outstanding, the active module is
+    /// initialised (or re-initialised, see `onFirstInitReady`).
+    let private onSourceLoaded config queryBus modules (key: string) (prior: Model) (model: Model) =
+        let awaiting = model.AwaitingFirstInit |> Set.remove key
+
+        let updated = {
+            model with
+                AwaitingFirstInit = awaiting
+        }
+
+        if awaiting.IsEmpty then
+            onFirstInitReady config queryBus modules prior updated
+        else
+            updated, Cmd.none
 
     /// Aggregate processed data from every module that exposes it.
     /// Pure — callers store the result in `Model.ProcessedData` and the
     /// shell's `view` then publishes it through `ProcessedDataContext`.
-    let private computeProcessedData (modules: ErasedModule list) (states: Map<string, obj>) =
+    let private computeProcessedData (modules: ErasedModule list) (hosts: Map<string, ModuleHost>) =
         modules
         |> List.collect (fun m ->
             match m.ProvidesProcessedData with
             | Some getter ->
-                match states |> Map.tryFind m.Definition.Id with
-                | Some state -> getter state
+                match hosts |> Map.tryFind m.Definition.Id with
+                | Some host -> getter host.State
                 | None -> []
             | None -> [])
 
@@ -1367,67 +1281,20 @@ module Client =
     /// Module-derived processed data, plus the boot-prefetched snapshot while
     /// the DataManager module hasn't been mounted yet — so data modules see
     /// uploaded data on load without first visiting the Data Manager page.
-    /// Once the DataManager is in `ModuleStates`, its live state (which the
+    /// Once the DataManager has a host, its live state (which the
     /// `computeProcessedData` aggregation already includes) is authoritative
     /// and the prefetched fallback is dropped to avoid stale entries.
     let private resolveProcessedData
         (config: ClientConfig)
         (modules: ErasedModule list)
-        (states: Map<string, obj>)
+        (hosts: Map<string, ModuleHost>)
         (prefetched: ProcessedFileEntry list)
         : ProcessedFileEntry list =
-        let derived = computeProcessedData modules states
+        let derived = computeProcessedData modules hosts
 
         match dataManagerModuleId config with
-        | Some dmId when states |> Map.containsKey dmId -> derived
+        | Some dmId when hosts |> Map.containsKey dmId -> derived
         | _ -> derived @ prefetched
-
-    /// 0.5.5 — boot-time API fetches packaged as a single `Cmd<Msg>`
-    /// so `init` and the `AuthTokenAcquired` update arm dispatch the
-    /// same set. Called from `init` only when a token is already
-    /// present (returning user / silent SSO carry-over), and from
-    /// `update` on `AuthTokenAcquired` after the OIDC PKCE callback
-    /// persists a fresh JWT (signal arrives via the
-    /// `auth-token-acquired` `programLifetime` effect).
-    let private bootLoadCommandsFor (config: ClientConfig) : Cmd<Msg> =
-        // Phase 121 — every loader rides `bootLoadCmd` so a thrown load
-        // dispatches `BootLoadFailed` instead of silently resolving to
-        // its default.
-        let loadPerms =
-            bootLoadCmd "permissions" (withCsrf loadAccessibleModules) AccessibleModulesLoaded
-
-        let loadConfigs = bootLoadCmd "configs" (withCsrf loadAllConfigs) ConfigsLoaded
-
-        let loadFlags = bootLoadCmd "flags" (withCsrf loadResolvedFlags) FlagsLoaded
-
-        // Team-scoped deployments load the user's team list and active-
-        // team id so the header (when `HeaderSwitcher`-UX) can render
-        // a switcher and the shell can populate
-        // `ClientModuleContext.TeamId` for module init. Other
-        // deployment shapes skip the round-trips.
-        let teamScopedLoaders =
-            if ClientConfig.hasTeamScope config then
-                [
-                    bootLoadCmd "teams" (withCsrf loadMyTeams) MyTeamsLoaded
-                    bootLoadCmd "active-team" (withCsrf loadActiveTeam) ActiveTeamLoaded
-                ]
-            else
-                []
-
-        // Phase 1046 — every `FileManagementApi` call waits on the
-        // server's advertisement of whether that API is mounted: the
-        // snapshot prefetch and the epoch seed are issued from the
-        // `PlatformInfoLoaded` arm, and only when it is.
-        Cmd.batch (
-            [
-                loadPerms
-                loadConfigs
-                loadFlags
-                bootLoadCmd "platform-role" loadPlatformRole PlatformRoleLoaded
-                bootLoadCmd "platform-info" loadPlatformInfo PlatformInfoLoaded
-            ]
-            @ teamScopedLoaders
-        )
 
     /// Whether the deployment wants a sign-in and this reader has not done one.
     ///
@@ -1497,89 +1364,27 @@ module Client =
 
             tryFind modules initialId |> Option.defaultValue modules[0]
 
-        // 0.5.16 — defer module `Init` only when prefetches are in flight
-        // AND will populate real values before the active module renders.
-        // That is: signed in. The other two cases mount immediately:
-        //
-        // - signed out (Welcome Page / mixed-mode
-        //   anonymous-side): boot loaders are skipped below, so there's
-        //   no prefetch window to wait on. Module `Init` runs with the
-        //   empty seed; the auth gate covers the shell for single-auth
-        //   surfaces, and the anonymous side of mixed-mode legitimately
-        //   operates against an empty scope. Later sign-in dispatches
-        //   `AuthTokenAcquired` which flips Ready → Reprefetching and
-        //   takes the standard skip-when-unchanged path.
-        //
-        // - no sign-in wanted (anonymous-only deployment): loaders fire
-        //   and typically return empty maps from the server. Module
-        //   `Init` runs with the empty seed; on prefetch arrival the
-        //   existing `reinitActiveAfterPrefetch` skip-when-unchanged
-        //   guard preserves the React subtree (empty = empty).
-        //
-        // When `willDeferInit = true` we leave `ModuleStates` empty so
-        // the `Prefetching` invariant holds and the view renders the
-        // skeleton; `initActiveOnFirstPrefetchReady` populates the
-        // entry on Ready promotion.
-        let willDeferInit = signedIn
-
-        // Phase 569.B — the route guard on the immediate-mount boot path
-        // (anonymous-only deployments and the pre-sign-in side of mixed
-        // mode). Nothing model-side has loaded at boot, so the decision's
-        // inputs ARE `SidebarVisibility.defaults` plus the three config
-        // projections — stating it that way keeps the "nothing known yet"
-        // state explicit rather than fabricating an empty model. What it
-        // catches: a deployment whose default surface declares a
-        // `Visibility` the boot subject fails (a team-only landing reached
-        // anonymously). `ensureActiveInitialised` / the prefetch paths
-        // mount it once the caller upgrades.
-        let bootPermitted =
-            SidebarVisibility.canNavigateTo
-                moduleFacts
-                {
-                    SidebarVisibility.defaults with
-                        SubjectKind = ClientConfig.resolveSubjectKind None _config
-                        HasTeamScope = ClientConfig.hasTeamScope _config
-                        NoActiveTeamLandingId = ClientConfig.effectiveNoActiveTeamLandingId _config
-                }
-                moduleImpl
-
-        let initPhase, moduleStates, moduleInitCmd =
-            if willDeferInit then
-                Prefetching, Map.empty, Cmd.none
-            elif not bootPermitted then
-                Ready, Map.empty, Cmd.none
-            else
-                let seedCtx = {
-                    Config = Map.empty
-                    PlatformConfig = Map.empty
-                    Flags = Map.empty
-                    UserId = UserId(UserSession.getUserId ())
-                    TeamId = None
-                    QueryBus = queryBus
-                    OnTeamSwitched = buildOnTeamSwitched _config
-                    OnAccessibleModulesChanged = buildOnAccessibleModulesChanged _config
-                    Messages = resolveCatalog _config None Map.empty
-                }
-
-                let state, cmd = moduleImpl.Init seedCtx
-                Ready, Map.ofList [ moduleImpl.Definition.Id, state ], moduleCmd moduleImpl.Definition.Id cmd
-
-        let processed = resolveProcessedData _config modules moduleStates []
-
-        let model = {
+        // Signed in, the first `Init` waits for the first-init boot sources,
+        // so the module is built from the persisted configs and flags rather
+        // than built from an empty seed and rebuilt. Signed out, or with no
+        // sign-in wanted, the loaders either do not run yet or bring what the
+        // empty seed already holds, so the module mounts now — through the
+        // same guard as every other init: a default surface whose declared
+        // `Visibility` the boot subject fails is not initialised.
+        let unhosted = {
             ActiveModuleId = moduleImpl.Definition.Id
             ActivePageRoute =
                 match restoredView with
                 | Some(_, Some route) -> Some route
                 | _ -> defaultPageRoute moduleImpl
-            ModuleStates = moduleStates
+            Hosts = Map.empty
             AccessibleModules = None
             ShowAllModules = false
             ModuleConfigs = Map.empty
             PlatformConfig = Map.empty
             ResolvedFlags = Map.empty
             SidebarPrefs = SidebarPreferences.load ()
-            ProcessedData = processed
+            ProcessedData = []
             MyTeams = []
             ActiveTeamId = None
             ActiveTeamLoadCompleted = false
@@ -1589,24 +1394,25 @@ module Client =
                 match restoredView with
                 | Some _ -> ClientConfig.effectiveArea moduleImpl.Area moduleImpl.Group
                 | None -> ModuleArea.Product
-            ConfigsPrefetch = Remote.Loading
-            FlagsPrefetch = Remote.Loading
-            ResetCounters = Map.empty
-            InitPhase = initPhase
+            AwaitingFirstInit = firstInitGates
+            InitPhase = if signedIn then Prefetching else Ready
             Degradations = []
             AppAccessRefused = false
             PrefetchedProcessedData = []
             CommandPalette = CommandPaletteNav.closed
-            // Phase 444 — no in-session locale choice yet; the resolve
-            // uses `ClientConfig.Locale` alone.
             LocaleOverride = None
         }
 
-        // 0.5.5 — Boot-time fetches are gated on auth state below.
-        // The load Cmds live in `bootLoadCommandsFor` (above `init`)
-        // so both `init` and the `AuthTokenAcquired` update arm
-        // dispatch the same set.
-        let bootLoadCommands = bootLoadCommandsFor _config
+        let hosted, moduleInitCmd =
+            initModule _config queryBus modules moduleImpl.Definition.Id unhosted
+
+        let model = {
+            hosted with
+                ProcessedData = resolveProcessedData _config modules hosted.Hosts []
+        }
+
+        let bootLoadCommands =
+            issueLoads model (BootSources.issuedAtBoot (ClientConfig.hasTeamScope _config) bootSources)
 
         // Shell dispatcher capture lives at the `Program` site via
         // `Program.withDispatcherHandle` (ToolUp.Elmish primitive), inside
@@ -1664,85 +1470,88 @@ module Client =
 
         model, Cmd.batch (initCmds @ firstEntryCmd)
 
-    /// Shared body of the `ConfigsLoaded` arm — also invoked by the
-    /// `BootLoadFailed("configs", _)` path with `Map.empty` so a failed
-    /// fetch still flips the `ConfigsPrefetch` gate (pre-121 behaviour:
-    /// the loader swallowed the failure into an empty map; the gate must
-    /// not dead-lock the `Prefetching` skeleton just because the failure
-    /// is now visible). `prior` is the pre-arm model handed to the
-    /// skip-when-unchanged re-init guard.
-    let private applyConfigsLoaded
-        (_config: ClientConfig)
-        (queryBus: IModuleQueryBus)
-        (modules: ErasedModule list)
-        (configs: Map<string, Map<string, string>>)
-        (prior: Model)
-        (model: Model)
-        : Model * Cmd<Msg> =
-        let platformCfg =
-            configs
-            |> Map.tryFind ConfigKeys.PlatformModuleKey
-            |> Option.defaultValue Map.empty
+    /// The shell's one reset. A team switch and a locale switch wipe the
+    /// per-scope state (the hosts, the loaded configs, flags and access
+    /// response, the degradations), return to `Prefetching` and re-issue the
+    /// boot sources that reset clears, so the active module is re-initialised
+    /// against the new scope once the first-init sources answer. A token
+    /// arriving after a signed-out boot re-issues its sources without the
+    /// wipe: the view stays on screen, stale, and is re-initialised only if
+    /// what it was built from changed.
+    ///
+    /// A locale switch to the locale already chosen, and a token arriving
+    /// while the boot loads are still in flight, change nothing.
+    let private reset (config: ClientConfig) (kind: BootSources.ResetKind) (model: Model) : Model * Cmd<Msg> =
+        let rescoped =
+            match kind with
+            | BootSources.ResetKind.TeamSwitch teamId ->
+                // The caller's role belongs to the team, so it is stale the
+                // moment the team moves. `None` fails the role gate open
+                // until it is re-read, as at boot.
+                Some {
+                    model with
+                        ActiveTeamId = teamId
+                        ActiveTeamRole = None
+                }
+            | BootSources.ResetKind.LocaleSwitch locale when locale <> model.LocaleOverride ->
+                Some { model with LocaleOverride = locale }
+            | BootSources.ResetKind.TokenAcquired when model.InitPhase <> Prefetching -> Some model
+            | BootSources.ResetKind.LocaleSwitch _
+            | BootSources.ResetKind.TokenAcquired -> None
 
-        let moduleCfgs = configs |> Map.remove ConfigKeys.PlatformModuleKey
+        match rescoped with
+        | None -> model, Cmd.none
+        | Some rescoped ->
+            let next =
+                match kind with
+                | BootSources.ResetKind.TokenAcquired -> {
+                    rescoped with
+                        InitPhase = Reprefetching
+                        AwaitingFirstInit = firstInitGates
+                  }
+                | BootSources.ResetKind.TeamSwitch _
+                | BootSources.ResetKind.LocaleSwitch _ -> {
+                    rescoped with
+                        ModuleConfigs = Map.empty
+                        PlatformConfig = Map.empty
+                        ResolvedFlags = Map.empty
+                        AccessibleModules = None
+                        Hosts = Map.empty
+                        AwaitingFirstInit = firstInitGates
+                        InitPhase = Prefetching
+                        Degradations = []
+                        AppAccessRefused = false
+                  }
 
-        let updated = {
-            model with
-                ModuleConfigs = moduleCfgs
-                PlatformConfig = platformCfg
-                ConfigsPrefetch = Remote.Loaded()
-        }
+            let reissued =
+                bootSources
+                |> BootSources.reissuedBy (BootSources.ResetKind.trigger kind) (ClientConfig.hasTeamScope config)
+                |> issueLoads next
 
-        if Remote.isSettled updated.FlagsPrefetch then
-            match updated.InitPhase with
-            | Prefetching -> initActiveOnFirstPrefetchReady _config queryBus modules updated
-            | Ready
-            | Reprefetching ->
-                let resolved = { updated with InitPhase = Ready }
-                reinitActiveAfterPrefetch _config queryBus modules prior resolved
-        else
-            updated, Cmd.none
-
-    /// Shared body of the `FlagsLoaded` arm — same dual-call shape as
-    /// `applyConfigsLoaded` above.
-    let private applyFlagsLoaded
-        (_config: ClientConfig)
-        (queryBus: IModuleQueryBus)
-        (modules: ErasedModule list)
-        (flags: Map<string, FlagValue>)
-        (prior: Model)
-        (model: Model)
-        : Model * Cmd<Msg> =
-        let updated = {
-            model with
-                ResolvedFlags = flags
-                FlagsPrefetch = Remote.Loaded()
-        }
-
-        if Remote.isSettled updated.ConfigsPrefetch then
-            match updated.InitPhase with
-            | Prefetching -> initActiveOnFirstPrefetchReady _config queryBus modules updated
-            | Ready
-            | Reprefetching ->
-                let resolved = { updated with InitPhase = Ready }
-                reinitActiveAfterPrefetch _config queryBus modules prior resolved
-        else
-            updated, Cmd.none
+            match kind with
+            | BootSources.ResetKind.TeamSwitch _ ->
+                next,
+                Cmd.batch [
+                    // The server scopes a read to the active team and a
+                    // cached read's key does not carry it, so the move is an
+                    // identity change: drop every cached read BEFORE the
+                    // re-issued loads go out.
+                    Cmd.ofEffect (fun _ -> UserSession.identityChanged ())
+                    reissued
+                    // The session file store on the other side is now a
+                    // different one: re-seed the epoch against it, or the next
+                    // focus check reports a reset that never happened.
+                    Cmd.ofEffect (fun _ ->
+                        SessionEpoch.reset ()
+                        Async.StartImmediate(SessionEpoch.prime ()))
+                ]
+            | BootSources.ResetKind.LocaleSwitch _
+            | BootSources.ResetKind.TokenAcquired -> next, reissued
 
     let private updateShell (_config: ClientConfig) (queryBus: IModuleQueryBus) (modules: ErasedModule list) msg model =
         let newModel, cmd =
             match msg with
-            | ModuleMsg(moduleId, message) ->
-                match tryFind modules moduleId, model.ModuleStates |> Map.tryFind moduleId with
-                | Some moduleImpl, Some currentState ->
-                    let newState, cmd = moduleImpl.Update message currentState
-
-                    {
-                        model with
-                            ModuleStates = model.ModuleStates |> Map.add moduleId newState
-                    },
-                    moduleCmd moduleId cmd
-                | _ -> model, Cmd.none
+            | ModuleMsg(moduleId, message) -> applyToHost modules moduleId message model
 
             | SessionStoreReset notice ->
                 // Drain the shell's half of the file-derived state. The
@@ -1805,7 +1614,7 @@ module Client =
                             // the data manager (best-effort — a failed fetch
                             // routes to `BootLoadFailed` and
                             // `PrefetchedProcessedData` stays empty).
-                            bootLoadCmd "data-snapshot" loadFileSnapshot DataSnapshotPrefetched
+                            bootLoads.DataSnapshot
                             // Phase 6p — seed the session epoch alongside the
                             // snapshot it describes. A first read can never
                             // report a reset (there is no prior epoch to differ
@@ -1881,14 +1690,8 @@ module Client =
                         | Some r -> Some r
                         | None -> defaultPageRoute moduleImpl
 
-                    // 0.5.16 — during `Prefetching` no module has been
-                    // initialised yet (invariant: `ModuleStates =
-                    // Map.empty`). A sidebar click just updates which
-                    // module will be the first to init when the prefetch
-                    // gate releases; do NOT call `Init` here (defeats the
-                    // entire point of deferring it). Skeleton view stays
-                    // on; sidebar `selected` highlight updates via
-                    // `ActiveModuleId` change.
+                    // During `Prefetching` no module has a host: a click
+                    // only moves which module the first init will build.
                     if model.InitPhase = Prefetching then
                         {
                             model with
@@ -1904,58 +1707,33 @@ module Client =
                                 CurrentArea = targetArea
                         },
                         Cmd.none
-                    elif not (canNavigateToModule _config model moduleImpl) then
-                        // Phase 569.B — the route guard on explicit
-                        // navigation. Reached by a deep link (the
-                        // `NavigationRequest` bus dispatches the same
-                        // `ModuleSelected`) rather than by a sidebar
-                        // click, since the rail no longer offers a
-                        // denied module — one predicate decides both.
-                        // The selection still moves so the shell reports
-                        // the route the caller actually asked for and
-                        // `view` can name the module in the denial; what
-                        // does NOT happen is `Init`, so the module's
-                        // boot calls are never made.
-                        {
-                            model with
-                                ActiveModuleId = moduleId
-                                ActivePageRoute = pageRoute
-                                CurrentArea = targetArea
-                        },
-                        Cmd.none
                     else
-                        let state, cmd =
-                            match model.ModuleStates |> Map.tryFind moduleId with
-                            | Some existingState -> existingState, Cmd.none
-                            | None ->
-                                let ctx = buildContext _config queryBus model moduleId
-                                let s, c = moduleImpl.Init ctx
-                                s, moduleCmd moduleId c
-
+                        // The selection moves even when the route guard
+                        // refuses the module (a deep link reaches here; the
+                        // rail no longer offers a denied module), so the
+                        // shell reports the route the caller asked for and
+                        // `view` names the module in the denial. What the
+                        // guard holds back is the `Init`, in `initModule`.
                         {
                             model with
                                 ActiveModuleId = moduleId
                                 ActivePageRoute = pageRoute
                                 CurrentArea = targetArea
-                                ModuleStates = model.ModuleStates |> Map.add moduleId state
-                        },
-                        cmd
+                        }
+                        |> ensureHost _config queryBus modules moduleId
                 | None -> model, Cmd.none
 
             | AccessibleModulesLoaded accessible ->
-                // Phase 569 — a route-guard input landed; mount the
-                // active module if that flipped it to reachable.
+                // A route-guard input landed; mount the active module if it
+                // made it reachable.
                 {
                     model with
                         AccessibleModules = accessible
-                        // Phase 121 — the data arrived after all; clear
-                        // any prior failure entry for this source.
-                        Degradations = BootDegradation.remove "permissions" model.Degradations
+                        Degradations = BootDegradation.remove BootSources.Key.Permissions model.Degradations
                 }
-                |> ensureActiveInitialised _config queryBus modules
+                |> fun m -> ensureHost _config queryBus modules m.ActiveModuleId m
 
-            | RefreshAccessibleModules ->
-                model, bootLoadCmd "permissions" (withCsrf loadAccessibleModules) AccessibleModulesLoaded
+            | RefreshAccessibleModules -> model, bootLoads.Permissions
 
             | ToggleShowAllModules ->
                 {
@@ -1965,160 +1743,39 @@ module Client =
                 Cmd.none
 
             | ConfigsLoaded configs ->
-                // Cold-load gate. The persisted value is recorded on
-                // `ModuleConfigs` / `PlatformConfig`; the gate is a
-                // `Remote<unit, string>` that flips to `Loaded ()`. When *both*
-                // gates have settled the second handler promotes the
-                // shell out of the `Prefetching` skeleton (first-load) OR
-                // re-inits the active module via the skip-when-unchanged
-                // guard (Ready / Reprefetching follow-ups). Body factored
-                // into `applyConfigsLoaded` so the
-                // `BootLoadFailed("configs", _)` path can flip the same
-                // gate without synthesising a fake success message.
-                let cleared = {
+                let updated = {
                     model with
-                        Degradations = BootDegradation.remove "configs" model.Degradations
+                        ModuleConfigs = configs |> Map.remove ConfigKeys.PlatformModuleKey
+                        PlatformConfig =
+                            configs
+                            |> Map.tryFind ConfigKeys.PlatformModuleKey
+                            |> Option.defaultValue Map.empty
+                        Degradations = BootDegradation.remove BootSources.Key.Configs model.Degradations
                 }
 
-                applyConfigsLoaded _config queryBus modules configs model cleared
+                onSourceLoaded _config queryBus modules BootSources.Key.Configs model updated
 
             | FlagsLoaded flags ->
-                // Same gate as `ConfigsLoaded` — see that handler.
-                let cleared = {
+                let updated = {
                     model with
-                        Degradations = BootDegradation.remove "flags" model.Degradations
+                        ResolvedFlags = flags
+                        Degradations = BootDegradation.remove BootSources.Key.Flags model.Degradations
                 }
 
-                applyFlagsLoaded _config queryBus modules flags model cleared
+                onSourceLoaded _config queryBus modules BootSources.Key.Flags model updated
 
-            | TeamSwitched newTeamIdOpt ->
-                // Active team changed. Every per-team piece of shell
-                // state must be cleared and re-fetched against the new
-                // scope, then the active module re-initialised so its
-                // `ClientModuleContext` reflects the swap. Same shape
-                // as the `ConfigsLoaded` / `FlagsLoaded` reset paths
-                // above, just rebound to the new team's data and
-                // chained through the loader cmds rather than running
-                // inline.
-                //
-                // `newTeamIdOpt = None` is the membership-revoked path
-                // — loaders run against an empty scope and the user
-                // lands in the no-active-team state.
-                //
-                // `MyTeams` is also refreshed because `TeamCreated`
-                // (which arrives via this message — `TeamManagerUI`
-                // invokes `OnTeamSwitched` for both switch and create)
-                // can introduce a team that wasn't in the boot-time
-                // list.
-                // 0.5.16 — flip back to `Prefetching` for the reload
-                // window so the same skeleton-then-mount discipline that
-                // governs cold load applies to team switches. Reset both
-                // prefetch gates so `initActiveOnFirstPrefetchReady` fires
-                // exactly once when the second new loader lands (the
-                // pre-0.5.16 code left `ConfigsPrefetch` / `FlagsPrefetch`
-                // at `Loaded ()` from the prior cycle, so a single loader
-                // arrival would falsely satisfy the gate). Reduces the
-                // team-switch flicker that motivated the opener's
-                // recommendation.
-                let reset = {
-                    model with
-                        ActiveTeamId = newTeamIdOpt
-                        // Phase 568 — the role is TEAM-bound (unlike
-                        // `PlatformRole`), so it is stale the instant the
-                        // active team moves. Cleared here and re-read by
-                        // `activeTeamRoleCmd` below; the intervening
-                        // `None` fails the gate open, which is the same
-                        // shape as the pre-load window at boot.
-                        ActiveTeamRole = None
-                        ModuleConfigs = Map.empty
-                        PlatformConfig = Map.empty
-                        ResolvedFlags = Map.empty
-                        AccessibleModules = None
-                        ModuleStates = Map.empty
-                        ResetCounters = Map.empty
-                        ConfigsPrefetch = Remote.Loading
-                        FlagsPrefetch = Remote.Loading
-                        InitPhase = Prefetching
-                        // Phase 121 — degradations from the prior boot
-                        // cycle are stale against the new scope; the
-                        // re-issued loaders below re-add any that recur.
-                        Degradations = []
-                        AppAccessRefused = false
-                }
-
-                reset,
-                Cmd.batch [
-                    // Phase 908 — the server scopes a read to the active
-                    // team, and a cached read's key does not carry it, so
-                    // the move is an identity change: drop every cached
-                    // read FIRST, before the loaders below issue theirs.
-                    Cmd.ofEffect (fun _ -> UserSession.identityChanged ())
-                    bootLoadCmd "permissions" (withCsrf loadAccessibleModules) AccessibleModulesLoaded
-                    bootLoadCmd "configs" (withCsrf loadAllConfigs) ConfigsLoaded
-                    bootLoadCmd "flags" (withCsrf loadResolvedFlags) FlagsLoaded
-                    bootLoadCmd "teams" (withCsrf loadMyTeams) MyTeamsLoaded
-                    activeTeamRoleCmd newTeamIdOpt
-                    // Phase 6p — the scope moved, so the store on the
-                    // other side is legitimately a different one. Drop
-                    // the cached epoch and re-seed against the new scope;
-                    // without this the next focus check would compare the
-                    // old scope's epoch against the new scope's store and
-                    // report a reset that never happened.
-                    Cmd.ofEffect (fun _ ->
-                        SessionEpoch.reset ()
-                        Async.StartImmediate(SessionEpoch.prime ()))
-                ]
+            | TeamSwitched newTeamIdOpt -> reset _config (BootSources.ResetKind.TeamSwitch newTeamIdOpt) model
 
             | LocaleSwitched locale ->
-                // Phase 444 — an in-session language change. Same reset
-                // shape as `TeamSwitched` above (see that arm's comment
-                // and this message's doc-comment for why a re-render is
-                // not enough), with two deliberate differences:
-                //
-                //   * `ActiveTeamId` / `ActiveTeamRole` are NOT touched —
-                //     the scope did not move, only the language, so the
-                //     team-role read is not stale and re-clearing it
-                //     would blink the sidebar's role gate open and shut.
-                //   * `LocaleOverride` is SET rather than cleared; it is
-                //     the one piece of state this message exists to
-                //     carry.
-                //
-                // A blank tag is treated as "clear the choice" and falls
-                // back to whatever `ClientConfig.Locale` resolves to,
-                // rather than resolving to an empty `Intl` locale.
-                let normalised =
+                // A blank tag clears the choice, falling back to whatever
+                // `ClientConfig.Locale` resolves to.
+                let chosen =
                     if System.String.IsNullOrWhiteSpace locale then
                         None
                     else
                         Some(locale.Trim())
 
-                if normalised = model.LocaleOverride then
-                    // Already there. Re-running the reset would tear down
-                    // every module's state for no visible change.
-                    model, Cmd.none
-                else
-                    let reset = {
-                        model with
-                            LocaleOverride = normalised
-                            ModuleConfigs = Map.empty
-                            PlatformConfig = Map.empty
-                            ResolvedFlags = Map.empty
-                            AccessibleModules = None
-                            ModuleStates = Map.empty
-                            ResetCounters = Map.empty
-                            ConfigsPrefetch = Remote.Loading
-                            FlagsPrefetch = Remote.Loading
-                            InitPhase = Prefetching
-                            Degradations = []
-                            AppAccessRefused = false
-                    }
-
-                    reset,
-                    Cmd.batch [
-                        bootLoadCmd "permissions" (withCsrf loadAccessibleModules) AccessibleModulesLoaded
-                        bootLoadCmd "configs" (withCsrf loadAllConfigs) ConfigsLoaded
-                        bootLoadCmd "flags" (withCsrf loadResolvedFlags) FlagsLoaded
-                    ]
+                reset _config (BootSources.ResetKind.LocaleSwitch chosen) model
 
             | MembershipRevoked teamId ->
                 // Server-driven `MembershipChanged.Removed` for this
@@ -2129,7 +1786,7 @@ module Client =
                 if model.ActiveTeamId = Some teamId then
                     model, Cmd.ofMsg (TeamSwitched None)
                 else
-                    model, bootLoadCmd "teams" (withCsrf loadMyTeams) MyTeamsLoaded
+                    model, bootLoads.Teams
 
             | MembershipActiveTeamSet teamId ->
                 // Server-driven `MembershipChanged.ActiveTeamSet` for
@@ -2147,7 +1804,7 @@ module Client =
                 // Added to a team (without an active-team switch) — refresh
                 // the team list so the new team shows up in the header
                 // switcher this session. Active team is left untouched.
-                model, bootLoadCmd "teams" (withCsrf loadMyTeams) MyTeamsLoaded
+                model, bootLoads.Teams
 
             | MyTeamsLoaded teams ->
                 // Sole-team auto-select may fire here (teams arriving
@@ -2157,100 +1814,56 @@ module Client =
                 let updated = {
                     model with
                         MyTeams = teams
-                        Degradations = BootDegradation.remove "teams" model.Degradations
+                        Degradations = BootDegradation.remove BootSources.Key.Teams model.Degradations
                 }
 
                 updated, maybeAutoSelectSoleTeam updated
 
             | PlatformRoleLoaded isAdmin ->
-                let role = if isAdmin then Some PlatformRole.PlatformAdmin else None
-
-                // Phase 569 — the input the deep-link case turns on. An
-                // admin who pasted an admin URL was refused (and left
-                // uninitialised) while this fetch was in flight; now that
-                // it has landed, mount the module they were entitled to.
+                // A route-guard input: an admin who opened an admin URL was
+                // refused while this read was in flight, and is initialised
+                // now.
                 {
                     model with
-                        PlatformRole = role
-                        Degradations = BootDegradation.remove "platform-role" model.Degradations
+                        PlatformRole = if isAdmin then Some PlatformRole.PlatformAdmin else None
+                        Degradations = BootDegradation.remove BootSources.Key.PlatformRole model.Degradations
                 }
-                |> ensureActiveInitialised _config queryBus modules
+                |> fun m -> ensureHost _config queryBus modules m.ActiveModuleId m
 
             | ActiveTeamRoleLoaded role ->
-                // Phase 568 — the caller's own role on the active team.
-                // Pure state for the sidebar (it re-reads on the next
-                // render); Phase 569 additionally mounts the active
-                // module if the arriving role made it reachable.
+                // The caller's own role on the active team: a route-guard
+                // input for `NavRole.TeamOwnerAdmin`.
                 {
                     model with
                         ActiveTeamRole = role
-                        Degradations = BootDegradation.remove "team-role" model.Degradations
+                        Degradations = BootDegradation.remove BootSources.Key.TeamRole model.Degradations
                 }
-                |> ensureActiveInitialised _config queryBus modules
+                |> fun m -> ensureHost _config queryBus modules m.ActiveModuleId m
 
             | ActiveTeamLoaded teamId ->
                 let updated = {
                     model with
                         ActiveTeamId = teamId
                         ActiveTeamLoadCompleted = true
-                        Degradations = BootDegradation.remove "active-team" model.Degradations
+                        Degradations = BootDegradation.remove BootSources.Key.ActiveTeam model.Degradations
                 }
 
-                // The no-team gate keys on `ActiveTeamId`; now that the
-                // active-team fetch resolved, reconcile the active content
-                // surface (landing <-> default surface) when the active
-                // module has already mounted. `prior = updated` so the
-                // re-init fires only when the gate actually moved the surface
-                // (configs / flags are unchanged on this arm). Before mount
-                // (`Prefetching` / `Reprefetching`) the cold-load promotion
-                // resolves the gate itself, so no reconcile is needed.
+                // The no-team gate keys on `ActiveTeamId`: once the module
+                // has mounted, settle the surface again (landing or default),
+                // re-initialising only if the gate moved it. Before mount the
+                // first-init gate settles it.
                 let reconciled, reconcileCmd =
                     match updated.InitPhase with
-                    | Ready -> reinitActiveAfterPrefetch _config queryBus modules updated updated
+                    | Ready -> onFirstInitReady _config queryBus modules updated updated
                     | Prefetching
                     | Reprefetching -> updated, Cmd.none
 
-                // Phase 568 — this is the boot-time moment the active team
-                // becomes known, so it is where the caller's team role is
-                // first read. `TeamSwitched` covers every later move; the
-                // sole-team auto-select routes through that message, so a
-                // freshly-auto-selected team re-reads there rather than
-                // racing this call against a team id about to change.
+                // The moment the active team becomes known at boot, so the
+                // caller's role on it is read here; a team switch re-reads it
+                // through `reset`.
                 reconciled, Cmd.batch [ reconcileCmd; activeTeamRoleCmd teamId; maybeAutoSelectSoleTeam reconciled ]
 
-            | AuthTokenAcquired ->
-                // 0.5.5 — `UserSession.localStorage.toolup-auth-token`
-                // transitioned `None → Some`. The auth-required boot
-                // fetches that `init` deliberately skipped now have a
-                // Bearer token to attach via
-                // `CsrfClient.installRequestGuard`'s identity getter,
-                // so dispatch them.
-                //
-                // 0.5.16 — when the shell is already `Ready` (anonymous-
-                // side branch of a mixed-mode deployment whose user just
-                // signed in, OR a Welcome Page path where `init`'s
-                // willDeferInit was false), flip to `Reprefetching` and
-                // reset both prefetch gates. Keeps the current view
-                // rendered (stale) while the new loaders arrive; the
-                // `ConfigsLoaded` / `FlagsLoaded` second-arrival promotes
-                // back to `Ready` via the skip-when-unchanged guard.
-                // `Prefetching` is unreachable here in practice (only set
-                // when signed in at boot, which precludes
-                // a later `None → Some` token transition) but defensively
-                // a no-op: loaders are already in flight from `init`.
-                match model.InitPhase with
-                | Prefetching -> model, Cmd.none
-                | Ready
-                | Reprefetching ->
-                    {
-                        model with
-                            InitPhase = Reprefetching
-                            ConfigsPrefetch = Remote.Loading
-                            FlagsPrefetch = Remote.Loading
-                    },
-                    bootLoadCommandsFor _config
-
-            // ─── Phase 121 — boot-degradation arms ───────────────────
+            | AuthTokenAcquired -> reset _config BootSources.ResetKind.TokenAcquired model
 
             | BootLoadFailed(source, error) ->
                 log.Warn(
@@ -2265,40 +1878,25 @@ module Client =
                         Degradations = BootDegradation.add (degradationEntry source error) model.Degradations
                 }
 
-                // The prefetch-gated loaders must still flip their gate on
-                // failure, or the shell would dead-lock in the
-                // `Prefetching` skeleton — apply the same empty-map state
-                // the pre-121 swallow produced, via the shared arm bodies.
-                match source with
-                | "configs" -> applyConfigsLoaded _config queryBus modules Map.empty updated updated
-                | "flags" -> applyFlagsLoaded _config queryBus modules Map.empty updated updated
+                // A failure is an answer: a source the first init waits for
+                // must still release it, or the shell would hold the
+                // `Prefetching` skeleton for good.
+                match BootSources.tryFind source bootSources with
+                | Some row when row.GatesFirstInit -> onSourceLoaded _config queryBus modules source updated updated
                 | _ -> updated, Cmd.none
 
             | RetryBootLoad source ->
                 // Optimistic clear — a re-failure re-adds via
-                // `BootLoadFailed`, so the banner row flickers off only
-                // while the retry is in flight.
+                // `BootLoadFailed`, so the banner row is off only while the
+                // retry is in flight.
                 let updated = {
                     model with
                         Degradations = BootDegradation.remove source model.Degradations
                 }
 
-                let retryCmd =
-                    match source with
-                    | "teams" -> bootLoadCmd "teams" (withCsrf loadMyTeams) MyTeamsLoaded
-                    | "active-team" -> bootLoadCmd "active-team" (withCsrf loadActiveTeam) ActiveTeamLoaded
-                    | "permissions" ->
-                        bootLoadCmd "permissions" (withCsrf loadAccessibleModules) AccessibleModulesLoaded
-                    | "configs" -> bootLoadCmd "configs" (withCsrf loadAllConfigs) ConfigsLoaded
-                    | "flags" -> bootLoadCmd "flags" (withCsrf loadResolvedFlags) FlagsLoaded
-                    | "platform-role" -> bootLoadCmd "platform-role" loadPlatformRole PlatformRoleLoaded
-                    | "platform-info" -> bootLoadCmd "platform-info" loadPlatformInfo PlatformInfoLoaded
-                    | "data-snapshot" -> bootLoadCmd "data-snapshot" loadFileSnapshot DataSnapshotPrefetched
-                    | "team-role" -> activeTeamRoleCmd updated.ActiveTeamId
-                    | "team-auto-select" -> maybeAutoSelectSoleTeam updated
-                    | _ -> Cmd.none
-
-                updated, retryCmd
+                match BootSources.tryFind source bootSources with
+                | Some row when row.Retryable -> updated, row.Load bootLoads updated
+                | _ -> updated, Cmd.none
 
             | BootLoadRecovered source ->
                 {
@@ -2360,58 +1958,30 @@ module Client =
                 Cmd.ofMsg (ModuleSelected sidebarId)
 
             | ResetModule moduleId ->
-                // Phase 12c — clear the named module's state, bump its
-                // reset counter (which forces the boundary to remount via
-                // a key change), and re-run `Init` against the current
-                // context. Other modules and per-team state untouched —
-                // mirrors the lazy-init path in `ModuleSelected` plus a
-                // counter bump.
-                //
-                // R2 mitigation: `Init` itself can throw. Wrap in F#
-                // try/with so the shell's update tick survives. On
-                // failure, leave `ModuleStates` without the key and
-                // surface via `OnError`. The next `ModuleSelected` for
-                // this module retries from scratch (and the boundary
-                // catches any re-thrown render-time exception).
-                match tryFind modules moduleId with
-                | None -> model, Cmd.none
-                | Some moduleImpl ->
-                    let nextGen =
-                        (model.ResetCounters |> Map.tryFind moduleId |> Option.defaultValue 0) + 1
+                // Re-initialise the module and advance its host's generation,
+                // which is part of the boundary's React key, so the boundary
+                // remounts and clears its error state. Other modules and the
+                // per-team state are untouched.
+                let generation =
+                    model.Hosts
+                    |> Map.tryFind moduleId
+                    |> Option.map (fun host -> host.Generation + 1)
+                    |> Option.defaultValue 0
 
-                    let cleared = {
+                let reinitialised, cmd =
+                    initModule _config queryBus modules moduleId {
                         model with
-                            ModuleStates = model.ModuleStates |> Map.remove moduleId
-                            ResetCounters = model.ResetCounters |> Map.add moduleId nextGen
+                            Hosts = model.Hosts |> Map.remove moduleId
                     }
 
-                    let ctx = buildContext _config queryBus cleared moduleId
-
-                    try
-                        let state, cmd = moduleImpl.Init ctx
-
-                        {
-                            cleared with
-                                ModuleStates = cleared.ModuleStates |> Map.add moduleId state
-                        },
-                        moduleCmd moduleId cmd
-                    with ex ->
-                        let stack = ex.StackTrace |> Option.ofObj |> Option.defaultValue ""
-
-                        match _config.OnError with
-                        | Some f ->
-                            f {
-                                ModuleId = moduleId
-                                Error = ex
-                                ComponentStack = stack
-                            }
-                        | None ->
-                            log.Error(
-                                sprintf "[ModuleBoundary] %s Init crashed during reset: %s" moduleId ex.Message,
-                                Some ex
-                            )
-
-                        cleared, Cmd.none
+                match reinitialised.Hosts |> Map.tryFind moduleId with
+                | Some host ->
+                    {
+                        reinitialised with
+                            Hosts = reinitialised.Hosts |> Map.add moduleId { host with Generation = generation }
+                    },
+                    cmd
+                | None -> reinitialised, cmd
 
             | SidebarGroupToggled groupKey ->
                 let prefs = SidebarPreferences.toggleExpanded groupKey model.SidebarPrefs
@@ -2442,76 +2012,57 @@ module Client =
                 { model with SidebarPrefs = prefs }, persistSidebarPrefs prefs
 
             | ModuleActionReceived(moduleId, actionKey, payloadJson) ->
-                // Gate 1: module registered in this deployment? If not,
-                // silently drop — the server-side tool ran and produced
-                // its text result; there is no UI to update here.
-                match tryFind modules moduleId with
+                // An unregistered target, one with no decoder for this
+                // action, or one the navigation decision refuses, drops it:
+                // the server-side tool ran and produced its text result, and
+                // there is no UI to update here.
+                let delivered =
+                    tryFind modules moduleId
+                    |> Option.bind (fun moduleImpl ->
+                        moduleImpl.ActionDecoder
+                        |> Option.bind (fun decoder -> decoder (actionKey, payloadJson))
+                        |> Option.bind (fun decoded -> stepModule _config queryBus modules moduleImpl decoded model)
+                        |> Option.map (fun stepped -> moduleImpl, stepped))
+
+                match delivered with
                 | None -> model, Cmd.none
-                | Some moduleImpl ->
-                    // Gate 2: may the caller open it? A module the route
-                    // guard refuses gets no `Init`, so none of its boot
-                    // calls go out to come back as 403s. The same decision
-                    // as the sidebar and the router.
-                    //
-                    // Gate 3: module has a decoder for this action?
-                    let decoded =
-                        if canNavigateToModule _config model moduleImpl then
-                            moduleImpl.ActionDecoder
-                            |> Option.bind (fun decoder -> decoder (actionKey, payloadJson))
+                | Some(moduleImpl, (updatedModel, routedCmd)) ->
+                    // A local toast when the target is not the module on
+                    // screen. A `Cmd`, because the envelope (user id, id,
+                    // timestamp) is built when the effect runs.
+                    let toastCmd =
+                        if moduleId <> model.ActiveModuleId then
+                            let text =
+                                (resolveCatalog _config model.LocaleOverride model.PlatformConfig)
+                                    .Shell.ResultsAvailableIn
+                                    moduleImpl.Definition.Name
+
+                            Cmd.ofEffect (fun _ ->
+                                NotificationClient.publishLocal (
+                                    NotificationEnvelope.create
+                                        (UserSession.getUserId ())
+                                        (Notification.SystemMessage(SystemMessageLevel.Info, text))
+                                ))
                         else
-                            None
+                            Cmd.none
 
-                    match decoded with
-                    | None -> model, Cmd.none
-                    | Some decodedMsg ->
-                        let updatedModel, routedCmd =
-                            deliverToModule _config queryBus model moduleImpl decodedMsg
-
-                        // Background UX: a local `SystemMessage` toast when
-                        // the target is inactive; the reader looking at the
-                        // target needs none. Any read the action started now
-                        // completes, so opening the module does show the
-                        // results. A `Cmd`, because the envelope (user id,
-                        // id, timestamp) is built when the effect runs.
-                        let toastCmd =
-                            if moduleId <> model.ActiveModuleId then
-                                let text =
-                                    (resolveCatalog _config model.LocaleOverride model.PlatformConfig)
-                                        .Shell.ResultsAvailableIn
-                                        moduleImpl.Definition.Name
-
-                                Cmd.ofEffect (fun _ ->
-                                    NotificationClient.publishLocal (
-                                        NotificationEnvelope.create
-                                            (UserSession.getUserId ())
-                                            (Notification.SystemMessage(SystemMessageLevel.Info, text))
-                                    ))
-                            else
-                                Cmd.none
-
-                        updatedModel, Cmd.batch [ routedCmd; toastCmd ]
+                    updatedModel, Cmd.batch [ routedCmd; toastCmd ]
 
             | ModuleEventPublished(topic, payload) ->
-                // Fan a cross-module event out to every registered module
-                // that declared a subscription for this topic. Each
-                // subscriber maps the payload into one of its own `Msg`
-                // values and runs it through its normal `update`, with
-                // init-on-demand for modules never navigated to this
-                // session. Mirrors the `ModuleActionReceived` routing but
-                // multi-target and identity-free — delivery is purely by
-                // topic, so a publisher self-receives only when it also
-                // subscribes. A subscriber the route guard refuses gets
-                // nothing, so its `Init` sends no boot calls to come back
-                // as 403s. That is not a trust boundary: the publisher runs
-                // in this user's client, and the server enforces access.
+                // Fan a cross-module event out to every module subscribed to
+                // the topic, by topic alone (a publisher receives its own
+                // event only when it also subscribes). Each subscriber the
+                // navigation decision admits is stepped with its mapped
+                // message, initialised first if it has never been opened.
+                // Not a trust boundary: the publisher runs in this user's
+                // client, and the server enforces access.
                 let folder (accModel, accCmds) (moduleImpl: ErasedModule) =
-                    match moduleImpl.EventSubscriptions |> Map.tryFind topic with
-                    | Some mapMsg when canNavigateToModule _config accModel moduleImpl ->
-                        let next, cmd =
-                            deliverToModule _config queryBus accModel moduleImpl (mapMsg payload)
-
-                        next, cmd :: accCmds
-                    | _ -> accModel, accCmds
+                    moduleImpl.EventSubscriptions
+                    |> Map.tryFind topic
+                    |> Option.bind (fun mapMsg ->
+                        stepModule _config queryBus modules moduleImpl (mapMsg payload) accModel)
+                    |> Option.map (fun (next, cmd) -> next, cmd :: accCmds)
+                    |> Option.defaultValue (accModel, accCmds)
 
                 let finalModel, cmds = modules |> List.fold folder (model, [])
                 finalModel, Cmd.batch cmds
@@ -2526,7 +2077,7 @@ module Client =
         // so the structural compare is cheap next to the render it saves.
         let finalModel =
             let processed =
-                resolveProcessedData _config modules newModel.ModuleStates newModel.PrefetchedProcessedData
+                resolveProcessedData _config modules newModel.Hosts newModel.PrefetchedProcessedData
 
             if processed = newModel.ProcessedData then
                 newModel
@@ -2551,7 +2102,7 @@ module Client =
         // (so SDK-built-ins like `FileManagerUI` / `TeamManagerUI` /
         // `HealthMonitorUI` / `TeamConfigUI` aren't touched — they
         // don't declare `NeedsData`). Modules that haven't been
-        // initialised yet (no `ModuleStates` entry) are skipped — the
+        // initialised yet (no host) are skipped — the
         // lazy init at `ModuleSelected` already starts from a clean
         // slate.
         let processedDataResetCmds =
@@ -2568,7 +2119,7 @@ module Client =
                 modules
                 |> List.choose (fun m ->
                     match m.NeedsData with
-                    | Some _ when finalModel.ModuleStates |> Map.containsKey m.Definition.Id ->
+                    | Some _ when finalModel.Hosts |> Map.containsKey m.Definition.Id ->
                         Some(Cmd.ofMsg (ResetModule m.Definition.Id))
                     | _ -> None)
                 |> Cmd.batch
@@ -2617,10 +2168,9 @@ module Client =
                             BrowserHistory.store view)
                 ]
 
-    /// Phase 1069 — the module-state observer publish (Phase 6g.A, 536),
-    /// moved out of `update` so the shell's `update` performs no side
-    /// effect. Called AFTER an update with the module states the model held
-    /// before it: a module the message could have moved — the named module
+    /// The module-state observer publish, kept out of `update` so `update`
+    /// performs no side effect. Called AFTER an update with the hosts the
+    /// model held before it: a module the message could have moved — the named module
     /// on `ModuleMsg`, the target of `ModuleActionReceived`, each subscriber
     /// of a `ModuleEventPublished` topic — is published when its state
     /// object changed. A message whose gates dropped it (an unregistered or
@@ -2629,7 +2179,7 @@ module Client =
     let observeModuleStates
         (modules: ErasedModule list)
         (msg: Msg)
-        (priorStates: Map<string, obj>)
+        (priorHosts: Map<string, ModuleHost>)
         (next: Model)
         : unit =
         let candidates =
@@ -2643,40 +2193,39 @@ module Client =
             | _ -> []
 
         for moduleId in candidates do
-            match tryFind modules moduleId, next.ModuleStates |> Map.tryFind moduleId with
-            | Some moduleImpl, Some state ->
+            match tryFind modules moduleId, next.Hosts |> Map.tryFind moduleId with
+            | Some moduleImpl, Some host ->
                 let changed =
-                    match priorStates |> Map.tryFind moduleId with
-                    | Some prior -> not (obj.ReferenceEquals(prior, state))
+                    match priorHosts |> Map.tryFind moduleId with
+                    | Some prior -> not (obj.ReferenceEquals(prior.State, host.State))
                     | None -> true
 
                 if changed then
-                    ModuleStateObserver.publishState moduleImpl.InspectState moduleId state
+                    ModuleStateObserver.publishState moduleImpl.InspectState moduleId host.State
             | _ -> ()
 
-    /// Phase 1069 — install `observeModuleStates` as the program's one
-    /// post-update hook, through the fork's `withTrace` seam (no combinator
-    /// changed). `unwrap` recovers the shell message from the program's
+    /// Install `observeModuleStates` as the program's one post-update hook,
+    /// through the fork's `withTrace` seam. `unwrap` recovers the shell message from the program's
     /// message type and `shellOf` the shell model, so a composer that
     /// embeds the shell (ToolUp.AI's `AIClientConfig`) installs the same
-    /// hook as `Client.program`. The hook keeps the last module-state map it
-    /// saw, which is what a shell message's prior state was: only shell
-    /// messages move it.
+    /// hook as `Client.program`. The hook keeps the last hosts it saw, which
+    /// is what a shell message's prior state was: only shell messages move
+    /// them.
     let withModuleStateObserver
         (modules: ErasedModule list)
         (unwrap: 'msg -> Msg option)
         (shellOf: 'model -> Model)
         (prog: Program<'arg, 'model, 'msg, 'view>)
         : Program<'arg, 'model, 'msg, 'view> =
-        let lastStates: Map<string, obj> ref = ref Map.empty
+        let lastHosts: Map<string, ModuleHost> ref = ref Map.empty
 
         prog
         |> Program.withTrace (fun msg model _ ->
             match unwrap msg with
             | Some shellMsg ->
                 let shell = shellOf model
-                observeModuleStates modules shellMsg lastStates.Value shell
-                lastStates.Value <- shell.ModuleStates
+                observeModuleStates modules shellMsg lastHosts.Value shell
+                lastHosts.Value <- shell.Hosts
             | None -> ())
 
     /// Controlled team switcher for the page header. Replaces the previous
@@ -3006,6 +2555,11 @@ module Client =
     let private visibleAdminTiles (visibleIds: string list) : AdminTile list =
         adminTilesFor (AdminTileRegistry.tiles (), visibleIds)
 
+    /// The module boundary's React key: the active team and the host's
+    /// generation, so a team switch or a `ResetModule` remounts the boundary
+    /// and clears its error state.
+    let private resetKeyOf (scopeKey: string) (host: ModuleHost) : string = $"{scopeKey}-{host.Generation}"
+
     /// The active module's error boundary around its view — one
     /// construction site for both render paths (the whole-tree `view` and
     /// the Phase 852 store-subscribed host below).
@@ -3055,14 +2609,14 @@ module Client =
     // read their own slice of the model:
     //
     //   * the CHROME (`shellChrome`) is a memo boundary over the whole model
-    //     with `ModuleStates` masked out — it re-renders when any OTHER
+    //     with `Hosts` masked out — it re-renders when any OTHER
     //     field changes identity, and never on a message that changed only
     //     a module's state. Masking one named field (rather than listing the
     //     fields the chrome reads) is deliberate: a field added to `Model`
     //     later is read by the chrome's comparison automatically, so the
     //     failure mode of forgetting is an extra render, never a stale one.
     //   * the ACTIVE MODULE (`activeModuleHost`) is a memo boundary over its
-    //     identity props that reads `ModuleStates[moduleId]` through
+    //     identity props that reads `Hosts[moduleId]` through
     //     `ModelStore.useSelector` by reference — so it re-renders when its
     //     own state object changes, and on nothing else. The selector runs
     //     on every publish; the view runs only when the state moved.
@@ -3131,7 +2685,9 @@ module Client =
         Module: ErasedModule
         ModuleId: string
         PageRoute: string option
-        ResetKey: string
+        /// The scope half of the boundary's React key; the host's generation
+        /// is the other half, read from the store with the state.
+        ScopeKey: string
         /// The loop's wrapper set — the module's dispatcher comes from it.
         Dispatchers: Dispatchers
     }
@@ -3139,21 +2695,22 @@ module Client =
     let private renderModuleHost (props: obj) : ReactElement =
         let p = unbox<ModuleHostProps> props
 
-        let state =
+        let host: obj =
             p.Store.UseSlice(fun (m: Model) ->
-                match m.ModuleStates |> Map.tryFind p.ModuleId with
-                | Some s -> s
+                match m.Hosts |> Map.tryFind p.ModuleId with
+                | Some host -> box host
                 | None -> null)
 
-        // Permitted but not yet in `ModuleStates`: the route guard refused
-        // this module while one of its inputs was still loading and
-        // `ensureActiveInitialised` has not yet run the deferred `Init`.
-        // Decided HERE, not by the chrome, because the entry's arrival is a
-        // `ModuleStates` change — which is exactly what the chrome's
-        // comparison does not see.
-        if isNull state then
+        // Permitted but with no host yet: the route guard refused this module
+        // while one of its inputs was still loading, and the arm receiving it
+        // has not yet run the deferred `Init`. Decided HERE, not by the
+        // chrome, because the host's arrival is a `Hosts` change — which is
+        // exactly what the chrome's comparison does not see.
+        if isNull host then
             Toolup.UIToolkit.Layout.loadingIndicator p.Config.LoadingIndicator
         else
+            let host = unbox<ModuleHost> host
+
             moduleBoundary
                 p.Config
                 p.ShellMessages
@@ -3161,9 +2718,9 @@ module Client =
                 p.Module
                 p.ModuleId
                 p.PageRoute
-                p.ResetKey
+                (resetKeyOf p.ScopeKey host)
                 p.Dispatchers
-                state
+                host.State
 
     /// Equal when every prop is the same object, the store compared by the
     /// store it reads (see `ShellStore`).
@@ -3178,7 +2735,7 @@ module Client =
         && obj.ReferenceEquals(p.Module, n.Module)
         && obj.ReferenceEquals(p.ModuleId, n.ModuleId)
         && obj.ReferenceEquals(p.PageRoute, n.PageRoute)
-        && obj.ReferenceEquals(p.ResetKey, n.ResetKey)
+        && obj.ReferenceEquals(p.ScopeKey, n.ScopeKey)
         && obj.ReferenceEquals(p.Dispatchers, n.Dispatchers)
 
     /// The active module's store-subscribed memo boundary. The comparer goes
@@ -3243,7 +2800,7 @@ module Client =
         // render a skeleton in the content area while keeping sidebar +
         // header chrome live. The active module is unmounted (its `Init`
         // has not run yet); we don't reach `tryFind` below because
-        // `ModuleStates` is empty by the `Prefetching` invariant and the
+        // no module has a host under the `Prefetching` invariant and the
         // existing `Map.find` would crash. `Reprefetching` falls through
         // to the steady-state render — the prior view stays mounted with
         // stale data while new prefetches refresh.
@@ -3289,20 +2846,14 @@ module Client =
                         }
                     )
                 | Some(moduleImpl, SidebarVisibility.NavigationDecision.Permitted) ->
-                    // Permitted but not yet in `ModuleStates`: the guard
-                    // refused this module while one of its inputs was
-                    // still loading and `ensureActiveInitialised` has not
-                    // yet run the deferred `Init`. A one-render window —
+                    // Permitted but with no host yet: the guard refused
+                    // this module while one of its inputs was still
+                    // loading, and the arm receiving it has not yet run the
+                    // deferred `Init`. A one-render window —
                     // both happen in the same update — but `Map.find`
                     // here would crash the shell, so hold the loading
                     // indicator rather than assume the entry exists.
-                    let resetKey =
-                        let teamPart = model.ActiveTeamId |> Option.defaultValue "_"
-
-                        let counter =
-                            model.ResetCounters |> Map.tryFind model.ActiveModuleId |> Option.defaultValue 0
-
-                        sprintf "%s-%d" teamPart counter
+                    let scopeKey = model.ActiveTeamId |> Option.defaultValue "_"
 
                     match slot with
                     | ModuleSlot.Subscribed store ->
@@ -3317,15 +2868,15 @@ module Client =
                             Module = moduleImpl
                             ModuleId = model.ActiveModuleId
                             PageRoute = model.ActivePageRoute
-                            ResetKey = resetKey
+                            ScopeKey = scopeKey
                             Dispatchers = dispatchers
                         }
 
                         Custom(ReactLegacy.createElement (unbox<ReactElement> activeModuleHost, box props))
                     | ModuleSlot.Inline ->
-                        match model.ModuleStates |> Map.tryFind model.ActiveModuleId with
+                        match model.Hosts |> Map.tryFind model.ActiveModuleId with
                         | None -> Custom(Toolup.UIToolkit.Layout.loadingIndicator config.LoadingIndicator)
-                        | Some currentState ->
+                        | Some host ->
                             Custom(
                                 moduleBoundary
                                     config
@@ -3334,9 +2885,9 @@ module Client =
                                     moduleImpl
                                     model.ActiveModuleId
                                     model.ActivePageRoute
-                                    resetKey
+                                    (resetKeyOf scopeKey host)
                                     dispatchers
-                                    currentState
+                                    host.State
                             )
                 | None -> SplitPanel(Html.div shellMsgs.ModuleNotFound, Html.div "")
 
@@ -4025,9 +3576,9 @@ module Client =
 
     /// The model field the chrome does not read — the active module reads
     /// it, through the store, below the chrome's boundary.
-    let private moduleStatesField = nameof Unchecked.defaultof<Model>.ModuleStates
+    let private hostsField = nameof Unchecked.defaultof<Model>.Hosts
 
-    /// Equal when every model field except `ModuleStates` is the same
+    /// Equal when every model field except `Hosts` is the same
     /// object. Walks the record's own fields, so a field added to `Model`
     /// participates without an edit here.
     [<Fable.Core.Emit("(function (a, b, skip) { if (a === b) return true; var ka = Object.keys(a); if (ka.length !== Object.keys(b).length) return false; for (var i = 0; i < ka.length; i++) { var k = ka[i]; if (k !== skip && a[k] !== b[k]) return false; } return true; })($0, $1, $2)")>]
@@ -4035,7 +3586,7 @@ module Client =
 
     /// Internal so the Fable pack can pin the comparison the chrome's memo
     /// boundary runs.
-    let internal chromeSliceEqual (a: Model) (b: Model) : bool = sameFieldsExcept a b moduleStatesField
+    let internal chromeSliceEqual (a: Model) (b: Model) : bool = sameFieldsExcept a b hostsField
 
     let private shellChromeEqual (prev: obj) (next: obj) : bool =
         let p = unbox<ShellChromeProps> prev
@@ -4066,7 +3617,7 @@ module Client =
 
     /// Phase 852 / 910 — the store-bound shell view: the same tree
     /// `viewWithSignIn` builds, behind two boundaries — the chrome, which
-    /// re-renders only when a shell-model field other than `ModuleStates`
+    /// re-renders only when a shell-model field other than `Hosts`
     /// (or the `chrome` record, or the `Dispatchers`) changes, and the active
     /// module, which reads its own state from the store `shell` names.
     /// Mount it on that same store (`Program.withReactStore`): the module
@@ -4110,7 +3661,7 @@ module Client =
 
     // ─── Phase 580 — client-shell module identity gate ────────────────
     //
-    // `Model.ModuleStates` is a `Map<string, obj>` keyed by
+    // `Model.Hosts` is a `Map<string, ModuleHost>` keyed by
     // `Definition.Id`, so two registered modules sharing an id collapse
     // into one entry: the second `Init` overwrites the first and both
     // modules' `update` calls thereafter run against whichever `Model`
@@ -4118,7 +3669,7 @@ module Client =
     // (`ComponentId.ensureUnique` in `ServerApp.run`); the client shell
     // had no equivalent. The gate below runs over the *composed* list
     // (`prepareModules`' output — consumer modules plus SDK built-ins,
-    // exactly the list that keys `ModuleStates`) before the shell's
+    // exactly the list that keys `Hosts`) before the shell's
     // `Program` is constructed, so a collision is a compose-time failure
     // naming both display names rather than a silent state merge.
     //
@@ -4938,8 +4489,8 @@ module Client =
                 let unsubscribe =
                     UserSession.onBridgeHealthChange (fun health ->
                         match health with
-                        | Some message -> dispatch (BootLoadFailed("auth-bridge", message))
-                        | None -> dispatch (BootLoadRecovered "auth-bridge"))
+                        | Some message -> dispatch (BootLoadFailed(BootSources.Key.AuthBridge, message))
+                        | None -> dispatch (BootLoadRecovered BootSources.Key.AuthBridge))
 
                 { new System.IDisposable with
                     member _.Dispose() = unsubscribe ()

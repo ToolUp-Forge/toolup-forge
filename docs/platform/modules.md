@@ -326,10 +326,45 @@ let registerSalesAnalysis () : ErasedModule =
 ```
 
 - Sidebar Id: single-page modules use the module Id; multi-page modules use `"{moduleId}{pageRoute}"` (routes start with `/`, which acts as the separator).
-- `ModuleStates` is keyed by module Id, NOT by page. Navigation between pages of the same module does not re-initialise; all pages share the same `Model`.
+- `Model.Hosts` is keyed by module Id, NOT by page. Navigation between pages of the same module does not re-initialise; all pages share the same `Model`.
 - Page-level layout (`SplitPanel | Stacked | FullWidth | Dashboard | Custom`) is the page's choice. Use `Custom` only when the built-in shapes genuinely don't fit, since it bypasses the shell's gutter conventions.
 
 Adding pages doesn't change storage, event, or notification wiring — pages are a presentation concern, not a persistence concern.
+
+## How the shell hosts a module
+
+The shell keeps one `ModuleHost` per initialised module in `Model.Hosts`, keyed by module id: the
+module's state (`State`, your `'Model`, erased at `ClientModule.register`) and a reset `Generation`.
+A module with no host has not been initialised. `Client.moduleState id model` reads one module's
+state.
+
+**When your `Init` runs.** One function in the shell calls it, so every path answers the same way:
+
+- **Not before the boot loads.** On a signed-in boot the shell waits for the boot sources your
+  context is built from (the persisted configs and the resolved flags) before it initialises the
+  active module, so `Init` sees real values rather than an empty seed. A failed load counts as an
+  answer: the module is initialised with the empty default and the degradation banner names the
+  failure.
+- **Only where the caller may navigate.** The navigation decision the sidebar and the router use
+  (`SidebarVisibility.decide`) refuses a module the caller may not reach, and a refused module is not
+  initialised, so none of its boot calls go out. A guard input still loading (the platform role, the
+  team role, the access response) reads as refused; when it arrives, the active module is
+  initialised if it became reachable.
+- **On first use.** Selecting a module initialises it if it has no host. So does an action or a
+  subscribed event delivered to it while another module is active: its `Init` command and its
+  `Update` command both run.
+- **Again after a reset.** A team switch and a locale switch clear every host and re-initialise the
+  active module once the boot loads answer again. A sign-in after a signed-out boot re-initialises
+  it only if its configs, flags or surface changed. `ResetModule` (the error boundary's Reload)
+  re-initialises one module and advances its host's `Generation`, which remounts the boundary.
+
+An `Init` that throws leaves the module with no host and is reported through `ClientConfig.OnError`.
+
+**Where your `Cmd` goes.** Every command your `Init` or `Update` returns, and every dispatch from
+your view, is addressed to your module by id (`Client.ModuleMsg(moduleId, message)`) and reaches
+your `Update` whichever module is active. A reply that lands after the reader navigated away updates
+your module, not the one on screen. A message for a module with no host (a team switch or a reset
+cleared it) is dropped.
 
 ## Data type registration
 
@@ -522,8 +557,8 @@ paragraph relies on.
 **What it buys (since Phase 852).** `Client.run` mounts the shell on a model store
 (`Program.withReactStore`): the shell's chrome and the active module are two separate React
 boundaries, and each re-renders only when the slice it reads changes **by reference**. The active
-module's boundary reads `ModuleStates[yourModuleId]`; the shell stores exactly what your `update`
-returned there (`Map.add` leaves every other module's entry the same object). So:
+module's boundary reads your module's host from `Model.Hosts`; the shell stores exactly what your
+`update` returned there (`Map.add` leaves every other module's entry the same object). So:
 
 - a message that changes your state re-renders **your module and nothing else** — the sidebar,
   header, overlays and providers are not rebuilt;
@@ -550,7 +585,7 @@ reads changes, so a message costs the part of the screen it moved:
    a navigation, a pin, a hide or a collapse does. The rail is still derived from each module's own
    declarations — group, placement, navigation role, visibility — exactly as before; the boundary
    decides only whether the derived rail changed.
-3. **The active module** — your view — reads `ModuleStates[yourModuleId]` by reference, as above.
+3. **The active module** — your view — reads your module's host by reference, as above.
 
 The sidebar boundary is part of the shell view itself, so unlike the other two it holds on **every**
 render path, including the whole-tree composers below. What keeps it holding is that its inputs
@@ -942,7 +977,7 @@ The five laws:
 
 | Law | What it asserts | Why it matters |
 |---|---|---|
-| **Server/client id parity** | `ServerModule.Name` and `ClientModule.Definition.Id` resolve to the same `ComponentId` (Phase 580's `ModuleIdentity.componentIdOf`) | `Name` is an **id token**, not a display name: it is the RBAC permission key, the `ServerConfig.ModuleNames` entry, and the client's `Model.ModuleStates` map key. An id left unset on the client is derived from the display `Name` with spaces stripped — so a server module called `"Hello World"` and a client module called `"Hello World"` do **not** match. |
+| **Server/client id parity** | `ServerModule.Name` and `ClientModule.Definition.Id` resolve to the same `ComponentId` (Phase 580's `ModuleIdentity.componentIdOf`) | `Name` is an **id token**, not a display name: it is the RBAC permission key, the `ServerConfig.ModuleNames` entry, and the client's `Model.Hosts` map key. An id left unset on the client is derived from the display `Name` with spaces stripped — so a server module called `"Hello World"` and a client module called `"Hello World"` do **not** match. |
 | **Wire-`TypeName` uniqueness** | no two of the module's `DataType` / `DataTypeDisplay` registrations share an id | `DataType.Id` *is* the wire `TypeName` its `Process` stamps onto the emitted `ProcessedData`; a repeat collides silently. |
 | **NeedsData satisfiability** | the module's `NeedsData` gate is satisfied by the data types the composition advertises | a gate no composition can satisfy renders the module's empty state forever. |
 | **Action emitter↔decoder coverage** | every `EmitsActions` declaration targeting this module is decoded by this module's `ActionDecoder` | `ActionDeclaration` is an inspection surface, not an enforcement contract — an undeclared decoder drops the action silently. |
