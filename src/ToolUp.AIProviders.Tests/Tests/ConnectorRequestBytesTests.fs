@@ -153,7 +153,14 @@ let private copilot (shape: string) =
     let handler, http = client None (fun _ -> "")
 
     let provider =
-        CopilotAIProvider.CopilotAIProvider(copilotEndpoint, "test-key", ConnectorFixtures.copilotModel, http)
+        ConnectorProvider(
+            CopilotAIProvider.connector
+                http
+                copilotEndpoint
+                CopilotAIProvider.DefaultApiVersion
+                (CopilotAIProvider.ApiKeyAuth testKey),
+            ConnectorFixtures.copilotModel
+        )
         :> IAIProvider
 
     drive provider shape |> ignore

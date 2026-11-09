@@ -26,7 +26,4 @@
     <ProjectReference Include="..\..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
     <ProjectReference Include="..\..\ToolUp.AI.Server\ToolUp.AI.Server.fsproj" />
   </ItemGroup>
-  <ItemGroup>
-    <InternalsVisibleTo Include="ToolUp.AIProviders.Tests" />
-  </ItemGroup>
 </Project>

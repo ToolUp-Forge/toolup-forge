@@ -92,6 +92,19 @@ let private connectors: (string * (HttpClient -> (TimeSpan -> Async<unit>) -> IA
             },
             GeminiAIProvider.DefaultModel
         )
+    "Copilot",
+    fun client pause ->
+        ConnectorProvider(
+            {
+                CopilotAIProvider.connector
+                    client
+                    "https://vendor.example"
+                    CopilotAIProvider.DefaultApiVersion
+                    (CopilotAIProvider.ApiKeyAuth testKey) with
+                    Pause = pause
+            },
+            CopilotAIProvider.DefaultModel
+        )
 ]
 
 let private oneMessage = [ AIProviderMessage.text "user" "hello" ]
