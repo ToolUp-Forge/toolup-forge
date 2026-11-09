@@ -567,7 +567,7 @@ let private writeRenderedEvent
 
             try
                 do!
-                    store.Write {
+                    EventStore.writeOrRaise store {
                         Id = Guid.NewGuid()
                         OccurredAt = DateTime.UtcNow
                         ScopeId = audit.ScopeId

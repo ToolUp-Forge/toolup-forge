@@ -20,7 +20,7 @@ type InMemoryEventStore() =
 
         member _.Write(evt) = async {
             written.Add evt
-            return ()
+            return Ok()
         }
 
         member _.ReadAll(scopeId) = async { return written |> Seq.filter (fun e -> e.ScopeId = scopeId) |> List.ofSeq }

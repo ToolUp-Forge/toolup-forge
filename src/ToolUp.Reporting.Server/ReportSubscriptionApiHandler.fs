@@ -200,14 +200,21 @@ let private syncJob
             match live with
             | Some job when job.Trigger = registration.Trigger -> async { return Result.Ok(Coalesced job.JobId) }
             | _ -> async {
-                match live with
-                | Some stale -> do! deps.Scheduler.Cancel(subscription.ScopeId, stale.JobId)
-                | None -> ()
+                // A stale job that did not cancel would fire beside its
+                // replacement, so its refusal is the sync's.
+                let! staleCancelled =
+                    match live with
+                    | Some stale -> deps.Scheduler.Cancel(subscription.ScopeId, stale.JobId)
+                    | None -> async { return Result.Ok() }
 
-                if carried then
-                    return! deps.Scheduler.Schedule(requestScope, registration)
-                else
-                    return! deps.Scheduler.Schedule registration
+                match staleCancelled with
+                | Result.Error refusal ->
+                    return Result.Error(ScheduleError.StorageFailure(JobTransitionError.message refusal))
+                | Result.Ok() ->
+                    if carried then
+                        return! deps.Scheduler.Schedule(requestScope, registration)
+                    else
+                        return! deps.Scheduler.Schedule registration
               }
 
         let! restamped =
@@ -223,12 +230,15 @@ let private syncJob
         | Result.Ok outcome, Ok() ->
             let jobId = ScheduleOutcome.jobId outcome
 
-            if subscription.Enabled then
-                do! deps.Scheduler.Enable(subscription.ScopeId, jobId)
-            else
-                do! deps.Scheduler.Disable(subscription.ScopeId, jobId)
+            let! toggled =
+                if subscription.Enabled then
+                    deps.Scheduler.Enable(subscription.ScopeId, jobId)
+                else
+                    deps.Scheduler.Disable(subscription.ScopeId, jobId)
 
-            return Ok()
+            match toggled with
+            | Result.Ok() -> return Ok()
+            | Result.Error refusal -> return Error(SchedulerUnavailable(JobTransitionError.message refusal))
     }
 
 /// Validate, store, then reconcile the job — the one write path every save
@@ -308,12 +318,16 @@ let private build
 
                         match job with
                         | Some definition ->
-                            if enabled then
-                                do! deps.Scheduler.Enable(scopeId, definition.JobId)
-                            else
-                                do! deps.Scheduler.Disable(scopeId, definition.JobId)
+                            let! toggled =
+                                if enabled then
+                                    deps.Scheduler.Enable(scopeId, definition.JobId)
+                                else
+                                    deps.Scheduler.Disable(scopeId, definition.JobId)
 
-                            return Ok persisted
+                            match toggled with
+                            | Result.Ok() -> return Ok persisted
+                            | Result.Error refusal ->
+                                return Error(SchedulerUnavailable(JobTransitionError.message refusal))
                         // No job — the subscription was created while no
                         // scheduler was reachable, or the store outlived
                         // the scheduler's state. Re-registering is the
@@ -342,17 +356,24 @@ let private build
                     // job firing for a subscription nobody can see.
                     let! job = findJob deps scopeId id
 
-                    match job with
-                    | Some definition -> do! deps.Scheduler.Cancel(scopeId, definition.JobId)
-                    | None -> ()
+                    let! cancelled =
+                        match job with
+                        | Some definition -> deps.Scheduler.Cancel(scopeId, definition.JobId)
+                        | None -> async { return Result.Ok() }
 
-                    // Phase 971 — the store raises when storage refuses the
-                    // delete; answer it as a refused save is answered. The
-                    // job is already cancelled, which is the visible,
-                    // re-runnable side of the order chosen above.
-                    match! Async.Catch(deps.Subscriptions.Delete(scopeId, id)) with
-                    | Choice1Of2() -> return Ok()
-                    | Choice2Of2 ex -> return Error(SubscriptionStorageFailure ex.Message)
+                    // A job that did not cancel keeps its subscription: the
+                    // delete is refused rather than leave a job firing for
+                    // a subscription nobody can see.
+                    match cancelled with
+                    | Result.Error refusal -> return Error(SchedulerUnavailable(JobTransitionError.message refusal))
+                    | Result.Ok() ->
+                        // Phase 971 — the store raises when storage refuses the
+                        // delete; answer it as a refused save is answered. The
+                        // job is already cancelled, which is the visible,
+                        // re-runnable side of the order chosen above.
+                        match! Async.Catch(deps.Subscriptions.Delete(scopeId, id)) with
+                        | Choice1Of2() -> return Ok()
+                        | Choice2Of2 ex -> return Error(SubscriptionStorageFailure ex.Message)
             }
 
         RunSubscriptionNow =

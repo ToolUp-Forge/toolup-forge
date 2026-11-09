@@ -623,6 +623,29 @@ let tests =
                 Expect.equal rewritten line "already the new id"
                 Expect.isEmpty rewrites "no rewrite"
 
+            testCase
+                "873: an event-store or job-store write is routed through its adapter, and a scheduler transition is reported"
+            <| fun () ->
+                let rewritten, _ = rewriteSource "        do! eventStore.Write evt"
+                Expect.equal rewritten "        do! EventStore.writeOrRaise eventStore evt" "event-store write"
+
+                let rewritten, _ = rewriteSource "        do! jobStore.Update job"
+                Expect.equal rewritten "        do! JobStoreWrite.orRaise <| jobStore.Update job" "job-store write"
+
+                let again, rewrites = rewriteSource rewritten
+                Expect.equal again rewritten "a migrated line is a fixed point"
+                Expect.isEmpty rewrites "and plans no second rewrite"
+
+                Expect.equal
+                    (reviewSource "        do! scheduler.Cancel(scopeId, jobId)" |> List.map _.RuleId)
+                    [ "873-job-transition-call" ]
+                    "a transition's Result is the site's to decide"
+
+                Expect.equal
+                    (reviewSource "    interface IEventStore with" |> List.map _.RuleId)
+                    [ "873-implementer" ]
+                    "an implementer is reported"
+
             testCase "an equality read of .Mode is reported, never rewritten"
             <| fun () ->
                 let line = "let isPublic (ctx: AccessContext) = ctx.Mode = Anonymous"

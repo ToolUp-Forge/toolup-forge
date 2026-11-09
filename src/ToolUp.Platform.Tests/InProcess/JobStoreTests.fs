@@ -58,7 +58,17 @@ let contractTests =
         let suffix = Guid.NewGuid().ToString("N").Substring(0, 8)
         store, "team-a-" + suffix, "team-b-" + suffix
 
-    IJobStoreContract.tests "BlobJobStore" factory
+    testList "BlobJobStore contract" [
+        IJobStoreContract.tests "BlobJobStore" factory
+        IJobStoreContract.failingBackendTests "BlobJobStore" (fun () ->
+            let storage =
+                InMemoryBlobStorage.WriteRefusingBlobStorage(tempStorage ()) :> IBlobStorage
+
+            let store =
+                JobStore.create storage (InMemoryEventStore.InMemoryEventStore() :> IEventStore)
+
+            store, "team-" + Guid.NewGuid().ToString("N").Substring(0, 8))
+    ]
 
 /// Phase 9c.F — the restart-survival arm, the half of the retired
 /// Phase 9c.A' that outlived it. One temp directory is the durable
@@ -104,7 +114,7 @@ let indexTests =
 
             let nextRun = DateTime(2026, 5, 1, 12, 0, 0, DateTimeKind.Utc)
             let job = mkDefinition scope "h1" (Some nextRun)
-            do! storeI.Save job
+            do! JobStoreWrite.orRaise <| storeI.Save job
 
             // Bucket entry exists.
             let! preNames = storage.List("_platform", $"jobs/{scope}/_next-run/{nextRun:yyyyMMddHHmm}/")
@@ -113,7 +123,7 @@ let indexTests =
 
             // Cancel via Update.
             let cancelled = { job with Status = Cancelled }
-            do! storeI.Update cancelled
+            do! JobStoreWrite.orRaise <| storeI.Update cancelled
 
             let! postNames = storage.List("_platform", $"jobs/{scope}/_next-run/{nextRun:yyyyMMddHHmm}/")
 
@@ -132,11 +142,11 @@ let indexTests =
             let newRun = DateTime(2026, 5, 1, 13, 0, 0, DateTimeKind.Utc)
 
             let job = mkDefinition scope "h1" (Some originalRun)
-            do! storeI.Save job
+            do! JobStoreWrite.orRaise <| storeI.Save job
 
             // Reschedule.
             let updated = { job with NextRunAt = Some newRun }
-            do! storeI.Update updated
+            do! JobStoreWrite.orRaise <| storeI.Update updated
 
             let! oldBucket = storage.List("_platform", $"jobs/{scope}/_next-run/{originalRun:yyyyMMddHHmm}/")
 
@@ -157,7 +167,7 @@ let indexTests =
             let now = DateTime(2026, 5, 1, 12, 0, 0, DateTimeKind.Utc)
 
             let due = mkDefinition scope "due" (Some(now.AddMinutes(-1.0)))
-            do! storeI.Save due
+            do! JobStoreWrite.orRaise <| storeI.Save due
 
             let! preDue = storeI.DueJobs(scope, now)
             Expect.hasLength preDue 1 "due job found via index"
@@ -191,7 +201,7 @@ let indexTests =
                     Idempotency = Some { Key = "daily"; TtlSeconds = 3600 }
             }
 
-            do! storeI.Save job
+            do! JobStoreWrite.orRaise <| storeI.Save job
 
             // Wipe the idempotency index.
             let! refs = storage.List("_platform", $"jobs/{scope}/_idempotency/")
@@ -221,7 +231,7 @@ let indexTests =
                     Idempotency = Some { Key = "k"; TtlSeconds = 3600 }
             }
 
-            do! storeI.Save job
+            do! JobStoreWrite.orRaise <| storeI.Save job
 
             let! first = store.Rebuild scope
             let! second = store.Rebuild scope
@@ -251,8 +261,8 @@ let indexTests =
                     Idempotency = Some { Key = "key2"; TtlSeconds = 3600 }
             }
 
-            do! storeI.Save job1
-            do! storeI.Save job2
+            do! JobStoreWrite.orRaise <| storeI.Save job1
+            do! JobStoreWrite.orRaise <| storeI.Save job2
 
             let! entries = store.IndexConsistencyCheck(scope, 20)
 

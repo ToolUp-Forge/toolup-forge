@@ -247,7 +247,7 @@ module Outcome =
     let emitAudit (eventStore: IEventStore) (logger: ILogger) (scopeId: string) (eventType: string) (payload: 'T) = async {
         try
             let evt = Events.create scopeId "ToolUp.RAG" eventType (toJson payload)
-            do! eventStore.Write evt
+            do! EventStore.writeOrRaise eventStore evt
         with ex ->
             logger.Error(
                 $"[Ingestion] event=audit_emit_failed kind={eventType} scope={scopeId}: event-store write failed; the audit event is lost",

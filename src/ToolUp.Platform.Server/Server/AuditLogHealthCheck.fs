@@ -65,7 +65,7 @@ type AuditLogHealthCheck(auditLog: IAuditLog, eventStore: IEventStore, ?timeout:
                 }
 
                 try
-                    do! eventStore.Write evt
+                    do! EventStore.writeOrRaise eventStore evt
 
                     let! readBack = eventStore.ReadBySource(probeScopeId, probeSourceModule)
 

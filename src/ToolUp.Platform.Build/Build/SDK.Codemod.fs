@@ -73,6 +73,11 @@ type CodemodMigration =
     /// The client's one async state and memo primitives: `Prefetch`'s stall
     /// reporter is removed.
     | RemoteAndMemo
+    /// The infrastructure seams report failure as data: `IEventStore.Write`,
+    /// the `IJobStore` writes, `IJobScheduler.Cancel` / `Disable` /
+    /// `Enable` and `IWebhookDispatcher.Dispatch` answer a `Result`, and a
+    /// live-session handler is asynchronous.
+    | FailureAsData
 
 /// Helpers over `CodemodMigration`.
 module CodemodMigration =
@@ -102,6 +107,7 @@ module CodemodMigration =
             "docs/migrations/1056-redesign-b-request-pipeline-as-stages-with-streaming-inside.md"
         | CodemodMigration.RateLimitAdmission -> "docs/migrations/1068-redesign-d-rate-limit-unification.md"
         | CodemodMigration.RemoteAndMemo -> "docs/migrations/1070-redesign-e-remote-and-memo-primitives.md"
+        | CodemodMigration.FailureAsData -> "docs/migrations/873-portable-infrastructure-interfaces.md"
 
     /// The phase label the renderings print.
     let label migration =
@@ -125,6 +131,7 @@ module CodemodMigration =
         | CodemodMigration.RequestPipeline -> "Phase 1056"
         | CodemodMigration.RateLimitAdmission -> "Phase 1068"
         | CodemodMigration.RemoteAndMemo -> "Phase 1070"
+        | CodemodMigration.FailureAsData -> "Phase 873"
 
 /// Which files a rule applies to. The Phase 11.C.5 Tier 2 renames are
 /// PACKAGE ids — they live in `.fsproj` / `Directory.Packages.props` —
@@ -964,6 +971,24 @@ module Codemod =
             @"\bToolUp\.Remoting\.Server\.IRateLimitStore\b"
             "ToolUp.Remoting.Server.IRemotingRateLimitStore"
             "`ToolUp.Remoting.Server.IRateLimitStore` → `ToolUp.Remoting.Server.IRemotingRateLimitStore`"
+        // A write awaited for its side effect, through a receiver
+        // whose name says it is the event store, keeps today's failure path
+        // (the default store raised on a lost write) through the one adapter.
+        rewrite
+            "873-event-store-write"
+            CodemodMigration.FailureAsData
+            CodemodFileClass.Source
+            @"\bdo!\s+(\w*[eE]ventStore)\.Write\b\s*"
+            "do! EventStore.writeOrRaise $1 "
+            "`do! eventStore.Write evt` → `do! EventStore.writeOrRaise eventStore evt` (a lost write still raises, now carrying `EventStoreError`; match `Write`'s `Result` where the site can decide)"
+        // The same for a job-store write through a receiver named for it.
+        rewrite
+            "873-job-store-write"
+            CodemodMigration.FailureAsData
+            CodemodFileClass.Source
+            @"\bdo!\s+(\w*[jJ]obStore)\.(Save|Update|RecordRun)\b"
+            "do! JobStoreWrite.orRaise <| $1.$2"
+            "`do! jobStore.Save job` (and `Update` / `RecordRun`) → `do! JobStoreWrite.orRaise <| jobStore.Save job` (a refused write still raises, now carrying `JobStoreError`)"
     ]
 
     // ── The review rules ──────────────────────────────────────────────
@@ -1452,6 +1477,37 @@ module Codemod =
             CodemodFileClass.Source
             @"\bPrefetch\.(?:warnIfStalled|setStallReporter|resetStallWarning)\b"
             "`Prefetch.warnIfStalled`, `Prefetch.setStallReporter` and `Prefetch.resetStallWarning` are removed with no replacement: delete the call. A gate that can hang is a `Remote<_, _>` whose `Failed` case the view renders (`StateViews.remote`); a timeout belongs to the request that loads it"
+        // Failure as data at the infrastructure seams.
+        review
+            "873-write-call"
+            CodemodMigration.FailureAsData
+            CodemodFileClass.Source
+            @"^(?!.*\bmember\b)(?!.*\bwriteOrRaise\b).*\.Write\s*(?:\(\s*(?:evt|event|e|ev)\s*\)|\s+(?:evt|event|ev)\b|\s*\{)"
+            "if this is `IEventStore.Write`, it answers `Result<unit, EventStoreError>`: match it where the site can decide (a lost write is `EventStoreError.WriteFailed`), or `EventStore.writeOrRaise store evt` where the failure path is already an exception"
+        review
+            "873-job-store-call"
+            CodemodMigration.FailureAsData
+            CodemodFileClass.Source
+            @"^(?!.*\bmember\b)(?!.*\bJobStoreWrite\b).*\bdo!\s+[\w.]+\.(?:Save|Update|RecordRun)\s*[\s({]"
+            "if this is an `IJobStore` write, it answers `Result<unit, JobStoreError>` (`WriteFailed` / `PriorUnreadable`): match it, or `JobStoreWrite.orRaise <| store.Save job` where the failure path is already an exception"
+        review
+            "873-job-transition-call"
+            CodemodMigration.FailureAsData
+            CodemodFileClass.Source
+            @"^(?!.*\bmember\b)(?!.*\bJobTransition\b).*\bdo!\s+[\w.]+\.(?:Cancel|Disable|Enable)\s*\("
+            "`IJobScheduler.Cancel` / `Disable` / `Enable` answer `Result<unit, JobTransitionError>`: `Busy` (an in-flight dispatch held the lease; nothing changed, retry) or `StoreFailed` — match it, render it with `JobTransitionError.message`, or `JobTransition.orRaise` where the failure path is already an exception"
+        review
+            "873-implementer"
+            CodemodMigration.FailureAsData
+            CodemodFileClass.Source
+            @"\binterface\s+(?:[\w.]+\.)?(?:IEventStore|IJobStore|IWebhookDispatcher|ILiveSessionHost)\b"
+            "an implementer of a seam Phase 873 retyped: `IEventStore.Write` answers `Result<unit, EventStoreError>`, the `IJobStore` writes `Result<unit, JobStoreError>`, `IWebhookDispatcher.Dispatch` `Async<Result<unit, WebhookDispatchError>>` (`Dropped` when not enqueued), and `ILiveSessionHost.Subscribe` takes `string -> Async<unit>`; a decorator propagates its inner `Error` unchanged and runs its hook only after `Ok`"
+        review
+            "873-scheduler-implementer"
+            CodemodMigration.FailureAsData
+            CodemodFileClass.Source
+            @"\bmember\s+\w+\.(?:Cancel|Disable|Enable)\s*\(\s*\w+\s*,\s*\w+\s*\)"
+            "if this implements `IJobScheduler`, `Cancel` / `Disable` / `Enable` answer `Result<unit, JobTransitionError>`: a scheduler over `SchedulerPolicy.setStatus` maps its `JobStoreError` with `JobTransitionError.StoreFailed`, and a lease it could not take is `Busy`"
     ]
 
 
@@ -2452,6 +2508,7 @@ module Codemod =
             CodemodMigration.RequestPipeline
             CodemodMigration.RateLimitAdmission
             CodemodMigration.RemoteAndMemo
+            CodemodMigration.FailureAsData
         ]
         |> List.tryFind (fun m -> CodemodMigration.label m = "Phase " + phase.Trim())
 

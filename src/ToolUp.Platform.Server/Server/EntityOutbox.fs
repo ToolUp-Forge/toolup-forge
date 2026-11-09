@@ -111,7 +111,7 @@ type OutboxEntityStore
     let publishAndClear (blobName: string) (intent: OutboxIntent) : Async<Result<unit, string>> = async {
         try
             for evt in intent.Events do
-                do! eventStore.Write evt
+                do! EventStore.writeOrRaise eventStore evt
 
             // The events are published, so a refused intent delete is
             // cleanup, not a failed publish: it must not read as

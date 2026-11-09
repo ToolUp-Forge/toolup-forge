@@ -692,7 +692,7 @@ let private writeTurn (store: IEventStore) (userId: string) (model: string) (pro
         CacheCreationTokens = Some 0
     }
 
-    store.Write {
+    EventStore.writeOrRaise store {
         Id = Guid.NewGuid()
         OccurredAt = noon
         ScopeId = scopeId

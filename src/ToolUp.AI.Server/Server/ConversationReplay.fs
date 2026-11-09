@@ -104,7 +104,7 @@ let private emitReplayedAudit
                 Payload = JsonSerializer.Serialize(payload, jsonOptions)
             }
 
-            do! store.Write event
+            do! EventStore.writeOrRaise store event
     }
 
 // ─── Delta summary ───────────────────────────────────────────────

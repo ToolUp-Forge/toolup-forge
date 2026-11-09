@@ -344,7 +344,7 @@ let tests =
             ]
 
             for e in events do
-                do! hookedStore.Write e
+                do! EventStore.writeOrRaise hookedStore e
 
             // Wait up to 5 seconds for the dispatcher to deliver.
             let deadline = DateTime.UtcNow.AddSeconds 5.0
@@ -407,8 +407,8 @@ let tests =
 
             // Write a self-event (should NOT be replicated) and a real
             // audit event (should be replicated).
-            do! hookedStore.Write(makeAuditEvent "_platform" "AuditSinkDelivered" 0.0)
-            do! hookedStore.Write(makeAuditEvent "team-a" "UserLoggedIn" 0.1)
+            do! EventStore.writeOrRaise hookedStore (makeAuditEvent "_platform" "AuditSinkDelivered" 0.0)
+            do! EventStore.writeOrRaise hookedStore (makeAuditEvent "team-a" "UserLoggedIn" 0.1)
 
             // Wait for the real event to land.
             let deadline = DateTime.UtcNow.AddSeconds 5.0

@@ -155,7 +155,7 @@ type MigrationRunner
             }
 
             try
-                do! eventStore.Write evt
+                do! EventStore.writeOrRaise eventStore evt
             with ex ->
                 // An event-store failure must not promote a per-object
                 // migration failure into a pass failure — the log line

@@ -159,7 +159,7 @@ type EventStoreRetrievalTracer(eventStore: IEventStore, logger: ILogger) =
                 let evt =
                     Events.create scopeId RetrievalTraceSourceModule KnowledgeRetrievedEventType (toTraceJson payload)
 
-                do! eventStore.Write evt
+                do! EventStore.writeOrRaise eventStore evt
             with ex ->
                 logger.Warn(sprintf "[RetrievalTracer] write failed: %s" ex.Message)
         }
@@ -184,7 +184,7 @@ type EventStoreRetrievalTracer(eventStore: IEventStore, logger: ILogger) =
                         KnowledgeRetrievalMissEventType
                         (toTraceJson payload)
 
-                do! eventStore.Write evt
+                do! EventStore.writeOrRaise eventStore evt
             with ex ->
                 logger.Warn(sprintf "[RetrievalTracer] miss write failed: %s" ex.Message)
         }

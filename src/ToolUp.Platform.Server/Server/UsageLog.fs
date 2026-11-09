@@ -305,7 +305,7 @@ type UsageBatchFlusher
                     let evt =
                         Events.create record.ScopeId UsageSourceModule "UsageRecordDropped" payload
 
-                    do! store.Write evt
+                    do! EventStore.writeOrRaise store evt
                 | None -> ()
         with ex ->
             dropCounter.Increment()

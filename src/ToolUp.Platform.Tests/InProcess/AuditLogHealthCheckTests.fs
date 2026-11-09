@@ -39,7 +39,7 @@ let private noOpChain () =
 /// probe must report Unhealthy.
 let private brokenStore () =
     { new IEventStore with
-        member _.Write _ = async { return () }
+        member _.Write _ = async { return Ok() }
         member _.ReadAll _ = async { return [] }
         member _.ReadByType(_, _) = async { return [] }
         member _.ReadBySource(_, _) = async { return [] }

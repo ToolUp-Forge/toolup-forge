@@ -184,7 +184,7 @@ type DataIngestor
             let evt =
                 Events.create scopeId DataIngestionSourceModule eventType (Json.serializeStr run)
 
-            do! eventStore.Write evt
+            do! EventStore.writeOrRaise eventStore evt
         with ex ->
             logger.Warn $"[DataIngestor] failed to write {eventType} event for run {run.RunId}: {ex.Message}"
     }

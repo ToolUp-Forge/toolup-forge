@@ -123,9 +123,9 @@ type private RecordingScheduler() =
             return Ok(Scheduled id)
         }
 
-        member _.Cancel(_, _) = async { return () }
-        member _.Disable(_, _) = async { return () }
-        member _.Enable(_, _) = async { return () }
+        member _.Cancel(_, _) = async { return Ok() }
+        member _.Disable(_, _) = async { return Ok() }
+        member _.Enable(_, _) = async { return Ok() }
         member _.Get(_, _) = async { return None }
         member _.ListJobs _ = async { return [] }
         member _.GetRecentRuns(_, _, _) = async { return [] }

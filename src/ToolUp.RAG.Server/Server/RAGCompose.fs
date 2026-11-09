@@ -347,7 +347,7 @@ let internal makeVectorisationHook
         try
             let json = System.Text.Json.JsonSerializer.Serialize(payload, jsonOptions)
             let evt = Events.create scopeId "ToolUp.RAG" eventName json
-            do! eventStore.Write evt
+            do! EventStore.writeOrRaise eventStore evt
         with ex ->
             logger.Warn(sprintf "[RAGCompose] event-write failed for %s: %s" eventName ex.Message)
     }

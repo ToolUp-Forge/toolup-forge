@@ -199,7 +199,11 @@ type CapturingEventStore() =
     member _.Written = written |> List.ofSeq
 
     interface IEventStore with
-        member _.Write(evt: ModuleEvent) = async { written.Add evt }
+        member _.Write(evt: ModuleEvent) = async {
+            written.Add evt
+            return Ok()
+        }
+
         member _.ReadAll(_) = async { return [] }
         member _.ReadByType(_, _) = async { return [] }
         member _.ReadBySource(_, _) = async { return [] }

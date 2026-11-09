@@ -110,6 +110,40 @@ module TriggerError =
                 breach.ScopeId
         | TriggerError.DispatchRefused reason -> reason
 
+/// Why a `Cancel` / `Disable` / `Enable` changed nothing. Every
+/// case leaves the job exactly as it was, so every case is safe to retry.
+[<RequireQualifiedAccess>]
+type JobTransitionError =
+    /// An in-flight dispatch holds the job's lease (typically asleep in its
+    /// retry backoff) and did not release it within the scheduler's wait.
+    | Busy of scopeId: string * jobId: JobId * waited: System.TimeSpan
+    /// The job store did not persist the transition.
+    | StoreFailed of JobStoreError
+
+[<RequireQualifiedAccess>]
+module JobTransitionError =
+    /// The refusal as a sentence, for the job admin API and a log line.
+    let message (error: JobTransitionError) : string =
+        match error with
+        | JobTransitionError.Busy(_, jobId, waited) ->
+            $"Job %O{jobId} is busy: an in-flight dispatch holds its lease (waited %.0f{waited.TotalMilliseconds} ms). Nothing was changed; retry shortly."
+        | JobTransitionError.StoreFailed error -> JobStoreError.describe error
+
+/// Raised by `JobTransition.orRaise`.
+exception JobTransitionFailed of JobTransitionError with
+    override this.Message = JobTransitionError.message this.Data0
+
+module JobTransition =
+    /// Await a `Cancel` / `Disable` / `Enable` and raise `JobTransitionFailed`
+    /// on `Error` — the adapter for a caller whose failure path is already an
+    /// exception. A caller that can decide (retry a `Busy`, report a
+    /// `StoreFailed`) matches the `Result` instead.
+    let orRaise (transition: Async<Result<unit, JobTransitionError>>) : Async<unit> = async {
+        match! transition with
+        | Ok() -> ()
+        | Error error -> return raise (JobTransitionFailed error)
+    }
+
 type IJobScheduler =
     /// Register a handler under `name`. Idempotent — re-registering
     /// the same name with a different implementation overwrites the
@@ -182,28 +216,29 @@ type IJobScheduler =
     /// Cancel a job — sets `Status = Cancelled`. The scheduler skips
     /// it on subsequent ticks; no further runs are dispatched. Does
     /// not delete the record (history remains for audit).
-    /// Returns `unit` on success; idempotent — cancelling an already-
-    /// cancelled or unknown job is a no-op.
+    /// Answers `Ok` on success; idempotent — cancelling an already-
+    /// cancelled or unknown job is a no-op `Ok`.
     ///
     /// The transition takes the job's lease, which an
     /// in-flight dispatch holds across its retry backoff. The in-process
     /// scheduler waits for it a bounded time (five seconds) and then
-    /// REFUSES, raising an `InvalidOperationException` that changes
-    /// nothing and is safe to retry, rather than parking the caller behind
-    /// the backoff sleep. `Disable` and `Enable` behave the same way.
-    abstract Cancel: scopeId: string * jobId: JobId -> Async<unit>
+    /// REFUSES with `JobTransitionError.Busy`, which changes nothing and is
+    /// safe to retry, rather than parking the caller behind the backoff
+    /// sleep. A transition the job store did not persist is `StoreFailed`
+    ///. `Disable` and `Enable` behave the same way.
+    abstract Cancel: scopeId: string * jobId: JobId -> Async<Result<unit, JobTransitionError>>
 
     /// Disable a job — sets `Status = Disabled`. Stops dispatch
     /// without losing the schedule — a manual `TriggerOnce` included
     /// (ruling 12). Admins re-enable via a separate
     /// `Enable` call.
-    abstract Disable: scopeId: string * jobId: JobId -> Async<unit>
+    abstract Disable: scopeId: string * jobId: JobId -> Async<Result<unit, JobTransitionError>>
 
     /// Re-enable a disabled job. No-op when the job is already
     /// `Active`. Reactivates `NextRunAt` recomputation on the next
     /// scheduler tick (cron-triggered) or arms it for the next
     /// matching `OnEvent` (event-triggered).
-    abstract Enable: scopeId: string * jobId: JobId -> Async<unit>
+    abstract Enable: scopeId: string * jobId: JobId -> Async<Result<unit, JobTransitionError>>
 
     /// Read job state by id. Returns `None` for unknown ids — does
     /// not throw. Used by the admin UI and by handlers that need to

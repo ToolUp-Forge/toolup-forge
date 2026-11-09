@@ -672,10 +672,13 @@ type ObservingEventStore(inner: IEventStore, observer: EventTopologyObserver, at
 
     interface IEventStore with
         member _.Write(evt) = async {
-            do! inner.Write evt
+            match! inner.Write evt with
+            | Result.Error _ as failed -> return failed
+            | Result.Ok() ->
+                if not (String.IsNullOrWhiteSpace evt.EventType) then
+                    observer.RecordEmission(attribute evt.SourceModule, EventKind.forEvent evt.EventType)
 
-            if not (String.IsNullOrWhiteSpace evt.EventType) then
-                observer.RecordEmission(attribute evt.SourceModule, EventKind.forEvent evt.EventType)
+                return Result.Ok()
         }
 
         member _.ReadAll(scopeId) = inner.ReadAll scopeId

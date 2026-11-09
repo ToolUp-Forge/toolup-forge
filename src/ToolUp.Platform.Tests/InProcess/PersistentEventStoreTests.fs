@@ -52,7 +52,14 @@ let contractTests =
     let factory () =
         makeStore EventRetentionPolicy.unlimited
 
-    IEventStoreContract.tests "PersistentEventStore" factory
+    testList "PersistentEventStore contract" [
+        IEventStoreContract.tests "PersistentEventStore" factory
+        IEventStoreContract.failingBackendTests "PersistentEventStore" (fun () ->
+            let blobs =
+                InMemoryBlobStorage.WriteRefusingBlobStorage(InMemoryBlobStorage.InMemoryBlobStorage()) :> IBlobStorage
+
+            PersistentEventStore.PersistentEventStore(blobs, EventRetentionPolicy.unlimited) :> IEventStore)
+    ]
 
 /// Retention- and persistence-specific tests that the generic
 /// `IEventStoreContract` doesn't cover.
@@ -71,7 +78,7 @@ let retentionTests =
             let first =
                 PersistentEventStore.PersistentEventStore(blobStorage, EventRetentionPolicy.unlimited) :> IEventStore
 
-            do! first.Write event
+            do! EventStore.writeOrRaise first event
 
             // New instance, same on-disk data — event must still be there.
             let second =
@@ -101,8 +108,8 @@ let retentionTests =
             // Just now — must survive.
             let fresh = makeEvent scope "Fresh" "m" 0.0
 
-            do! (store :> IEventStore).Write stale
-            do! (store :> IEventStore).Write fresh
+            do! EventStore.writeOrRaise (store :> IEventStore) stale
+            do! EventStore.writeOrRaise (store :> IEventStore) fresh
 
             let! pruned = store.PruneScope scope
 
@@ -127,9 +134,9 @@ let retentionTests =
             let middle = makeEvent scope "B" "m" -20.0
             let newest = makeEvent scope "C" "m" -10.0
 
-            do! (store :> IEventStore).Write oldest
-            do! (store :> IEventStore).Write middle
-            do! (store :> IEventStore).Write newest
+            do! EventStore.writeOrRaise (store :> IEventStore) oldest
+            do! EventStore.writeOrRaise (store :> IEventStore) middle
+            do! EventStore.writeOrRaise (store :> IEventStore) newest
 
             let! pruned = store.PruneScope scope
             Expect.equal pruned 1 "one over-cap event pruned"
@@ -149,8 +156,8 @@ let retentionTests =
                 PersistentEventStore.PersistentEventStore(blobStorage, EventRetentionPolicy.unlimited)
 
             let scope = uniqueScope ()
-            do! (store :> IEventStore).Write(makeEvent scope "A" "m" -999.0)
-            do! (store :> IEventStore).Write(makeEvent scope "B" "m" -999.0)
+            do! EventStore.writeOrRaise (store :> IEventStore) (makeEvent scope "A" "m" -999.0)
+            do! EventStore.writeOrRaise (store :> IEventStore) (makeEvent scope "B" "m" -999.0)
 
             let! pruned = store.PruneScope scope
             Expect.equal pruned 0 "unlimited retention never prunes"
@@ -173,8 +180,8 @@ let retentionTests =
             let scopeA = uniqueScope ()
             let scopeB = uniqueScope ()
             // Both stale under the 1-minute policy.
-            do! (store :> IEventStore).Write(makeEvent scopeA "A" "m" -10.0)
-            do! (store :> IEventStore).Write(makeEvent scopeB "B" "m" -10.0)
+            do! EventStore.writeOrRaise (store :> IEventStore) (makeEvent scopeA "A" "m" -10.0)
+            do! EventStore.writeOrRaise (store :> IEventStore) (makeEvent scopeB "B" "m" -10.0)
 
             // Pruning scope A must not touch scope B — scope isolation
             // is load-bearing for multi-tenant deployments.
@@ -199,7 +206,7 @@ let retentionTests =
             let scopes = [ uniqueScope (); uniqueScope (); uniqueScope () ]
 
             for scope in scopes do
-                do! (store :> IEventStore).Write(makeEvent scope "Stale" "m" -10.0)
+                do! EventStore.writeOrRaise (store :> IEventStore) (makeEvent scope "Stale" "m" -10.0)
 
             let! results = store.PruneScopes scopes
             Expect.equal results.Count 3 "a count per scope"
@@ -238,9 +245,9 @@ let replayTests =
 
             // Write out of order — ReadAll returns reverse-chronological,
             // foldScope must re-sort to chronological before folding.
-            do! store.Write(makeEvent scope "A" "m" -30.0)
-            do! store.Write(makeEvent scope "C" "m" -10.0)
-            do! store.Write(makeEvent scope "B" "m" -20.0)
+            do! EventStore.writeOrRaise store (makeEvent scope "A" "m" -30.0)
+            do! EventStore.writeOrRaise store (makeEvent scope "C" "m" -10.0)
+            do! EventStore.writeOrRaise store (makeEvent scope "B" "m" -20.0)
 
             let collector (acc: string list) (e: ModuleEvent) = acc @ [ e.EventType ]
 
@@ -254,9 +261,9 @@ let replayTests =
             let store = makeStore EventRetentionPolicy.unlimited
             let scope = uniqueScope ()
 
-            do! store.Write(makeEvent scope "Click" "m" -30.0)
-            do! store.Write(makeEvent scope "View" "m" -20.0)
-            do! store.Write(makeEvent scope "Click" "m" -10.0)
+            do! EventStore.writeOrRaise store (makeEvent scope "Click" "m" -30.0)
+            do! EventStore.writeOrRaise store (makeEvent scope "View" "m" -20.0)
+            do! EventStore.writeOrRaise store (makeEvent scope "Click" "m" -10.0)
 
             let! totals = EventReplay.foldScope store scope ReplayScenario.empty ReplayScenario.fold
 
@@ -270,9 +277,9 @@ let replayTests =
             let store = makeStore EventRetentionPolicy.unlimited
             let scope = uniqueScope ()
 
-            do! store.Write(makeEvent scope "Click" "m" -30.0)
-            do! store.Write(makeEvent scope "View" "m" -20.0)
-            do! store.Write(makeEvent scope "Click" "m" -10.0)
+            do! EventStore.writeOrRaise store (makeEvent scope "Click" "m" -30.0)
+            do! EventStore.writeOrRaise store (makeEvent scope "View" "m" -20.0)
+            do! EventStore.writeOrRaise store (makeEvent scope "Click" "m" -10.0)
 
             let! clickCount = EventReplay.foldScopeOfType store scope "Click" 0 (fun acc _ -> acc + 1)
 
@@ -301,10 +308,10 @@ let indexTests =
             let scope = uniqueScope ()
 
             for i in 1..95 do
-                do! storeI.Write(makeEvent scope "Other" "m" (float -i))
+                do! EventStore.writeOrRaise storeI (makeEvent scope "Other" "m" (float -i))
 
             for i in 1..5 do
-                do! storeI.Write(makeEvent scope "Match" "m" (float -i))
+                do! EventStore.writeOrRaise storeI (makeEvent scope "Match" "m" (float -i))
 
             let! matches = storeI.ReadByType(scope, "Match")
             Expect.hasLength matches 5 "ReadByType returns only the matching subset"
@@ -322,7 +329,7 @@ let indexTests =
             let scope = uniqueScope ()
 
             let event = makeEvent scope "Drifty" "m" 0.0
-            do! storeI.Write event
+            do! EventStore.writeOrRaise storeI event
 
             let! beforeDrift = storeI.ReadByType(scope, "Drifty")
             Expect.hasLength beforeDrift 1 "indexed read finds the event before drift"
@@ -357,7 +364,7 @@ let indexTests =
             ]
 
             for e in events do
-                do! storeI.Write e
+                do! EventStore.writeOrRaise storeI e
 
             // Wipe both index trees.
             let! refs = blobStorage.List("_platform", $"events/{scope}/_by-type/")
@@ -405,8 +412,8 @@ let indexTests =
             let storeI = store :> IEventStore
             let scope = uniqueScope ()
 
-            do! storeI.Write(makeEvent scope "X" "m" 0.0)
-            do! storeI.Write(makeEvent scope "X" "m" 0.5)
+            do! EventStore.writeOrRaise storeI (makeEvent scope "X" "m" 0.0)
+            do! EventStore.writeOrRaise storeI (makeEvent scope "X" "m" 0.5)
 
             let! _ = store.Rebuild scope
             let! _ = store.Rebuild scope
@@ -429,7 +436,7 @@ let indexTests =
             let storeI = store :> IEventStore
             let scope = uniqueScope ()
 
-            do! storeI.Write(makeEvent scope "Stale" "m" -10.0)
+            do! EventStore.writeOrRaise storeI (makeEvent scope "Stale" "m" -10.0)
 
             let! pruned = store.PruneScope scope
             Expect.equal pruned 1 "stale event pruned"

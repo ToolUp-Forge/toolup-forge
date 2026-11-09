@@ -1716,7 +1716,7 @@ type DelegateTableWriter
             StagedRows = run.StagedRows
         }
 
-        events.Write {
+        EventStore.writeOrRaise events {
             Id = Guid.NewGuid()
             OccurredAt = now ()
             ScopeId = scopeId

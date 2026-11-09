@@ -79,7 +79,7 @@ let private writeEvent (eventStore: IEventStore) (scopeId: string) (eventType: s
         Payload = serializePayload payload
     }
 
-    do! eventStore.Write evt
+    do! EventStore.writeOrRaise eventStore evt
 }
 
 let private mapEntityError (err: EntityError) : BookingError = StorageFailure(EntityError.message err)

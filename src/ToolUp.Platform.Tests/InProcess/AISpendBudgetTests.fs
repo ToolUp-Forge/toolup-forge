@@ -126,7 +126,7 @@ let private writeTurnOn
         CacheCreationTokens = Some cacheWrite
     }
 
-    store.Write {
+    EventStore.writeOrRaise store {
         Id = Guid.NewGuid()
         OccurredAt = at
         ScopeId = scopeId

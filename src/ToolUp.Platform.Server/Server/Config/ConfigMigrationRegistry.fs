@@ -301,7 +301,7 @@ type MigratingConfigStore(inner: IConfigStore, support: ConfigMigrationSupport) 
             }
 
             try
-                do! store.Write evt
+                do! EventStore.writeOrRaise store evt
             with ex ->
                 // An event-store failure must never promote a
                 // recoverable config read into a failed one — the same

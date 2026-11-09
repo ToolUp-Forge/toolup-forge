@@ -586,7 +586,7 @@ module private Bounded =
     /// and the record is dropped.
     let write (logger: ILogger) (what: string) (store: IEventStore) (evt: ModuleEvent) : Async<unit> = async {
         try
-            let writeTask = store.Write evt |> Async.StartAsTask
+            let writeTask = EventStore.writeOrRaise store evt |> Async.StartAsTask
 
             let! winner =
                 Task.WhenAny(writeTask :> Task, Task.Delay EventWriteTimeoutMs)

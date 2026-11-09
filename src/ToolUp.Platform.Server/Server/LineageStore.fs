@@ -173,7 +173,7 @@ type EventStoreLineageStore(eventStore: IEventStore) =
         member _.Record(scopeId, link) = async {
             try
                 do!
-                    eventStore.Write {
+                    EventStore.writeOrRaise eventStore {
                         Id = link.LinkId
                         OccurredAt = link.Timestamp
                         ScopeId = scopeId

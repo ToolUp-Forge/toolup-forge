@@ -147,7 +147,13 @@ let schedulerContractTests =
         let suffix = uniqueSuffix ()
         scheduler, "team-a-" + suffix, "team-b-" + suffix
 
-    IJobSchedulerContract.tests "QuartzJobScheduler" factory
+    testList "QuartzJobScheduler contract" [
+        IJobSchedulerContract.tests "QuartzJobScheduler" factory
+        IJobSchedulerContract.failingStoreTests "QuartzJobScheduler" (fun decorate handler ->
+            let scheduler = composeOver (decorate (tempJobStore ())) false :> IJobScheduler
+            scheduler.RegisterHandler(handler, nullHandler)
+            scheduler, "team-" + uniqueSuffix ())
+    ]
 
 let storeContractTests =
     let factory () =
@@ -159,7 +165,15 @@ let storeContractTests =
         let suffix = uniqueSuffix ()
         store, "team-a-" + suffix, "team-b-" + suffix
 
-    IJobStoreContract.tests "QuartzJobStore" factory
+    testList "QuartzJobStore contract" [
+        IJobStoreContract.tests "QuartzJobStore" factory
+        // The projecting store's backend is the store it wraps: over one
+        // that refuses every write, the projection must answer its error.
+        IJobStoreContract.failingBackendTests "QuartzJobStore" (fun () ->
+            let backend = IJobSchedulerContract.RefusingJobStore(tempJobStore ())
+            backend.Arm()
+            (composeOver backend false).JobStore :> IJobStore, "team-" + uniqueSuffix ())
+    ]
 
 // ─── Phase 9c.F — the restart arms, bound the second way ─────────────
 //
@@ -316,8 +330,8 @@ let projectionTests =
             let! disabledId = schedule ()
             let! cancelledId = schedule ()
 
-            do! scheduler.Disable(scope, disabledId)
-            do! scheduler.Cancel(scope, cancelledId)
+            do! JobTransition.orRaise <| scheduler.Disable(scope, disabledId)
+            do! JobTransition.orRaise <| scheduler.Cancel(scope, cancelledId)
 
             let! disabledJobExists = quartz.Exists(QuartzMapping.jobKey scope disabledId).AsTask() |> Async.AwaitTask
 

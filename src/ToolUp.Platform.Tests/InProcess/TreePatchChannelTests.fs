@@ -254,8 +254,14 @@ let private isolationTests =
 
             let receivedA = ResizeArray<string>()
             let receivedB = ResizeArray<string>()
-            host.Subscribe("a", dA.SessionId, receivedA.Add) |> run |> ignore
-            host.Subscribe("b", dB.SessionId, receivedB.Add) |> run |> ignore
+
+            host.Subscribe("a", dA.SessionId, (fun frame -> async { receivedA.Add frame }))
+            |> run
+            |> ignore
+
+            host.Subscribe("b", dB.SessionId, (fun frame -> async { receivedB.Add frame }))
+            |> run
+            |> ignore
 
             // Resolve + wrap scope A's channel; push a patch through it.
             let chA =

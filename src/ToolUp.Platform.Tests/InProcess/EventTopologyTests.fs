@@ -135,10 +135,13 @@ let private derivation =
             let store =
                 ObservingEventStore(InMemoryEventStore.InMemoryEventStore(), observer) :> IEventStore
 
-            store.Write(moduleEvent "Orders" "OrderPlaced") |> Async.RunSynchronously
-            store.Write(moduleEvent "Orders" "OrderPlaced") |> Async.RunSynchronously
+            EventStore.writeOrRaise store (moduleEvent "Orders" "OrderPlaced")
+            |> Async.RunSynchronously
 
-            store.Write(moduleEvent "_platform" "HealthStateChanged")
+            EventStore.writeOrRaise store (moduleEvent "Orders" "OrderPlaced")
+            |> Async.RunSynchronously
+
+            EventStore.writeOrRaise store (moduleEvent "_platform" "HealthStateChanged")
             |> Async.RunSynchronously
 
             let observed = observer.Snapshot()
@@ -167,7 +170,7 @@ let private derivation =
             let store = ObservingEventStore(inner, EventTopologyObserver()) :> IEventStore
             let evt = moduleEvent "Orders" "OrderPlaced"
 
-            store.Write evt |> Async.RunSynchronously
+            EventStore.writeOrRaise store evt |> Async.RunSynchronously
 
             let read = store.ReadByType("team-1", "OrderPlaced") |> Async.RunSynchronously
             Expect.equal (read |> List.map _.Id) [ evt.Id ] "the decorator returns the inner store's reads verbatim"

@@ -141,7 +141,7 @@ let private liveChannelTests =
 
             let received = System.Collections.Generic.List<string>()
 
-            host.Subscribe(scopeA.ScopeId, descriptor.SessionId, received.Add)
+            host.Subscribe(scopeA.ScopeId, descriptor.SessionId, (fun frame -> async { received.Add frame }))
             |> run
             |> ignore
 

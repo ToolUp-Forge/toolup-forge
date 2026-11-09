@@ -354,8 +354,9 @@ let private runOneDeliveryPerReplica
         for h in hosted do
             do! h.StartAsync CancellationToken.None |> Async.AwaitTask
 
-        dispatchers
-        |> List.iteri (fun i d -> (d :> IWebhookDispatcher).Dispatch(eventFor i))
+        for i, d in List.indexed dispatchers do
+            let! dispatched = (d :> IWebhookDispatcher).Dispatch(eventFor i)
+            Expect.isOk dispatched "the event is enqueued"
 
         let expectedDeadLetters = List.length dispatchers
 
@@ -460,7 +461,8 @@ let tests =
                 let! _ = registry.CreateSubscription(subscriptionFor subscriptionId)
                 let hosted = dispatcher :> IHostedService
                 do! hosted.StartAsync CancellationToken.None |> Async.AwaitTask
-                (dispatcher :> IWebhookDispatcher).Dispatch(eventFor 0)
+                let! dispatched = (dispatcher :> IWebhookDispatcher).Dispatch(eventFor 0)
+                Expect.isOk dispatched "the event is enqueued"
 
                 let! delivered =
                     waitFor (TimeSpan.FromSeconds 20.0) (fun () -> async {

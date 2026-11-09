@@ -91,7 +91,7 @@ type private RecordingEventStore() =
     interface IEventStore with
         member _.Write(evt: ModuleEvent) = async {
             written.Enqueue evt
-            do! (inner :> IEventStore).Write evt
+            return! (inner :> IEventStore).Write evt
         }
 
         member _.ReadAll(scopeId: string) = (inner :> IEventStore).ReadAll scopeId

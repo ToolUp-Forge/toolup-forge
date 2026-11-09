@@ -433,7 +433,7 @@ let byteFixtureTests =
                 PersistentEventStore.PersistentEventStore(storage, EventRetentionPolicy.unlimited) :> IEventStore
 
             let event = Events.create "team-x" "billing" "InvoiceIssued" "{}"
-            events.Write event |> run
+            EventStore.writeOrRaise events event |> run
 
             let name = $"events/team-x/garbage-{Guid.NewGuid():N}.json"
 

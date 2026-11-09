@@ -134,7 +134,7 @@ let moduleVisibilityApi (registeredModuleIds: string list) (ctx: HttpContext) : 
                         ModuleVisibilityEvents.ProfileChanged
                         json
 
-                do! es.Write evt
+                do! EventStore.writeOrRaise es evt
             with ex ->
                 logger.Warn $"ModuleVisibility: audit write failed scope={FlagScope.slug scope}: {ex.Message}"
     }

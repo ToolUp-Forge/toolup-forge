@@ -608,8 +608,9 @@ let platformTenantApi (ctx: HttpContext) : IPlatformTenantApi =
                     | None -> return Ok()
                     | Some sch ->
                         match! TenantLifecycleAggregator.cancelScheduledDeprovision sch scopeId with
-                        | None -> return Ok() // nothing pending — idempotent
-                        | Some sd ->
+                        | Error error -> return Error(JobTransitionError.message error)
+                        | Ok None -> return Ok() // nothing pending — idempotent
+                        | Ok(Some sd) ->
                             do!
                                 emitAudit
                                     scopeId

@@ -280,7 +280,8 @@ let private scheduleOverdueCron (replica: Replica) : string * JobId =
         |> Async.RunSynchronously
         |> Option.defaultWith (fun () -> failtest "scheduled job not readable")
 
-    replica.Store.Update {
+    JobStoreWrite.orRaise
+    <| replica.Store.Update {
         definition with
             NextRunAt = Some(DateTime.UtcNow.AddMinutes -2.0)
     }

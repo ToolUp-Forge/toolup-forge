@@ -531,7 +531,7 @@ let private emitEvent
             }
 
             try
-                do! store.Write evt
+                do! EventStore.writeOrRaise store evt
             with ex ->
                 // Non-fatal for the user's chat, but a wedged event
                 // store should not be invisible — the fast-path audit
@@ -567,7 +567,7 @@ let private emitRejection
             }
 
             try
-                do! store.Write evt
+                do! EventStore.writeOrRaise store evt
             with ex ->
                 logWarn
                     logger
@@ -929,7 +929,7 @@ let private emitSequencedClauseEvent
             }
 
             try
-                do! store.Write evt
+                do! EventStore.writeOrRaise store evt
             with ex ->
                 logWarn logger $"Sequenced fast-path clause event write failed: {ex.Message}"
     }
@@ -954,7 +954,7 @@ let private emitSequenceOutcomeEvent
             }
 
             try
-                do! store.Write evt
+                do! EventStore.writeOrRaise store evt
             with ex ->
                 logWarn logger $"Sequenced fast-path outcome event write failed: {ex.Message}"
     }
@@ -979,7 +979,7 @@ let private emitSequenceResolvedEvent
             }
 
             try
-                do! store.Write evt
+                do! EventStore.writeOrRaise store evt
             with ex ->
                 logWarn logger $"Sequenced fast-path aggregate event write failed: {ex.Message}"
     }

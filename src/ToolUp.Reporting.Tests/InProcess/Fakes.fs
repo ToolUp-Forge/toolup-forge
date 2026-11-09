@@ -219,7 +219,7 @@ type RecordingScheduler() =
 
         member _.Cancel(_, jobId) = async {
             jobs.TryRemove jobId |> ignore
-            return ()
+            return Ok()
         }
 
         member _.Disable(_, jobId) = async {
@@ -227,7 +227,7 @@ type RecordingScheduler() =
             | true, job -> jobs[jobId] <- { job with Status = JobStatus.Disabled }
             | _ -> ()
 
-            return ()
+            return Ok()
         }
 
         member _.Enable(_, jobId) = async {
@@ -235,7 +235,7 @@ type RecordingScheduler() =
             | true, job -> jobs[jobId] <- { job with Status = JobStatus.Active }
             | _ -> ()
 
-            return ()
+            return Ok()
         }
 
         member _.Get(_, jobId) = async {

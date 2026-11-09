@@ -190,7 +190,7 @@ module private Events =
                     |}
 
                 do!
-                    store.Write {
+                    EventStore.writeOrRaise store {
                         Id = Guid.NewGuid()
                         OccurredAt = DateTime.UtcNow
                         ScopeId = scopeId

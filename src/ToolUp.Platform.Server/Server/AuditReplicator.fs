@@ -153,10 +153,13 @@ type AuditReplicationHookedEventStore(inner: IEventStore, enqueue: ModuleEvent -
 
     interface IEventStore with
         member _.Write(evt) = async {
-            do! inner.Write evt
+            match! inner.Write evt with
+            | Error _ as failed -> return failed
+            | Ok() ->
+                if shouldReplicate evt then
+                    enqueue evt
 
-            if shouldReplicate evt then
-                enqueue evt
+                return Ok()
         }
 
         member _.ReadAll(scopeId) = inner.ReadAll(scopeId)

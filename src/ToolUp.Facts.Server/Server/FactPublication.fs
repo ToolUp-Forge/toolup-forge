@@ -491,7 +491,7 @@ module internal Consolidation =
         async {
             try
                 do!
-                    deps.Events.Write {
+                    EventStore.writeOrRaise deps.Events {
                         Id = recordId
                         OccurredAt = now deps.Clock
                         ScopeId = scopeId

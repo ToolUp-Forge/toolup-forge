@@ -38,11 +38,19 @@ let hook: TenantHook<IJobScheduler> = {
     OnDeprovisioned =
         Some(fun scheduler scopeId _ -> async {
             let! jobs = scheduler.ListJobs scopeId
+            let errors = ResizeArray<string>()
 
             for job in jobs do
-                do! scheduler.Cancel(scopeId, job.JobId)
+                match! scheduler.Cancel(scopeId, job.JobId) with
+                | Ok() -> ()
+                | Error error -> errors.Add(JobTransitionError.message error)
 
-            return LifecycleHookResult.Completed
+            // A job that could not be cancelled fails the hook, so the
+            // resumable sweep re-runs it rather than recording it done.
+            if errors.Count = 0 then
+                return LifecycleHookResult.Completed
+            else
+                return LifecycleHookResult.Failed(String.Join("; ", errors))
         })
     // Mutation-free preview: the scope's scheduled jobs (the jobs that
     // WOULD be cancelled), via the read-only ListJobs.

@@ -153,7 +153,7 @@ let featureFlagApi (declared: FeatureFlag list) (ctx: HttpContext) : IFeatureFla
                         FeatureFlagEvents.FlagChanged
                         json
 
-                do! es.Write evt
+                do! EventStore.writeOrRaise es evt
             with ex ->
                 logger.Warn $"FeatureFlags: audit write failed key='{key}' scope={FlagScope.slug scope}: {ex.Message}"
     }
