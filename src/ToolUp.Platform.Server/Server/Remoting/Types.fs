@@ -17,6 +17,42 @@ module TypeInfo =
             yield typeDef
     |]
 
+/// How every reader of an API record walks it: one flag set, one field walk.
+/// An internal or private API record is a record too; without `NonPublic` its
+/// fields are invisible and every reader would silently see an empty record.
+[<RequireQualifiedAccess>]
+module internal ApiRecord =
+    let reflectionFlags =
+        System.Reflection.BindingFlags.Public
+        ||| System.Reflection.BindingFlags.NonPublic
+
+    let isRecord (t: Type) = FSharpType.IsRecord(t, reflectionFlags)
+
+    /// The record's fields in declaration order; empty for a non-record type.
+    let fields (t: Type) : System.Reflection.PropertyInfo[] =
+        if isRecord t then
+            FSharpType.GetRecordFields(t, reflectionFlags)
+        else
+            [||]
+
+    /// A method's first argument type: the first domain of its function type.
+    let firstInput (field: System.Reflection.PropertyInfo) : Type option =
+        if FSharpType.IsFunction field.PropertyType then
+            Some(fst (FSharpType.GetFunctionElements field.PropertyType))
+        else
+            None
+
+/// The one route grammar: a method is addressed by its route's last segment.
+[<RequireQualifiedAccess>]
+module internal Route =
+    let methodSegment (route: string) : string =
+        let lastSlash = route.LastIndexOf '/'
+
+        if lastSlash >= 0 then
+            route.Substring(lastSlash + 1)
+        else
+            route
+
 /// The decode-refusal record, re-exported here so
 /// `open ToolUp.Remoting.Server` is enough to name it.
 ///
@@ -317,6 +353,27 @@ type AuditKind =
     | IdempotencyReplay
     | Custom of string
 
+/// The one decoding of the string-literal kind both `[<Audit>]` families carry
+/// ("MoneyMoved", "Custom:<name>", ...).
+[<RequireQualifiedAccess>]
+module internal AuditKind =
+    let parse (kindName: string) : AuditKind =
+        if kindName.StartsWith "Custom:" then
+            AuditKind.Custom(kindName.Substring 7)
+        else
+            match kindName with
+            | "MoneyMoved" -> AuditKind.MoneyMoved
+            | "PolicyChanged" -> AuditKind.PolicyChanged
+            | "PiiAccessed" -> AuditKind.PiiAccessed
+            | "DataExported" -> AuditKind.DataExported
+            | "PermissionGranted" -> AuditKind.PermissionGranted
+            | "PermissionRevoked" -> AuditKind.PermissionRevoked
+            | "TenantCreated" -> AuditKind.TenantCreated
+            | "TenantDeleted" -> AuditKind.TenantDeleted
+            | "RateLimitExceeded" -> AuditKind.RateLimitExceeded
+            | "IdempotencyReplay" -> AuditKind.IdempotencyReplay
+            | other -> AuditKind.Custom other
+
 /// Audit event emitted on every successful invocation of
 /// an `[<Audit>]`-attributed method. PII fields are redacted unless
 /// the field carries `[<PiiSafe>]`.
@@ -350,7 +407,7 @@ type AuditEvent = {
 type IAuditEmitter =
     abstract Emit: event: AuditEvent -> Async<unit>
 
-/// 0.1.16 — typed exception raised when a multipart request exceeds the
+/// Typed exception raised when a multipart request exceeds the
 /// configured caps (per-section byte cap OR per-request section count
 /// cap). The Giraffe adapter catches this specifically and emits an
 /// `ErrorCategory.User` + 413 Payload Too Large envelope, rather than
@@ -674,17 +731,17 @@ type RemotingOptions<'context, 'serverImpl> = {
     /// increment this and consult an `X-Remoting-Schema` request header
     /// to optionally route to a per-version handler shape.
     SchemaVersion: int
-    /// 0.1.15 — per-multipart-section byte cap. Applied per part inside
+    /// Per-multipart-section byte cap. Applied per part inside
     /// `multipart/form-data` bodies so a single hostile section can't
     /// materialise an unbounded `byte[]` and OOM the host. Default 16
     /// MiB matches a generous mobile-upload ceiling; raise via
     /// composition for genuine large-file paths.
     MaxMultipartSectionBytes: int64
-    /// 0.1.15 — per-request multipart section count cap. Caps how many
+    /// Per-request multipart section count cap. Caps how many
     /// parts a single multipart request may carry. Default 64; raise via
     /// composition only when the application genuinely needs more.
     MaxMultipartSections: int
-    /// 0.1.15 — per-request remote IP resolver. Used by the rate-limit
+    /// Per-request remote IP resolver. Used by the rate-limit
     /// fallback so anonymous callers partition by client IP (not
     /// reverse-proxy IP). Default `None` → the dispatcher reads
     /// `ctx.Connection.RemoteIpAddress` (socket-level) — correct for
