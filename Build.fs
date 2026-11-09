@@ -4470,7 +4470,6 @@ let main args =
         "JobTriggerWatermark.fs"
         "MigrationStatusStore.fs"
         "NotificationAddressBook.fs"
-        "OAuthFlowHandler.fs"
         "Providers/BlobProviderProfile.fs"
         "Remoting/Idempotency.fs"
         "ResultStore.fs"
