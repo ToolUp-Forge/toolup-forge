@@ -80,7 +80,7 @@ type Model = {
     /// Tracks whether a CreateTeamWithOwner call is in flight, so
     /// the submit button can disable to prevent double-fire.
     CreateTeamInFlight: bool
-    /// Live all-teams admin table from `ListAllTeams`. Remote.Loaded on shell
+    /// Live all-teams admin table from `ListAllTeams`. Loaded on shell
     /// init and after every successful archive / restore / delete /
     /// create. Platform-Admin only — non-admins never see this surface.
     Teams: Remote<TeamSummary list, string>
@@ -95,7 +95,7 @@ type Model = {
     /// keyed by team id so the banner renders against the right row.
     TeamActionError: Map<string, Notice>
     /// Phase 4b deferred follow-up — current runtime PlatformKnowledgeBase
-    /// state. Remote.Loaded on shell init via `GetPlatformKnowledgeBase`;
+    /// state. Loaded on shell init via `GetPlatformKnowledgeBase`;
     /// updated optimistically after a successful `Set`.
     PlatformKnowledgeBase: Remote<FeatureMode, string>
     /// Inline error from a SetPlatformKnowledgeBase attempt.
