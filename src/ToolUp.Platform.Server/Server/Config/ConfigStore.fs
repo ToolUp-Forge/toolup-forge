@@ -6,6 +6,7 @@ open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.Infra
 
 // ─── JSON helpers ────────────────────────────────────────────────
 
@@ -22,19 +23,10 @@ module private Json =
     let deserialize<'T> (json: string) : 'T =
         JsonSerializer.Deserialize<'T>(json, options)
 
-    /// Deserialise the flat `Map<string, string>` persistence shape
-    /// from a single blob. Kept out of the typed `deserialize<'T>`
-    /// because the map is what the admin UI sees — typed reads go
-    /// through `projectToRecord`.
-    let tryDeserializeMap (bytes: byte[]) : Map<string, string> option =
-        try
-            let json = Encoding.UTF8.GetString(bytes)
-            Some(JsonSerializer.Deserialize<Map<string, string>>(json, options))
-        with _ ->
-            None
-
-    let serializeMap (values: Map<string, string>) : byte[] =
-        JsonSerializer.Serialize(values, options) |> Encoding.UTF8.GetBytes
+    /// The flat `Map<string, string>` persistence shape, one document per
+    /// blob. Kept out of the typed `deserialize<'T>` because the map is
+    /// what the admin UI sees — typed reads go through `projectToRecord`.
+    let mapCodec: BlobCodec<Map<string, string>> = BlobCodec.json<Map<string, string>>
 
 // ─── Validation ──────────────────────────────────────────────────
 
@@ -322,53 +314,40 @@ let private blobName (scope: StorageScope) (moduleKey: string) =
 /// method overrides — an object-expression `Set<'T>` infers a fresh
 /// `'a` instead of sharing the interface's `'T`.
 ///
-/// `logger` is optional for back-compat with direct constructions, but
-/// every fallback path warns through it when present — the three
-/// silent degradations (corrupt blob → empty map; `Get<'T>` decode
-/// failure → `None`; effective-config decode failure → all-defaults)
-/// previously had no observability at all, so a schema drift after an
-/// upgrade discarded every admin-configured value with empty logs.
+/// The document itself goes through the document store: one that cannot be
+/// read or decoded REFUSES the read (`DocumentUnavailableException`) and the
+/// write (`Error`), its bytes quarantined and logged at `Error`, rather than
+/// reading as "nothing configured" and discarding every admin-configured
+/// value. The two projection fallbacks (`Get<'T>` decode failure → `None`;
+/// effective-config decode failure → defaults) warn through `logger` when
+/// one is passed.
 type BlobConfigStore(storage: IBlobStorage, ?logger: ILogger) =
     let warn (msg: string) =
         match logger with
         | Some l -> l.Warn msg
         | None -> ()
 
+    let docs =
+        BlobDocumentStore<Map<string, string>>(
+            storage,
+            Json.mapCodec,
+            defaultArg logger (ConsoleLogger.ConsoleLogger() :> ILogger)
+        )
+
+    let path (scope: StorageScope) (moduleKey: string) =
+        DocPath.ofString (blobName scope moduleKey)
+
     let context (scope: StorageScope) (moduleKey: string) =
         sprintf "scope=%s moduleKey=%s" scope.Container moduleKey
 
     let loadRaw (scope: StorageScope) (moduleKey: string) = async {
-        let! result = storage.Download(platformContainer, blobName scope moduleKey)
-
-        match result with
-        | Ok bytes ->
-            match Json.tryDeserializeMap bytes with
-            | Some map -> return map
-            | None ->
-                // Blob exists but doesn't decode — corruption or a
-                // persistence-shape change. Distinct from the missing-
-                // blob case below: here admin-configured values exist
-                // on disk and are being discarded.
-                warn (
-                    sprintf
-                        "[BlobConfigStore] %s: config blob exists but failed to decode as Map<string,string> — treating as empty. Persisted admin-configured values are being ignored; inspect/restore the blob '%s/%s'."
-                        (context scope moduleKey)
-                        platformContainer
-                        (blobName scope moduleKey)
-                )
-
-                return Map.empty
-        | Error _ ->
-            // Missing blob is the normal "nothing configured yet" case
-            // — not warn-worthy.
-            return Map.empty
+        let! loaded = docs.Read(ScopeKey.platform, path scope moduleKey)
+        return loaded |> DocumentUnavailable.orRaise |> Option.defaultValue Map.empty
     }
 
     let saveRaw (scope: StorageScope) (moduleKey: string) (values: Map<string, string>) = async {
-        let bytes = Json.serializeMap values
-        let! result = storage.Upload(platformContainer, blobName scope moduleKey, bytes)
-
-        return result |> Result.map (fun _ -> ())
+        let! written = docs.Update(ScopeKey.platform, path scope moduleKey, (fun _ -> BlobUpdate.Write(values, ())))
+        return written |> Result.mapError BlobMapStoreError.describe
     }
 
     interface IConfigStore with
@@ -426,30 +405,45 @@ type BlobConfigStore(storage: IBlobStorage, ?logger: ILogger) =
             else
                 let! names = storage.List(platformContainer, $"config/{scopeId}/")
 
-                let! docs =
+                let! read =
                     names
                     |> List.map (fun name -> async {
-                        let! result = storage.Download(platformContainer, name)
-
-                        return
-                            match result with
-                            | Ok bytes -> name, Json.tryDeserializeMap bytes
-                            | Error _ -> name, None
+                        let! loaded = docs.Read(ScopeKey.platform, DocPath.ofString name)
+                        return name, loaded
                     })
-                    |> Async.Parallel
+                    |> fun reads -> Async.Parallel(reads, BlobDocumentStoreLimits.DefaultListDegree)
 
                 let valueNamesSubject (m: Map<string, string>) =
                     m |> Map.exists (fun _ v -> v.Contains subjectUserId.Value)
 
+                // A document that cannot be read may name the subject: the
+                // erasure cannot say it is complete, so it refuses.
+                let unreadable =
+                    read
+                    |> Array.choose (fun (name, loaded) ->
+                        match loaded with
+                        | Error e -> Some(sprintf "%s (%s)" name (BlobMapStoreError.describe e))
+                        | Ok _ -> None)
+                    |> List.ofArray
+
                 let matched =
-                    docs
+                    read
                     |> Array.toList
-                    |> List.choose (fun (name, mo) ->
-                        match mo with
-                        | Some m when valueNamesSubject m -> Some(name, m)
+                    |> List.choose (fun (name, loaded) ->
+                        match loaded with
+                        | Ok(Some m) when valueNamesSubject m -> Some(name, m)
                         | _ -> None)
 
-                if dryRun || List.isEmpty matched then
+                if not unreadable.IsEmpty then
+                    return
+                        Result.Error(
+                            ErasureError.StoreUnreachable(
+                                "config",
+                                sprintf "config document(s) could not be read: %s" (String.concat "; " unreadable)
+                            )
+                        )
+                elif dryRun || List.isEmpty matched then
+
                     let verb =
                         match policy with
                         | ErasurePolicy.HardDelete -> "removed"
@@ -529,7 +523,7 @@ type BlobConfigStore(storage: IBlobStorage, ?logger: ILogger) =
                                     m
                                     |> Map.map (fun _ v -> if v.Contains subjectUserId.Value then markerJson else v)
 
-                                let! result = storage.Upload(platformContainer, name, Json.serializeMap redacted)
+                                let! result = storage.Upload(platformContainer, name, PlatformJson.serialize redacted)
                                 return name, result
                             })
                             |> Async.Parallel
