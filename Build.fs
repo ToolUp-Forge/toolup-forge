@@ -544,7 +544,7 @@ let main args =
             up (DirectoryInfo projDir)
 
         let built = ResizeArray<string>()
-        let mutable skippedTranspile = 0
+        let transpileDeferred = ResizeArray<string>()
 
         let legs =
             plan.ToBuild
@@ -562,7 +562,7 @@ let main args =
                         let projDir = Path.GetDirectoryName(Path.Combine(root, proj))
 
                         if not transpile then
-                            skippedTranspile <- skippedTranspile + 1
+                            transpileDeferred.Add proj
 
                             Trace.tracefn
                                 "▶ VerifySamples: %s is a Fable sample; transpile runs in the full lane only."
@@ -611,7 +611,7 @@ let main args =
                         onDisk.Length
                         built.Count
                         SampleGate.excluded.Length
-                        skippedTranspile
+                        transpileDeferred.Count
 
                     for f in findings do
                         Trace.traceError ("VerifySamples: " + f)
@@ -929,6 +929,33 @@ let main args =
     Target.create "VerifyDocSnippets" (fun _ -> refuseUnlessPass (runVerifyDocSnippets ()))
     Target.create "VerifySourceCitations" (fun _ -> refuseUnlessPass (runVerifySourceCitations ()))
     Target.create "VerifyUploadResults" (fun _ -> refuseUnlessPass (runVerifyUploadResults ()))
+
+    // The registry of generated artefacts, `projections.json` (read by
+    // `Projections` in Approval.fs, which ProjectionsTests holds to the tree),
+    // and the render it drives here. `dev-scripts/regen.ps1 <stem>` reads the
+    // same registry to regenerate a stem's rows.
+    //
+    //   dotnet run --project Build.fsproj -- Projections [--check]  refuse a .fantomasignore that is not the render
+    //   dotnet run --project Build.fsproj -- Projections --render   write it
+    Target.create "Projections" (fun _ ->
+        let root = __SOURCE_DIRECTORY__
+        let path = Path.Combine(root, ".fantomasignore")
+
+        let rendered =
+            ToolUp.Platform.Tests.Contracts.Projections.read root
+            |> ToolUp.Platform.Tests.Contracts.Projections.renderFantomasIgnore
+
+        if Flags.has "--render" flags then
+            File.WriteAllText(path, rendered)
+            Trace.tracefn "Projections: wrote .fantomasignore from projections.json."
+        elif
+            not (File.Exists path)
+            || File.ReadAllText(path).Replace("\r\n", "\n") <> rendered
+        then
+            failwith
+                "Projections: .fantomasignore is not the render of projections.json. Change the row, then run `dotnet run --project Build.fsproj -- Projections --render` and commit both."
+        else
+            Trace.tracefn "Projections: .fantomasignore is the render of projections.json.")
 
     // The scope grammar has ONE home.
     //
@@ -1363,7 +1390,7 @@ let main args =
             Proc.execWith
                 {
                     Proc.options with
-                        Environment = [ "TOOLUP_REGEN_CONFIG_REFERENCE", "1" ]
+                        Environment = [ "TOOLUP_APPROVE", "config-reference" ]
                 }
                 "dotnet"
                 [ dll; "--filter-test-list"; "ConfigReference" ]
@@ -2739,7 +2766,7 @@ let main args =
     // came out of the merge, so the merge commit carries the bytes a clean
     // regen would. This is that, scoped — it regenerates EXACTLY the
     // assemblies it was handed and never touches one it was not, which is the
-    // whole point of `TOOLUP_APPROVE_API` taking names (Phase 259).
+    // whole point of the `api` stem taking names.
     //
     // Usage:
     //   dotnet run --project Build.fsproj -- MergeBaselines --assemblies ToolUp.AI.Core,ToolUp.AI.Server
@@ -2769,7 +2796,9 @@ let main args =
         Proc.execWith
             {
                 Proc.options with
-                    Environment = [ "TOOLUP_APPROVE_API", scope ]
+                    Environment = [
+                        "TOOLUP_APPROVE", assemblies |> Seq.map (sprintf "api:%s") |> String.concat ","
+                    ]
             }
             "dotnet"
             [

@@ -72,7 +72,8 @@ let private assemblyCase (a: PackableAssembly) = test a.Name {
             ()
         elif not (File.Exists baselinePath) then
             failtestf
-                "%s: no committed baseline at api-baselines/%s.approved.txt. This is a NEW public package — generate its baseline with `TOOLUP_APPROVE_API=1` and commit it in the same PR."
+                "%s: no committed baseline at api-baselines/%s.approved.txt. This is a NEW public package — generate its baseline with `TOOLUP_APPROVE=api:%s` and commit it in the same PR."
+                a.Name
                 a.Name
                 a.Name
         else
@@ -173,7 +174,7 @@ let private assemblyCases =
 
                 Expect.isEmpty
                     (Set.toList unknown)
-                    "TOOLUP_APPROVE_API names assemblies that are not in the discovered packable set — nothing would have been regenerated for them. Check the spelling, or build the solution first."
+                    "TOOLUP_APPROVE names api assemblies that are not in the discovered packable set — nothing would have been regenerated for them. Check the spelling, or build the solution first."
         }
 
         // Phase 731 — THE precondition, failed once. Every per-assembly
@@ -409,7 +410,11 @@ let private messageFixtures =
 
             Expect.stringContains report "ADDED" "an addition must be named as an addition"
             Expect.stringContains report "NOTHING IS BROKEN" "the addition message must say the change is non-breaking"
-            Expect.stringContains report "TOOLUP_APPROVE_API" "the addition message must name the regeneration flag"
+
+            Expect.stringContains
+                report
+                "TOOLUP_APPROVE = \"api:"
+                "the addition message must name the regeneration flag"
 
             Expect.stringContains
                 report
@@ -958,7 +963,7 @@ let private docCoverageFixtures =
                 }
 
             Expect.stringContains report "Demo.New" "the report names the package"
-            Expect.stringContains report "TOOLUP_APPROVE_API" "and the switch that records the floor"
+            Expect.stringContains report "TOOLUP_APPROVE = \"api:" "and the switch that records the floor"
         }
 
         test "the missing-documentation-file precondition fires once and stays quiet otherwise" {

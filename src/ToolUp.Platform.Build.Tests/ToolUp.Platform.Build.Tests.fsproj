@@ -6,6 +6,7 @@
         <IsPackable>false</IsPackable>
     </PropertyGroup>
     <ItemGroup>
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\Approval.fs" Link="Contracts\Approval.fs" />
         <Compile Include="SbomTests.fs" />
         <Compile Include="PackagedModuleConformanceTests.fs" />
         <!-- Phase 213 — Lighthouse / Core-Web-Vitals budget gate. -->

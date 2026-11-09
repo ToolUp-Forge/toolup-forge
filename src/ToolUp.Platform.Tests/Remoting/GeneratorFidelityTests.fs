@@ -4,6 +4,7 @@
 module ToolUp.Platform.Tests.Remoting.GeneratorFidelityTests
 
 open System
+open ToolUp.Platform.Tests.Contracts
 open Expecto
 open ToolUp.Platform
 open ToolUp.Remoting
@@ -1124,7 +1125,7 @@ let tests =
                 let expected, _, _ = jsonEmission ()
                 let path = committedJsonPath ()
 
-                if Environment.GetEnvironmentVariable "TOOLUP_REGEN_PLATFORM_JSON_DECODERS" = "1" then
+                if Approve.admit "platform-json-decoders" then
                     IO.File.WriteAllText(path, expected.Replace("\r\n", "\n"))
 
                 let committed = IO.File.ReadAllText path

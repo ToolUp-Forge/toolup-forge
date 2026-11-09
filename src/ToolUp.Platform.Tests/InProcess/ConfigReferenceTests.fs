@@ -1,6 +1,7 @@
 module ToolUp.Platform.Tests.InProcess.ConfigReferenceTests
 
 open System
+open ToolUp.Platform.Tests.Contracts
 open System.IO
 open System.Reflection
 open System.Text.Json
@@ -48,11 +49,7 @@ let private operationsDocPath () =
 let private deploymentDocPath () =
     Path.Combine(repoRoot (), DeploymentDoc.DocPath)
 
-let private regenModeOn () =
-    match Environment.GetEnvironmentVariable "TOOLUP_REGEN_CONFIG_REFERENCE" with
-    | null
-    | "" -> false
-    | v -> v = "1" || v.Equals("true", StringComparison.OrdinalIgnoreCase)
+let private regenModeOn () = Approve.admit "config-reference"
 
 let private normalise (s: string) = s.Replace("\r\n", "\n")
 

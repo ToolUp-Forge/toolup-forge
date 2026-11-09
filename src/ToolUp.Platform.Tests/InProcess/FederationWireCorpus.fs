@@ -46,6 +46,7 @@ module ToolUp.Platform.Tests.InProcess.FederationWireCorpus
 // byte-for-byte unchanged (GP 13).
 
 open System
+open ToolUp.Platform.Tests.Contracts
 open System.IO
 open System.Reflection
 open System.Security.Cryptography
@@ -248,13 +249,9 @@ let specLegDeclined () =
 let manifestPath () =
     Path.Combine(corpusDir (), "manifest.json")
 
-/// Regeneration path: `TOOLUP_EMIT_WIRE_FIXTURES=1` rewrites the corpus
+/// Regeneration path: `TOOLUP_APPROVE=wire-fixtures` rewrites the corpus
 /// instead of comparing against it.
-let emitModeOn () =
-    match Environment.GetEnvironmentVariable "TOOLUP_EMIT_WIRE_FIXTURES" with
-    | null
-    | "" -> false
-    | v -> v = "1" || v.Equals("true", StringComparison.OrdinalIgnoreCase)
+let emitModeOn () = Approve.admit "wire-fixtures"
 
 // ─── Vector model ────────────────────────────────────────────────────
 

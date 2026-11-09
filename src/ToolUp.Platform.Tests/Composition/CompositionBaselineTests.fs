@@ -1,6 +1,7 @@
 module ToolUp.Platform.Tests.Composition.CompositionBaselineTests
 
 open System
+open ToolUp.Platform.Tests.Contracts
 open System.IO
 open System.Reflection
 open System.Text.Json
@@ -117,13 +118,9 @@ let private authorizationBaselinePath () =
 let private ruleManifestBaselinePath () =
     Path.Combine(repoRoot (), "composition-baselines", "rule-manifest-baseline.json")
 
-/// Regeneration path: `TOOLUP_APPROVE_COMPOSITION=1` rewrites the baseline
+/// Regeneration path: `TOOLUP_APPROVE=composition` rewrites the baselines
 /// instead of comparing.
-let private approveModeOn () =
-    match Environment.GetEnvironmentVariable "TOOLUP_APPROVE_COMPOSITION" with
-    | null
-    | "" -> false
-    | v -> v = "1" || v.Equals("true", StringComparison.OrdinalIgnoreCase)
+let private approveModeOn () = Approve.admit "composition"
 
 // ── The reference composition (mirrors CompositionManifestTests' stubs) ──
 
@@ -342,7 +339,7 @@ let private gate = test "reference composition matches the committed baseline" {
         File.WriteAllText(path, rendered)
     elif not (File.Exists path) then
         failtestf
-            "no committed composition baseline at %s. Generate it with TOOLUP_APPROVE_COMPOSITION=1 and commit composition-baselines/composition-baseline.json in the same PR."
+            "no committed composition baseline at %s. Generate it with TOOLUP_APPROVE=composition and commit composition-baselines/composition-baseline.json in the same PR."
             path
     else
         let baseline =
@@ -352,7 +349,7 @@ let private gate = test "reference composition matches the committed baseline" {
 
         if not (CompositionDiff.isEmpty delta) then
             failtestf
-                "Composition drift vs the committed baseline:\n%s\n\nIf this change is intentional, regenerate the baseline (TOOLUP_APPROVE_COMPOSITION=1) and commit the composition-baseline.json edit in the same PR so the change is reviewed."
+                "Composition drift vs the committed baseline:\n%s\n\nIf this change is intentional, regenerate the baseline (TOOLUP_APPROVE=composition) and commit the composition-baseline.json edit in the same PR so the change is reviewed."
                 (CompositionDiff.render delta)
 }
 
@@ -371,7 +368,7 @@ let private topologyGate = test "reference event topology matches the committed 
         File.WriteAllText(path, rendered)
     elif not (File.Exists path) then
         failtestf
-            "no committed event-topology baseline at %s. Generate it with TOOLUP_APPROVE_COMPOSITION=1 and commit composition-baselines/event-topology-baseline.json in the same PR."
+            "no committed event-topology baseline at %s. Generate it with TOOLUP_APPROVE=composition and commit composition-baselines/event-topology-baseline.json in the same PR."
             path
     else
         let baseline =
@@ -382,7 +379,7 @@ let private topologyGate = test "reference event topology matches the committed 
 
         if not (EventTopology.isEmptyDelta delta) then
             failtestf
-                "Event-topology drift vs the committed baseline:\n%s\n\nIf this change is intentional, regenerate the baseline (TOOLUP_APPROVE_COMPOSITION=1) and commit the event-topology-baseline.json edit in the same PR so the messaging-graph change is reviewed."
+                "Event-topology drift vs the committed baseline:\n%s\n\nIf this change is intentional, regenerate the baseline (TOOLUP_APPROVE=composition) and commit the event-topology-baseline.json edit in the same PR so the messaging-graph change is reviewed."
                 (EventTopology.renderDelta delta)
 }
 
@@ -402,7 +399,7 @@ let private footprintGate = test "reference data footprint matches the committed
         File.WriteAllText(path, rendered)
     elif not (File.Exists path) then
         failtestf
-            "no committed data-footprint baseline at %s. Generate it with TOOLUP_APPROVE_COMPOSITION=1 and commit composition-baselines/data-footprint-baseline.json in the same PR."
+            "no committed data-footprint baseline at %s. Generate it with TOOLUP_APPROVE=composition and commit composition-baselines/data-footprint-baseline.json in the same PR."
             path
     else
         let baseline =
@@ -413,7 +410,7 @@ let private footprintGate = test "reference data footprint matches the committed
 
         if not (DataFootprint.isEmptyDelta delta) then
             failtestf
-                "Data-footprint drift vs the committed baseline:\n%s\n\nIf this change is intentional, regenerate the baseline (TOOLUP_APPROVE_COMPOSITION=1) and commit the data-footprint-baseline.json edit in the same PR so the data-at-rest change is reviewed."
+                "Data-footprint drift vs the committed baseline:\n%s\n\nIf this change is intentional, regenerate the baseline (TOOLUP_APPROVE=composition) and commit the data-footprint-baseline.json edit in the same PR so the data-at-rest change is reviewed."
                 (DataFootprint.renderDelta delta)
 }
 
@@ -434,7 +431,7 @@ let private authorizationGate = test "reference authorization surface matches th
         File.WriteAllText(path, rendered)
     elif not (File.Exists path) then
         failtestf
-            "no committed authorization-surface baseline at %s. Generate it with TOOLUP_APPROVE_COMPOSITION=1 and commit composition-baselines/authorization-surface-baseline.json in the same PR."
+            "no committed authorization-surface baseline at %s. Generate it with TOOLUP_APPROVE=composition and commit composition-baselines/authorization-surface-baseline.json in the same PR."
             path
     else
         let baseline =
@@ -445,7 +442,7 @@ let private authorizationGate = test "reference authorization surface matches th
 
         if not (AuthorizationSurface.isEmptyDelta delta) then
             failtestf
-                "Authorization-surface drift vs the committed baseline:\n%s\n\nIf this change is intentional, regenerate the baseline (TOOLUP_APPROVE_COMPOSITION=1) and commit the authorization-surface-baseline.json edit in the same PR so the exposure change is reviewed."
+                "Authorization-surface drift vs the committed baseline:\n%s\n\nIf this change is intentional, regenerate the baseline (TOOLUP_APPROVE=composition) and commit the authorization-surface-baseline.json edit in the same PR so the exposure change is reviewed."
                 (AuthorizationSurface.renderDelta delta)
 }
 
@@ -464,7 +461,7 @@ let private ruleManifestGate = test "shipped rule manifest matches the committed
         File.WriteAllText(path, rendered)
     elif not (File.Exists path) then
         failtestf
-            "no committed rule-manifest baseline at %s. Generate it with TOOLUP_APPROVE_COMPOSITION=1 and commit composition-baselines/rule-manifest-baseline.json in the same PR."
+            "no committed rule-manifest baseline at %s. Generate it with TOOLUP_APPROVE=composition and commit composition-baselines/rule-manifest-baseline.json in the same PR."
             path
     else
         let baseline =
@@ -472,7 +469,7 @@ let private ruleManifestGate = test "shipped rule manifest matches the committed
 
         if baseline <> document then
             failtestf
-                "Rule-manifest drift vs the committed baseline:\n%s\n\nIf this change is intentional, bump the affected rule's version in CompositionRuleVersions.overrides per the discipline (patch = message / fix, minor = tightening, major = meaning change), regenerate the baseline (TOOLUP_APPROVE_COMPOSITION=1) and commit the rule-manifest-baseline.json edit in the same PR so the change to what preflight MEANS is reviewed."
+                "Rule-manifest drift vs the committed baseline:\n%s\n\nIf this change is intentional, bump the affected rule's version in CompositionRuleVersions.overrides per the discipline (patch = message / fix, minor = tightening, major = meaning change), regenerate the baseline (TOOLUP_APPROVE=composition) and commit the rule-manifest-baseline.json edit in the same PR so the change to what preflight MEANS is reviewed."
                 (renderRuleManifestDelta baseline document)
 }
 
@@ -680,7 +677,7 @@ let private defaultDescriptorsGate = test "a default deployment's service descri
         File.WriteAllText(path, String.concat "\n" lines + "\n")
     elif not (File.Exists path) then
         failtestf
-            "no committed descriptor baseline at %s. Generate it with TOOLUP_APPROVE_COMPOSITION=1 and commit composition-baselines/default-service-descriptors.txt in the same PR."
+            "no committed descriptor baseline at %s. Generate it with TOOLUP_APPROVE=composition and commit composition-baselines/default-service-descriptors.txt in the same PR."
             path
     else
         let baseline =
@@ -720,7 +717,7 @@ let private defaultDescriptorsGate = test "a default deployment's service descri
 "
 
             failtestf
-                "A default deployment's DI descriptor list moved (baseline %d descriptors, now %d; first difference at position %d: baseline '%s', now '%s'). A composition refactor must not change membership or order (GP 11). If the change is intentional, regenerate the baseline (TOOLUP_APPROVE_COMPOSITION=1) and commit the default-service-descriptors.txt edit in the same PR.
+                "A default deployment's DI descriptor list moved (baseline %d descriptors, now %d; first difference at position %d: baseline '%s', now '%s'). A composition refactor must not change membership or order (GP 11). If the change is intentional, regenerate the baseline (TOOLUP_APPROVE=composition) and commit the default-service-descriptors.txt edit in the same PR.
 Only in the baseline:
 %s
 Only in this run:

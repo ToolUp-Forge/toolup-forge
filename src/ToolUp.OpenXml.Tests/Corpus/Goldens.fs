@@ -13,7 +13,7 @@
 /// residue entry that moved — not as "the bytes differ".
 ///
 /// **The regeneration switch is deliberately loud.** Setting
-/// `TOOLUP_APPROVE_OPENXML_GOLDENS` rewrites the goldens AND fails the
+/// `TOOLUP_APPROVE=openxml-goldens` rewrites the goldens AND fails the
 /// case that rewrote each one, so a regeneration run can never read as
 /// green and a run with the variable set by accident cannot pass. The
 /// api-baseline gate's lesson, applied at the point it is easiest to
@@ -22,6 +22,7 @@
 module ToolUp.OpenXml.Tests.Corpus.Goldens
 
 open System
+open ToolUp.Platform.Tests.Contracts
 open System.IO
 open System.Reflection
 open System.Text
@@ -33,10 +34,11 @@ open ToolUp.Platform.Audit
 
 // ─── Grounding ───────────────────────────────────────────────────
 
-/// The env var that arms regeneration. Named for the gate it rewrites,
-/// in the shape of the repo's existing `TOOLUP_APPROVE_API`.
-[<Literal>]
-let ApproveVariable = "TOOLUP_APPROVE_OPENXML_GOLDENS"
+/// The approval stem that arms regeneration (`projections.json`).
+let ApproveStem = "openxml-goldens"
+
+/// The setting that arms regeneration, as a reader would type it.
+let ApproveVariable = "TOOLUP_APPROVE=" + ApproveStem
 
 /// `src/ToolUp.OpenXml.Tests/Corpus/` — resolved from the running test
 /// assembly (`bin/<Config>/net10.0/…dll` → up 3 = the project dir), so
@@ -47,11 +49,7 @@ let corpusDir () =
 
     Path.GetFullPath(Path.Combine(assemblyDir, "..", "..", "..", "Corpus"))
 
-let approveModeOn () =
-    match Environment.GetEnvironmentVariable ApproveVariable with
-    | null
-    | "" -> false
-    | _ -> true
+let approveModeOn () = Approve.admit ApproveStem
 
 // ─── Rendering helpers ───────────────────────────────────────────
 
@@ -422,13 +420,12 @@ let private goldenPath (name: string) = Path.Combine(corpusDir (), name)
 /// format change — rather than presenting it as the way to clear a red.
 let private regenerationInstructions (name: string) =
     sprintf
-        "Regenerate ONLY for an intentional, reviewed change to the import/emit format — never to clear a red:\n  $env:%s = \"1\"\n  dotnet run --project src/ToolUp.OpenXml.Tests/ToolUp.OpenXml.Tests.fsproj\n  $env:%s = $null\nThe regeneration run FAILS by design (it rewrote goldens; it verified nothing). Re-run WITHOUT the variable to verify, and commit src/ToolUp.OpenXml.Tests/Corpus/%s in the same PR so the fidelity change is reviewed alongside the code that caused it."
-        ApproveVariable
-        ApproveVariable
+        "Regenerate ONLY for an intentional, reviewed change to the import/emit format — never to clear a red:\n  $env:TOOLUP_APPROVE = \"%s\"\n  dotnet run --project src/ToolUp.OpenXml.Tests/ToolUp.OpenXml.Tests.fsproj\n  $env:TOOLUP_APPROVE = $null\nThe regeneration run FAILS by design (it rewrote goldens; it verified nothing). Re-run WITHOUT the variable to verify, and commit src/ToolUp.OpenXml.Tests/Corpus/%s in the same PR so the fidelity change is reviewed alongside the code that caused it."
+        ApproveStem
         name
 
 /// Compare `actual` against the committed golden `name`, or — under
-/// `TOOLUP_APPROVE_OPENXML_GOLDENS` — rewrite it and fail.
+/// `TOOLUP_APPROVE=openxml-goldens` — rewrite it and fail.
 ///
 /// Returns `Ok ()` when the projection matches, `Error message` in
 /// every other case: a mismatch, a missing golden (never silently
