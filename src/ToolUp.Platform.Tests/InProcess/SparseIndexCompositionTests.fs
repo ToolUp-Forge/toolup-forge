@@ -624,6 +624,63 @@ let private fullyWiredStages (faulty: bool) = async {
         | None -> failtest "a trace is emitted"
 }
 
+/// One value of every `RetrievalStage` case, every payload alternative the
+/// fixture's templates name.
+let private everyStage: ToolUp.RAG.RetrievalPipeline.RetrievalStage list = [
+    ToolUp.RAG.RetrievalPipeline.RetrievalStage.AuthoriseScopes
+    ToolUp.RAG.RetrievalPipeline.RetrievalStage.FactResolve
+    ToolUp.RAG.RetrievalPipeline.RetrievalStage.DisclosureFilter
+    ToolUp.RAG.RetrievalPipeline.RetrievalStage.FactsDegraded ToolUp.RAG.RetrievalPipeline.BoundedFault.TimedOut
+    ToolUp.RAG.RetrievalPipeline.RetrievalStage.FactsDegraded ToolUp.RAG.RetrievalPipeline.BoundedFault.Failed
+    ToolUp.RAG.RetrievalPipeline.RetrievalStage.QueryRewrite
+    ToolUp.RAG.RetrievalPipeline.RetrievalStage.Dense
+    ToolUp.RAG.RetrievalPipeline.RetrievalStage.DenseDegraded(QueryEmbedOutcome.TimedOut(TimeSpan.FromSeconds 5.0))
+    ToolUp.RAG.RetrievalPipeline.RetrievalStage.DenseDegraded(QueryEmbedOutcome.Refused 4)
+    ToolUp.RAG.RetrievalPipeline.RetrievalStage.DenseDegraded(QueryEmbedOutcome.Failed "down")
+    ToolUp.RAG.RetrievalPipeline.RetrievalStage.Sparse
+    ToolUp.RAG.RetrievalPipeline.RetrievalStage.RRF
+    ToolUp.RAG.RetrievalPipeline.RetrievalStage.MetadataFilter
+    ToolUp.RAG.RetrievalPipeline.RetrievalStage.OriginFilter
+    ToolUp.RAG.RetrievalPipeline.RetrievalStage.DerivedDisclosureDegraded
+        ToolUp.RAG.RetrievalPipeline.BoundedFault.TimedOut
+    ToolUp.RAG.RetrievalPipeline.RetrievalStage.DerivedDisclosureDegraded
+        ToolUp.RAG.RetrievalPipeline.BoundedFault.Failed
+    ToolUp.RAG.RetrievalPipeline.RetrievalStage.DerivedDisclosure
+    ToolUp.RAG.RetrievalPipeline.RetrievalStage.DerivedDisclosureDropped(1, 3)
+    ToolUp.RAG.RetrievalPipeline.RetrievalStage.Normalise
+    ToolUp.RAG.RetrievalPipeline.RetrievalStage.Rerank
+    ToolUp.RAG.RetrievalPipeline.RetrievalStage.RerankCapped(2, 6)
+    ToolUp.RAG.RetrievalPipeline.RetrievalStage.Boost ToolUp.RAG.RetrievalPipeline.BoostKind.ActiveModule
+    ToolUp.RAG.RetrievalPipeline.RetrievalStage.Boost ToolUp.RAG.RetrievalPipeline.BoostKind.Summary
+    ToolUp.RAG.RetrievalPipeline.RetrievalStage.Boost ToolUp.RAG.RetrievalPipeline.BoostKind.FactNarrativeJoin
+    ToolUp.RAG.RetrievalPipeline.RetrievalStage.MMR
+    ToolUp.RAG.RetrievalPipeline.RetrievalStage.AdaptiveK
+    ToolUp.RAG.RetrievalPipeline.RetrievalStage.TopK
+    ToolUp.RAG.RetrievalPipeline.RetrievalStage.Merge None
+    ToolUp.RAG.RetrievalPipeline.RetrievalStage.FinalOrder ToolUp.RAG.RetrievalPipeline.OrderingStep.Interleaved
+    ToolUp.RAG.RetrievalPipeline.RetrievalStage.ScoreSpace RetrievalScoreSpace.Cosine
+    ToolUp.RAG.RetrievalPipeline.RetrievalStage.ScoreSpace RetrievalScoreSpace.Fused
+    ToolUp.RAG.RetrievalPipeline.RetrievalStage.ScoreSpace RetrievalScoreSpace.Reranked
+]
+
+/// A fixture template as a pattern: `<a|b>` is one of the alternatives,
+/// `<name>` any value.
+let private templatePattern (template: string) =
+    let body =
+        System.Text.RegularExpressions.Regex.Replace(
+            System.Text.RegularExpressions.Regex.Escape(template).Replace("\\|", "|"),
+            "<([^>]*)>",
+            fun m ->
+                let inner = m.Groups[1].Value
+
+                if inner.Contains "|" then "(" + inner + ")" else "[^ ]+"
+        )
+
+    System.Text.RegularExpressions.Regex("^" + body + "$")
+
+let private apiReferencePath =
+    IO.Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "..", "docs", "rag", "api-reference.md")
+
 /// One request per composition the fixture names, each over fixed rankings.
 let private markScenarios: (string * Async<string list>) list =
     let ranked = [ for i in 1..6 -> rankedMatch (sprintf "c%d" i) [] ]
@@ -1381,6 +1438,54 @@ let tests =
                         rendered)
             }
 
+            test "RetrievalStage.mark renders exactly the fixture's vocabulary, and the reference lists it" {
+                let vocabulary = markVocabulary ()
+
+                let patterns =
+                    vocabulary |> List.map (fun template -> template, templatePattern template)
+
+                let rendered =
+                    everyStage |> List.map ToolUp.RAG.RetrievalPipeline.RetrievalStage.mark
+
+                for mark in
+                    rendered
+                    @ (markFixture ()
+                       |> Map.toList
+                       |> List.collect (fun (_, line) -> List.ofArray (line.Split ' '))) do
+                    Expect.equal
+                        (patterns
+                         |> List.filter (fun (_, pattern) -> pattern.IsMatch mark)
+                         |> List.length)
+                        1
+                        (sprintf "'%s' is exactly one template" mark)
+
+                for template, pattern in patterns do
+                    Expect.isTrue
+                        (List.exists (fun (mark: string) -> pattern.IsMatch mark) rendered)
+                        (sprintf "a case renders '%s'" template)
+
+                let caseOf (stage: ToolUp.RAG.RetrievalPipeline.RetrievalStage) =
+                    let case, _ =
+                        Reflection.FSharpValue.GetUnionFields(
+                            stage,
+                            typeof<ToolUp.RAG.RetrievalPipeline.RetrievalStage>
+                        )
+
+                    case.Name
+
+                Expect.equal
+                    (everyStage |> List.map caseOf |> Set.ofList)
+                    (Reflection.FSharpType.GetUnionCases typeof<ToolUp.RAG.RetrievalPipeline.RetrievalStage>
+                     |> Array.map _.Name
+                     |> Set.ofArray)
+                    "every case is enumerated"
+
+                let reference = IO.File.ReadAllText apiReferencePath
+
+                for template in vocabulary do
+                    Expect.stringContains reference ("`" + template + "`") (sprintf "the reference lists %s" template)
+            }
+
             testAsync "Separate over two scopes returns the scopes grouped in the order the request listed them" {
                 let userScope = User "u1"
 
@@ -1442,8 +1547,8 @@ let tests =
 
                 Expect.equal
                     (matches |> List.map _.ChunkId)
-                    [ "a"; "b"; "d"; "c" ]
-                    "no relevance cliff, so all four, in MMR's order"
+                    [ "a"; "b"; "c"; "d" ]
+                    "no relevance cliff, so all four, in MMR's order (the duplicate of a last)"
             }
         ]
     ]
