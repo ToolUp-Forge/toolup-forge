@@ -782,6 +782,17 @@ ToolUp.Platform.AdminMutationWriteOutcome+QueuedForApproval.Item : ToolUp.Platfo
 ToolUp.Platform.AdminMutationWriteOutcome+Tags (class)
 ToolUp.Platform.AdminMutationWriteOutcome+Tags.AppliedImmediately : System.Int32 (literal)
 ToolUp.Platform.AdminMutationWriteOutcome+Tags.QueuedForApproval : System.Int32 (literal)
+ToolUp.Platform.Admission (class)
+ToolUp.Platform.Admission.IsAdmit : System.Boolean { get }
+ToolUp.Platform.Admission.IsDeny : System.Boolean { get }
+ToolUp.Platform.Admission.Tag : System.Int32 { get }
+ToolUp.Platform.Admission+Admit (class)
+ToolUp.Platform.Admission+Admit.remaining : System.Int32 { get }
+ToolUp.Platform.Admission+Deny (class)
+ToolUp.Platform.Admission+Deny.retryAfter : System.TimeSpan { get }
+ToolUp.Platform.Admission+Tags (class)
+ToolUp.Platform.Admission+Tags.Admit : System.Int32 (literal)
+ToolUp.Platform.Admission+Tags.Deny : System.Int32 (literal)
 ToolUp.Platform.AlertDelivery (class)
 ToolUp.Platform.AlertDelivery.IsViaChannel : System.Boolean { get }
 ToolUp.Platform.AlertDelivery.IsViaSink : System.Boolean { get }
@@ -7733,6 +7744,8 @@ ToolUp.Platform.InboundRateLimitDecision+DenyWithError.Item : ToolUp.Platform.Ra
 ToolUp.Platform.InboundRateLimitDecision+Tags (class)
 ToolUp.Platform.InboundRateLimitDecision+Tags.AllowWithRemaining : System.Int32 (literal)
 ToolUp.Platform.InboundRateLimitDecision+Tags.DenyWithError : System.Int32 (literal)
+ToolUp.Platform.InboundRateLimitDecisionModule (class)
+ToolUp.Platform.InboundRateLimitDecisionModule.toAdmission(ToolUp.Platform.InboundRateLimitDecision) : ToolUp.Platform.Admission
 ToolUp.Platform.InboundRateLimitKey (class)
 ToolUp.Platform.InboundRateLimitKey.IsInboundComposite : System.Boolean { get }
 ToolUp.Platform.InboundRateLimitKey.IsIpAddressKey : System.Boolean { get }
@@ -11193,6 +11206,9 @@ ToolUp.Platform.RateLimitedError..ctor(System.Int32, System.Int32, ToolUp.Platfo
 ToolUp.Platform.RateLimitedError.Limit : System.Int32 { get }
 ToolUp.Platform.RateLimitedError.RetryAfterSeconds : System.Int32 { get }
 ToolUp.Platform.RateLimitedError.Window : ToolUp.Platform.RateLimitWindow { get }
+ToolUp.Platform.RateLimitedErrorModule (class)
+ToolUp.Platform.RateLimitedErrorModule.ofDenial(System.Int32, ToolUp.Platform.RateLimitWindow, System.TimeSpan) : ToolUp.Platform.RateLimitedError
+ToolUp.Platform.RateLimitedErrorModule.retryAfterSeconds(System.TimeSpan) : System.Int32
 ToolUp.Platform.Readiness (class)
 ToolUp.Platform.Readiness.DevOnly : ToolUp.Platform.Readiness { get }
 ToolUp.Platform.Readiness.DistributedReady : ToolUp.Platform.Readiness { get }
@@ -11435,10 +11451,11 @@ ToolUp.Platform.RiskAcknowledgements.AcceptUnsignedPublishable : System.Boolean 
 ToolUp.Platform.RiskAcknowledgementsModule (class)
 ToolUp.Platform.RiskAcknowledgementsModule.defaults : ToolUp.Platform.RiskAcknowledgements { get }
 ToolUp.Platform.RouteLimit (class)
-ToolUp.Platform.RouteLimit..ctor(System.String, ToolUp.Platform.RateLimitKeyKind, ToolUp.Platform.RateLimitWindow, System.Int32, ToolUp.Platform.RateLimitOnExceeded)
+ToolUp.Platform.RouteLimit..ctor(System.String, ToolUp.Platform.RateLimitKeyKind, ToolUp.Platform.RateLimitWindow, System.Int32, ToolUp.Platform.RateLimitOnExceeded, ToolUp.Platform.StorePosture)
 ToolUp.Platform.RouteLimit.Key : ToolUp.Platform.RateLimitKeyKind { get }
 ToolUp.Platform.RouteLimit.OnExceeded : ToolUp.Platform.RateLimitOnExceeded { get }
 ToolUp.Platform.RouteLimit.Route : System.String { get }
+ToolUp.Platform.RouteLimit.StorePosture : ToolUp.Platform.StorePosture { get }
 ToolUp.Platform.RouteLimit.Threshold : System.Int32 { get }
 ToolUp.Platform.RouteLimit.Window : ToolUp.Platform.RateLimitWindow { get }
 ToolUp.Platform.RouteLimitModule (class)
@@ -12520,6 +12537,15 @@ ToolUp.Platform.StorageScopeModule (class)
 ToolUp.Platform.StorageScopeModule.ofKey(System.Boolean, ToolUp.Platform.ScopeKey) : ToolUp.Platform.StorageScope
 ToolUp.Platform.StorageScopeModule.tryKey(ToolUp.Platform.StorageScope) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ScopeKey]
 ToolUp.Platform.StorageScopeModule.tryTeamId(ToolUp.Platform.StorageScope) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamId]
+ToolUp.Platform.StorePosture (class)
+ToolUp.Platform.StorePosture.FailClosed : ToolUp.Platform.StorePosture { get }
+ToolUp.Platform.StorePosture.FailOpen : ToolUp.Platform.StorePosture { get }
+ToolUp.Platform.StorePosture.IsFailClosed : System.Boolean { get }
+ToolUp.Platform.StorePosture.IsFailOpen : System.Boolean { get }
+ToolUp.Platform.StorePosture.Tag : System.Int32 { get }
+ToolUp.Platform.StorePosture+Tags (class)
+ToolUp.Platform.StorePosture+Tags.FailClosed : System.Int32 (literal)
+ToolUp.Platform.StorePosture+Tags.FailOpen : System.Int32 (literal)
 ToolUp.Platform.Stores (class)
 ToolUp.Platform.Stores..ctor(ToolUp.Platform.EventStoreMode, ToolUp.Platform.ResultStoreMode, ToolUp.Platform.FeatureMode, ToolUp.Platform.ServiceAccountStoreMode, ToolUp.Platform.FeatureMode, ToolUp.Platform.FeatureMode, ToolUp.Platform.GraphStoreMode, ToolUp.Platform.TimeSeriesStoreMode, ToolUp.Platform.DatasetStoreMode, ToolUp.Platform.SessionRegistryMode, ToolUp.Platform.FeatureMode, ToolUp.Platform.ConversationStoreMode, ToolUp.Platform.FeatureMode, ToolUp.Platform.RateLimitStoreMode, ToolUp.Platform.ConsentStateStoreMode, ToolUp.Platform.FeatureMode)
 ToolUp.Platform.Stores.AssetStore : ToolUp.Platform.FeatureMode { get }

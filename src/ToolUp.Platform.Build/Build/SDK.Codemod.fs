@@ -66,6 +66,10 @@ type CodemodMigration =
     /// `InvocationResult` is gone, the fork's unions are qualified, and a
     /// streaming method may carry the pre-flight markers.
     | RequestPipeline
+    /// The remoting rate-limit store is `IRemotingRateLimitStore`, both
+    /// store interfaces answer `Admission`, and a `RouteLimit` declares its
+    /// `StorePosture`.
+    | RateLimitAdmission
 
 /// Helpers over `CodemodMigration`.
 module CodemodMigration =
@@ -93,6 +97,7 @@ module CodemodMigration =
         | CodemodMigration.TypedIdentity -> "docs/migrations/878-typed-identity.md"
         | CodemodMigration.RequestPipeline ->
             "docs/migrations/1056-redesign-b-request-pipeline-as-stages-with-streaming-inside.md"
+        | CodemodMigration.RateLimitAdmission -> "docs/migrations/1068-redesign-d-rate-limit-unification.md"
 
     /// The phase label the renderings print.
     let label migration =
@@ -114,6 +119,7 @@ module CodemodMigration =
         | CodemodMigration.SubsystemNamespaces -> "Phase 1198"
         | CodemodMigration.TypedIdentity -> "Phase 878"
         | CodemodMigration.RequestPipeline -> "Phase 1056"
+        | CodemodMigration.RateLimitAdmission -> "Phase 1068"
 
 /// Which files a rule applies to. The Phase 11.C.5 Tier 2 renames are
 /// PACKAGE ids — they live in `.fsproj` / `Directory.Packages.props` —
@@ -943,6 +949,16 @@ module Codemod =
             @"(?<![.\w])(PropagateCategorised|Propagate)\b(?=\s*[(\w""])"
             "ErrorResult.$1"
             "`Propagate x` / `PropagateCategorised(category, x)` in an error handler → `ErrorResult.Propagate x` / `ErrorResult.PropagateCategorised(category, x)`"
+        // The remoting rate-limit store, named by its namespace (the Phase 56
+        // `ToolUp.Platform.Infra.IRateLimitStore` shares the simple name and
+        // is unchanged, so only the qualified spelling is mechanical).
+        rewrite
+            "1068-remoting-store"
+            CodemodMigration.RateLimitAdmission
+            CodemodFileClass.Source
+            @"\bToolUp\.Remoting\.Server\.IRateLimitStore\b"
+            "ToolUp.Remoting.Server.IRemotingRateLimitStore"
+            "`ToolUp.Remoting.Server.IRateLimitStore` → `ToolUp.Remoting.Server.IRemotingRateLimitStore`"
     ]
 
     // ── The review rules ──────────────────────────────────────────────
@@ -1394,6 +1410,36 @@ module Codemod =
             CodemodFileClass.Source
             @"\bAsyncStream\.from(?:Callback|Subscription)\b"
             "a streaming producer now runs under the request's abort token (a client that leaves cancels it) and behind a bounded channel: a `fromCallback` producer that outruns its consumer is held in `emit` until it reads; a `fromSubscription` feed drops its oldest waiting value instead. A producer that relied on unbounded buffering, or on running past a disconnect, is reviewed here"
+        // Phase 1068 — the remoting store answers `Admission`.
+        review
+            "1068-remoting-decision"
+            CodemodMigration.RateLimitAdmission
+            CodemodFileClass.Source
+            @"\bRateLimitAllowed\b|\bRateLimitDenied\b"
+            "`RateLimitDecision` is gone: `TryAcquire` answers `Admission` — `RateLimitAllowed` is `Admission.Admit remaining` (`Admission.Admit _` in a pattern) and `RateLimitDenied retryAfter` is `Admission.Deny retryAfter`"
+        // The bare simple name: the remoting store if the file opens
+        // `ToolUp.Remoting.Server` and calls `TryAcquire`, else the Phase 56
+        // store, which keeps its name.
+        review
+            "1068-bare-store-name"
+            CodemodMigration.RateLimitAdmission
+            CodemodFileClass.Source
+            @"(?<![.\w])IRateLimitStore\b"
+            "if this is the remoting store (its member is `TryAcquire`, from `ToolUp.Remoting.Server`) it is `IRemotingRateLimitStore` now; the Phase 56 `IRateLimitStore` (`IncrementAndCheck`) keeps its name"
+        // The Phase 56 store answers `Admission` too.
+        review
+            "1068-inbound-decision"
+            CodemodMigration.RateLimitAdmission
+            CodemodFileClass.Source
+            @"\b(?:AllowWithRemaining|DenyWithError)\b"
+            "if this matches an `IncrementAndCheck` result, it answers `Admission` now: `AllowWithRemaining remaining` is `Admission.Admit remaining` and `DenyWithError rle` is `Admission.Deny retryAfter` (`RateLimitedError.ofDenial threshold window retryAfter` rebuilds the payload). A `RateLimitDecisionEvent.Decision` keeps the old shape; an implementation returns `InboundRateLimitDecision.toAdmission` of it"
+        // A full `RouteLimit` literal gains a field.
+        review
+            "1068-route-limit-posture"
+            CodemodMigration.RateLimitAdmission
+            CodemodFileClass.Source
+            @"\bOnExceeded\s*=(?!.*\bStorePosture\b)"
+            "if this is a full `RouteLimit` literal it needs `StorePosture = StorePosture.FailOpen` (today's behaviour) or `StorePosture.FailClosed` (refuse and audit when the store fails); a `{ limit with OnExceeded = … }` copy keeps the posture it copies"
     ]
 
 
@@ -2392,6 +2438,7 @@ module Codemod =
             CodemodMigration.TypedIdentity
             CodemodMigration.SubsystemNamespaces
             CodemodMigration.RequestPipeline
+            CodemodMigration.RateLimitAdmission
         ]
         |> List.tryFind (fun m -> CodemodMigration.label m = "Phase " + phase.Trim())
 

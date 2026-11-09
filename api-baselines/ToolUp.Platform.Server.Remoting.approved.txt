@@ -617,8 +617,8 @@ ToolUp.Remoting.Server.IJobDispatcher (interface)
 ToolUp.Remoting.Server.IJobDispatcher.Cancel`1(ToolUp.Remoting.Server.JobHandle`1[T]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Remoting.Server.IJobDispatcher.Enqueue`1(Microsoft.FSharp.Control.FSharpAsync`1[T]) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Remoting.Server.JobHandle`1[T]]
 ToolUp.Remoting.Server.IJobDispatcher.GetStatus`1(ToolUp.Remoting.Server.JobHandle`1[T]) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Remoting.Server.JobStatus`1[T]]
-ToolUp.Remoting.Server.IRateLimitStore (interface)
-ToolUp.Remoting.Server.IRateLimitStore.TryAcquire(System.String, System.Int32, System.TimeSpan) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Remoting.Server.RateLimitDecision]
+ToolUp.Remoting.Server.IRemotingRateLimitStore (interface)
+ToolUp.Remoting.Server.IRemotingRateLimitStore.TryAcquire(System.String, System.Int32, System.TimeSpan) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.Admission]
 ToolUp.Remoting.Server.IRemotingTelemetry (interface)
 ToolUp.Remoting.Server.IRemotingTelemetry.OnMethodCompleted(ToolUp.Remoting.Server.MethodTelemetry) : System.Void
 ToolUp.Remoting.Server.IValidationContext (interface)
@@ -638,7 +638,9 @@ ToolUp.Remoting.Server.InMemoryJobDispatcher..ctor(Microsoft.FSharp.Core.FSharpO
 ToolUp.Remoting.Server.InMemoryJobDispatcher.JobCount : System.Int32 { get }
 ToolUp.Remoting.Server.InMemoryJobDispatcher.MaxJobs : System.Int32 { get }
 ToolUp.Remoting.Server.InMemoryRateLimitStore (class)
-ToolUp.Remoting.Server.InMemoryRateLimitStore..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.Int32])
+ToolUp.Remoting.Server.InMemoryRateLimitStore..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset]])
+ToolUp.Remoting.Server.InMemoryRateLimitStore.Acquire(System.String, System.Int32, System.TimeSpan) : ToolUp.Platform.Admission
+ToolUp.Remoting.Server.InMemoryRateLimitStore.Admitted(System.String, System.TimeSpan) : System.Int32
 ToolUp.Remoting.Server.InMemoryRateLimitStore.BucketCount : System.Int32 { get }
 ToolUp.Remoting.Server.InMemoryRateLimitStore.MaxBuckets : System.Int32 { get }
 ToolUp.Remoting.Server.JobCompanion (class)
@@ -836,16 +838,6 @@ ToolUp.Remoting.Server.RateLimitAttribute..ctor(System.Int32, System.Int32)
 ToolUp.Remoting.Server.RateLimitAttribute.Count : System.Int32 { get }
 ToolUp.Remoting.Server.RateLimitAttribute.Window : System.TimeSpan { get }
 ToolUp.Remoting.Server.RateLimitAttribute.WindowSeconds : System.Int32 { get }
-ToolUp.Remoting.Server.RateLimitDecision (class)
-ToolUp.Remoting.Server.RateLimitDecision.IsRateLimitAllowed : System.Boolean { get }
-ToolUp.Remoting.Server.RateLimitDecision.IsRateLimitDenied : System.Boolean { get }
-ToolUp.Remoting.Server.RateLimitDecision.RateLimitAllowed : ToolUp.Remoting.Server.RateLimitDecision { get }
-ToolUp.Remoting.Server.RateLimitDecision.Tag : System.Int32 { get }
-ToolUp.Remoting.Server.RateLimitDecision+RateLimitDenied (class)
-ToolUp.Remoting.Server.RateLimitDecision+RateLimitDenied.retryAfter : System.TimeSpan { get }
-ToolUp.Remoting.Server.RateLimitDecision+Tags (class)
-ToolUp.Remoting.Server.RateLimitDecision+Tags.RateLimitAllowed : System.Int32 (literal)
-ToolUp.Remoting.Server.RateLimitDecision+Tags.RateLimitDenied : System.Int32 (literal)
 ToolUp.Remoting.Server.RateLimitWindow (class)
 ToolUp.Remoting.Server.RateLimitWindow.perDay : System.Int32 (literal)
 ToolUp.Remoting.Server.RateLimitWindow.perHour : System.Int32 (literal)
@@ -874,7 +866,7 @@ ToolUp.Remoting.Server.Remoting.withJobAdminRole`2(System.String, ToolUp.Remotin
 ToolUp.Remoting.Server.Remoting.withJobDispatcher`2(ToolUp.Remoting.Server.IJobDispatcher, ToolUp.Remoting.Server.RemotingOptions`2[t, implementation]) : ToolUp.Remoting.Server.RemotingOptions`2[t, implementation]
 ToolUp.Remoting.Server.Remoting.withMaxMultipartSectionBytes`2(System.Int64, ToolUp.Remoting.Server.RemotingOptions`2[t, implementation]) : ToolUp.Remoting.Server.RemotingOptions`2[t, implementation]
 ToolUp.Remoting.Server.Remoting.withMaxMultipartSections`2(System.Int32, ToolUp.Remoting.Server.RemotingOptions`2[t, implementation]) : ToolUp.Remoting.Server.RemotingOptions`2[t, implementation]
-ToolUp.Remoting.Server.Remoting.withRateLimitStore`2(ToolUp.Remoting.Server.IRateLimitStore, ToolUp.Remoting.Server.RemotingOptions`2[t, implementation]) : ToolUp.Remoting.Server.RemotingOptions`2[t, implementation]
+ToolUp.Remoting.Server.Remoting.withRateLimitStore`2(ToolUp.Remoting.Server.IRemotingRateLimitStore, ToolUp.Remoting.Server.RemotingOptions`2[t, implementation]) : ToolUp.Remoting.Server.RemotingOptions`2[t, implementation]
 ToolUp.Remoting.Server.Remoting.withRecyclableMemoryStreamManager`2(Microsoft.IO.RecyclableMemoryStreamManager, ToolUp.Remoting.Server.RemotingOptions`2[a, b]) : ToolUp.Remoting.Server.RemotingOptions`2[a, b]
 ToolUp.Remoting.Server.Remoting.withRemoteIpResolver`2(Microsoft.FSharp.Core.FSharpFunc`2[ctx, Microsoft.FSharp.Core.FSharpOption`1[System.String]], ToolUp.Remoting.Server.RemotingOptions`2[ctx, implementation]) : ToolUp.Remoting.Server.RemotingOptions`2[ctx, implementation]
 ToolUp.Remoting.Server.Remoting.withRouteBuilder`2(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]], ToolUp.Remoting.Server.RemotingOptions`2[a, b]) : ToolUp.Remoting.Server.RemotingOptions`2[a, b]
@@ -885,7 +877,7 @@ ToolUp.Remoting.Server.Remoting.withTelemetry`2(ToolUp.Remoting.Server.IRemoting
 ToolUp.Remoting.Server.Remoting.withValidationMessages`2(ToolUp.Remoting.Server.IValidationMessages, ToolUp.Remoting.Server.RemotingOptions`2[t, implementation]) : ToolUp.Remoting.Server.RemotingOptions`2[t, implementation]
 ToolUp.Remoting.Server.Remoting.withoutBodyNormalisation`2(ToolUp.Remoting.Server.RemotingOptions`2[t, implementation]) : ToolUp.Remoting.Server.RemotingOptions`2[t, implementation]
 ToolUp.Remoting.Server.RemotingOptions`2 (class)
-ToolUp.Remoting.Server.RemotingOptions`2..ctor(ToolUp.Remoting.Server.ProtocolImplementation`2[context, serverImpl], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.Exception, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Server.RouteInfo`1[context], ToolUp.Remoting.Server.ErrorResult]]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit]], System.Tuple`2[Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Remoting.Server.Documentation]], ToolUp.Remoting.Server.SerializationType, ToolUp.Remoting.Server.JsonSerializerBackend, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.IO.RecyclableMemoryStreamManager], ToolUp.Remoting.Server.BodyNormalisation, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Remoting.Server.IRemotingTelemetry], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.Boolean]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[context, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Remoting.Server.IAuthContext]]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Remoting.Server.IRateLimitStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Remoting.Server.IAuditEmitter], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Remoting.Server.IIdempotencyStore], System.TimeSpan, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Remoting.Server.IValidationMessages], System.Int32, System.Int64, System.Int32, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[context, Microsoft.FSharp.Core.FSharpOption`1[System.String]]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Remoting.Server.IJobDispatcher], System.String)
+ToolUp.Remoting.Server.RemotingOptions`2..ctor(ToolUp.Remoting.Server.ProtocolImplementation`2[context, serverImpl], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.Exception, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Server.RouteInfo`1[context], ToolUp.Remoting.Server.ErrorResult]]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit]], System.Tuple`2[Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Remoting.Server.Documentation]], ToolUp.Remoting.Server.SerializationType, ToolUp.Remoting.Server.JsonSerializerBackend, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.IO.RecyclableMemoryStreamManager], ToolUp.Remoting.Server.BodyNormalisation, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Remoting.Server.IRemotingTelemetry], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.Boolean]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[context, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Remoting.Server.IAuthContext]]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Remoting.Server.IRemotingRateLimitStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Remoting.Server.IAuditEmitter], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Remoting.Server.IIdempotencyStore], System.TimeSpan, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Remoting.Server.IValidationMessages], System.Int32, System.Int64, System.Int32, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[context, Microsoft.FSharp.Core.FSharpOption`1[System.String]]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Remoting.Server.IJobDispatcher], System.String)
 ToolUp.Remoting.Server.RemotingOptions`2.AuditEmitter : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Remoting.Server.IAuditEmitter] { get }
 ToolUp.Remoting.Server.RemotingOptions`2.AuthContextResolver : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[context, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Remoting.Server.IAuthContext]]] { get }
 ToolUp.Remoting.Server.RemotingOptions`2.BodyNormalisation : ToolUp.Remoting.Server.BodyNormalisation { get }
@@ -900,7 +892,7 @@ ToolUp.Remoting.Server.RemotingOptions`2.JobDispatcher : Microsoft.FSharp.Core.F
 ToolUp.Remoting.Server.RemotingOptions`2.JsonSerializer : ToolUp.Remoting.Server.JsonSerializerBackend { get }
 ToolUp.Remoting.Server.RemotingOptions`2.MaxMultipartSectionBytes : System.Int64 { get }
 ToolUp.Remoting.Server.RemotingOptions`2.MaxMultipartSections : System.Int32 { get }
-ToolUp.Remoting.Server.RemotingOptions`2.RateLimitStore : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Remoting.Server.IRateLimitStore] { get }
+ToolUp.Remoting.Server.RemotingOptions`2.RateLimitStore : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Remoting.Server.IRemotingRateLimitStore] { get }
 ToolUp.Remoting.Server.RemotingOptions`2.RemoteIpResolver : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[context, Microsoft.FSharp.Core.FSharpOption`1[System.String]]] { get }
 ToolUp.Remoting.Server.RemotingOptions`2.RequireAuditOnRoleGated : System.Boolean { get }
 ToolUp.Remoting.Server.RemotingOptions`2.ResponseSerialization : ToolUp.Remoting.Server.SerializationType { get }
