@@ -14,7 +14,7 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Infra.Metrics
 open ToolUp.Platform.Compose
 
-// ─── Phase 6j.B — Tier 3: small-model triage ─────────────────────
+// ─── Tier 3: small-model triage ─────────────────────
 //
 // The third tier of the fast-path ladder. Tier 1 (a declarative
 // pattern match, client-side, microseconds) has already missed; the
@@ -23,7 +23,7 @@ open ToolUp.Platform.Compose
 // country to UK". Tier 3 spends one cheap, tool-free,
 // schema-constrained model call (~500 ms) deciding between the two:
 // either the instruction maps onto exactly one declared field (or,
-// since Phase 664, an ordered list of them, or one declared navigation
+// an ordered list of them, or one declared navigation
 // target), or it does not and the full loop runs unchanged.
 //
 // ─── The three properties that make this safe ────────────────────
@@ -73,7 +73,7 @@ open ToolUp.Platform.Compose
 //
 // Rides the existing `_platform.ai.fastpath` event source (the same
 // source `/dev/ai-fastpath` already reads) under its own `EventType`,
-// exactly as the Phase 6j.G sequencer beacons do. One event per
+// exactly as the sequencer beacons do. One event per
 // ATTEMPT, carrying the outcome — not one event per outcome kind —
 // so the attempt count is the row count and a rollup cannot
 // double-count.
@@ -84,98 +84,107 @@ let FastPathSourceModule = "_platform.ai.fastpath"
 [<Literal>]
 let TriageEventType = "FastPathTriageAttempt"
 
-/// Triage resolved the instruction — one declared field, an ordered
-/// list of them, or a declared navigation target (Phase 664; the
-/// row's `VerdictShape` says which) — and the action(s) were emitted.
-/// The full agent loop did NOT run.
-[<Literal>]
-let OutcomeHit = "hit"
+/// How one triage attempt ended. `Token` is the telemetry string a row and a
+/// metric tag carry.
+[<RequireQualifiedAccess>]
+type TriageOutcome =
+    /// Triage resolved the instruction — one declared field, an ordered list
+    /// of them, or a declared navigation target (the row's `VerdictShape`
+    /// says which) — and the action(s) were emitted. The full agent loop did
+    /// NOT run.
+    | Hit
+    /// The model itself judged the instruction to need the full agent. The
+    /// healthy majority of misses; distinct from every other case, all of
+    /// which are triage failing rather than triage working.
+    | NeedsFullAgent
+    /// The model's answer did not parse as the required shape.
+    | Unparseable
+    /// The model named a field the active surface does not declare.
+    | UnknownField
+    /// The model's own confidence was under the configured floor.
+    | LowConfidence
+    /// The model asked to CLEAR a field whose declared `ValueType` is not
+    /// optional. Kept separate from `UnknownField` because it points at a
+    /// declaration gap, not a hallucination.
+    | ClearUnsupported
+    /// The triage provider call failed — a call that CAME BACK and said no,
+    /// not one that never came back inside the configured budget.
+    | ProviderError
+    /// The triage call did not complete within `FastPathTriageConfig`'s
+    /// configured `TimeoutMs`: the resolver's OWN wall-clock guarantee
+    /// firing, the property that bounds what triage can cost a turn whether
+    /// or not the provider honours cancellation. Paired with
+    /// `TimeoutBudgetMs` on the telemetry row so a dashboard can tell a
+    /// near-miss from a hang.
+    | Timeout
 
-/// The model itself judged the instruction to need the full agent.
-/// The healthy majority of misses; distinct from every other token
-/// below, all of which are triage failing rather than triage working.
-[<Literal>]
-let OutcomeNeedsFullAgent = "needs-full-agent"
+    member this.Token =
+        match this with
+        | Hit -> "hit"
+        | NeedsFullAgent -> "needs-full-agent"
+        | Unparseable -> "unparseable"
+        | UnknownField -> "unknown-field"
+        | LowConfidence -> "low-confidence"
+        | ClearUnsupported -> "clear-unsupported"
+        | ProviderError -> "provider-error"
+        | Timeout -> "timeout"
 
-/// The model's answer did not parse as the required shape.
-[<Literal>]
-let OutcomeUnparseable = "unparseable"
+module TriageOutcome =
+    /// Every outcome, in the order a rollup presents them.
+    let all: TriageOutcome list = [
+        TriageOutcome.Hit
+        TriageOutcome.NeedsFullAgent
+        TriageOutcome.Unparseable
+        TriageOutcome.UnknownField
+        TriageOutcome.LowConfidence
+        TriageOutcome.ClearUnsupported
+        TriageOutcome.ProviderError
+        TriageOutcome.Timeout
+    ]
 
-/// The model named a field the active surface does not declare.
-[<Literal>]
-let OutcomeUnknownField = "unknown-field"
+    /// The outcome a telemetry token names; `None` for a token this
+    /// vocabulary does not hold.
+    let ofToken (token: string) : TriageOutcome option =
+        all |> List.tryFind (fun o -> o.Token = token)
 
-/// The model's own confidence was under the configured floor.
-[<Literal>]
-let OutcomeLowConfidence = "low-confidence"
+    /// The turn continued into the full agent loop: everything but a hit,
+    /// including the healthy `NeedsFullAgent`, because the question this
+    /// answers is "what fraction of triage spend bought a resolution".
+    let isFallThrough (outcome: TriageOutcome) : bool = outcome <> TriageOutcome.Hit
 
-/// The model asked to CLEAR a field whose declared `ValueType` is not
-/// optional. Kept separate from `unknown-field` because it points at a
-/// declaration gap, not a hallucination.
-[<Literal>]
-let OutcomeClearUnsupported = "clear-unsupported"
+/// Which path the triage call took to a model.
+[<RequireQualifiedAccess>]
+type TriageRoute =
+    /// `config.TriageProvider` served — the explicit escape hatch.
+    | TriageProvider
+    /// The turn provider served on its configured model, no override
+    /// requested.
+    | TurnProvider
+    /// The turn provider served through the per-call model override at its
+    /// declared `TriageModelId` (also recorded when the override call FAILED
+    /// before the provider could say whether it honoured the id).
+    | Override
+    /// The override was requested and the provider served its configured
+    /// model instead.
+    | OverrideFallback
+    /// The override path reported serving the configured model.
+    | Configured
 
-/// The triage provider call failed — a schema/parse/capability error,
-/// or any other `AIProviderError` the call returned. Distinct from
-/// `OutcomeTimeout`: this stratum is a call that CAME BACK and said no,
-/// not one that never came back inside the configured budget.
-[<Literal>]
-let OutcomeProviderError = "provider-error"
+    member this.Token =
+        match this with
+        | TriageProvider -> "triage-provider"
+        | TurnProvider -> "turn-provider"
+        | Override -> "override"
+        | OverrideFallback -> "override-fallback"
+        | Configured -> "configured"
 
-/// The triage call did not complete within `FastPathTriageConfig`'s
-/// configured `TimeoutMs`. Kept separate from `provider-error` because
-/// the operator question is different: a provider answering "no" cheaply
-/// is a healthy miss at the model layer, while a hang is the resolver's
-/// OWN wall-clock guarantee firing — the property that bounds what
-/// triage can cost a turn regardless of whether the provider (or a
-/// misbehaving fake in tests) honours cancellation cooperatively. Paired
-/// with `TimeoutBudgetMs` on the telemetry row so a dashboard can tell a
-/// near-miss (elapsed close to, but under, the budget) from a hang
-/// (elapsed at the budget because this stratum fired).
-[<Literal>]
-let OutcomeTimeout = "timeout"
-
-// ─── Route tokens (Phase 661) ────────────────────────────────────
-//
-// Which path the triage call took to a model. `TriageEventPayload.Route`
-// carries one of these, or one of `ModelOverrideOutcome.route`'s values
-// (`override` / `override-fallback` / `configured`) when the per-call
-// override path was taken and the provider answered.
-
-/// `config.TriageProvider` served — the explicit escape hatch.
-[<Literal>]
-let TriageRouteTriageProvider = "triage-provider"
-
-/// The turn provider served through the per-call model override at its
-/// declared `TriageModelId`. Recorded as-is only when the call FAILED
-/// before the provider could say whether it honoured the id; a
-/// successful call records `ModelOverrideOutcome.route` instead.
-[<Literal>]
-let TriageRouteOverride = "override"
-
-/// The turn provider served on its configured model, no override
-/// requested — the pre-661 path.
-[<Literal>]
-let TriageRouteTurnProvider = "turn-provider"
-
-/// Every outcome token, in the order a rollup should present them.
-let outcomes: string list = [
-    OutcomeHit
-    OutcomeNeedsFullAgent
-    OutcomeUnparseable
-    OutcomeUnknownField
-    OutcomeLowConfidence
-    OutcomeClearUnsupported
-    OutcomeProviderError
-    OutcomeTimeout
-]
-
-/// Outcomes that mean the turn continued into the full agent loop.
-/// Everything that is not a hit — including the healthy
-/// `needs-full-agent` — because the operator question this answers is
-/// "what fraction of triage spend bought a resolution".
-let fallThroughOutcomes: Set<string> =
-    outcomes |> List.filter (fun o -> o <> OutcomeHit) |> Set.ofList
+module TriageRoute =
+    /// The route the per-call override reported.
+    let ofOverride (outcome: ModelOverrideOutcome) : TriageRoute =
+        match outcome with
+        | ConfiguredModel _ -> TriageRoute.Configured
+        | OverrideHonoured _ -> TriageRoute.Override
+        | OverrideFellBack _ -> TriageRoute.OverrideFallback
 
 // ─── Configuration ───────────────────────────────────────────────
 
@@ -186,7 +195,7 @@ let fallThroughOutcomes: Set<string> =
 [<Literal>]
 let SetFieldActionKey = "_ui.set-field"
 
-/// Phase 664 — the action key a `navigate` verdict's
+/// The action key a `navigate` verdict's
 /// `Notification.ModuleAction` carries, addressed to the active module
 /// exactly as `_ui.set-field` is, with the payload
 /// `{"target":…,"source":"triage"}`. Only ever emitted on a surface that
@@ -196,7 +205,7 @@ let SetFieldActionKey = "_ui.set-field"
 [<Literal>]
 let NavigateActionKey = "_ui.navigate"
 
-/// Phase 664 — the reserved `AIFieldDescriptor.FieldId` through which a
+/// The reserved `AIFieldDescriptor.FieldId` through which a
 /// surface declares its navigation targets. The same `_navigation`
 /// token the Tier-1 beacon already records for a navigation resolution
 /// (`FastPathBeaconHandler`), so the two tiers name navigation alike.
@@ -223,7 +232,7 @@ type FastPathTriageConfig = {
     Registry: IAIFieldRegistry
     /// The provider that serves the triage call — the explicit escape
     /// hatch, and it wins outright when set. `None` ⇒ the turn's own
-    /// provider serves, and since Phase 661 it serves at its declared
+    /// provider serves, and it serves at its declared
     /// `Capabilities.TriageModelId` through the per-call model
     /// override, so the cheap tier is reached with nothing wired here.
     /// Populate this only to route triage somewhere the turn provider's
@@ -305,42 +314,12 @@ module FastPathTriageConfig =
 
 // ─── Model contract ──────────────────────────────────────────────
 
-/// The four verdicts of the answer grammar. `set_field` and
-/// `needs_full_agent` are the Phase 6j.B originals; `set_fields` (an
-/// ordered list of two or more field sets) and `navigate` (one declared
-/// navigation target) are Phase 664's, added because a measured fifth
-/// of the paraphrase stratum resolves to one of those two shapes and
-/// was structurally unreachable under a single-field grammar.
-[<Literal>]
-let VerdictSetField = "set_field"
-
-/// Phase 664 — an ordered list of two or more field sets, applied
-/// all-or-nothing.
-[<Literal>]
-let VerdictSetFields = "set_fields"
-
-/// Phase 664 — go to one target of the surface's declared navigation.
-[<Literal>]
-let VerdictNavigate = "navigate"
-
-/// The model's own decline: the full agent loop should handle this.
-[<Literal>]
-let VerdictNeedsFullAgent = "needs_full_agent"
-
 /// Upper bound on the clauses of one `set_fields` verdict. An
 /// instruction short enough to be eligible cannot plausibly name more;
 /// a longer list is a model misbehaving, and is refused whole rather
 /// than truncated.
 [<Literal>]
 let MaxFieldClauses = 8
-
-/// JSON Schema handed to `IAIProvider.SendStructuredMessage`. Kept
-/// deliberately small: one closed enum, one shallow list, nothing a
-/// provider's native structured-output mode can fail on — and the
-/// post-parse below stays total and strict whatever the provider does
-/// with the schema.
-let triageSchema =
-    """{"type":"object","additionalProperties":false,"properties":{"decision":{"type":"string","enum":["set_field","set_fields","navigate","needs_full_agent"]},"fieldId":{"type":["string","null"]},"value":{"type":["string","null"]},"fields":{"type":["array","null"],"items":{"type":"object","additionalProperties":false,"properties":{"fieldId":{"type":"string"},"value":{"type":["string","null"]}},"required":["fieldId","value"]}},"target":{"type":["string","null"]},"confidence":{"type":"number"},"reason":{"type":"string"}},"required":["decision","confidence"]}"""
 
 /// One clause of a `set_fields` verdict. `Value = None` clears, under
 /// the same optional-typed-field rule as a single `set_field`.
@@ -352,27 +331,120 @@ type TriageFieldClause = {
     Value: string option
 }
 
+/// Which grammar shape an action verdict took, recorded on every attempt
+/// row whose answer parsed as one — so an absorption dashboard can attribute
+/// hits (and whole-verdict rejections) to the single-field grammar or to its
+/// two extensions.
+[<RequireQualifiedAccess>]
+type VerdictShape =
+    /// A `set_field` verdict.
+    | Single
+    /// A `set_fields` verdict.
+    | Multi
+    /// A `navigate` verdict.
+    | Navigate
+
+    member this.Token =
+        match this with
+        | Single -> "single"
+        | Multi -> "multi"
+        | Navigate -> "navigate"
+
+module VerdictShape =
+    /// Every shape, in presentation order.
+    let all: VerdictShape list = [ VerdictShape.Single; VerdictShape.Multi; VerdictShape.Navigate ]
+
+    /// The shape a telemetry token names; `None` for `""` and any token this
+    /// vocabulary does not hold.
+    let ofToken (token: string) : VerdictShape option =
+        all |> List.tryFind (fun s -> s.Token = token)
+
+// The verdict tokens of the answer grammar: the `decision` strings the model
+// answers with and the schema enumerates. Read only through `Token` and the
+// parser below.
+module private VerdictToken =
+    [<Literal>]
+    let SetField = "set_field"
+
+    [<Literal>]
+    let SetFields = "set_fields"
+
+    [<Literal>]
+    let Navigate = "navigate"
+
+    [<Literal>]
+    let NeedsFullAgent = "needs_full_agent"
+
+/// The model's verdict, the four of the answer grammar. Each carries exactly
+/// its own members, so a verdict carrying another verdict's members (a
+/// "mixed" verdict) cannot be built.
+[<RequireQualifiedAccess>]
+type TriageVerdict =
+    /// Set one field. `fieldId` is the id as the model gave it (`None` when
+    /// it gave none), `value = None` the CLEAR case.
+    | SetField of fieldId: string option * value: string option
+    /// An ordered list of two or more field sets, applied all-or-nothing.
+    | SetFields of clauses: TriageFieldClause list
+    /// Go to one target of the surface's declared navigation.
+    | Navigate of target: string
+    /// The model's own decline: the full agent loop should handle this.
+    | NeedsFullAgent
+
+    member this.Token =
+        match this with
+        | SetField _ -> VerdictToken.SetField
+        | SetFields _ -> VerdictToken.SetFields
+        | Navigate _ -> VerdictToken.Navigate
+        | NeedsFullAgent -> VerdictToken.NeedsFullAgent
+
+module TriageVerdict =
+    /// The grammar shape of an action verdict; `None` for `NeedsFullAgent`.
+    let shape (verdict: TriageVerdict) : VerdictShape option =
+        match verdict with
+        | TriageVerdict.SetField _ -> Some VerdictShape.Single
+        | TriageVerdict.SetFields _ -> Some VerdictShape.Multi
+        | TriageVerdict.Navigate _ -> Some VerdictShape.Navigate
+        | TriageVerdict.NeedsFullAgent -> None
+
+    /// The one consistency rule, read by the parser when it builds a verdict
+    /// and by the planner for a verdict built anywhere else (a cached
+    /// calibration answer, a test): a list has two to `MaxFieldClauses`
+    /// clauses, and a navigation names a target.
+    let wellFormed (verdict: TriageVerdict) : bool =
+        match verdict with
+        | TriageVerdict.SetFields clauses ->
+            not (isNull (box clauses))
+            && clauses.Length >= 2
+            && clauses.Length <= MaxFieldClauses
+        | TriageVerdict.Navigate target -> not (String.IsNullOrWhiteSpace target)
+        | TriageVerdict.SetField _
+        | TriageVerdict.NeedsFullAgent -> true
+
+/// JSON Schema handed to `IAIProvider.SendStructuredMessage`. Kept
+/// deliberately small: one closed enum, one shallow list, nothing a
+/// provider's native structured-output mode can fail on — and the
+/// post-parse below stays total and strict whatever the provider does
+/// with the schema.
+let triageSchema =
+    let verdicts =
+        [
+            VerdictToken.SetField
+            VerdictToken.SetFields
+            VerdictToken.Navigate
+            VerdictToken.NeedsFullAgent
+        ]
+        |> List.map (fun t -> $"\"{t}\"")
+        |> String.concat ","
+
+    """{"type":"object","additionalProperties":false,"properties":{"decision":{"type":"string","enum":[VERDICTS]},"fieldId":{"type":["string","null"]},"value":{"type":["string","null"]},"fields":{"type":["array","null"],"items":{"type":"object","additionalProperties":false,"properties":{"fieldId":{"type":"string"},"value":{"type":["string","null"]}},"required":["fieldId","value"]}},"target":{"type":["string","null"]},"confidence":{"type":"number"},"reason":{"type":"string"}},"required":["decision","confidence"]}"""
+        .Replace("VERDICTS", verdicts)
+
 /// The model's answer, after parsing and before validation against the
-/// surface. `Value = None` is the CLEAR case (the model returned JSON
-/// `null`), which is only honoured for an optional-typed field.
-///
-/// Phase 664: `Target` carries a `navigate` verdict's target and
-/// `Fields` a `set_fields` verdict's clauses, in the order the model
-/// gave them. Each is populated ONLY for its own verdict — the parser
-/// refuses a verdict carrying another shape's members (a "mixed"
-/// verdict), and `planTriage` re-checks, so a hand-built decision
-/// cannot smuggle one shape inside another.
+/// surface.
 type TriageModelDecision = {
-    Decision: string
-    FieldId: string option
-    Value: string option
+    Decision: TriageVerdict
     Confidence: float
     Reason: string
-    /// Phase 664 — a `navigate` verdict's target; `None` otherwise.
-    Target: string option
-    /// Phase 664 — a `set_fields` verdict's clauses, in order; `[]`
-    /// otherwise.
-    Fields: TriageFieldClause list
 }
 
 /// What the resolver decided to do, after checking the model's answer
@@ -381,48 +453,16 @@ type TriagePlan =
     /// Emit a `_ui.set-field` action for this declared field.
     /// `Value = None` clears an optional field.
     | TriageSetField of field: AIFieldDescriptor * value: string option * confidence: float
-    /// Phase 664 — emit one `_ui.set-field` action per clause, in order.
-    /// Only ever built when EVERY clause validated: there is no partial
-    /// plan (partial resolvability stays a Tier-1 sequencer capability).
+    /// Emit one `_ui.set-field` action per clause, in order. Only ever built
+    /// when EVERY clause validated: there is no partial plan (partial
+    /// resolvability stays a Tier-1 sequencer capability).
     | TriageSetFields of clauses: (AIFieldDescriptor * string option) list * confidence: float
-    /// Phase 664 — emit one `_ui.navigate` action for this target, on a
-    /// surface whose declared `_navigation` descriptor is carried here.
+    /// Emit one `_ui.navigate` action for this target, on a surface whose
+    /// declared `_navigation` descriptor is carried here.
     | TriageNavigate of navigation: AIFieldDescriptor * target: string * confidence: float
-    /// Run the full agent loop. Carries the telemetry outcome token,
-    /// not a user-facing message — the user sees the agent's answer,
-    /// never this.
-    | TriageFallThrough of outcome: string
-
-// ─── Verdict shape (Phase 664 telemetry) ─────────────────────────
-//
-// Which grammar shape a parsed verdict took, recorded on every attempt
-// row whose answer parsed as an action verdict — so an absorption
-// dashboard can attribute hits (and whole-verdict rejections) to the
-// single-field grammar or to the two Phase 664 extensions.
-
-/// A `set_field` verdict — the 6j.B single-field grammar.
-[<Literal>]
-let VerdictShapeSingle = "single"
-
-/// A `set_fields` verdict — Phase 664's ordered list.
-[<Literal>]
-let VerdictShapeMulti = "multi"
-
-/// A `navigate` verdict — Phase 664's navigation.
-[<Literal>]
-let VerdictShapeNavigate = "navigate"
-
-/// Every shape token, in presentation order.
-let verdictShapes: string list = [ VerdictShapeSingle; VerdictShapeMulti; VerdictShapeNavigate ]
-
-/// The shape of a decision string; `""` for `needs_full_agent` and any
-/// verdict that is not an action.
-let verdictShape (decision: string) : string =
-    match decision with
-    | VerdictSetField -> VerdictShapeSingle
-    | VerdictSetFields -> VerdictShapeMulti
-    | VerdictNavigate -> VerdictShapeNavigate
-    | _ -> ""
+    /// Run the full agent loop. Carries the telemetry outcome, not a
+    /// user-facing message — the user sees the agent's answer, never this.
+    | TriageFallThrough of outcome: TriageOutcome
 
 // ─── Pure stages ─────────────────────────────────────────────────
 //
@@ -465,79 +505,68 @@ let private questionOpeners = [
     "describe"
 ]
 
-/// Is this text a plausible trivial UI instruction at all? Cheap,
-/// local, and applied BEFORE any model call — a turn refused here
-/// costs nothing and is not counted as a triage attempt.
-let isEligibleInstruction (maxChars: int) (instruction: string) : bool =
-    if String.IsNullOrWhiteSpace instruction then
-        false
-    else
-        let trimmed = instruction.Trim()
+/// Which surface signal marked an instruction as a question.
+[<RequireQualifiedAccess>]
+type ReadSignal =
+    /// The instruction contains a `?`.
+    | QuestionMark
+    /// The instruction opens with a question word (`questionOpeners`).
+    | QuestionOpener
 
-        if trimmed.Length > maxChars then
-            false
-        elif trimmed.Contains "?" then
-            false
+    member this.Token =
+        match this with
+        | QuestionMark -> "question-mark"
+        | QuestionOpener -> "question-opener"
+
+/// Whether an instruction is a plausible trivial UI instruction at all, and
+/// if not, why. Cheap, local, and decided BEFORE any model call — a turn
+/// refused here costs nothing and is not counted as a triage attempt.
+[<RequireQualifiedAccess>]
+type Eligibility =
+    | Eligible
+    /// Empty or whitespace.
+    | Empty
+    /// Longer than the configured `MaxInstructionChars`.
+    | TooLong
+    /// A QUESTION about the surface rather than a command to change it —
+    /// the read-path class this tier deliberately never serves. One token
+    /// covers both surface signals, because they are the same refusal for
+    /// the same reason; `signal` says which fired.
+    | ReadShaped of signal: ReadSignal
+
+    member this.Token =
+        match this with
+        | Eligible -> "eligible"
+        | Empty -> "empty"
+        | TooLong -> "too-long"
+        | ReadShaped _ -> "read-shaped"
+
+module Eligibility =
+    /// Assess `instruction` against the pre-filter, in order: empty, too
+    /// long, a `?`, a leading question word.
+    let assess (maxChars: int) (instruction: string) : Eligibility =
+        if String.IsNullOrWhiteSpace instruction then
+            Eligibility.Empty
         else
-            let lowered = trimmed.ToLowerInvariant()
+            let trimmed = instruction.Trim()
 
-            questionOpeners
-            |> List.exists (fun (opener: string) -> lowered.StartsWith opener)
-            |> not
-
-// ─── Pre-filter (eligibility) reasons — Phase 666 ─────────────────
-//
-// `isEligibleInstruction` is a bare bool by design and stays that way:
-// Phase 663's `ToolUp.TriageCalibration` tool and every other caller
-// already depend on that exact signature, and this phase does not
-// widen it. What follows is a SIBLING that names *why* a refused
-// instruction was refused, in the same stratified-token style as the
-// outcome vocabulary above, so a caller that wants the reason can read
-// it directly instead of re-deriving it by elimination the way the
-// calibration tool's own `eligibilityReason` still does (see
-// `docs/migrations/6j-B-fastpath-triage.md`, "Read-path triage
-// stance").
-
-[<Literal>]
-let IneligibleEmpty = "empty"
-
-[<Literal>]
-let IneligibleTooLong = "too-long"
-
-/// The instruction is a QUESTION about the surface rather than a
-/// command to change it — the read-path class this tier deliberately
-/// never serves (see the migration doc). One token covers both shapes
-/// `isEligibleInstruction` tests for — a literal `?` and a leading
-/// question-opener word — because they are the same refusal for the
-/// same reason: a caller reading this token has no use for which of
-/// the two surface signals fired.
-[<Literal>]
-let IneligibleReadShaped = "read-shaped"
-
-/// `None` when the instruction is eligible; otherwise the reason
-/// `isEligibleInstruction` refused it. Mirrors that function's checks,
-/// in the same order, so the two can never disagree about the
-/// VERDICT — only this one also names it.
-let ineligibilityReason (maxChars: int) (instruction: string) : string option =
-    if String.IsNullOrWhiteSpace instruction then
-        Some IneligibleEmpty
-    else
-        let trimmed = instruction.Trim()
-
-        if trimmed.Length > maxChars then
-            Some IneligibleTooLong
-        elif trimmed.Contains "?" then
-            Some IneligibleReadShaped
-        else
-            let lowered = trimmed.ToLowerInvariant()
-
-            if
-                questionOpeners
-                |> List.exists (fun (opener: string) -> lowered.StartsWith opener)
-            then
-                Some IneligibleReadShaped
+            if trimmed.Length > maxChars then
+                Eligibility.TooLong
+            elif trimmed.Contains "?" then
+                Eligibility.ReadShaped ReadSignal.QuestionMark
             else
-                None
+                let lowered = trimmed.ToLowerInvariant()
+
+                if
+                    questionOpeners
+                    |> List.exists (fun (opener: string) -> lowered.StartsWith opener)
+                then
+                    Eligibility.ReadShaped ReadSignal.QuestionOpener
+                else
+                    Eligibility.Eligible
+
+    /// The instruction may be triaged.
+    let isEligible (eligibility: Eligibility) : bool = eligibility = Eligibility.Eligible
 
 /// The last user instruction in the replayed history — the text this
 /// turn is about. `None` when the tail is not a plain user turn (a
@@ -559,7 +588,7 @@ let lastUserInstruction (messages: AIProviderMessage list) : string option =
 [<Literal>]
 let private MaxStateSummaryChars = 2000
 
-/// Phase 665 — a fixed few-shot pack teaching the OUTPUT GRAMMAR, not
+/// A fixed few-shot pack teaching the OUTPUT GRAMMAR, not
 /// this snapshot's fields. Each pair is an instruction and the exact
 /// JSON verdict `parseTriageDecision` accepts for it, so the pack is a
 /// contract with the parser as much as with the model: every entry
@@ -574,7 +603,7 @@ let private MaxStateSummaryChars = 2000
 /// one-line `reason` form for an instruction that needs a lookup and
 /// one that names no single field plainly.
 ///
-/// Phase 664 appends two more, one per new verdict: an ordered
+/// Two more follow, one per new verdict: an ordered
 /// two-clause `set_fields` and a `navigate`. The `navigate` exemplar is
 /// in `navigateExemplars` and reaches the prompt only on a surface that
 /// declares navigation (`triageExemplarsFor`) — telling a model about a
@@ -721,7 +750,7 @@ let buildTriagePrompt (snapshot: AIFieldSnapshot) : string =
          |> String.concat "\n")
     ]
 
-/// Phase 664 — the clauses of a `set_fields` verdict, strictly and in
+/// The clauses of a `set_fields` verdict, strictly and in
 /// order. ALL-OR-NOTHING: the list is refused whole (`None`) unless it
 /// is an array of two to `MaxFieldClauses` objects, each carrying
 /// exactly a non-blank string `fieldId` and a `value` that is a string
@@ -785,7 +814,7 @@ let private parseFieldClauses (fields: JsonElement) : TriageFieldClause list opt
 /// contract returns `None`, and the caller records `unparseable`.
 /// Deliberately lenient about *casing* and about a fenced code block,
 /// because those are the two ways a model that got the content right
-/// gets the envelope wrong — and, since Phase 664, deliberately STRICT
+/// gets the envelope wrong — and deliberately STRICT
 /// about everything else in the two new verdicts: a `set_fields` list
 /// is all-or-nothing (see `parseFieldClauses`), and a verdict carrying
 /// another verdict's members is refused as mixed.
@@ -840,59 +869,48 @@ let parseTriageDecision (content: string) : TriageModelDecision option =
                         // that is not a moment to trust a hit.
                         |> Option.defaultValue 0.0
 
-                    let baseDecision: TriageModelDecision = {
-                        Decision = d
-                        FieldId =
-                            tryProp "fieldId"
-                            |> Option.filter (fun v -> v.ValueKind = JsonValueKind.String)
-                            |> Option.map (fun v -> v.GetString())
-                        Value =
-                            tryProp "value"
-                            |> Option.filter (fun v -> v.ValueKind = JsonValueKind.String)
-                            |> Option.map (fun v -> v.GetString())
-                        Confidence = confidence
-                        Reason =
-                            tryProp "reason"
-                            |> Option.filter (fun v -> v.ValueKind = JsonValueKind.String)
-                            |> Option.map (fun v -> v.GetString())
-                            |> Option.defaultValue ""
-                        Target = None
-                        Fields = []
-                    }
+                    let str (name: string) =
+                        tryProp name
+                        |> Option.filter (fun v -> v.ValueKind = JsonValueKind.String)
+                        |> Option.map (fun v -> v.GetString())
 
-                    // Phase 664 — a verdict carrying another shape's
-                    // members is MIXED, and a mixed verdict is not one
-                    // this parser guesses at: it is refused whole. JSON
-                    // `null` members count as absent (a provider honouring
-                    // the schema's nullable types emits them).
+                    // A verdict carrying another shape's members is MIXED,
+                    // and a mixed verdict is not one this parser guesses
+                    // at: it is refused whole. JSON `null` members count as
+                    // absent (a provider honouring the schema's nullable
+                    // types emits them). `needs_full_agent`, and any
+                    // decision string the grammar does not know, read as
+                    // the model's decline.
                     let has (name: string) = (tryProp name).IsSome
 
-                    match d with
-                    | VerdictSetField ->
-                        if has "target" || has "fields" then
-                            None
-                        else
-                            Some baseDecision
-                    | VerdictNavigate ->
-                        if has "fieldId" || has "value" || has "fields" then
-                            None
-                        else
-                            tryProp "target"
-                            |> Option.filter (fun v -> v.ValueKind = JsonValueKind.String)
-                            |> Option.map (fun v -> v.GetString().Trim())
-                            |> Option.filter (fun t -> t <> "")
-                            |> Option.map (fun t -> { baseDecision with Target = Some t })
-                    | VerdictSetFields ->
-                        if has "fieldId" || has "value" || has "target" then
-                            None
-                        else
-                            tryProp "fields"
-                            |> Option.bind parseFieldClauses
-                            |> Option.map (fun clauses -> { baseDecision with Fields = clauses })
-                    // `needs_full_agent`, and any decision string the
-                    // grammar does not know, parse as before: the plan
-                    // stage reads both as `needs-full-agent`.
-                    | _ -> Some baseDecision
+                    let verdict =
+                        match d with
+                        | VerdictToken.SetField ->
+                            if has "target" || has "fields" then
+                                None
+                            else
+                                Some(TriageVerdict.SetField(str "fieldId", str "value"))
+                        | VerdictToken.Navigate ->
+                            if has "fieldId" || has "value" || has "fields" then
+                                None
+                            else
+                                str "target" |> Option.map (fun t -> TriageVerdict.Navigate(t.Trim()))
+                        | VerdictToken.SetFields ->
+                            if has "fieldId" || has "value" || has "target" then
+                                None
+                            else
+                                tryProp "fields"
+                                |> Option.bind parseFieldClauses
+                                |> Option.map TriageVerdict.SetFields
+                        | _ -> Some TriageVerdict.NeedsFullAgent
+
+                    verdict
+                    |> Option.filter TriageVerdict.wellFormed
+                    |> Option.map (fun v -> {
+                        Decision = v
+                        Confidence = confidence
+                        Reason = str "reason" |> Option.defaultValue ""
+                    })
         with _ ->
             None
 
@@ -907,7 +925,7 @@ let parseTriageDecision (content: string) : TriageModelDecision option =
 /// turn, and the `hit` telemetry row cannot disagree about whether
 /// triage resolved.
 ///
-/// Phase 664: a `set_fields` verdict is planned clause by clause under
+/// A `set_fields` verdict is planned clause by clause under
 /// exactly the single-field rules, and the FIRST clause that fails
 /// fails the whole verdict with that clause's outcome token — there is
 /// no plan that applies some clauses and not others. A `navigate`
@@ -918,9 +936,12 @@ let planTriage (config: FastPathTriageConfig) (snapshot: AIFieldSnapshot) (decis
     // Validate one field set against the declared surface. Shared by the
     // single and the list verdict, so the two cannot drift on what a
     // valid clause is.
-    let planClause (fieldId: string option) (value: string option) : Result<AIFieldDescriptor * string option, string> =
+    let planClause
+        (fieldId: string option)
+        (value: string option)
+        : Result<AIFieldDescriptor * string option, TriageOutcome> =
         match fieldId |> Option.bind (fun id -> tryFindSettableField id snapshot) with
-        | None -> Error OutcomeUnknownField
+        | None -> Error TriageOutcome.UnknownField
         | Some field ->
             match value with
             | None
@@ -943,75 +964,60 @@ let planTriage (config: FastPathTriageConfig) (snapshot: AIFieldSnapshot) (decis
                 if valueType.EndsWith("-option", StringComparison.Ordinal) then
                     Ok(field, None)
                 else
-                    Error OutcomeClearUnsupported
+                    Error TriageOutcome.ClearUnsupported
             | Some raw -> Ok(field, Some(AIFieldDescriptor.resolveAlias field raw))
 
-    // The parser never produces a mixed decision; a hand-built one (a
-    // cached calibration answer, a test) is held to the same rule here.
-    let fields = if isNull (box decision.Fields) then [] else decision.Fields
-
-    let consistent =
+    let actionable =
         match decision.Decision with
-        | VerdictSetField -> decision.Target.IsNone && List.isEmpty fields
-        | VerdictSetFields ->
-            decision.FieldId.IsNone
-            && decision.Value.IsNone
-            && decision.Target.IsNone
-            && fields.Length >= 2
-            && fields.Length <= MaxFieldClauses
-        | VerdictNavigate ->
-            decision.FieldId.IsNone
-            && decision.Value.IsNone
-            && List.isEmpty fields
-            && (decision.Target |> Option.exists (fun t -> not (String.IsNullOrWhiteSpace t)))
-        | _ -> true
+        | TriageVerdict.NeedsFullAgent -> false
+        | TriageVerdict.SetField _
+        | TriageVerdict.SetFields _
+        | TriageVerdict.Navigate _ -> true
 
-    match decision.Decision with
-    | VerdictSetField
-    | VerdictSetFields
-    | VerdictNavigate when not consistent -> TriageFallThrough OutcomeUnparseable
-    | VerdictSetField
-    | VerdictSetFields
-    | VerdictNavigate when decision.Confidence < FastPathTriageConfig.effectiveFloor config ->
-        TriageFallThrough OutcomeLowConfidence
-    | VerdictSetField ->
-        match planClause decision.FieldId decision.Value with
-        | Ok(field, value) -> TriageSetField(field, value, decision.Confidence)
-        | Error outcome -> TriageFallThrough outcome
-    | VerdictSetFields ->
-        let planned = fields |> List.map (fun c -> planClause (Some c.FieldId) c.Value)
+    if actionable && not (TriageVerdict.wellFormed decision.Decision) then
+        TriageFallThrough TriageOutcome.Unparseable
+    elif actionable && decision.Confidence < FastPathTriageConfig.effectiveFloor config then
+        TriageFallThrough TriageOutcome.LowConfidence
+    else
+        match decision.Decision with
+        | TriageVerdict.SetField(fieldId, value) ->
+            match planClause fieldId value with
+            | Ok(field, value) -> TriageSetField(field, value, decision.Confidence)
+            | Error outcome -> TriageFallThrough outcome
+        | TriageVerdict.SetFields clauses ->
+            let planned = clauses |> List.map (fun c -> planClause (Some c.FieldId) c.Value)
 
-        match
-            planned
-            |> List.tryPick (function
-                | Error outcome -> Some outcome
-                | Ok _ -> None)
-        with
-        | Some outcome -> TriageFallThrough outcome
-        | None ->
-            let clauses =
+            match
                 planned
-                |> List.choose (function
-                    | Ok clause -> Some clause
-                    | Error _ -> None)
+                |> List.tryPick (function
+                    | Error outcome -> Some outcome
+                    | Ok _ -> None)
+            with
+            | Some outcome -> TriageFallThrough outcome
+            | None ->
+                let planned =
+                    planned
+                    |> List.choose (function
+                        | Ok clause -> Some clause
+                        | Error _ -> None)
 
-            // Two clauses the parser saw as distinct can still land on one
-            // declared field (an id spelled two ways the case-insensitive
-            // lookup folds together). Setting a field twice in one verdict
-            // is not an instruction this tier resolves.
-            let distinctFields =
-                clauses |> List.map (fun (f, _) -> f.FieldId) |> List.distinct |> List.length
+                // Two clauses the parser saw as distinct can still land on one
+                // declared field (an id spelled two ways the case-insensitive
+                // lookup folds together). Setting a field twice in one verdict
+                // is not an instruction this tier resolves.
+                let distinctFields =
+                    planned |> List.map (fun (f, _) -> f.FieldId) |> List.distinct |> List.length
 
-            if distinctFields <> clauses.Length then
-                TriageFallThrough OutcomeUnparseable
-            else
-                TriageSetFields(clauses, decision.Confidence)
-    | VerdictNavigate ->
-        match tryFindNavigation snapshot, decision.Target with
-        | Some navigation, Some target ->
-            TriageNavigate(navigation, AIFieldDescriptor.resolveAlias navigation target, decision.Confidence)
-        | _ -> TriageFallThrough OutcomeUnknownField
-    | _ -> TriageFallThrough OutcomeNeedsFullAgent
+                if distinctFields <> planned.Length then
+                    TriageFallThrough TriageOutcome.Unparseable
+                else
+                    TriageSetFields(planned, decision.Confidence)
+        | TriageVerdict.Navigate target ->
+            match tryFindNavigation snapshot with
+            | Some navigation ->
+                TriageNavigate(navigation, AIFieldDescriptor.resolveAlias navigation target, decision.Confidence)
+            | None -> TriageFallThrough TriageOutcome.UnknownField
+        | TriageVerdict.NeedsFullAgent -> TriageFallThrough TriageOutcome.NeedsFullAgent
 
 /// The `Notification.ModuleAction` payload. Mirrors the field/value
 /// shape the Tier-1 beacon records so a history reader sees one
@@ -1035,12 +1041,12 @@ let syntheticReply (snapshot: AIFieldSnapshot) (field: AIFieldDescriptor) (value
     | None -> $"Cleared **{field.FieldId}** on {snapshot.ModuleId}."
     | Some v -> $"Set **{field.FieldId}** to `{v}` on {snapshot.ModuleId}."
 
-/// Phase 664 — the `_ui.navigate` action payload. Same `source` marker
+/// The `_ui.navigate` action payload. Same `source` marker
 /// as the field-set payload, for the same cross-tier reason.
 let navigatePayloadJson (target: string) : string =
     $"""{{"target":{jsonString target},"source":"triage"}}"""
 
-/// Phase 664 — the ModuleActions a resolved plan emits, as
+/// The ModuleActions a resolved plan emits, as
 /// `(actionKey, payloadJson)` pairs IN DISPATCH ORDER. Pure, so the
 /// order and the all-or-nothing property are asserted on a value: a
 /// fall-through plan emits nothing at all.
@@ -1053,7 +1059,7 @@ let planActions (plan: TriagePlan) : (string * string) list =
     | TriageNavigate(_, target, _) -> [ NavigateActionKey, navigatePayloadJson target ]
     | TriageFallThrough _ -> []
 
-/// Phase 664 — the recap for any resolved plan: the single-field text
+/// The recap for any resolved plan: the single-field text
 /// unchanged, every clause of a `set_fields` in order (so the next
 /// turn's model sees the whole sequence, not its last step), or the
 /// navigation. `None` for a fall-through, which appends nothing.
@@ -1090,6 +1096,7 @@ type TriageEventPayload = {
     ConversationId: Guid
     TaskId: Guid
     ModuleId: string
+    /// A `TriageOutcome` token (read through `TriageEventPayload.outcome`).
     Outcome: string
     /// The resolved field on a hit; `""` on every fall-through
     /// (including `unknown-field`, where the model's proposed id is
@@ -1102,32 +1109,26 @@ type TriageEventPayload = {
     /// Recorded so an operator can tell a triage served by a genuinely
     /// cheap model from one quietly served by the frontier model.
     TriageModelId: string
-    /// Phase 661 — which path reached a model: `triage-provider` (the
-    /// explicit `TriageProvider`), `turn-provider` (no override
-    /// declared), or the per-call override's own report — `override`
-    /// (the cheap model served), `override-fallback` (the provider
-    /// could not serve it and ran its configured model). The
+    /// A `TriageRoute` token (read through `TriageEventPayload.route`):
+    /// which path reached a model. The
     /// operator question this answers is whether the triage spend
     /// actually moved to the cheap tier.
     Route: string
-    /// Phase 661 — the model that actually served. Equals
+    /// The model that actually served. Equals
     /// `ProviderModel` except on an honoured override, where it is the
     /// declared `TriageModelId`.
     ServedModel: string
     /// Wall-clock for the whole attempt, provider call included.
     LatencyMs: float
-    /// Phase 662 — the configured `TimeoutMs` this attempt ran under
+    /// The configured `TimeoutMs` this attempt ran under
     /// (`FastPathTriageConfig.effectiveTimeoutMs`), on every row, not
     /// only a timed-out one. Pairs with `LatencyMs` so a dashboard can
     /// compute how close a non-timeout attempt ran to the budget (a
     /// near-miss) versus a `timeout` row, whose `LatencyMs` sits at the
     /// budget because this is the value that cut it off. A row written
-    /// before Phase 662 carries no `TimeoutBudgetMs` property; STJ
-    /// decodes the missing int field to `0` on its own (no
-    /// `coerceLegacy` change needed — that helper exists for the two
-    /// *string* fields, where `null` is indistinguishable from "absent"
-    /// only by convention). Read a `0` as "budget unknown", never as "no
-    /// budget was configured".
+    /// before the field existed carries no `TimeoutBudgetMs` property; STJ
+    /// decodes the missing int field to `0`. Read a `0` as "budget
+    /// unknown", never as "no budget was configured".
     TimeoutBudgetMs: int
     /// Length of the instruction, for tuning `MaxInstructionChars`.
     /// The instruction TEXT is not recorded here — the Tier-1 beacon
@@ -1136,62 +1137,62 @@ type TriageEventPayload = {
     /// ones that fall through to a full agent turn, and it is not the
     /// place to accumulate a second copy of user prose.
     InstructionChars: int
-    /// Phase 664 — which grammar shape the parsed verdict took:
-    /// `single` / `multi` / `navigate` (`verdictShapes`), on a hit AND on
+    /// Which grammar shape the parsed verdict took:
+    /// a `VerdictShape` token, on a hit AND on
     /// a row whose action verdict was refused whole (an `unknown-field`
     /// multi, say), so a dashboard can attribute both the gain and the
     /// rejections to the extension that produced them. `""` when no
     /// action verdict parsed (`needs-full-agent`, `unparseable`,
     /// `provider-error`, `timeout`). On a `multi` hit `FieldId` holds the
     /// resolved ids comma-joined in dispatch order; on a `navigate` hit it
-    /// holds `NavigationFieldId`. A pre-664 row carries no property here;
-    /// `coerceLegacy` reads it back as `single` on a hit (the only shape
-    /// that existed) and `""` otherwise.
+    /// holds `NavigationFieldId`. Read through `TriageEventPayload.shape`,
+    /// which gives a row written before the field existed its old value.
     VerdictShape: string
 }
 
+/// The typed reading of a row. The string fields are the wire (written as a
+/// union's `Token`); a row written before a field existed carries no
+/// property for it, which the FableConverters path reads as `null`, and each
+/// reading below gives that absence the value it had then — so a rollup over
+/// a mixed window never meets a null.
 module TriageEventPayload =
-    /// A row written before Phase 661 carries no `Route` / `ServedModel`;
-    /// the STJ + FableConverters path deserialises the absent string
-    /// fields to `null`. Coerce at the read boundary so a rollup over a
-    /// mixed window never meets a null string: the route reads as
-    /// `turn-provider` (the only path that existed) and the served
-    /// model as the recorded `ProviderModel`. A pre-664 row's absent
-    /// `VerdictShape` reads as `single` on a hit and `""` otherwise.
-    let coerceLegacy (payload: TriageEventPayload) : TriageEventPayload =
-        let route =
-            if isNull payload.Route then
-                TriageRouteTurnProvider
-            else
-                payload.Route
+    /// The attempt's outcome; `None` for a token this vocabulary does not
+    /// hold.
+    let outcome (payload: TriageEventPayload) : TriageOutcome option = TriageOutcome.ofToken payload.Outcome
 
-        let served =
-            if isNull payload.ServedModel then
-                payload.ProviderModel
-            else
-                payload.ServedModel
-
-        let shape =
-            if not (isNull payload.VerdictShape) then
-                payload.VerdictShape
-            elif payload.Outcome = OutcomeHit then
-                VerdictShapeSingle
-            else
-                ""
-
-        if
-            route = payload.Route
-            && served = payload.ServedModel
-            && shape = payload.VerdictShape
-        then
-            payload
+    /// The route; a row with none predates per-call routing, when the turn
+    /// provider was the only path.
+    let route (payload: TriageEventPayload) : TriageRoute =
+        if isNull payload.Route then
+            TriageRoute.TurnProvider
         else
-            {
-                payload with
-                    Route = route
-                    ServedModel = served
-                    VerdictShape = shape
-            }
+            [
+                TriageRoute.TriageProvider
+                TriageRoute.TurnProvider
+                TriageRoute.Override
+                TriageRoute.OverrideFallback
+                TriageRoute.Configured
+            ]
+            |> List.tryFind (fun r -> r.Token = payload.Route)
+            |> Option.defaultValue TriageRoute.TurnProvider
+
+    /// The model that served; a row with none was served by `ProviderModel`.
+    let servedModel (payload: TriageEventPayload) : string =
+        if isNull payload.ServedModel then
+            payload.ProviderModel
+        else
+            payload.ServedModel
+
+    /// The verdict's shape; a row with none predates the list and navigation
+    /// verdicts, when a hit was always a single field.
+    let shape (payload: TriageEventPayload) : VerdictShape option =
+        if isNull payload.VerdictShape then
+            if outcome payload = Some TriageOutcome.Hit then
+                Some VerdictShape.Single
+            else
+                None
+        else
+            VerdictShape.ofToken payload.VerdictShape
 
 /// Metric names, registered in `AILatencyMetrics.registrations` so the
 /// sink pre-allocates the series.
@@ -1328,7 +1329,8 @@ let tryTriage
 
                 match lastUserInstruction messages with
                 | None -> return None
-                | Some instruction when not (isEligibleInstruction maxChars instruction) -> return None
+                | Some instruction when not (Eligibility.isEligible (Eligibility.assess maxChars instruction)) ->
+                    return None
                 | Some instruction ->
                     let logger = resolveLogger ctx
 
@@ -1370,7 +1372,7 @@ let tryTriage
                                 AIProviderMessage.text "user" instruction
                             ]
 
-                        // Phase 662 — the route/served-model this attempt
+                        // The route/served-model this attempt
                         // reports if the call never comes back at all inside
                         // the budget. Mirrors each arm's own on-`Error` guess
                         // below exactly (the override arm still computes its
@@ -1381,11 +1383,12 @@ let tryTriage
                         // than "this is the arm that was attempted".
                         let routeGuess, servedModelGuess =
                             match config.TriageProvider, turnProvider.Capabilities.TriageModelId with
-                            | Some explicitProvider, _ -> TriageRouteTriageProvider, explicitProvider.Capabilities.Model
-                            | None, Some _ -> TriageRouteOverride, turnProvider.Capabilities.Model
-                            | None, None -> TriageRouteTurnProvider, turnProvider.Capabilities.Model
+                            | Some explicitProvider, _ ->
+                                TriageRoute.TriageProvider, explicitProvider.Capabilities.Model
+                            | None, Some _ -> TriageRoute.Override, turnProvider.Capabilities.Model
+                            | None, None -> TriageRoute.TurnProvider, turnProvider.Capabilities.Model
 
-                        // Phase 661 — which model serves the triage call, in
+                        // Which model serves the triage call, in
                         // order of precedence:
                         //   1. `config.TriageProvider` — the explicit escape
                         //      hatch, a whole instance the composition root
@@ -1404,7 +1407,7 @@ let tryTriage
                             match config.TriageProvider, turnProvider.Capabilities.TriageModelId with
                             | Some explicitProvider, _ -> async {
                                 let! r = explicitProvider.SendStructuredMessage(triageInput, [], triageSchema, policy)
-                                return r, TriageRouteTriageProvider, explicitProvider.Capabilities.Model
+                                return r, TriageRoute.TriageProvider, explicitProvider.Capabilities.Model
                               }
                             | None, Some cheapModel -> async {
                                 let! r =
@@ -1420,16 +1423,16 @@ let tryTriage
                                     match r with
                                     | Ok call ->
                                         Ok call.Response,
-                                        ModelOverrideOutcome.route call.Model,
+                                        TriageRoute.ofOverride call.Model,
                                         ModelOverrideOutcome.served call.Model
-                                    | Error err -> Error err, TriageRouteOverride, turnProvider.Capabilities.Model
+                                    | Error err -> Error err, TriageRoute.Override, turnProvider.Capabilities.Model
                               }
                             | None, None -> async {
                                 let! r = turnProvider.SendStructuredMessage(triageInput, [], triageSchema, policy)
-                                return r, TriageRouteTurnProvider, turnProvider.Capabilities.Model
+                                return r, TriageRoute.TurnProvider, turnProvider.Capabilities.Model
                               }
 
-                        // Phase 662 — the resolver's OWN wall-clock cutoff on
+                        // The resolver's OWN wall-clock cutoff on
                         // the whole call, independent of whatever the
                         // provider does with `policy.Timeout` internally.
                         // `RetryPolicy.Timeout` asks the provider to honour
@@ -1461,47 +1464,47 @@ let tryTriage
                         let plan, shape =
                             if timedOut then
                                 logger.Warn
-                                    $"FastPath triage timed out after {effectiveTimeoutMs}ms (conversation={conversationId}, provider={provider.Capabilities.ProviderName}/{servedModel}, route={route}). Falling through to the full agent loop."
+                                    $"FastPath triage timed out after {effectiveTimeoutMs}ms (conversation={conversationId}, provider={provider.Capabilities.ProviderName}/{servedModel}, route={route.Token}). Falling through to the full agent loop."
 
-                                TriageFallThrough OutcomeTimeout, ""
+                                TriageFallThrough TriageOutcome.Timeout, None
                             else
                                 match response with
                                 | Error err ->
                                     logger.Warn
-                                        $"FastPath triage provider call failed (conversation={conversationId}, provider={provider.Capabilities.ProviderName}/{servedModel}, route={route}): {AIProviderError.toMessage err}. Falling through to the full agent loop."
+                                        $"FastPath triage provider call failed (conversation={conversationId}, provider={provider.Capabilities.ProviderName}/{servedModel}, route={route.Token}): {AIProviderError.toMessage err}. Falling through to the full agent loop."
 
-                                    TriageFallThrough OutcomeProviderError, ""
+                                    TriageFallThrough TriageOutcome.ProviderError, None
                                 | Ok r ->
                                     match parseTriageDecision r.Content with
-                                    | None -> TriageFallThrough OutcomeUnparseable, ""
+                                    | None -> TriageFallThrough TriageOutcome.Unparseable, None
                                     | Some decision ->
-                                        planTriage config snapshot decision, verdictShape decision.Decision
+                                        planTriage config snapshot decision, TriageVerdict.shape decision.Decision
 
                         sw.Stop()
 
                         let outcome, fieldId =
                             match plan with
-                            | TriageSetField(field, _, _) -> OutcomeHit, field.FieldId
+                            | TriageSetField(field, _, _) -> TriageOutcome.Hit, field.FieldId
                             | TriageSetFields(clauses, _) ->
-                                OutcomeHit, clauses |> List.map (fun (f, _) -> f.FieldId) |> String.concat ","
-                            | TriageNavigate _ -> OutcomeHit, NavigationFieldId
+                                TriageOutcome.Hit, clauses |> List.map (fun (f, _) -> f.FieldId) |> String.concat ","
+                            | TriageNavigate _ -> TriageOutcome.Hit, NavigationFieldId
                             | TriageFallThrough o -> o, ""
 
                         let payload: TriageEventPayload = {
                             ConversationId = conversationId
                             TaskId = taskId
                             ModuleId = moduleId
-                            Outcome = outcome
+                            Outcome = outcome.Token
                             FieldId = fieldId
                             ProviderName = provider.Capabilities.ProviderName
                             ProviderModel = provider.Capabilities.Model
                             TriageModelId = defaultArg provider.Capabilities.TriageModelId ""
-                            Route = route
+                            Route = route.Token
                             ServedModel = servedModel
                             LatencyMs = sw.Elapsed.TotalMilliseconds
                             TimeoutBudgetMs = effectiveTimeoutMs
                             InstructionChars = instruction.Length
-                            VerdictShape = shape
+                            VerdictShape = shape |> Option.map _.Token |> Option.defaultValue ""
                         }
 
                         do! emitTelemetry ctx payload
@@ -1529,8 +1532,10 @@ let tryTriage
                                 | TriageNavigate(_, _, c) -> sprintf "%.2f" c
                                 | TriageFallThrough _ -> ""
 
+                            let shapeText = shape |> Option.map _.Token |> Option.defaultValue ""
+
                             logger.Info
-                                $"FastPath triage resolved in {elapsed}ms (conversation={conversationId}, module={moduleId}, shape={shape}, field={fieldId}, confidence={confidenceText}) — full agent loop skipped"
+                                $"FastPath triage resolved in {elapsed}ms (conversation={conversationId}, module={moduleId}, shape={shapeText}, field={fieldId}, confidence={confidenceText}) — full agent loop skipped"
 
                             return Some(TriageResolved reply)
     }

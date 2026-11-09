@@ -30,7 +30,7 @@ pack decodes it, so it stays in step with this page.
 ## What it runs, and what it does not
 
 The tool calls the resolver's own public, pure stages and modifies none of
-them: `isEligibleInstruction`, `buildTriagePrompt`, `triageSchema`,
+them: `Eligibility.assess`, `buildTriagePrompt`, `triageSchema`,
 `parseTriageDecision` and `planTriage` from
 `ToolUp.AI.FastPathTriageResolver`. The provider call is shaped exactly as the
 resolver shapes it — the same system prompt, the same schema, one attempt, and
@@ -39,7 +39,7 @@ connector is cut and recorded as `timeout` rather than blocking the run.
 
 For each case:
 
-1. **Pre-filter (free).** `isEligibleInstruction` decides. A refused case makes
+1. **Pre-filter (free).** `Eligibility.assess` decides. A refused case makes
    no call; its latency is recorded under the `pre-filter` stage. An eligible
    instruction over a snapshot with no fields is also refused here — the
    resolver does not attempt triage on an empty surface.
@@ -50,11 +50,11 @@ For each case:
    `planTriage` at each floor in `{0.70, 0.78, 0.85, 0.92}`. The sweep costs
    one pass, not four.
 
-**The eligibility reason is derived, the verdict is not.** `isEligibleInstruction`
-returns a verdict with no reason, so the tool names the rule by elimination over
-the pre-filter's documented rules, in the resolver's order. If the resolver
-ever gains a rule this tool does not know, the refusal is reported as
-`unclassified` — never attributed to the wrong rule.
+**The eligibility reason is the resolver's own.** `Eligibility.assess` returns the
+verdict and its reason together (`empty`, `too-long`, or `read-shaped` with the
+signal that fired), and the tool reports it in its own vocabulary, a question
+named by its signal (`question-mark` / `question-opener`). A rule the resolver
+gains is a new case of that union, so this tool stops compiling until it names it.
 
 ## The case file — `toolup.triage-calibration.cases/1`
 
@@ -125,7 +125,7 @@ of meaning is a new schema id. Member order in the written file is fixed.
 |---|---|
 | `id`, `instruction`, `expected` | echoed from the case file. |
 | `eligibility.eligible` | the resolver's pre-filter verdict. |
-| `eligibility.reason` | `eligible`, `empty`, `too-long`, `question-mark`, `question-opener`, `no-declared-fields`, or `unclassified`. |
+| `eligibility.reason` | `eligible`, `empty`, `too-long`, `question-mark`, `question-opener`, or `no-declared-fields`. |
 | `latency.stage` | `pre-filter` (refused locally, free) or `model-call` (cost a call). |
 | `latency.ms` | wall-clock milliseconds for that stage. |
 | `call` | `null` for a refused case; otherwise the one call, below. |

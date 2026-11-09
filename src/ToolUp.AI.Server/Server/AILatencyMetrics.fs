@@ -142,8 +142,8 @@ let registrations: MetricRegistration list = [
         Definition = {
             Name = FastPathTriageResolver.TriageOutcomesMetric
             Kind = Counter
-            // The stratification. `outcome` is a closed set of seven
-            // tokens (`FastPathTriageResolver.outcomes`), so the tag
+            // The stratification. `outcome` is a closed set of
+            // tokens (`FastPathTriageResolver.TriageOutcome.all`), so the tag
             // multiplies cardinality by a constant — which is why it is
             // admissible here and a field id or an instruction would
             // not be.
