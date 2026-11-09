@@ -166,8 +166,8 @@ module NarrativeRegenerateJob =
 
 /// Who an authorised call is for.
 type private Caller = {
-    UserId: string
-    TeamId: string
+    UserId: UserId
+    TeamId: TeamId
     /// The scope the request resolved to — the team's.
     Resolved: ResolvedScope
     Scope: StorageScope
@@ -313,8 +313,8 @@ let narrativePromptApi (ctx: HttpContext) : NarrativePromptApi =
                         | Some scope when scope.ScopeId = teamId ->
                             return!
                                 f {
-                                    UserId = userId
-                                    TeamId = teamId
+                                    UserId = UserId userId
+                                    TeamId = TeamId teamId
                                     Resolved = resolved
                                     Scope = scope
                                     Registry = registry
@@ -381,13 +381,13 @@ let narrativePromptApi (ctx: HttpContext) : NarrativePromptApi =
         | Some log ->
             do!
                 log.Record(
-                    AuditStreamKey.ofTeam caller.TeamId,
+                    AuditStreamKey.ofTeam caller.TeamId.Value,
                     RemotingMethodAudited {
                         Kind = kind
                         MethodName = methodName
-                        SubjectId = caller.UserId
+                        SubjectId = caller.UserId.Value
                         CorrelationId = None
-                        Payload = Map.ofList ([ "teamId", caller.TeamId; "runKey", runKey ] @ payload)
+                        Payload = Map.ofList ([ "teamId", caller.TeamId.Value; "runKey", runKey ] @ payload)
                     }
                 )
         | None -> ()
@@ -516,7 +516,7 @@ let narrativePromptApi (ctx: HttpContext) : NarrativePromptApi =
                                                 IsReset = false
                                                 Prompt = prompt
                                                 Guidance = guidance
-                                                Author = caller.UserId
+                                                Author = caller.UserId.Value
                                                 SavedAt = DateTime.UtcNow
                                             }
                                         )
@@ -552,7 +552,7 @@ let narrativePromptApi (ctx: HttpContext) : NarrativePromptApi =
                                                 IsReset = true
                                                 Prompt = ""
                                                 Guidance = []
-                                                Author = caller.UserId
+                                                Author = caller.UserId.Value
                                                 SavedAt = DateTime.UtcNow
                                             }
                                         )
@@ -577,12 +577,15 @@ let narrativePromptApi (ctx: HttpContext) : NarrativePromptApi =
                                 "No job scheduler is composed in this deployment, so a report cannot be regenerated on demand."
                     | Some scheduler ->
                         let registration =
-                            NarrativeRegenerateJob.registrationFor caller.Scope.ScopeId definition.Key caller.UserId
+                            NarrativeRegenerateJob.registrationFor
+                                caller.Scope.ScopeId
+                                definition.Key
+                                caller.UserId.Value
 
                         match! scheduler.Schedule(caller.Resolved, registration) with
                         | Error error -> return Error(describeScheduleError error)
                         | Ok(Scheduled jobId | Coalesced jobId) ->
-                            match! scheduler.TriggerOnce(caller.Scope.ScopeId, jobId, UserId caller.UserId) with
+                            match! scheduler.TriggerOnce(caller.Scope.ScopeId, jobId, caller.UserId) with
                             | Error refusal -> return Error(TriggerError.message refusal)
                             | Ok() -> return Ok jobId
                 })
@@ -643,7 +646,7 @@ let narrativePromptApi (ctx: HttpContext) : NarrativePromptApi =
                                                         IsReset = false
                                                         Prompt = prompt
                                                         Guidance = guidance
-                                                        Author = caller.UserId
+                                                        Author = caller.UserId.Value
                                                         SavedAt = DateTime.UtcNow
                                                     }
                                                 )
@@ -659,7 +662,7 @@ let narrativePromptApi (ctx: HttpContext) : NarrativePromptApi =
                                             definition.Key,
                                             proposal.Id,
                                             NarrativeProposalState.Approved version.Version,
-                                            caller.UserId,
+                                            caller.UserId.Value,
                                             DateTime.UtcNow
                                         )
 
@@ -696,7 +699,7 @@ let narrativePromptApi (ctx: HttpContext) : NarrativePromptApi =
                                 definition.Key,
                                 decision.ProposalId,
                                 NarrativeProposalState.Dismissed,
-                                caller.UserId,
+                                caller.UserId.Value,
                                 DateTime.UtcNow
                             )
                         with

@@ -193,7 +193,7 @@ type BlobNotificationPreferenceStore(storage: IBlobStorage, logger: ILogger opti
         }
 
         member this.SetDigestWatermark(scopeId, userId, frequency, sentAt) = async {
-            let! current = (this :> INotificationPreferenceStore).GetDigestWatermarks(scopeId, UserId userId.Value)
+            let! current = (this :> INotificationPreferenceStore).GetDigestWatermarks(scopeId, userId)
 
             let updated =
                 current

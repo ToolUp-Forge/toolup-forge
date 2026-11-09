@@ -76,10 +76,10 @@ type MembershipDiagnosis = {
     /// the drifted value (an email, a raw JWT `sub`) — that is the
     /// point of the report; render it to operators, never echo it back
     /// to unauthenticated callers.
-    UserId: string
+    UserId: UserId
     /// The team the finding is about. `None` when the finding is the
     /// blob key itself and the blob holds no rows.
-    TeamId: string option
+    TeamId: TeamId option
     /// Human-readable why. Categorised — never carries attacker-
     /// controlled bytes beyond the ids already in the record.
     Evidence: string
@@ -161,7 +161,7 @@ let diagnose (reads: MembershipReads) : Async<MembershipDiagnosis list> = async 
                     | [] -> [
                         {
                             Kind = kind
-                            UserId = userId
+                            UserId = UserId userId
                             TeamId = None
                             Evidence = evidence
                             ProposedRepair = ReAddUnderResolvedId
@@ -171,8 +171,8 @@ let diagnose (reads: MembershipReads) : Async<MembershipDiagnosis list> = async 
                         rows
                         |> List.map (fun r -> {
                             Kind = kind
-                            UserId = userId
-                            TeamId = Some r.TeamId.Value
+                            UserId = UserId userId
+                            TeamId = Some(r.TeamId)
                             Evidence = evidence
                             ProposedRepair = ReAddUnderResolvedId
                         })
@@ -182,8 +182,8 @@ let diagnose (reads: MembershipReads) : Async<MembershipDiagnosis list> = async 
                     |> List.filter (fun r -> not (teamIds.Contains r.TeamId.Value))
                     |> List.map (fun r -> {
                         Kind = OrphanTeamRow
-                        UserId = userId
-                        TeamId = Some r.TeamId.Value
+                        UserId = UserId userId
+                        TeamId = Some(r.TeamId)
                         Evidence = "membership row names a team with no team record"
                         ProposedRepair = DeleteMembershipRow
                     })
@@ -210,8 +210,8 @@ let diagnose (reads: MembershipReads) : Async<MembershipDiagnosis list> = async 
                         [
                             {
                                 Kind = DanglingActiveTeam
-                                UserId = userId
-                                TeamId = Some teamId
+                                UserId = UserId userId
+                                TeamId = Some(TeamId teamId)
                                 Evidence = evidence
                                 ProposedRepair = ClearActiveTeamPointer
                             }
@@ -247,16 +247,16 @@ let repair (reads: MembershipReads) (writes: MembershipWrites) : Async<Membershi
 
     for (userId, findings) in rowDeletions do
         let orphanTeams = findings |> List.choose _.TeamId |> Set.ofList
-        let! rows = reads.LoadMemberships userId
-        let kept = rows |> List.filter (fun r -> not (orphanTeams.Contains r.TeamId.Value))
-        do! writes.SaveMemberships userId kept
+        let! rows = reads.LoadMemberships userId.Value
+        let kept = rows |> List.filter (fun r -> not (orphanTeams.Contains(r.TeamId)))
+        do! writes.SaveMemberships userId.Value kept
 
         for teamId in orphanTeams do
-            do! writes.EmitMemberRemoved teamId userId
+            do! writes.EmitMemberRemoved teamId.Value userId.Value
 
     for d in safe |> List.filter (fun d -> d.ProposedRepair = ClearActiveTeamPointer) do
         match d.TeamId with
-        | Some teamId -> do! writes.ClearActiveTeam d.UserId teamId
+        | Some teamId -> do! writes.ClearActiveTeam d.UserId.Value teamId.Value
         | None -> ()
 
     return {

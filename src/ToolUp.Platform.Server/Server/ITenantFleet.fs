@@ -73,7 +73,7 @@ type ITenantFleet =
     /// Fetch a tenant by id. Returns `UnknownTenant` when the id
     /// doesn't exist (including evicted tenants whose record is
     /// retained — `Evicted` is queryable, just not mutable).
-    abstract GetTenant: tenantId: TenantId -> Async<Result<Tenant, TenantFleetError>>
+    abstract GetTenant: tenantId: string -> Async<Result<Tenant, TenantFleetError>>
 
     /// Enumerate tenants. `ownerUserId = Some uid` filters to one
     /// user's tenants (via the `OwnerUserId` index — O(1)); `None`
@@ -98,7 +98,7 @@ type ITenantFleet =
     /// `TenantUnhealthy`; mixed → `TenantDegraded`; no containers
     /// → `TenantHealthUnknown`). Suspended tenants always read
     /// `TenantHealthUnknown` (no containers running by design).
-    abstract GetTenantHealth: tenantId: TenantId -> Async<Result<TenantHealth, TenantFleetError>>
+    abstract GetTenantHealth: tenantId: string -> Async<Result<TenantHealth, TenantFleetError>>
 
     /// Offboard a tenant. Transitions `Status` to `Evicted` (terminal
     /// — no re-activation path), stops every container the tenant
@@ -109,14 +109,13 @@ type ITenantFleet =
     /// Returns `TenantEvicted` when the tenant is already evicted
     /// (idempotent on the success path — a second call after a
     /// first succeeded returns `Ok ()`).
-    abstract EvictTenant:
-        tenantId: TenantId * byUserId: UserId * reason: string -> Async<Result<unit, TenantFleetError>>
+    abstract EvictTenant: tenantId: string * byUserId: UserId * reason: string -> Async<Result<unit, TenantFleetError>>
 
     /// Resume a `Suspended` tenant — transition `Status` back to
     /// `Active` and relaunch its containers. Returns
     /// `TenantEvicted` when the tenant is evicted (terminal).
     /// Idempotent: calling on an already-active tenant is `Ok`.
-    abstract RestartTenant: tenantId: TenantId * byUserId: UserId -> Async<Result<unit, TenantFleetError>>
+    abstract RestartTenant: tenantId: string * byUserId: UserId -> Async<Result<unit, TenantFleetError>>
 
     /// Cheap pre-flight check for a tenant-creation UI. Returns
     /// `true` when no `Active` or `Suspended` tenant with this slug

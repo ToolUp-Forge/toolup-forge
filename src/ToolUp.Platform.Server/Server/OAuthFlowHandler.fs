@@ -390,7 +390,7 @@ let private authorize (flowName: string) : HttpHandler =
                                 DataSourceId = dataSourceId
                                 ScopeId = scope.ScopeId
                                 Container = scope.Container
-                                UserId = accessContext.UserId
+                                UserId = UserId accessContext.UserId
                                 CreatedAt = DateTime.UtcNow
                                 RedirectUri = redirectUri
                                 CodeVerifier = Some verifier
@@ -541,7 +541,7 @@ let private providerCallbackTail
                             secretStore
                             (tryGetService<IAuditLog> ctx)
                             scope
-                            entry.UserId
+                            entry.UserId.Value
                             providerFlow
                             correlation
                             credentials
@@ -569,7 +569,11 @@ let private providerCallbackTail
                         | Some scheduler ->
                             let! refreshScheduled =
                                 scheduler.Schedule(
-                                    ProviderOAuthRefreshJobHandler.registrationFor scope flowName label entry.UserId
+                                    ProviderOAuthRefreshJobHandler.registrationFor
+                                        scope
+                                        flowName
+                                        label
+                                        entry.UserId.Value
                                 )
 
                             match refreshScheduled with
@@ -584,7 +588,7 @@ let private providerCallbackTail
                                         ProviderStatusProbeJobHandler.registrationFor
                                             scope
                                             ProviderStatusProbeJobHandler.DefaultCronExpression
-                                            entry.UserId
+                                            entry.UserId.Value
                                     )
 
                                 match probeScheduled with
@@ -675,7 +679,7 @@ let private callback (flowName: string) : HttpHandler =
                             // the /authorize initiator.
                             let accessContext = resolveAccessContext ctx
 
-                            if accessContext.UserId <> entry.UserId then
+                            if accessContext.UserId <> entry.UserId.Value then
                                 return! respondText ctx 403 "OAuth flow was initiated by a different user"
                             else
 
@@ -863,7 +867,7 @@ let private callback (flowName: string) : HttpHandler =
                                                             auditLog.Record(
                                                                 entry.ScopeId,
                                                                 OAuthConnected {
-                                                                    UserId = UserId entry.UserId
+                                                                    UserId = entry.UserId
                                                                     ScopeId = entry.ScopeId
                                                                     FlowName = flowName
                                                                     DataSourceId = entry.DataSourceId

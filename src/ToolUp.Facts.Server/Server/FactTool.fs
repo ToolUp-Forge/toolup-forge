@@ -22,7 +22,7 @@ type FactToolContext = {
     Gate: IFactDisclosureGate
     Registry: Grounding.IMetricRegistry option
     Scope: ResolvedScope
-    UserId: string
+    UserId: UserId
 }
 
 /// The shell every fact tool shares: argument reading, the service and
@@ -207,7 +207,7 @@ module FactTool =
                         Gate = gate
                         Registry = ServiceComposition.tryService<Grounding.IMetricRegistry> services
                         Scope = StorageScopeResolver.ScopeResolution.forRequest ctx
-                        UserId = userIdOf ctx
+                        UserId = UserId(userIdOf ctx)
                     }
                     argsJson
             | _ -> async {

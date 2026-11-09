@@ -17,9 +17,9 @@ open ToolUp.Platform
 /// from anything a request handler passes on. Server tier only.
 type RequestViewer = {
     /// The resolved user id.
-    UserId: string
+    UserId: UserId
     /// The active team of a `TeamMember` subject; `None` otherwise.
-    ActiveTeamId: string option
+    ActiveTeamId: TeamId option
     /// Whether the request resolved `PlatformRole.PlatformAdmin`.
     IsPlatformAdmin: bool
 }
@@ -54,11 +54,11 @@ module RequestViewer =
             Some {
                 UserId =
                     match item "ToolUp.UserId" with
-                    | Some(:? string as userId) when not (System.String.IsNullOrWhiteSpace userId) -> userId
-                    | _ -> fromSubject
+                    | Some(:? string as userId) when not (System.String.IsNullOrWhiteSpace userId) -> UserId userId
+                    | _ -> UserId fromSubject
                 ActiveTeamId =
                     match subject with
-                    | TeamMember(_, teamId) -> Some teamId
+                    | TeamMember(_, teamId) -> Some(TeamId teamId)
                     | _ -> None
                 IsPlatformAdmin =
                     match item "ToolUp.PlatformRole" with

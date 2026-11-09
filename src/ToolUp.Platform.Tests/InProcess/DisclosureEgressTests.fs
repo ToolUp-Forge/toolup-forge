@@ -543,7 +543,7 @@ let private mkKbDeps (storage: IBlobStorage) (gate: IFactDisclosureGate option) 
         Container = container
         Persist = true
     }
-    UserId = "user-1"
+    UserId = UserId "user-1"
     VectorScope = Deployment
     VectorStore = None
     IndexLifecycle = None
@@ -1355,8 +1355,8 @@ let heldFormTests =
                 use _ =
                     RequestViewerContext.establish (fun () ->
                         Some {
-                            UserId = userId
-                            ActiveTeamId = Some teamId
+                            UserId = UserId userId
+                            ActiveTeamId = Some(TeamId teamId)
                             IsPlatformAdmin = false
                         })
 

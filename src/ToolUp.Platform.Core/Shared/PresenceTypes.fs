@@ -82,10 +82,7 @@ type PresenceEvent = {
 /// `EntityRef<'T>` (Phase 19) carries, minus the phantom type and
 /// version so it is a clean structural dictionary key with no ordering
 /// promise across refs.
-type EntityLockRef = {
-    EntityType: string
-    EntityId: EntityId
-}
+type EntityLockRef = { EntityType: string; EntityId: string }
 
 module EntityLockRef =
     /// Build a lock ref from an entity-store `EntityRef<'T>`'s value

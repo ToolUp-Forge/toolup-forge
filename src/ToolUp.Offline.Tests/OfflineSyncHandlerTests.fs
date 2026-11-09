@@ -138,13 +138,13 @@ type FakeEntityStore() =
                     return Ok(write core entity (expectedVersion + 1))
         }
 
-        member _.Get<'T>(_scopeId: string, entityType: string, entityId: EntityId) = async {
+        member _.Get<'T>(_scopeId: string, entityType: string, entityId: string) = async {
             match store.TryGetValue(key entityType entityId) with
             | true, (json, _) -> return Ok(JsonSerializer.Deserialize<'T>(json, jsonOptions))
             | _ -> return Error(EntityError.NotFound(entityType, entityId))
         }
 
-        member _.Delete(_scopeId: string, actor: EntityPrincipal, entityType: string, entityId: EntityId) = async {
+        member _.Delete(_scopeId: string, actor: EntityPrincipal, entityType: string, entityId: string) = async {
             actors.Add("Delete", actor)
             let k = key entityType entityId
 
@@ -155,7 +155,7 @@ type FakeEntityStore() =
         }
 
         member _.DeleteIfVersion
-            (_scopeId: string, actor: EntityPrincipal, entityType: string, entityId: EntityId, expectedVersion: int)
+            (_scopeId: string, actor: EntityPrincipal, entityType: string, entityId: string, expectedVersion: int)
             =
             async {
                 actors.Add("DeleteIfVersion", actor)

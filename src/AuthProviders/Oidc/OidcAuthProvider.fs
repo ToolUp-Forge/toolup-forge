@@ -747,7 +747,7 @@ let private holdsAppMembership (ctx: HttpContext) (user: AuthenticatedUser) : As
             let! inTeam = async {
                 match ctx.RequestServices.GetService(typeof<ToolUp.Platform.Config.TeamManagement.ITeamStore>) with
                 | :? ToolUp.Platform.Config.TeamManagement.ITeamStore as teams ->
-                    let! held = teams.GetTeamsForUser(UserId user.UserId.Value)
+                    let! held = teams.GetTeamsForUser(user.UserId)
                     return not (List.isEmpty held)
                 | _ -> return false
             }

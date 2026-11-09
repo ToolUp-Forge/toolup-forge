@@ -98,7 +98,7 @@ let private mkDeps
             Container = container
             Persist = true
         }
-        UserId = "user-1"
+        UserId = UserId "user-1"
         VectorScope = Deployment
         VectorStore = None
         IndexLifecycle = None

@@ -85,7 +85,7 @@ type DefaultEvidencePackGenerator
                 match request.SubjectUserId with
                 | Some subjectId when not (Erasure.isBlankSubject subjectId.Value) ->
                     for exporter in exporters |> List.sortBy _.Name do
-                        let! segments = exporter.Export(request.ScopeId, UserId subjectId.Value)
+                        let! segments = exporter.Export(request.ScopeId, subjectId)
 
                         for s in segments do
                             dsrSegments <- { s with Name = $"dsr/{s.Name}" } :: dsrSegments

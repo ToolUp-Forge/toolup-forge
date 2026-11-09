@@ -30,7 +30,7 @@ let private silentLogger =
     }
 
 type LedgerEntry = {
-    Id: EntityId
+    Id: string
     Type: string
     Version: int
     Note: string
@@ -39,7 +39,7 @@ type LedgerEntry = {
 [<Literal>]
 let private LedgerType = "OutboxLedgerEntry"
 
-let private mkEntry (id: EntityId) (note: string) : LedgerEntry = {
+let private mkEntry (id: string) (note: string) : LedgerEntry = {
     Id = id
     Type = LedgerType
     Version = 0

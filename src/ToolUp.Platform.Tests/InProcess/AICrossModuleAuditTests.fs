@@ -811,6 +811,10 @@ let tests =
                     || t = typeof<float>
                     || t = typeof<Guid>
                     || t = typeof<DateTime>
+                    // A typed identity encodes as the bare string it wraps
+                    // (Phase 878), so it is a value on the wire.
+                    || t = typeof<UserId>
+                    || t = typeof<TeamId>
                     || (t.IsGenericType && t.GetGenericArguments() |> Array.forall isValueShaped)
 
                 for field in FSharpType.GetRecordFields typeof<CrossModuleReadPayload> do

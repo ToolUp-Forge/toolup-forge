@@ -15,7 +15,7 @@ open ToolUp.Platform.Infra
 // instance.
 
 type TestEntity = {
-    Id: EntityId
+    Id: string
     Type: string
     Version: int
     Owner: string
@@ -23,7 +23,7 @@ type TestEntity = {
 }
 
 type OtherEntity = {
-    Id: EntityId
+    Id: string
     Type: string
     Version: int
     Note: string
@@ -46,7 +46,7 @@ let otherEntityRegistration = EntityRegistration.create<OtherEntity> OtherEntity
 /// below use their own, because the actor is what they are about.
 let private actor = EntityPrincipal.ofPrincipal "tester"
 
-let private mkEntity (id: EntityId) (owner: string) (status: string) : TestEntity = {
+let private mkEntity (id: string) (owner: string) (status: string) : TestEntity = {
     Id = id
     Type = TestEntityType
     Version = 0 // overridden by store

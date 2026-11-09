@@ -4,6 +4,7 @@
 module ToolUp.Scheduling.ICalendarBridge
 
 open System
+open ToolUp.Platform
 open ToolUp.Scheduling.SchedulingTypes
 
 // ─── Phase 20a — the calendar-bridge seam ───────────────────────────
@@ -173,7 +174,7 @@ type CalendarLinkRef = {
     /// The user whose credentials authorise the mirror. A bridge keys
     /// its `ISecretStore` lookup on this, so one deployment can mirror
     /// several users' calendars through one bridge instance.
-    UserId: string
+    UserId: UserId
 }
 
 /// One event read back out of an external calendar.

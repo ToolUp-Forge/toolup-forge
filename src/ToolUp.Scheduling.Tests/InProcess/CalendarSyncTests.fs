@@ -244,7 +244,7 @@ let tests =
                 let options = Text.Json.JsonSerializerOptions(PropertyNamingPolicy = null)
 
                 let created: BookingCreatedPayload = {
-                    UserId = "alice"
+                    UserId = UserId "alice"
                     BookingId = "bk-created"
                     ResourceId = "room-101"
                     StartUtc = utc 2026 10 1 9
@@ -252,7 +252,7 @@ let tests =
                 }
 
                 let cancelled: BookingCancelledPayload = {
-                    UserId = "alice"
+                    UserId = UserId "alice"
                     BookingId = "bk-cancelled"
                     Reason = "no longer needed"
                 }
@@ -368,7 +368,7 @@ let tests =
                                         ScopeId = scopeId
                                         ResourceId = "room-101"
                                         ExternalCalendarId = CalendarId
-                                        UserId = "alice"
+                                        UserId = UserId "alice"
                                     },
                                     None,
                                     saved

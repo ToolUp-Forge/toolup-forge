@@ -21,7 +21,7 @@ open ToolUp.Platform.Infra
 // plus sort + paging + validation errors.
 
 type Item = {
-    Id: EntityId
+    Id: string
     Type: string
     Version: int
     Owner: string
@@ -84,7 +84,7 @@ let private seed (store: IEntityStore) (scope: string) : Async<unit> = async {
 // tests exercise the in-memory index only).
 
 type FtDoc = {
-    Id: EntityId
+    Id: string
     Type: string
     Version: int
     Category: string
@@ -193,7 +193,7 @@ let private queryIds (store: IEntityStore) (scope: string) (predicate: Predicate
 
 /// Save `id` under `Owner = alice`, then re-save it under `Owner = bob`
 /// while index-ref deletes are refused: the alice ref outlives the value.
-let private staleAliceNowBob (rig: StaleQueryRig) (id: EntityId) = async {
+let private staleAliceNowBob (rig: StaleQueryRig) (id: string) = async {
     rig.Refusing.Value <- true
     do! saveItem rig.Store rig.Scope (mkItem id "alice" "active" "01")
     do! saveItem rig.Store rig.Scope (mkItem id "bob" "active" "01")

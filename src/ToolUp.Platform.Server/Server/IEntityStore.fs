@@ -101,19 +101,19 @@ type IEntityStore =
     /// Fetch the latest version of an entity. Returns `NotFound` when
     /// the `(entityType, entityId)` pair has no head version in this
     /// scope.
-    abstract Get<'T> : scopeId: string * entityType: string * entityId: EntityId -> Async<Result<'T, EntityError>>
+    abstract Get<'T> : scopeId: string * entityType: string * entityId: string -> Async<Result<'T, EntityError>>
 
     /// Fetch a specific historical version. Returns `NotFound` when
     /// the version doesn't exist (either deleted or never written).
     /// Useful for audit / rollback workflows.
     abstract GetVersion<'T> :
-        scopeId: string * entityType: string * entityId: EntityId * version: int -> Async<Result<'T, EntityError>>
+        scopeId: string * entityType: string * entityId: string * version: int -> Async<Result<'T, EntityError>>
 
     /// List every version's `EntityRef` for a single entity, sorted
     /// ascending by `Version`. Empty when the entity has no versions
     /// — callers that need to distinguish "no versions" from "exists
     /// with one version" should check `List.length`.
-    abstract ListVersions<'T> : scopeId: string * entityType: string * entityId: EntityId -> Async<EntityRef<'T> list>
+    abstract ListVersions<'T> : scopeId: string * entityType: string * entityId: string -> Async<EntityRef<'T> list>
 
     /// Delete the entity. Removes the head version's metadata and
     /// drops every declared index entry. Historical versions remain
@@ -123,7 +123,7 @@ type IEntityStore =
     /// Idempotent: deleting a non-existent entity returns `Ok` without
     /// error. `actor` is stamped on the `EntityDeleted` row (Phase 806).
     abstract Delete:
-        scopeId: string * actor: EntityPrincipal * entityType: string * entityId: EntityId ->
+        scopeId: string * actor: EntityPrincipal * entityType: string * entityId: string ->
             Async<Result<unit, EntityError>>
 
     /// Phase 753 — compare-and-set delete, the twin of `SaveIfVersion`.
@@ -140,7 +140,7 @@ type IEntityStore =
     /// storage that cannot documents the residual window in its own
     /// header.
     abstract DeleteIfVersion:
-        scopeId: string * actor: EntityPrincipal * entityType: string * entityId: EntityId * expectedVersion: int ->
+        scopeId: string * actor: EntityPrincipal * entityType: string * entityId: string * expectedVersion: int ->
             Async<Result<unit, EntityError>>
 
     /// Look up entities by a single declared index. Returns every

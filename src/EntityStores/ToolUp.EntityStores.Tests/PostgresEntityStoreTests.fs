@@ -31,7 +31,7 @@ open ToolUp.Platform.Infra
 // arm). A real consumer's entity type is public, so the store is right and the
 // fixture was wrong.
 type Item = {
-    Id: EntityId
+    Id: string
     Type: string
     Version: int
     Owner: string

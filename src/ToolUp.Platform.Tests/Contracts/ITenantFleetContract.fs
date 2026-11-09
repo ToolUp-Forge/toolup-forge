@@ -87,7 +87,7 @@ let tests (name: string) (factory: unit -> ITenantFleet) =
                 okOrFail "ProvisionTenant" (Async.RunSynchronously(fleet.ProvisionTenant req))
 
             Expect.equal tenant.Slug "alpha" "Slug round-trips"
-            Expect.equal tenant.OwnerUserId "owner-1" "OwnerUserId round-trips"
+            Expect.equal tenant.OwnerUserId (UserId "owner-1") "OwnerUserId round-trips"
             Expect.equal tenant.Region "eu-west" "Region round-trips"
             Expect.equal tenant.Status Active "freshly provisioned tenant is Active"
             Expect.isFalse (String.IsNullOrEmpty tenant.Id) "TenantId assigned"
@@ -202,7 +202,7 @@ let tests (name: string) (factory: unit -> ITenantFleet) =
 
             let! owner1Tenants = fleet.ListTenants(Some(UserId "owner-1"))
             Expect.hasLength owner1Tenants 2 "owner-1 has two tenants"
-            Expect.all owner1Tenants (fun t -> t.OwnerUserId = "owner-1") "all entries belong to owner-1"
+            Expect.all owner1Tenants (fun t -> t.OwnerUserId = UserId "owner-1") "all entries belong to owner-1"
         }
 
         // ─── EvictTenant ──────────────────────────────────────────
@@ -342,14 +342,12 @@ let tests (name: string) (factory: unit -> ITenantFleet) =
         // These assertions back the prose audit block at the top of
         // ITenantFleet.fs with executable claims.
 
-        testCaseAsync "Rule 1 — identity-by-value: TenantId is a string alias"
+        testCaseAsync "Rule 1 — identity-by-value: a tenant id is a plain string"
         <| async {
-            // Compile-time shape: TenantId must remain a string alias
-            // so framework handles cannot escape the boundary. The
-            // assertion is reachable only because the runtime equality
-            // works on the underlying string.
-            let id: TenantId = "tenant-1"
-            Expect.equal id "tenant-1" "TenantId is a string alias"
+            // A tenant id is a plain string, so no framework handle can
+            // escape the boundary through it.
+            let id: string = "tenant-1"
+            Expect.equal id "tenant-1" "a tenant id is a plain string"
             do! async.Return()
         }
 

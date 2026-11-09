@@ -114,7 +114,7 @@ type PendingConsent = {
     /// read, without re-deriving a scope from a different request.
     Container: string
     /// The user the tool resolved when it suspended. Audit attribution.
-    UserId: string
+    UserId: UserId
 }
 
 /// Per-process registry of suspended cross-module reads awaiting a user's
@@ -350,7 +350,7 @@ let requireConsent
                                 ConversationId = conversationId
                                 TargetModule = targetModule
                                 Container = container
-                                UserId = userIdOf ctx
+                                UserId = UserId(userIdOf ctx)
                             }
                         )
 

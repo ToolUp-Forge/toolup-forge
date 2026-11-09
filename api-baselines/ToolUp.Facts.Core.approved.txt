@@ -1031,10 +1031,10 @@ ToolUp.Facts.PopulationTripleModule.tryOrdering(System.String) : Microsoft.FShar
 ToolUp.Facts.PopulationValue (class)
 ToolUp.Facts.PopulationValue.comparable(ToolUp.Facts.FactValue) : Microsoft.FSharp.Core.FSharpOption`1[System.Decimal]
 ToolUp.Facts.PublicationConsent (class)
-ToolUp.Facts.PublicationConsent..ctor(System.String, System.String, System.DateTime)
+ToolUp.Facts.PublicationConsent..ctor(ToolUp.Platform.TeamId, ToolUp.Platform.UserId, System.DateTime)
 ToolUp.Facts.PublicationConsent.At : System.DateTime { get }
-ToolUp.Facts.PublicationConsent.ByUserId : System.String { get }
-ToolUp.Facts.PublicationConsent.TeamId : System.String { get }
+ToolUp.Facts.PublicationConsent.ByUserId : ToolUp.Platform.UserId { get }
+ToolUp.Facts.PublicationConsent.TeamId : ToolUp.Platform.TeamId { get }
 ToolUp.Facts.PublicationGrant (class)
 ToolUp.Facts.PublicationGrant..ctor(System.String, System.String, System.String, System.String, System.String, ToolUp.Facts.PublicationVisibility, System.String, System.DateTime, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.PublicationConsent], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.PublicationConsent], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.PublicationRevocation])
 ToolUp.Facts.PublicationGrant.GrantId : System.String { get }
@@ -1098,10 +1098,10 @@ ToolUp.Facts.PublicationRefusal+PublicationNotAParty (class)
 ToolUp.Facts.PublicationRefusal+PublicationNotAParty.grantId : System.String { get }
 ToolUp.Facts.PublicationRefusal+PublicationNotAParty.scopeId : System.String { get }
 ToolUp.Facts.PublicationRefusal+PublicationNotOwner (class)
-ToolUp.Facts.PublicationRefusal+PublicationNotOwner.teamId : System.String { get }
-ToolUp.Facts.PublicationRefusal+PublicationNotOwner.userId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Facts.PublicationRefusal+PublicationNotOwner.teamId : ToolUp.Platform.TeamId { get }
+ToolUp.Facts.PublicationRefusal+PublicationNotOwner.userId : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.UserId] { get }
 ToolUp.Facts.PublicationRefusal+PublicationSameTeam (class)
-ToolUp.Facts.PublicationRefusal+PublicationSameTeam.teamId : System.String { get }
+ToolUp.Facts.PublicationRefusal+PublicationSameTeam.teamId : ToolUp.Platform.TeamId { get }
 ToolUp.Facts.PublicationRefusal+PublicationShapeMismatch (class)
 ToolUp.Facts.PublicationRefusal+PublicationShapeMismatch.detail : System.String { get }
 ToolUp.Facts.PublicationRefusal+PublicationSignatureRefused (class)
@@ -1137,10 +1137,10 @@ ToolUp.Facts.PublicationRefusal+Tags.PublicationWrongScope : System.Int32 (liter
 ToolUp.Facts.PublicationRefusalModule (class)
 ToolUp.Facts.PublicationRefusalModule.describe(ToolUp.Facts.PublicationRefusal) : System.String
 ToolUp.Facts.PublicationRevocation (class)
-ToolUp.Facts.PublicationRevocation..ctor(System.String, System.String, System.DateTime)
+ToolUp.Facts.PublicationRevocation..ctor(System.String, ToolUp.Platform.UserId, System.DateTime)
 ToolUp.Facts.PublicationRevocation.At : System.DateTime { get }
 ToolUp.Facts.PublicationRevocation.ByTeam : System.String { get }
-ToolUp.Facts.PublicationRevocation.ByUserId : System.String { get }
+ToolUp.Facts.PublicationRevocation.ByUserId : ToolUp.Platform.UserId { get }
 ToolUp.Facts.PublicationSide (class)
 ToolUp.Facts.PublicationSide.IsSource : System.Boolean { get }
 ToolUp.Facts.PublicationSide.IsTarget : System.Boolean { get }

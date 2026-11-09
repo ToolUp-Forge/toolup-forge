@@ -261,7 +261,7 @@ type EntityBackedExternalContactStore(entities: IEntityStore.IEntityStore, audit
                             audit
                                 scopeId
                                 (ContactCreated {
-                                    UserId = UserId actorUserId.Value
+                                    UserId = actorUserId
                                     ScopeId = scopeId
                                     ContactId = stored.Id
                                     Owner = ContactOwner.toWireString stored.Owner
@@ -332,7 +332,7 @@ type EntityBackedExternalContactStore(entities: IEntityStore.IEntityStore, audit
                                 audit
                                     scopeId
                                     (ContactUpdated {
-                                        UserId = UserId actorUserId.Value
+                                        UserId = actorUserId
                                         ScopeId = scopeId
                                         ContactId = stored.Id
                                         ChangedFields = changed
@@ -361,7 +361,7 @@ type EntityBackedExternalContactStore(entities: IEntityStore.IEntityStore, audit
                         audit
                             scopeId
                             (ContactDeleted {
-                                UserId = UserId actorUserId.Value
+                                UserId = actorUserId
                                 ScopeId = scopeId
                                 ContactId = contactId
                                 WithdrawnChannels = discarded |> List.map NotificationKind.SinkKind.toWireString
@@ -378,7 +378,7 @@ type EntityBackedExternalContactStore(entities: IEntityStore.IEntityStore, audit
                     audit
                         scopeId
                         (ContactOptInRecorded {
-                            UserId = UserId actorUserId.Value
+                            UserId = actorUserId
                             ScopeId = scopeId
                             ContactId = contactId
                             Channel = NotificationKind.SinkKind.toWireString channel
@@ -400,7 +400,7 @@ type EntityBackedExternalContactStore(entities: IEntityStore.IEntityStore, audit
                     audit
                         scopeId
                         (ContactOptInWithdrawn {
-                            UserId = UserId actorUserId.Value
+                            UserId = actorUserId
                             ScopeId = scopeId
                             ContactId = contactId
                             Channel = NotificationKind.SinkKind.toWireString channel

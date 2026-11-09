@@ -75,7 +75,7 @@ type IDeployPipeline =
     /// `PrebuiltImage` source skips `DeployBuilding`; a build that
     /// is still in-flight transitions to `DeployBuilding buildId`.
     abstract BeginDeploy:
-        tenantId: TenantId * buildId: BuildId * manifest: DeployManifest * byUserId: UserId ->
+        tenantId: string * buildId: BuildId * manifest: DeployManifest * byUserId: UserId ->
             Async<Result<DeployId, DeployPipelineError>>
 
     /// Read the current state of a deploy. The returned summary
@@ -93,13 +93,13 @@ type IDeployPipeline =
     /// is mid-flight (the caller cancels it first or waits for it
     /// to settle); `NothingToRollbackTo` when no prior successful
     /// deploy exists for the tenant.
-    abstract Rollback: tenantId: TenantId * byUserId: UserId -> Async<Result<DeployId, DeployPipelineError>>
+    abstract Rollback: tenantId: string * byUserId: UserId -> Async<Result<DeployId, DeployPipelineError>>
 
     /// Read the most recent `count` deploys for a tenant, newest
     /// first. Includes every terminal state (`DeploySucceeded`,
     /// `DeployFailed`, `DeployRolledBack`). Powers the admin UI's
     /// per-tenant deploy history panel.
-    abstract GetDeployHistory: tenantId: TenantId * count: int -> Async<DeploySummary list>
+    abstract GetDeployHistory: tenantId: string * count: int -> Async<DeploySummary list>
 
 // ─── IDeployPlanner (Phase 185 — the dry-run seam) ───────────────────
 //
@@ -154,5 +154,4 @@ type IDeployPlanner =
     /// be read; a plan computed from partial state is worse than no
     /// plan, so the planner fails closed rather than under-reporting
     /// changes.
-    abstract PlanDeploy:
-        tenantId: TenantId * target: ContainerSpec list -> Async<Result<DeployPlan, DeployPipelineError>>
+    abstract PlanDeploy: tenantId: string * target: ContainerSpec list -> Async<Result<DeployPlan, DeployPipelineError>>

@@ -138,7 +138,7 @@ type FactPublicationEvent = {
     /// The grant's visibility level.
     Visibility: string
     /// The owner who performed an owner act.
-    ByUserId: string option
+    ByUserId: UserId option
     /// The publication run both sides' records share.
     PublicationRunId: string option
     /// The source table's committed run the rows came from.
@@ -734,8 +734,8 @@ module internal GrantPersistence =
                 grant.TargetTable
                 PublicationVisibility.label grant.Visibility
                 PublicationSide.name side
-                consent.TeamId
-                consent.ByUserId
+                consent.TeamId.Value
+                consent.ByUserId.Value
                 consent.At.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
             ]
             |> FactTableBlobIo.serialize
@@ -1116,16 +1116,16 @@ type internal FactPublicationService(deps: FactPublicationDeps) =
     /// the scope resolved to.
     let owner (scope: ResolvedScope) : Async<Result<string, PublicationRefusal>> = async {
         match RequestViewerContext.current () with
-        | None -> return Error(PublicationNotOwner(scope.ScopeId, None))
+        | None -> return Error(PublicationNotOwner(TeamId scope.ScopeId, None))
         | Some viewer ->
             if scope.IsAnonymous then
-                return Error(PublicationNotOwner(scope.ScopeId, Some viewer.UserId))
+                return Error(PublicationNotOwner(TeamId scope.ScopeId, Some viewer.UserId))
             else
-                let! role = deps.TeamRole scope.ScopeId viewer.UserId
+                let! role = deps.TeamRole scope.ScopeId viewer.UserId.Value
 
                 match role with
-                | Some TeamRole.Owner -> return Ok viewer.UserId
-                | _ -> return Error(PublicationNotOwner(scope.ScopeId, Some viewer.UserId))
+                | Some TeamRole.Owner -> return Ok viewer.UserId.Value
+                | _ -> return Error(PublicationNotOwner(TeamId scope.ScopeId, Some viewer.UserId))
     }
 
     let partyAct
@@ -1172,7 +1172,7 @@ type internal FactPublicationService(deps: FactPublicationDeps) =
                                 do!
                                     Consolidation.audit deps (Guid.NewGuid()) scope.ScopeId eventType {
                                         Consolidation.eventFor deps next.Grant side with
-                                            ByUserId = Some userId
+                                            ByUserId = Some(UserId userId)
                                             Reason =
                                                 next.Grant.Revocation
                                                 |> Option.map (fun _ -> "withdrawn by the team's owner")
@@ -1491,7 +1491,7 @@ type internal FactPublicationService(deps: FactPublicationDeps) =
                     None
 
             if proposal.SourceTeam = proposal.TargetTeam then
-                return Error(PublicationSameTeam proposal.SourceTeam)
+                return Error(PublicationSameTeam(TeamId proposal.SourceTeam))
             else
                 match side with
                 | None -> return Error(PublicationNotAParty("(proposal)", scope.ScopeId))
@@ -1540,7 +1540,7 @@ type internal FactPublicationService(deps: FactPublicationDeps) =
                                             FactPublicationEvents.ProposedType
                                             {
                                                 Consolidation.eventFor deps grant side with
-                                                    ByUserId = Some userId
+                                                    ByUserId = Some(UserId userId)
                                             }
 
                                     return Ok grant
@@ -1555,8 +1555,8 @@ type internal FactPublicationService(deps: FactPublicationDeps) =
                     | Some _ -> Error(PublicationGrantRevoked grantId)
                     | None ->
                         let consent = {
-                            TeamId = scope.ScopeId
-                            ByUserId = userId
+                            TeamId = TeamId scope.ScopeId
+                            ByUserId = UserId userId
                             At = now ()
                         }
 
@@ -1594,7 +1594,7 @@ type internal FactPublicationService(deps: FactPublicationDeps) =
                                         Revocation =
                                             Some {
                                                 ByTeam = scope.ScopeId
-                                                ByUserId = userId
+                                                ByUserId = UserId userId
                                                 At = now ()
                                             }
                                 }

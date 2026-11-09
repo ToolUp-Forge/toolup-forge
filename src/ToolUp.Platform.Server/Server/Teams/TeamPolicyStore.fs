@@ -300,7 +300,7 @@ type TeamPolicyStore(storage: IBlobStorage) =
 /// Who is asking, as the change rules need them.
 type TeamPolicyViewer = {
     /// The viewer's user id.
-    UserId: string
+    UserId: UserId
     /// The viewer's role in the team, `None` when not a member (or when no
     /// team store is composed to say).
     TeamRole: TeamRole option
@@ -326,7 +326,7 @@ module TeamPolicyViewer =
                 | _ -> async.Return None
 
             return {
-                UserId = userId
+                UserId = UserId userId
                 TeamRole = role
                 IsPlatformAdmin =
                     access

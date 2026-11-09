@@ -36,7 +36,7 @@ let private mkEntry (token: string) (createdAt: DateTime) : OAuthFlowState = {
     DataSourceId = "ds-1"
     ScopeId = "scope-1"
     Container = "team-scope-1"
-    UserId = "user-1"
+    UserId = UserId "user-1"
     CreatedAt = createdAt
     RedirectUri = "https://example.com/api/oauth/test-flow/callback"
     CodeVerifier = Some "abc123"
@@ -65,7 +65,7 @@ let tests (name: string) (factory: unit -> IOAuthStateStore) =
                 Expect.equal e.Token "tok-roundtrip" "Token round-trips"
                 Expect.equal e.FlowName "test-flow" "FlowName round-trips"
                 Expect.equal e.DataSourceId "ds-1" "DataSourceId round-trips"
-                Expect.equal e.UserId "user-1" "UserId round-trips"
+                Expect.equal e.UserId (UserId "user-1") "UserId round-trips"
                 Expect.equal e.RedirectUri "https://example.com/api/oauth/test-flow/callback" "RedirectUri round-trips"
                 Expect.equal e.CodeVerifier (Some "abc123") "CodeVerifier round-trips"
             | None -> failtest "TryConsume returned None for a freshly-saved entry"

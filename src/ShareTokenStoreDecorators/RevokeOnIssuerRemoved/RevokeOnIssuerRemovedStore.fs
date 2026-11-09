@@ -81,7 +81,7 @@ type RevokeOnIssuerRemovedStore(inner: IShareTokenStore, notifications: INotific
 
     let revokeLeaversClaims (payload: MembershipChangedPayload) = async {
         try
-            let! claims = inner.ListByIssuer(payload.TeamId.Value, UserId payload.AffectedUserId.Value)
+            let! claims = inner.ListByIssuer(payload.TeamId.Value, payload.AffectedUserId)
             let active = claims |> List.filter (fun c -> not c.Revoked)
 
             for claim in active do

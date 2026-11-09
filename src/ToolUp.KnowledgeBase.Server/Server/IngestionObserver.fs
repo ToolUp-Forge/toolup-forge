@@ -322,7 +322,7 @@ let makeIngestionStatusObserver
 
     let settle (job: IngestionJob) (outcome: ChunkOutcome) = async {
         match! apply job outcome with
-        | Some(doc, status) -> do! publishTerminal doc status job.OriginatingUserId
+        | Some(doc, status) -> do! publishTerminal doc status (Option.map UserId.value job.OriginatingUserId)
         | None -> ()
     }
 

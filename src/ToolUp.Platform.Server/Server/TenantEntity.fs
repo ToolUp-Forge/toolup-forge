@@ -94,7 +94,7 @@ module TenantStatus =
 /// self-hosted operator picks their own vocabulary.
 type Tenant = {
     /// Required by `IEntityStore`. Equals `TenantId`.
-    Id: TenantId
+    Id: string
     /// Required by `IEntityStore`. Always `"Tenant"`.
     Type: string
     /// Required by `IEntityStore`. Monotonically bumped per Save.
@@ -106,7 +106,7 @@ type Tenant = {
     /// The human who owns this tenant — `userId` per
     /// `ISubjectResolver`. Indexed so a single user's tenants are
     /// O(1) lookup.
-    OwnerUserId: string
+    OwnerUserId: UserId
     /// Operator-defined deployment region.
     Region: string
     /// Operator-defined billing tier (e.g. `"free"`, `"starter"`,
@@ -171,7 +171,7 @@ module Tenant =
     let registration: EntityRegistration<Tenant> =
         EntityRegistration.create<Tenant> EntityType
         |> EntityRegistration.withIndex SlugIndex _.Slug
-        |> EntityRegistration.withIndex OwnerUserIdIndex _.OwnerUserId
+        |> EntityRegistration.withIndex OwnerUserIdIndex _.OwnerUserId.Value
         |> EntityRegistration.withIndex RegionIndex _.Region
         |> EntityRegistration.withIndex TierIndex _.Tier
         |> EntityRegistration.withIndex StatusIndex (fun t -> TenantStatus.toString t.Status)
@@ -182,7 +182,7 @@ module Tenant =
     /// first Save). `now` is supplied so deterministic tests can
     /// pin the timestamp.
     let provision
-        (tenantId: TenantId)
+        (tenantId: string)
         (slug: string)
         (ownerUserId: string)
         (region: string)
@@ -195,7 +195,7 @@ module Tenant =
             Type = EntityType
             Version = 0
             Slug = slug
-            OwnerUserId = ownerUserId
+            OwnerUserId = UserId ownerUserId
             Region = region
             Tier = tier
             Status = Active

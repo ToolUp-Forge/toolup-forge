@@ -683,7 +683,7 @@ let tests =
                 ArgumentsDigest = ToolApprovalDispatch.argumentsDigest ArgsJson
                 ArgumentsPreview = ArgsJson
                 ScopeId = "anonymous"
-                UserId = "alice"
+                UserId = UserId "alice"
             }
 
             // (1) a caller with no Read on the source module cannot answer.

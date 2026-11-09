@@ -393,7 +393,7 @@ let private toEnvArray (envVars: Map<string, string>) : string[] =
     |> Seq.map (fun (k, v) -> sprintf "%s=%s" k v)
     |> Array.ofSeq
 
-let private toLabelDict (extras: Map<string, string>) (tenantId: TenantId) : Dictionary<string, string> =
+let private toLabelDict (extras: Map<string, string>) (tenantId: string) : Dictionary<string, string> =
     let d = Dictionary<string, string>(extras)
     d["tenantId"] <- tenantId
     d
@@ -431,7 +431,7 @@ type DockerLocalContainerScheduler(config: DockerLocalContainerSchedulerConfig) 
 
     interface IContainerScheduler with
 
-        member _.LaunchContainer(tenantId: TenantId, spec: ContainerSpec) = async {
+        member _.LaunchContainer(tenantId: string, spec: ContainerSpec) = async {
             if String.IsNullOrWhiteSpace spec.Image then
                 return Error(InvalidContainerSpec "ContainerSpec.Image is required")
             else
@@ -532,7 +532,7 @@ type DockerLocalContainerScheduler(config: DockerLocalContainerSchedulerConfig) 
                 return Error(SchedulerUnavailable ex.Message)
         }
 
-        member _.ListContainers(tenantId: TenantId option) = async {
+        member _.ListContainers(tenantId: string option) = async {
             try
                 let path =
                     match tenantId with

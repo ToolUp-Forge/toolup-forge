@@ -227,7 +227,7 @@ let private errorPayload (code: string) (message: string) : string =
 
 /// The caller as the background context carries it.
 type private Caller = {
-    UserId: string
+    UserId: UserId
     ScopeId: string
     /// The scope the platform resolved for the request — the one the fact
     /// tier's disclosure door judges in.
@@ -269,7 +269,7 @@ let private callerOf (ctx: HttpContext) : Caller =
     let resolvedUser = userId |> Option.defaultValue "anonymous"
 
     {
-        UserId = resolvedUser
+        UserId = UserId resolvedUser
         ScopeId = scopeId |> Option.defaultValue resolvedUser
         Scope = StorageScopeResolver.ScopeResolution.forRequest ctx
         Anonymous = anonymousSubject || resolvedUser = "anonymous"
@@ -522,7 +522,7 @@ type RenderJobPayload = {
     /// The requester's storage scope.
     ScopeId: string
     /// The requester — the render's principal and the notified user.
-    UserId: string
+    UserId: UserId
     /// The conversation that asked, for the audit row.
     ConversationId: Guid option
     /// The typed placeholder values, already disclosure-resolved.
@@ -942,10 +942,10 @@ let private renderInTurn
         let gate = serviceOf<IFactDisclosureGate> services
         let events = serviceOf<IEventStore> services
 
-        let audit = auditChain deps events caller.UserId caller.ConversationId None
+        let audit = auditChain deps events caller.UserId.Value caller.ConversationId None
 
         let api =
-            apiFor deps gate caller.UserId (inTurnConfig deps template.Format) audit caller.Scope
+            apiFor deps gate caller.UserId.Value (inTurnConfig deps template.Format) audit caller.Scope
 
         let! outcome = api.Render(template.Id, values)
 
@@ -974,7 +974,7 @@ let private renderInTurn
         | Ok(RenderedToBlob(key, version, mime)) ->
             let link = deps.DownloadLink key version
             let channel = serviceOf<INotificationChannel> services
-            do! announceReady channel caller.UserId None template.DisplayName
+            do! announceReady channel caller.UserId.Value None template.DisplayName
 
             return
                 serialise {|
@@ -1026,7 +1026,7 @@ let private enqueue
     : Async<string> =
     async {
         let gate = serviceOf<IFactDisclosureGate> ctx.RequestServices
-        let! disclosed = discloseForJob gate caller.UserId caller.Scope values
+        let! disclosed = discloseForJob gate caller.UserId.Value caller.Scope values
 
         let registration: JobRegistration = {
             ScopeId = caller.ScopeId
@@ -1044,7 +1044,7 @@ let private enqueue
             RetryPolicy = JobRetryPolicy.defaults
             ShardKey = None
             Precision = Minute
-            CreatedBy = caller.UserId
+            CreatedBy = caller.UserId.Value
             Tags = Map.ofList [ "template-id", template.Id ]
         }
 
@@ -1052,7 +1052,7 @@ let private enqueue
         | Error err -> return errorPayload "RenderQueueFailed" $"The background render could not be queued: %A{err}"
         | Ok(Scheduled jobId | Coalesced jobId) ->
             // A `Manual` job runs on `TriggerOnce`, not on a tick.
-            match! scheduler.TriggerOnce(caller.ScopeId, jobId, UserId caller.UserId) with
+            match! scheduler.TriggerOnce(caller.ScopeId, jobId, caller.UserId) with
             | Error refusal ->
                 return
                     errorPayload
@@ -1142,13 +1142,13 @@ let renderJobHandler (deps: ReportingAIToolDeps) (services: IServiceProvider) : 
                     |> Option.defaultValue payload.TemplateId
 
                 let audit =
-                    auditChain deps events payload.UserId payload.ConversationId (Some jobCtx.JobId)
+                    auditChain deps events payload.UserId.Value payload.ConversationId (Some jobCtx.JobId)
 
                 // No gate: the executor applied the disclosure door before
                 // enqueueing, and these are the values it returned.
                 let api =
                     ReportApiHandler.create
-                        payload.UserId
+                        payload.UserId.Value
                         deps.Templates
                         deps.Renderers
                         deps.StoreBlob
@@ -1170,17 +1170,17 @@ let renderJobHandler (deps: ReportingAIToolDeps) (services: IServiceProvider) : 
                             }
                         )
 
-                    do! announceReady channel payload.UserId (Some(jobCtx.JobId, link)) templateName
+                    do! announceReady channel payload.UserId.Value (Some(jobCtx.JobId, link)) templateName
                     return Success
                 | Ok(RenderedInline _) ->
                     // Unreachable with `jobConfig`'s budget; refused
                     // rather than silently dropping the bytes.
                     let reason = "the render was returned inline, so there is no file to link"
-                    do! announceFailed channel payload.UserId templateName reason
+                    do! announceFailed channel payload.UserId.Value templateName reason
                     return PermanentFailure reason
                 | Error error ->
                     let reason = rpcErrorText error
-                    do! announceFailed channel payload.UserId templateName reason
+                    do! announceFailed channel payload.UserId.Value templateName reason
                     return PermanentFailure reason
         }
     }

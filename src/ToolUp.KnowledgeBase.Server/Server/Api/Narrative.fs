@@ -40,7 +40,7 @@ let private disclosureRefusalFor (deps: KnowledgeApiDeps) (document: NarrativeDo
         match NarrativeFacts.factRefs document |> Set.toList with
         | [] -> return None
         | refs ->
-            let! verdicts = gate.Check(factScope, deps.UserId, FactNarrativePublication, refs)
+            let! verdicts = gate.Check(factScope, deps.UserId.Value, FactNarrativePublication, refs)
 
             let offending =
                 verdicts
@@ -157,7 +157,7 @@ let ingestNarrative
                     FileName = fileName
                     FileType = "narrative"
                     UploadedAt = DateTimeOffset.UtcNow
-                    UploadedBy = deps.UserId
+                    UploadedBy = deps.UserId.Value
                     Status = Queued
                     SizeBytes = sizeBytes
                     ChunkCount = chunks.Length
@@ -320,14 +320,27 @@ let ingestNarrative
                         let terminal = Complete 0
                         setStatus docId terminal
                         do! updateIndexStatus deps.Storage deps.Scope.Container docId terminal
-                        do! publishTerminalStatus deps.Notifications deps.Logger docId fileName deps.UserId terminal
+
+                        do!
+                            publishTerminalStatus
+                                deps.Notifications
+                                deps.Logger
+                                docId
+                                fileName
+                                deps.UserId.Value
+                                terminal
 
                     // Nudge the KB client to reload its document list.
                     // The notification scope is the user id (matches the
                     // SSE subscription filter); the payload's `scopeId`
                     // carries the storage scope for downstream consumers
                     // that need it.
-                    do! deps.Notifications.Publish(deps.UserId, DataRefreshed("KnowledgeBase", deps.Scope.ScopeId))
+                    do!
+                        deps.Notifications.Publish(
+                            deps.UserId.Value,
+                            DataRefreshed("KnowledgeBase", deps.Scope.ScopeId)
+                        )
+
                     do! deps.PublishInventory()
 
                     return Ok returnedDoc
@@ -549,7 +562,7 @@ let private performReset (deps: KnowledgeApiDeps) : Async<Result<unit, string>> 
 
         // Some blobs did go, so the scope's views still refresh; the
         // erasure audit row is left to the re-run that completes it.
-        do! deps.Notifications.Publish(deps.UserId, DataRefreshed("KnowledgeBase", deps.Scope.ScopeId))
+        do! deps.Notifications.Publish(deps.UserId.Value, DataRefreshed("KnowledgeBase", deps.Scope.ScopeId))
         do! deps.PublishInventory()
 
         return
@@ -569,7 +582,7 @@ let private performReset (deps: KnowledgeApiDeps) : Async<Result<unit, string>> 
                 auditLog.Record(
                     deps.Scope.ScopeId,
                     KnowledgeScopeErased {
-                        UserId = UserId deps.UserId
+                        UserId = deps.UserId
                         ScopeId = deps.Scope.ScopeId
                         DocumentCount = documentCount
                         OrphanChunkCount = orphanChunkCount
@@ -577,7 +590,7 @@ let private performReset (deps: KnowledgeApiDeps) : Async<Result<unit, string>> 
                 )
         | None -> ()
 
-        do! deps.Notifications.Publish(deps.UserId, DataRefreshed("KnowledgeBase", deps.Scope.ScopeId))
+        do! deps.Notifications.Publish(deps.UserId.Value, DataRefreshed("KnowledgeBase", deps.Scope.ScopeId))
         do! deps.PublishInventory()
         return Ok()
 }

@@ -137,7 +137,7 @@ let private callerOf (r: Rig) (userId: string) : LayoutCaller =
             PageGateViewer.fingerprint {
                 Principal = userId
                 ScopeId = teamScope.ScopeId
-                ActiveTeamId = Some teamId
+                ActiveTeamId = Some(TeamId teamId)
                 IsPlatformAdmin = false
                 TeamRole = None
                 OutputVisibility = None

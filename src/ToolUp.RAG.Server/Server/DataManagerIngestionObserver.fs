@@ -137,7 +137,7 @@ let create
                 }
 
                 let json = JsonSerializer.Serialize(payload, jsonOptions)
-                do! channel.Publish(uid, CustomNotification(DataManagerIngestionStatusKey, json))
+                do! channel.Publish(uid.Value, CustomNotification(DataManagerIngestionStatusKey, json))
             with ex ->
                 logger.Error(
                     sprintf "[DataManagerIngestionObserver] failed to publish status for %s" job.DocumentId,

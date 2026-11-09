@@ -90,7 +90,7 @@ let private invokeHook
                         | :? ITenantLifecycleProvisionContext as rc ->
                             rc.OnProvisionedWith {
                                 ScopeId = scopeId
-                                ActorUserId = actorUserId
+                                ActorUserId = UserId actorUserId
                                 Request = request
                             }
                         | _ -> hook.OnProvisioned(scopeId, UserId actorUserId)

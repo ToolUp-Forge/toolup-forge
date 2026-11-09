@@ -82,13 +82,13 @@ let take (n: int) (q: EntityQuery<'T>) : EntityQuery<'T> = { q with Take = n }
 /// `relationship` — an `Eq` over the relationship's foreign-key field.
 /// Indexed (19c auto-registers the index), so it executes through the
 /// existing executor unchanged.
-let relatedTo (relationship: Relationship) (relatedId: EntityId) : Predicate =
+let relatedTo (relationship: Relationship) (relatedId: string) : Predicate =
     Eq(relationship.ForeignKeyField, relatedId)
 
 /// As `relatedTo`, for several related ids at once — an `In` over the
 /// foreign-key field (union of indexed lookups). Useful for the second
 /// leg of a ManyToMany resolution, or a batched parent lookup.
-let relatedToAny (relationship: Relationship) (relatedIds: EntityId list) : Predicate =
+let relatedToAny (relationship: Relationship) (relatedIds: string list) : Predicate =
     In(relationship.ForeignKeyField, relatedIds)
 
 /// Walk the predicate tree, collecting every **index** leaf field name

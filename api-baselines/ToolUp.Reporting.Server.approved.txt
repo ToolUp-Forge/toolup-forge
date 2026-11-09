@@ -191,11 +191,11 @@ ToolUp.Reporting.ReportingAITools+LongRenderPolicyModule.defaults : ToolUp.Repor
 ToolUp.Reporting.ReportingAITools+LongRenderPolicyModule.defers(ToolUp.Reporting.ReportingAITools+LongRenderPolicy, ToolUp.Reporting.TemplateFormat, System.Int64) : System.Boolean
 ToolUp.Reporting.ReportingAITools+LongRenderPolicyModule.never : ToolUp.Reporting.ReportingAITools+LongRenderPolicy { get }
 ToolUp.Reporting.ReportingAITools+RenderJobPayload (class)
-ToolUp.Reporting.ReportingAITools+RenderJobPayload..ctor(System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Guid], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Reporting.PlaceholderValue])
+ToolUp.Reporting.ReportingAITools+RenderJobPayload..ctor(System.String, System.String, ToolUp.Platform.UserId, Microsoft.FSharp.Core.FSharpOption`1[System.Guid], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Reporting.PlaceholderValue])
 ToolUp.Reporting.ReportingAITools+RenderJobPayload.ConversationId : Microsoft.FSharp.Core.FSharpOption`1[System.Guid] { get }
 ToolUp.Reporting.ReportingAITools+RenderJobPayload.ScopeId : System.String { get }
 ToolUp.Reporting.ReportingAITools+RenderJobPayload.TemplateId : System.String { get }
-ToolUp.Reporting.ReportingAITools+RenderJobPayload.UserId : System.String { get }
+ToolUp.Reporting.ReportingAITools+RenderJobPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Reporting.ReportingAITools+RenderJobPayload.Values : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Reporting.PlaceholderValue] { get }
 ToolUp.Reporting.ReportingAITools+RenderJobPayloadModule (class)
 ToolUp.Reporting.ReportingAITools+RenderJobPayloadModule.decode(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Reporting.ReportingAITools+RenderJobPayload]

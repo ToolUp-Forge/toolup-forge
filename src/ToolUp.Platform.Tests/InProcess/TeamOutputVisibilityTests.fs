@@ -43,8 +43,8 @@ let private team = "alpha"
 
 /// The platform-resolved viewers, as scope resolution stamps them.
 let private viewer (userId: string) (isPlatformAdmin: bool) : RequestViewer = {
-    UserId = userId
-    ActiveTeamId = Some team
+    UserId = UserId userId
+    ActiveTeamId = Some(TeamId team)
     IsPlatformAdmin = isPlatformAdmin
 }
 
@@ -568,8 +568,8 @@ let private viewerTests =
             Expect.equal
                 (RequestViewer.ofItems ctx.Items)
                 (Some {
-                    UserId = "ada"
-                    ActiveTeamId = Some team
+                    UserId = UserId "ada"
+                    ActiveTeamId = Some(TeamId team)
                     IsPlatformAdmin = true
                 })
                 "the resolved viewer"
@@ -605,8 +605,8 @@ let private viewerTests =
                 ctx.Items.Clear()
                 release.SetResult()
 
-                Expect.equal (during |> Option.map _.UserId) (Some "ada") "during the request"
-                Expect.equal (later.Result |> Option.map _.UserId) (Some "ada") "after it, from the snapshot"
+                Expect.equal (during |> Option.map _.UserId) (Some(UserId "ada")) "during the request"
+                Expect.equal (later.Result |> Option.map _.UserId) (Some(UserId "ada")) "after it, from the snapshot"
                 Expect.isNone (RequestViewerContext.current ()) "nothing leaks past the request")
 
         testCase

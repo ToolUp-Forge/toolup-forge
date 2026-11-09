@@ -1771,7 +1771,7 @@ type InProcessJobScheduler internal (deps: SchedulerDeps, options: SchedulerOpti
             match! SchedulerPolicy.triggerable store scopeId jobId with
             | Error refusal -> return Error refusal
             | Ok job ->
-                let source = ScheduledManually(UserId byUserId.Value)
+                let source = ScheduledManually(byUserId)
 
                 // A stopping scheduler starts nothing; saying `Ok` here would
                 // report a run that never happens.

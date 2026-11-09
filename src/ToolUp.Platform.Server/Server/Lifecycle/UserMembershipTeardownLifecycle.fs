@@ -97,9 +97,9 @@ let hook: TenantHook<TeardownSubstrate> = {
                 // Snapshot the affected teams BEFORE the purge — the audit
                 // trail records one MemberRemoved per stripped team, and the
                 // membership rows are gone afterwards.
-                let! teams = store.GetTeamsForUser(UserId userId)
+                let! teams = store.GetTeamsForUser(userId)
 
-                match! store.PurgeUser(UserId userId) with
+                match! store.PurgeUser(userId) with
                 | Error err -> return LifecycleHookResult.Failed err
                 | Ok() ->
                     match substrate.Audit with
@@ -111,7 +111,7 @@ let hook: TenantHook<TeardownSubstrate> = {
                                     MemberRemoved {
                                         UserId = UserId actorUserId
                                         TeamId = TeamId team.TeamId
-                                        AffectedUserId = UserId userId
+                                        AffectedUserId = userId
                                     }
                                 )
                     | None -> ()
@@ -119,7 +119,7 @@ let hook: TenantHook<TeardownSubstrate> = {
                     // Pending-invite sweep — a purged user must not
                     // auto-rejoin from a stale email invite on their next
                     // sign-in.
-                    match! resolveEmail substrate userId with
+                    match! resolveEmail substrate userId.Value with
                     | None -> return LifecycleHookResult.Completed
                     | Some address ->
                         match substrate.Invites with
@@ -149,7 +149,7 @@ let hook: TenantHook<TeardownSubstrate> = {
         Some(fun substrate scopeId _ -> async {
             match ScopeId.parse scopeId with
             | ScopeKind.User userId ->
-                let! teams = substrate.Teams.GetTeamsForUser(UserId userId)
+                let! teams = substrate.Teams.GetTeamsForUser(userId)
                 return teams.Length, sprintf "%d team membership row(s) would be stripped" teams.Length
             | ScopeKind.Team _
             | ScopeKind.Other _ -> return 0, "not a user scope — nothing to tear down"

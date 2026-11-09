@@ -161,7 +161,7 @@ type PageGateViewer = {
     /// The scope the reads run in.
     ScopeId: string
     /// The viewer's active team.
-    ActiveTeamId: string option
+    ActiveTeamId: TeamId option
     /// Whether the viewer is a platform admin.
     IsPlatformAdmin: bool
     /// The team's role for the viewer.
@@ -199,7 +199,7 @@ module PageGateViewer =
         JObj [
             "principal", JStr viewer.Principal
             "scope", JStr viewer.ScopeId
-            "team", optional viewer.ActiveTeamId
+            "team", optional (viewer.ActiveTeamId |> Option.map TeamId.value)
             "platformAdmin", JBool viewer.IsPlatformAdmin
             "role", optional viewer.TeamRole
             "outputVisibility", optional viewer.OutputVisibility
@@ -221,12 +221,12 @@ module PageGateViewer =
 
             let! role =
                 match teamId, sources.Teams with
-                | Some team, Some teams -> teams.GetMemberRole(TeamId team, UserId principal)
+                | Some team, Some teams -> teams.GetMemberRole(team, UserId principal)
                 | _ -> async.Return None
 
             let! level =
                 match teamId, sources.OutputVisibility with
-                | Some team, Some source -> source.Current(TeamId team)
+                | Some team, Some source -> source.Current(team)
                 | _ -> async.Return(Error "")
 
             return {
@@ -559,16 +559,16 @@ module PageRequestResolvers =
                     let principal =
                         RequestViewer.ofItems ctx.Items
                         |> Option.map _.UserId
-                        |> Option.defaultValue "anonymous"
+                        |> Option.defaultValue (UserId "anonymous")
 
-                    let! session = cache.Session(scope, principal)
+                    let! session = cache.Session(scope, principal.Value)
 
                     let gate () = async {
-                        let! viewer = PageGateViewer.forRequest sources ctx scope principal
+                        let! viewer = PageGateViewer.forRequest sources ctx scope principal.Value
                         return PageGateViewer.fingerprint viewer
                     }
 
-                    return Ok(PageRequestResolver.create session gate deps scope principal)
+                    return Ok(PageRequestResolver.create session gate deps scope principal.Value)
             }
     }
 

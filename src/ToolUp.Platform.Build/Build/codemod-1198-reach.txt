@@ -980,12 +980,6 @@ ToolUp.AI.McpHost.McpCompose EnabledMcpHost
 ToolUp.AI.McpHost.McpCompose NoMcpHost
 ToolUp.AI.ToolApprovalDispatch ApprovalGranted
 ToolUp.AI.ToolApprovalDispatch ApprovalRefused
-ToolUp.AI.Wire JArray
-ToolUp.AI.Wire JBool
-ToolUp.AI.Wire JNull
-ToolUp.AI.Wire JNumber
-ToolUp.AI.Wire JObject
-ToolUp.AI.Wire JString
 ToolUp.Algorithms.AlgorithmOperations CentredAligned
 ToolUp.Algorithms.AlgorithmOperations CentredMean
 ToolUp.Algorithms.AlgorithmOperations DescriptiveOutcome
@@ -2920,6 +2914,7 @@ ToolUp.Platform Id
 ToolUp.Platform IdTokenBearer
 ToolUp.Platform IdempotencyKey
 ToolUp.Platform IdempotentAttribute
+ToolUp.Platform Identity
 ToolUp.Platform ImagePullFailed
 ToolUp.Platform Immediate
 ToolUp.Platform Imported
@@ -3867,7 +3862,6 @@ ToolUp.Platform SchemaString
 ToolUp.Platform SchemaVersion
 ToolUp.Platform SchemaVersionNotFound
 ToolUp.Platform ScopeDenial
-ToolUp.Platform ScopeId
 ToolUp.Platform ScopeKey
 ToolUp.Platform ScopeMismatch
 ToolUp.Platform ScopePersistence
@@ -4083,6 +4077,8 @@ ToolUp.Platform TeamDefault
 ToolUp.Platform TeamDefaults
 ToolUp.Platform TeamDeleted
 ToolUp.Platform TeamDeletedPayload
+ToolUp.Platform TeamId
+ToolUp.Platform TeamIdJsonConverter
 ToolUp.Platform TeamInfo
 ToolUp.Platform TeamInviteAcceptResult
 ToolUp.Platform TeamInviteAccepted
@@ -4145,7 +4141,6 @@ ToolUp.Platform TenantFleetError
 ToolUp.Platform TenantHealth
 ToolUp.Platform TenantHealthUnknown
 ToolUp.Platform TenantHealthy
-ToolUp.Platform TenantId
 ToolUp.Platform TenantLifecycleAdminMessages
 ToolUp.Platform TenantLifecycleEvent
 ToolUp.Platform TenantLifecycleHookFailed
@@ -4273,6 +4268,8 @@ ToolUp.Platform UserAuditKind
 ToolUp.Platform UserAuthoredSchema
 ToolUp.Platform UserContact
 ToolUp.Platform UserDirectoryTypeahead
+ToolUp.Platform UserId
+ToolUp.Platform UserIdJsonConverter
 ToolUp.Platform UserIdKey
 ToolUp.Platform UserKind
 ToolUp.Platform UserLoggedIn
@@ -8468,8 +8465,12 @@ ToolUp.RAG.RAGCompose SuppliedSparseIndex
 ToolUp.RAG.RetrievalPipeline Cosine
 ToolUp.RAG.RetrievalPipeline Fused
 ToolUp.RAG.RetrievalPipeline Reranked
+ToolUp.Remoting Chunk
+ToolUp.Remoting Complete
 ToolUp.Remoting DecoderDiverges
 ToolUp.Remoting DecoderUndrawable
+ToolUp.Remoting Error
+ToolUp.Remoting Other
 ToolUp.Remoting.AspNetCore.AppBuilderExtensions IApplicationBuilder
 ToolUp.Remoting.AspNetCore.AspNetCoreWarnings warnEmptyOnce
 ToolUp.Remoting.AspNetCore.Extensions HttpContext
@@ -8559,6 +8560,7 @@ ToolUp.Remoting.Json.SystemTextJson.TupleReflection TupleInfo
 ToolUp.Remoting.Json.SystemTextJson.TupleReflection getInfo
 ToolUp.Remoting.Json.SystemTextJson.UnionAttributes hasPojoAttribute
 ToolUp.Remoting.Json.SystemTextJson.UnionAttributes hasStringEnumAttribute
+ToolUp.Remoting.Json.SystemTextJson.UnionAttributes isErasedWrapper
 ToolUp.Remoting.Json.SystemTextJson.UnionReflection UnionCase
 ToolUp.Remoting.Json.SystemTextJson.UnionReflection UnionInfo
 ToolUp.Remoting.Json.SystemTextJson.UnionReflection bindingFlags
@@ -8794,9 +8796,7 @@ ToolUp.Remoting.Server.SchemaVersion reflectionFlags
 ToolUp.Remoting.Server.SchemaVersion refusalPayload
 ToolUp.Remoting.Server.SchemaVersion splitVersionSuffix
 ToolUp.Remoting.Server.SchemaVersion supportedVersions
-ToolUp.Remoting.Server.SseFrame parse
 ToolUp.Remoting.Server.Streaming classify
-ToolUp.Remoting.Server.Streaming formatChunk
 ToolUp.Remoting.Server.Streaming formatChunkWithId
 ToolUp.Remoting.Server.Streaming formatComplete
 ToolUp.Remoting.Server.Streaming formatError

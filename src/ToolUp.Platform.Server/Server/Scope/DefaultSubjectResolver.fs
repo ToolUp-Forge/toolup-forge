@@ -143,7 +143,7 @@ type DefaultSubjectResolver
                 | None, Some user when not (AuthenticatedUser.isAnonymous user) ->
                     // Step 2 — authenticated subject.
                     if supportsTeam then
-                        let! activeTeamResult = getActiveTeam (UserId user.UserId.Value)
+                        let! activeTeamResult = getActiveTeam (user.UserId)
 
                         match activeTeamResult with
                         | Result.Error ex ->
@@ -174,11 +174,11 @@ type DefaultSubjectResolver
                                     )
                             | Some store ->
                                 try
-                                    let! role = store.GetMemberRole(TeamId teamId.Value, UserId user.UserId.Value)
+                                    let! role = store.GetMemberRole(teamId, user.UserId)
 
                                     match role with
                                     | Some _ -> return Ok(Subject.TeamMember(user.UserId.Value, teamId.Value))
-                                    | None -> return Error(SubjectResolutionError.NotTeamMember(TeamId teamId.Value))
+                                    | None -> return Error(SubjectResolutionError.NotTeamMember(teamId))
                                 with ex ->
                                     return Error(SubjectResolutionError.SubjectResolutionFailed ex.Message)
                     elif supportsUser then

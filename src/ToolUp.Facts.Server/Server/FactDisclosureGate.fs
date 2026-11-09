@@ -254,7 +254,7 @@ module ViewerAwareDisclosure =
         | Some team -> async.Return team
         | None ->
             match requester with
-            | Some viewer when viewer.ActiveTeamId = Some scopeId -> async.Return(Some scopeId)
+            | Some viewer when viewer.ActiveTeamId = Some(TeamId scopeId) -> async.Return(Some scopeId)
             | _ -> async {
                 let! isTeam = sources.IsTeam scopeId
                 return if isTeam then Some scopeId else None
@@ -292,7 +292,7 @@ module ViewerAwareDisclosure =
                     match requester with
                     | None -> return Ok(DisclosureViewer.leastPrivileged level)
                     | Some viewer ->
-                        let! role = sources.TeamRole team viewer.UserId
+                        let! role = sources.TeamRole team viewer.UserId.Value
 
                         return
                             Ok {

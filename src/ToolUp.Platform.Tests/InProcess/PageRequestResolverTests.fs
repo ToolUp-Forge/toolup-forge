@@ -469,7 +469,7 @@ let private cacheTests =
                     PageGateViewer.fingerprint {
                         Principal = "u"
                         ScopeId = w.Scope.ScopeId
-                        ActiveTeamId = Some "t"
+                        ActiveTeamId = Some(TeamId "t")
                         IsPlatformAdmin = false
                         TeamRole = role
                         OutputVisibility = None

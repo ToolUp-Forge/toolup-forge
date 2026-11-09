@@ -660,7 +660,7 @@ type BlobShareTokenStore(storage: IBlobStorage, secretStore: ISecretStore, audit
                     recordAudit
                         scopeId
                         (AuditEvent.ShareTokenRevoked {
-                            UserId = UserId actorUserId.Value
+                            UserId = actorUserId
                             TokenId = tokenId
                             ResourceKind = claim.ResourceKind
                             ResourceId = claim.ResourceId

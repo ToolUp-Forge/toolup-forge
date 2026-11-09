@@ -65,22 +65,22 @@ let private bootstrap (store: ITeamStore) (scopeId: string) (ownerUserId: string
     | ScopeKind.User _
     | ScopeKind.Other _ -> return LifecycleHookResult.Skipped "scope is not a team scope — no owner team to bootstrap"
     | ScopeKind.Team teamId ->
-        let! existing = store.GetTeam(TeamId teamId)
+        let! existing = store.GetTeam(teamId)
 
         match existing with
         | Some _ ->
             // Team already exists — re-provision. Ensure the owner
             // membership is present, then done.
-            match! ensureOwner store teamId ownerUserId with
+            match! ensureOwner store teamId.Value ownerUserId with
             | Ok() -> return LifecycleHookResult.Completed
-            | Error e -> return LifecycleHookResult.Failed(sprintf "attach owner to %s: %s" teamId e)
+            | Error e -> return LifecycleHookResult.Failed(sprintf "attach owner to %s: %s" teamId.Value e)
         | None ->
-            match! store.CreateTeam(TeamId teamId, teamId) with
-            | Error e -> return LifecycleHookResult.Failed(sprintf "create team %s: %s" teamId e)
+            match! store.CreateTeam(teamId, teamId.Value) with
+            | Error e -> return LifecycleHookResult.Failed(sprintf "create team %s: %s" teamId.Value e)
             | Ok _ ->
-                match! ensureOwner store teamId ownerUserId with
+                match! ensureOwner store teamId.Value ownerUserId with
                 | Ok() -> return LifecycleHookResult.Completed
-                | Error e -> return LifecycleHookResult.Failed(sprintf "attach owner to %s: %s" teamId e)
+                | Error e -> return LifecycleHookResult.Failed(sprintf "attach owner to %s: %s" teamId.Value e)
 }
 
 /// Phase 306 — tear down the bootstrapped owner team for `scopeId` on
@@ -94,12 +94,12 @@ let private teardown (store: ITeamStore) (scopeId: string) : Async<LifecycleHook
     | ScopeKind.User _
     | ScopeKind.Other _ -> return LifecycleHookResult.Skipped "scope is not a team scope — no owner team to tear down"
     | ScopeKind.Team teamId ->
-        match! store.GetTeam(TeamId teamId) with
+        match! store.GetTeam(teamId) with
         | None -> return LifecycleHookResult.Completed
         | Some _ ->
-            match! store.DeleteTeam(TeamId teamId) with
+            match! store.DeleteTeam(teamId) with
             | Ok() -> return LifecycleHookResult.Completed
-            | Error e -> return LifecycleHookResult.Failed(sprintf "delete owner team %s: %s" teamId e)
+            | Error e -> return LifecycleHookResult.Failed(sprintf "delete owner team %s: %s" teamId.Value e)
 }
 
 /// The effective owner for a provisioning run: the request's explicit
@@ -110,7 +110,7 @@ let private teardown (store: ITeamStore) (scopeId: string) : Async<LifecycleHook
 let private effectiveOwner (context: TenantProvisioningContext) : string =
     match context.Request with
     | Some req when not (String.IsNullOrWhiteSpace req.OwnerUserId) -> req.OwnerUserId
-    | _ -> context.ActorUserId
+    | _ -> context.ActorUserId.Value
 
 /// The first-party owner-team bootstrap hook, as a value: the team row and
 /// its owner at provisioning (the request's owner when it names one, else

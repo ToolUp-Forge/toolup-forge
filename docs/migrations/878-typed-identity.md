@@ -27,12 +27,15 @@ corpus under `tests/remoting-corpus/` is unchanged.
 | `ITeamStore` members over `teamId: string` / `userId: string`; `GetActiveTeam : … -> Async<string option>` | over `TeamId` / `UserId`; `GetActiveTeam : UserId -> Async<TeamId option>`; `ActiveTeamPolicy.ensureActiveTeam` takes the typed ids |
 | every other store and service seam taking a `…userId` / `…teamId` string (`IPermissionStore`, `IPlatformAdminStore`, `IPresenceTracker`, `ISessionRegistry`, `IShareTokenStore`, `INotificationPreferenceStore`, `IUserClaims`, `IExternalContactStore`, `IServiceAccountStore`, `IConversationStore`, `IUserSchemaStore`, `IDataExporter` / `IErasureHandler` and every `Erase(…, subjectUserId, …)`, `ITenantLifecycle`, `ITenantFleet`, `IDeployPipeline`, `IBuildOrchestrator`, `IJobScheduler.TriggerOnce`, `IModelRegistry`, `IAdminMutationApprovalStore`, `IGrantConsentStore`, `IMigrationStatusStore`, `IPublicationReaderGrantStore`, `ITeamOutputVisibilitySource`, `IPlatformAIKeyStore`, …) | the parameter is `UserId` / `TeamId` |
 | Core records holding a user or team id that never cross the remoting wire (`AuthenticatedUser`, `AccessContext`, `Subject`, `DeclaredPrincipal`, the audit payloads, `MembershipChangedPayload`, `SessionRecord`, …) | the field is `UserId` / `TeamId` (a full record literal wraps the id) |
+| feature-tier records holding a user or team id (the AI budget, latency, consent and approval records, the Facts publication consent / revocation / refusal cases, `FactToolContext`, the passkey credential, challenge and session records, `ScimConfig.TeamId`, the RAG ingestion jobs' `OriginatingUserId`, the reporting AI callers, the scheduling booking payloads and calendar links, `OfflineReplayContext`, `Tenant.OwnerUserId`, `OAuthFlowState`, `RequestViewer`, `ScopeKind` and the other server-tier records) | the field is `UserId` / `TeamId` |
+| `type EntityId = string`, `type TenantId = string`, `type ScopeId = string` | removed: each abbreviated `string`, and a type annotation naming one is `string` |
 | — | `UserId.tryCreate` / `TeamId.tryCreate` (refuse a null, empty or padded id), `tryParse`, `value`, `.Value`; `Identity.isWellFormed`; `BlobMapStore.Read` / `Update` over a `ScopeKey` |
 
 **What did not change, deliberately:** a record that crosses the remoting wire keeps its `string` id. Its
 shape is pinned by the remoting corpus and its generated client decoders, and a typed field there is a wire
 change this release does not make. The client tier's own UI state (form inputs, configuration, message catalogues) also keeps strings: a
-half-typed id in a text box is not yet an id. Those wire records are the API DTOs: `TeamInfo`, `TeamMembership`,
+half-typed id in a text box is not yet an id. A Google Workspace sender account (`GoogleDirectoryConfig.SenderUserId`, `EntraDirectory`'s
+sender) is the directory's own identity, not a platform user, and stays a string. Those wire records are the API DTOs: `TeamInfo`, `TeamMembership`,
 `CreateTeamRequest`, the invite, session and notification API records, and the other records reachable from an
 API record. The handler that serves one converts at the seam (`.Value` out, `UserId x` in).
 
@@ -59,7 +62,9 @@ match UserId.tryCreate (ctx.Request.Query["user"].ToString()) with
 and read `.Value` (or `UserId.value`) where a string is needed — a log line, a wire DTO, a blob name built by
 hand. `878-scopekey-payload` lists a `ScopeKey.Team` / `ScopeKey.User` built from a non-literal or matched in
 a pattern: the pattern binds the typed id. `878-team-id-reader` lists `StorageScope.tryTeamId`, which answers
-`TeamId option`. An implementer of a retyped seam changes its member annotations to the typed ids.
+`TeamId option`. `878-retired-abbreviation` rewrites `EntityId`, `TenantId` and `ScopeId` in a type position
+(after `:`, `of`, `*` or `<`) to `string`; `878-retired-abbreviation-site` lists one it could not place, such as
+a return type after `->`. An implementer of a retyped seam changes its member annotations to the typed ids.
 
 ## Verifying
 

@@ -613,7 +613,6 @@ member ToolUp.Platform.DeclaredPrincipal missingGrant ToolUp.Platform.Jobs.Decla
 member ToolUp.Platform.DeclaredPrincipal resolveInScope ToolUp.Platform.Jobs.DeclaredPrincipal
 member ToolUp.Platform.DeclaredPrincipal user ToolUp.Platform.Jobs.DeclaredPrincipal
 member ToolUp.Platform.DeclaredPrincipal userOf ToolUp.Platform.Jobs.DeclaredPrincipal
-member ToolUp.Platform.ScopeId parse ToolUp.Platform.Compose.ScopeId
 member ToolUp.Platform.ServerConfig fromEnv ToolUp.Platform.Config.ServerConfig
 namespace ToolUp.Platform.Teams * ToolUp.Platform.Scope.Teams
 namespace ToolUp.Platform.Tracing * ToolUp.Platform.Infra.Tracing
@@ -621,7 +620,6 @@ shared ToolUp.Platform BlobStorage ToolUp.Platform.Infra
 shared ToolUp.Platform DataVocabulary ToolUp.Platform.Infra
 shared ToolUp.Platform DeclaredPrincipal ToolUp.Platform.Jobs
 shared ToolUp.Platform EgressPolicy ToolUp.Platform.Audit
-shared ToolUp.Platform ScopeId ToolUp.Platform.Compose
 shared ToolUp.Platform ServerConfig ToolUp.Platform.Config
 split ToolUp.Platform.Auth * ToolUp.Platform.Config.Auth
 split ToolUp.Platform.Metrics * ToolUp.Platform.Audit.Metrics
@@ -1811,6 +1809,7 @@ type ToolUp.Platform SchemaOnlyGuard ToolUp.Platform.Infra
 type ToolUp.Platform ScopeAtCapacity ToolUp.Platform.Jobs
 type ToolUp.Platform ScopeCarrier ToolUp.Platform.Jobs
 type ToolUp.Platform ScopeEnumeration ToolUp.Platform.Compose
+type ToolUp.Platform ScopeId ToolUp.Platform.Compose
 type ToolUp.Platform ScopeKind ToolUp.Platform.Compose
 type ToolUp.Platform ScopeReissueError ToolUp.Platform.Jobs
 type ToolUp.Platform ScoreContext ToolUp.Platform.Infra

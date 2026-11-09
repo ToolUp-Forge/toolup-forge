@@ -101,7 +101,7 @@ type VectorStoreErasureHandler
         }
 
         member _.Preview(scopeId, subjectUserId, policy) = async {
-            let! result = eraseOnce scopeId (UserId subjectUserId.Value) policy true
+            let! result = eraseOnce scopeId (subjectUserId) policy true
 
             return
                 match result with

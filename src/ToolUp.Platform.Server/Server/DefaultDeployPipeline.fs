@@ -188,7 +188,7 @@ type DefaultDeployPipeline
     /// Read every persisted `DeploySummary` for a tenant, newest first.
     /// `_platform`-scoped scan filtered to the tenant via the payload's
     /// `TenantId` field.
-    let readTenantSummaries (tenantId: TenantId) : Async<DeploySummary list> = async {
+    let readTenantSummaries (tenantId: string) : Async<DeploySummary list> = async {
         let! events = eventStore.ReadBySource(DeployScopeId, DeploySourceModule)
 
         let parsed =
@@ -212,7 +212,7 @@ type DefaultDeployPipeline
 
     /// Latest summary per `DeployId` from a tenant's history, newest
     /// state-change first. Used by `GetDeployHistory`.
-    let groupTenantHistory (tenantId: TenantId) : Async<DeploySummary list> = async {
+    let groupTenantHistory (tenantId: string) : Async<DeploySummary list> = async {
         let! summaries = readTenantSummaries tenantId
         // Per-DeployId latest summary, then sort by StartedAt desc.
         let perDeploy =
@@ -412,7 +412,7 @@ type DefaultDeployPipeline
     interface IDeployPipeline with
 
         member _.BeginDeploy
-            (tenantId: TenantId, buildId: BuildId, manifest: DeployManifest, byUserId: UserId)
+            (tenantId: string, buildId: BuildId, manifest: DeployManifest, byUserId: UserId)
             : Async<Result<DeployId, DeployPipelineError>> =
             async {
                 let deployId = Guid.NewGuid().ToString("N")
@@ -487,7 +487,7 @@ type DefaultDeployPipeline
                 | None -> Error(UnknownDeploy deployId)
         }
 
-        member _.Rollback(tenantId: TenantId, UserId(byUserId: string)) : Async<Result<DeployId, DeployPipelineError>> = async {
+        member _.Rollback(tenantId: string, UserId(byUserId: string)) : Async<Result<DeployId, DeployPipelineError>> = async {
             let! perDeploy = groupTenantHistory tenantId
 
             // Reject when any deploy is mid-flight.
@@ -594,7 +594,7 @@ type DefaultDeployPipeline
                             )
         }
 
-        member _.GetDeployHistory(tenantId: TenantId, count: int) : Async<DeploySummary list> = async {
+        member _.GetDeployHistory(tenantId: string, count: int) : Async<DeploySummary list> = async {
             let! perDeploy = groupTenantHistory tenantId
             return perDeploy |> List.truncate (max 0 count)
         }
@@ -619,7 +619,7 @@ type DefaultDeployPipeline
     interface IDeployPlanner with
 
         member _.PlanDeploy
-            (tenantId: TenantId, target: ContainerSpec list)
+            (tenantId: string, target: ContainerSpec list)
             : Async<Result<DeployPlan, DeployPipelineError>> =
             DeployPlanner.plan containerScheduler tenantId target
 

@@ -44,7 +44,7 @@ ToolUp.Scheduling.CalendarSync+CalendarEventLink.ResourceId : System.String { ge
 ToolUp.Scheduling.CalendarSync+CalendarEventLink.Type : System.String { get }
 ToolUp.Scheduling.CalendarSync+CalendarEventLink.Version : System.Int32 { get }
 ToolUp.Scheduling.CalendarSync+CalendarLink (class)
-ToolUp.Scheduling.CalendarSync+CalendarLink..ctor(System.String, System.String, System.Int32, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset])
+ToolUp.Scheduling.CalendarSync+CalendarLink..ctor(System.String, System.String, System.Int32, System.String, System.String, System.String, ToolUp.Platform.UserId, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset])
 ToolUp.Scheduling.CalendarSync+CalendarLink.CursorUtc : Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset] { get }
 ToolUp.Scheduling.CalendarSync+CalendarLink.ExternalCalendarId : System.String { get }
 ToolUp.Scheduling.CalendarSync+CalendarLink.Id : System.String { get }
@@ -52,7 +52,7 @@ ToolUp.Scheduling.CalendarSync+CalendarLink.Kind : System.String { get }
 ToolUp.Scheduling.CalendarSync+CalendarLink.Policy : System.String { get }
 ToolUp.Scheduling.CalendarSync+CalendarLink.ResourceId : System.String { get }
 ToolUp.Scheduling.CalendarSync+CalendarLink.Type : System.String { get }
-ToolUp.Scheduling.CalendarSync+CalendarLink.UserId : System.String { get }
+ToolUp.Scheduling.CalendarSync+CalendarLink.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Scheduling.CalendarSync+CalendarLink.Version : System.Int32 { get }
 ToolUp.Scheduling.CalendarSync+CalendarPollJobHandler (class)
 ToolUp.Scheduling.CalendarSync+CalendarPollJobHandler..ctor(ToolUp.Scheduling.CalendarSync+ICalendarSync, ToolUp.Platform.Infra.IEntityStore+IEntityStore)

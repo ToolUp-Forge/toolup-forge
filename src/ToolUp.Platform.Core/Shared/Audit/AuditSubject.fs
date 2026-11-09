@@ -180,8 +180,8 @@ module AuditSubject =
             match ScopeKey.tryParseContainer scopeId with
             | Some(ScopeKey.Platform _) -> UserAudit(UserId PlatformSentinelUserId)
             | Some(ScopeKey.Session sessionId) -> AnonymousAudit sessionId
-            | Some(ScopeKey.User userId) -> UserAudit(UserId userId.Value)
-            | Some(ScopeKey.Team teamId) -> TeamAudit(UserId DispatcherSentinelUserId, TeamId teamId.Value)
+            | Some(ScopeKey.User userId) -> UserAudit(userId)
+            | Some(ScopeKey.Team teamId) -> TeamAudit(UserId DispatcherSentinelUserId, teamId)
             | Some(ScopeKey.Claim _)
             | None -> UserAudit(UserId scopeId)
 

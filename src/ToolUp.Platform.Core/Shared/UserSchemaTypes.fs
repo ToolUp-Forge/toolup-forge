@@ -26,12 +26,6 @@ open DataManagementTypes
 // `ToolUp.Platform.Core` and compile under both the .NET server and the
 // Fable client. No server-tier dependency; pure values + BCL primitives.
 
-/// Scope owning a user-authored schema. String alias matching the forge
-/// scope-id convention (`user-{id}` / `team-{id}` / `session-{id}` /
-/// `_platform`). Team A's schemas are invisible to Team B — isolation is
-/// carried by the owning scope, structurally (GP 4).
-type ScopeId = string
-
 /// Stable identity for a user-authored schema (natural key, e.g.
 /// `expense-claim`, `intake-v3`). Type alias for `string` so natural keys
 /// flow through unchanged — mirrors `FormSchemaId` / `DataTypeId`.
@@ -201,7 +195,7 @@ type UserAuthoredSchema = {
     /// Free-form description (projected to `DataTypeSchema.Description`).
     Description: string
     /// The owning scope. Isolation is by scope (GP 4).
-    Owner: ScopeId
+    Owner: string
     /// Monotonic numeric version, assigned/overwritten by the store on
     /// every save (mirrors the Phase 19 entity-store reflection contract).
     Version: int
@@ -234,7 +228,7 @@ module UserAuthoredSchema =
     let create
         (schemaId: SchemaId)
         (displayName: string)
-        (owner: ScopeId)
+        (owner: string)
         (fields: UserSchemaField list)
         : UserAuthoredSchema =
         {

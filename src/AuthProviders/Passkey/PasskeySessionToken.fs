@@ -24,7 +24,7 @@ open ToolUp.Platform.Infra
 
 /// The identity a minted session token authenticates as.
 type SessionIdentity = {
-    UserId: string
+    UserId: UserId
     DisplayName: string
     Email: string option
 }

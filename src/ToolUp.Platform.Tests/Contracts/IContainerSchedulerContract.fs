@@ -38,7 +38,7 @@ type ContainerSchedulerBinding = {
     SampleImage: string
     /// Tenant id to use for sample containers. Bindings pick a
     /// throw-away string; the pack treats it as opaque.
-    SampleTenantId: TenantId
+    SampleTenantId: string
 }
 
 let private mkSpec image : ContainerSpec = {
@@ -264,7 +264,7 @@ let tests (name: string) (binding: ContainerSchedulerBinding) =
         testCaseAsync "Rule 1 — identity-by-value: ContainerId / TenantId are string aliases"
         <| async {
             let cid: ContainerId = "c-1"
-            let tid: TenantId = "t-1"
+            let tid: string = "t-1"
             Expect.equal cid "c-1" "ContainerId is a string alias"
             Expect.equal tid "t-1" "TenantId is a string alias"
             do! async.Return()

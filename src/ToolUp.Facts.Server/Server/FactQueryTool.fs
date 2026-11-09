@@ -311,6 +311,6 @@ module FactQueryTool =
         FactTool.define
             "query_facts"
             (fun c argsJson ->
-                executeWith c.Store c.Gate c.Registry (fun () -> DateTime.UtcNow) c.Scope c.UserId argsJson)
+                executeWith c.Store c.Gate c.Registry (fun () -> DateTime.UtcNow) c.Scope c.UserId.Value argsJson)
             ctx
             argsJson

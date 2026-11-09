@@ -49,7 +49,7 @@ open ToolUp.Platform.Compose
 /// The persisted cursor entity (Phase 19 `IEntity` shape). Read and write
 /// it through `SyncCursor`, which works in the typed `SyncCursor` view.
 type SyncCursorEntity = {
-    Id: EntityId
+    Id: string
     Type: string
     Version: int
     Connector: string
@@ -111,7 +111,7 @@ module SyncCursor =
     /// The deterministic entity id for a (connector, data source, endpoint)
     /// key. Each part is escaped to `[A-Za-z0-9_-]`, `-` only ever opening
     /// an escape, so distinct keys never share an id.
-    let entityId (connector: string) (sourceId: string) (endpoint: string) : EntityId =
+    let entityId (connector: string) (sourceId: string) (endpoint: string) : string =
         $"{segment connector}.{segment sourceId}.{segment endpoint}"
 
     /// The cursor of a sync that has never run.

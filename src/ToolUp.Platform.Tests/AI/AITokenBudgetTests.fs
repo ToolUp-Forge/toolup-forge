@@ -98,7 +98,7 @@ let private writeTurn
     let record: AILatencyRecord = {
         TaskId = Guid.NewGuid()
         ConversationId = Guid.NewGuid()
-        UserId = userId
+        UserId = UserId userId
         TurnNumber = 1
         ProviderName = "fake"
         ProviderModel = "fake-1"
@@ -299,7 +299,7 @@ let tests =
             let refusals = readRefusals store scopeId
             Expect.hasLength refusals 1 "exactly one BudgetExceeded event per refusal"
             let recorded = List.head refusals
-            Expect.equal recorded.UserId alice "the recorded refusal names the user"
+            Expect.equal recorded.UserId (UserId alice) "the recorded refusal names the user"
             Expect.equal recorded.ScopeId scopeId "…and the scope"
             Expect.equal recorded.WindowKind "hourly" "…and the window it was measured over"
             Expect.equal recorded.CapTokens 1000M "…and the cap"
@@ -468,7 +468,7 @@ let tests =
             let snapshot = cache.Snapshot()
             Expect.hasLength snapshot 1 "one live window"
             Expect.equal (List.head snapshot).UsedTokens 500M "…reporting the consumption the enforcer summed"
-            Expect.equal (List.head snapshot).UserId alice "…named by user"
+            Expect.equal (List.head snapshot).UserId (UserId alice) "…named by user"
         }
 
         // ─── The decorator chain ─────────────────────────────────

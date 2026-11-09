@@ -190,7 +190,7 @@ type BlobUserSchemaStore(dataObjectStore: IDataObjectStore, auditLog: IAuditLog 
                         emit
                             scopeId
                             (SchemaChanged {
-                                UserId = UserId actorUserId.Value
+                                UserId = actorUserId
                                 ScopeId = scopeId
                                 SchemaId = committed.SchemaId
                                 Version = newVersion
@@ -207,7 +207,7 @@ type BlobUserSchemaStore(dataObjectStore: IDataObjectStore, auditLog: IAuditLog 
                             emit
                                 scopeId
                                 (SchemaApproved {
-                                    UserId = UserId actorUserId.Value
+                                    UserId = actorUserId
                                     ScopeId = scopeId
                                     SchemaId = committed.SchemaId
                                     Version = newVersion
@@ -292,7 +292,7 @@ type BlobUserSchemaStore(dataObjectStore: IDataObjectStore, auditLog: IAuditLog 
                         emit
                             scopeId
                             (SchemaChanged {
-                                UserId = UserId actorUserId.Value
+                                UserId = actorUserId
                                 ScopeId = scopeId
                                 SchemaId = schemaId
                                 Version = 0
@@ -369,7 +369,7 @@ type BlobUserSchemaStore(dataObjectStore: IDataObjectStore, auditLog: IAuditLog 
                         emit
                             scopeId
                             (SchemaChanged {
-                                UserId = UserId actorUserId.Value
+                                UserId = actorUserId
                                 ScopeId = scopeId
                                 SchemaId = schemaId
                                 Version = committed.Version

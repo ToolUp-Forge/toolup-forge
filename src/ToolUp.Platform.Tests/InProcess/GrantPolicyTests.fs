@@ -279,7 +279,7 @@ let tests =
                 let store = freshStore ()
 
                 let request: GrantPolicyGuard.ModuleGrantRequest = {
-                    TeamId = "t1"
+                    TeamId = TeamId "t1"
                     ActorId = "admin"
                     SubjectId = "alice"
                     ModuleName = "Partner"
@@ -317,7 +317,7 @@ let tests =
 
                 let! outcome =
                     GrantPolicyGuard.PermissionGrants.grantModuleAccess store registry {
-                        TeamId = "t1"
+                        TeamId = TeamId "t1"
                         ActorId = "admin"
                         SubjectId = "alice"
                         ModuleName = "Partner"
@@ -349,7 +349,7 @@ let tests =
 
                 let! outcome =
                     GrantPolicyGuard.PermissionGrants.grantModuleAccess store registry {
-                        TeamId = "t1"
+                        TeamId = TeamId "t1"
                         ActorId = "admin"
                         SubjectId = "alice"
                         ModuleName = "Partner"
@@ -418,7 +418,7 @@ let tests =
 
                 match!
                     GrantPolicyGuard.PermissionGrants.grantModuleAccess store registry {
-                        TeamId = "t1"
+                        TeamId = TeamId "t1"
                         ActorId = "admin"
                         SubjectId = "alice"
                         ModuleName = "Partner"
@@ -446,7 +446,7 @@ let tests =
 
                 let! outcome =
                     GrantPolicyGuard.PermissionGrants.grantModuleAccess store registry {
-                        TeamId = "t1"
+                        TeamId = TeamId "t1"
                         ActorId = "admin"
                         SubjectId = "alice"
                         ModuleName = "Partner"

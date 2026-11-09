@@ -26,7 +26,7 @@ A relationship is declared on the entity that carries the foreign key, via
 open ToolUp.Platform.EntityTypes
 
 type Order = {
-    Id: EntityId
+    Id: string
     Type: string
     Version: int
     CustomerId: string   // ← the foreign key
@@ -118,7 +118,7 @@ keys, and index them:
 
 ```fsharp
 type Enrollment = {
-    Id: EntityId
+    Id: string
     Type: string
     Version: int
     StudentId: string   // source key

@@ -4,6 +4,7 @@
 namespace ToolUp.Facts
 
 open System
+open ToolUp.Platform
 open ToolUp.Platform.Grounding
 
 // ─── Team-to-team fact publication (Phase 897) ───────────────────────
@@ -93,9 +94,9 @@ module PublicationSide =
 /// One team's consent to a grant — an audited act by that team's owner.
 type PublicationConsent = {
     /// The consenting team.
-    TeamId: string
+    TeamId: TeamId
     /// The owner who consented, as the platform resolved them.
-    ByUserId: string
+    ByUserId: UserId
     /// When the consent was recorded (UTC).
     At: DateTime
 }
@@ -105,7 +106,7 @@ type PublicationRevocation = {
     /// The team whose owner withdrew the grant.
     ByTeam: string
     /// The owner who withdrew it.
-    ByUserId: string
+    ByUserId: UserId
     /// When it was withdrawn (UTC).
     At: DateTime
 }
@@ -286,7 +287,7 @@ type PublicationRefusal =
     | PublicationNotAParty of grantId: string * scopeId: string
     /// The act needs the team's owner, and the viewer is not one (or no
     /// viewer was resolved).
-    | PublicationNotOwner of teamId: string * userId: string option
+    | PublicationNotOwner of teamId: TeamId * userId: UserId option
     /// The grant lacks one or both consents.
     | PublicationGrantNotInForce of grantId: string * missing: PublicationSide list
     /// The grant was withdrawn.
@@ -294,7 +295,7 @@ type PublicationRefusal =
     /// The act ran in a scope other than the one its side requires.
     | PublicationWrongScope of grantId: string * side: PublicationSide * expected: string * actual: string
     /// A grant's teams are one team.
-    | PublicationSameTeam of teamId: string
+    | PublicationSameTeam of teamId: TeamId
     /// The source table is not declared.
     | PublicationSourceUndeclared of tableId: string
     /// The target table is not declared as a publication target.
@@ -321,9 +322,9 @@ module PublicationRefusal =
         | PublicationNotOwner(teamId, userId) ->
             sprintf
                 "only an owner of team '%s' may do this, and %s is not one"
-                teamId
+                teamId.Value
                 (userId
-                 |> Option.map (sprintf "'%s'")
+                 |> Option.map (fun u -> sprintf "'%s'" u.Value)
                  |> Option.defaultValue "no resolved viewer")
         | PublicationGrantNotInForce(grantId, missing) ->
             sprintf
@@ -338,7 +339,7 @@ module PublicationRefusal =
                 (PublicationSide.name side)
                 expected
                 actual
-        | PublicationSameTeam teamId -> sprintf "a team cannot publish to itself ('%s')" teamId
+        | PublicationSameTeam teamId -> sprintf "a team cannot publish to itself ('%s')" teamId.Value
         | PublicationSourceUndeclared tableId -> sprintf "source table '%s' is not a declared fact table" tableId
         | PublicationTargetUndeclared tableId ->
             sprintf "table '%s' is not declared as a publication target in this composition" tableId

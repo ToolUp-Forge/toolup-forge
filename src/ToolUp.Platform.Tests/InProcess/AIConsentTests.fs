@@ -646,7 +646,7 @@ let tests =
                             ConversationId = h.ConversationId
                             TargetModule = "MoodJournal"
                             Container = scope.Container
-                            UserId = "alice"
+                            UserId = UserId "alice"
                         }
                     )
 
@@ -669,7 +669,7 @@ let tests =
                             ConversationId = h.ConversationId
                             TargetModule = "MoodJournal"
                             Container = scope.Container
-                            UserId = "alice"
+                            UserId = UserId "alice"
                         }
                     )
 

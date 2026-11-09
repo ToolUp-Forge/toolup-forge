@@ -24,7 +24,7 @@ open ToolUp.Platform.EntityTypes
 /// `Id` / `Type` / `Version` shape without polluting `PublicPage`.
 /// `Id` always equals `Slug.value Page.Slug` — one envelope per slug.
 type PublicPageEntity = {
-    Id: EntityId
+    Id: string
     Type: string
     Version: int
     Page: PublicPage

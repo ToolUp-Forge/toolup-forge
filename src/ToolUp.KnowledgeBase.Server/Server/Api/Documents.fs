@@ -129,7 +129,7 @@ let private saveOriginal
                     "kb.fileName", safeName
                     "kb.fileType", ext
                     "kb.sourceKind", "UploadedFile"
-                    "kb.uploadedBy", deps.UserId
+                    "kb.uploadedBy", deps.UserId.Value
                     match contentHash with
                     | Some h -> "kb.contentHash", h
                     | None -> ()
@@ -141,7 +141,7 @@ let private saveOriginal
                     docId,
                     bytes,
                     KnowledgeObjectRetentionPolicy.ObjectDataType,
-                    deps.UserId,
+                    deps.UserId.Value,
                     metadata,
                     Versioned
                 )
@@ -560,7 +560,7 @@ let private persistAndIngest
             FileName = safeName
             FileType = ext
             UploadedAt = DateTimeOffset.UtcNow
-            UploadedBy = deps.UserId
+            UploadedBy = deps.UserId.Value
             Status = Queued
             SizeBytes = int64 bytes.Length
             ChunkCount = 0
@@ -798,7 +798,15 @@ let private persistAndIngest
                             let terminal = Complete chunks.Length
                             setStatus docId terminal
                             do! updateIndexStatus deps.Storage deps.Scope.Container docId terminal
-                            do! publishTerminalStatus deps.Notifications deps.Logger docId safeName deps.UserId terminal
+
+                            do!
+                                publishTerminalStatus
+                                    deps.Notifications
+                                    deps.Logger
+                                    docId
+                                    safeName
+                                    deps.UserId.Value
+                                    terminal
 
                             deps.Logger.Info(
                                 sprintf
@@ -887,7 +895,15 @@ let private persistAndIngest
 
                         setStatus docId terminal
                         do! updateIndexStatus deps.Storage deps.Scope.Container docId terminal
-                        do! publishTerminalStatus deps.Notifications deps.Logger docId safeName deps.UserId terminal
+
+                        do!
+                            publishTerminalStatus
+                                deps.Notifications
+                                deps.Logger
+                                docId
+                                safeName
+                                deps.UserId.Value
+                                terminal
 
                     do! deps.PublishInventory()
                 with ex ->
@@ -1025,7 +1041,7 @@ let uploadDocumentCore
                 FileName = safeName
                 FileType = ext
                 UploadedAt = DateTimeOffset.UtcNow
-                UploadedBy = deps.UserId
+                UploadedBy = deps.UserId.Value
                 Status = UploadRejected reason
                 SizeBytes = int64 bytes.Length
                 ChunkCount = 0
@@ -1143,7 +1159,7 @@ let uploadDocumentCore
                         audit.Record(
                             deps.Scope.ScopeId,
                             ContentScanned {
-                                UserId = UserId deps.UserId
+                                UserId = deps.UserId
                                 ScopeId = deps.Scope.ScopeId
                                 ScannerName = scanner.Name
                                 FileName = safeName
@@ -1202,7 +1218,7 @@ let uploadDocumentCore
                             audit.Record(
                                 deps.Scope.ScopeId,
                                 KnowledgeDocumentDeduplicated {
-                                    UserId = UserId deps.UserId
+                                    UserId = deps.UserId
                                     ScopeId = deps.Scope.ScopeId
                                     ExistingDocumentId = existing.Id
                                     FileName = safeName
@@ -1217,7 +1233,7 @@ let uploadDocumentCore
                         try
                             do!
                                 deps.Notifications.Publish(
-                                    deps.UserId,
+                                    deps.UserId.Value,
                                     SystemMessage(
                                         SystemMessageLevel.Info,
                                         sprintf
@@ -1504,10 +1520,10 @@ let importBatch (deps: KnowledgeApiDeps) (request: BulkImportRequest) : Async<Bu
             Imported = report.Imported
             Refused = report.Refused
             CompletedAt = report.CompletedAt
-            RequestedBy = deps.UserId
+            RequestedBy = deps.UserId.Value
         }
 
-        do! deps.Notifications.Publish(deps.UserId, CustomNotification(BulkImportNotificationKey, toJson summary))
+        do! deps.Notifications.Publish(deps.UserId.Value, CustomNotification(BulkImportNotificationKey, toJson summary))
     with ex ->
         deps.Logger.Error(sprintf "[KnowledgeBase] Failed to publish bulk-import summary for %s" batchId, Some ex)
 
@@ -1934,7 +1950,7 @@ let private getOriginalDocumentCore
             recordOriginalAccessAudit
                 deps
                 (KnowledgeOriginalRetrievalDenied {
-                    UserId = UserId deps.UserId
+                    UserId = deps.UserId
                     DocumentId = docId
                     ScopeId = deps.Scope.ScopeId
                     Reason = reason
@@ -1991,7 +2007,7 @@ let private getOriginalDocumentCore
                             recordOriginalAccessAudit
                                 deps
                                 (KnowledgeOriginalRetrieved {
-                                    UserId = UserId deps.UserId
+                                    UserId = deps.UserId
                                     DocumentId = doc.Id
                                     ScopeId = deps.Scope.ScopeId
                                     SourceKind = sourceKindName doc.Source
@@ -2002,7 +2018,10 @@ let private getOriginalDocumentCore
                         // level, on this delivery only — a caller the
                         // policy allowed everything for produces none.
                         for event in
-                            KnowledgeBase.ServerOriginalRedactor.redactionAuditEvents deps.UserId doc.Id redactedLevels do
+                            KnowledgeBase.ServerOriginalRedactor.redactionAuditEvents
+                                deps.UserId.Value
+                                doc.Id
+                                redactedLevels do
                             do! recordOriginalAccessAudit deps event
 
                         return Ok delivered
@@ -2085,7 +2104,7 @@ let getOriginalDelivery
                 recordOriginalAccessAudit
                     deps
                     (KnowledgeOriginalRetrievalDenied {
-                        UserId = UserId deps.UserId
+                        UserId = deps.UserId
                         DocumentId = docId
                         ScopeId = deps.Scope.ScopeId
                         Reason = reason
@@ -2143,7 +2162,7 @@ let getOriginalDelivery
                                 recordOriginalAccessAudit
                                     deps
                                     (KnowledgeOriginalRetrieved {
-                                        UserId = UserId deps.UserId
+                                        UserId = deps.UserId
                                         DocumentId = doc.Id
                                         ScopeId = deps.Scope.ScopeId
                                         SourceKind = sourceKindName doc.Source

@@ -93,7 +93,7 @@ let private credId = Base64Url.encode credBytes
 let private regPending (userId: string) : PendingChallenge = {
     Kind = Registration
     Options = box (minimalCreateOptions ())
-    UserId = Some userId
+    UserId = Some(UserId userId)
     UserHandle = Some(userHandleFor userId)
     DisplayName = Some "Alice"
     Email = Some "alice@example.com"
@@ -105,7 +105,7 @@ let private regPending (userId: string) : PendingChallenge = {
 let private assertPending: PendingChallenge = {
     Kind = Assertion
     Options = box (Fido2NetLib.AssertionOptions())
-    UserId = Option<string>.None
+    UserId = Option<UserId>.None
     UserHandle = Option<string>.None
     DisplayName = Option<string>.None
     Email = Option<string>.None
@@ -140,7 +140,7 @@ let tests =
                 | Error e -> failtestf "registration failed: %s" e
 
             Expect.equal record.CredentialId credId "credential id persisted (base64url)"
-            Expect.equal record.UserId userId "record bound to the enrolling identity"
+            Expect.equal record.UserId (UserId userId) "record bound to the enrolling identity"
             Expect.equal record.SignCount 0u "initial sign counter stored"
 
             let! fetched = creds.TryGet credId
@@ -151,7 +151,7 @@ let tests =
 
             match assertion with
             | Ok r ->
-                Expect.equal r.UserId userId "assertion resolved the credential's identity"
+                Expect.equal r.UserId (UserId userId) "assertion resolved the credential's identity"
                 Expect.equal r.SignCount 1u "sign counter advanced to the asserted value"
             | Error e -> failtestf "assertion failed: %s" e
         }
@@ -176,7 +176,7 @@ let tests =
                     PublicKey = Base64Url.encode [| 9uy; 9uy |]
                     SignCount = 5u
                     UserHandle = userHandleFor "alice"
-                    UserId = "alice"
+                    UserId = UserId "alice"
                     DisplayName = "Alice"
                     Email = Option<string>.None
                     Transports = []
@@ -270,7 +270,7 @@ let tests =
 
             let token =
                 mint secret cfg {
-                    UserId = "alice"
+                    UserId = UserId "alice"
                     DisplayName = "Alice"
                     Email = Some "alice@example.com"
                 }
@@ -365,7 +365,7 @@ let tests =
                 PublicKey = Base64Url.encode [| 7uy |]
                 SignCount = 2u
                 UserHandle = userHandleFor "bob"
-                UserId = "bob"
+                UserId = UserId "bob"
                 DisplayName = "Bob"
                 Email = Option<string>.None
                 Transports = [ "internal" ]
@@ -378,7 +378,7 @@ let tests =
 
             let! byUser = creds.ListByUserId "bob"
             Expect.equal byUser.Length 1 "credential listed under its user"
-            Expect.isEmpty (byUser |> List.filter (fun r -> r.UserId <> "bob")) "no cross-user leakage"
+            Expect.isEmpty (byUser |> List.filter (fun r -> r.UserId <> (UserId "bob"))) "no cross-user leakage"
 
             let! _ = creds.Remove credId
             let! stillExists = creds.Exists credId

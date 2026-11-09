@@ -297,7 +297,7 @@ let tests =
                 Migrations = [
                     AddField(field "Flag" BIFriendlyType.Boolean FieldSensitivity.Internal, "true")
                 ]
-                ActorUserId = "job-runner"
+                ActorUserId = UserId "job-runner"
             }
 
             let ctx: JobContext = {

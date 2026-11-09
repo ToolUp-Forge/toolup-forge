@@ -393,7 +393,7 @@ let private sampleJob: DocumentIngestionJob = {
     Scope = VectorScope.Team "alpha"
     ScopeId = "alpha"
     Container = "team-alpha"
-    OriginatingUserId = Some "ann"
+    OriginatingUserId = Some(UserId "ann")
     Attempt = None
 }
 

@@ -1031,8 +1031,8 @@ ToolUp.Facts.FactPublicationConfigModule (class)
 ToolUp.Facts.FactPublicationConfigModule.create(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactPublicationTarget]) : ToolUp.Facts.FactPublicationConfig
 ToolUp.Facts.FactPublicationConfigModule.signed(ToolUp.Facts.FactPublicationConfig) : ToolUp.Facts.FactPublicationConfig
 ToolUp.Facts.FactPublicationEvent (class)
-ToolUp.Facts.FactPublicationEvent..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Int32, System.Int32, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Guid], Microsoft.FSharp.Core.FSharpOption`1[System.String])
-ToolUp.Facts.FactPublicationEvent.ByUserId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Facts.FactPublicationEvent..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.UserId], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Int32, System.Int32, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Guid], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Facts.FactPublicationEvent.ByUserId : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.UserId] { get }
 ToolUp.Facts.FactPublicationEvent.CounterpartRecordId : Microsoft.FSharp.Core.FSharpOption`1[System.Guid] { get }
 ToolUp.Facts.FactPublicationEvent.GrantId : System.String { get }
 ToolUp.Facts.FactPublicationEvent.OriginRun : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
@@ -1394,12 +1394,12 @@ ToolUp.Facts.FactTablesTool.projectWith(System.Int32, ToolUp.Facts.FactBrowseHan
 ToolUp.Facts.FactTool (class)
 ToolUp.Facts.FactTool.define(System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.FactToolContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]], Microsoft.AspNetCore.Http.HttpContext, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
 ToolUp.Facts.FactToolContext (class)
-ToolUp.Facts.FactToolContext..ctor(ToolUp.Facts.IFactStore, ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], ToolUp.Platform.ResolvedScope, System.String)
+ToolUp.Facts.FactToolContext..ctor(ToolUp.Facts.IFactStore, ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], ToolUp.Platform.ResolvedScope, ToolUp.Platform.UserId)
 ToolUp.Facts.FactToolContext.Gate : ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate { get }
 ToolUp.Facts.FactToolContext.Registry : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry] { get }
 ToolUp.Facts.FactToolContext.Scope : ToolUp.Platform.ResolvedScope { get }
 ToolUp.Facts.FactToolContext.Store : ToolUp.Facts.IFactStore { get }
-ToolUp.Facts.FactToolContext.UserId : System.String { get }
+ToolUp.Facts.FactToolContext.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Facts.FactViewerContext (class)
 ToolUp.Facts.FactViewerContext.middleware(Microsoft.AspNetCore.Http.HttpContext, System.Func`1[System.Threading.Tasks.Task]) : System.Threading.Tasks.Task
 ToolUp.Facts.FactWithCompetition (class)

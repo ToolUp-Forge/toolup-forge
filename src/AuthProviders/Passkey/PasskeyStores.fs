@@ -36,7 +36,7 @@ open ToolUp.Platform.Jobs
 type PendingChallenge = {
     Kind: ChallengeKind
     Options: obj
-    UserId: string option
+    UserId: UserId option
     UserHandle: string option
     DisplayName: string option
     Email: string option
@@ -167,7 +167,7 @@ type PasskeyCredentialStore(blobs: IBlobStorage) =
     /// Credentials enrolled by one platform identity.
     member this.ListByUserId(userId: string) : Async<PasskeyCredentialRecord list> = async {
         let! all = this.ListAll()
-        return all |> List.filter (fun r -> r.UserId = userId)
+        return all |> List.filter (fun r -> r.UserId = UserId userId)
     }
 
     /// Delete a credential (idempotent).

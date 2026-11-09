@@ -679,7 +679,7 @@ let private writeTurn (store: IEventStore) (userId: string) (model: string) (pro
     let record: AILatencyRecord = {
         TaskId = Guid.NewGuid()
         ConversationId = Guid.NewGuid()
-        UserId = userId
+        UserId = UserId userId
         TurnNumber = 1
         ProviderName = "acme"
         ProviderModel = model

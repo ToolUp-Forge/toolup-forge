@@ -887,7 +887,7 @@ type MicrosoftGraphCalendarBridge
         | None -> url
 
     let token (link: CalendarLinkRef) =
-        accessToken secretStore refresher settings clock link.ScopeId link.UserId
+        accessToken secretStore refresher settings clock link.ScopeId link.UserId.Value
 
     let send (build: string -> HttpRequestMessage) (bearer: string) = async {
         use request = build bearer
@@ -932,7 +932,7 @@ type MicrosoftGraphCalendarBridge
         | Ok bearer ->
             match! send build bearer with
             | Ok response when response.Status = HttpStatusCode.Unauthorized ->
-                match! forceRefresh secretStore refresher settings link.ScopeId link.UserId with
+                match! forceRefresh secretStore refresher settings link.ScopeId link.UserId.Value with
                 | Error e -> return Error e
                 | Ok renewed -> return! send build renewed
             | other -> return other

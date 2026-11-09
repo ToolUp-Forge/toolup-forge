@@ -740,7 +740,7 @@ let beaconHandler: HttpHandler =
                                         TeamConversationPolicyStore.ConversationVisibility.resolveViewer
                                             ctx
                                             callerUserId
-                                            state.TeamId)
+                                            state.TeamId.Value)
                                     existing
                                     callerUserId
 

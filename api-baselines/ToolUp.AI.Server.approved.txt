@@ -333,13 +333,13 @@ ToolUp.AI.AIBudgetEnforcer+AIBudgetWindowCache.TryRead(System.String, System.Str
 ToolUp.AI.AIBudgetEnforcer+AIBudgetWindowCache.TtlSeconds : System.Int32 { get }
 ToolUp.AI.AIBudgetEnforcer+AIBudgetWindowCache.Write(ToolUp.AI.AIBudgetEnforcer+AIBudgetWindowEntry) : System.Void
 ToolUp.AI.AIBudgetEnforcer+AIBudgetWindowEntry (class)
-ToolUp.AI.AIBudgetEnforcer+AIBudgetWindowEntry..ctor(System.String, System.String, System.String, System.Decimal, System.Decimal, System.DateTime)
+ToolUp.AI.AIBudgetEnforcer+AIBudgetWindowEntry..ctor(System.String, ToolUp.Platform.UserId, System.String, System.Decimal, System.Decimal, System.DateTime)
 ToolUp.AI.AIBudgetEnforcer+AIBudgetWindowEntry.CapAtLastSum : System.Decimal { get }
 ToolUp.AI.AIBudgetEnforcer+AIBudgetWindowEntry.ComputedAt : System.DateTime { get }
 ToolUp.AI.AIBudgetEnforcer+AIBudgetWindowEntry.PeriodKey : System.String { get }
 ToolUp.AI.AIBudgetEnforcer+AIBudgetWindowEntry.ScopeId : System.String { get }
 ToolUp.AI.AIBudgetEnforcer+AIBudgetWindowEntry.UsedTokens : System.Decimal { get }
-ToolUp.AI.AIBudgetEnforcer+AIBudgetWindowEntry.UserId : System.String { get }
+ToolUp.AI.AIBudgetEnforcer+AIBudgetWindowEntry.UserId : ToolUp.Platform.UserId { get }
 ToolUp.AI.AIBudgetEnforcer+AISpendBudgetContributor (class)
 ToolUp.AI.AIBudgetEnforcer+AISpendBudgetContributor..ctor(ToolUp.AI.AIBudgetEnforcer+AISpendWindowCache, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.ModelPriceTable])
 ToolUp.AI.AIBudgetEnforcer+AISpendEnforcer (class)
@@ -359,13 +359,13 @@ ToolUp.AI.AIBudgetEnforcer+AISpendWindowCache.TtlSeconds : System.Int32 { get }
 ToolUp.AI.AIBudgetEnforcer+AISpendWindowCache.UnpricedKeys : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.AI.AIBudgetEnforcer+AISpendWindowCache.Write(ToolUp.AI.AIBudgetEnforcer+AISpendWindowEntry) : System.Void
 ToolUp.AI.AIBudgetEnforcer+AISpendWindowEntry (class)
-ToolUp.AI.AIBudgetEnforcer+AISpendWindowEntry..ctor(System.String, System.String, System.String, System.String, System.Decimal, System.Decimal, System.Int32, System.DateTime)
+ToolUp.AI.AIBudgetEnforcer+AISpendWindowEntry..ctor(System.String, ToolUp.Platform.UserId, System.String, System.String, System.Decimal, System.Decimal, System.Int32, System.DateTime)
 ToolUp.AI.AIBudgetEnforcer+AISpendWindowEntry.ComputedAt : System.DateTime { get }
 ToolUp.AI.AIBudgetEnforcer+AISpendWindowEntry.ScopeId : System.String { get }
 ToolUp.AI.AIBudgetEnforcer+AISpendWindowEntry.ScopePeriodKey : System.String { get }
 ToolUp.AI.AIBudgetEnforcer+AISpendWindowEntry.ScopeSpend : System.Decimal { get }
 ToolUp.AI.AIBudgetEnforcer+AISpendWindowEntry.UnpricedTurns : System.Int32 { get }
-ToolUp.AI.AIBudgetEnforcer+AISpendWindowEntry.UserId : System.String { get }
+ToolUp.AI.AIBudgetEnforcer+AISpendWindowEntry.UserId : ToolUp.Platform.UserId { get }
 ToolUp.AI.AIBudgetEnforcer+AISpendWindowEntry.UserPeriodKey : System.String { get }
 ToolUp.AI.AIBudgetEnforcer+AISpendWindowEntry.UserSpend : System.Decimal { get }
 ToolUp.AI.AIBudgetEnforcer+AITokenBudgetContributor (class)
@@ -474,11 +474,11 @@ ToolUp.AI.AIConsentDispatch+ItemsKeys.ConversationId : System.String (literal)
 ToolUp.AI.AIConsentDispatch+ItemsKeys.StreamEmitter : System.String (literal)
 ToolUp.AI.AIConsentDispatch+ItemsKeys.TaskId : System.String (literal)
 ToolUp.AI.AIConsentDispatch+PendingConsent (class)
-ToolUp.AI.AIConsentDispatch+PendingConsent..ctor(System.Guid, System.String, System.String, System.String)
+ToolUp.AI.AIConsentDispatch+PendingConsent..ctor(System.Guid, System.String, System.String, ToolUp.Platform.UserId)
 ToolUp.AI.AIConsentDispatch+PendingConsent.Container : System.String { get }
 ToolUp.AI.AIConsentDispatch+PendingConsent.ConversationId : System.Guid { get }
 ToolUp.AI.AIConsentDispatch+PendingConsent.TargetModule : System.String { get }
-ToolUp.AI.AIConsentDispatch+PendingConsent.UserId : System.String { get }
+ToolUp.AI.AIConsentDispatch+PendingConsent.UserId : ToolUp.Platform.UserId { get }
 ToolUp.AI.AIConsentDispatch+StreamEmitter (class)
 ToolUp.AI.AIConsentDispatch+StreamEmitter..ctor(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.AIStreamEvent, Microsoft.FSharp.Core.Unit])
 ToolUp.AI.AIConsentDispatch+StreamEmitter.Emit : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.AIStreamEvent, Microsoft.FSharp.Core.Unit] { get }
@@ -1464,11 +1464,11 @@ ToolUp.AI.TeamConversationPolicyStore+ConversationVisibilityChange (class)
 ToolUp.AI.TeamConversationPolicyStore+ConversationVisibilityChange.check(ToolUp.Platform.TeamConversationVisibilitySettings, ToolUp.Platform.TeamVisibilityLevel, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamRole], System.Boolean, ToolUp.Platform.TeamVisibilityLevel) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]
 ToolUp.AI.TeamConversationPolicyStore+ConversationVisibilityChange.selectable(ToolUp.Platform.TeamConversationVisibilitySettings, ToolUp.Platform.TeamVisibilityLevel, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamRole], System.Boolean) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamVisibilityLevel]
 ToolUp.AI.TeamConversationPolicyStore+TeamVisibilityState (class)
-ToolUp.AI.TeamConversationPolicyStore+TeamVisibilityState..ctor(System.String, System.String, ToolUp.Platform.TeamConversationVisibilitySettings, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamConversationPolicyRecord])
+ToolUp.AI.TeamConversationPolicyStore+TeamVisibilityState..ctor(ToolUp.Platform.TeamId, System.String, ToolUp.Platform.TeamConversationVisibilitySettings, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamConversationPolicyRecord])
 ToolUp.AI.TeamConversationPolicyStore+TeamVisibilityState.Container : System.String { get }
 ToolUp.AI.TeamConversationPolicyStore+TeamVisibilityState.Record : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamConversationPolicyRecord] { get }
 ToolUp.AI.TeamConversationPolicyStore+TeamVisibilityState.Settings : ToolUp.Platform.TeamConversationVisibilitySettings { get }
-ToolUp.AI.TeamConversationPolicyStore+TeamVisibilityState.TeamId : System.String { get }
+ToolUp.AI.TeamConversationPolicyStore+TeamVisibilityState.TeamId : ToolUp.Platform.TeamId { get }
 ToolUp.AI.ToolApprovalDispatch (class)
 ToolUp.AI.ToolApprovalDispatch.ApprovalAuditSource : System.String (literal)
 ToolUp.AI.ToolApprovalDispatch.ApprovalExpiredEvent : System.String (literal)
@@ -1494,14 +1494,14 @@ ToolUp.AI.ToolApprovalDispatch+ApprovalOutcome+Tags (class)
 ToolUp.AI.ToolApprovalDispatch+ApprovalOutcome+Tags.ApprovalGranted : System.Int32 (literal)
 ToolUp.AI.ToolApprovalDispatch+ApprovalOutcome+Tags.ApprovalRefused : System.Int32 (literal)
 ToolUp.AI.ToolApprovalDispatch+PendingApproval (class)
-ToolUp.AI.ToolApprovalDispatch+PendingApproval..ctor(System.Guid, System.String, System.String, System.String, System.String, System.String, System.String)
+ToolUp.AI.ToolApprovalDispatch+PendingApproval..ctor(System.Guid, System.String, System.String, System.String, System.String, System.String, ToolUp.Platform.UserId)
 ToolUp.AI.ToolApprovalDispatch+PendingApproval.ArgumentsDigest : System.String { get }
 ToolUp.AI.ToolApprovalDispatch+PendingApproval.ArgumentsPreview : System.String { get }
 ToolUp.AI.ToolApprovalDispatch+PendingApproval.ConversationId : System.Guid { get }
 ToolUp.AI.ToolApprovalDispatch+PendingApproval.ScopeId : System.String { get }
 ToolUp.AI.ToolApprovalDispatch+PendingApproval.SourceModule : System.String { get }
 ToolUp.AI.ToolApprovalDispatch+PendingApproval.ToolName : System.String { get }
-ToolUp.AI.ToolApprovalDispatch+PendingApproval.UserId : System.String { get }
+ToolUp.AI.ToolApprovalDispatch+PendingApproval.UserId : ToolUp.Platform.UserId { get }
 ToolUp.AI.ToolApprovalDispatch+ToolApprovalRegistry (class)
 ToolUp.AI.ToolApprovalDispatch+ToolApprovalRegistry..ctor()
 ToolUp.AI.ToolApprovalDispatch+ToolApprovalRegistry.PendingOf(System.Guid) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.ToolApprovalDispatch+PendingApproval]

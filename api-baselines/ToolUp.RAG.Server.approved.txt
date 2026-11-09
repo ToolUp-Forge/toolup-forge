@@ -174,7 +174,7 @@ ToolUp.RAG.RAGCitationDevEndpoint.routes : Microsoft.FSharp.Collections.FSharpLi
 ToolUp.RAG.RAGCompose (class)
 ToolUp.RAG.RAGCompose.composeRAG(ToolUp.RAG.RAGCompose+RagOptions, ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.RAG.RAGCompose.defaultRetrievalFraming : System.String { get }
-ToolUp.RAG.RAGCompose.emitIngestionDrop(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.INotificationChannel], ToolUp.RAG.IngestionTypes+IngestionQueue, ToolUp.Platform.ILogger, System.String, System.String, System.Int32, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.RAG.RAGCompose.emitIngestionDrop(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.INotificationChannel], ToolUp.RAG.IngestionTypes+IngestionQueue, ToolUp.Platform.ILogger, System.String, System.String, System.Int32, System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.UserId]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.RAG.RAGCompose.hasCrossReplicaEmbeddingCache(ToolUp.RAG.RAGCompose+RagOptions) : System.Boolean
 ToolUp.RAG.RAGCompose.hasScopeKeyedEmbeddingProvider(ToolUp.RAG.RAGCompose+RagOptions) : System.Boolean
 ToolUp.RAG.RAGCompose.isInProcessSparseIndex(ToolUp.Platform.Infra.ISparseIndex+ISparseIndex) : System.Boolean

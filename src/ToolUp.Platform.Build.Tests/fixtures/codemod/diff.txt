@@ -255,6 +255,26 @@
 @@ L16 [1067-at-start]
 -        ProcessProfileGate.atStart (fun () -> scheduler.RegisterHandler("my-handler", handler)))
 +        Hosting.atStart (fun () -> scheduler.RegisterHandler("my-handler", handler)))
+--- a/src/Server/Identity.fs
++++ b/src/Server/Identity.fs
+@@ L6 [878-retired-abbreviation]
+-    Id: EntityId
++    Id: string
+@@ L7 [878-retired-abbreviation]
+-    Tenant: TenantId
++    Tenant: string
+@@ L8 [878-retired-abbreviation]
+-    Owner: ScopeId
++    Owner: string
+@@ L11 [878-retired-abbreviation]
+-let lookup (ids: Map<string, EntityId>) (key: string) : EntityId option = Map.tryFind key ids
++let lookup (ids: Map<string, string>) (key: string) : string option = Map.tryFind key ids
+@@ L13 [878-scopekey-literal]
+-let teamScope = ScopeKey.Team "acme"
++let teamScope = ScopeKey.Team(TeamId "acme")
+@@ L14 [878-scopekey-literal]
+-let userScope = ScopeKey.User("alice")
++let userScope = ScopeKey.User(UserId "alice")
 --- a/src/Server/Jobs.fs
 +++ b/src/Server/Jobs.fs
 @@ L6 [1066-schedule-result-type]
@@ -354,4 +374,4 @@
 @@ L41 [73-remoting-namespace]
 -let legacyJson = Fable.Remoting.Json.FableJsonConverter()
 +let legacyJson = ToolUp.Remoting.Json.FableJsonConverter()
-Codemod: 88 rewrite(s) across 14 file(s) pending.
+Codemod: 94 rewrite(s) across 15 file(s) pending.

@@ -178,8 +178,8 @@ ToolUp.Facts.Presentation.PageGateSources..ctor(Microsoft.FSharp.Core.FSharpOpti
 ToolUp.Facts.Presentation.PageGateSources.OutputVisibility : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ITeamOutputVisibilitySource] { get }
 ToolUp.Facts.Presentation.PageGateSources.Teams : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Config.TeamManagement+ITeamStore] { get }
 ToolUp.Facts.Presentation.PageGateViewer (class)
-ToolUp.Facts.Presentation.PageGateViewer..ctor(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
-ToolUp.Facts.Presentation.PageGateViewer.ActiveTeamId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Facts.Presentation.PageGateViewer..ctor(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamId], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Facts.Presentation.PageGateViewer.ActiveTeamId : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamId] { get }
 ToolUp.Facts.Presentation.PageGateViewer.IsPlatformAdmin : System.Boolean { get }
 ToolUp.Facts.Presentation.PageGateViewer.OutputVisibility : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Facts.Presentation.PageGateViewer.Principal : System.String { get }

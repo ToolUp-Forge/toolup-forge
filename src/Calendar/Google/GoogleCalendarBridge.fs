@@ -137,7 +137,7 @@ module GoogleCalendarSettings =
 
     /// The OAuth connection that authorises `link`.
     let connectionOf (settings: GoogleCalendarSettings) (link: CalendarLinkRef) : string =
-        settings.ConnectionId |> Option.defaultValue link.UserId
+        settings.ConnectionId |> Option.defaultValue link.UserId.Value
 
 // ─── Event ids ──────────────────────────────────────────────────────
 

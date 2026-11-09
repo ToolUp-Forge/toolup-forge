@@ -595,10 +595,10 @@ let private fixtureWith (bridgeSettings: MicrosoftGraphCalendarSettings) : Fixtu
         ScopeId = "team-" + Guid.NewGuid().ToString("N").Substring(0, 8)
         ResourceId = "room-101"
         ExternalCalendarId = CalendarId
-        UserId = "alice"
+        UserId = UserId "alice"
     }
 
-    seedConnection secrets link.ScopeId link.UserId
+    seedConnection secrets link.ScopeId link.UserId.Value
 
     let bridge =
         MicrosoftGraphCalendarBridge(secrets, refresher, bridgeSettings, new StubHandler(server))
@@ -762,7 +762,7 @@ let private expectOk (label: string) (result: Result<'T, BridgeError>) : 'T =
 let private defaultsFor (link: CalendarLinkRef) : Booking = {
     editDefaults with
         ResourceId = link.ResourceId
-        BookedBy = link.UserId
+        BookedBy = link.UserId.Value
 }
 
 /// POST a notification for `eventId` to every subscription the stub
@@ -1082,7 +1082,7 @@ let private graphTests =
             let flow = createFlow (new HttpClient(refused)) f.Secrets None settings
 
             let ctx =
-                OAuthFlowContext.forDataSource f.Link.ScopeId (connectionId f.Link.UserId) None
+                OAuthFlowContext.forDataSource f.Link.ScopeId (connectionId f.Link.UserId.Value) None
 
             match!
                 Async.Catch(
@@ -1112,14 +1112,14 @@ let private tokenTests =
             expectOk "link" linked
             Expect.equal f.Server.IssuedTokens 1 "one refresh minted the first access token"
 
-            let key = refreshTokenKey (connectionId f.Link.UserId)
+            let key = refreshTokenKey (connectionId f.Link.UserId.Value)
 
             Expect.equal
                 (f.Secrets.TryGet(f.Link.ScopeId, key))
                 (Some "rt-1")
                 "the rotated refresh token was written back"
 
-            let! descriptor = f.Refresher.GetDescriptor(FlowName, connectionId f.Link.UserId)
+            let! descriptor = f.Refresher.GetDescriptor(FlowName, connectionId f.Link.UserId.Value)
             Expect.isSome descriptor "the connection's descriptor is registered with the refresher"
         }
 
@@ -1130,7 +1130,7 @@ let private tokenTests =
             Expect.equal f.Server.IssuedTokens 1 "the second call reused the cached access token"
 
             let descriptor =
-                refreshDescriptor settings f.Link.ScopeId (connectionId f.Link.UserId)
+                refreshDescriptor settings f.Link.ScopeId (connectionId f.Link.UserId.Value)
 
             let store = f.Secrets :> ISecretStore
 
@@ -1173,11 +1173,11 @@ let private tokenTests =
                 createFlow (new HttpClient(new StubHandler(f.Server))) refusing None settings
 
             let ctx =
-                OAuthFlowContext.forDataSource f.Link.ScopeId (connectionId f.Link.UserId) None
+                OAuthFlowContext.forDataSource f.Link.ScopeId (connectionId f.Link.UserId.Value) None
 
             match! flow.RefreshAccessToken(ctx, "rt-0") with
             | Error(OAuthFlowFailed message) ->
-                Expect.stringContains message (connectionId f.Link.UserId) "names the data source"
+                Expect.stringContains message (connectionId f.Link.UserId.Value) "names the data source"
                 Expect.stringContains message "store is read-only" "carries the refusal"
             | other -> failtestf "expected OAuthFlowFailed, got %A" other
         }
@@ -1193,7 +1193,11 @@ let private tokenTests =
 
         testAsync "no connection is an authentication failure naming the data source to connect" {
             let f = fixtureWith settings
-            let stranger = { f.Link with UserId = "mallory" }
+
+            let stranger = {
+                f.Link with
+                    UserId = UserId "mallory"
+            }
 
             match! (f.Bridge :> ICalendarBridge).LinkResource stranger with
             | Error(AuthenticationFailed message) ->
@@ -1314,7 +1318,7 @@ let private subscriptionTests =
                     f.Link.ResourceId,
                     KindName,
                     CalendarId,
-                    f.Link.UserId,
+                    f.Link.UserId.Value,
                     ExternalWins,
                     fixture.Actor
                 )
@@ -1423,7 +1427,7 @@ let private subscriptionTests =
                     f.Link.ResourceId,
                     KindName,
                     CalendarId,
-                    f.Link.UserId,
+                    f.Link.UserId.Value,
                     ExternalWins,
                     fixture.Actor
                 )
@@ -1471,7 +1475,7 @@ let private subscriptionTests =
                     f.Link.ResourceId,
                     KindName,
                     CalendarId,
-                    f.Link.UserId,
+                    f.Link.UserId.Value,
                     ExternalWins,
                     fixture.Actor
                 )
@@ -1548,7 +1552,7 @@ let private healthTests =
                     f.Refresher,
                     settings,
                     f.Link.ScopeId,
-                    f.Link.UserId,
+                    f.Link.UserId.Value,
                     new StubHandler(f.Server)
                 )
                 :> IHealthCheck
@@ -1612,10 +1616,10 @@ let private liveTests =
                     ScopeId = "_platform"
                     ResourceId = "live-probe"
                     ExternalCalendarId = calendarId
-                    UserId = "live"
+                    UserId = UserId "live"
                 }
 
-                let! _ = store.SetSecret(link.ScopeId, refreshTokenKey (connectionId link.UserId), refreshToken)
+                let! _ = store.SetSecret(link.ScopeId, refreshTokenKey (connectionId link.UserId.Value), refreshToken)
                 let! _ = store.SetSecret(link.ScopeId, SecretKeys.ClientSecret, clientSecret)
 
                 let refresher =

@@ -516,6 +516,6 @@ module CoverageTool =
     let execute (ctx: HttpContext) (argsJson: string) : Async<string> =
         FactTool.define
             "list_metric_coverage"
-            (fun c argsJson -> executeWith c.Store c.Gate c.Registry c.Scope c.UserId argsJson)
+            (fun c argsJson -> executeWith c.Store c.Gate c.Registry c.Scope c.UserId.Value argsJson)
             ctx
             argsJson

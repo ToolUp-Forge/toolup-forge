@@ -293,7 +293,7 @@ type BlobServiceAccountStore(storage: IBlobStorage, audit: IAuditLog option, log
                     recordAudit
                         scopeId
                         (AuditEvent.ServiceAccountStatusChanged {
-                            UserId = UserId actorUserId.Value
+                            UserId = actorUserId
                             AccountId = accountId
                             Disabled = (status = ServiceAccountStatus.Disabled)
                         })
@@ -319,7 +319,7 @@ type BlobServiceAccountStore(storage: IBlobStorage, audit: IAuditLog option, log
                         recordAudit
                             scopeId
                             (AuditEvent.ServiceAccountPermissionsChanged {
-                                UserId = UserId actorUserId.Value
+                                UserId = actorUserId
                                 AccountId = accountId
                                 PreviousModules = moduleNames account.Permissions
                                 Modules = moduleNames permissions
@@ -420,7 +420,7 @@ type BlobServiceAccountStore(storage: IBlobStorage, audit: IAuditLog option, log
                     recordAudit
                         scopeId
                         (AuditEvent.ServiceAccountTokenRevoked {
-                            UserId = UserId actorUserId.Value
+                            UserId = actorUserId
                             AccountId = token.AccountId
                             TokenId = tokenId
                         })

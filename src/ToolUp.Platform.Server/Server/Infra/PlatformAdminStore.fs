@@ -150,7 +150,7 @@ type BlobBackedPlatformAdminStore(storage: IBlobStorage, auditLog: IAuditLog, ?d
                                 platformContainer,
                                 PlatformAdminAssigned {
                                     Actor = actorUserId.Value
-                                    TargetUserId = UserId targetUserId.Value
+                                    TargetUserId = targetUserId
                                 }
                             )
 
@@ -177,7 +177,7 @@ type BlobBackedPlatformAdminStore(storage: IBlobStorage, auditLog: IAuditLog, ?d
                                 platformContainer,
                                 PlatformAdminRevoked {
                                     Actor = actorUserId.Value
-                                    TargetUserId = UserId targetUserId.Value
+                                    TargetUserId = targetUserId
                                 }
                             )
 

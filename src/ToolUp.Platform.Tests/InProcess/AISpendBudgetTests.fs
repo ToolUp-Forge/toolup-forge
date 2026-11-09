@@ -112,7 +112,7 @@ let private writeTurnOn
     let record: AILatencyRecord = {
         TaskId = Guid.NewGuid()
         ConversationId = Guid.NewGuid()
-        UserId = userId
+        UserId = UserId userId
         TurnNumber = 1
         ProviderName = providerName
         ProviderModel = model
@@ -380,7 +380,7 @@ let tests =
             let refusals = readRefusals store scopeId
             Expect.hasLength refusals 1 "exactly one recorded refusal"
             let recorded = List.head refusals
-            Expect.equal recorded.UserId alice "the recorded refusal names the user"
+            Expect.equal recorded.UserId (UserId alice) "the recorded refusal names the user"
             Expect.equal recorded.Currency "USD" "…and the currency its amounts are in"
             Expect.equal recorded.WindowKind "daily" "…and the window"
             Expect.equal recorded.CapAmount 5.00M "…and the ceiling"

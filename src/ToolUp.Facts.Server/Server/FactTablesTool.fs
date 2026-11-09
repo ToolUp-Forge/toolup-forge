@@ -781,7 +781,7 @@ module FactTablesTool =
                 // The shell found the store and the gate, which are exactly
                 // what the browse dependencies need.
                 match FactBrowseHandler.factBrowseDeps ctx with
-                | Some deps -> executeWithOptions options deps c.Scope c.UserId argsJson
+                | Some deps -> executeWithOptions options deps c.Scope c.UserId.Value argsJson
                 | None ->
                     async.Return(
                         FactTool.serialize {|

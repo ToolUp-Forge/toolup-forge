@@ -68,12 +68,16 @@ let beginRegistration
     : Async<Result<CeremonyOptionsResponse, string>> =
     async {
         try
-            let handle = userHandleFor identity.UserId
+            let handle = userHandleFor identity.UserId.Value
 
             let user =
-                Fido2User(Id = Base64Url.decode handle, Name = identity.UserId, DisplayName = identity.DisplayName)
+                Fido2User(
+                    Id = Base64Url.decode handle,
+                    Name = identity.UserId.Value,
+                    DisplayName = identity.DisplayName
+                )
 
-            let! existing = creds.ListByUserId identity.UserId
+            let! existing = creds.ListByUserId identity.UserId.Value
             let excludeCredentials = ResizeArray(existing |> List.map descriptorFor)
 
             let selection =
@@ -100,7 +104,7 @@ let beginRegistration
                 UserHandle = Some handle
                 DisplayName = Some identity.DisplayName
                 Email = identity.Email
-                Username = Some identity.UserId
+                Username = Some identity.UserId.Value
                 Grant = Some(string grant)
                 ExpiresAt = DateTime.UtcNow.AddSeconds(float config.ChallengeTtlSeconds)
             }
@@ -162,7 +166,7 @@ let completeRegistration
                     PublicKey = Base64Url.encode credential.PublicKey
                     SignCount = credential.SignCount
                     UserHandle = pending.UserHandle |> Option.defaultValue (Base64Url.encode credential.User.Id)
-                    UserId = pending.UserId |> Option.defaultValue ""
+                    UserId = pending.UserId |> Option.defaultValue (UserId "")
                     DisplayName = pending.DisplayName |> Option.defaultValue ""
                     Email = pending.Email
                     Transports = transports
@@ -215,7 +219,7 @@ let beginAssertion
             let pending: PendingChallenge = {
                 Kind = Assertion
                 Options = box options
-                UserId = Option<string>.None
+                UserId = Option<UserId>.None
                 UserHandle = Option<string>.None
                 DisplayName = Option<string>.None
                 Email = Option<string>.None

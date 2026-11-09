@@ -24,14 +24,14 @@ open ToolUp.Platform.Infra
 
 // ── Foreign-key domain (Order → Customer) ──
 type Customer = {
-    Id: EntityId
+    Id: string
     Type: string
     Version: int
     Name: string
 }
 
 type Order = {
-    Id: EntityId
+    Id: string
     Type: string
     Version: int
     CustomerId: string
@@ -40,21 +40,21 @@ type Order = {
 
 // ── ManyToMany domain (Student ↔ Course via Enrollment) ──
 type Student = {
-    Id: EntityId
+    Id: string
     Type: string
     Version: int
     Name: string
 }
 
 type Course = {
-    Id: EntityId
+    Id: string
     Type: string
     Version: int
     Title: string
 }
 
 type Enrollment = {
-    Id: EntityId
+    Id: string
     Type: string
     Version: int
     StudentId: string

@@ -202,7 +202,7 @@ type PostgresEntityStore
     let lifecyclePayload
         (actor: EntityPrincipal)
         (entityType: string)
-        (entityId: EntityId)
+        (entityId: string)
         (version: int)
         : EntityLifecycleEventPayload =
         {
@@ -216,7 +216,7 @@ type PostgresEntityStore
 
     /// Head version of one entity — `0` when it has never been written.
     /// Shared by the Phase 753 conditional forms.
-    let readHead (scopeId: string) (entityType: string) (entityId: EntityId) : Async<int> = async {
+    let readHead (scopeId: string) (entityType: string) (entityId: string) : Async<int> = async {
         use cmd =
             dataSource.CreateCommand(
                 sprintf
@@ -412,7 +412,7 @@ type PostgresEntityStore
                                 Error(StorageFailure(sprintf "PostgresEntityStore.SaveIfVersion failed: %s" ex.Message))
         }
 
-        member _.Get<'T>(scopeId: string, entityType: string, entityId: EntityId) = async {
+        member _.Get<'T>(scopeId: string, entityType: string, entityId: string) = async {
             try
                 use cmd =
                     dataSource.CreateCommand(
@@ -434,7 +434,7 @@ type PostgresEntityStore
                 return Error(StorageFailure(sprintf "PostgresEntityStore.Get failed: %s" ex.Message))
         }
 
-        member _.GetVersion<'T>(scopeId: string, entityType: string, entityId: EntityId, version: int) = async {
+        member _.GetVersion<'T>(scopeId: string, entityType: string, entityId: string, version: int) = async {
             try
                 use cmd =
                     dataSource.CreateCommand(
@@ -457,7 +457,7 @@ type PostgresEntityStore
                 return Error(StorageFailure(sprintf "PostgresEntityStore.GetVersion failed: %s" ex.Message))
         }
 
-        member _.ListVersions<'T>(scopeId: string, entityType: string, entityId: EntityId) = async {
+        member _.ListVersions<'T>(scopeId: string, entityType: string, entityId: string) = async {
             try
                 use cmd =
                     dataSource.CreateCommand(
@@ -490,7 +490,7 @@ type PostgresEntityStore
                 return []
         }
 
-        member _.Delete(scopeId: string, actor: EntityPrincipal, entityType: string, entityId: EntityId) = async {
+        member _.Delete(scopeId: string, actor: EntityPrincipal, entityType: string, entityId: string) = async {
             if not (registry.Knows entityType) then
                 return Error(EntityError.UnknownEntityType entityType)
             else
@@ -544,7 +544,7 @@ type PostgresEntityStore
         // = 0` is the idempotent "never existed" `Ok`, anything else is a
         // `VersionConflict` naming what the head is now.
         member _.DeleteIfVersion
-            (scopeId: string, actor: EntityPrincipal, entityType: string, entityId: EntityId, expectedVersion: int)
+            (scopeId: string, actor: EntityPrincipal, entityType: string, entityId: string, expectedVersion: int)
             =
             async {
 

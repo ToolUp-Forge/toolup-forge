@@ -99,7 +99,7 @@ type DSRExportJobHandler
                             audit {
                                 RequestId = request.Id
                                 Kind = ExportCompleted
-                                SubjectUserId = request.SubjectUserId
+                                SubjectUserId = UserId request.SubjectUserId
                                 ScopeId = ctx.ScopeId
                                 Actor = request.RequestedBy
                                 Reason = request.Reason

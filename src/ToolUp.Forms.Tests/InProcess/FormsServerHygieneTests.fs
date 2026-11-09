@@ -57,7 +57,7 @@ type private RecordingMetricsSink() =
 /// "underlying store can list refs but per-row reads fault" shape that
 /// surfaces in practice when an index entry survives a partial-write
 /// outage but the version blob is unreadable.
-type private FaultingGetEntityStore(inner: IEntityStore, failIds: Set<EntityId>) =
+type private FaultingGetEntityStore(inner: IEntityStore, failIds: Set<string>) =
     interface IEntityStore with
         member _.Save<'T>(scopeId, actor, entity) = inner.Save<'T>(scopeId, actor, entity)
 

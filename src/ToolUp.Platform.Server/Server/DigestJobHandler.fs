@@ -128,7 +128,7 @@ type DigestJobHandler
     let release (scopeId: string) (item: PendingNotification) = async {
         do! channel.Publish(scopeId, item.Notification)
 
-        match! store.Remove(scopeId, UserId item.UserId.Value, [ item.Id ]) with
+        match! store.Remove(scopeId, item.UserId, [ item.Id ]) with
         | Ok() -> ()
         | Error e -> logger.Warn $"[NotificationDigest] released {item.Id} but could not remove it: {e}"
     }

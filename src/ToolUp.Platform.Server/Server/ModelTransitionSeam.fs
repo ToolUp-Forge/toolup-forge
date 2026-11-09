@@ -92,7 +92,7 @@ type ModelTransitionAuthor =
     /// role travels with the author because it is the local authority
     /// question, and it is the ONLY case where a team role means
     /// anything.
-    | LocalUser of userId: string * role: TeamRole
+    | LocalUser of userId: UserId * role: TeamRole
     /// A peer deployment's actor, invoking across the federation seam.
     /// Both identities are recorded: the peer is who this deployment has
     /// an agreement with, the actor is who the peer says asked.
@@ -119,7 +119,7 @@ module ModelTransitionAuthor =
     /// set.
     let id (author: ModelTransitionAuthor) : string =
         match author with
-        | LocalUser(userId, _) -> userId
+        | LocalUser(userId, _) -> userId.Value
         | PeerActor(peerId, actorId) -> $"{peerId}/{actorId}"
         | PolicyVerdict policyId -> policyId
 

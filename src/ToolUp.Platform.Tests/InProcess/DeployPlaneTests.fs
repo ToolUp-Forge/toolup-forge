@@ -43,7 +43,7 @@ open ToolUp.Platform.Compose
 
 type InMemoryContainerScheduler() =
     let containers =
-        ConcurrentDictionary<ContainerId, TenantId * ContainerSpec * ContainerStatus>()
+        ConcurrentDictionary<ContainerId, string * ContainerSpec * ContainerStatus>()
 
     let nextId () = Guid.NewGuid().ToString("N")
 
@@ -216,7 +216,7 @@ type InMemoryBuildOrchestrator() =
 
 type InMemoryDeployPipeline() =
     let deploys = ConcurrentDictionary<DeployId, DeploySummary>()
-    let perTenant = ConcurrentDictionary<TenantId, ResizeArray<DeployId>>()
+    let perTenant = ConcurrentDictionary<string, ResizeArray<DeployId>>()
     let nextId () = Guid.NewGuid().ToString("N")
 
     interface IDeployPipeline with
@@ -970,41 +970,35 @@ let defaultPipelineRollbackTests =
 
     /// Two succeeded build-sourced deploys for `tenant` (images v1
     /// then v2), so a rollback targets the v1 deploy.
-    let seedTwoDeploys
-        (pipeline: IDeployPipeline)
-        (orchestrator: IBuildOrchestrator)
-        (tenant: TenantId)
-        (slug: string)
-        =
-        async {
-            let! buildId1 = enqueueBuild orchestrator slug (sprintf "registry/%s:v1" slug)
-            let! begun1 = pipeline.BeginDeploy(tenant, buildId1, mkBuildManifest slug, UserId "alice")
+    let seedTwoDeploys (pipeline: IDeployPipeline) (orchestrator: IBuildOrchestrator) (tenant: string) (slug: string) = async {
+        let! buildId1 = enqueueBuild orchestrator slug (sprintf "registry/%s:v1" slug)
+        let! begun1 = pipeline.BeginDeploy(tenant, buildId1, mkBuildManifest slug, UserId "alice")
 
-            match begun1 with
-            | Error e -> return failtestf "BeginDeploy v1: %A" e
-            | Ok deployId1 ->
-                let! settled1 = awaitTerminal pipeline deployId1
+        match begun1 with
+        | Error e -> return failtestf "BeginDeploy v1: %A" e
+        | Ok deployId1 ->
+            let! settled1 = awaitTerminal pipeline deployId1
 
-                match settled1.State with
-                | DeploySucceeded _ -> ()
-                | other -> failtestf "v1 deploy did not succeed: %A" other
+            match settled1.State with
+            | DeploySucceeded _ -> ()
+            | other -> failtestf "v1 deploy did not succeed: %A" other
 
-                // Distinct StartedAt so the rollback's newest-first scan
-                // is deterministic.
-                do! Async.Sleep 15
+            // Distinct StartedAt so the rollback's newest-first scan
+            // is deterministic.
+            do! Async.Sleep 15
 
-                let! buildId2 = enqueueBuild orchestrator slug (sprintf "registry/%s:v2" slug)
-                let! begun2 = pipeline.BeginDeploy(tenant, buildId2, mkBuildManifest slug, UserId "alice")
+            let! buildId2 = enqueueBuild orchestrator slug (sprintf "registry/%s:v2" slug)
+            let! begun2 = pipeline.BeginDeploy(tenant, buildId2, mkBuildManifest slug, UserId "alice")
 
-                match begun2 with
-                | Error e -> return failtestf "BeginDeploy v2: %A" e
-                | Ok deployId2 ->
-                    let! settled2 = awaitTerminal pipeline deployId2
+            match begun2 with
+            | Error e -> return failtestf "BeginDeploy v2: %A" e
+            | Ok deployId2 ->
+                let! settled2 = awaitTerminal pipeline deployId2
 
-                    match settled2.State with
-                    | DeploySucceeded _ -> return ()
-                    | other -> return failtestf "v2 deploy did not succeed: %A" other
-        }
+                match settled2.State with
+                | DeploySucceeded _ -> return ()
+                | other -> return failtestf "v2 deploy did not succeed: %A" other
+    }
 
     let composed (containerScheduler: IContainerScheduler) =
         let eventStore =

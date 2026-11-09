@@ -25,7 +25,7 @@ open ToolUp.Platform.Config.Auth
 
 /// The identity a registration ceremony enrols a credential for.
 type RegistrationIdentity = {
-    UserId: string
+    UserId: UserId
     DisplayName: string
     Email: string option
 }
@@ -106,7 +106,7 @@ let resolveIdentity
                 Ok(
                     ExistingSession,
                     {
-                        UserId = currentUser.UserId.Value
+                        UserId = currentUser.UserId
                         DisplayName =
                             if currentUser.DisplayName <> "" then
                                 currentUser.DisplayName
@@ -131,7 +131,7 @@ let resolveIdentity
                         Ok(
                             grant,
                             {
-                                UserId = userId
+                                UserId = UserId userId
                                 DisplayName = req.DisplayName |> Option.defaultValue userId
                                 Email = req.Email
                             }

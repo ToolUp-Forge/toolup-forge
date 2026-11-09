@@ -109,7 +109,7 @@ type AttestedApproval = {
     /// to the record they signed.
     ConsentId: string
     /// The team whose permission document carries the grant.
-    TeamId: string
+    TeamId: TeamId
     /// The principal the grant is for.
     SubjectId: string
     /// The counterparty that approved — always the party the declared
@@ -265,7 +265,7 @@ let private readApproval (node: JsonNode) : Result<AttestedApproval, string> =
                         | Some raw -> parseStamp "expiresAtUtc" raw |> Result.map Some)
                         |> Result.map (fun expires -> {
                             ConsentId = consentId
-                            TeamId = teamId
+                            TeamId = TeamId teamId
                             SubjectId = subjectId
                             Party = party
                             IssuedAtUtc = issued
@@ -460,7 +460,7 @@ let private liveApprovalsFor
                     | Ok record ->
                         approvals.Add {
                             ConsentId = record.ConsentId
-                            TeamId = teamId
+                            TeamId = TeamId teamId
                             SubjectId = subjectId
                             Party = PartyRef.value record.Party
                             IssuedAtUtc = record.IssuedAtUtc
@@ -524,7 +524,7 @@ let compose
                 let ordered =
                     approvals
                     |> List.sortWith (fun a b ->
-                        let byTeam = String.CompareOrdinal(a.TeamId, b.TeamId)
+                        let byTeam = String.CompareOrdinal(a.TeamId.Value, b.TeamId.Value)
 
                         if byTeam <> 0 then
                             byTeam

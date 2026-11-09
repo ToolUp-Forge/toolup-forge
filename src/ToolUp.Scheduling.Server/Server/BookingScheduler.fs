@@ -215,7 +215,7 @@ type BookingScheduler(entityStore: IEntityStore, eventStore: IEventStore) =
                     | Error err -> return Error(mapEntityError err)
                     | Ok ref ->
                         let payload: BookingCreatedPayload = {
-                            UserId = actorUserId
+                            UserId = UserId actorUserId
                             BookingId = booking.Id
                             ResourceId = booking.ResourceId
                             StartUtc = booking.StartUtc
@@ -243,7 +243,7 @@ type BookingScheduler(entityStore: IEntityStore, eventStore: IEventStore) =
                 | Error err -> return Error(mapEntityError err)
                 | Ok _ ->
                     let payload: BookingCancelledPayload = {
-                        UserId = actorUserId
+                        UserId = UserId actorUserId
                         BookingId = id
                         Reason = reason
                     }
@@ -276,7 +276,7 @@ type BookingScheduler(entityStore: IEntityStore, eventStore: IEventStore) =
                         | Error err -> return Error(mapEntityError err)
                         | Ok _ ->
                             let payload: BookingRescheduledPayload = {
-                                UserId = actorUserId
+                                UserId = UserId actorUserId
                                 BookingId = id
                                 OldStart = b.StartUtc
                                 OldEnd = b.EndUtc
@@ -304,7 +304,10 @@ type BookingScheduler(entityStore: IEntityStore, eventStore: IEventStore) =
                 match r with
                 | Error err -> return Error(mapEntityError err)
                 | Ok _ ->
-                    let payload: BookingNoShowPayload = { UserId = actorUserId; BookingId = id }
+                    let payload: BookingNoShowPayload = {
+                        UserId = UserId actorUserId
+                        BookingId = id
+                    }
 
                     do! writeEvent eventStore scopeId BookingNoShow payload
                     return Ok()

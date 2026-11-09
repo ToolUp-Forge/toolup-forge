@@ -383,7 +383,7 @@ type JobSchedulerBuildOrchestrator(scheduler: IJobScheduler, eventStore: IEventS
 
                         let cancelled = {
                             current with
-                                Status = BuildStatus.Cancelled(cancelledAt, UserId byUserId.Value)
+                                Status = BuildStatus.Cancelled(cancelledAt, byUserId)
                         }
 
                         builds[buildId] <- cancelled

@@ -2644,7 +2644,7 @@ let private transitionSeamTests =
                 Rationale = None
             }
 
-            let! _ = ModelTransition.invoke deps hostScope approveGrant (request "a" (LocalUser("alice", Owner)))
+            let! _ = ModelTransition.invoke deps hostScope approveGrant (request "a" (LocalUser(UserId "alice", Owner)))
 
             let! _ =
                 ModelTransition.invoke

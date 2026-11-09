@@ -68,7 +68,7 @@ let private budgetJsonOptions = FableConverters.create ()
 /// TTL.
 type AIBudgetWindowEntry = {
     ScopeId: string
-    UserId: string
+    UserId: UserId
     /// `BudgetPeriod.key` of the hour this sum covers.
     PeriodKey: string
     /// Tokens (`PromptTokens + OutputTokens`) the user had consumed in
@@ -113,7 +113,7 @@ type AIBudgetWindowCache(ttlSeconds: int) =
     /// has elapsed.
     member _.Write(entry: AIBudgetWindowEntry) =
         if ttlSeconds > 0 then
-            entries[struct (entry.ScopeId, entry.UserId, entry.PeriodKey)] <- entry
+            entries[struct (entry.ScopeId, entry.UserId.Value, entry.PeriodKey)] <- entry
 
             // Sweep elapsed hours. Cheap (the dictionary holds one
             // entry per active user per hour) and bounded, and it
@@ -167,7 +167,7 @@ let sumUserWindow (store: IEventStore) (scopeId: string) (userId: string) (windo
 
             if isNull (box record) then
                 0M
-            elif isNull (box record.UserId) || record.UserId <> userId then
+            elif isNull (box record.UserId) || record.UserId <> (UserId userId) then
                 0M
             else
                 let prompt = record.PromptTokens |> Option.defaultValue 0
@@ -289,7 +289,7 @@ type AIBudgetEnforcer
 
                             cache.Write {
                                 ScopeId = scopeId
-                                UserId = userId
+                                UserId = UserId userId
                                 PeriodKey = periodKey
                                 UsedTokens = computed
                                 CapAtLastSum = policy.PerUserPerHour |> Option.map decimal |> Option.defaultValue 0M
@@ -562,7 +562,7 @@ let EstimateDriftTolerance = 0.5M
 /// `/dev/inspect` panel readable.
 type AISpendWindowEntry = {
     ScopeId: string
-    UserId: string
+    UserId: UserId
     /// `BudgetPeriod.key` of the window the USER figure covers.
     UserPeriodKey: string
     /// `BudgetPeriod.key` of the window the SCOPE figure covers.
@@ -629,7 +629,7 @@ type AISpendWindowCache(ttlSeconds: int) =
     /// rather than an archaeology of past ones.
     member _.Write(entry: AISpendWindowEntry) =
         if ttlSeconds > 0 then
-            entries[struct (entry.ScopeId, entry.UserId)] <- entry
+            entries[struct (entry.ScopeId, entry.UserId.Value)] <- entry
 
             for KeyValue(key, value) in entries do
                 if
@@ -686,7 +686,7 @@ let periodWindowStart (period: BudgetPeriod) (at: DateTime) : DateTime =
 /// One turn's priced contribution to the two windows.
 type private PricedTurn = {
     /// `AILatencyRecord.UserId`, `""` when the record predates Phase 9s.
-    UserId: string
+    UserId: UserId
     OccurredAt: DateTime
     /// The turn's cost under the rate card, or `None` when its
     /// `(provider, model)` is unpriced.
@@ -729,7 +729,11 @@ let private priceWindow
                         let cacheWrite = record.CacheCreationTokens |> Option.defaultValue 0
 
                         Some {
-                            UserId = if isNull (box record.UserId) then "" else record.UserId
+                            UserId =
+                                if isNull (box record.UserId) then
+                                    (UserId "")
+                                else
+                                    record.UserId
                             OccurredAt = evt.OccurredAt.ToUniversalTime()
                             Cost =
                                 table
@@ -921,11 +925,11 @@ type AISpendEnforcer
                                 if caller = "" then
                                     0M
                                 else
-                                    sumFrom userStart (fun turn -> turn.UserId = caller)
+                                    sumFrom userStart (fun turn -> turn.UserId = UserId caller)
 
                             let computed = {
                                 ScopeId = scopeId
-                                UserId = caller
+                                UserId = UserId caller
                                 UserPeriodKey = userPeriodKey
                                 ScopePeriodKey = scopePeriodKey
                                 UserSpend = userSpend
@@ -941,7 +945,7 @@ type AISpendEnforcer
                             // is not evidence of overspend.
                             return {
                                 ScopeId = scopeId
-                                UserId = caller
+                                UserId = UserId caller
                                 UserPeriodKey = userPeriodKey
                                 ScopePeriodKey = scopePeriodKey
                                 UserSpend = 0M

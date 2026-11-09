@@ -88,7 +88,7 @@ type IContainerScheduler =
     /// container so `ListContainers` filtering works without an
     /// external lookup.
     abstract LaunchContainer:
-        tenantId: TenantId * spec: ContainerSpec -> Async<Result<ContainerId, ContainerSchedulerError>>
+        tenantId: string * spec: ContainerSpec -> Async<Result<ContainerId, ContainerSchedulerError>>
 
     /// Stop a container. Sends SIGTERM (or scheduler-native
     /// equivalent), waits the scheduler's grace period, then
@@ -116,7 +116,7 @@ type IContainerScheduler =
     /// Ordering: scheduler-defined (typically launch-time
     /// ascending). Implementations re-query the backend on every
     /// call — no caching.
-    abstract ListContainers: tenantId: TenantId option -> Async<ContainerInfo list>
+    abstract ListContainers: tenantId: string option -> Async<ContainerInfo list>
 
     /// Stream log entries from a container. `fromTime = Some t`
     /// scopes to logs at or after `t`; `None` streams from the

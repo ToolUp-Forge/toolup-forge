@@ -88,7 +88,7 @@ let private tokenise (d: MembershipDoctor.MembershipDiagnosis) =
         | MembershipDoctor.ClearActiveTeamPointer -> MembershipsDoctorCommand.RepairClearPointer
         | MembershipDoctor.ReAddUnderResolvedId -> MembershipsDoctorCommand.RepairReportOnly
 
-    kind, d.UserId, d.TeamId, d.Evidence, repair
+    kind, d.UserId.Value, d.TeamId |> Option.map TeamId.value, d.Evidence, repair
 
 /// Diagnose `root` through the real server substrate over the real
 /// local-file storage backend.
@@ -190,7 +190,7 @@ let tests =
 
                 Expect.equal
                     (remaining |> List.map _.UserId |> List.distinct |> List.sort)
-                    [ "ghost@example.com"; "user id" ]
+                    [ UserId "ghost@example.com"; UserId "user id" ]
                     "the bad-key blobs are untouched and still reported"
 
                 let emailBlob =

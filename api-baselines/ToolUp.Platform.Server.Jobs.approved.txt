@@ -1364,8 +1364,8 @@ ToolUp.Platform.Jobs.SchemaMigrationJobHandler.HandlerName : System.String (lite
 ToolUp.Platform.Jobs.SchemaMigrationJobHandler.create(ToolUp.Platform.Infra.IUserSchemaStore) : ToolUp.Platform.Jobs.IJobHandler
 ToolUp.Platform.Jobs.SchemaMigrationJobHandler.serialisePayload(ToolUp.Platform.Jobs.SchemaMigrationJobHandler+SchemaMigrationJobPayload) : System.String
 ToolUp.Platform.Jobs.SchemaMigrationJobHandler+SchemaMigrationJobPayload (class)
-ToolUp.Platform.Jobs.SchemaMigrationJobHandler+SchemaMigrationJobPayload..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SchemaMigration], System.String)
-ToolUp.Platform.Jobs.SchemaMigrationJobHandler+SchemaMigrationJobPayload.ActorUserId : System.String { get }
+ToolUp.Platform.Jobs.SchemaMigrationJobHandler+SchemaMigrationJobPayload..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SchemaMigration], ToolUp.Platform.UserId)
+ToolUp.Platform.Jobs.SchemaMigrationJobHandler+SchemaMigrationJobPayload.ActorUserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.Jobs.SchemaMigrationJobHandler+SchemaMigrationJobPayload.Migrations : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SchemaMigration] { get }
 ToolUp.Platform.Jobs.SchemaMigrationJobHandler+SchemaMigrationJobPayload.SchemaId : System.String { get }
 ToolUp.Platform.Jobs.ScopeAtCapacity (class)

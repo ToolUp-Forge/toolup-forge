@@ -66,7 +66,7 @@ type OfflineReplayContext = {
     ScopeId: string
     /// Server-resolved caller. The `Principal` of the `EntityPrincipal` the
     /// handler builds per mutation and hands to `Apply`.
-    UserId: string
+    UserId: UserId
 }
 
 /// Why a replay adapter could not apply a mutation (Phase 753).
@@ -324,7 +324,7 @@ let private applyOne
                 // suppressed. The compare-and-set is untouched: the
                 // actor rides the seam call, it does not change what the
                 // seam is asked.
-                let actor = ReplayAudit.actor replayCtx.UserId mutation DateTime.UtcNow
+                let actor = ReplayAudit.actor replayCtx.UserId.Value mutation DateTime.UtcNow
 
                 match mutation.Operation with
                 | DeleteOp ->
@@ -359,7 +359,7 @@ let offlineSyncApi (store: IEntityStore) (options: OfflineSyncOptions) (ctx: Htt
     let replayCtx: OfflineReplayContext = {
         Store = store
         ScopeId = scopeId
-        UserId = accessContext.UserId
+        UserId = UserId accessContext.UserId
     }
 
     {

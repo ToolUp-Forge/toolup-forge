@@ -37,7 +37,7 @@ let addNote (deps: KnowledgeApiDeps) (req: AddNoteRequest) : Async<Result<Knowle
 
             let noteSource: NoteSource = {
                 Title = title
-                Author = deps.UserId
+                Author = deps.UserId.Value
                 CreatedAt = DateTimeOffset.UtcNow
                 LastEditedAt = None
             }
@@ -49,7 +49,7 @@ let addNote (deps: KnowledgeApiDeps) (req: AddNoteRequest) : Async<Result<Knowle
                 FileName = fileName
                 FileType = "note"
                 UploadedAt = DateTimeOffset.UtcNow
-                UploadedBy = deps.UserId
+                UploadedBy = deps.UserId.Value
                 Status = Queued
                 SizeBytes = sizeBytes
                 ChunkCount = chunks.Length
@@ -130,7 +130,7 @@ let addNote (deps: KnowledgeApiDeps) (req: AddNoteRequest) : Async<Result<Knowle
                                 Status = IngestionStatus.Failed reason
                         }
 
-                do! deps.Notifications.Publish(deps.UserId, DataRefreshed("KnowledgeBase", deps.Scope.ScopeId))
+                do! deps.Notifications.Publish(deps.UserId.Value, DataRefreshed("KnowledgeBase", deps.Scope.ScopeId))
                 do! deps.PublishInventory()
 
                 return Ok returnedDoc
@@ -261,7 +261,12 @@ let updateNote (deps: KnowledgeApiDeps) (req: UpdateNoteRequest) : Async<Result<
                                         Status = IngestionStatus.Failed reason
                                 }
 
-                        do! deps.Notifications.Publish(deps.UserId, DataRefreshed("KnowledgeBase", deps.Scope.ScopeId))
+                        do!
+                            deps.Notifications.Publish(
+                                deps.UserId.Value,
+                                DataRefreshed("KnowledgeBase", deps.Scope.ScopeId)
+                            )
+
                         do! deps.PublishInventory()
 
                         return Ok returnedDoc

@@ -255,7 +255,7 @@ type DeployRecord = {
     /// The deploy this record describes.
     DeployId: DeployId
     /// The tenant the deploy belonged to.
-    TenantId: TenantId
+    TenantId: string
     /// The build the deploy ran from.
     BuildId: BuildId
     /// The manifest as deployed, carried verbatim so the record is
@@ -384,7 +384,7 @@ module DeployRecord =
     /// it with `withVerificationLevel` BEFORE sealing.
     let create
         (deployId: DeployId)
-        (tenantId: TenantId)
+        (tenantId: string)
         (buildId: BuildId)
         (manifest: DeployManifest)
         (provenance: DeployProvenance)

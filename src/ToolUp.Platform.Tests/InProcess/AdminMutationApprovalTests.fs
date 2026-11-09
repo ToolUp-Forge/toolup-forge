@@ -743,7 +743,7 @@ let tests =
 
                 let outcome =
                     GrantPolicyGuard.PermissionGrants.grantModuleAccess composed registry {
-                        TeamId = "acme"
+                        TeamId = TeamId "acme"
                         ActorId = "admin-a"
                         SubjectId = "bob"
                         ModuleName = "payroll"

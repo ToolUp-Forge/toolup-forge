@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-namespace ToolUp.Platform
+namespace rec ToolUp.Platform
 
 open Fable.Core
 
@@ -33,6 +33,10 @@ open Fable.Core
 // container. The union case itself stays public, as `ComponentId`'s does:
 // it is the trusted constructor for an id that was already validated (one
 // read from a store, a token's claims or a route the platform minted).
+//
+// The namespace is `rec` so each wrapper's `JsonConverter` attribute can
+// name the converter declared after it, without an `and` chain split by
+// the conditional compilation the converters need.
 //
 // Fable-safe: BCL string operations only.
 
@@ -74,11 +78,11 @@ type UserId =
 #endif
 
 /// A team's identity. Encodes as the bare string it wraps on both hosts.
-#if FABLE_COMPILER
-and [<Erase>] TeamId =
-#else
-and [<Erase; System.Text.Json.Serialization.JsonConverter(typeof<TeamIdJsonConverter>)>] TeamId =
+[<Erase>]
+#if !FABLE_COMPILER
+[<System.Text.Json.Serialization.JsonConverter(typeof<TeamIdJsonConverter>)>]
 #endif
+type TeamId =
     | TeamId of string
 
     /// The wrapped id string.
@@ -92,7 +96,7 @@ and [<Erase; System.Text.Json.Serialization.JsonConverter(typeof<TeamIdJsonConve
 /// The bare-string JSON form of a `UserId` for a .NET serialiser configured
 /// WITHOUT the remoting converter set (which handles every erased wrapper):
 /// a value, and a dictionary key.
-and UserIdJsonConverter() =
+type UserIdJsonConverter() =
     inherit System.Text.Json.Serialization.JsonConverter<UserId>()
 
     override _.Read(reader, _, _) = UserId(reader.GetString())
@@ -104,7 +108,7 @@ and UserIdJsonConverter() =
     override _.WriteAsPropertyName(writer, value, _) = writer.WritePropertyName value.Value
 
 /// The bare-string JSON form of a `TeamId`, as `UserIdJsonConverter`.
-and TeamIdJsonConverter() =
+type TeamIdJsonConverter() =
     inherit System.Text.Json.Serialization.JsonConverter<TeamId>()
 
     override _.Read(reader, _, _) = TeamId(reader.GetString())

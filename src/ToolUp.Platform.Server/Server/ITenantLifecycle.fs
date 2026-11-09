@@ -99,7 +99,7 @@ type ITenantLifecycle =
 /// `OnProvisioned` semantics when it is absent.
 type TenantProvisioningContext = {
     ScopeId: string
-    ActorUserId: string
+    ActorUserId: UserId
     Request: ProvisioningRequest option
 }
 

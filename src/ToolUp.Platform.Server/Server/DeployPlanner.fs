@@ -105,7 +105,7 @@ module DeployPlanner =
     /// (`ContainerInfo.Status` re-read per container, not the
     /// list-time snapshot).
     let diff
-        (tenantId: TenantId)
+        (tenantId: string)
         (target: ContainerSpec list)
         (observed: ContainerInfo list)
         (observedAt: DateTime)
@@ -202,7 +202,7 @@ module DeployPlanner =
     /// an operator would have wanted to see.
     let plan
         (scheduler: IContainerScheduler)
-        (tenantId: TenantId)
+        (tenantId: string)
         (target: ContainerSpec list)
         : Async<Result<DeployPlan, DeployPipelineError>> =
         async {
@@ -262,7 +262,7 @@ module DeployPipelinePlanning =
         /// `Stop`, so passing a partial set under-reports nothing but
         /// over-reports stops.
         member this.PlanDeploy
-            (scheduler: IContainerScheduler, tenantId: TenantId, target: ContainerSpec list)
+            (scheduler: IContainerScheduler, tenantId: string, target: ContainerSpec list)
             : Async<Result<DeployPlan, DeployPipelineError>> =
             match box this with
             | :? IDeployPlanner as planner -> planner.PlanDeploy(tenantId, target)

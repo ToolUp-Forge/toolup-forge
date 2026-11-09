@@ -729,7 +729,7 @@ let longRenderTests =
                 Expect.equal r.ScopeId "team-a" "the caller's scope"
 
                 let payload = RenderJobPayload.decode r.Payload |> Option.get
-                Expect.equal payload.UserId "user-1" "the requester rides the payload"
+                Expect.equal payload.UserId (UserId "user-1") "the requester rides the payload"
                 Expect.equal payload.ConversationId (Some conversationId) "so does the conversation"
             | other -> failtestf "expected one registration, got %A" other
 
@@ -842,7 +842,7 @@ let longRenderTests =
                     RenderJobPayload.encode {
                         TemplateId = "gone"
                         ScopeId = "team-a"
-                        UserId = "user-1"
+                        UserId = UserId "user-1"
                         ConversationId = None
                         Values = Map.empty
                     }
@@ -884,7 +884,7 @@ let longRenderTests =
             let payload: RenderJobPayload = {
                 TemplateId = "quarterly"
                 ScopeId = "team-a"
-                UserId = "user-1"
+                UserId = UserId "user-1"
                 ConversationId = Some conversationId
                 Values =
                     Map.ofList [

@@ -274,8 +274,8 @@ type TeamStore(storage: IBlobStorage, notifications: INotificationChannel, logge
     // subscriber side) and proceed.
     let publishChange (teamId: TeamId) (userId: UserId) (kind: MembershipChangeKind) = async {
         let payload: MembershipChangedPayload = {
-            TeamId = TeamId teamId.Value
-            AffectedUserId = UserId userId.Value
+            TeamId = teamId
+            AffectedUserId = userId
             ChangeKind = kind
             PublishedAt = DateTime.UtcNow
         }

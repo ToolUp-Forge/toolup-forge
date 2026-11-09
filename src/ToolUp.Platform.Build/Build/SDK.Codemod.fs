@@ -917,6 +917,16 @@ module Codemod =
             @"\bScopeKey\.(Team|User)\s*\(?\s*(""[^""\r\n]*"")\s*\)?"
             "ScopeKey.${1}(${1}Id $2)"
             "`ScopeKey.Team \"acme\"` / `ScopeKey.User \"alice\"` → `ScopeKey.Team(TeamId \"acme\")` / `ScopeKey.User(UserId \"alice\")`"
+        // The three retired string abbreviations, in a type position
+        // (after `:`, `of`, `*` or `<`, or as a generic argument before
+        // `>`), are the `string` they abbreviated.
+        rewrite
+            "878-retired-abbreviation"
+            CodemodMigration.TypedIdentity
+            CodemodFileClass.Source
+            @"(?<=(?:(?<!:):|\bof|\*|<)\s*)\b(?:EntityId|TenantId|ScopeId)\b|(?<=,\s*)\b(?:EntityId|TenantId|ScopeId)\b(?=\s*>)"
+            "string"
+            "`id: EntityId` / `of TenantId` / `Map<string, ScopeId>` (a retired `string` abbreviation in a type position) → `string`"
     ]
 
     // ── The review rules ──────────────────────────────────────────────
@@ -1334,6 +1344,15 @@ module Codemod =
             CodemodFileClass.Source
             @"\bStorageScope\.tryTeamId\b"
             "`StorageScope.tryTeamId` answers `TeamId option`: map `TeamId.value` where a string is needed"
+        // A retired abbreviation the type-position rewrite could not place:
+        // after `->` (a return type, or a match arm yielding a value of
+        // the same name) or in a tuple of values.
+        review
+            "878-retired-abbreviation-site"
+            CodemodMigration.TypedIdentity
+            CodemodFileClass.Source
+            @"(?<![.\w""])(?:EntityId|TenantId|ScopeId)\b(?!\s*(?:=|:(?!:)))"
+            "`EntityId`, `TenantId` and `ScopeId` are gone: each was an abbreviation for `string`. If this names the type, write `string`; if it is a value or a field of your own with the same name, it is unchanged"
     ]
 
 
@@ -2329,6 +2348,7 @@ module Codemod =
             CodemodMigration.BackgroundPlacement
             CodemodMigration.CompanionOptions
             CodemodMigration.NestedConfig
+            CodemodMigration.TypedIdentity
             CodemodMigration.SubsystemNamespaces
         ]
         |> List.tryFind (fun m -> CodemodMigration.label m = "Phase " + phase.Trim())

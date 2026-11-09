@@ -4,6 +4,7 @@
 namespace ToolUp.AI
 
 open System
+open ToolUp.Platform
 
 // ─── Phase 6i.A — per-turn AI latency record ─────────────────────
 //
@@ -62,7 +63,7 @@ type AILatencyRecord = {
     /// UNATTRIBUTED. An unattributed turn is never charged to a user's
     /// window; it is wrong in the safe direction, and the historical
     /// backlog ages out of an hourly window within the hour.
-    UserId: string
+    UserId: UserId
     /// 1-based turn index within this agent-loop run.
     TurnNumber: int
     ProviderName: string

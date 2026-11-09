@@ -24,7 +24,7 @@ type ConfigStoreErasureHandler(configStore: IConfigStore) =
             configStore.Erase(scopeId, subjectUserId, policy, false)
 
         member _.Preview(scopeId, subjectUserId, policy) = async {
-            let! result = configStore.Erase(scopeId, UserId subjectUserId.Value, policy, true)
+            let! result = configStore.Erase(scopeId, subjectUserId, policy, true)
 
             return
                 match result with

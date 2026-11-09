@@ -66,10 +66,10 @@ let private subjectsFor (teams: ITeamStore option) (scopeId: string) : Async<Res
     | ScopeKind.Team teamId ->
         match teams with
         | Some store ->
-            let! members = store.GetTeamMembers(TeamId teamId)
+            let! members = store.GetTeamMembers(teamId)
             return Ok(members |> List.map _.UserId)
         | None -> return Error "team scope offboard requires an ITeamStore to enumerate member subjects"
-    | ScopeKind.User userId -> return Ok [ userId ]
+    | ScopeKind.User userId -> return Ok [ userId.Value ]
     | ScopeKind.Other scopeId -> return Ok [ scopeId ]
 }
 

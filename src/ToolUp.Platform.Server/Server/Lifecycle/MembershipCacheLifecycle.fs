@@ -28,7 +28,7 @@ open ToolUp.Platform.Config.TeamManagement
 let private teamIdOf (scopeId: string) =
     match ScopeId.parse scopeId with
     | ScopeKind.Team teamId -> teamId
-    | _ -> scopeId
+    | _ -> TeamId scopeId
 
 /// The first-party membership-cache offboard hook, as a value. Its
 /// substrate is the team scope resolver (the only resolver with a team
@@ -46,7 +46,7 @@ let hook: TenantHook<TeamScopeResolver * ITeamStore> = {
     OnProvisioned = None
     OnDeprovisioned =
         Some(fun (resolver, store) scopeId _ -> async {
-            let! members = store.GetTeamMembers(TeamId(teamIdOf scopeId))
+            let! members = store.GetTeamMembers(TeamId((teamIdOf scopeId).Value))
 
             // InvalidateUser publishes a MembershipChanged event per
             // member; the resolver (and any cross-instance companion)
@@ -60,7 +60,7 @@ let hook: TenantHook<TeamScopeResolver * ITeamStore> = {
     // WOULD be invalidated), via the read-only GetTeamMembers.
     Preview =
         Some(fun (_, store) scopeId _ -> async {
-            let! members = store.GetTeamMembers(TeamId(teamIdOf scopeId))
+            let! members = store.GetTeamMembers(TeamId((teamIdOf scopeId).Value))
             return members.Length, sprintf "%d member cache entr(y/ies) would be invalidated" members.Length
         })
 }

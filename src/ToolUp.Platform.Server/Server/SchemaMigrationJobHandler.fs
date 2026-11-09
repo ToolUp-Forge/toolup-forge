@@ -30,7 +30,7 @@ let HandlerName = "_platform.user_schema.migrate"
 type SchemaMigrationJobPayload = {
     SchemaId: SchemaId
     Migrations: SchemaMigration list
-    ActorUserId: string
+    ActorUserId: UserId
 }
 
 let private jsonOptions = FableConverters.create ()
@@ -53,12 +53,7 @@ let create (store: IUserSchemaStore) : IJobHandler =
             | Error msg -> return PermanentFailure(sprintf "malformed migration payload: %s" msg)
             | Ok payload ->
                 let! result =
-                    store.ExecuteMigration(
-                        ctx.ScopeId,
-                        payload.SchemaId,
-                        payload.Migrations,
-                        UserId payload.ActorUserId
-                    )
+                    store.ExecuteMigration(ctx.ScopeId, payload.SchemaId, payload.Migrations, payload.ActorUserId)
 
                 match result with
                 | Ok _ -> return Success

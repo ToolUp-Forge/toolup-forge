@@ -763,12 +763,7 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                                 // reads admits every module.
                                 try
                                     let! perms =
-                                        runAsync (
-                                            permStore.GetEffectivePermissions(
-                                                UserId user.UserId.Value,
-                                                TeamId scope.ScopeId
-                                            )
-                                        )
+                                        runAsync (permStore.GetEffectivePermissions(user.UserId, TeamId scope.ScopeId))
 
                                     ctx.Items["ToolUp.ModulePermissions"] <- box perms
 
@@ -912,7 +907,7 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                         if permissionFault.Value.IsNone && not (AuthenticatedUser.isAnonymous user) then
                             match ctx.RequestServices.GetService(typeof<IPlatformAdminStore>) with
                             | :? IPlatformAdminStore as adminStore ->
-                                let! isAdmin = runAsync (adminStore.IsPlatformAdmin(UserId user.UserId.Value))
+                                let! isAdmin = runAsync (adminStore.IsPlatformAdmin(user.UserId))
 
                                 if isAdmin then
                                     ctx.Items["ToolUp.PlatformRole"] <- box PlatformRole.PlatformAdmin

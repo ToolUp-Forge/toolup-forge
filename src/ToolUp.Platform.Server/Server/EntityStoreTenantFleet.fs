@@ -50,10 +50,10 @@ type EntityStoreTenantFleet
     // surface (Provision, DeployTo, Evict, Restart); read-only paths
     // (Get, List, IsSlugAvailable) bypass it. Per-(region,slug) lock
     // for the slug-uniqueness window inside ProvisionTenant.
-    let tenantLocks = ConcurrentDictionary<TenantId, SemaphoreSlim>()
+    let tenantLocks = ConcurrentDictionary<string, SemaphoreSlim>()
     let slugLocks = ConcurrentDictionary<string * string, SemaphoreSlim>()
 
-    let acquireTenantLock (tenantId: TenantId) =
+    let acquireTenantLock (tenantId: string) =
         tenantLocks.GetOrAdd(tenantId, fun _ -> new SemaphoreSlim(1, 1))
 
     let acquireSlugLock (slug: string) (region: string) =
@@ -143,7 +143,7 @@ type EntityStoreTenantFleet
                     slugLock.Release() |> ignore
         }
 
-        member _.GetTenant(tenantId: TenantId) : Async<Result<Tenant, TenantFleetError>> = async {
+        member _.GetTenant(tenantId: string) : Async<Result<Tenant, TenantFleetError>> = async {
             let! result = entityStore.Get<Tenant>(Tenant.CatalogScope, Tenant.EntityType, tenantId)
 
             return
@@ -235,7 +235,7 @@ type EntityStoreTenantFleet
                 lock.Release() |> ignore
         }
 
-        member self.GetTenantHealth(tenantId: TenantId) : Async<Result<TenantHealth, TenantFleetError>> = async {
+        member self.GetTenantHealth(tenantId: string) : Async<Result<TenantHealth, TenantFleetError>> = async {
             let! tenant = (self :> ITenantFleet).GetTenant tenantId
 
             match tenant with
@@ -267,7 +267,7 @@ type EntityStoreTenantFleet
         }
 
         member self.EvictTenant
-            (tenantId: TenantId, byUserId: UserId, reason: string)
+            (tenantId: string, byUserId: UserId, reason: string)
             : Async<Result<unit, TenantFleetError>> =
             async {
                 let lock = acquireTenantLock tenantId
@@ -322,7 +322,7 @@ type EntityStoreTenantFleet
                     lock.Release() |> ignore
             }
 
-        member self.RestartTenant(tenantId: TenantId, byUserId: UserId) : Async<Result<unit, TenantFleetError>> = async {
+        member self.RestartTenant(tenantId: string, byUserId: UserId) : Async<Result<unit, TenantFleetError>> = async {
             let lock = acquireTenantLock tenantId
             do! lock.WaitAsync() |> Async.AwaitTask
 

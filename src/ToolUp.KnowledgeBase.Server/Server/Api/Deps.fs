@@ -40,7 +40,7 @@ type KnowledgeApiDeps = {
     Notifications: INotificationChannel
     Logger: ILogger
     Scope: StorageScope
-    UserId: string
+    UserId: UserId
     VectorScope: VectorScope
     VectorStore: IVectorStore option
     /// Phase 115 — unified deletion/erasure seam over every retrieval
@@ -523,7 +523,7 @@ module KnowledgeApiDeps =
             Notifications = notifications
             Logger = logger
             Scope = scope
-            UserId = userId
+            UserId = UserId userId
             VectorScope = vectorScope
             VectorStore = vectorStore
             IndexLifecycle = indexLifecycle
@@ -579,7 +579,7 @@ module KnowledgeApiDeps =
     /// already logged the collapse loudly; this is the operation-level
     /// refusal.
     let guardResolvedScope (deps: KnowledgeApiDeps) : Result<unit, string> =
-        if not deps.ScopeResolvedFromRequest && deps.UserId = "anonymous" then
+        if not deps.ScopeResolvedFromRequest && deps.UserId = UserId "anonymous" then
             Error
                 "Storage scope is unresolved for this request (ScopeResolutionMiddleware not wired); refusing the destructive operation to avoid mutating the shared anonymous container."
         else

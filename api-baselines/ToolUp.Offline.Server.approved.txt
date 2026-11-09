@@ -13,10 +13,10 @@ ToolUp.Offline.OfflineSyncHandler+OfflineEntityReplay.EntityType : System.String
 ToolUp.Offline.OfflineSyncHandler+OfflineEntityReplayModule (class)
 ToolUp.Offline.OfflineSyncHandler+OfflineEntityReplayModule.ofJson`1(System.String) : ToolUp.Offline.OfflineSyncHandler+OfflineEntityReplay
 ToolUp.Offline.OfflineSyncHandler+OfflineReplayContext (class)
-ToolUp.Offline.OfflineSyncHandler+OfflineReplayContext..ctor(ToolUp.Platform.Infra.IEntityStore+IEntityStore, System.String, System.String)
+ToolUp.Offline.OfflineSyncHandler+OfflineReplayContext..ctor(ToolUp.Platform.Infra.IEntityStore+IEntityStore, System.String, ToolUp.Platform.UserId)
 ToolUp.Offline.OfflineSyncHandler+OfflineReplayContext.ScopeId : System.String { get }
 ToolUp.Offline.OfflineSyncHandler+OfflineReplayContext.Store : ToolUp.Platform.Infra.IEntityStore+IEntityStore { get }
-ToolUp.Offline.OfflineSyncHandler+OfflineReplayContext.UserId : System.String { get }
+ToolUp.Offline.OfflineSyncHandler+OfflineReplayContext.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Offline.OfflineSyncHandler+OfflineReplayError (class)
 ToolUp.Offline.OfflineSyncHandler+OfflineReplayError.IsReplayConflict : System.Boolean { get }
 ToolUp.Offline.OfflineSyncHandler+OfflineReplayError.IsReplayRejected : System.Boolean { get }

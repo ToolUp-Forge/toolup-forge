@@ -82,7 +82,7 @@ type ConsentSource =
 type ConsentRecord = {
     /// Entity id — the subject key. Equals `Subject` (the store keys
     /// records by subject, one head record per subject per scope).
-    Id: EntityId
+    Id: string
     /// Entity-type discriminator. Always `"ConsentRecord"`.
     Type: string
     /// Store-assigned monotonic version. Overwritten on every save.

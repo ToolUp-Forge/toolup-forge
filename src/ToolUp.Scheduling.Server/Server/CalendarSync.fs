@@ -96,7 +96,7 @@ type CalendarLink = {
     Kind: string
     ExternalCalendarId: ExternalCalendarId
     /// The user whose credentials the bridge resolves per call.
-    UserId: string
+    UserId: UserId
     /// `ConflictPolicy.toString` form. Persisted as a string so the
     /// stored shape stays a plain record of primitives.
     Policy: string
@@ -438,7 +438,7 @@ type CalendarSync
         StartUtc = DateTimeOffset.MinValue
         EndUtc = DateTimeOffset.MinValue
         Status = Confirmed
-        BookedBy = link.UserId
+        BookedBy = link.UserId.Value
         BookedFor = None
         Recurrence = None
         ParentBookingId = None
@@ -506,11 +506,11 @@ type CalendarSync
     let applyExternally (scopeId: string) (link: CalendarLink) (local: Booking option) (incoming: Booking) = async {
         match local with
         | None ->
-            match! scheduler.Book(scopeId, incoming, link.UserId) with
+            match! scheduler.Book(scopeId, incoming, link.UserId.Value) with
             | Ok _ -> return true
             | Error _ -> return false
         | Some b when onlyTimesMoved b incoming ->
-            match! scheduler.Reschedule(scopeId, b.Id, incoming.StartUtc, incoming.EndUtc, link.UserId) with
+            match! scheduler.Reschedule(scopeId, b.Id, incoming.StartUtc, incoming.EndUtc, link.UserId.Value) with
             | Ok _ -> return true
             | Error _ -> return false
         | Some b ->
@@ -530,7 +530,7 @@ type CalendarSync
                     ParentBookingId = b.ParentBookingId
             }
 
-            match! scheduler.Book(scopeId, merged, link.UserId) with
+            match! scheduler.Book(scopeId, merged, link.UserId.Value) with
             | Ok _ -> return true
             | Error _ -> return false
     }
@@ -543,7 +543,7 @@ type CalendarSync
         // whose credentials the bridge used — which is already the user
         // the applied booking itself is booked by (`defaultsFor`).
         // `EntityPrincipal.system` would record a write nobody made.
-        let actor = EntityPrincipal.ofPrincipal link.UserId
+        let actor = EntityPrincipal.ofPrincipal link.UserId.Value
 
         match tryBridge link.Kind with
         | Error _ -> return outcome
@@ -666,7 +666,7 @@ type CalendarSync
                     ResourceId = resourceId
                     Kind = kind
                     ExternalCalendarId = externalCalendarId
-                    UserId = userId
+                    UserId = UserId userId
                     Policy = ConflictPolicy.toString policy
                     CursorUtc = None
                 }

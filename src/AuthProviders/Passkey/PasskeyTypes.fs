@@ -118,7 +118,7 @@ type PasskeyCredentialRecord = {
     /// UserId). Ties every credential a user enrols to one identity.
     UserHandle: string
     /// The platform identity (`sub`) this credential authenticates as.
-    UserId: string
+    UserId: UserId
     /// Display name captured at enrolment.
     DisplayName: string
     /// Optional email — drives the pending-invite team-membership path.
@@ -173,7 +173,7 @@ type CeremonyOptionsResponse = {
 type SessionTokenResponse = {
     Token: string
     ExpiresInSeconds: int
-    UserId: string
+    UserId: UserId
 }
 
 /// The two ceremony kinds a pending challenge belongs to.

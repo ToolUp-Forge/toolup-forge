@@ -1,6 +1,7 @@
 module ToolUp.RAG.IngestionTypes
 
 open System
+open ToolUp.Platform
 open System.Collections.Concurrent
 open System.Threading
 open System.Threading.Channels
@@ -50,7 +51,7 @@ type IngestionJob = {
     /// path (e.g. the SDK's post-save vectorisation hook); observers
     /// treat `None` as "no re-auth, fall back to historical
     /// publish-to-UploadedBy" for backwards compatibility.
-    OriginatingUserId: string option
+    OriginatingUserId: UserId option
     /// Phase 867 — the ingestion attempt this chunk belongs to. `None`
     /// when the producer mints no attempt, or the job was persisted
     /// before attempts existed; observers then fall back to the document's
@@ -75,7 +76,7 @@ type DocumentIngestionJob = {
     Container: string
     /// User id of the originating principal. See `IngestionJob.OriginatingUserId`
     /// for the re-auth contract. `None` for non-user enqueue paths.
-    OriginatingUserId: string option
+    OriginatingUserId: UserId option
     /// Phase 867 — the attempt this enqueue starts; copied onto every
     /// per-chunk `IngestionJob` and retry payload. See `IngestionJob.Attempt`.
     Attempt: IngestionAttempt option
@@ -809,7 +810,7 @@ type IngestionRetryPayload = {
     Scope: VectorScope
     ScopeId: string
     Container: string
-    OriginatingUserId: string option
+    OriginatingUserId: UserId option
     /// Phase 867 — the attempt the retried chunk belongs to. Absent from a
     /// payload persisted before 867, which reads back as `None`.
     Attempt: IngestionAttempt option

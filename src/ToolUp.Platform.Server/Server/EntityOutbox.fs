@@ -54,7 +54,7 @@ type OutboxIntent = {
     IntentId: Guid
     ScopeId: string
     EntityType: string
-    EntityId: EntityId
+    EntityId: string
     /// Head version observed before the save, plus one. The save
     /// commits at (at least) this version — the relay's witness for
     /// "did the mutation actually land".
@@ -100,7 +100,7 @@ type OutboxEntityStore
     let settle = defaultArg settleWindow defaultSettleWindow
     let abandon = defaultArg abandonWindow defaultAbandonWindow
 
-    let headVersion (scopeId: string) (entityType: string) (entityId: EntityId) : Async<int> = async {
+    let headVersion (scopeId: string) (entityType: string) (entityId: string) : Async<int> = async {
         // `EntityRef<'T>` is a phantom-typed metadata record — no
         // payload materialisation, so `obj` is safe at the relay
         // boundary where the concrete type is unknown.
@@ -139,7 +139,7 @@ type OutboxEntityStore
             scopeId: string,
             actor: EntityPrincipal,
             entityType: string,
-            entityId: EntityId,
+            entityId: string,
             entity: 'T,
             events: ModuleEvent list
         ) : Async<Result<EntityRef<'T>, EntityError>> =

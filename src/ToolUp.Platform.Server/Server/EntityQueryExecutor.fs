@@ -55,7 +55,7 @@ type ExecutorContext = {
     /// `Ne`/`Not` subtract them from `AllEntityIds`, so an entry left
     /// behind by a refused removal must not reach this list. `value` is the
     /// key as indexed — never its storage encoding.
-    LookupByIndex: string -> string -> Async<EntityId list>
+    LookupByIndex: string -> string -> Async<string list>
     /// Enumerate every key for an index. Used by range predicates
     /// (`Gt`/`Gte`/`Lt`/`Lte`), which compare each key to the bound and
     /// pass the matching ones to `LookupByIndex`. Phase 974 — the keys are
@@ -67,10 +67,10 @@ type ExecutorContext = {
     /// List every entity id in the scope (regardless of index
     /// values). Used for complement predicates that need to subtract
     /// matched ids from the universe.
-    AllEntityIds: unit -> Async<EntityId list>
+    AllEntityIds: unit -> Async<string list>
     /// Fetch a single entity by id and deserialise to 'T. Returns
     /// `None` for missing entities (drift).
-    LoadEntity: EntityId -> Async<string option>
+    LoadEntity: string -> Async<string option>
     /// Field-name-keyed extractor used for `OrderBy` — given the
     /// loaded entity JSON, return the value of the named field as a
     /// string. Returns `None` when the field isn't present.
@@ -80,13 +80,13 @@ type ExecutorContext = {
     /// from the field's per-(entityType, field) sparse index within
     /// the scope. The `BlobEntityStore` wires this to `ISparseIndex.Search`;
     /// a deployment with no sparse index wired returns the empty list.
-    FullTextSearch: string -> string -> Async<EntityId list>
+    FullTextSearch: string -> string -> Async<string list>
 }
 
 /// Resolve a predicate to the set of matching entity ids. Used as
 /// the executor's inner loop; `Query` wraps this with sort + paging
 /// + entity load + deserialisation.
-let rec private resolveIds (ctx: ExecutorContext) (predicate: Predicate) : Async<Set<EntityId>> = async {
+let rec private resolveIds (ctx: ExecutorContext) (predicate: Predicate) : Async<Set<string>> = async {
     match predicate with
     | Eq(field, value) ->
         let! ids = ctx.LookupByIndex field value

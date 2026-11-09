@@ -1068,5 +1068,5 @@ module NarrativeCalculations =
             [
                 definition calculations,
                 FactTool.define AuthorisedCalculation.ToolName (fun c argsJson ->
-                    executeWith calculations c.Store c.Gate c.Registry c.Scope c.UserId argsJson)
+                    executeWith calculations c.Store c.Gate c.Registry c.Scope c.UserId.Value argsJson)
             ]

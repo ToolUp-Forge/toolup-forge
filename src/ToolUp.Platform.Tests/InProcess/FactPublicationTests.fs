@@ -86,8 +86,8 @@ let private asUser (userId: string) (teamId: string) (body: Async<'T>) : 'T =
         use _ =
             RequestViewerContext.establish (fun () ->
                 Some {
-                    UserId = userId
-                    ActiveTeamId = Some teamId
+                    UserId = UserId userId
+                    ActiveTeamId = Some(TeamId teamId)
                     IsPlatformAdmin = false
                 })
 
@@ -766,7 +766,7 @@ let private grantTests =
             let grant = propose w north
 
             match asUser "dan" group (w.Publication.Consent(teamScope group, grant.GrantId)) with
-            | Error(PublicationNotOwner(team, Some "dan")) -> Expect.equal team group "names the team"
+            | Error(PublicationNotOwner(team, Some(UserId "dan"))) -> Expect.equal team (TeamId group) "names the team"
             | other -> failtestf "a member may not consent, got %A" other
 
             match asUser "bob" south (w.Publication.Consent(teamScope south, grant.GrantId)) with
@@ -1101,9 +1101,9 @@ let private auditTests =
                 |> List.filter (fun (e, _) -> e.EventType = FactPublicationEvents.ConsentedType)
                 |> List.map (fun (_, p) -> p.ByUserId)
 
-            Expect.equal (consentedIn north) [ Some "ann" ] "the source owner's consent, in the source"
-            Expect.equal (consentedIn group) [ Some "cat" ] "the target owner's consent, in the target"
-            Expect.equal grant.SourceConsent.Value.ByUserId "ann" "recorded on the grant"
+            Expect.equal (consentedIn north) [ Some(UserId "ann") ] "the source owner's consent, in the source"
+            Expect.equal (consentedIn group) [ Some(UserId "cat") ] "the target owner's consent, in the target"
+            Expect.equal grant.SourceConsent.Value.ByUserId (UserId "ann") "recorded on the grant"
         }
 
         test "a refused run is audited on the source side and writes nothing" {

@@ -31,7 +31,7 @@ type ConversationViewer = TeamPolicyViewer
 /// What one request knows about its team's policy.
 type TeamVisibilityState = {
     /// The team the request is scoped to.
-    TeamId: string
+    TeamId: TeamId
     /// The team's storage container.
     Container: string
     /// The deployment's declared default and allowed set.
@@ -43,7 +43,7 @@ type TeamVisibilityState = {
 
 module ConversationVisibility =
     let private isAuthor (viewer: ConversationViewer) (owner: string) =
-        not (String.IsNullOrEmpty owner) && viewer.UserId = owner
+        not (String.IsNullOrEmpty owner) && viewer.UserId = UserId owner
 
     /// The levels in force when the conversation was created and now.
     let levels (state: TeamVisibilityState) (createdAt: DateTime) =
@@ -77,8 +77,18 @@ module ConversationVisibility =
         isAuthor viewer owner
         || (match levels state createdAt with
             | Some(atCreation, current) ->
-                TeamConversationVisibility.canSee atCreation viewer.UserId owner viewer.TeamRole viewer.IsPlatformAdmin
-                && TeamConversationVisibility.canSee current viewer.UserId owner viewer.TeamRole viewer.IsPlatformAdmin
+                TeamConversationVisibility.canSee
+                    atCreation
+                    viewer.UserId.Value
+                    owner
+                    viewer.TeamRole
+                    viewer.IsPlatformAdmin
+                && TeamConversationVisibility.canSee
+                    current
+                    viewer.UserId.Value
+                    owner
+                    viewer.TeamRole
+                    viewer.IsPlatformAdmin
             | None -> false)
 
     /// Whether `viewer` may delete or change the conversation: its author;
@@ -138,7 +148,7 @@ module ConversationVisibility =
 
                 return
                     Some {
-                        TeamId = teamId
+                        TeamId = TeamId teamId
                         Container = container
                         Settings = TeamPolicySettings.conversationOrUnrestricted ctx.RequestServices
                         Record =

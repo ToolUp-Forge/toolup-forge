@@ -65,7 +65,7 @@ type EventStoreErasureHandler(eventStore: IEventStore) =
             eventStore.Erase(scopeId, subjectUserId, policy, false)
 
         member _.Preview(scopeId, subjectUserId, policy) = async {
-            let! result = eventStore.Erase(scopeId, UserId subjectUserId.Value, policy, true)
+            let! result = eventStore.Erase(scopeId, subjectUserId, policy, true)
 
             return
                 match result with

@@ -1,0 +1,23 @@
+module Server.Identity
+
+open ToolUp.Platform
+
+type Appointment = {
+    Id: EntityId
+    Tenant: TenantId
+    Owner: ScopeId
+}
+
+let lookup (ids: Map<string, EntityId>) (key: string) : EntityId option = Map.tryFind key ids
+
+let teamScope = ScopeKey.Team "acme"
+let userScope = ScopeKey.User("alice")
+
+let scopeOf (teamId: string) = ScopeKey.Team teamId
+
+let addAlice (store: ITeamStore) (teamId: string) = store.AddMember(teamId, "alice", Member)
+
+let activeTeam scope = StorageScope.tryTeamId scope
+
+type ITenantSource =
+    abstract Current: unit -> TenantId

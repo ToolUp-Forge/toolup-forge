@@ -54,7 +54,7 @@ let private SlotIdIndex = "SlotId"
 /// `Type` matches the registered entity-type name; `Version` is
 /// assigned by `IEntityStore.Save`.
 type AdSlotEntity = {
-    Id: EntityId
+    Id: string
     Type: string
     Version: int
     AdClientId: string

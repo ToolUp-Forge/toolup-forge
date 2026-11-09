@@ -6,6 +6,7 @@ open ToolUp.Scheduling.ICalendarBridge
 open ToolUp.Scheduling.Tests.Contracts
 open ToolUp.Scheduling.Tests.InProcess.InMemoryCalendarBridge
 open ToolUp.Platform.Compose
+open ToolUp.Platform
 
 // ─── Binding 1 of the ICalendarBridge contract pack ─────────────────
 //
@@ -27,7 +28,7 @@ let tests =
                 ScopeId = "team-" + Guid.NewGuid().ToString("N").Substring(0, 8)
                 ResourceId = "room-101"
                 ExternalCalendarId = CalendarId
-                UserId = "alice"
+                UserId = UserId "alice"
             }
             MissingCalendarId = "cal-that-does-not-exist"
             ExternalEdit = fun eventId transform at -> bridge.ExternalEdit(CalendarId, eventId, transform, at)

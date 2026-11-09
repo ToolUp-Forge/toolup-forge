@@ -44,7 +44,7 @@ type DsrAuditEventKind =
 type DsrAuditEvent = {
     RequestId: DataSubjectRequestId
     Kind: DsrAuditEventKind
-    SubjectUserId: string
+    SubjectUserId: UserId
     ScopeId: string
     Actor: string
     Reason: string
@@ -192,7 +192,7 @@ let auditToLog (auditLog: IAuditLog) : AuditOnDsr =
                 | ErasureFailed -> "ErasureFailed"
                 | ExportCompleted -> "ExportCompleted"
                 | ExportSigned -> "ExportSigned"
-            SubjectUserId = UserId ev.SubjectUserId
+            SubjectUserId = ev.SubjectUserId
             Actor = ev.Actor
             Reason = ev.Reason
             Properties = ev.Properties
@@ -269,7 +269,7 @@ let create
         audit {
             RequestId = request.Id
             Kind = kind
-            SubjectUserId = request.SubjectUserId
+            SubjectUserId = UserId request.SubjectUserId
             ScopeId = scopeId
             Actor = request.RequestedBy
             Reason = request.Reason
@@ -524,7 +524,7 @@ let create
                                         audit {
                                             RequestId = ticket
                                             Kind = ExportSigned
-                                            SubjectUserId = ""
+                                            SubjectUserId = UserId ""
                                             ScopeId = scopeId
                                             Actor = actorUserId
                                             Reason = "signed export download"

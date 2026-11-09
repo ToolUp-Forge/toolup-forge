@@ -92,8 +92,8 @@ let tests =
             match diagnoseNow storage with
             | [ d ] ->
                 Expect.equal d.Kind EmailKeyedRow "kind"
-                Expect.equal d.UserId "ghost@example.com" "userId"
-                Expect.equal d.TeamId (Some "team-a") "teamId"
+                Expect.equal d.UserId (UserId "ghost@example.com") "userId"
+                Expect.equal d.TeamId (Some(TeamId "team-a")) "teamId"
                 Expect.equal d.ProposedRepair ReAddUnderResolvedId "report-only"
             | other -> failtestf "expected exactly one finding, got %A" other
 
@@ -124,7 +124,10 @@ let tests =
 
             Expect.equal
                 (Set.ofList kinds)
-                (Set.ofList [ OrphanTeamRow, Some "team-purged"; DanglingActiveTeam, Some "team-b" ])
+                (Set.ofList [
+                    OrphanTeamRow, Some(TeamId "team-purged")
+                    DanglingActiveTeam, Some(TeamId "team-b")
+                ])
                 "both drift kinds classified against the right team"
 
         testCase "pointer-only user (no membership blob) is a dangling pointer"
@@ -136,7 +139,7 @@ let tests =
             match diagnoseNow storage with
             | [ d ] ->
                 Expect.equal d.Kind DanglingActiveTeam "kind"
-                Expect.equal d.UserId "user-gone" "userId"
+                Expect.equal d.UserId (UserId "user-gone") "userId"
                 Expect.equal d.ProposedRepair ClearActiveTeamPointer "safe repair"
             | other -> failtestf "expected exactly one finding, got %A" other
 

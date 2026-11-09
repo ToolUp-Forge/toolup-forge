@@ -261,14 +261,14 @@ ToolUp.Platform.Audit.DataSubjectRequestApiHandler+DsrAsyncDeps.Scheduler : Tool
 ToolUp.Platform.Audit.DataSubjectRequestApiHandler+DsrAsyncDeps.Signer : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Audit.IExportEnvelopeSigner] { get }
 ToolUp.Platform.Audit.DataSubjectRequestApiHandler+DsrAsyncDeps.Store : ToolUp.Platform.Audit.IBackgroundExportStore { get }
 ToolUp.Platform.Audit.DataSubjectRequestApiHandler+DsrAuditEvent (class)
-ToolUp.Platform.Audit.DataSubjectRequestApiHandler+DsrAuditEvent..ctor(System.String, ToolUp.Platform.Audit.DataSubjectRequestApiHandler+DsrAuditEventKind, System.String, System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String])
+ToolUp.Platform.Audit.DataSubjectRequestApiHandler+DsrAuditEvent..ctor(System.String, ToolUp.Platform.Audit.DataSubjectRequestApiHandler+DsrAuditEventKind, ToolUp.Platform.UserId, System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String])
 ToolUp.Platform.Audit.DataSubjectRequestApiHandler+DsrAuditEvent.Actor : System.String { get }
 ToolUp.Platform.Audit.DataSubjectRequestApiHandler+DsrAuditEvent.Kind : ToolUp.Platform.Audit.DataSubjectRequestApiHandler+DsrAuditEventKind { get }
 ToolUp.Platform.Audit.DataSubjectRequestApiHandler+DsrAuditEvent.Properties : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
 ToolUp.Platform.Audit.DataSubjectRequestApiHandler+DsrAuditEvent.Reason : System.String { get }
 ToolUp.Platform.Audit.DataSubjectRequestApiHandler+DsrAuditEvent.RequestId : System.String { get }
 ToolUp.Platform.Audit.DataSubjectRequestApiHandler+DsrAuditEvent.ScopeId : System.String { get }
-ToolUp.Platform.Audit.DataSubjectRequestApiHandler+DsrAuditEvent.SubjectUserId : System.String { get }
+ToolUp.Platform.Audit.DataSubjectRequestApiHandler+DsrAuditEvent.SubjectUserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.Audit.DataSubjectRequestApiHandler+DsrAuditEventKind (class)
 ToolUp.Platform.Audit.DataSubjectRequestApiHandler+DsrAuditEventKind.ErasureCompleted : ToolUp.Platform.Audit.DataSubjectRequestApiHandler+DsrAuditEventKind { get }
 ToolUp.Platform.Audit.DataSubjectRequestApiHandler+DsrAuditEventKind.ErasureFailed : ToolUp.Platform.Audit.DataSubjectRequestApiHandler+DsrAuditEventKind { get }

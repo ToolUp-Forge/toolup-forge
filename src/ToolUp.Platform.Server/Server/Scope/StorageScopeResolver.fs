@@ -40,7 +40,7 @@ type AuthenticatedEphemeralScopeResolver() =
             return
                 match request.User with
                 | Some user when not (AuthenticatedUser.isAnonymous user) ->
-                    Ok(StorageScope.ofKey false (ScopeKey.User(UserId user.UserId.Value)))
+                    Ok(StorageScope.ofKey false (ScopeKey.User(user.UserId)))
                 | _ -> Error NotAuthenticated
         }
 
@@ -51,7 +51,7 @@ type AuthenticatedScopeResolver() =
             return
                 match request.User with
                 | Some user when not (AuthenticatedUser.isAnonymous user) ->
-                    Ok(StorageScope.ofKey true (ScopeKey.User(UserId user.UserId.Value)))
+                    Ok(StorageScope.ofKey true (ScopeKey.User(user.UserId)))
                 | _ -> Error NotAuthenticated
         }
 
@@ -143,7 +143,7 @@ type TeamScopeResolver
                     | true, cached -> return Ok cached
                     | false, _ ->
                         try
-                            let! activeTeam = teamStore.GetActiveTeam(UserId user.UserId.Value)
+                            let! activeTeam = teamStore.GetActiveTeam(user.UserId)
                             let entry = cache.CreateEntry key
                             entry.SlidingExpiration <- TimeSpan.FromMinutes 5.0
                             entry.Value <- activeTeam
@@ -167,11 +167,11 @@ type TeamScopeResolver
                     // next request. One blob read per team-scoped
                     // request; acceptable cost for the guarantee.
                     try
-                        let! role = teamStore.GetMemberRole(teamId, UserId user.UserId.Value)
+                        let! role = teamStore.GetMemberRole(teamId, user.UserId)
 
                         match role with
                         | Some _ -> return Ok(StorageScope.ofKey true (ScopeKey.Team teamId))
-                        | None -> return Error(NotTeamMember(TeamId teamId.Value))
+                        | None -> return Error(NotTeamMember(teamId))
                     with ex ->
                         return Error(ScopeResolutionFailed ex.Message)
         }

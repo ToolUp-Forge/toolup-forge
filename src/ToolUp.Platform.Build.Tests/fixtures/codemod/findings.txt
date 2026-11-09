@@ -1,4 +1,4 @@
-Codemod: 75 site(s) in 15 file(s) need human review (not rewritten):
+Codemod: 82 site(s) in 16 file(s) need human review (not rewritten):
   src/Client/App.fs
     L14 [66-dev-default-user-id] DevDefaultUserId = "dev-admin"
       -> Phase 66: `ClientConfig.DevDefaultUserId` is deleted — the public-utility-with-admin shape it approximated is `Surfaces = Surfaces.anonymousAndIndividual` (worked example 4)
@@ -103,17 +103,32 @@ Codemod: 75 site(s) in 15 file(s) need human review (not rewritten):
       -> Phase 1067: `WebhookDispatcherService` has one factory: `WebhookDispatcher.create { Registry = …; DeliveryLog = …; EventStore = …; HttpClient = …; RetryPolicy = …; Logger = …; ActivitySink = …; SecretStore = …; GetRateLimiter = …; UrlPolicy = … } WebhookOptions.defaults`, with `{ WebhookOptions.defaults with DistributedLock = Some lock }` where `createWithLock` passed a lock
     L27 [1067-declared-data-sources] services |> DeclaredDelivery.withDeclaredDataSources declared DeclaredDelivery.DefaultWatchPoll
       -> Phase 1067: `DeclaredDelivery.withDeclaredDataSources` takes the deployment's `ServerConfig` first (it registers through `Hosting.register`): `withDeclaredDataSources config declared watchPoll services`
+  src/Server/Identity.fs
+    L16 [878-scopekey-payload] let scopeOf (teamId: string) = ScopeKey.Team teamId
+      -> Phase 878: `ScopeKey.Team` carries a `TeamId` and `ScopeKey.User` a `UserId`: wrap a string payload (`ScopeKey.Team(TeamId teamId)`), and a pattern `ScopeKey.Team teamId` binds the typed id (`teamId.Value` is the string)
+    L18 [878-typed-seam-call] let addAlice (store: ITeamStore) (teamId: string) = store.AddMember(teamId, "alice", Member)
+      -> Phase 878: if this is a platform store or service seam, its user and team id parameters are `UserId` / `TeamId` now: wrap a string at the call (`UserId userId`, or `UserId.tryCreate raw` for an id from a request), and read `.Value` where a string is needed; `ITeamStore.GetActiveTeam` answers `TeamId option`
+    L20 [878-team-id-reader] let activeTeam scope = StorageScope.tryTeamId scope
+      -> Phase 878: `StorageScope.tryTeamId` answers `TeamId option`: map `TeamId.value` where a string is needed
+    L23 [878-retired-abbreviation-site] abstract Current: unit -> TenantId
+      -> Phase 878: `EntityId`, `TenantId` and `ScopeId` are gone: each was an abbreviation for `string`. If this names the type, write `string`; if it is a value or a field of your own with the same name, it is unchanged
   src/Server/Jobs.fs
     L8 [1066-schedule-call] match! scheduler.Schedule registration with
       -> Phase 1066: `Schedule` answers `Ok(Scheduled jobId)` for a job it created and `Ok(Coalesced jobId)` for one an idempotency key recovered: `Ok _` still compiles; a site that reads the id matches both (`Ok(Scheduled jobId | Coalesced jobId)`) or calls `ScheduleOutcome.jobId`, and a site that fires what it schedules fires only `Scheduled`, so a replayed request runs once
     L10 [1066-trigger-once-call] let! _ = scheduler.TriggerOnce(registration.ScopeId, jobId, "nightly")
       -> Phase 1066: `TriggerOnce` refuses with a `TriggerError` (`JobNotFound` / `JobCancelled` / `JobDisabled` / `SchedulerStopping` / `QuotaExceeded` / `DispatchRefused`): match the cases, or render the old sentence with `TriggerError.message`
+    L10 [878-typed-seam-call] let! _ = scheduler.TriggerOnce(registration.ScopeId, jobId, "nightly")
+      -> Phase 878: if this is a platform store or service seam, its user and team id parameters are `UserId` / `TeamId` now: wrap a string at the call (`UserId userId`, or `UserId.tryCreate raw` for an id from a request), and read `.Value` where a string is needed; `ITeamStore.GetActiveTeam` answers `TeamId option`
     L18 [1066-scheduler-implementer] member _.TriggerOnce(scopeId, jobId, byUserId) = async {
       -> Phase 1066: an `IJobScheduler` implementer: `Schedule` returns `ScheduleOutcome` and `TriggerOnce` returns `TriggerError`; a decorator forwards both unchanged, and a scheduler builds on `SchedulerPolicy` (`scheduleValidated`, `triggerable`, `setStatus`, `eventTriggered`) instead of re-typing the policy
+    L18 [878-typed-seam-call] member _.TriggerOnce(scopeId, jobId, byUserId) = async {
+      -> Phase 878: if this is a platform store or service seam, its user and team id parameters are `UserId` / `TeamId` now: wrap a string at the call (`UserId userId`, or `UserId.tryCreate raw` for an id from a request), and read `.Value` where a string is needed; `ITeamStore.GetActiveTeam` answers `TeamId option`
     L19 [1157-string-scope-call] match! inner.Get(scopeId, jobId) with
       -> Phase 1157: an `IFactStore` member takes a `ResolvedScope`, never a string: on a request `ScopeResolution.forRequest ctx`, in a job `JobContext.Scope`, for declared standing work a principal resolved through `DeclaredPrincipalResolver`. Every member answers `Result<_, FactStoreError>`: match it, or `FactStoreResult.orRaise` where the caller has no failure channel (a string-keyed store's own member is not affected)
     L23 [1066-trigger-once-call] | Some _ -> return! inner.TriggerOnce(scopeId, jobId, byUserId)
       -> Phase 1066: `TriggerOnce` refuses with a `TriggerError` (`JobNotFound` / `JobCancelled` / `JobDisabled` / `SchedulerStopping` / `QuotaExceeded` / `DispatchRefused`): match the cases, or render the old sentence with `TriggerError.message`
+    L23 [878-typed-seam-call] | Some _ -> return! inner.TriggerOnce(scopeId, jobId, byUserId)
+      -> Phase 878: if this is a platform store or service seam, its user and team id parameters are `UserId` / `TeamId` now: wrap a string at the call (`UserId userId`, or `UserId.tryCreate raw` for an id from a request), and read `.Value` where a string is needed; `ITeamStore.GetActiveTeam` answers `TeamId option`
   src/Server/Models.fs
     L58 [1094-isolated-backend] interface IIsolatedComputeBackend with
       -> Phase 1094: `IIsolatedComputeBackend` is removed: move the posture into the backend's `Capabilities` (`{ BackendCapabilities.none with Isolated = Some <posture> }`) and delete this interface block; the codemod declared `BackendCapabilities.none`, which reads as standard-only until you do
@@ -178,4 +193,5 @@ Codemod: 75 site(s) in 15 file(s) need human review (not rewritten):
     Phase 815 — docs/migrations/815-remove-open-deprecations.md
     Phase 876 — docs/migrations/876-composition-contributions.md
     Phase 877 — docs/migrations/877-nested-server-config.md
+    Phase 878 — docs/migrations/878-typed-identity.md
     Phase 879 — docs/migrations/879-shell-slots.md

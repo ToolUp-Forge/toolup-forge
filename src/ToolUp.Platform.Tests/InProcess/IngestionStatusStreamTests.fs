@@ -71,7 +71,7 @@ let private mkDeps
             Container = "team-stream"
             Persist = true
         }
-        UserId = "user-1"
+        UserId = UserId "user-1"
         VectorScope = Team "stream-team"
         VectorStore = None
         IndexLifecycle = None

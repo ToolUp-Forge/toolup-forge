@@ -2435,7 +2435,7 @@ ToolUp.Platform.Infra.ModelTransitionAuthor.IsPolicyVerdict : System.Boolean { g
 ToolUp.Platform.Infra.ModelTransitionAuthor.Tag : System.Int32 { get }
 ToolUp.Platform.Infra.ModelTransitionAuthor+LocalUser (class)
 ToolUp.Platform.Infra.ModelTransitionAuthor+LocalUser.role : ToolUp.Platform.TeamRole { get }
-ToolUp.Platform.Infra.ModelTransitionAuthor+LocalUser.userId : System.String { get }
+ToolUp.Platform.Infra.ModelTransitionAuthor+LocalUser.userId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.Infra.ModelTransitionAuthor+PeerActor (class)
 ToolUp.Platform.Infra.ModelTransitionAuthor+PeerActor.actorId : System.String { get }
 ToolUp.Platform.Infra.ModelTransitionAuthor+PeerActor.peerId : System.String { get }
@@ -2621,7 +2621,7 @@ ToolUp.Platform.Infra.OAuthFlowDescriptor.DisplayName : System.String { get }
 ToolUp.Platform.Infra.OAuthFlowDescriptor.HelpUrl : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.Infra.OAuthFlowDescriptor.Scopes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.Infra.OAuthFlowState (class)
-ToolUp.Platform.Infra.OAuthFlowState..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.DateTime, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.OAuthCorrelationKey])
+ToolUp.Platform.Infra.OAuthFlowState..ctor(System.String, System.String, System.String, System.String, System.String, ToolUp.Platform.UserId, System.DateTime, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.OAuthCorrelationKey])
 ToolUp.Platform.Infra.OAuthFlowState.CodeVerifier : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.Infra.OAuthFlowState.Container : System.String { get }
 ToolUp.Platform.Infra.OAuthFlowState.Correlation : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.OAuthCorrelationKey] { get }
@@ -2631,7 +2631,7 @@ ToolUp.Platform.Infra.OAuthFlowState.FlowName : System.String { get }
 ToolUp.Platform.Infra.OAuthFlowState.RedirectUri : System.String { get }
 ToolUp.Platform.Infra.OAuthFlowState.ScopeId : System.String { get }
 ToolUp.Platform.Infra.OAuthFlowState.Token : System.String { get }
-ToolUp.Platform.Infra.OAuthFlowState.UserId : System.String { get }
+ToolUp.Platform.Infra.OAuthFlowState.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.Infra.OAuthFlowStateModule (class)
 ToolUp.Platform.Infra.OAuthFlowStateModule.correlationOf(ToolUp.Platform.Infra.OAuthFlowState) : ToolUp.Platform.OAuthCorrelationKey
 ToolUp.Platform.Infra.OAuthStateCleanupService (class)
@@ -3323,11 +3323,11 @@ ToolUp.Platform.Infra.TelemetryApiHandler.routes : Microsoft.FSharp.Collections.
 ToolUp.Platform.Infra.TelemetryApiHandler.routesFor(ToolUp.Platform.FeatureMode) : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]]
 ToolUp.Platform.Infra.TenantEntity (class)
 ToolUp.Platform.Infra.TenantEntity+Tenant (class)
-ToolUp.Platform.Infra.TenantEntity+Tenant..ctor(System.String, System.String, System.Int32, System.String, System.String, System.String, System.String, ToolUp.Platform.Infra.TenantEntity+TenantStatus, System.DateTime, System.DateTime, System.String)
+ToolUp.Platform.Infra.TenantEntity+Tenant..ctor(System.String, System.String, System.Int32, System.String, ToolUp.Platform.UserId, System.String, System.String, ToolUp.Platform.Infra.TenantEntity+TenantStatus, System.DateTime, System.DateTime, System.String)
 ToolUp.Platform.Infra.TenantEntity+Tenant.CreatedAt : System.DateTime { get }
 ToolUp.Platform.Infra.TenantEntity+Tenant.DisplayName : System.String { get }
 ToolUp.Platform.Infra.TenantEntity+Tenant.Id : System.String { get }
-ToolUp.Platform.Infra.TenantEntity+Tenant.OwnerUserId : System.String { get }
+ToolUp.Platform.Infra.TenantEntity+Tenant.OwnerUserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.Infra.TenantEntity+Tenant.Region : System.String { get }
 ToolUp.Platform.Infra.TenantEntity+Tenant.Slug : System.String { get }
 ToolUp.Platform.Infra.TenantEntity+Tenant.Status : ToolUp.Platform.Infra.TenantEntity+TenantStatus { get }

@@ -267,7 +267,7 @@ let private harness () : ICalendarBridgeContract.BridgeHarness =
             ScopeId = "team-" + Guid.NewGuid().ToString("N").Substring(0, 8)
             ResourceId = "room-101"
             ExternalCalendarId = CollectionPath
-            UserId = "alice"
+            UserId = UserId "alice"
         }
         MissingCalendarId = "/dav/calendars/alice/nowhere"
         ExternalEdit = externalEdit server
@@ -308,7 +308,7 @@ let private liveTests =
                     ScopeId = "_platform"
                     ResourceId = "live-probe"
                     ExternalCalendarId = collection
-                    UserId = liveSettings.Username
+                    UserId = UserId liveSettings.Username
                 }
 
                 match! bridge.LinkResource link with
@@ -339,7 +339,7 @@ let tests =
                 ScopeId = "team-no-secret"
                 ResourceId = "room-101"
                 ExternalCalendarId = CollectionPath
-                UserId = "alice"
+                UserId = UserId "alice"
             }
 
             match! bridge.LinkResource link with
@@ -360,7 +360,7 @@ let tests =
                 ScopeId = "team-put"
                 ResourceId = "room-101"
                 ExternalCalendarId = CollectionPath
-                UserId = "alice"
+                UserId = UserId "alice"
             }
 
             let booking =
@@ -401,7 +401,7 @@ let tests =
                 ScopeId = "team-401"
                 ResourceId = "room-101"
                 ExternalCalendarId = CollectionPath
-                UserId = "alice"
+                UserId = UserId "alice"
             }
 
             match! bridge.LinkResource link with
@@ -427,7 +427,7 @@ let tests =
                 ScopeId = "team-refused"
                 ResourceId = "room-101"
                 ExternalCalendarId = CollectionPath
-                UserId = "alice"
+                UserId = UserId "alice"
             }
 
             match! Async.Catch(bridge.LinkResource link) with

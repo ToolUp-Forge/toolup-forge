@@ -37,7 +37,7 @@ type ConversationEraseHandler(store: IConversationStore) =
             store.Erase(scopeId, subjectUserId, policy, false)
 
         member _.Preview(scopeId, subjectUserId, policy) = async {
-            let! result = store.Erase(scopeId, UserId subjectUserId.Value, policy, true)
+            let! result = store.Erase(scopeId, subjectUserId, policy, true)
 
             return
                 match result with

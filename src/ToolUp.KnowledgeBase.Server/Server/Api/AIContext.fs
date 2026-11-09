@@ -27,7 +27,7 @@ let setAIContext (deps: KnowledgeApiDeps) (body: string) : Async<Result<AIContex
             let entry: AIContextEntry = {
                 Body = body
                 UpdatedAt = DateTimeOffset.UtcNow
-                UpdatedBy = deps.UserId
+                UpdatedBy = deps.UserId.Value
             }
 
             do! saveAIContext deps.Storage deps.Scope.Container entry

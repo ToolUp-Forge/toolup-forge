@@ -78,7 +78,7 @@ type OAuthFlowState = {
     Container: string
     /// User id of the caller who initiated the flow. Used for audit
     /// emission (`OAuthConnected.ActorUserId`).
-    UserId: string
+    UserId: UserId
     /// UTC creation time. TTL eviction compares against this.
     CreatedAt: DateTime
     /// Absolute redirect URI sent to the provider in the /authorize

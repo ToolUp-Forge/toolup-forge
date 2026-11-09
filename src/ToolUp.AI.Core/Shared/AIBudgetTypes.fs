@@ -190,7 +190,7 @@ type AITokenBudgetExceeded = {
     OccurredAt: DateTime
     /// The user whose window was exhausted. This is the whole point of
     /// the record: Phase 9d's refusal names only the scope.
-    UserId: string
+    UserId: UserId
     /// Storage scope the refused call belonged to — the same scope key
     /// `AILatencyRecord`s are written under, so the two streams join.
     ScopeId: string
@@ -229,7 +229,7 @@ module AITokenBudgetExceeded =
     /// accounting of the same refusal.
     let ofDenial (occurredAt: DateTime) (denial: BudgetDenial) : AITokenBudgetExceeded = {
         OccurredAt = occurredAt
-        UserId = denial.ClassLabel
+        UserId = UserId denial.ClassLabel
         ScopeId = denial.ScopeId
         WindowKind = BudgetPeriod.label AITokenBudgetPolicy.perUserPeriod
         CapTokens = denial.Quota
@@ -603,7 +603,7 @@ type AISpendBudgetExceeded = {
     OccurredAt: DateTime
     /// The user whose call was refused. Empty when the refused ceiling
     /// was the SCOPE's rather than a member's.
-    UserId: string
+    UserId: UserId
     /// Storage scope the refused call belonged to.
     ScopeId: string
     /// `BudgetClaim.Dimension` of the ceiling that refused —
@@ -664,7 +664,7 @@ module AISpendBudgetExceeded =
         : AISpendBudgetExceeded =
         {
             OccurredAt = occurredAt
-            UserId = denial.ClassLabel
+            UserId = UserId denial.ClassLabel
             ScopeId = denial.ScopeId
             Dimension = denial.Dimension
             Currency = currency

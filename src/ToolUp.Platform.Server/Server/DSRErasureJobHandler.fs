@@ -49,7 +49,7 @@ type DSRErasureJobHandler(handlers: IErasureHandler list, audit: AuditOnDsr, log
                         audit {
                             RequestId = request.Id
                             Kind = kind
-                            SubjectUserId = request.SubjectUserId
+                            SubjectUserId = UserId request.SubjectUserId
                             ScopeId = ctx.ScopeId
                             Actor = request.RequestedBy
                             Reason = request.Reason

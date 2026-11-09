@@ -137,7 +137,7 @@ let private ctxOf
     : TenantProvisioningContext =
     {
         ScopeId = scopeId
-        ActorUserId = actorUserId
+        ActorUserId = UserId actorUserId
         Request = request
     }
 

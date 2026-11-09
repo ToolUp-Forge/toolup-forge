@@ -560,7 +560,7 @@ let private mkDeps (storage: IBlobStorage) (ocr: IOcrProvider) (container: strin
         Container = container
         Persist = true
     }
-    UserId = "user-1"
+    UserId = UserId "user-1"
     VectorScope = Deployment
     VectorStore = None
     IndexLifecycle = None

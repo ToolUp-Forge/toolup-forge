@@ -821,6 +821,6 @@ module PopulationQueryTool =
         FactTool.define
             "query_metric_population"
             (fun c argsJson ->
-                executeWith c.Store c.Gate c.Registry (fun () -> DateTime.UtcNow) c.Scope c.UserId argsJson)
+                executeWith c.Store c.Gate c.Registry (fun () -> DateTime.UtcNow) c.Scope c.UserId.Value argsJson)
             ctx
             argsJson

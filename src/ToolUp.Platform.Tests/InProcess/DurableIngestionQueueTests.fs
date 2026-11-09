@@ -65,7 +65,7 @@ let private mkJob (docId: string) : DocumentIngestionJob = {
     Scope = Deployment
     ScopeId = "scope-1"
     Container = "deployment"
-    OriginatingUserId = Some "user-7"
+    OriginatingUserId = Some(UserId "user-7")
     Attempt = None
 }
 

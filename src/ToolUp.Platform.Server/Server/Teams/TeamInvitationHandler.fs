@@ -218,7 +218,7 @@ let tryConsumePendingForUser
             | Ok(Some entry) ->
                 // Skip if already a member — substrate state is the
                 // source of truth, the pending row is a hint.
-                let! existing = teamStore.GetMemberRole(TeamId entry.TeamId, UserId user.UserId.Value)
+                let! existing = teamStore.GetMemberRole(TeamId entry.TeamId, user.UserId)
 
                 match existing with
                 | Some _ ->
@@ -226,10 +226,10 @@ let tryConsumePendingForUser
                     // active-team pointer (pre-fix add paths never set
                     // it). Heal on the sign-in resolve — only writes
                     // when the pointer is unset.
-                    do! ActiveTeamPolicy.ensureActiveTeam teamStore (UserId user.UserId.Value) (TeamId entry.TeamId)
+                    do! ActiveTeamPolicy.ensureActiveTeam teamStore (user.UserId) (TeamId entry.TeamId)
                     return Some entry
                 | None ->
-                    match! teamStore.AddMember(TeamId entry.TeamId, UserId user.UserId.Value, entry.Role) with
+                    match! teamStore.AddMember(TeamId entry.TeamId, user.UserId, entry.Role) with
                     | Error reason ->
                         do!
                             auditLog.Record(
@@ -248,7 +248,7 @@ let tryConsumePendingForUser
                     | Ok() ->
                         // First-team-becomes-active — same policy as
                         // the interactive accept path above.
-                        do! ActiveTeamPolicy.ensureActiveTeam teamStore (UserId user.UserId.Value) (TeamId entry.TeamId)
+                        do! ActiveTeamPolicy.ensureActiveTeam teamStore (user.UserId) (TeamId entry.TeamId)
 
                         do!
                             auditLog.Record(
@@ -923,7 +923,7 @@ let teamInvitationApi
                             // complete, and reporting `Ok None` would
                             // read as "no invitation" after the pending
                             // row had already been destroyed.
-                            let! role = teamStore.GetMemberRole(TeamId entry.TeamId, UserId user.UserId.Value)
+                            let! role = teamStore.GetMemberRole(TeamId entry.TeamId, user.UserId)
 
                             match role with
                             | None ->

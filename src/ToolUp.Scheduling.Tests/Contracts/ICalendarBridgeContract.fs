@@ -85,7 +85,7 @@ let private defaultsFor (link: CalendarLinkRef) : Booking = {
     makeBooking "" link.ResourceId DateTimeOffset.MinValue with
         Title = ""
         Metadata = Map.empty
-        BookedBy = link.UserId
+        BookedBy = link.UserId.Value
 }
 
 let private expectOk (label: string) (result: Result<'T, BridgeError>) : 'T =
@@ -174,7 +174,7 @@ let private linkAndPush (fixture: SyncFixture) (harness: BridgeHarness) (booking
             harness.Link.ResourceId,
             harness.Bridge.Kind,
             harness.Link.ExternalCalendarId,
-            harness.Link.UserId,
+            harness.Link.UserId.Value,
             LatestModifiedWins,
             fixture.Actor
         )
@@ -200,7 +200,7 @@ let private relinkWithPolicy (fixture: SyncFixture) (harness: BridgeHarness) (po
             harness.Link.ResourceId,
             harness.Bridge.Kind,
             harness.Link.ExternalCalendarId,
-            harness.Link.UserId,
+            harness.Link.UserId.Value,
             policy,
             fixture.Actor
         )

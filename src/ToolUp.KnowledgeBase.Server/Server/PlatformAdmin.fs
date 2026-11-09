@@ -84,7 +84,7 @@ let private platformDeps (baseDeps: KnowledgeApiDeps) : KnowledgeApiDeps =
         // Phase 959 — the guarded index writer (see `Api/Deps.fs`).
         do! updateIndexStatus storage platformContainer docId status
 
-        do! publishTerminalStatus notifications logger docId fileName userId status
+        do! publishTerminalStatus notifications logger docId fileName userId.Value status
     }
 
     {

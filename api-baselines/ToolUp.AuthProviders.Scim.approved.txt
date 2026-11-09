@@ -17,11 +17,11 @@ ToolUp.AuthProviders.ScimHandler.replaceGroup(ToolUp.AuthProviders.ScimHandler+S
 ToolUp.AuthProviders.ScimHandler.replaceUser(ToolUp.AuthProviders.ScimHandler+ScimDeps, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.AuthProviders.ScimTypes+ScimError]]
 ToolUp.AuthProviders.ScimHandler.toScimUser(ToolUp.AuthProviders.ScimHandler+ScimDeps, ToolUp.Platform.TeamMembership) : ToolUp.AuthProviders.ScimTypes+ScimUser
 ToolUp.AuthProviders.ScimHandler+ScimConfig (class)
-ToolUp.AuthProviders.ScimHandler+ScimConfig..ctor(System.String, System.String, System.String, ToolUp.AuthProviders.ScimTypes+ScimAttributeMapping, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.AuthProviders.ScimHandler+ScimConfig..ctor(ToolUp.Platform.TeamId, System.String, System.String, ToolUp.AuthProviders.ScimTypes+ScimAttributeMapping, Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.AuthProviders.ScimHandler+ScimConfig.BaseUrl : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.AuthProviders.ScimHandler+ScimConfig.Mapping : ToolUp.AuthProviders.ScimTypes+ScimAttributeMapping { get }
 ToolUp.AuthProviders.ScimHandler+ScimConfig.SecretScope : System.String { get }
-ToolUp.AuthProviders.ScimHandler+ScimConfig.TeamId : System.String { get }
+ToolUp.AuthProviders.ScimHandler+ScimConfig.TeamId : ToolUp.Platform.TeamId { get }
 ToolUp.AuthProviders.ScimHandler+ScimConfig.TokenKey : System.String { get }
 ToolUp.AuthProviders.ScimHandler+ScimConfigModule (class)
 ToolUp.AuthProviders.ScimHandler+ScimConfigModule.DefaultTokenKey : System.String (literal)

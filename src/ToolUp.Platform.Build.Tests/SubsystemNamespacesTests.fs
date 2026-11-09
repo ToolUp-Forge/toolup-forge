@@ -864,11 +864,11 @@ let tests =
                     (SubsystemNamespaces.embedded.Value
                      |> List.exists (fun e ->
                          e.Kind = SubsystemNamespaces.EntryKind.Member
-                         && e.OldNamespace = "ToolUp.Platform.ScopeId"))
+                         && e.OldNamespace = "ToolUp.Platform.DeclaredPrincipal"))
                     "a shared nested module's members are in the name table"
 
                 Expect.isFalse
-                    (SubsystemNamespaces.embeddedIndex.Value.Mentions.TryFind "ScopeId"
+                    (SubsystemNamespaces.embeddedIndex.Value.Mentions.TryFind "DeclaredPrincipal"
                      |> Option.isSome)
                     "and its bare name derives nothing"
 

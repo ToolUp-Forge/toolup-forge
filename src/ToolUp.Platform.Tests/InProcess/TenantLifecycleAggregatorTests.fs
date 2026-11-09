@@ -74,7 +74,7 @@ type private RecordingProvisionHook(name: string) =
         member _.OnProvisioned(scopeId, actorUserId) = async {
             received.Add {
                 ScopeId = scopeId
-                ActorUserId = actorUserId.Value
+                ActorUserId = actorUserId
                 Request = None
             }
 
@@ -853,7 +853,7 @@ let tests =
             Expect.equal hook.Received.Length 1 "the hook was invoked once"
             Expect.equal hook.Received.Head.Request (Some sampleRequest) "the ProvisioningRequest was threaded through"
             Expect.equal hook.Received.Head.ScopeId "team-req" "scope threaded through"
-            Expect.equal hook.Received.Head.ActorUserId "admin" "actor threaded through"
+            Expect.equal hook.Received.Head.ActorUserId (UserId "admin") "actor threaded through"
         }
 
         testCaseAsync "the request-free run path dispatches OnProvisionedWith with Request = None"

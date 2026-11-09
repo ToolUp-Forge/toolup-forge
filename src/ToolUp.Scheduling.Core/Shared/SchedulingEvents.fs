@@ -1,6 +1,7 @@
 module ToolUp.Scheduling.SchedulingEvents
 
 open System
+open ToolUp.Platform
 open ToolUp.Scheduling.SchedulingTypes
 
 // ─── Phase 20 — Booking lifecycle event payloads ─────────────────
@@ -39,7 +40,7 @@ let BookingRescheduled = "BookingRescheduled"
 let BookingNoShow = "BookingNoShow"
 
 type BookingCreatedPayload = {
-    UserId: string
+    UserId: UserId
     BookingId: BookingId
     ResourceId: ResourceId
     StartUtc: DateTimeOffset
@@ -47,13 +48,13 @@ type BookingCreatedPayload = {
 }
 
 type BookingCancelledPayload = {
-    UserId: string
+    UserId: UserId
     BookingId: BookingId
     Reason: string
 }
 
 type BookingRescheduledPayload = {
-    UserId: string
+    UserId: UserId
     BookingId: BookingId
     OldStart: DateTimeOffset
     OldEnd: DateTimeOffset
@@ -61,4 +62,4 @@ type BookingRescheduledPayload = {
     NewEnd: DateTimeOffset
 }
 
-type BookingNoShowPayload = { UserId: string; BookingId: BookingId }
+type BookingNoShowPayload = { UserId: UserId; BookingId: BookingId }

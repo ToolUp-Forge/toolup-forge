@@ -60,9 +60,9 @@ type ScopeSummary = {
 }
 
 type CallerSummary = {
-    UserId: string
+    UserId: UserId
     IsAnonymous: bool
-    TeamId: string option
+    TeamId: TeamId option
     Mode: string
     StorageScope: ScopeSummary option
     StorageScopeError: string option
@@ -481,9 +481,9 @@ let private buildCallerSummary (ctx: HttpContext) (config: ServerConfig) = async
         |> Map.map (fun _ perms -> perms |> List.map permissionName)
 
     return {
-        UserId = user.UserId.Value
+        UserId = user.UserId
         IsAnonymous = AuthenticatedUser.isAnonymous user
-        TeamId = accessContext.TeamId |> Option.orElse (teamId |> Option.map TeamId.value)
+        TeamId = accessContext.TeamId |> Option.map TeamId |> Option.orElse teamId
         Mode = DeploymentConfig.surfacesLabel config
         StorageScope = scopeSummary
         StorageScopeError = scopeError
@@ -916,13 +916,13 @@ let private renderHtml (report: DevDiagnosticsReport) : string =
             ""
 
     sb.AppendLine(
-        sprintf "<tr><th>UserId</th><td><code>%s</code>%s</td></tr>" (encode report.Caller.UserId) anonymousMarker
+        sprintf "<tr><th>UserId</th><td><code>%s</code>%s</td></tr>" (encode report.Caller.UserId.Value) anonymousMarker
     )
     |> ignore
 
     let teamCell =
         report.Caller.TeamId
-        |> Option.map encode
+        |> Option.map (TeamId.value >> encode)
         |> Option.defaultValue (sprintf """<span class="muted">none</span>""")
 
     sb.AppendLine(sprintf "<tr><th>TeamId</th><td>%s</td></tr>" teamCell) |> ignore

@@ -996,7 +996,7 @@ type PersistentConversationStore
             else
                 let reader = this :> IConversationReader
                 let writer = this :> IConversationWriter
-                let! allConversations = reader.ListByUser(scopeId, UserId subjectUserId.Value)
+                let! allConversations = reader.ListByUser(scopeId, subjectUserId)
                 let count = allConversations.Length
 
                 if dryRun then

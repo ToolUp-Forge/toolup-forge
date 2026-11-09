@@ -110,7 +110,7 @@ type PendingApproval = {
     /// The scope the audit rows are written under.
     ScopeId: string
     /// The user the gate resolved when it suspended. Audit attribution.
-    UserId: string
+    UserId: UserId
 }
 
 /// Per-process registry of tool invocations held awaiting a user's
@@ -324,7 +324,7 @@ let private holdFor
                     ArgumentsDigest = argumentsDigest argsJson
                     ArgumentsPreview = preview
                     ScopeId = scopeId
-                    UserId = access.UserId
+                    UserId = UserId access.UserId
                 }
 
                 // Register BEFORE emitting, so a decision that arrives

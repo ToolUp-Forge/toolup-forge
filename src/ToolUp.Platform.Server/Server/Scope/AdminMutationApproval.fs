@@ -784,7 +784,7 @@ type DualControlPermissionStore
         match mutation with
         | AdminMutation.SetTeamPermissions p -> inner.SetTeamPermissions(TeamId teamId, p)
         | AdminMutation.SetMemberPermissions(userId, moduleName, permissions) ->
-            inner.SetMemberPermissions(TeamId teamId, UserId userId.Value, moduleName, permissions)
+            inner.SetMemberPermissions(TeamId teamId, userId, moduleName, permissions)
         | AdminMutation.SetTeamDefaults defaults -> inner.SetTeamDefaults(TeamId teamId, defaults)
         | AdminMutation.SetModuleExposure(moduleName, state) ->
             inner.SetModuleExposure(TeamId teamId, moduleName, state)
@@ -882,7 +882,7 @@ type DualControlPermissionStore
             gate teamId.Value (AdminMutation.SetTeamPermissions permissions)
 
         member _.SetMemberPermissions(teamId, userId, moduleName, permissions) =
-            gate teamId.Value (AdminMutation.SetMemberPermissions(UserId userId.Value, moduleName, permissions))
+            gate teamId.Value (AdminMutation.SetMemberPermissions(userId, moduleName, permissions))
 
         member _.SetTeamDefaults(teamId, defaults) =
             gate teamId.Value (AdminMutation.SetTeamDefaults defaults)

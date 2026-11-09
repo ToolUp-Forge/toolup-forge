@@ -18,7 +18,7 @@ open Microsoft.FSharp.Reflection
 // fields:
 //
 //     type Appointment = {
-//         Id: EntityId        // unique identifier within (entityType, scope)
+//         Id: string          // unique identifier within (entityType, scope)
 //         Type: string        // entity-type discriminator, e.g. "Appointment"
 //         Version: int        // monotonic, set by the store on save
 //         // ... user-defined fields
@@ -40,13 +40,6 @@ open Microsoft.FSharp.Reflection
 // `tryGetEntityFields` helper extracts the three required fields
 // from any record and returns `Error` when they're absent.
 
-/// Stable identifier for an entity instance. `string` (not `Guid`)
-/// because some domains have natural keys (SKU codes, ISIN, USDOT
-/// numbers); the SDK doesn't impose a key shape, only that it
-/// round-trips through the index segment naming and stays unique
-/// within `(entityType, scope)`.
-type EntityId = string
-
 /// Lightweight reference to an entity, returned by index lookups
 /// before the full record is downloaded. `EntityRef` carries enough
 /// information to fetch the full entity (`Id` + `Type`) plus the
@@ -55,7 +48,10 @@ type EntityId = string
 /// downloaded entity may carry additional fields beyond the three
 /// required ones.
 type EntityRef<'T> = {
-    Id: EntityId
+    /// The entity's id: a `string` (not a `Guid`) because some domains
+    /// have natural keys (SKU codes, ISIN, USDOT numbers). Unique within
+    /// `(entityType, scope)`.
+    Id: string
     Type: string
     Version: int
 }
@@ -63,11 +59,11 @@ type EntityRef<'T> = {
 /// Why an entity-store operation failed.
 type EntityError =
     /// No entity with this `(type, id)` exists in the scope.
-    | NotFound of entityType: string * entityId: EntityId
+    | NotFound of entityType: string * entityId: string
     /// Save attempted to write a version older than the current one
     /// — typically indicates a stale read-modify-write race. The
     /// caller refreshes and retries.
-    | VersionConflict of entityType: string * entityId: EntityId * expected: int * actual: int
+    | VersionConflict of entityType: string * entityId: string * expected: int * actual: int
     /// The entity type wasn't registered via `ServerApp.withEntity`.
     | UnknownEntityType of entityType: string
     /// Predicate or `FindByIndex` referenced an index that wasn't
@@ -199,7 +195,7 @@ module EntityPrincipal =
 /// Core fields every entity record must carry. Used by the runtime
 /// reflection helper to extract them from any user record.
 type EntityFieldsCore = {
-    Id: EntityId
+    Id: string
     Type: string
     Version: int
 }

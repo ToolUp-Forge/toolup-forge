@@ -151,7 +151,7 @@ let private dropEmission =
                     "doc.pdf"
                     2
                     "queue full"
-                    (Some "user-9")
+                    (Some(UserId "user-9"))
             )
 
             match notifs.Published with

@@ -271,7 +271,7 @@ module GrantEvidence =
 /// One grant, with its evidence. The `PermissionGrants.grantModuleAccess`
 /// argument.
 type ModuleGrantRequest = {
-    TeamId: string
+    TeamId: TeamId
     /// The administrator performing the grant — audit attribution.
     ActorId: string
     /// The subject being granted.
@@ -772,7 +772,7 @@ module PermissionGrants =
             match evaluateGrant policy request.ModuleName request.SubjectId request.Permissions request.Evidence with
             | Error refusal -> return Error refusal
             | Ok recordOpt ->
-                let! existing = store.GetTeamPermissions(TeamId request.TeamId)
+                let! existing = store.GetTeamPermissions(request.TeamId)
 
                 let priorForUser =
                     existing.Members
@@ -812,7 +812,7 @@ module PermissionGrants =
 
                 let! written =
                     store.SetTeamPermissions(
-                        TeamId request.TeamId,
+                        request.TeamId,
                         {
                             existing with
                                 Members = updatedMembers

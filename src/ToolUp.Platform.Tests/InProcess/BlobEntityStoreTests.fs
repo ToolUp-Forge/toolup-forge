@@ -30,7 +30,7 @@ let private staleActor = EntityPrincipal.ofPrincipal "tester-973"
 [<Literal>]
 let private EntityTypeName = "TestEntity"
 
-let private entity (id: EntityId) (owner: string) : IEntityStoreContract.TestEntity = {
+let private entity (id: string) (owner: string) : IEntityStoreContract.TestEntity = {
     Id = id
     Type = EntityTypeName
     Version = 0
@@ -68,7 +68,7 @@ let private staleRig () =
 
 let private entities (rig: StaleRig) = rig.Store :> IEntityStore
 
-let private saveAs (rig: StaleRig) (id: EntityId) (owner: string) = async {
+let private saveAs (rig: StaleRig) (id: string) (owner: string) = async {
     match! (entities rig).Save(rig.Scope, staleActor, entity id owner) with
     | Result.Ok _ -> ()
     | Result.Error e -> failwithf "Save failed: %A" e

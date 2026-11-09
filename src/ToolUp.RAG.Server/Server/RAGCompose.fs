@@ -267,7 +267,7 @@ let emitIngestionDrop
     (docId: string)
     (chunkCount: int)
     (reason: string)
-    (originatingUserId: string option)
+    (originatingUserId: UserId option)
     : Async<unit> =
     async {
         queue.RecordDrop()
@@ -300,7 +300,7 @@ let emitIngestionDrop
                         "\"%s\" could not be indexed for search right now — the ingestion queue is saturated. The file is saved; re-upload it in a moment to index it for retrieval."
                         docId
 
-                do! ch.Publish(uid, Notification.SystemMessage(SystemMessageLevel.Warning, text))
+                do! ch.Publish(uid.Value, Notification.SystemMessage(SystemMessageLevel.Warning, text))
             with ex ->
                 logger.Warn(sprintf "[RAGCompose] ingestion-drop notification failed for %s: %s" docId ex.Message)
         | _ -> ()
@@ -522,7 +522,7 @@ let internal makeVectorisationHook
                             if System.String.IsNullOrWhiteSpace createdBy then
                                 None
                             else
-                                Some createdBy
+                                Some(UserId createdBy)
                         // The Data Manager status store tracks a file, not
                         // an attempt (Phase 867 attempts are the KB's).
                         Attempt = None

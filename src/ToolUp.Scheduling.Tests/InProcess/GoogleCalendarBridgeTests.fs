@@ -395,7 +395,7 @@ let private rigWith (webhook: bool) (refresher: IOAuthTokenRefresher option) : R
             ScopeId = scopeId
             ResourceId = "room-101"
             ExternalCalendarId = CalendarId
-            UserId = Connection
+            UserId = UserId Connection
         }
         Now = now
     }
@@ -542,7 +542,7 @@ let private syncRig (rig: Rig) (policy: ConflictPolicy) = async {
             rig.Link.ResourceId,
             KindName,
             rig.Link.ExternalCalendarId,
-            rig.Link.UserId,
+            rig.Link.UserId.Value,
             policy,
             actor
         )
@@ -627,7 +627,7 @@ let private liveTests =
                     ScopeId = "_platform"
                     ResourceId = "live-probe"
                     ExternalCalendarId = calendarId
-                    UserId = "live"
+                    UserId = UserId "live"
                 }
 
                 expectOk "live link" (bridge.LinkResource link |> Async.RunSynchronously)
@@ -1002,7 +1002,11 @@ let tests =
 
             testAsync "a missing credential is an authentication failure naming the key" {
                 let rig = rigWith false None
-                let orphan = { rig.Link with UserId = "nobody" }
+
+                let orphan = {
+                    rig.Link with
+                        UserId = UserId "nobody"
+                }
 
                 match! (bridgeOf rig).LinkResource orphan with
                 | Error(AuthenticationFailed message) ->
@@ -1041,7 +1045,7 @@ let tests =
                     ScopeId = "team-r"
                     ResourceId = "room-101"
                     ExternalCalendarId = CalendarId
-                    UserId = Connection
+                    UserId = UserId Connection
                 }
 
                 expectOk "first link" (bridge.LinkResource link |> Async.RunSynchronously)

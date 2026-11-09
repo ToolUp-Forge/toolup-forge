@@ -47,11 +47,11 @@ ToolUp.Scheduling.ICalendarBridge+BridgeErrorModule (class)
 ToolUp.Scheduling.ICalendarBridge+BridgeErrorModule.isRetryable(ToolUp.Scheduling.ICalendarBridge+BridgeError) : System.Boolean
 ToolUp.Scheduling.ICalendarBridge+BridgeErrorModule.message(ToolUp.Scheduling.ICalendarBridge+BridgeError) : System.String
 ToolUp.Scheduling.ICalendarBridge+CalendarLinkRef (class)
-ToolUp.Scheduling.ICalendarBridge+CalendarLinkRef..ctor(System.String, System.String, System.String, System.String)
+ToolUp.Scheduling.ICalendarBridge+CalendarLinkRef..ctor(System.String, System.String, System.String, ToolUp.Platform.UserId)
 ToolUp.Scheduling.ICalendarBridge+CalendarLinkRef.ExternalCalendarId : System.String { get }
 ToolUp.Scheduling.ICalendarBridge+CalendarLinkRef.ResourceId : System.String { get }
 ToolUp.Scheduling.ICalendarBridge+CalendarLinkRef.ScopeId : System.String { get }
-ToolUp.Scheduling.ICalendarBridge+CalendarLinkRef.UserId : System.String { get }
+ToolUp.Scheduling.ICalendarBridge+CalendarLinkRef.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Scheduling.ICalendarBridge+ConflictPolicy (class)
 ToolUp.Scheduling.ICalendarBridge+ConflictPolicy.ExternalWins : ToolUp.Scheduling.ICalendarBridge+ConflictPolicy { get }
 ToolUp.Scheduling.ICalendarBridge+ConflictPolicy.IsExternalWins : System.Boolean { get }
@@ -123,29 +123,29 @@ ToolUp.Scheduling.SchedulingEvents.BookingNoShow : System.String (literal)
 ToolUp.Scheduling.SchedulingEvents.BookingRescheduled : System.String (literal)
 ToolUp.Scheduling.SchedulingEvents.SourceModule : System.String (literal)
 ToolUp.Scheduling.SchedulingEvents+BookingCancelledPayload (class)
-ToolUp.Scheduling.SchedulingEvents+BookingCancelledPayload..ctor(System.String, System.String, System.String)
+ToolUp.Scheduling.SchedulingEvents+BookingCancelledPayload..ctor(ToolUp.Platform.UserId, System.String, System.String)
 ToolUp.Scheduling.SchedulingEvents+BookingCancelledPayload.BookingId : System.String { get }
 ToolUp.Scheduling.SchedulingEvents+BookingCancelledPayload.Reason : System.String { get }
-ToolUp.Scheduling.SchedulingEvents+BookingCancelledPayload.UserId : System.String { get }
+ToolUp.Scheduling.SchedulingEvents+BookingCancelledPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Scheduling.SchedulingEvents+BookingCreatedPayload (class)
-ToolUp.Scheduling.SchedulingEvents+BookingCreatedPayload..ctor(System.String, System.String, System.String, System.DateTimeOffset, System.DateTimeOffset)
+ToolUp.Scheduling.SchedulingEvents+BookingCreatedPayload..ctor(ToolUp.Platform.UserId, System.String, System.String, System.DateTimeOffset, System.DateTimeOffset)
 ToolUp.Scheduling.SchedulingEvents+BookingCreatedPayload.BookingId : System.String { get }
 ToolUp.Scheduling.SchedulingEvents+BookingCreatedPayload.EndUtc : System.DateTimeOffset { get }
 ToolUp.Scheduling.SchedulingEvents+BookingCreatedPayload.ResourceId : System.String { get }
 ToolUp.Scheduling.SchedulingEvents+BookingCreatedPayload.StartUtc : System.DateTimeOffset { get }
-ToolUp.Scheduling.SchedulingEvents+BookingCreatedPayload.UserId : System.String { get }
+ToolUp.Scheduling.SchedulingEvents+BookingCreatedPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Scheduling.SchedulingEvents+BookingNoShowPayload (class)
-ToolUp.Scheduling.SchedulingEvents+BookingNoShowPayload..ctor(System.String, System.String)
+ToolUp.Scheduling.SchedulingEvents+BookingNoShowPayload..ctor(ToolUp.Platform.UserId, System.String)
 ToolUp.Scheduling.SchedulingEvents+BookingNoShowPayload.BookingId : System.String { get }
-ToolUp.Scheduling.SchedulingEvents+BookingNoShowPayload.UserId : System.String { get }
+ToolUp.Scheduling.SchedulingEvents+BookingNoShowPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Scheduling.SchedulingEvents+BookingRescheduledPayload (class)
-ToolUp.Scheduling.SchedulingEvents+BookingRescheduledPayload..ctor(System.String, System.String, System.DateTimeOffset, System.DateTimeOffset, System.DateTimeOffset, System.DateTimeOffset)
+ToolUp.Scheduling.SchedulingEvents+BookingRescheduledPayload..ctor(ToolUp.Platform.UserId, System.String, System.DateTimeOffset, System.DateTimeOffset, System.DateTimeOffset, System.DateTimeOffset)
 ToolUp.Scheduling.SchedulingEvents+BookingRescheduledPayload.BookingId : System.String { get }
 ToolUp.Scheduling.SchedulingEvents+BookingRescheduledPayload.NewEnd : System.DateTimeOffset { get }
 ToolUp.Scheduling.SchedulingEvents+BookingRescheduledPayload.NewStart : System.DateTimeOffset { get }
 ToolUp.Scheduling.SchedulingEvents+BookingRescheduledPayload.OldEnd : System.DateTimeOffset { get }
 ToolUp.Scheduling.SchedulingEvents+BookingRescheduledPayload.OldStart : System.DateTimeOffset { get }
-ToolUp.Scheduling.SchedulingEvents+BookingRescheduledPayload.UserId : System.String { get }
+ToolUp.Scheduling.SchedulingEvents+BookingRescheduledPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Scheduling.SchedulingTypes (class)
 ToolUp.Scheduling.SchedulingTypes+AvailabilityException (class)
 ToolUp.Scheduling.SchedulingTypes+AvailabilityException..ctor(System.String, System.String, System.Int32, System.String, System.DateOnly, ToolUp.Scheduling.SchedulingTypes+ExceptionKind, Microsoft.FSharp.Core.FSharpOption`1[System.TimeOnly], Microsoft.FSharp.Core.FSharpOption`1[System.TimeOnly], Microsoft.FSharp.Core.FSharpOption`1[System.String])

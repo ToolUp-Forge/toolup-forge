@@ -145,7 +145,7 @@ let tests (name: string) (factory: unit -> IDeployPipeline) =
         testCaseAsync "Rule 1 — identity-by-value: DeployId / TenantId / BuildId are string aliases"
         <| async {
             let did: DeployId = "d-1"
-            let tid: TenantId = "t-1"
+            let tid: string = "t-1"
             let bid: BuildId = "b-1"
             Expect.equal did "d-1" "DeployId is a string alias"
             Expect.equal tid "t-1" "TenantId is a string alias"
@@ -278,7 +278,7 @@ let planTests (name: string) (binding: DeployPlanBinding) =
 
     /// Fresh (recorder, pipeline) pair with `images` launched for
     /// `tenantId`, recorder reset so only the plan's own calls show.
-    let seeded (tenantId: TenantId) (images: string list) = async {
+    let seeded (tenantId: string) (images: string list) = async {
         let recorder = RecordingContainerScheduler(binding.Scheduler())
         let scheduler = recorder :> IContainerScheduler
         let pipeline = binding.Pipeline scheduler

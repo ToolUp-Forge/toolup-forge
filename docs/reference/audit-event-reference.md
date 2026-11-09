@@ -106,8 +106,8 @@ Cases whose wire discriminator differs from the F# identifier (3):
 | `ConsentRecorded` | — | `ConsentEvent` |
 | `AdImpressionRecorded` | — | `AdImpression` |
 | `AdClickRecorded` | — | `AdClick` |
-| `PremiumGranted` | — | `string * string * string option * DateTimeOffset` |
-| `PremiumRevoked` | — | `string * string * string option * DateTimeOffset` |
+| `PremiumGranted` | — | `UserId * string * string option * DateTimeOffset` |
+| `PremiumRevoked` | — | `UserId * string * string option * DateTimeOffset` |
 | `AdSlotConfigCreated` | — | `string * string * DateTimeOffset` |
 | `AdSlotConfigUpdated` | — | `string * string * DateTimeOffset` |
 | `AdSlotConfigDeleted` | — | `string * string * DateTimeOffset` |

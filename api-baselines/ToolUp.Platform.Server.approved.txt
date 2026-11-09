@@ -94,13 +94,13 @@ ToolUp.Platform.Compose.AccessAttestation+AttestationRefusal+Unreadable.reason :
 ToolUp.Platform.Compose.AccessAttestation+AttestationRefusalModule (class)
 ToolUp.Platform.Compose.AccessAttestation+AttestationRefusalModule.describe(ToolUp.Platform.Compose.AccessAttestation+AttestationRefusal) : System.String
 ToolUp.Platform.Compose.AccessAttestation+AttestedApproval (class)
-ToolUp.Platform.Compose.AccessAttestation+AttestedApproval..ctor(System.String, System.String, System.String, System.String, System.DateTimeOffset, Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset])
+ToolUp.Platform.Compose.AccessAttestation+AttestedApproval..ctor(System.String, ToolUp.Platform.TeamId, System.String, System.String, System.DateTimeOffset, Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset])
 ToolUp.Platform.Compose.AccessAttestation+AttestedApproval.ConsentId : System.String { get }
 ToolUp.Platform.Compose.AccessAttestation+AttestedApproval.ExpiresAtUtc : Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset] { get }
 ToolUp.Platform.Compose.AccessAttestation+AttestedApproval.IssuedAtUtc : System.DateTimeOffset { get }
 ToolUp.Platform.Compose.AccessAttestation+AttestedApproval.Party : System.String { get }
 ToolUp.Platform.Compose.AccessAttestation+AttestedApproval.SubjectId : System.String { get }
-ToolUp.Platform.Compose.AccessAttestation+AttestedApproval.TeamId : System.String { get }
+ToolUp.Platform.Compose.AccessAttestation+AttestedApproval.TeamId : ToolUp.Platform.TeamId { get }
 ToolUp.Platform.Compose.AccessClassification (class)
 ToolUp.Platform.Compose.AccessClassification.AnonymousReachable : ToolUp.Platform.Compose.AccessClassification { get }
 ToolUp.Platform.Compose.AccessClassification.ExplicitRequirement : ToolUp.Platform.Compose.AccessClassification { get }
@@ -2073,14 +2073,14 @@ ToolUp.Platform.Compose.DevDiagnosticsHandler+BuildIdentityModule (class)
 ToolUp.Platform.Compose.DevDiagnosticsHandler+BuildIdentityModule.ofAssembly(System.Reflection.Assembly) : ToolUp.Platform.Compose.DevDiagnosticsHandler+BuildIdentity
 ToolUp.Platform.Compose.DevDiagnosticsHandler+BuildIdentityModule.ofInformationalVersion(System.String) : ToolUp.Platform.Compose.DevDiagnosticsHandler+BuildIdentity
 ToolUp.Platform.Compose.DevDiagnosticsHandler+CallerSummary (class)
-ToolUp.Platform.Compose.DevDiagnosticsHandler+CallerSummary..ctor(System.String, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Compose.DevDiagnosticsHandler+ScopeSummary], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]])
+ToolUp.Platform.Compose.DevDiagnosticsHandler+CallerSummary..ctor(ToolUp.Platform.UserId, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamId], System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Compose.DevDiagnosticsHandler+ScopeSummary], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]])
 ToolUp.Platform.Compose.DevDiagnosticsHandler+CallerSummary.IsAnonymous : System.Boolean { get }
 ToolUp.Platform.Compose.DevDiagnosticsHandler+CallerSummary.Mode : System.String { get }
 ToolUp.Platform.Compose.DevDiagnosticsHandler+CallerSummary.Permissions : Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]] { get }
 ToolUp.Platform.Compose.DevDiagnosticsHandler+CallerSummary.StorageScope : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Compose.DevDiagnosticsHandler+ScopeSummary] { get }
 ToolUp.Platform.Compose.DevDiagnosticsHandler+CallerSummary.StorageScopeError : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.Compose.DevDiagnosticsHandler+CallerSummary.TeamId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.Compose.DevDiagnosticsHandler+CallerSummary.UserId : System.String { get }
+ToolUp.Platform.Compose.DevDiagnosticsHandler+CallerSummary.TeamId : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamId] { get }
+ToolUp.Platform.Compose.DevDiagnosticsHandler+CallerSummary.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.Compose.DevDiagnosticsHandler+CompositionSeamSummary (class)
 ToolUp.Platform.Compose.DevDiagnosticsHandler+CompositionSeamSummary..ctor(System.Int32, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[System.String])
 ToolUp.Platform.Compose.DevDiagnosticsHandler+CompositionSeamSummary.CorsConfigured : System.Boolean { get }
@@ -4637,9 +4637,9 @@ ToolUp.Platform.Compose.ScopeKind+Tags.Other : System.Int32 (literal)
 ToolUp.Platform.Compose.ScopeKind+Tags.Team : System.Int32 (literal)
 ToolUp.Platform.Compose.ScopeKind+Tags.User : System.Int32 (literal)
 ToolUp.Platform.Compose.ScopeKind+Team (class)
-ToolUp.Platform.Compose.ScopeKind+Team.teamId : System.String { get }
+ToolUp.Platform.Compose.ScopeKind+Team.teamId : ToolUp.Platform.TeamId { get }
 ToolUp.Platform.Compose.ScopeKind+User (class)
-ToolUp.Platform.Compose.ScopeKind+User.userId : System.String { get }
+ToolUp.Platform.Compose.ScopeKind+User.userId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.Compose.SealedCompositionBinding (class)
 ToolUp.Platform.Compose.SealedCompositionBinding..ctor(ToolUp.Platform.Compose.CompositionBinding, ToolUp.Platform.DeployRecordSeal)
 ToolUp.Platform.Compose.SealedCompositionBinding.Binding : ToolUp.Platform.Compose.CompositionBinding { get }
@@ -5267,8 +5267,8 @@ ToolUp.Platform.Compose.TenantLifecycleAggregator+ScheduledDeprovisionPayload (c
 ToolUp.Platform.Compose.TenantLifecycleAggregator+ScheduledDeprovisionPayload.parse(System.String) : Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`4[System.String, System.String, System.String, System.DateTimeOffset], System.String]
 ToolUp.Platform.Compose.TenantLifecycleAggregator+ScheduledDeprovisionPayload.serialise(System.String, System.String, System.String, System.DateTimeOffset) : System.String
 ToolUp.Platform.Compose.TenantProvisioningContext (class)
-ToolUp.Platform.Compose.TenantProvisioningContext..ctor(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ProvisioningRequest])
-ToolUp.Platform.Compose.TenantProvisioningContext.ActorUserId : System.String { get }
+ToolUp.Platform.Compose.TenantProvisioningContext..ctor(System.String, ToolUp.Platform.UserId, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ProvisioningRequest])
+ToolUp.Platform.Compose.TenantProvisioningContext.ActorUserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.Compose.TenantProvisioningContext.Request : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ProvisioningRequest] { get }
 ToolUp.Platform.Compose.TenantProvisioningContext.ScopeId : System.String { get }
 ToolUp.Platform.Compose.TenantResolutionError (class)

@@ -84,7 +84,7 @@ let private EntityIndexPrefix = "entities/_indexes"
 ///
 /// Constraint: `EntityId` must not contain `__` (would confuse the
 /// reverse parse). User-supplied IDs typically don't; documented.
-let private objectIdFor (entityType: string) (entityId: EntityId) : string =
+let private objectIdFor (entityType: string) (entityId: string) : string =
     sprintf "%s%s%s%s" EntityObjectIdPrefix entityType EntityObjectIdSeparator entityId
 
 /// `dataType` is stored in a JSON metadata field, not a path, so
@@ -184,7 +184,7 @@ type EntityRegistry() =
     member _.AllRegisteredTypes() : string list = registrations.Keys |> List.ofSeq
 
 /// Build an `EntityRef<'T>` from the persisted DataObject metadata.
-let private refFromDataObject<'T> (dataObject: DataObject) (entityId: EntityId) (entityType: string) : EntityRef<'T> = {
+let private refFromDataObject<'T> (dataObject: DataObject) (entityId: string) (entityType: string) : EntityRef<'T> = {
     Id = entityId
     Type = entityType
     Version = dataObject.Version
@@ -193,7 +193,7 @@ let private refFromDataObject<'T> (dataObject: DataObject) (entityId: EntityId) 
 /// Build the per-entity-type index map. Each call returns a closure
 /// over the supplied `BlobIndex` instances; no per-Save allocation.
 type private IndexHandle<'T> = {
-    Index: BlobIndex<string, EntityId>
+    Index: BlobIndex<string, string>
     Definition: EntityIndex<'T>
 }
 
@@ -229,9 +229,9 @@ type BlobEntityStore
     // Per-(scopeId, entityType, indexName) BlobIndex cache. Keyed by
     // tuple-as-string for ConcurrentDictionary's IEquatable<TKey>
     // requirement.
-    let indexCache = ConcurrentDictionary<string, BlobIndex<string, EntityId>>()
+    let indexCache = ConcurrentDictionary<string, BlobIndex<string, string>>()
 
-    let getIndex (scopeId: string) (entityType: string) (indexName: string) : BlobIndex<string, EntityId> =
+    let getIndex (scopeId: string) (entityType: string) (indexName: string) : BlobIndex<string, string> =
         let cacheKey = sprintf "%s|%s|%s" scopeId entityType indexName
 
         indexCache.GetOrAdd(
@@ -283,7 +283,7 @@ type BlobEntityStore
         (entityType: string)
         (keyOf: string -> string)
         (key: string)
-        (entityId: EntityId)
+        (entityId: string)
         : Async<RefState> =
         async {
             let! head = dataObjectStore.Get(scopeId, objectIdFor entityType entityId)
@@ -323,7 +323,7 @@ type BlobEntityStore
         (indexName: string)
         (keyOf: string -> string)
         (key: string)
-        (candidate: EntityId -> bool)
+        (candidate: string -> bool)
         : Async<int> =
         let blobIndex = getIndex scopeId entityType indexName
 
@@ -383,7 +383,7 @@ type BlobEntityStore
         (indexName: string)
         (keyOf: string -> string)
         (key: string)
-        : Async<(EntityId * int) list> =
+        : Async<(string * int) list> =
         async {
             let blobIndex = getIndex scopeId entityType indexName
             let! lookupResults = blobIndex.Lookup key
@@ -429,7 +429,7 @@ type BlobEntityStore
             return backed
         }
 
-    let entityIdFromObjectId (entityType: string) (objectId: string) : EntityId option =
+    let entityIdFromObjectId (entityType: string) (objectId: string) : string option =
         let prefix =
             sprintf "%s%s%s" EntityObjectIdPrefix entityType EntityObjectIdSeparator
 
@@ -475,7 +475,7 @@ type BlobEntityStore
     let lifecyclePayload
         (actor: EntityPrincipal)
         (entityType: string)
-        (entityId: EntityId)
+        (entityId: string)
         (version: int)
         : EntityLifecycleEventPayload =
         {
@@ -604,7 +604,7 @@ type BlobEntityStore
         (scopeId: string)
         (actor: EntityPrincipal)
         (entityType: string)
-        (entityId: EntityId)
+        (entityId: string)
         (expected: int option)
         =
         async {
@@ -881,7 +881,7 @@ type BlobEntityStore
                         return Ok entityRef
             }
 
-        member _.Get<'T>(scopeId: string, entityType: string, entityId: EntityId) = async {
+        member _.Get<'T>(scopeId: string, entityType: string, entityId: string) = async {
             if not (registry.Knows entityType) then
                 return Error(EntityError.UnknownEntityType entityType)
             else
@@ -896,7 +896,7 @@ type BlobEntityStore
                     return Ok(deserialise<'T> json)
         }
 
-        member _.GetVersion<'T>(scopeId: string, entityType: string, entityId: EntityId, version: int) = async {
+        member _.GetVersion<'T>(scopeId: string, entityType: string, entityId: string, version: int) = async {
             if not (registry.Knows entityType) then
                 return Error(EntityError.UnknownEntityType entityType)
             else
@@ -913,7 +913,7 @@ type BlobEntityStore
                     return Ok(deserialise<'T> json)
         }
 
-        member _.ListVersions<'T>(scopeId: string, entityType: string, entityId: EntityId) = async {
+        member _.ListVersions<'T>(scopeId: string, entityType: string, entityId: string) = async {
             if not (registry.Knows entityType) then
                 return []
             else
@@ -931,13 +931,13 @@ type BlobEntityStore
                         : EntityRef<'T>))
         }
 
-        member _.Delete(scopeId: string, actor: EntityPrincipal, entityType: string, entityId: EntityId) =
+        member _.Delete(scopeId: string, actor: EntityPrincipal, entityType: string, entityId: string) =
             deleteEntity scopeId actor entityType entityId None
 
         // Phase 753 / 806 — compare-and-set delete; see `deleteEntity`
         // for how the compare and the removal are made one act.
         member _.DeleteIfVersion
-            (scopeId: string, actor: EntityPrincipal, entityType: string, entityId: EntityId, expectedVersion: int)
+            (scopeId: string, actor: EntityPrincipal, entityType: string, entityId: string, expectedVersion: int)
             =
             deleteEntity scopeId actor entityType entityId (Some expectedVersion)
 
@@ -1028,7 +1028,7 @@ type BlobEntityStore
                             |> List.choose (fun o -> entityIdFromObjectId query.EntityType o.ObjectId)
                     }
 
-                    let loadEntity (entityId: EntityId) = async {
+                    let loadEntity (entityId: string) = async {
                         let objectId = objectIdFor query.EntityType entityId
                         let! result = dataObjectStore.Get(scopeId, objectId)
 

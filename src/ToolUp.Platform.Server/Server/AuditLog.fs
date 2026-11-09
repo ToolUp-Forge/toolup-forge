@@ -60,7 +60,7 @@ let private encodeSurfaceDenied (payload: SurfaceDeniedPayload) =
 // cases; the serialised form is an anonymous record on the write
 // path. This typed alias round-trips it back to a tuple.
 type private PremiumAuditPayload = {
-    SubjectUserId: string
+    SubjectUserId: UserId
     Grantor: string
     Reason: string option
     OccurredAt: DateTimeOffset
@@ -929,7 +929,7 @@ let internal auditEventCodecs: AuditEventCodec list = [
             | PremiumGranted(subjectUserId, grantor, reason, occurredAt) ->
                 Some(
                     toAuditJson {
-                        SubjectUserId = subjectUserId.Value
+                        SubjectUserId = subjectUserId
                         Grantor = grantor
                         Reason = reason
                         OccurredAt = occurredAt
@@ -939,7 +939,7 @@ let internal auditEventCodecs: AuditEventCodec list = [
         Decode =
             fun j ->
                 let p = fromAuditJson<PremiumAuditPayload> j
-                PremiumGranted(UserId p.SubjectUserId, p.Grantor, p.Reason, p.OccurredAt)
+                PremiumGranted(p.SubjectUserId, p.Grantor, p.Reason, p.OccurredAt)
     }
     {
         EventType = "PremiumRevoked"
@@ -948,7 +948,7 @@ let internal auditEventCodecs: AuditEventCodec list = [
             | PremiumRevoked(subjectUserId, grantor, reason, occurredAt) ->
                 Some(
                     toAuditJson {
-                        SubjectUserId = subjectUserId.Value
+                        SubjectUserId = subjectUserId
                         Grantor = grantor
                         Reason = reason
                         OccurredAt = occurredAt
@@ -958,7 +958,7 @@ let internal auditEventCodecs: AuditEventCodec list = [
         Decode =
             fun j ->
                 let p = fromAuditJson<PremiumAuditPayload> j
-                PremiumRevoked(UserId p.SubjectUserId, p.Grantor, p.Reason, p.OccurredAt)
+                PremiumRevoked(p.SubjectUserId, p.Grantor, p.Reason, p.OccurredAt)
     }
     {
         EventType = "AdSlotConfigCreated"

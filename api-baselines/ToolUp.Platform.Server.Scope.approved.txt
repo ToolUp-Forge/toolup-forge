@@ -230,13 +230,13 @@ ToolUp.Platform.Scope.GrantPolicyGuard+ModuleGrantPolicyRegistryModule.ofDeclara
 ToolUp.Platform.Scope.GrantPolicyGuard+ModuleGrantPolicyRegistryModule.orphans(ToolUp.Platform.Scope.GrantPolicyGuard+ModuleGrantPolicyRegistry, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Platform.Scope.GrantPolicyGuard+ModuleGrantPolicyRegistryModule.resolve(ToolUp.Platform.Scope.GrantPolicyGuard+ModuleGrantPolicyRegistry, System.String) : ToolUp.Platform.GrantPolicy
 ToolUp.Platform.Scope.GrantPolicyGuard+ModuleGrantRequest (class)
-ToolUp.Platform.Scope.GrantPolicyGuard+ModuleGrantRequest..ctor(System.String, System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission], ToolUp.Platform.Scope.GrantPolicyGuard+GrantEvidence)
+ToolUp.Platform.Scope.GrantPolicyGuard+ModuleGrantRequest..ctor(ToolUp.Platform.TeamId, System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission], ToolUp.Platform.Scope.GrantPolicyGuard+GrantEvidence)
 ToolUp.Platform.Scope.GrantPolicyGuard+ModuleGrantRequest.ActorId : System.String { get }
 ToolUp.Platform.Scope.GrantPolicyGuard+ModuleGrantRequest.Evidence : ToolUp.Platform.Scope.GrantPolicyGuard+GrantEvidence { get }
 ToolUp.Platform.Scope.GrantPolicyGuard+ModuleGrantRequest.ModuleName : System.String { get }
 ToolUp.Platform.Scope.GrantPolicyGuard+ModuleGrantRequest.Permissions : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission] { get }
 ToolUp.Platform.Scope.GrantPolicyGuard+ModuleGrantRequest.SubjectId : System.String { get }
-ToolUp.Platform.Scope.GrantPolicyGuard+ModuleGrantRequest.TeamId : System.String { get }
+ToolUp.Platform.Scope.GrantPolicyGuard+ModuleGrantRequest.TeamId : ToolUp.Platform.TeamId { get }
 ToolUp.Platform.Scope.GrantPolicyGuard+PermissionGrants (class)
 ToolUp.Platform.Scope.GrantPolicyGuard+PermissionGrants.acceptGrant(ToolUp.Platform.Scope.PermissionStore+IPermissionStore, System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.Scope.GrantPolicyGuard+PermissionGrants.grantModuleAccess(ToolUp.Platform.Scope.PermissionStore+IPermissionStore, ToolUp.Platform.Scope.GrantPolicyGuard+ModuleGrantPolicyRegistry, ToolUp.Platform.Scope.GrantPolicyGuard+ModuleGrantRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.GrantWriteOutcome, ToolUp.Platform.GrantRefusal]]
@@ -285,12 +285,12 @@ ToolUp.Platform.Scope.MembershipDoctor (class)
 ToolUp.Platform.Scope.MembershipDoctor.diagnose(ToolUp.Platform.Scope.MembershipDoctor+MembershipReads) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Scope.MembershipDoctor+MembershipDiagnosis]]
 ToolUp.Platform.Scope.MembershipDoctor.repair(ToolUp.Platform.Scope.MembershipDoctor+MembershipReads, ToolUp.Platform.Scope.MembershipDoctor+MembershipWrites) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.Scope.MembershipDoctor+MembershipRepairOutcome]
 ToolUp.Platform.Scope.MembershipDoctor+MembershipDiagnosis (class)
-ToolUp.Platform.Scope.MembershipDoctor+MembershipDiagnosis..ctor(ToolUp.Platform.Scope.MembershipDoctor+MembershipFindingKind, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, ToolUp.Platform.Scope.MembershipDoctor+MembershipRepair)
+ToolUp.Platform.Scope.MembershipDoctor+MembershipDiagnosis..ctor(ToolUp.Platform.Scope.MembershipDoctor+MembershipFindingKind, ToolUp.Platform.UserId, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamId], System.String, ToolUp.Platform.Scope.MembershipDoctor+MembershipRepair)
 ToolUp.Platform.Scope.MembershipDoctor+MembershipDiagnosis.Evidence : System.String { get }
 ToolUp.Platform.Scope.MembershipDoctor+MembershipDiagnosis.Kind : ToolUp.Platform.Scope.MembershipDoctor+MembershipFindingKind { get }
 ToolUp.Platform.Scope.MembershipDoctor+MembershipDiagnosis.ProposedRepair : ToolUp.Platform.Scope.MembershipDoctor+MembershipRepair { get }
-ToolUp.Platform.Scope.MembershipDoctor+MembershipDiagnosis.TeamId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.Scope.MembershipDoctor+MembershipDiagnosis.UserId : System.String { get }
+ToolUp.Platform.Scope.MembershipDoctor+MembershipDiagnosis.TeamId : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamId] { get }
+ToolUp.Platform.Scope.MembershipDoctor+MembershipDiagnosis.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.Scope.MembershipDoctor+MembershipDoctorStorage (class)
 ToolUp.Platform.Scope.MembershipDoctor+MembershipDoctorStorage.reads(ToolUp.Platform.BlobStorage+IBlobStorage) : ToolUp.Platform.Scope.MembershipDoctor+MembershipReads
 ToolUp.Platform.Scope.MembershipDoctor+MembershipDoctorStorage.writes(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.INotificationChannel], System.String) : ToolUp.Platform.Scope.MembershipDoctor+MembershipWrites
@@ -491,10 +491,10 @@ ToolUp.Platform.Scope.PublicationReaderGrants.validateToken(System.String, Syste
 ToolUp.Platform.Scope.RequestContextBuilder (class)
 ToolUp.Platform.Scope.RequestContextBuilder.ofHttpContext(Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.Auth+RequestContext
 ToolUp.Platform.Scope.RequestViewer (class)
-ToolUp.Platform.Scope.RequestViewer..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean)
-ToolUp.Platform.Scope.RequestViewer.ActiveTeamId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.Scope.RequestViewer..ctor(ToolUp.Platform.UserId, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamId], System.Boolean)
+ToolUp.Platform.Scope.RequestViewer.ActiveTeamId : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamId] { get }
 ToolUp.Platform.Scope.RequestViewer.IsPlatformAdmin : System.Boolean { get }
-ToolUp.Platform.Scope.RequestViewer.UserId : System.String { get }
+ToolUp.Platform.Scope.RequestViewer.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.Scope.RequestViewerContext (class)
 ToolUp.Platform.Scope.RequestViewerContext.current() : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Scope.RequestViewer]
 ToolUp.Platform.Scope.RequestViewerContext.establish(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Scope.RequestViewer]]) : System.IDisposable
@@ -708,10 +708,10 @@ ToolUp.Platform.Scope.TeamPolicyStore+TeamPolicyStore.ChangeBoth(System.String, 
 ToolUp.Platform.Scope.TeamPolicyStore+TeamPolicyStore.Read(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TeamConversationPolicyRecord, System.String]]
 ToolUp.Platform.Scope.TeamPolicyStore+TeamPolicyStore.ReadOutput(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TeamOutputPolicyRecord, System.String]]
 ToolUp.Platform.Scope.TeamPolicyStore+TeamPolicyViewer (class)
-ToolUp.Platform.Scope.TeamPolicyStore+TeamPolicyViewer..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamRole], System.Boolean)
+ToolUp.Platform.Scope.TeamPolicyStore+TeamPolicyViewer..ctor(ToolUp.Platform.UserId, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamRole], System.Boolean)
 ToolUp.Platform.Scope.TeamPolicyStore+TeamPolicyViewer.IsPlatformAdmin : System.Boolean { get }
 ToolUp.Platform.Scope.TeamPolicyStore+TeamPolicyViewer.TeamRole : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamRole] { get }
-ToolUp.Platform.Scope.TeamPolicyStore+TeamPolicyViewer.UserId : System.String { get }
+ToolUp.Platform.Scope.TeamPolicyStore+TeamPolicyViewer.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.Scope.TeamPolicyStore+TeamPolicyViewerModule (class)
 ToolUp.Platform.Scope.TeamPolicyStore+TeamPolicyViewerModule.resolve(System.IServiceProvider, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AccessContext], System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.Scope.TeamPolicyStore+TeamPolicyViewer]
 ToolUp.Platform.Scope.TeamPolicyStore+TeamVisibilityDefaultsValidator (class)

@@ -1529,7 +1529,7 @@ let aiAssistantApi
         TeamConversationPolicyStore.ConversationVisibility.resolveState ctx storage scope.Container
 
     let viewerIn (state: TeamConversationPolicyStore.TeamVisibilityState) =
-        TeamConversationPolicyStore.ConversationVisibility.resolveViewer ctx userId state.TeamId
+        TeamConversationPolicyStore.ConversationVisibility.resolveViewer ctx userId state.TeamId.Value
 
     let createdAtOf (messages: ConversationMessage list) =
         match messages with
@@ -1722,7 +1722,7 @@ let aiAssistantApi
                             turn.Background.RequestServices
                             turn.GateAccess
                             userId
-                            state.TeamId)
+                            state.TeamId.Value)
                     messages
                     userId
 
@@ -2271,7 +2271,7 @@ let aiAssistantApi
                                     TeamConversationPolicyStore.ConversationVisibilityAudit.elevatedRead
                                         auditLogOpt
                                         scope.ScopeId
-                                        viewer.UserId
+                                        viewer.UserId.Value
                                         owner
                                         conversationId
                                         current

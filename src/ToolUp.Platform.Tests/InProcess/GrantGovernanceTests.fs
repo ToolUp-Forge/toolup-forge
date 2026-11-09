@@ -236,7 +236,7 @@ let tests =
 
                 let outcome =
                     GrantPolicyGuard.PermissionGrants.grantModuleAccess store registry {
-                        TeamId = "t1"
+                        TeamId = TeamId "t1"
                         ActorId = "admin-bob"
                         SubjectId = "alice"
                         ModuleName = "Payroll"
@@ -288,7 +288,7 @@ let tests =
 
                 let outcome =
                     GrantPolicyGuard.PermissionGrants.grantModuleAccess store registry {
-                        TeamId = "t1"
+                        TeamId = TeamId "t1"
                         ActorId = "admin-bob"
                         SubjectId = "alice"
                         ModuleName = "Payroll"
@@ -319,7 +319,7 @@ let tests =
 
                 let outcome =
                     GrantPolicyGuard.PermissionGrants.grantModuleAccess store registry {
-                        TeamId = "t1"
+                        TeamId = TeamId "t1"
                         ActorId = "admin-bob"
                         SubjectId = "alice"
                         // NOT the policy-bearing module.
@@ -354,7 +354,7 @@ let tests =
                     :> IPermissionStore
 
                 GrantPolicyGuard.PermissionGrants.grantModuleAccess store registry {
-                    TeamId = "t1"
+                    TeamId = TeamId "t1"
                     ActorId = "admin-bob"
                     SubjectId = "alice"
                     ModuleName = "Payroll"
@@ -388,7 +388,7 @@ let tests =
 
                 let outcome =
                     GrantPolicyGuard.PermissionGrants.grantModuleAccess store registry {
-                        TeamId = "t1"
+                        TeamId = TeamId "t1"
                         ActorId = "admin-bob"
                         SubjectId = "alice"
                         ModuleName = "Payroll"
@@ -435,7 +435,7 @@ let tests =
 
                 let outcome =
                     GrantPolicyGuard.PermissionGrants.grantModuleAccess store registry {
-                        TeamId = "t1"
+                        TeamId = TeamId "t1"
                         ActorId = "admin-bob"
                         SubjectId = "alice"
                         ModuleName = "Payroll"
