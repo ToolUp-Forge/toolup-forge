@@ -7,6 +7,7 @@ open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.Infra
 
 // ─── Storage layout ──────────────────────────────────────────────
 //
@@ -45,21 +46,18 @@ module private Json =
         with _ ->
             None
 
-let private downloadAll<'T> (storage: IBlobStorage) (blobNames: string list) : Async<'T list> = async {
-    let! results =
+let private logger = lazy (JsonConsoleLogger.JsonConsoleLogger() :> ILogger)
+
+/// A listing prefers a partial result to a total failure: a configuration
+/// that cannot be read is left out, logged and (when undecodable)
+/// quarantined by the document store.
+let private downloadAll<'T> (storage: IBlobStorage) (blobNames: string list) : Async<'T list> =
+    BlobDocuments.readAvailable
+        (BlobDocumentStore<'T>(storage, BlobCodec.json<'T>, logger.Value))
+        logger.Value
+        "DataSourceConfigStore"
+        ScopeKey.platform
         blobNames
-        |> List.map (fun name -> async {
-            let! result = storage.Download(platformContainer, name)
-
-            return
-                match result with
-                | Ok bytes -> Json.tryDeserialize<'T> bytes
-                | Error _ -> None
-        })
-        |> Async.Parallel
-
-    return results |> Array.choose id |> Array.toList
-}
 
 // ─── BlobDataSourceConfigStore ───────────────────────────────────
 
@@ -81,12 +79,14 @@ type BlobDataSourceConfigStore(storage: IBlobStorage) =
             | Error e -> return failwith $"DataSourceConfigStore: failed to persist {config.Id}: {e}"
         }
 
+        // A configuration that cannot be read or decoded REFUSES the read
+        // (`DocumentUnavailableException`) rather than reading as absent.
         member _.Get(scopeId, sourceId) = async {
-            let! result = storage.Download(platformContainer, configBlob scopeId sourceId)
+            let docs =
+                BlobDocumentStore<DataSourceConfig>(storage, BlobCodec.json<DataSourceConfig>, logger.Value)
 
-            match result with
-            | Ok bytes -> return Json.tryDeserialize<DataSourceConfig> bytes
-            | Error _ -> return None
+            let! read = docs.Read(ScopeKey.platform, DocPath.ofString (configBlob scopeId sourceId))
+            return DocumentUnavailable.orRaise read
         }
 
         member _.List(scopeId) = async {
@@ -139,26 +139,43 @@ type BlobDeclaredDeliveryLedger(storage: IBlobStorage) =
     interface IDeclaredDeliveryLedger with
 
         member _.ReadSeeded() = async {
-            let! exists = storage.Exists(platformContainer, seededLedgerBlob)
+            let ledger =
+                BlobDocumentStore<Set<string * string>>(
+                    storage,
+                    {
+                        Encode =
+                            fun seeded ->
+                                seeded
+                                |> Set.toArray
+                                |> Array.map (fun (sourceId, scopeId) -> [| sourceId; scopeId |])
+                                |> JsonSerializer.Serialize
+                                |> Encoding.UTF8.GetBytes
+                        // An array of [source id, scope id] pairs: a BCL
+                        // shape, so the ledger reads without the wire
+                        // converter set.
+                        Decode =
+                            fun bytes ->
+                                try
+                                    let entries =
+                                        JsonSerializer.Deserialize<string array array>(Encoding.UTF8.GetString bytes)
 
-            if not exists then
-                return Ok Set.empty
-            else
-                match! storage.Download(platformContainer, seededLedgerBlob) with
-                | Error e -> return Error $"the declared data-source ledger could not be read: {e}"
-                | Ok bytes ->
-                    // An array of [source id, scope id] pairs: a BCL shape, so
-                    // the ledger reads without the wire converter set.
-                    try
-                        let entries =
-                            JsonSerializer.Deserialize<string array array>(Encoding.UTF8.GetString bytes)
+                                    if
+                                        isNull entries || entries |> Array.exists (fun e -> isNull e || e.Length <> 2)
+                                    then
+                                        Error "the declared data-source ledger is not a list of [source, scope] pairs"
+                                    else
+                                        Ok(entries |> Array.map (fun e -> e[0], e[1]) |> Set.ofArray)
+                                with ex ->
+                                    Error
+                                        $"the declared data-source ledger is not a ledger this version wrote: {ex.Message}"
+                    },
+                    logger.Value
+                )
 
-                        if isNull entries || entries |> Array.exists (fun e -> isNull e || e.Length <> 2) then
-                            return Error "the declared data-source ledger is not a list of [source, scope] pairs"
-                        else
-                            return Ok(entries |> Array.map (fun e -> e[0], e[1]) |> Set.ofArray)
-                    with ex ->
-                        return Error $"the declared data-source ledger is not a ledger this version wrote: {ex.Message}"
+            match! ledger.Read(ScopeKey.platform, DocPath.ofString seededLedgerBlob) with
+            | Ok seeded -> return Ok(defaultArg seeded Set.empty)
+            | Error e ->
+                return Error $"the declared data-source ledger could not be read: {BlobMapStoreError.describe e}"
         }
 
         member _.WriteSeeded(seeded) = async {
