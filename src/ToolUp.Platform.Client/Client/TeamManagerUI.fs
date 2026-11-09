@@ -139,6 +139,10 @@ type Model = {
     /// the member list stays functional, just less friendly. Mirrors
     /// `PlatformAdminUI.Directory`.
     Directory: Map<string, UserSummary>
+    /// This module's section of `ClientModuleContext.Messages`,
+    /// kept from `init` so `update` authors reader-facing text in the
+    /// session's language (a locale switch re-initialises the module).
+    Messages: TeamManagerMessages
 }
 
 type Msg =
@@ -254,6 +258,7 @@ let init (ctx: ClientModuleContext) =
         ReissueInFlight = Set.empty
         TransferOwnershipModal = None
         Directory = Map.empty
+        Messages = ctx.Messages.TeamManager
     }
 
     let loadTeams =
@@ -383,7 +388,7 @@ let update (msg: Msg) (model: Model) =
         if raw = "" then
             {
                 model with
-                    Error = Some(Notice.Problem MessageCatalog.english.TeamManager.IdentifierRequired)
+                    Error = Some(Notice.Problem model.Messages.IdentifierRequired)
             },
             Cmd.none
         // 0.5.7 — Detect email format and route through the
@@ -682,7 +687,7 @@ let update (msg: Msg) (model: Model) =
                     IssueByEmailModal =
                         Some {
                             m with
-                                SubmitError = Some(MessageCatalog.english.TeamManager.EmailRequired)
+                                SubmitError = Some(model.Messages.EmailRequired)
                         }
             },
             Cmd.none
