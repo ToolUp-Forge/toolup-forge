@@ -373,6 +373,7 @@ ToolUp.RAG.RagHealthHandler (class)
 ToolUp.RAG.RagHealthHandler.healthHandler(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.AspNetCore.Http.HttpContext) : System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]
 ToolUp.RAG.RagHealthHandler.route : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]] { get }
 ToolUp.RAG.RagTelemetry (class)
+ToolUp.RAG.RagTelemetry.DefaultDenseMissFloor : System.Double (literal)
 ToolUp.RAG.RagTelemetry.TotalStage : System.String (literal)
 ToolUp.RAG.RagTelemetry.createDefault() : ToolUp.Platform.Infra.IRagTelemetry+IRagTelemetry
 ToolUp.RAG.RagTelemetry.createNoOp() : ToolUp.Platform.Infra.IRagTelemetry+IRagTelemetry
@@ -390,6 +391,7 @@ ToolUp.RAG.RagTelemetry+RetrievalMeter.Inner : ToolUp.Platform.Infra.IRetrievalP
 ToolUp.RAG.RagTelemetry+RetrievalMeter.PeakInFlight : System.Int32 { get }
 ToolUp.RAG.RagTelemetry+RollingRagTelemetry (class)
 ToolUp.RAG.RagTelemetry+RollingRagTelemetry..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.Int32])
+ToolUp.RAG.RagTelemetry+RollingRagTelemetry..ctor(System.Int32, System.Double)
 ToolUp.RAG.RagVectorStoreLifecycle (class)
 ToolUp.RAG.RagVectorStoreLifecycle.create(System.IServiceProvider) : ToolUp.Platform.Compose.ITenantLifecycle
 ToolUp.RAG.RagVectorStoreLifecycle+RagVectorStoreLifecycle (class)
@@ -406,6 +408,29 @@ ToolUp.RAG.ReembeddingService+ReembeddingQueue.MarkScanComplete(ToolUp.Platform.
 ToolUp.RAG.ReembeddingService+ReembeddingQueue.Reader : System.Threading.Channels.ChannelReader`1[ToolUp.Platform.VectorKnowledgeTypes+VectorScope] { get }
 ToolUp.RAG.RetrievalPipeline (class)
 ToolUp.RAG.RetrievalPipeline.KnowledgeQueryRejectedEventType : System.String (literal)
+ToolUp.RAG.RetrievalPipeline+BoostKind (class)
+ToolUp.RAG.RetrievalPipeline+BoostKind.ActiveModule : ToolUp.RAG.RetrievalPipeline+BoostKind { get }
+ToolUp.RAG.RetrievalPipeline+BoostKind.FactNarrativeJoin : ToolUp.RAG.RetrievalPipeline+BoostKind { get }
+ToolUp.RAG.RetrievalPipeline+BoostKind.IsActiveModule : System.Boolean { get }
+ToolUp.RAG.RetrievalPipeline+BoostKind.IsFactNarrativeJoin : System.Boolean { get }
+ToolUp.RAG.RetrievalPipeline+BoostKind.IsSummary : System.Boolean { get }
+ToolUp.RAG.RetrievalPipeline+BoostKind.Summary : ToolUp.RAG.RetrievalPipeline+BoostKind { get }
+ToolUp.RAG.RetrievalPipeline+BoostKind.Tag : System.Int32 { get }
+ToolUp.RAG.RetrievalPipeline+BoostKind+Tags (class)
+ToolUp.RAG.RetrievalPipeline+BoostKind+Tags.ActiveModule : System.Int32 (literal)
+ToolUp.RAG.RetrievalPipeline+BoostKind+Tags.FactNarrativeJoin : System.Int32 (literal)
+ToolUp.RAG.RetrievalPipeline+BoostKind+Tags.Summary : System.Int32 (literal)
+ToolUp.RAG.RetrievalPipeline+BoundedFault (class)
+ToolUp.RAG.RetrievalPipeline+BoundedFault.Failed : ToolUp.RAG.RetrievalPipeline+BoundedFault { get }
+ToolUp.RAG.RetrievalPipeline+BoundedFault.IsFailed : System.Boolean { get }
+ToolUp.RAG.RetrievalPipeline+BoundedFault.IsTimedOut : System.Boolean { get }
+ToolUp.RAG.RetrievalPipeline+BoundedFault.Tag : System.Int32 { get }
+ToolUp.RAG.RetrievalPipeline+BoundedFault.TimedOut : ToolUp.RAG.RetrievalPipeline+BoundedFault { get }
+ToolUp.RAG.RetrievalPipeline+BoundedFault+Tags (class)
+ToolUp.RAG.RetrievalPipeline+BoundedFault+Tags.Failed : System.Int32 (literal)
+ToolUp.RAG.RetrievalPipeline+BoundedFault+Tags.TimedOut : System.Int32 (literal)
+ToolUp.RAG.RetrievalPipeline+BoundedFaultModule (class)
+ToolUp.RAG.RetrievalPipeline+BoundedFaultModule.label(ToolUp.RAG.RetrievalPipeline+BoundedFault) : System.String
 ToolUp.RAG.RetrievalPipeline+IBatchIndexer (interface)
 ToolUp.RAG.RetrievalPipeline+IBatchIndexer.IndexBatch(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.VectorKnowledgeTypes+TextChunk]], ToolUp.Platform.VectorKnowledgeTypes+VectorScope) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.RAG.RetrievalPipeline+IBatchIndexer.SupportsBatch : System.Boolean { get }
@@ -413,6 +438,31 @@ ToolUp.RAG.RetrievalPipeline+KnowledgeQueryTooLargeException (class)
 ToolUp.RAG.RetrievalPipeline+KnowledgeQueryTooLargeException..ctor(System.Int32, System.Int32)
 ToolUp.RAG.RetrievalPipeline+KnowledgeQueryTooLargeException.MaxQueryChars : System.Int32 { get }
 ToolUp.RAG.RetrievalPipeline+KnowledgeQueryTooLargeException.QueryChars : System.Int32 { get }
+ToolUp.RAG.RetrievalPipeline+OrderingStep (class)
+ToolUp.RAG.RetrievalPipeline+OrderingStep.Dense : ToolUp.RAG.RetrievalPipeline+OrderingStep { get }
+ToolUp.RAG.RetrievalPipeline+OrderingStep.Interleaved : ToolUp.RAG.RetrievalPipeline+OrderingStep { get }
+ToolUp.RAG.RetrievalPipeline+OrderingStep.IsBoost : System.Boolean { get }
+ToolUp.RAG.RetrievalPipeline+OrderingStep.IsDense : System.Boolean { get }
+ToolUp.RAG.RetrievalPipeline+OrderingStep.IsInterleaved : System.Boolean { get }
+ToolUp.RAG.RetrievalPipeline+OrderingStep.IsMMR : System.Boolean { get }
+ToolUp.RAG.RetrievalPipeline+OrderingStep.IsRRF : System.Boolean { get }
+ToolUp.RAG.RetrievalPipeline+OrderingStep.IsRerank : System.Boolean { get }
+ToolUp.RAG.RetrievalPipeline+OrderingStep.IsSeparate : System.Boolean { get }
+ToolUp.RAG.RetrievalPipeline+OrderingStep.MMR : ToolUp.RAG.RetrievalPipeline+OrderingStep { get }
+ToolUp.RAG.RetrievalPipeline+OrderingStep.RRF : ToolUp.RAG.RetrievalPipeline+OrderingStep { get }
+ToolUp.RAG.RetrievalPipeline+OrderingStep.Rerank : ToolUp.RAG.RetrievalPipeline+OrderingStep { get }
+ToolUp.RAG.RetrievalPipeline+OrderingStep.Separate : ToolUp.RAG.RetrievalPipeline+OrderingStep { get }
+ToolUp.RAG.RetrievalPipeline+OrderingStep.Tag : System.Int32 { get }
+ToolUp.RAG.RetrievalPipeline+OrderingStep+Boost (class)
+ToolUp.RAG.RetrievalPipeline+OrderingStep+Boost.kind : ToolUp.RAG.RetrievalPipeline+BoostKind { get }
+ToolUp.RAG.RetrievalPipeline+OrderingStep+Tags (class)
+ToolUp.RAG.RetrievalPipeline+OrderingStep+Tags.Boost : System.Int32 (literal)
+ToolUp.RAG.RetrievalPipeline+OrderingStep+Tags.Dense : System.Int32 (literal)
+ToolUp.RAG.RetrievalPipeline+OrderingStep+Tags.Interleaved : System.Int32 (literal)
+ToolUp.RAG.RetrievalPipeline+OrderingStep+Tags.MMR : System.Int32 (literal)
+ToolUp.RAG.RetrievalPipeline+OrderingStep+Tags.RRF : System.Int32 (literal)
+ToolUp.RAG.RetrievalPipeline+OrderingStep+Tags.Rerank : System.Int32 (literal)
+ToolUp.RAG.RetrievalPipeline+OrderingStep+Tags.Separate : System.Int32 (literal)
 ToolUp.RAG.RetrievalPipeline+RetrievalBudgets (class)
 ToolUp.RAG.RetrievalPipeline+RetrievalBudgets..ctor(ToolUp.Platform.Infra.IEmbeddingProvider+QueryEmbedPolicy, System.TimeSpan)
 ToolUp.RAG.RetrievalPipeline+RetrievalBudgets.FactStage : System.TimeSpan { get }
@@ -439,6 +489,95 @@ ToolUp.RAG.RetrievalPipeline+RetrievalScoreSpaceModule.ofComposition(System.Bool
 ToolUp.RAG.RetrievalPipeline+RetrievalScoreSpaceModule.stageMark(ToolUp.Platform.Infra.IRetrievalPipeline+RetrievalScoreSpace) : System.String
 ToolUp.RAG.RetrievalPipeline+RetrievalScoreSpaceModule.thresholdFinding(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.IRetrievalPipeline+RetrievalScoreSpace], Microsoft.FSharp.Core.FSharpOption`1[System.Double]) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.RAG.RetrievalPipeline+RetrievalScoreSpaceModule.upperBound(ToolUp.Platform.Infra.IRetrievalPipeline+RetrievalScoreSpace) : Microsoft.FSharp.Core.FSharpOption`1[System.Double]
+ToolUp.RAG.RetrievalPipeline+RetrievalStage (class)
+ToolUp.RAG.RetrievalPipeline+RetrievalStage.AdaptiveK : ToolUp.RAG.RetrievalPipeline+RetrievalStage { get }
+ToolUp.RAG.RetrievalPipeline+RetrievalStage.AuthoriseScopes : ToolUp.RAG.RetrievalPipeline+RetrievalStage { get }
+ToolUp.RAG.RetrievalPipeline+RetrievalStage.Dense : ToolUp.RAG.RetrievalPipeline+RetrievalStage { get }
+ToolUp.RAG.RetrievalPipeline+RetrievalStage.DerivedDisclosure : ToolUp.RAG.RetrievalPipeline+RetrievalStage { get }
+ToolUp.RAG.RetrievalPipeline+RetrievalStage.DisclosureFilter : ToolUp.RAG.RetrievalPipeline+RetrievalStage { get }
+ToolUp.RAG.RetrievalPipeline+RetrievalStage.FactResolve : ToolUp.RAG.RetrievalPipeline+RetrievalStage { get }
+ToolUp.RAG.RetrievalPipeline+RetrievalStage.IsAdaptiveK : System.Boolean { get }
+ToolUp.RAG.RetrievalPipeline+RetrievalStage.IsAuthoriseScopes : System.Boolean { get }
+ToolUp.RAG.RetrievalPipeline+RetrievalStage.IsBoost : System.Boolean { get }
+ToolUp.RAG.RetrievalPipeline+RetrievalStage.IsDense : System.Boolean { get }
+ToolUp.RAG.RetrievalPipeline+RetrievalStage.IsDenseDegraded : System.Boolean { get }
+ToolUp.RAG.RetrievalPipeline+RetrievalStage.IsDerivedDisclosure : System.Boolean { get }
+ToolUp.RAG.RetrievalPipeline+RetrievalStage.IsDerivedDisclosureDegraded : System.Boolean { get }
+ToolUp.RAG.RetrievalPipeline+RetrievalStage.IsDerivedDisclosureDropped : System.Boolean { get }
+ToolUp.RAG.RetrievalPipeline+RetrievalStage.IsDisclosureFilter : System.Boolean { get }
+ToolUp.RAG.RetrievalPipeline+RetrievalStage.IsFactResolve : System.Boolean { get }
+ToolUp.RAG.RetrievalPipeline+RetrievalStage.IsFactsDegraded : System.Boolean { get }
+ToolUp.RAG.RetrievalPipeline+RetrievalStage.IsFinalOrder : System.Boolean { get }
+ToolUp.RAG.RetrievalPipeline+RetrievalStage.IsMMR : System.Boolean { get }
+ToolUp.RAG.RetrievalPipeline+RetrievalStage.IsMerge : System.Boolean { get }
+ToolUp.RAG.RetrievalPipeline+RetrievalStage.IsMetadataFilter : System.Boolean { get }
+ToolUp.RAG.RetrievalPipeline+RetrievalStage.IsNormalise : System.Boolean { get }
+ToolUp.RAG.RetrievalPipeline+RetrievalStage.IsOriginFilter : System.Boolean { get }
+ToolUp.RAG.RetrievalPipeline+RetrievalStage.IsQueryRewrite : System.Boolean { get }
+ToolUp.RAG.RetrievalPipeline+RetrievalStage.IsRRF : System.Boolean { get }
+ToolUp.RAG.RetrievalPipeline+RetrievalStage.IsRerank : System.Boolean { get }
+ToolUp.RAG.RetrievalPipeline+RetrievalStage.IsRerankCapped : System.Boolean { get }
+ToolUp.RAG.RetrievalPipeline+RetrievalStage.IsScoreSpace : System.Boolean { get }
+ToolUp.RAG.RetrievalPipeline+RetrievalStage.IsSparse : System.Boolean { get }
+ToolUp.RAG.RetrievalPipeline+RetrievalStage.IsTopK : System.Boolean { get }
+ToolUp.RAG.RetrievalPipeline+RetrievalStage.MMR : ToolUp.RAG.RetrievalPipeline+RetrievalStage { get }
+ToolUp.RAG.RetrievalPipeline+RetrievalStage.MetadataFilter : ToolUp.RAG.RetrievalPipeline+RetrievalStage { get }
+ToolUp.RAG.RetrievalPipeline+RetrievalStage.Normalise : ToolUp.RAG.RetrievalPipeline+RetrievalStage { get }
+ToolUp.RAG.RetrievalPipeline+RetrievalStage.OriginFilter : ToolUp.RAG.RetrievalPipeline+RetrievalStage { get }
+ToolUp.RAG.RetrievalPipeline+RetrievalStage.QueryRewrite : ToolUp.RAG.RetrievalPipeline+RetrievalStage { get }
+ToolUp.RAG.RetrievalPipeline+RetrievalStage.RRF : ToolUp.RAG.RetrievalPipeline+RetrievalStage { get }
+ToolUp.RAG.RetrievalPipeline+RetrievalStage.Rerank : ToolUp.RAG.RetrievalPipeline+RetrievalStage { get }
+ToolUp.RAG.RetrievalPipeline+RetrievalStage.Sparse : ToolUp.RAG.RetrievalPipeline+RetrievalStage { get }
+ToolUp.RAG.RetrievalPipeline+RetrievalStage.Tag : System.Int32 { get }
+ToolUp.RAG.RetrievalPipeline+RetrievalStage.TopK : ToolUp.RAG.RetrievalPipeline+RetrievalStage { get }
+ToolUp.RAG.RetrievalPipeline+RetrievalStage+Boost (class)
+ToolUp.RAG.RetrievalPipeline+RetrievalStage+Boost.kind : ToolUp.RAG.RetrievalPipeline+BoostKind { get }
+ToolUp.RAG.RetrievalPipeline+RetrievalStage+DenseDegraded (class)
+ToolUp.RAG.RetrievalPipeline+RetrievalStage+DenseDegraded.outcome : ToolUp.Platform.Infra.IEmbeddingProvider+QueryEmbedOutcome { get }
+ToolUp.RAG.RetrievalPipeline+RetrievalStage+DerivedDisclosureDegraded (class)
+ToolUp.RAG.RetrievalPipeline+RetrievalStage+DerivedDisclosureDegraded.fault : ToolUp.RAG.RetrievalPipeline+BoundedFault { get }
+ToolUp.RAG.RetrievalPipeline+RetrievalStage+DerivedDisclosureDropped (class)
+ToolUp.RAG.RetrievalPipeline+RetrievalStage+DerivedDisclosureDropped.dropped : System.Int32 { get }
+ToolUp.RAG.RetrievalPipeline+RetrievalStage+DerivedDisclosureDropped.pool : System.Int32 { get }
+ToolUp.RAG.RetrievalPipeline+RetrievalStage+FactsDegraded (class)
+ToolUp.RAG.RetrievalPipeline+RetrievalStage+FactsDegraded.fault : ToolUp.RAG.RetrievalPipeline+BoundedFault { get }
+ToolUp.RAG.RetrievalPipeline+RetrievalStage+FinalOrder (class)
+ToolUp.RAG.RetrievalPipeline+RetrievalStage+FinalOrder.step : ToolUp.RAG.RetrievalPipeline+OrderingStep { get }
+ToolUp.RAG.RetrievalPipeline+RetrievalStage+Merge (class)
+ToolUp.RAG.RetrievalPipeline+RetrievalStage+Merge.ordered : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.RAG.RetrievalPipeline+OrderingStep] { get }
+ToolUp.RAG.RetrievalPipeline+RetrievalStage+RerankCapped (class)
+ToolUp.RAG.RetrievalPipeline+RetrievalStage+RerankCapped.pool : System.Int32 { get }
+ToolUp.RAG.RetrievalPipeline+RetrievalStage+RerankCapped.reranked : System.Int32 { get }
+ToolUp.RAG.RetrievalPipeline+RetrievalStage+ScoreSpace (class)
+ToolUp.RAG.RetrievalPipeline+RetrievalStage+ScoreSpace.space : ToolUp.Platform.Infra.IRetrievalPipeline+RetrievalScoreSpace { get }
+ToolUp.RAG.RetrievalPipeline+RetrievalStage+Tags (class)
+ToolUp.RAG.RetrievalPipeline+RetrievalStage+Tags.AdaptiveK : System.Int32 (literal)
+ToolUp.RAG.RetrievalPipeline+RetrievalStage+Tags.AuthoriseScopes : System.Int32 (literal)
+ToolUp.RAG.RetrievalPipeline+RetrievalStage+Tags.Boost : System.Int32 (literal)
+ToolUp.RAG.RetrievalPipeline+RetrievalStage+Tags.Dense : System.Int32 (literal)
+ToolUp.RAG.RetrievalPipeline+RetrievalStage+Tags.DenseDegraded : System.Int32 (literal)
+ToolUp.RAG.RetrievalPipeline+RetrievalStage+Tags.DerivedDisclosure : System.Int32 (literal)
+ToolUp.RAG.RetrievalPipeline+RetrievalStage+Tags.DerivedDisclosureDegraded : System.Int32 (literal)
+ToolUp.RAG.RetrievalPipeline+RetrievalStage+Tags.DerivedDisclosureDropped : System.Int32 (literal)
+ToolUp.RAG.RetrievalPipeline+RetrievalStage+Tags.DisclosureFilter : System.Int32 (literal)
+ToolUp.RAG.RetrievalPipeline+RetrievalStage+Tags.FactResolve : System.Int32 (literal)
+ToolUp.RAG.RetrievalPipeline+RetrievalStage+Tags.FactsDegraded : System.Int32 (literal)
+ToolUp.RAG.RetrievalPipeline+RetrievalStage+Tags.FinalOrder : System.Int32 (literal)
+ToolUp.RAG.RetrievalPipeline+RetrievalStage+Tags.MMR : System.Int32 (literal)
+ToolUp.RAG.RetrievalPipeline+RetrievalStage+Tags.Merge : System.Int32 (literal)
+ToolUp.RAG.RetrievalPipeline+RetrievalStage+Tags.MetadataFilter : System.Int32 (literal)
+ToolUp.RAG.RetrievalPipeline+RetrievalStage+Tags.Normalise : System.Int32 (literal)
+ToolUp.RAG.RetrievalPipeline+RetrievalStage+Tags.OriginFilter : System.Int32 (literal)
+ToolUp.RAG.RetrievalPipeline+RetrievalStage+Tags.QueryRewrite : System.Int32 (literal)
+ToolUp.RAG.RetrievalPipeline+RetrievalStage+Tags.RRF : System.Int32 (literal)
+ToolUp.RAG.RetrievalPipeline+RetrievalStage+Tags.Rerank : System.Int32 (literal)
+ToolUp.RAG.RetrievalPipeline+RetrievalStage+Tags.RerankCapped : System.Int32 (literal)
+ToolUp.RAG.RetrievalPipeline+RetrievalStage+Tags.ScoreSpace : System.Int32 (literal)
+ToolUp.RAG.RetrievalPipeline+RetrievalStage+Tags.Sparse : System.Int32 (literal)
+ToolUp.RAG.RetrievalPipeline+RetrievalStage+Tags.TopK : System.Int32 (literal)
+ToolUp.RAG.RetrievalPipeline+RetrievalStageModule (class)
+ToolUp.RAG.RetrievalPipeline+RetrievalStageModule.mark(ToolUp.RAG.RetrievalPipeline+RetrievalStage) : System.String
+ToolUp.RAG.RetrievalPipeline+RetrievalStageModule.ordering(ToolUp.RAG.RetrievalPipeline+RetrievalStage) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.RAG.RetrievalPipeline+OrderingStep]
 ToolUp.RAG.RetrievalTracers (class)
 ToolUp.RAG.RetrievalTracers.createBackground(ToolUp.Platform.Infra.IRetrievalTracer+IRetrievalTracer, System.Int32, ToolUp.Platform.ILogger) : ToolUp.RAG.RetrievalTracers+BackgroundRetrievalTracer
 ToolUp.RAG.RetrievalTracers.createEventStore(ToolUp.Platform.IEventStore, ToolUp.Platform.ILogger) : ToolUp.Platform.Infra.IRetrievalTracer+IRetrievalTracer

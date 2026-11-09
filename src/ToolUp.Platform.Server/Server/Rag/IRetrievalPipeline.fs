@@ -87,6 +87,13 @@ type ScoredPool = {
     /// The pool in relevance order before MMR diversified it, when MMR
     /// reordered it; `None` when the returned order IS the relevance order.
     Relevance: VectorMatch list option
+    /// The best dense (cosine) similarity among `Matches`, read before any
+    /// fusion: an absolute relevance reading beside a relative order. A
+    /// fused pool's best match is `1.0` whether the corpus answered or not,
+    /// so this is what tells a hit from a miss there. `None` when no dense
+    /// ranking scored the returned matches (its embed degraded, or the
+    /// pipeline does not report one).
+    DenseSimilarity: float option
 }
 
 /// The scored sibling of `IRetrievalPipeline`: a pipeline that returns the
@@ -124,6 +131,7 @@ module ScoredPool =
         Unit = unitOf space matches
         Matches = matches
         Relevance = None
+        DenseSimilarity = None
     }
 
     /// Retrieve through `pipeline`: its own pool when it implements the

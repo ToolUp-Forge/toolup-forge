@@ -1,0 +1,85 @@
+=== chunk 1
+source: doc-golden | notes.docx | docx | Section "Document"
+meta _locationHint = Section: "Document"
+meta _origin = Document
+meta _source = {"DocumentId":"doc-golden","DocumentName":"notes.docx","FileType":"docx","Location":{"Section":"Document"},"IndexedAt":"<clock>"}
+meta dataTypeId = KnowledgeDocument
+content:
+[notes.docx — Section: "Document"]
+Preamble before any heading.
+=== chunk 2
+source: doc-golden | notes.docx | docx | Section "Intro"
+meta _locationHint = Section: "Intro"
+meta _origin = Document
+meta _source = {"DocumentId":"doc-golden","DocumentName":"notes.docx","FileType":"docx","Location":{"Section":"Intro"},"IndexedAt":"<clock>"}
+meta dataTypeId = KnowledgeDocument
+content:
+[notes.docx — Section: "Intro"]
+Alpha beta gamma.
+=== chunk 3
+source: doc-golden | notes.docx | docx | Section "Intro › Sub"
+meta _locationHint = Section: "Intro › Sub"
+meta _origin = Document
+meta _source = {"DocumentId":"doc-golden","DocumentName":"notes.docx","FileType":"docx","Location":{"Section":"Intro › Sub"},"IndexedAt":"<clock>"}
+meta dataTypeId = KnowledgeDocument
+content:
+[notes.docx — Section: "Intro › Sub"]
+One
+Two
+=== chunk 4
+source: doc-golden | notes.docx | docx | Section "Intro › Sub"
+meta _locationHint = Section: "Intro › Sub" (table)
+meta _origin = Document
+meta _source = {"DocumentId":"doc-golden","DocumentName":"notes.docx","FileType":"docx","Location":{"Section":"Intro › Sub"},"IndexedAt":"<clock>"}
+meta dataTypeId = KnowledgeDocument
+content:
+[notes.docx — Section: "Intro › Sub" (table)]
+Sheet "Intro › Sub", rows 2–3 of 2
+Columns: Col, Val
+Col: a | Val: 1
+Col: b | Val: 2
+=== chunk 5
+source: doc-golden | notes.docx | docx | Section "Intro › Sub"
+meta _locationHint = Section: "Intro › Sub"
+meta _origin = Document
+meta _source = {"DocumentId":"doc-golden","DocumentName":"notes.docx","FileType":"docx","Location":{"Section":"Intro › Sub"},"IndexedAt":"<clock>"}
+meta dataTypeId = KnowledgeDocument
+content:
+[notes.docx — Section: "Intro › Sub"]
+only	row
+=== chunk 6
+source: doc-golden | notes.docx | docx | Section "Long"
+meta _locationHint = Section: "Long" (part 1 of 4)
+meta _origin = Document
+meta _source = {"DocumentId":"doc-golden","DocumentName":"notes.docx","FileType":"docx","Location":{"Section":"Long"},"IndexedAt":"<clock>"}
+meta dataTypeId = KnowledgeDocument
+content:
+[notes.docx — Section: "Long" (part 1 of 4)]
+The docx review number 1 recorded steady progress across the northern region and the southern region alike. The docx review number 2 recorded steady progress across the northern region and the southern region alike. The docx review number 3 recorded steady progress across the northern region and the southern region alike. The docx review number 4 recorded steady progress across the northern region and the southern region alike. The docx review number 5 recorded steady progress across the northern region and the southern region alike. The docx review number 6 recorded steady progress across the northern region and the southern region alike. The docx review number 7 recorded steady progress across the northern region and the southern region alike. The docx review number 8 recorded steady progress across the northern region and the southern region alike. The docx review number 9 recorded steady progress across the northern region and the southern region alike. The docx review number 10 recorded steady progress across the northern region and the southern region alike. The docx review number 11 recorded steady progress across the northern region and the southern region alike. The docx review number 12 recorded steady progress across the northern region and the southern region alike. The docx review number 13 recorded steady progress across the northern region and the southern region alike. The docx review number 14 recorded steady progress across the northern region and the southern region alike. The docx review number 15 recorded steady progress across the northern region and the southern region alike. The docx review number 16 recorded steady progress across the northern region and the southern region alike. The docx review number 17 recorded steady progress across the northern region and the southern region alike. The docx review number 18 recorded steady progress across the northern region and the southern region alike.
+=== chunk 7
+source: doc-golden | notes.docx | docx | Section "Long"
+meta _locationHint = Section: "Long" (part 2 of 4)
+meta _origin = Document
+meta _source = {"DocumentId":"doc-golden","DocumentName":"notes.docx","FileType":"docx","Location":{"Section":"Long"},"IndexedAt":"<clock>"}
+meta dataTypeId = KnowledgeDocument
+content:
+[notes.docx — Section: "Long" (part 2 of 4)]
+The docx review number 16 recorded steady progress across the northern region and the southern region alike. The docx review number 17 recorded steady progress across the northern region and the southern region alike. The docx review number 18 recorded steady progress across the northern region and the southern region alike. The docx review number 19 recorded steady progress across the northern region and the southern region alike. The docx review number 20 recorded steady progress across the northern region and the southern region alike. The docx review number 21 recorded steady progress across the northern region and the southern region alike. The docx review number 22 recorded steady progress across the northern region and the southern region alike. The docx review number 23 recorded steady progress across the northern region and the southern region alike. The docx review number 24 recorded steady progress across the northern region and the southern region alike. The docx review number 25 recorded steady progress across the northern region and the southern region alike. The docx review number 26 recorded steady progress across the northern region and the southern region alike. The docx review number 27 recorded steady progress across the northern region and the southern region alike. The docx review number 28 recorded steady progress across the northern region and the southern region alike. The docx review number 29 recorded steady progress across the northern region and the southern region alike. The docx review number 30 recorded steady progress across the northern region and the southern region alike. The docx review number 31 recorded steady progress across the northern region and the southern region alike. The docx review number 32 recorded steady progress across the northern region and the southern region alike. The docx review number 33 recorded steady progress across the northern region and the southern region alike.
+=== chunk 8
+source: doc-golden | notes.docx | docx | Section "Long"
+meta _locationHint = Section: "Long" (part 3 of 4)
+meta _origin = Document
+meta _source = {"DocumentId":"doc-golden","DocumentName":"notes.docx","FileType":"docx","Location":{"Section":"Long"},"IndexedAt":"<clock>"}
+meta dataTypeId = KnowledgeDocument
+content:
+[notes.docx — Section: "Long" (part 3 of 4)]
+The docx review number 31 recorded steady progress across the northern region and the southern region alike. The docx review number 32 recorded steady progress across the northern region and the southern region alike. The docx review number 33 recorded steady progress across the northern region and the southern region alike. The docx review number 34 recorded steady progress across the northern region and the southern region alike. The docx review number 35 recorded steady progress across the northern region and the southern region alike. The docx review number 36 recorded steady progress across the northern region and the southern region alike. The docx review number 37 recorded steady progress across the northern region and the southern region alike. The docx review number 38 recorded steady progress across the northern region and the southern region alike. The docx review number 39 recorded steady progress across the northern region and the southern region alike. The docx review number 40 recorded steady progress across the northern region and the southern region alike. The docx review number 41 recorded steady progress across the northern region and the southern region alike. The docx review number 42 recorded steady progress across the northern region and the southern region alike. The docx review number 43 recorded steady progress across the northern region and the southern region alike. The docx review number 44 recorded steady progress across the northern region and the southern region alike. The docx review number 45 recorded steady progress across the northern region and the southern region alike. The docx review number 46 recorded steady progress across the northern region and the southern region alike. The docx review number 47 recorded steady progress across the northern region and the southern region alike. The docx review number 48 recorded steady progress across the northern region and the southern region alike.
+=== chunk 9
+source: doc-golden | notes.docx | docx | Section "Long"
+meta _locationHint = Section: "Long" (part 4 of 4)
+meta _origin = Document
+meta _source = {"DocumentId":"doc-golden","DocumentName":"notes.docx","FileType":"docx","Location":{"Section":"Long"},"IndexedAt":"<clock>"}
+meta dataTypeId = KnowledgeDocument
+content:
+[notes.docx — Section: "Long" (part 4 of 4)]
+The docx review number 46 recorded steady progress across the northern region and the southern region alike. The docx review number 47 recorded steady progress across the northern region and the southern region alike. The docx review number 48 recorded steady progress across the northern region and the southern region alike. The docx review number 49 recorded steady progress across the northern region and the southern region alike. The docx review number 50 recorded steady progress across the northern region and the southern region alike. The docx review number 51 recorded steady progress across the northern region and the southern region alike. The docx review number 52 recorded steady progress across the northern region and the southern region alike. The docx review number 53 recorded steady progress across the northern region and the southern region alike. The docx review number 54 recorded steady progress across the northern region and the southern region alike. The docx review number 55 recorded steady progress across the northern region and the southern region alike. The docx review number 56 recorded steady progress across the northern region and the southern region alike. The docx review number 57 recorded steady progress across the northern region and the southern region alike. The docx review number 58 recorded steady progress across the northern region and the southern region alike. The docx review number 59 recorded steady progress across the northern region and the southern region alike. The docx review number 60 recorded steady progress across the northern region and the southern region alike.

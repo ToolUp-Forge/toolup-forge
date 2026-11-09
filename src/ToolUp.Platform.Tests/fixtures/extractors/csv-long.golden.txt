@@ -1,0 +1,434 @@
+=== chunk 1
+source: doc-golden | long.csv | csv | Sheet ("data", None)
+meta _locationHint = schema + sample
+meta _origin = Document
+meta _source = {"DocumentId":"doc-golden","DocumentName":"long.csv","FileType":"csv","Location":{"Sheet":["data",null]},"IndexedAt":"<clock>"}
+meta dataTypeId = KnowledgeDocument
+content:
+[long.csv — schema + sample]
+Columns: id, description
+id: 1 | description: row 1 carries a description long enough to fill
+id: 2 | description: row 2 carries a description long enough to fill
+id: 3 | description: row 3 carries a description long enough to fill
+id: 4 | description: row 4 carries a description long enough to fill
+id: 5 | description: row 5 carries a description long enough to fill
+=== chunk 2
+source: doc-golden | long.csv | csv | RowGroup (2, 27)
+meta _locationHint = rows 2–27
+meta _origin = Document
+meta _source = {"DocumentId":"doc-golden","DocumentName":"long.csv","FileType":"csv","Location":{"RowGroup":[2,27]},"IndexedAt":"<clock>"}
+meta dataTypeId = KnowledgeDocument
+content:
+[long.csv — rows 2–27]
+Sheet "data", rows 2–27 of 300
+Columns: id, description
+id: 1 | description: row 1 carries a description long enough to fill
+id: 2 | description: row 2 carries a description long enough to fill
+id: 3 | description: row 3 carries a description long enough to fill
+id: 4 | description: row 4 carries a description long enough to fill
+id: 5 | description: row 5 carries a description long enough to fill
+id: 6 | description: row 6 carries a description long enough to fill
+id: 7 | description: row 7 carries a description long enough to fill
+id: 8 | description: row 8 carries a description long enough to fill
+id: 9 | description: row 9 carries a description long enough to fill
+id: 10 | description: row 10 carries a description long enough to fill
+id: 11 | description: row 11 carries a description long enough to fill
+id: 12 | description: row 12 carries a description long enough to fill
+id: 13 | description: row 13 carries a description long enough to fill
+id: 14 | description: row 14 carries a description long enough to fill
+id: 15 | description: row 15 carries a description long enough to fill
+id: 16 | description: row 16 carries a description long enough to fill
+id: 17 | description: row 17 carries a description long enough to fill
+id: 18 | description: row 18 carries a description long enough to fill
+id: 19 | description: row 19 carries a description long enough to fill
+id: 20 | description: row 20 carries a description long enough to fill
+id: 21 | description: row 21 carries a description long enough to fill
+id: 22 | description: row 22 carries a description long enough to fill
+id: 23 | description: row 23 carries a description long enough to fill
+id: 24 | description: row 24 carries a description long enough to fill
+id: 25 | description: row 25 carries a description long enough to fill
+id: 26 | description: row 26 carries a description long enough to fill
+=== chunk 3
+source: doc-golden | long.csv | csv | RowGroup (28, 53)
+meta _locationHint = rows 28–53
+meta _origin = Document
+meta _source = {"DocumentId":"doc-golden","DocumentName":"long.csv","FileType":"csv","Location":{"RowGroup":[28,53]},"IndexedAt":"<clock>"}
+meta dataTypeId = KnowledgeDocument
+content:
+[long.csv — rows 28–53]
+Sheet "data", rows 28–53 of 300
+Columns: id, description
+id: 27 | description: row 27 carries a description long enough to fill
+id: 28 | description: row 28 carries a description long enough to fill
+id: 29 | description: row 29 carries a description long enough to fill
+id: 30 | description: row 30 carries a description long enough to fill
+id: 31 | description: row 31 carries a description long enough to fill
+id: 32 | description: row 32 carries a description long enough to fill
+id: 33 | description: row 33 carries a description long enough to fill
+id: 34 | description: row 34 carries a description long enough to fill
+id: 35 | description: row 35 carries a description long enough to fill
+id: 36 | description: row 36 carries a description long enough to fill
+id: 37 | description: row 37 carries a description long enough to fill
+id: 38 | description: row 38 carries a description long enough to fill
+id: 39 | description: row 39 carries a description long enough to fill
+id: 40 | description: row 40 carries a description long enough to fill
+id: 41 | description: row 41 carries a description long enough to fill
+id: 42 | description: row 42 carries a description long enough to fill
+id: 43 | description: row 43 carries a description long enough to fill
+id: 44 | description: row 44 carries a description long enough to fill
+id: 45 | description: row 45 carries a description long enough to fill
+id: 46 | description: row 46 carries a description long enough to fill
+id: 47 | description: row 47 carries a description long enough to fill
+id: 48 | description: row 48 carries a description long enough to fill
+id: 49 | description: row 49 carries a description long enough to fill
+id: 50 | description: row 50 carries a description long enough to fill
+id: 51 | description: row 51 carries a description long enough to fill
+id: 52 | description: row 52 carries a description long enough to fill
+=== chunk 4
+source: doc-golden | long.csv | csv | RowGroup (54, 79)
+meta _locationHint = rows 54–79
+meta _origin = Document
+meta _source = {"DocumentId":"doc-golden","DocumentName":"long.csv","FileType":"csv","Location":{"RowGroup":[54,79]},"IndexedAt":"<clock>"}
+meta dataTypeId = KnowledgeDocument
+content:
+[long.csv — rows 54–79]
+Sheet "data", rows 54–79 of 300
+Columns: id, description
+id: 53 | description: row 53 carries a description long enough to fill
+id: 54 | description: row 54 carries a description long enough to fill
+id: 55 | description: row 55 carries a description long enough to fill
+id: 56 | description: row 56 carries a description long enough to fill
+id: 57 | description: row 57 carries a description long enough to fill
+id: 58 | description: row 58 carries a description long enough to fill
+id: 59 | description: row 59 carries a description long enough to fill
+id: 60 | description: row 60 carries a description long enough to fill
+id: 61 | description: row 61 carries a description long enough to fill
+id: 62 | description: row 62 carries a description long enough to fill
+id: 63 | description: row 63 carries a description long enough to fill
+id: 64 | description: row 64 carries a description long enough to fill
+id: 65 | description: row 65 carries a description long enough to fill
+id: 66 | description: row 66 carries a description long enough to fill
+id: 67 | description: row 67 carries a description long enough to fill
+id: 68 | description: row 68 carries a description long enough to fill
+id: 69 | description: row 69 carries a description long enough to fill
+id: 70 | description: row 70 carries a description long enough to fill
+id: 71 | description: row 71 carries a description long enough to fill
+id: 72 | description: row 72 carries a description long enough to fill
+id: 73 | description: row 73 carries a description long enough to fill
+id: 74 | description: row 74 carries a description long enough to fill
+id: 75 | description: row 75 carries a description long enough to fill
+id: 76 | description: row 76 carries a description long enough to fill
+id: 77 | description: row 77 carries a description long enough to fill
+id: 78 | description: row 78 carries a description long enough to fill
+=== chunk 5
+source: doc-golden | long.csv | csv | RowGroup (80, 105)
+meta _locationHint = rows 80–105
+meta _origin = Document
+meta _source = {"DocumentId":"doc-golden","DocumentName":"long.csv","FileType":"csv","Location":{"RowGroup":[80,105]},"IndexedAt":"<clock>"}
+meta dataTypeId = KnowledgeDocument
+content:
+[long.csv — rows 80–105]
+Sheet "data", rows 80–105 of 300
+Columns: id, description
+id: 79 | description: row 79 carries a description long enough to fill
+id: 80 | description: row 80 carries a description long enough to fill
+id: 81 | description: row 81 carries a description long enough to fill
+id: 82 | description: row 82 carries a description long enough to fill
+id: 83 | description: row 83 carries a description long enough to fill
+id: 84 | description: row 84 carries a description long enough to fill
+id: 85 | description: row 85 carries a description long enough to fill
+id: 86 | description: row 86 carries a description long enough to fill
+id: 87 | description: row 87 carries a description long enough to fill
+id: 88 | description: row 88 carries a description long enough to fill
+id: 89 | description: row 89 carries a description long enough to fill
+id: 90 | description: row 90 carries a description long enough to fill
+id: 91 | description: row 91 carries a description long enough to fill
+id: 92 | description: row 92 carries a description long enough to fill
+id: 93 | description: row 93 carries a description long enough to fill
+id: 94 | description: row 94 carries a description long enough to fill
+id: 95 | description: row 95 carries a description long enough to fill
+id: 96 | description: row 96 carries a description long enough to fill
+id: 97 | description: row 97 carries a description long enough to fill
+id: 98 | description: row 98 carries a description long enough to fill
+id: 99 | description: row 99 carries a description long enough to fill
+id: 100 | description: row 100 carries a description long enough to fill
+id: 101 | description: row 101 carries a description long enough to fill
+id: 102 | description: row 102 carries a description long enough to fill
+id: 103 | description: row 103 carries a description long enough to fill
+id: 104 | description: row 104 carries a description long enough to fill
+=== chunk 6
+source: doc-golden | long.csv | csv | RowGroup (106, 131)
+meta _locationHint = rows 106–131
+meta _origin = Document
+meta _source = {"DocumentId":"doc-golden","DocumentName":"long.csv","FileType":"csv","Location":{"RowGroup":[106,131]},"IndexedAt":"<clock>"}
+meta dataTypeId = KnowledgeDocument
+content:
+[long.csv — rows 106–131]
+Sheet "data", rows 106–131 of 300
+Columns: id, description
+id: 105 | description: row 105 carries a description long enough to fill
+id: 106 | description: row 106 carries a description long enough to fill
+id: 107 | description: row 107 carries a description long enough to fill
+id: 108 | description: row 108 carries a description long enough to fill
+id: 109 | description: row 109 carries a description long enough to fill
+id: 110 | description: row 110 carries a description long enough to fill
+id: 111 | description: row 111 carries a description long enough to fill
+id: 112 | description: row 112 carries a description long enough to fill
+id: 113 | description: row 113 carries a description long enough to fill
+id: 114 | description: row 114 carries a description long enough to fill
+id: 115 | description: row 115 carries a description long enough to fill
+id: 116 | description: row 116 carries a description long enough to fill
+id: 117 | description: row 117 carries a description long enough to fill
+id: 118 | description: row 118 carries a description long enough to fill
+id: 119 | description: row 119 carries a description long enough to fill
+id: 120 | description: row 120 carries a description long enough to fill
+id: 121 | description: row 121 carries a description long enough to fill
+id: 122 | description: row 122 carries a description long enough to fill
+id: 123 | description: row 123 carries a description long enough to fill
+id: 124 | description: row 124 carries a description long enough to fill
+id: 125 | description: row 125 carries a description long enough to fill
+id: 126 | description: row 126 carries a description long enough to fill
+id: 127 | description: row 127 carries a description long enough to fill
+id: 128 | description: row 128 carries a description long enough to fill
+id: 129 | description: row 129 carries a description long enough to fill
+id: 130 | description: row 130 carries a description long enough to fill
+=== chunk 7
+source: doc-golden | long.csv | csv | RowGroup (132, 157)
+meta _locationHint = rows 132–157
+meta _origin = Document
+meta _source = {"DocumentId":"doc-golden","DocumentName":"long.csv","FileType":"csv","Location":{"RowGroup":[132,157]},"IndexedAt":"<clock>"}
+meta dataTypeId = KnowledgeDocument
+content:
+[long.csv — rows 132–157]
+Sheet "data", rows 132–157 of 300
+Columns: id, description
+id: 131 | description: row 131 carries a description long enough to fill
+id: 132 | description: row 132 carries a description long enough to fill
+id: 133 | description: row 133 carries a description long enough to fill
+id: 134 | description: row 134 carries a description long enough to fill
+id: 135 | description: row 135 carries a description long enough to fill
+id: 136 | description: row 136 carries a description long enough to fill
+id: 137 | description: row 137 carries a description long enough to fill
+id: 138 | description: row 138 carries a description long enough to fill
+id: 139 | description: row 139 carries a description long enough to fill
+id: 140 | description: row 140 carries a description long enough to fill
+id: 141 | description: row 141 carries a description long enough to fill
+id: 142 | description: row 142 carries a description long enough to fill
+id: 143 | description: row 143 carries a description long enough to fill
+id: 144 | description: row 144 carries a description long enough to fill
+id: 145 | description: row 145 carries a description long enough to fill
+id: 146 | description: row 146 carries a description long enough to fill
+id: 147 | description: row 147 carries a description long enough to fill
+id: 148 | description: row 148 carries a description long enough to fill
+id: 149 | description: row 149 carries a description long enough to fill
+id: 150 | description: row 150 carries a description long enough to fill
+id: 151 | description: row 151 carries a description long enough to fill
+id: 152 | description: row 152 carries a description long enough to fill
+id: 153 | description: row 153 carries a description long enough to fill
+id: 154 | description: row 154 carries a description long enough to fill
+id: 155 | description: row 155 carries a description long enough to fill
+id: 156 | description: row 156 carries a description long enough to fill
+=== chunk 8
+source: doc-golden | long.csv | csv | RowGroup (158, 183)
+meta _locationHint = rows 158–183
+meta _origin = Document
+meta _source = {"DocumentId":"doc-golden","DocumentName":"long.csv","FileType":"csv","Location":{"RowGroup":[158,183]},"IndexedAt":"<clock>"}
+meta dataTypeId = KnowledgeDocument
+content:
+[long.csv — rows 158–183]
+Sheet "data", rows 158–183 of 300
+Columns: id, description
+id: 157 | description: row 157 carries a description long enough to fill
+id: 158 | description: row 158 carries a description long enough to fill
+id: 159 | description: row 159 carries a description long enough to fill
+id: 160 | description: row 160 carries a description long enough to fill
+id: 161 | description: row 161 carries a description long enough to fill
+id: 162 | description: row 162 carries a description long enough to fill
+id: 163 | description: row 163 carries a description long enough to fill
+id: 164 | description: row 164 carries a description long enough to fill
+id: 165 | description: row 165 carries a description long enough to fill
+id: 166 | description: row 166 carries a description long enough to fill
+id: 167 | description: row 167 carries a description long enough to fill
+id: 168 | description: row 168 carries a description long enough to fill
+id: 169 | description: row 169 carries a description long enough to fill
+id: 170 | description: row 170 carries a description long enough to fill
+id: 171 | description: row 171 carries a description long enough to fill
+id: 172 | description: row 172 carries a description long enough to fill
+id: 173 | description: row 173 carries a description long enough to fill
+id: 174 | description: row 174 carries a description long enough to fill
+id: 175 | description: row 175 carries a description long enough to fill
+id: 176 | description: row 176 carries a description long enough to fill
+id: 177 | description: row 177 carries a description long enough to fill
+id: 178 | description: row 178 carries a description long enough to fill
+id: 179 | description: row 179 carries a description long enough to fill
+id: 180 | description: row 180 carries a description long enough to fill
+id: 181 | description: row 181 carries a description long enough to fill
+id: 182 | description: row 182 carries a description long enough to fill
+=== chunk 9
+source: doc-golden | long.csv | csv | RowGroup (184, 209)
+meta _locationHint = rows 184–209
+meta _origin = Document
+meta _source = {"DocumentId":"doc-golden","DocumentName":"long.csv","FileType":"csv","Location":{"RowGroup":[184,209]},"IndexedAt":"<clock>"}
+meta dataTypeId = KnowledgeDocument
+content:
+[long.csv — rows 184–209]
+Sheet "data", rows 184–209 of 300
+Columns: id, description
+id: 183 | description: row 183 carries a description long enough to fill
+id: 184 | description: row 184 carries a description long enough to fill
+id: 185 | description: row 185 carries a description long enough to fill
+id: 186 | description: row 186 carries a description long enough to fill
+id: 187 | description: row 187 carries a description long enough to fill
+id: 188 | description: row 188 carries a description long enough to fill
+id: 189 | description: row 189 carries a description long enough to fill
+id: 190 | description: row 190 carries a description long enough to fill
+id: 191 | description: row 191 carries a description long enough to fill
+id: 192 | description: row 192 carries a description long enough to fill
+id: 193 | description: row 193 carries a description long enough to fill
+id: 194 | description: row 194 carries a description long enough to fill
+id: 195 | description: row 195 carries a description long enough to fill
+id: 196 | description: row 196 carries a description long enough to fill
+id: 197 | description: row 197 carries a description long enough to fill
+id: 198 | description: row 198 carries a description long enough to fill
+id: 199 | description: row 199 carries a description long enough to fill
+id: 200 | description: row 200 carries a description long enough to fill
+id: 201 | description: row 201 carries a description long enough to fill
+id: 202 | description: row 202 carries a description long enough to fill
+id: 203 | description: row 203 carries a description long enough to fill
+id: 204 | description: row 204 carries a description long enough to fill
+id: 205 | description: row 205 carries a description long enough to fill
+id: 206 | description: row 206 carries a description long enough to fill
+id: 207 | description: row 207 carries a description long enough to fill
+id: 208 | description: row 208 carries a description long enough to fill
+=== chunk 10
+source: doc-golden | long.csv | csv | RowGroup (210, 235)
+meta _locationHint = rows 210–235
+meta _origin = Document
+meta _source = {"DocumentId":"doc-golden","DocumentName":"long.csv","FileType":"csv","Location":{"RowGroup":[210,235]},"IndexedAt":"<clock>"}
+meta dataTypeId = KnowledgeDocument
+content:
+[long.csv — rows 210–235]
+Sheet "data", rows 210–235 of 300
+Columns: id, description
+id: 209 | description: row 209 carries a description long enough to fill
+id: 210 | description: row 210 carries a description long enough to fill
+id: 211 | description: row 211 carries a description long enough to fill
+id: 212 | description: row 212 carries a description long enough to fill
+id: 213 | description: row 213 carries a description long enough to fill
+id: 214 | description: row 214 carries a description long enough to fill
+id: 215 | description: row 215 carries a description long enough to fill
+id: 216 | description: row 216 carries a description long enough to fill
+id: 217 | description: row 217 carries a description long enough to fill
+id: 218 | description: row 218 carries a description long enough to fill
+id: 219 | description: row 219 carries a description long enough to fill
+id: 220 | description: row 220 carries a description long enough to fill
+id: 221 | description: row 221 carries a description long enough to fill
+id: 222 | description: row 222 carries a description long enough to fill
+id: 223 | description: row 223 carries a description long enough to fill
+id: 224 | description: row 224 carries a description long enough to fill
+id: 225 | description: row 225 carries a description long enough to fill
+id: 226 | description: row 226 carries a description long enough to fill
+id: 227 | description: row 227 carries a description long enough to fill
+id: 228 | description: row 228 carries a description long enough to fill
+id: 229 | description: row 229 carries a description long enough to fill
+id: 230 | description: row 230 carries a description long enough to fill
+id: 231 | description: row 231 carries a description long enough to fill
+id: 232 | description: row 232 carries a description long enough to fill
+id: 233 | description: row 233 carries a description long enough to fill
+id: 234 | description: row 234 carries a description long enough to fill
+=== chunk 11
+source: doc-golden | long.csv | csv | RowGroup (236, 261)
+meta _locationHint = rows 236–261
+meta _origin = Document
+meta _source = {"DocumentId":"doc-golden","DocumentName":"long.csv","FileType":"csv","Location":{"RowGroup":[236,261]},"IndexedAt":"<clock>"}
+meta dataTypeId = KnowledgeDocument
+content:
+[long.csv — rows 236–261]
+Sheet "data", rows 236–261 of 300
+Columns: id, description
+id: 235 | description: row 235 carries a description long enough to fill
+id: 236 | description: row 236 carries a description long enough to fill
+id: 237 | description: row 237 carries a description long enough to fill
+id: 238 | description: row 238 carries a description long enough to fill
+id: 239 | description: row 239 carries a description long enough to fill
+id: 240 | description: row 240 carries a description long enough to fill
+id: 241 | description: row 241 carries a description long enough to fill
+id: 242 | description: row 242 carries a description long enough to fill
+id: 243 | description: row 243 carries a description long enough to fill
+id: 244 | description: row 244 carries a description long enough to fill
+id: 245 | description: row 245 carries a description long enough to fill
+id: 246 | description: row 246 carries a description long enough to fill
+id: 247 | description: row 247 carries a description long enough to fill
+id: 248 | description: row 248 carries a description long enough to fill
+id: 249 | description: row 249 carries a description long enough to fill
+id: 250 | description: row 250 carries a description long enough to fill
+id: 251 | description: row 251 carries a description long enough to fill
+id: 252 | description: row 252 carries a description long enough to fill
+id: 253 | description: row 253 carries a description long enough to fill
+id: 254 | description: row 254 carries a description long enough to fill
+id: 255 | description: row 255 carries a description long enough to fill
+id: 256 | description: row 256 carries a description long enough to fill
+id: 257 | description: row 257 carries a description long enough to fill
+id: 258 | description: row 258 carries a description long enough to fill
+id: 259 | description: row 259 carries a description long enough to fill
+id: 260 | description: row 260 carries a description long enough to fill
+=== chunk 12
+source: doc-golden | long.csv | csv | RowGroup (262, 287)
+meta _locationHint = rows 262–287
+meta _origin = Document
+meta _source = {"DocumentId":"doc-golden","DocumentName":"long.csv","FileType":"csv","Location":{"RowGroup":[262,287]},"IndexedAt":"<clock>"}
+meta dataTypeId = KnowledgeDocument
+content:
+[long.csv — rows 262–287]
+Sheet "data", rows 262–287 of 300
+Columns: id, description
+id: 261 | description: row 261 carries a description long enough to fill
+id: 262 | description: row 262 carries a description long enough to fill
+id: 263 | description: row 263 carries a description long enough to fill
+id: 264 | description: row 264 carries a description long enough to fill
+id: 265 | description: row 265 carries a description long enough to fill
+id: 266 | description: row 266 carries a description long enough to fill
+id: 267 | description: row 267 carries a description long enough to fill
+id: 268 | description: row 268 carries a description long enough to fill
+id: 269 | description: row 269 carries a description long enough to fill
+id: 270 | description: row 270 carries a description long enough to fill
+id: 271 | description: row 271 carries a description long enough to fill
+id: 272 | description: row 272 carries a description long enough to fill
+id: 273 | description: row 273 carries a description long enough to fill
+id: 274 | description: row 274 carries a description long enough to fill
+id: 275 | description: row 275 carries a description long enough to fill
+id: 276 | description: row 276 carries a description long enough to fill
+id: 277 | description: row 277 carries a description long enough to fill
+id: 278 | description: row 278 carries a description long enough to fill
+id: 279 | description: row 279 carries a description long enough to fill
+id: 280 | description: row 280 carries a description long enough to fill
+id: 281 | description: row 281 carries a description long enough to fill
+id: 282 | description: row 282 carries a description long enough to fill
+id: 283 | description: row 283 carries a description long enough to fill
+id: 284 | description: row 284 carries a description long enough to fill
+id: 285 | description: row 285 carries a description long enough to fill
+id: 286 | description: row 286 carries a description long enough to fill
+=== chunk 13
+source: doc-golden | long.csv | csv | RowGroup (288, 301)
+meta _locationHint = rows 288–301
+meta _origin = Document
+meta _source = {"DocumentId":"doc-golden","DocumentName":"long.csv","FileType":"csv","Location":{"RowGroup":[288,301]},"IndexedAt":"<clock>"}
+meta dataTypeId = KnowledgeDocument
+content:
+[long.csv — rows 288–301]
+Sheet "data", rows 288–301 of 300
+Columns: id, description
+id: 287 | description: row 287 carries a description long enough to fill
+id: 288 | description: row 288 carries a description long enough to fill
+id: 289 | description: row 289 carries a description long enough to fill
+id: 290 | description: row 290 carries a description long enough to fill
+id: 291 | description: row 291 carries a description long enough to fill
+id: 292 | description: row 292 carries a description long enough to fill
+id: 293 | description: row 293 carries a description long enough to fill
+id: 294 | description: row 294 carries a description long enough to fill
+id: 295 | description: row 295 carries a description long enough to fill
+id: 296 | description: row 296 carries a description long enough to fill
+id: 297 | description: row 297 carries a description long enough to fill
+id: 298 | description: row 298 carries a description long enough to fill
+id: 299 | description: row 299 carries a description long enough to fill
+id: 300 | description: row 300 carries a description long enough to fill

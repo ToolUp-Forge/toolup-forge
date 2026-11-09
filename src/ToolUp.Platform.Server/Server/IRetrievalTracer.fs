@@ -45,11 +45,15 @@ type RetrievalTrace = {
     RerankerName: string option
     /// Wall-clock latency from pipeline entry to trace emission, in ms.
     LatencyMs: int64
-    /// Ordered list of stages that ran. Cardinality and order describe the
-    /// realised pipeline shape. Examples: `["AuthoriseScopes"; "Dense"; "TopK"]`
-    /// (cosine-only minimum), `["AuthoriseScopes"; "Dense"; "Sparse"; "RRF";
-    /// "Rerank"; "MMR"; "AdaptiveK"; "Merge"]` (everything wired). Stage names
-    /// are stable; do not rename without considering downstream consumers.
+    /// The marks the stages that ran recorded, in order. Cardinality and
+    /// order describe the realised pipeline shape. The default pipeline's
+    /// marks are its `RetrievalStage` cases rendered by `RetrievalStage.mark`
+    /// (`ToolUp.RAG.RetrievalPipeline`): the dense-only minimum is
+    /// `["AuthoriseScopes"; "Dense"; "TopK"; "Merge"; "FinalOrder:Interleaved";
+    /// "ScoreSpace:Cosine"]`, and the default fused composition adds `"Sparse"`,
+    /// `"RRF"` and `"Normalise:MinMax"` after `"Dense"` and ends
+    /// `"ScoreSpace:Fused"`. The marks are a shipped grammar: a stage adds a
+    /// mark, it does not rename one.
     Stages: string list
     /// Number of matches returned to the caller after every stage. May be
     /// less than `TopK` when retrieval returned a smaller pool or when
@@ -57,20 +61,18 @@ type RetrievalTrace = {
     ResultCount: int
     /// Per-stage wall-clock timings as `(stageName, elapsedMs)` pairs in
     /// execution order. Stage names align with `Stages` entries, but only
-    /// the substantive stages are timed (`QueryRewrite`, `Dense`,
-    /// `Sparse`, `RRF`, `Rerank`, `MMR`, `Merge`) — bookkeeping stages (scope
-    /// authorisation, filters, boosts) appear in `Stages` without a
+    /// the substantive stages are timed (`QueryRewrite`, `Dense`, `Sparse`,
+    /// `RRF`, `DerivedDisclosure`, `Rerank`, `MMR`, `Merge`) — bookkeeping
+    /// stages (scope authorisation, filters, boosts) appear in `Stages` without a
     /// timing entry. `Dense` and `Sparse` run concurrently under hybrid
     /// retrieval, so their entries can sum to more than `LatencyMs`;
     /// `LatencyMs` remains authoritative for end-to-end latency.
-    /// Additive (Phase 122, GP 11): absent in pre-122 traces; old
-    /// consumers deserialise unchanged.
+    /// Absent in older traces; old consumers deserialise unchanged (GP 11).
     StageTimings: (string * float) list
-    /// What the conversation-aware query-rewrite stage decided this call
-    /// (Phase 506). `None` when no rewrite stage ran at all — no
-    /// `IQueryRewriter` wired, or the request carried no `History` — which
-    /// is every pre-506 deployment, so an existing trace consumer sees
-    /// exactly what it saw before (GP 11). Otherwise one of the
+    /// What the conversation-aware query-rewrite stage decided this call.
+    /// `None` when no rewrite stage ran at all — no `IQueryRewriter` wired,
+    /// or the request carried no `History` — so a trace consumer that never
+    /// wires one sees exactly what it saw before (GP 11). Otherwise one of the
     /// `QueryRewriteDecision` literals: `"SelfContained"` (the rewriter
     /// judged the query standalone), `"Rewritten"` (a standalone query was
     /// substituted), `"Failed"` (the rewriter raised or timed out and
@@ -121,11 +123,11 @@ type RetrievalMiss = {
 
 /// Implementation-agnostic tracer for retrieval emissions. Default
 /// implementation is `NoOpRetrievalTracer` (in `ToolUp.RAG`), which discards.
-/// The supplied default in Phase 14j is `EventStoreRetrievalTracer`, which
+/// The supplied default is `EventStoreRetrievalTracer`, which
 /// writes a `KnowledgeRetrieved` event into the configured `IEventStore` so
 /// existing audit-trail / event-replay tooling can read it.
 ///
-/// **Phase 9c portability.** Identity-by-value (`RetrievalTrace` is a record);
+/// **Portability.** Identity-by-value (`RetrievalTrace` is a record);
 /// async at every boundary; no callbacks; stateless between calls; no
 /// cross-shard ordering claim.
 type IRetrievalTracer =

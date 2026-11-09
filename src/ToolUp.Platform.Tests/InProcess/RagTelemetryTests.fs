@@ -5,12 +5,10 @@ module ToolUp.Platform.Tests.InProcess.RagTelemetryTests
 // 1. What the `/health/rag` classification can see. Under the default
 //    composition the pipeline fuses the dense and keyword rankings and
 //    min-max normalises the pool, so the best returned candidate scores
-//    exactly 1.0 whether the corpus answers the query or not. Every
-//    number the prompt builder hands the telemetry is read off that
-//    returned pool, so no threshold "in the fused space" can tell a hit
-//    from a miss: the information is gone before the reader sees it.
-//    The pin records that, so the change that carries an absolute
-//    relevance signal out of the pipeline turns it red on purpose.
+//    exactly 1.0 whether the corpus answers the query or not. The pool
+//    therefore carries an absolute signal beside the fused order, the
+//    best returned candidate's dense similarity, and the classification
+//    reads a fused pool's miss on it.
 //
 // 2. One team's RAG audit rows share one stream id: the retrieval trace,
 //    the retrieval miss, the over-length-query refusal and the vacuum
@@ -346,15 +344,26 @@ let private scoredPoolTests =
             Expect.isNonEmpty missPool.Matches "a low-score miss is not an empty pool"
         }
 
-        testCaseAsync
-            "fused: the best candidate is 1.0 by construction, so a relative threshold reads a hit on both corpora"
+        testCaseAsync "fused: a miss corpus is a low-score miss, read on the best candidate's dense similarity"
         <| async {
             let! hitPipeline = composed true false hitCorpus
             let! missPipeline = composed true false missCorpus
-            let! _, hit = classify hitPipeline (Some 0.5)
-            let! _, miss = classify missPipeline (Some 0.5)
-            Expect.equal hit.RetrievalHits 1 "a hit"
-            Expect.equal miss.RetrievalHits 1 "the fused space is relative: it has no absolute floor to miss"
+            let! hitPool, hit = classify hitPipeline None
+            let! missPool, miss = classify missPipeline None
+
+            Expect.equal
+                (hitPool.Matches |> List.map _.Score |> List.max, missPool.Matches |> List.map _.Score |> List.max)
+                (1.0, 1.0)
+                "both fused pools lead at 1.0, so the fused order alone cannot tell them apart"
+
+            Expect.equal hit.RetrievalHits 1 "the answering corpus is a hit"
+            Expect.equal miss.RetrievalLowScoreMisses 1 "the off-topic corpus is a low-score miss"
+            Expect.isLessThan hit.RetrievalAvgTopScore 1.0 "the recorded top score is the absolute reading"
+
+            Expect.notEqual
+                hit.RetrievalAvgTopScore
+                miss.RetrievalAvgTopScore
+                "the average top score moves between a hit and a miss corpus"
         }
 
         testCaseAsync "reranked: the threshold is read on the reranker's own scale"
