@@ -206,10 +206,10 @@ ToolUp.AI.AIAgentEngine+TurnPlan+Tags.RunLoop : System.Int32 (literal)
 ToolUp.AI.AIAgentEngine+TurnPlanModule (class)
 ToolUp.AI.AIAgentEngine+TurnPlanModule.ofContribution(ToolUp.AI.SystemPromptBuilder+PromptContribution) : ToolUp.AI.AIAgentEngine+TurnPlan
 ToolUp.AI.AIAgentEngine+TurnServices (class)
-ToolUp.AI.AIAgentEngine+TurnServices..ctor(ToolUp.Platform.ILogger, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEventStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.Metrics.IMetricsSink], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.IClientToolAuthorizer], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AIDenialRateMonitor+AIDenialRateMonitor], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.INotificationChannel], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.ICitationNormaliser], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AnswerVerifier+AnswerGate], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAnswerProvenanceAnchors])
+ToolUp.AI.AIAgentEngine+TurnServices..ctor(ToolUp.Platform.ILogger, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEventStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.Metrics.IMetricsSink], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.IClientToolAuthorizer], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AIDenialRateMonitor+AIDenialRateMonitor], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.INotificationChannel], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.ICitationNormaliser], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AnswerVerifier+AnswerGate], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], ToolUp.Platform.IAuditLog, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAnswerProvenanceAnchors])
 ToolUp.AI.AIAgentEngine+TurnServices.AnswerAnchors : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAnswerProvenanceAnchors] { get }
 ToolUp.AI.AIAgentEngine+TurnServices.AnswerGate : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AnswerVerifier+AnswerGate] { get }
-ToolUp.AI.AIAgentEngine+TurnServices.AuditLog : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog] { get }
+ToolUp.AI.AIAgentEngine+TurnServices.AuditLog : ToolUp.Platform.IAuditLog { get }
 ToolUp.AI.AIAgentEngine+TurnServices.CitationNormaliser : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.ICitationNormaliser] { get }
 ToolUp.AI.AIAgentEngine+TurnServices.ClientToolAuthorizer : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.IClientToolAuthorizer] { get }
 ToolUp.AI.AIAgentEngine+TurnServices.DenialAlertChannel : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.INotificationChannel] { get }
@@ -286,7 +286,7 @@ ToolUp.AI.AIAssistantHandler+ConversationRetention.deleteSiblings(ToolUp.Platfor
 ToolUp.AI.AIAssistantHandler+ConversationRetention.lastActivity(ToolUp.Platform.ILogger, ToolUp.Platform.BlobStorage+IBlobStorage, System.String, System.Guid) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[System.DateTime]]
 ToolUp.AI.AIAssistantHandler+ConversationRetention.listConversationIds(ToolUp.Platform.BlobStorage+IBlobStorage, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[System.Guid]]
 ToolUp.AI.AIAssistantHandler+ConversationRetention.siblingBlobNames(System.Guid) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
-ToolUp.AI.AIAssistantHandler+ConversationRetention.sweepContainer(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], ToolUp.Platform.ILogger, System.DateTime, ToolUp.AI.ConversationRetentionPolicy, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.AIAssistantHandler+ConversationPurgeReport]
+ToolUp.AI.AIAssistantHandler+ConversationRetention.sweepContainer(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IAuditLog, ToolUp.Platform.ILogger, System.DateTime, ToolUp.AI.ConversationRetentionPolicy, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.AIAssistantHandler+ConversationPurgeReport]
 ToolUp.AI.AIAssistantHandler+ConversationRetentionSweepJobHandler (class)
 ToolUp.AI.AIAssistantHandler+ConversationRetentionSweepJobHandler..ctor(System.IServiceProvider, ToolUp.AI.ConversationRetentionPolicy)
 ToolUp.AI.AIAssistantHandler+ConversationTitling (class)
@@ -507,7 +507,7 @@ ToolUp.AI.AICrossModuleObservability (class)
 ToolUp.AI.AICrossModuleObservability.EventType : System.String (literal)
 ToolUp.AI.AICrossModuleObservability.UnattributedTargetLabel : System.String (literal)
 ToolUp.AI.AICrossModuleObservability.computeReport(System.String, System.DateTime, System.TimeSpan, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CrossModuleReadPayload]) : ToolUp.AI.AICrossModuleObservability+CrossModuleReport
-ToolUp.AI.AICrossModuleObservability.reportFor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.AICrossModuleObservability+CrossModuleReport]
+ToolUp.AI.AICrossModuleObservability.reportFor(ToolUp.Platform.IAuditLog, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.AICrossModuleObservability+CrossModuleReport]
 ToolUp.AI.AICrossModuleObservability.routes : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]] { get }
 ToolUp.AI.AICrossModuleObservability.targetLabel(ToolUp.Platform.CrossModuleReadPayload) : System.String
 ToolUp.AI.AICrossModuleObservability+CrossModuleGroup (class)
@@ -756,9 +756,9 @@ ToolUp.AI.AnswerVerifier.runVerificationStageWithScope(Microsoft.FSharp.Core.FSh
 ToolUp.AI.AnswerVerifier.scopedFacts(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+RetrievedSource]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.AnswerVerifier+ScopedFact]
 ToolUp.AI.AnswerVerifier.toolResultFacts(System.String) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.AnswerVerifier+ScopedFact]
 ToolUp.AI.AnswerVerifier+AnswerAuditJoin (class)
-ToolUp.AI.AnswerVerifier+AnswerAuditJoin..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAnswerProvenanceAnchors])
+ToolUp.AI.AnswerVerifier+AnswerAuditJoin..ctor(ToolUp.Platform.IAuditLog, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAnswerProvenanceAnchors])
 ToolUp.AI.AnswerVerifier+AnswerAuditJoin.Anchors : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAnswerProvenanceAnchors] { get }
-ToolUp.AI.AnswerVerifier+AnswerAuditJoin.AuditLog : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog] { get }
+ToolUp.AI.AnswerVerifier+AnswerAuditJoin.AuditLog : ToolUp.Platform.IAuditLog { get }
 ToolUp.AI.AnswerVerifier+AnswerAuditJoinModule (class)
 ToolUp.AI.AnswerVerifier+AnswerAuditJoinModule.auditOnly(ToolUp.Platform.IAuditLog) : ToolUp.AI.AnswerVerifier+AnswerAuditJoin
 ToolUp.AI.AnswerVerifier+AnswerAuditJoinModule.none : ToolUp.AI.AnswerVerifier+AnswerAuditJoin { get }
@@ -1513,8 +1513,8 @@ ToolUp.AI.TeamConversationPolicyStore+ConversationVisibility.teamOf(Microsoft.FS
 ToolUp.AI.TeamConversationPolicyStore+ConversationVisibilityAudit (class)
 ToolUp.AI.TeamConversationPolicyStore+ConversationVisibilityAudit.ElevatedReadKind : System.String (literal)
 ToolUp.AI.TeamConversationPolicyStore+ConversationVisibilityAudit.LevelChangedKind : System.String (literal)
-ToolUp.AI.TeamConversationPolicyStore+ConversationVisibilityAudit.elevatedRead(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], System.String, System.String, System.String, System.Guid, ToolUp.Platform.TeamVisibilityLevel) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
-ToolUp.AI.TeamConversationPolicyStore+ConversationVisibilityAudit.levelChanged(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], System.String, System.String, System.String, ToolUp.Platform.TeamVisibilityLevel, ToolUp.Platform.TeamVisibilityLevel) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.AI.TeamConversationPolicyStore+ConversationVisibilityAudit.elevatedRead(ToolUp.Platform.IAuditLog, System.String, System.String, System.String, System.Guid, ToolUp.Platform.TeamVisibilityLevel) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.AI.TeamConversationPolicyStore+ConversationVisibilityAudit.levelChanged(ToolUp.Platform.IAuditLog, System.String, System.String, System.String, ToolUp.Platform.TeamVisibilityLevel, ToolUp.Platform.TeamVisibilityLevel) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.AI.TeamConversationPolicyStore+ConversationVisibilityChange (class)
 ToolUp.AI.TeamConversationPolicyStore+ConversationVisibilityChange.check(ToolUp.Platform.TeamConversationVisibilitySettings, ToolUp.Platform.TeamVisibilityLevel, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamRole], System.Boolean, ToolUp.Platform.TeamVisibilityLevel) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]
 ToolUp.AI.TeamConversationPolicyStore+ConversationVisibilityChange.selectable(ToolUp.Platform.TeamConversationVisibilitySettings, ToolUp.Platform.TeamVisibilityLevel, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamRole], System.Boolean) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamVisibilityLevel]

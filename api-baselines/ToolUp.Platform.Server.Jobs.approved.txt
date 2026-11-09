@@ -208,13 +208,13 @@ ToolUp.Platform.Jobs.ExternalContactApiHandler.externalContactApi(Microsoft.AspN
 ToolUp.Platform.Jobs.ExternalContactConsent (class)
 ToolUp.Platform.Jobs.ExternalContactConsent.NoOptInReason : System.String (literal)
 ToolUp.Platform.Jobs.ExternalContactConsentFilter (class)
-ToolUp.Platform.Jobs.ExternalContactConsentFilter..ctor(ToolUp.Platform.INotificationChannel, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Jobs.IExternalContactStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], ToolUp.Platform.ILogger)
-ToolUp.Platform.Jobs.ExternalContactConsentFilter..ctor(ToolUp.Platform.INotificationChannel, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Jobs.IExternalContactStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], ToolUp.Platform.ILogger, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime])
+ToolUp.Platform.Jobs.ExternalContactConsentFilter..ctor(ToolUp.Platform.INotificationChannel, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Jobs.IExternalContactStore], ToolUp.Platform.IAuditLog, ToolUp.Platform.ILogger)
+ToolUp.Platform.Jobs.ExternalContactConsentFilter..ctor(ToolUp.Platform.INotificationChannel, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Jobs.IExternalContactStore], ToolUp.Platform.IAuditLog, ToolUp.Platform.ILogger, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime])
 ToolUp.Platform.Jobs.ExternalContactStore (class)
-ToolUp.Platform.Jobs.ExternalContactStore.entityBacked(ToolUp.Platform.Infra.IEntityStore+IEntityStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog]) : ToolUp.Platform.Jobs.IExternalContactStore
+ToolUp.Platform.Jobs.ExternalContactStore.entityBacked(ToolUp.Platform.Infra.IEntityStore+IEntityStore, ToolUp.Platform.IAuditLog) : ToolUp.Platform.Jobs.IExternalContactStore
 ToolUp.Platform.Jobs.ExternalContactStore.registration : ToolUp.Platform.EntityTypes+EntityRegistration`1[ToolUp.Platform.ExternalContact] { get }
 ToolUp.Platform.Jobs.ExternalContactStore+EntityBackedExternalContactStore (class)
-ToolUp.Platform.Jobs.ExternalContactStore+EntityBackedExternalContactStore..ctor(ToolUp.Platform.Infra.IEntityStore+IEntityStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog])
+ToolUp.Platform.Jobs.ExternalContactStore+EntityBackedExternalContactStore..ctor(ToolUp.Platform.Infra.IEntityStore+IEntityStore, ToolUp.Platform.IAuditLog)
 ToolUp.Platform.Jobs.ExternalFitCompletionRegistry (class)
 ToolUp.Platform.Jobs.ExternalFitCompletionRegistry..ctor()
 ToolUp.Platform.Jobs.ExternalFitCompletionRegistry..ctor(System.TimeSpan)
@@ -1041,8 +1041,8 @@ ToolUp.Platform.Jobs.NotificationHandler.notificationHandler(ToolUp.Platform.INo
 ToolUp.Platform.Jobs.NotificationPreferenceApiHandler (class)
 ToolUp.Platform.Jobs.NotificationPreferenceApiHandler.notificationPreferenceApi(ToolUp.Platform.ServerConfig, Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.INotificationPreferenceApi
 ToolUp.Platform.Jobs.NotificationPreferenceFilter (class)
-ToolUp.Platform.Jobs.NotificationPreferenceFilter..ctor(ToolUp.Platform.INotificationChannel, ToolUp.Platform.Jobs.INotificationPreferenceStore, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.NotificationCategory], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], ToolUp.Platform.ILogger)
-ToolUp.Platform.Jobs.NotificationPreferenceFilter..ctor(ToolUp.Platform.INotificationChannel, ToolUp.Platform.Jobs.INotificationPreferenceStore, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.NotificationCategory], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], ToolUp.Platform.ILogger, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[System.TimeZoneInfo]])
+ToolUp.Platform.Jobs.NotificationPreferenceFilter..ctor(ToolUp.Platform.INotificationChannel, ToolUp.Platform.Jobs.INotificationPreferenceStore, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.NotificationCategory], ToolUp.Platform.IAuditLog, ToolUp.Platform.ILogger)
+ToolUp.Platform.Jobs.NotificationPreferenceFilter..ctor(ToolUp.Platform.INotificationChannel, ToolUp.Platform.Jobs.INotificationPreferenceStore, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.NotificationCategory], ToolUp.Platform.IAuditLog, ToolUp.Platform.ILogger, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[System.TimeZoneInfo]])
 ToolUp.Platform.Jobs.NotificationPreferenceFilterModule (class)
 ToolUp.Platform.Jobs.NotificationPreferenceFilterModule.DigestQueuedReason : System.String (literal)
 ToolUp.Platform.Jobs.NotificationPreferenceFilterModule.MutedReason : System.String (literal)
@@ -1246,10 +1246,10 @@ ToolUp.Platform.Jobs.PromotionToleranceCheck.Satisfied : System.Boolean { get }
 ToolUp.Platform.Jobs.ProviderOAuthRefreshJobHandler (class)
 ToolUp.Platform.Jobs.ProviderOAuthRefreshJobHandler.HandlerName : System.String (literal)
 ToolUp.Platform.Jobs.ProviderOAuthRefreshJobHandler.RefreshCronExpression : System.String (literal)
-ToolUp.Platform.Jobs.ProviderOAuthRefreshJobHandler.create(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Infra.IProviderOAuthFlow], ToolUp.Platform.Providers+IProviderProfile, ToolUp.Platform.Secrets+ISecretStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], ToolUp.Platform.ILogger) : ToolUp.Platform.Jobs.IJobHandler
+ToolUp.Platform.Jobs.ProviderOAuthRefreshJobHandler.create(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Infra.IProviderOAuthFlow], ToolUp.Platform.Providers+IProviderProfile, ToolUp.Platform.Secrets+ISecretStore, ToolUp.Platform.IAuditLog, ToolUp.Platform.ILogger) : ToolUp.Platform.Jobs.IJobHandler
 ToolUp.Platform.Jobs.ProviderOAuthRefreshJobHandler.registrationFor(ToolUp.Platform.StorageScope, System.String, System.String, System.String) : ToolUp.Platform.JobRegistration
 ToolUp.Platform.Jobs.ProviderOAuthRefreshJobHandler+ProviderOAuthRefreshJobHandler (class)
-ToolUp.Platform.Jobs.ProviderOAuthRefreshJobHandler+ProviderOAuthRefreshJobHandler..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Infra.IProviderOAuthFlow], ToolUp.Platform.Providers+IProviderProfile, ToolUp.Platform.Secrets+ISecretStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], ToolUp.Platform.ILogger)
+ToolUp.Platform.Jobs.ProviderOAuthRefreshJobHandler+ProviderOAuthRefreshJobHandler..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Infra.IProviderOAuthFlow], ToolUp.Platform.Providers+IProviderProfile, ToolUp.Platform.Secrets+ISecretStore, ToolUp.Platform.IAuditLog, ToolUp.Platform.ILogger)
 ToolUp.Platform.Jobs.ProviderOAuthRefreshJobHandler+ProviderOAuthRefreshPayload (class)
 ToolUp.Platform.Jobs.ProviderOAuthRefreshJobHandler+ProviderOAuthRefreshPayload..ctor(System.String, System.String, System.Boolean, System.String, System.String)
 ToolUp.Platform.Jobs.ProviderOAuthRefreshJobHandler+ProviderOAuthRefreshPayload.Container : System.String { get }
@@ -1712,8 +1712,8 @@ ToolUp.Platform.Jobs.WhatsAppSendPolicy.TemplateUnknownReason : System.String (l
 ToolUp.Platform.Jobs.WhatsAppSendPolicy.checkTemplate(ToolUp.Platform.WhatsAppEnvelope, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Jobs.WhatsAppTemplateDescriptor]) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.Platform.Jobs.WhatsAppSendPolicy.isInsideWindow(System.DateTime, Microsoft.FSharp.Core.FSharpOption`1[System.DateTime]) : System.Boolean
 ToolUp.Platform.Jobs.WhatsAppSendPolicyFilter (class)
-ToolUp.Platform.Jobs.WhatsAppSendPolicyFilter..ctor(ToolUp.Platform.INotificationChannel, ToolUp.Platform.Jobs.IWhatsAppTemplateRegistry, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Jobs.IExternalContactStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], ToolUp.Platform.ILogger)
-ToolUp.Platform.Jobs.WhatsAppSendPolicyFilter..ctor(ToolUp.Platform.INotificationChannel, ToolUp.Platform.Jobs.IWhatsAppTemplateRegistry, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Jobs.IExternalContactStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], ToolUp.Platform.ILogger, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime])
+ToolUp.Platform.Jobs.WhatsAppSendPolicyFilter..ctor(ToolUp.Platform.INotificationChannel, ToolUp.Platform.Jobs.IWhatsAppTemplateRegistry, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Jobs.IExternalContactStore], ToolUp.Platform.IAuditLog, ToolUp.Platform.ILogger)
+ToolUp.Platform.Jobs.WhatsAppSendPolicyFilter..ctor(ToolUp.Platform.INotificationChannel, ToolUp.Platform.Jobs.IWhatsAppTemplateRegistry, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Jobs.IExternalContactStore], ToolUp.Platform.IAuditLog, ToolUp.Platform.ILogger, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime])
 ToolUp.Platform.Jobs.WhatsAppTemplateDescriptor (class)
 ToolUp.Platform.Jobs.WhatsAppTemplateDescriptor..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Int32, System.Int32, System.Int32)
 ToolUp.Platform.Jobs.WhatsAppTemplateDescriptor.BodyParameterCount : System.Int32 { get }

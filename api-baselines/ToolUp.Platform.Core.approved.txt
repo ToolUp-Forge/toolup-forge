@@ -1037,8 +1037,8 @@ ToolUp.Platform.AuditEnvelope.OccurredAt : System.DateTime { get }
 ToolUp.Platform.AuditEnvelope.ScopeId : System.String { get }
 ToolUp.Platform.AuditEnvelope.Subject : ToolUp.Platform.AuditSubject { get }
 ToolUp.Platform.AuditEnvelopeModule (class)
+ToolUp.Platform.AuditEnvelopeModule.create(ToolUp.Platform.AuditSubject, System.String, System.DateTime, ToolUp.Platform.AuditEvent) : ToolUp.Platform.AuditEnvelope
 ToolUp.Platform.AuditEnvelopeModule.event(ToolUp.Platform.AuditEnvelope) : ToolUp.Platform.AuditEvent
-ToolUp.Platform.AuditEnvelopeModule.fromScopeId(System.String, System.DateTime, ToolUp.Platform.AuditEvent) : ToolUp.Platform.AuditEnvelope
 ToolUp.Platform.AuditEnvelopeModule.fromSubject(ToolUp.Platform.Subject, System.String, System.DateTime, ToolUp.Platform.AuditEvent) : ToolUp.Platform.AuditEnvelope
 ToolUp.Platform.AuditEnvelopeModule.subjectKindString(ToolUp.Platform.AuditEnvelope) : System.String
 ToolUp.Platform.AuditEvent (class)
@@ -1946,7 +1946,7 @@ ToolUp.Platform.AuditLogMessages.ToLabel : System.String { get }
 ToolUp.Platform.AuditLogMessages.UnattributedActor : System.String { get }
 ToolUp.Platform.AuditRow (class)
 ToolUp.Platform.AuditRow.bestEffort(Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.AuditWriteError]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
-ToolUp.Platform.AuditRow.emit(ToolUp.Platform.IAuditLog, System.String, ToolUp.Platform.AuditEvent) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.AuditWriteError]]
+ToolUp.Platform.AuditRow.emit(ToolUp.Platform.IAuditLog, ToolUp.Platform.AuditScope, ToolUp.Platform.AuditSubject, ToolUp.Platform.AuditEvent) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.AuditWriteError]]
 ToolUp.Platform.AuditRow.orRefuse(Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.AuditWriteError]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.AuditSamplingPolicy (class)
 ToolUp.Platform.AuditSamplingPolicy..ctor(System.Double, System.Double, System.Double, System.Double)
@@ -1964,15 +1964,25 @@ ToolUp.Platform.AuditSchemaVersion.pre66 : System.Int32 (literal)
 ToolUp.Platform.AuditScope (class)
 ToolUp.Platform.AuditScope.IsPlatformScope : System.Boolean { get }
 ToolUp.Platform.AuditScope.IsScoped : System.Boolean { get }
+ToolUp.Platform.AuditScope.IsShard : System.Boolean { get }
 ToolUp.Platform.AuditScope.PlatformScope : ToolUp.Platform.AuditScope { get }
 ToolUp.Platform.AuditScope.Tag : System.Int32 { get }
 ToolUp.Platform.AuditScope+Scoped (class)
 ToolUp.Platform.AuditScope+Scoped.Item : ToolUp.Platform.ScopeKey { get }
+ToolUp.Platform.AuditScope+Shard (class)
+ToolUp.Platform.AuditScope+Shard.shardKey : System.String { get }
 ToolUp.Platform.AuditScope+Tags (class)
 ToolUp.Platform.AuditScope+Tags.PlatformScope : System.Int32 (literal)
 ToolUp.Platform.AuditScope+Tags.Scoped : System.Int32 (literal)
+ToolUp.Platform.AuditScope+Tags.Shard : System.Int32 (literal)
 ToolUp.Platform.AuditScopeModule (class)
+ToolUp.Platform.AuditScopeModule.ofKey(ToolUp.Platform.ScopeKey) : ToolUp.Platform.AuditScope
+ToolUp.Platform.AuditScopeModule.platform : ToolUp.Platform.AuditScope { get }
+ToolUp.Platform.AuditScopeModule.shard(System.String) : ToolUp.Platform.AuditScope
 ToolUp.Platform.AuditScopeModule.streamKey(ToolUp.Platform.AuditScope) : System.String
+ToolUp.Platform.AuditScopeModule.team(ToolUp.Platform.TeamId) : ToolUp.Platform.AuditScope
+ToolUp.Platform.AuditScopeModule.user(ToolUp.Platform.UserId) : ToolUp.Platform.AuditScope
+ToolUp.Platform.AuditScopeModule.|StreamKey|(ToolUp.Platform.AuditScope) : System.String
 ToolUp.Platform.AuditSinkDeadLetteredPayload (class)
 ToolUp.Platform.AuditSinkDeadLetteredPayload..ctor(System.String, System.String, System.Int32, System.Int32, System.String, System.DateTime)
 ToolUp.Platform.AuditSinkDeadLetteredPayload.AttemptCount : System.Int32 { get }
@@ -1998,13 +2008,11 @@ ToolUp.Platform.AuditSinkFailedPayload.FailedAt : System.DateTime { get }
 ToolUp.Platform.AuditSinkFailedPayload.SinkName : System.String { get }
 ToolUp.Platform.AuditSourceModule (class)
 ToolUp.Platform.AuditSourceModule.value : System.String (literal)
-ToolUp.Platform.AuditStreamKey (class)
-ToolUp.Platform.AuditStreamKey.ofScope(ToolUp.Platform.StorageScope) : System.String
-ToolUp.Platform.AuditStreamKey.ofTeam(System.String) : System.String
 ToolUp.Platform.AuditSubject (class)
 ToolUp.Platform.AuditSubject.IsAnonymousAudit : System.Boolean { get }
 ToolUp.Platform.AuditSubject.IsClaimAudit : System.Boolean { get }
 ToolUp.Platform.AuditSubject.IsReaderAudit : System.Boolean { get }
+ToolUp.Platform.AuditSubject.IsSystemAudit : System.Boolean { get }
 ToolUp.Platform.AuditSubject.IsTeamAudit : System.Boolean { get }
 ToolUp.Platform.AuditSubject.IsUserAudit : System.Boolean { get }
 ToolUp.Platform.AuditSubject.Tag : System.Int32 { get }
@@ -2017,10 +2025,13 @@ ToolUp.Platform.AuditSubject+ClaimAudit.resourceKind : System.String { get }
 ToolUp.Platform.AuditSubject+ClaimAudit.tokenId : System.String { get }
 ToolUp.Platform.AuditSubject+ReaderAudit (class)
 ToolUp.Platform.AuditSubject+ReaderAudit.userId : ToolUp.Platform.UserId { get }
+ToolUp.Platform.AuditSubject+SystemAudit (class)
+ToolUp.Platform.AuditSubject+SystemAudit.emitter : System.String { get }
 ToolUp.Platform.AuditSubject+Tags (class)
 ToolUp.Platform.AuditSubject+Tags.AnonymousAudit : System.Int32 (literal)
 ToolUp.Platform.AuditSubject+Tags.ClaimAudit : System.Int32 (literal)
 ToolUp.Platform.AuditSubject+Tags.ReaderAudit : System.Int32 (literal)
+ToolUp.Platform.AuditSubject+Tags.SystemAudit : System.Int32 (literal)
 ToolUp.Platform.AuditSubject+Tags.TeamAudit : System.Int32 (literal)
 ToolUp.Platform.AuditSubject+Tags.UserAudit : System.Int32 (literal)
 ToolUp.Platform.AuditSubject+TeamAudit (class)
@@ -2034,9 +2045,11 @@ ToolUp.Platform.AuditSubjectKind.ClaimAuditKind : ToolUp.Platform.AuditSubjectKi
 ToolUp.Platform.AuditSubjectKind.IsAnonymousAuditKind : System.Boolean { get }
 ToolUp.Platform.AuditSubjectKind.IsClaimAuditKind : System.Boolean { get }
 ToolUp.Platform.AuditSubjectKind.IsReaderAuditKind : System.Boolean { get }
+ToolUp.Platform.AuditSubjectKind.IsSystemAuditKind : System.Boolean { get }
 ToolUp.Platform.AuditSubjectKind.IsTeamAuditKind : System.Boolean { get }
 ToolUp.Platform.AuditSubjectKind.IsUserAuditKind : System.Boolean { get }
 ToolUp.Platform.AuditSubjectKind.ReaderAuditKind : ToolUp.Platform.AuditSubjectKind { get }
+ToolUp.Platform.AuditSubjectKind.SystemAuditKind : ToolUp.Platform.AuditSubjectKind { get }
 ToolUp.Platform.AuditSubjectKind.Tag : System.Int32 { get }
 ToolUp.Platform.AuditSubjectKind.TeamAuditKind : ToolUp.Platform.AuditSubjectKind { get }
 ToolUp.Platform.AuditSubjectKind.UserAuditKind : ToolUp.Platform.AuditSubjectKind { get }
@@ -2044,16 +2057,16 @@ ToolUp.Platform.AuditSubjectKind+Tags (class)
 ToolUp.Platform.AuditSubjectKind+Tags.AnonymousAuditKind : System.Int32 (literal)
 ToolUp.Platform.AuditSubjectKind+Tags.ClaimAuditKind : System.Int32 (literal)
 ToolUp.Platform.AuditSubjectKind+Tags.ReaderAuditKind : System.Int32 (literal)
+ToolUp.Platform.AuditSubjectKind+Tags.SystemAuditKind : System.Int32 (literal)
 ToolUp.Platform.AuditSubjectKind+Tags.TeamAuditKind : System.Int32 (literal)
 ToolUp.Platform.AuditSubjectKind+Tags.UserAuditKind : System.Int32 (literal)
 ToolUp.Platform.AuditSubjectModule (class)
-ToolUp.Platform.AuditSubjectModule.DispatcherSentinelUserId : System.String (literal)
-ToolUp.Platform.AuditSubjectModule.PlatformSentinelUserId : System.String (literal)
-ToolUp.Platform.AuditSubjectModule.fromScopeId(System.String) : ToolUp.Platform.AuditSubject
 ToolUp.Platform.AuditSubjectModule.fromSubject(ToolUp.Platform.Subject) : ToolUp.Platform.AuditSubject
 ToolUp.Platform.AuditSubjectModule.kind(ToolUp.Platform.AuditSubject) : ToolUp.Platform.AuditSubjectKind
 ToolUp.Platform.AuditSubjectModule.kindString(ToolUp.Platform.AuditSubjectKind) : System.String
 ToolUp.Platform.AuditSubjectModule.sanitise(ToolUp.Platform.Subject) : System.Tuple`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]]
+ToolUp.Platform.AuditSubjectModule.system(System.String) : ToolUp.Platform.AuditSubject
+ToolUp.Platform.AuditSubjectModule.unattributed : ToolUp.Platform.AuditSubject { get }
 ToolUp.Platform.AuditTrailQuery (class)
 ToolUp.Platform.AuditTrailQuery..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Int32)
 ToolUp.Platform.AuditTrailQuery.Actor : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
@@ -2429,9 +2442,9 @@ ToolUp.Platform.BlobStorage+SignedUrlRefusal+Tags.SigningFailed : System.Int32 (
 ToolUp.Platform.BlobStorageAuthAudit (class)
 ToolUp.Platform.BlobStorageAuthAudit.maxReasonLength : System.Int32 (literal)
 ToolUp.Platform.BlobStorageAuthAudit.payload(System.String, System.String, System.String, System.Int32, System.String) : ToolUp.Platform.BlobStorageAuthFailedPayload
-ToolUp.Platform.BlobStorageAuthAudit.record(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], System.String, System.String, System.String, System.Int32, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.BlobStorageAuthAudit.record(ToolUp.Platform.IAuditLog, System.String, System.String, System.String, System.Int32, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.BlobStorageAuthAudit.sanitiseReason(System.String) : System.String
-ToolUp.Platform.BlobStorageAuthAudit.scopeId : System.String (literal)
+ToolUp.Platform.BlobStorageAuthAudit.scope : ToolUp.Platform.AuditScope { get }
 ToolUp.Platform.BlobStorageAuthFailedPayload (class)
 ToolUp.Platform.BlobStorageAuthFailedPayload..ctor(System.String, System.String, System.String, System.Int32, System.String, System.DateTime)
 ToolUp.Platform.BlobStorageAuthFailedPayload.At : System.DateTime { get }
@@ -7925,8 +7938,8 @@ ToolUp.Platform.IAnswerProvenanceAnchors (interface)
 ToolUp.Platform.IAnswerProvenanceAnchors.CompositionSealId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.IAnswerProvenanceAnchors.TryCertificateRef(System.String, System.Guid, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[System.String]]
 ToolUp.Platform.IAuditLog (interface)
-ToolUp.Platform.IAuditLog.GetAuditTrail(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[System.DateTime, System.DateTime]], Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AuditEvent]]
-ToolUp.Platform.IAuditLog.Record(System.String, ToolUp.Platform.AuditEvent) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.AuditWriteError]]
+ToolUp.Platform.IAuditLog.GetAuditTrail(ToolUp.Platform.AuditScope, Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[System.DateTime, System.DateTime]], Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AuditEvent]]
+ToolUp.Platform.IAuditLog.Record(ToolUp.Platform.AuditScope, ToolUp.Platform.AuditSubject, ToolUp.Platform.AuditEvent) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.AuditWriteError]]
 ToolUp.Platform.IAuditViewApi (class)
 ToolUp.Platform.IAuditViewApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AuditTrailQuery, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.AuditEventPage, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AuditTrailQuery, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Byte[], System.String]]])
 ToolUp.Platform.IAuditViewApi.ExportCsv : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AuditTrailQuery, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Byte[], System.String]]] { get }
@@ -10839,6 +10852,8 @@ ToolUp.Platform.NoActiveTeamLandingMessages.Joined : Microsoft.FSharp.Core.FShar
 ToolUp.Platform.NoActiveTeamLandingMessages.NothingPending : System.String { get }
 ToolUp.Platform.NoEvidencePackGenerator (class)
 ToolUp.Platform.NoEvidencePackGenerator..ctor()
+ToolUp.Platform.NoOpAuditLog (class)
+ToolUp.Platform.NoOpAuditLog..ctor()
 ToolUp.Platform.NoOpHostRenderTelemetrySink (class)
 ToolUp.Platform.NoOpHostRenderTelemetrySink..ctor()
 ToolUp.Platform.NoOpTelemetrySink (class)
@@ -12775,6 +12790,7 @@ ToolUp.Platform.ResolvedScope.Storage : Microsoft.FSharp.Core.FSharpOption`1[Too
 ToolUp.Platform.ResolvedScopeModule (class)
 ToolUp.Platform.ResolvedScopeModule.AnonymousScopeId : System.String (literal)
 ToolUp.Platform.ResolvedScopeModule.anonymous : ToolUp.Platform.ResolvedScope { get }
+ToolUp.Platform.ResolvedScopeModule.auditScope(ToolUp.Platform.ResolvedScope) : ToolUp.Platform.AuditScope
 ToolUp.Platform.ResolvedScopeModule.scopeId(ToolUp.Platform.ResolvedScope) : System.String
 ToolUp.Platform.ResolvedScopePair (class)
 ToolUp.Platform.ResolvedScopePair.Source : ToolUp.Platform.ResolvedScope { get }
@@ -14095,6 +14111,7 @@ ToolUp.Platform.StorageScope.Container : System.String { get }
 ToolUp.Platform.StorageScope.Persist : System.Boolean { get }
 ToolUp.Platform.StorageScope.ScopeId : System.String { get }
 ToolUp.Platform.StorageScopeModule (class)
+ToolUp.Platform.StorageScopeModule.auditScope(ToolUp.Platform.StorageScope) : ToolUp.Platform.AuditScope
 ToolUp.Platform.StorageScopeModule.ofKey(System.Boolean, ToolUp.Platform.ScopeKey) : ToolUp.Platform.StorageScope
 ToolUp.Platform.StorageScopeModule.tryKey(ToolUp.Platform.StorageScope) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ScopeKey]
 ToolUp.Platform.StorageScopeModule.tryTeamId(ToolUp.Platform.StorageScope) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamId]

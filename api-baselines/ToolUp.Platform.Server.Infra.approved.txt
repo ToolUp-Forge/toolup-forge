@@ -279,7 +279,7 @@ ToolUp.Platform.Infra.BlobUpdate`2+Write.result : R { get }
 ToolUp.Platform.Infra.BlobUpdate`2+Write.value : T { get }
 ToolUp.Platform.Infra.BlobUserSchemaStore (class)
 ToolUp.Platform.Infra.BlobUserSchemaStore+BlobUserSchemaStore (class)
-ToolUp.Platform.Infra.BlobUserSchemaStore+BlobUserSchemaStore..ctor(ToolUp.Platform.Infra.IDataObjectStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog])
+ToolUp.Platform.Infra.BlobUserSchemaStore+BlobUserSchemaStore..ctor(ToolUp.Platform.Infra.IDataObjectStore, ToolUp.Platform.IAuditLog)
 ToolUp.Platform.Infra.BlobWorkerKeyRegistry (class)
 ToolUp.Platform.Infra.BlobWorkerKeyRegistry..ctor(ToolUp.Platform.BlobStorage+IBlobStorage)
 ToolUp.Platform.Infra.BlobWorkerKeyRegistry..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime])
@@ -933,8 +933,8 @@ ToolUp.Platform.Infra.EntityQueryExecutor+ExecutorContext.LookupByIndex : Micros
 ToolUp.Platform.Infra.EntityQueryExecutor+ExecutorContext.ReadFieldString : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]]] { get }
 ToolUp.Platform.Infra.EntityStore (class)
 ToolUp.Platform.Infra.EntityStore+BlobEntityStore (class)
-ToolUp.Platform.Infra.EntityStore+BlobEntityStore..ctor(ToolUp.Platform.Infra.IDataObjectStore, ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.Infra.EntityStore+EntityRegistry, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog])
-ToolUp.Platform.Infra.EntityStore+BlobEntityStore..ctor(ToolUp.Platform.Infra.IDataObjectStore, ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.Infra.EntityStore+EntityRegistry, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.ISparseIndex+ISparseIndex])
+ToolUp.Platform.Infra.EntityStore+BlobEntityStore..ctor(ToolUp.Platform.Infra.IDataObjectStore, ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.Infra.EntityStore+EntityRegistry, ToolUp.Platform.IAuditLog)
+ToolUp.Platform.Infra.EntityStore+BlobEntityStore..ctor(ToolUp.Platform.Infra.IDataObjectStore, ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.Infra.EntityStore+EntityRegistry, ToolUp.Platform.IAuditLog, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.ISparseIndex+ISparseIndex])
 ToolUp.Platform.Infra.EntityStore+BlobEntityStore.IndexDriftSnapshot(System.String) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Infra.SecondaryIndex+IndexConsistencyEntry]
 ToolUp.Platform.Infra.EntityStore+BlobEntityStore.VacuumIndex(System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Int32, ToolUp.Platform.EntityTypes+EntityError]]
 ToolUp.Platform.Infra.EntityStore+EntityRegistry (class)
@@ -3033,7 +3033,7 @@ ToolUp.Platform.Infra.RateLimitVerdict+Tags.AdmittedOnStoreFailure : System.Int3
 ToolUp.Platform.Infra.RateLimitVerdict+Tags.Answered : System.Int32 (literal)
 ToolUp.Platform.Infra.RateLimitVerdict+Tags.RefusedOnStoreFailure : System.Int32 (literal)
 ToolUp.Platform.Infra.RateLimitVerdictModule (class)
-ToolUp.Platform.Infra.RateLimitVerdictModule.auditRefusal(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.Infra.RateLimitVerdictModule.auditRefusal(ToolUp.Platform.IAuditLog, System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.Infra.RateLimitVerdictModule.ofResult(ToolUp.Platform.StorePosture, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Admission, ToolUp.Platform.Infra.RateLimitStoreError]) : ToolUp.Platform.Infra.RateLimitVerdict
 ToolUp.Platform.Infra.RateLimiting (class)
 ToolUp.Platform.Infra.RateLimiting.configure(ToolUp.Platform.RateLimitConfig, Microsoft.AspNetCore.RateLimiting.RateLimiterOptions) : System.Void
