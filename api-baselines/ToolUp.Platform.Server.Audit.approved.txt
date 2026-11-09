@@ -41,10 +41,8 @@ ToolUp.Platform.Audit.AuditLog (class)
 ToolUp.Platform.Audit.AuditLog+AuditMetrics (class)
 ToolUp.Platform.Audit.AuditLog+AuditMetrics.ChainHeadUnreadableTotal : System.String (literal)
 ToolUp.Platform.Audit.AuditLog+AuditMetrics.WriteFailuresTotal : System.String (literal)
-ToolUp.Platform.Audit.AuditLog+AuditWriteRefusedException (class)
-ToolUp.Platform.Audit.AuditLog+AuditWriteRefusedException..ctor(System.String, System.String, System.Exception)
 ToolUp.Platform.Audit.AuditLog+EventStoreAuditLog (class)
-ToolUp.Platform.Audit.AuditLog+EventStoreAuditLog..ctor(ToolUp.Platform.IEventStore, ToolUp.Platform.ILogger, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.Infra.Metrics.IMetricsSink]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AuditFailurePolicy], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Audit.AuditFallbackStore+AuditFallbackStore])
+ToolUp.Platform.Audit.AuditLog+EventStoreAuditLog..ctor(ToolUp.Platform.IEventStore, ToolUp.Platform.ILogger, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.Infra.Metrics.IMetricsSink]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AuditFailurePolicy], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Audit.AuditFallbackStore+AuditFallbackStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BlobStorage+IBlobStorage])
 ToolUp.Platform.Audit.AuditLog+NoOpAuditLog (class)
 ToolUp.Platform.Audit.AuditLog+NoOpAuditLog..ctor()
 ToolUp.Platform.Audit.AuditLogHealthCheck (class)
@@ -127,8 +125,8 @@ ToolUp.Platform.Audit.ClassificationGate.RedactedPlaceholder : System.String (li
 ToolUp.Platform.Audit.ClassificationGate.decide(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClassificationLevel, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AccessContext, ToolUp.Platform.Audit.ClassificationDecision]], ToolUp.Platform.FieldClassification, ToolUp.Platform.AccessContext) : ToolUp.Platform.Audit.ClassificationDecision
 ToolUp.Platform.Audit.ClassificationGate.defaultPolicy(ToolUp.Platform.ClassificationLevel, ToolUp.Platform.AccessContext) : ToolUp.Platform.Audit.ClassificationDecision
 ToolUp.Platform.Audit.ClassificationGate.readerModule(ToolUp.Platform.ClassificationLevel) : System.String
-ToolUp.Platform.Audit.ClassificationGate.recordWrites(ToolUp.Platform.Audit.IFieldClassifier, ToolUp.Platform.IAuditLog, ToolUp.Platform.AccessContext, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
-ToolUp.Platform.Audit.ClassificationGate.redactFields(ToolUp.Platform.Audit.IFieldClassifier, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClassificationLevel, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AccessContext, ToolUp.Platform.Audit.ClassificationDecision]], ToolUp.Platform.IAuditLog, ToolUp.Platform.AccessContext, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]]
+ToolUp.Platform.Audit.ClassificationGate.recordWrites(ToolUp.Platform.Audit.IFieldClassifier, ToolUp.Platform.IAuditLog, ToolUp.Platform.AccessContext, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.AuditWriteError]]
+ToolUp.Platform.Audit.ClassificationGate.redactFields(ToolUp.Platform.Audit.IFieldClassifier, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClassificationLevel, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AccessContext, ToolUp.Platform.Audit.ClassificationDecision]], ToolUp.Platform.IAuditLog, ToolUp.Platform.AccessContext, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Platform.AuditWriteError]]
 ToolUp.Platform.Audit.ConfigStoreErasureHandler (class)
 ToolUp.Platform.Audit.ConfigStoreErasureHandler.erasureHandler(ToolUp.Platform.Config.IConfigStore) : ToolUp.Platform.Audit.IDataExporter+IErasureHandler
 ToolUp.Platform.Audit.ConfigStoreErasureHandler+ConfigStoreErasureHandler (class)

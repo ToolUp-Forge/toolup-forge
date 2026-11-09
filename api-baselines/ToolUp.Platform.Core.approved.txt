@@ -1944,6 +1944,10 @@ ToolUp.Platform.AuditLogMessages.ShowingCount : Microsoft.FSharp.Core.FSharpFunc
 ToolUp.Platform.AuditLogMessages.Subheading : System.String { get }
 ToolUp.Platform.AuditLogMessages.ToLabel : System.String { get }
 ToolUp.Platform.AuditLogMessages.UnattributedActor : System.String { get }
+ToolUp.Platform.AuditRow (class)
+ToolUp.Platform.AuditRow.bestEffort(Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.AuditWriteError]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.AuditRow.emit(ToolUp.Platform.IAuditLog, System.String, ToolUp.Platform.AuditEvent) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.AuditWriteError]]
+ToolUp.Platform.AuditRow.orRefuse(Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.AuditWriteError]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.AuditSamplingPolicy (class)
 ToolUp.Platform.AuditSamplingPolicy..ctor(System.Double, System.Double, System.Double, System.Double)
 ToolUp.Platform.AuditSamplingPolicy.Anonymous : System.Double { get }
@@ -2068,6 +2072,26 @@ ToolUp.Platform.AuditViewProjection (class)
 ToolUp.Platform.AuditViewProjection.SummaryMaxFields : System.Int32 (literal)
 ToolUp.Platform.AuditViewProjection.SummaryMaxLength : System.Int32 (literal)
 ToolUp.Platform.AuditViewProjection.actorFieldNames : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.AuditWriteError (class)
+ToolUp.Platform.AuditWriteError.IsChainHeadConflict : System.Boolean { get }
+ToolUp.Platform.AuditWriteError.IsRefused : System.Boolean { get }
+ToolUp.Platform.AuditWriteError.IsStoreUnavailable : System.Boolean { get }
+ToolUp.Platform.AuditWriteError.Tag : System.Int32 { get }
+ToolUp.Platform.AuditWriteError+ChainHeadConflict (class)
+ToolUp.Platform.AuditWriteError+ChainHeadConflict.streamKey : System.String { get }
+ToolUp.Platform.AuditWriteError+Refused (class)
+ToolUp.Platform.AuditWriteError+Refused.policy : System.String { get }
+ToolUp.Platform.AuditWriteError+StoreUnavailable (class)
+ToolUp.Platform.AuditWriteError+StoreUnavailable.reason : System.String { get }
+ToolUp.Platform.AuditWriteError+Tags (class)
+ToolUp.Platform.AuditWriteError+Tags.ChainHeadConflict : System.Int32 (literal)
+ToolUp.Platform.AuditWriteError+Tags.Refused : System.Int32 (literal)
+ToolUp.Platform.AuditWriteError+Tags.StoreUnavailable : System.Int32 (literal)
+ToolUp.Platform.AuditWriteErrorModule (class)
+ToolUp.Platform.AuditWriteErrorModule.describe(ToolUp.Platform.AuditWriteError) : System.String
+ToolUp.Platform.AuditWriteRefusedException (class)
+ToolUp.Platform.AuditWriteRefusedException..ctor(ToolUp.Platform.AuditWriteError)
+ToolUp.Platform.AuditWriteRefusedException.Error : ToolUp.Platform.AuditWriteError { get }
 ToolUp.Platform.Auth (class)
 ToolUp.Platform.Auth+AuthenticatedUser (class)
 ToolUp.Platform.Auth+AuthenticatedUser..ctor(ToolUp.Platform.UserId, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.Auth+PrincipalAdmission)
@@ -7902,7 +7926,7 @@ ToolUp.Platform.IAnswerProvenanceAnchors.CompositionSealId : Microsoft.FSharp.Co
 ToolUp.Platform.IAnswerProvenanceAnchors.TryCertificateRef(System.String, System.Guid, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[System.String]]
 ToolUp.Platform.IAuditLog (interface)
 ToolUp.Platform.IAuditLog.GetAuditTrail(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[System.DateTime, System.DateTime]], Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AuditEvent]]
-ToolUp.Platform.IAuditLog.Record(System.String, ToolUp.Platform.AuditEvent) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.IAuditLog.Record(System.String, ToolUp.Platform.AuditEvent) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.AuditWriteError]]
 ToolUp.Platform.IAuditViewApi (class)
 ToolUp.Platform.IAuditViewApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AuditTrailQuery, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.AuditEventPage, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AuditTrailQuery, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Byte[], System.String]]])
 ToolUp.Platform.IAuditViewApi.ExportCsv : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AuditTrailQuery, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Byte[], System.String]]] { get }
