@@ -74,6 +74,7 @@ let private registeredTests =
         BudgetSeamTests.tests
         SignedWorkerOutcomeTests.tests
         SqliteLogStoreTests.tests
+        BlobDocumentStoreTests.tests
     ]
 
 let private deliberatelyUnregistered: TestRegistrationGuard.Exemption list = []
