@@ -162,7 +162,7 @@ module LiveSessionHandler =
                         | Some(RateLimitVerdict.RefusedOnStoreFailure reason) ->
                             do!
                                 RateLimitVerdict.auditRefusal
-                                    (ToolUp.Platform.Config.Background.resolveAuditLog ctx.RequestServices)
+                                    (ToolUp.Platform.Config.Background.auditLogOf ctx)
                                     scopeId
                                     "live-sessions:subscribe"
                                     reason

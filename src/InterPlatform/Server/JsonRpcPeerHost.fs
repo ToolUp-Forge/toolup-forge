@@ -452,7 +452,7 @@ module JsonRpcPeerHost =
         (result: Result<string, PeerError>)
         : System.Threading.Tasks.Task =
         task {
-            let auditLog = ToolUp.Platform.Config.Background.resolveAuditLog ctx.RequestServices
+            let auditLog = ToolUp.Platform.Config.Background.auditLogOf ctx
 
             let payload: PeerCallCompletedPayload = {
                 ContractId = contractId
@@ -514,7 +514,7 @@ module JsonRpcPeerHost =
                 // claim on a non-outcome.
                 | PeerJobStatus.Pending -> ()
                 | terminal ->
-                    let auditLog = ToolUp.Platform.Config.Background.resolveAuditLog ctx.RequestServices
+                    let auditLog = ToolUp.Platform.Config.Background.auditLogOf ctx
                     let! first = map.MarkTerminalObserved(PeerJob.Scope, groupJobId) |> Async.StartAsTask
 
                     if first then

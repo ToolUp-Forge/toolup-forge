@@ -555,7 +555,7 @@ let private bundleHandler (config: ServerConfig) (capture: DevDiagnosticsHandler
         // Audit emission is best-effort; a write failure must not
         // poison the response. The `IAuditLog` default already
         // swallows + logs exceptions internally.
-        let auditLogOpt = Background.resolveAuditLog ctx.RequestServices
+        let auditLogOpt = Background.auditLogOf ctx
 
         do!
             auditLogOpt.Record(

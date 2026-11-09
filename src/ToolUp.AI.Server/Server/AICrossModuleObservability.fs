@@ -306,8 +306,7 @@ let private resolveScopeId (ctx: HttpContext) : string =
         | _ -> "anonymous"
 
 let private buildReport (ctx: HttpContext) : Async<CrossModuleReport> =
-    let auditLogOpt =
-        ToolUp.Platform.Config.Background.resolveAuditLog ctx.RequestServices
+    let auditLogOpt = ToolUp.Platform.Config.Background.auditLogOf ctx
 
     reportFor auditLogOpt (resolveScopeId ctx)
 

@@ -1279,7 +1279,7 @@ let aiAssistantApi
     // ownership-gate path. `None` in test compositions that bypass
     // `compose` (no DI registration); the gate stays effective — only
     // the audit-trail row is skipped.
-    let auditLogOpt = Background.resolveAuditLog ctx.RequestServices
+    let auditLogOpt = Background.auditLogOf ctx
 
     // Opt-in conversation persistence. Resolves `IConversationStore`
     // once per handler invocation; `null` (the default,

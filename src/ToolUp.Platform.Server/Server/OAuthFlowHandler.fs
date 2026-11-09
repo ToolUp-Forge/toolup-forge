@@ -541,7 +541,7 @@ let private providerCallbackTail
                             (Background.writeFailureWarner "OAuthFlowHandler" (Background.requestLogger ctx) ctx)
                             providerProfile
                             secretStore
-                            (Background.resolveAuditLog ctx.RequestServices)
+                            (Background.auditLogOf ctx)
                             scope
                             entry.UserId.Value
                             providerFlow
@@ -857,7 +857,7 @@ let private callback (flowName: string) : HttpHandler =
                                                     // Fire-and-forget,
                                                     // observed: a failed
                                                     // write is a Warning.
-                                                    let auditLog = Background.resolveAuditLog ctx.RequestServices
+                                                    let auditLog = Background.auditLogOf ctx
 
                                                     let warn =
                                                         Background.writeFailureWarner

@@ -281,7 +281,7 @@ let private resolveLogger (ctx: HttpContext) : ILogger option =
     | _ -> None
 
 let private tryResolveAuditLog (ctx: HttpContext) : IAuditLog =
-    ToolUp.Platform.Config.Background.resolveAuditLog ctx.RequestServices
+    ToolUp.Platform.Config.Background.auditLogOf ctx
 
 let private safeLen (s: string) = if isNull s then 0 else s.Length
 

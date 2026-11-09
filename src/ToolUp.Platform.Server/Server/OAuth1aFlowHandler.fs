@@ -242,7 +242,7 @@ let private callback (flowName: string) : HttpHandler =
                                     return! respondText ctx 500 (sprintf "Failed to persist access token: %s" msg)
                                 | Ok(), Ok() ->
                                     // Best-effort audit (GP 6).
-                                    let auditLog = ToolUp.Platform.Config.Background.resolveAuditLog ctx.RequestServices
+                                    let auditLog = ToolUp.Platform.Config.Background.auditLogOf ctx
 
                                     let warn =
                                         Background.writeFailureWarner

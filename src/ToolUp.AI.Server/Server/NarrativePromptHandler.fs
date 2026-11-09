@@ -377,7 +377,7 @@ let narrativePromptApi (ctx: HttpContext) : NarrativePromptApi =
     /// write under the default policy and raises under a compliance-grade one
     /// on purpose, so the call then fails rather than completing un-audited.
     let audit (caller: Caller) (kind: string) (methodName: string) (runKey: string) (payload: (string * string) list) = async {
-        let log = ToolUp.Platform.Config.Background.resolveAuditLog ctx.RequestServices
+        let log = ToolUp.Platform.Config.Background.auditLogOf ctx
 
         do!
             log.Record(

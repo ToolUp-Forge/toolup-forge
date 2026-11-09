@@ -30,8 +30,7 @@ let private resolveUserClaims (ctx: HttpContext) : IUserClaims =
     | :? IUserClaims as svc -> svc
     | _ -> NoOpUserClaims() :> _
 
-let private resolveAuditLog (ctx: HttpContext) : IAuditLog =
-    Background.resolveAuditLog ctx.RequestServices
+let private resolveAuditLog (ctx: HttpContext) : IAuditLog = Background.auditLogOf ctx
 
 /// Phase 1026 — the warning a failed grant / revoke audit write is logged
 /// as, built while the request is live.

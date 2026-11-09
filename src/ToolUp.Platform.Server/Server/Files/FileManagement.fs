@@ -1405,7 +1405,7 @@ let fileManagementApi (ctx: HttpContext) : FileManagementApi =
     // Audit log is best-effort: emission is fire-and-forget through
     // `Background.startAudit` (Phase 1026), so a missing or failing
     // `IAuditLog` never blocks file operations — a failure is a Warning.
-    let auditLog = Background.resolveAuditLog ctx.RequestServices
+    let auditLog = Background.auditLogOf ctx
 
     let auditWarn =
         Background.writeFailureWarner "FileManagement" (Background.requestLogger ctx) ctx

@@ -163,13 +163,16 @@ let resolveAuditLog (services: IServiceProvider) : IAuditLog =
     | :? IAuditLog as log -> log
     | _ -> NoOpAuditLog() :> IAuditLog
 
-/// The actor of an audit row a request handler emits: the principal of the
-/// request's registered `AccessContext`, or `emitter` as a system actor when
-/// the request resolved none.
+/// The actor of an audit row a request handler emits: the subject the scope
+/// resolution stamped on the request, or `emitter` as a system actor when
+/// it resolved none.
 let requestActor (emitter: string) (ctx: HttpContext) : AuditSubject =
-    match ctx.RequestServices.GetService(typeof<AccessContext>) with
-    | :? AccessContext as access -> AuditSubject.fromSubject access.Subject
+    match ctx.Items.TryGetValue "ToolUp.Subject" with
+    | true, (:? Subject as subject) -> AuditSubject.fromSubject subject
     | _ -> AuditSubject.system emitter
+
+/// The request's composed `IAuditLog` (`resolveAuditLog` over its services).
+let auditLogOf (ctx: HttpContext) : IAuditLog = resolveAuditLog ctx.RequestServices
 
 let internal writeFailureWarner (source: string) (logger: ILogger option) (ctx: HttpContext) : string -> exn -> unit =
     let route = sprintf " on %s %s" ctx.Request.Method (string ctx.Request.Path)

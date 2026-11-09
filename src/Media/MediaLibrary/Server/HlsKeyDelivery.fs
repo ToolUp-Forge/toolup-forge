@@ -378,7 +378,7 @@ let private recordDenial (ctx: HttpContext) (verdict: string) (viaSignature: boo
 /// A deployment composing no `IAuditLog` emits nothing and pays nothing
 /// (GP 13), like every other optional seam this endpoint reaches for.
 let private recordDelivery (ctx: HttpContext) (container: string) (id: MediaId) (via: string) =
-    let log = ToolUp.Platform.Config.Background.resolveAuditLog ctx.RequestServices
+    let log = ToolUp.Platform.Config.Background.auditLogOf ctx
     let subjectKind, subjectId = AuditSubject.sanitise (subjectOf ctx)
 
     let payload: MediaKeyDeliveredPayload = {

@@ -92,8 +92,7 @@ let private resolvePermissionStore (ctx: HttpContext) =
     | :? IPermissionStore as p -> Some p
     | _ -> None
 
-let private resolveAuditLog (ctx: HttpContext) =
-    Background.resolveAuditLog ctx.RequestServices
+let private resolveAuditLog (ctx: HttpContext) = Background.auditLogOf ctx
 
 /// Phase 5f — resolves `IPlatformAdminStore` for the `CreateTeam`
 /// admin-gate. The store is registered unconditionally by

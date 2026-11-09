@@ -96,7 +96,7 @@ let private currentUser (ctx: HttpContext) : Async<AuthenticatedUser> = async {
 }
 
 let private auditEmit (ctx: HttpContext) (scopeId: string) (event: AuditEvent) : Async<unit> = async {
-    let auditLog = ToolUp.Platform.Config.Background.resolveAuditLog ctx.RequestServices
+    let auditLog = ToolUp.Platform.Config.Background.auditLogOf ctx
 
     return!
         auditLog.Record(AuditScope.shard scopeId, ToolUp.Platform.Config.Background.requestActor "Passkey" ctx, event)

@@ -890,7 +890,7 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                                                 // the record".
                                                 | _ -> GrantConsentStore.denyingVerifier
 
-                                            let auditLog = Background.resolveAuditLog ctx.RequestServices
+                                            let auditLog = Background.auditLogOf ctx
 
                                             let mutable verdicts = Map.empty<string, Result<unit, ConsentDenial>>
 

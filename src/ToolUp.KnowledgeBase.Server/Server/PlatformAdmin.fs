@@ -100,7 +100,7 @@ let private platformDeps (baseDeps: KnowledgeApiDeps) : KnowledgeApiDeps =
 /// registered (test bypass, `FeatureMode.Disabled` deployment) — emission is
 /// fire-and-forget and silent when the substrate is absent.
 let private resolveAuditLog (ctx: HttpContext) : IAuditLog =
-    ToolUp.Platform.Config.Background.resolveAuditLog ctx.RequestServices
+    ToolUp.Platform.Config.Background.auditLogOf ctx
 
 /// Emit a Platform KB audit event under `_platform` scope. Fire-and-
 /// forget — `IAuditLog.Record` is contractually best-effort and

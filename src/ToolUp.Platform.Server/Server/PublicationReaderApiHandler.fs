@@ -71,7 +71,7 @@ let publicationReaderApi (ctx: HttpContext) : IPublicationReaderApi =
         (event: PublicationReaderGrantChangedPayload -> AuditEvent)
         =
         async {
-            let log = ToolUp.Platform.Config.Background.resolveAuditLog ctx.RequestServices
+            let log = ToolUp.Platform.Config.Background.auditLogOf ctx
 
             do!
                 log.Record(

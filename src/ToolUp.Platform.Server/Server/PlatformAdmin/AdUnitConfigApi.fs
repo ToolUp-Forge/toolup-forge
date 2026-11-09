@@ -104,8 +104,7 @@ let private resolveRegistry (ctx: HttpContext) : EntityRegistry option =
     | :? EntityRegistry as r -> Some r
     | _ -> None
 
-let private resolveAuditLog (ctx: HttpContext) : IAuditLog =
-    Background.resolveAuditLog ctx.RequestServices
+let private resolveAuditLog (ctx: HttpContext) : IAuditLog = Background.auditLogOf ctx
 
 /// Idempotent entity-type registration. Calling on every request is
 /// cheap because `EntityRegistry.Register` is a `ConcurrentDictionary`
