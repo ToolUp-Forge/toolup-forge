@@ -51,7 +51,9 @@ type Model = {
     PendingSecret: PendingSecret option
     Loaded: bool
     Busy: bool
-    Error: string option
+    /// The page's failure notice, as a `Notice.Problem`. Cleared by
+    /// `DismissError` or the next call.
+    Error: Notice option
 }
 
 type Msg =
@@ -122,7 +124,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
             model with
                 Loaded = true
                 Busy = false
-                Error = Some err
+                Error = Some(Notice.Problem err)
         },
         Cmd.none
 
@@ -158,7 +160,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         {
             model with
                 Busy = false
-                Error = Some err
+                Error = Some(Notice.Problem err)
         },
         Cmd.none
 
@@ -173,7 +175,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         {
             model with
                 Busy = false
-                Error = Some err
+                Error = Some(Notice.Problem err)
         },
         Cmd.none
 
@@ -188,7 +190,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         {
             model with
                 Busy = false
-                Error = Some err
+                Error = Some(Notice.Problem err)
         },
         Cmd.none
 
@@ -221,7 +223,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         {
             model with
                 Busy = false
-                Error = Some err
+                Error = Some(Notice.Problem err)
         },
         Cmd.none
 
@@ -243,7 +245,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         {
             model with
                 Busy = false
-                Error = Some err
+                Error = Some(Notice.Problem err)
         },
         Cmd.none
 
@@ -302,23 +304,6 @@ let private permissionSummary (msgs: ServiceAccountMessages) (permissions: Map<s
                 pill $"{moduleName}: {granted}" "bg-gray-100 text-gray-700 font-mono"
         ]
     ]
-
-let private errorBanner (msgs: ServiceAccountMessages) (model: Model) (dispatch: Msg -> unit) =
-    match model.Error with
-    | Some msg ->
-        Html.div [
-            prop.className
-                "mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm flex items-center justify-between"
-            prop.children [
-                Html.span [ prop.text msg ]
-                Html.button [
-                    prop.className "text-xs text-red-600 hover:underline"
-                    prop.text msgs.Dismiss
-                    prop.onClick (fun _ -> dispatch DismissError)
-                ]
-            ]
-        ]
-    | None -> Html.none
 
 /// The one-time secret panel. Deliberately loud, deliberately hard to
 /// dismiss by reflex: this value cannot be recovered, and the only
@@ -706,7 +691,7 @@ let private ServiceAccountBody (model: Model) (dispatch: Msg -> unit) =
             (match model.PendingSecret with
              | Some pending -> secretPanel msgs pending dispatch
              | None -> Html.none)
-            errorBanner msgs model dispatch
+            StateViews.notice { Dismiss = msgs.Dismiss } model.Error (fun () -> dispatch DismissError)
             body
         ]
     ]
