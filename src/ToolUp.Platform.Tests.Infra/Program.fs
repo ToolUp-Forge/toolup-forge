@@ -77,6 +77,7 @@ let private registeredTests =
         BlobDocumentStoreTests.tests
         BlobDocumentStoreTests.raisingReadTests
         BlobDocumentStoreTests.byteFixtureTests
+        IdempotencyReplayAuditTests.tests
     ]
 
 let private deliberatelyUnregistered: TestRegistrationGuard.Exemption list = []

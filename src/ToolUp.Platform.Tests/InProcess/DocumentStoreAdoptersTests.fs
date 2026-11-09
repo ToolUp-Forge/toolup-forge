@@ -563,4 +563,42 @@ let tests =
 
             expectQuarantined storage platform name
         }
+
+        test
+            "BlobIdempotencyStore — today's envelope reads, and one that does not decode refuses rather than re-executing" {
+            let nameOf (scope: string) (key: string) =
+                let hash =
+                    Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(scope + "|" + key))
+                    |> Convert.ToHexString
+
+                "idem/" + hash.ToLowerInvariant() + ".json"
+
+            let bad = nameOf "s1" "k-bad"
+            let storage = planted platform bad
+
+            let envelope =
+                "{\"StatusCode\":200,\"ContentType\":\"application/json\",\"RequestBodyHash\":\"h\",\"ExpiryUtcTicks\":"
+                + string DateTime.MaxValue.Ticks
+                + ",\"BodyBase64\":\"AQI=\"}"
+
+            storage.Upload(platform, nameOf "s1" "k-good", Encoding.UTF8.GetBytes envelope)
+            |> run
+            |> ignore
+
+            let store =
+                ToolUp.Remoting.Server.BlobIdempotencyStore(storage) :> ToolUp.Remoting.Server.IIdempotencyStore
+
+            Expect.equal
+                (store.TryGet("k-good", "s1") |> run)
+                (Some {
+                    Body = [| 1uy; 2uy |]
+                    StatusCode = 200
+                    ContentType = "application/json"
+                    RequestBodyHash = "h"
+                })
+                "the bytes the store has always written read back"
+
+            expectRefusedRead "TryGet" (fun () -> store.TryGet("k-bad", "s1") |> run |> ignore)
+            expectQuarantined storage platform bad
+        }
     ]
