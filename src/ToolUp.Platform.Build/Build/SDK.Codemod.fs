@@ -66,6 +66,9 @@ type CodemodMigration =
     /// `InvocationResult` is gone, the fork's unions are qualified, and a
     /// streaming method may carry the pre-flight markers.
     | RequestPipeline
+    /// The client's one async state and memo primitives: `Prefetch`'s stall
+    /// reporter is removed.
+    | RemoteAndMemo
 
 /// Helpers over `CodemodMigration`.
 module CodemodMigration =
@@ -93,6 +96,7 @@ module CodemodMigration =
         | CodemodMigration.TypedIdentity -> "docs/migrations/878-typed-identity.md"
         | CodemodMigration.RequestPipeline ->
             "docs/migrations/1056-redesign-b-request-pipeline-as-stages-with-streaming-inside.md"
+        | CodemodMigration.RemoteAndMemo -> "docs/migrations/1070-redesign-e-remote-and-memo-primitives.md"
 
     /// The phase label the renderings print.
     let label migration =
@@ -114,6 +118,7 @@ module CodemodMigration =
         | CodemodMigration.SubsystemNamespaces -> "Phase 1198"
         | CodemodMigration.TypedIdentity -> "Phase 878"
         | CodemodMigration.RequestPipeline -> "Phase 1056"
+        | CodemodMigration.RemoteAndMemo -> "Phase 1070"
 
 /// Which files a rule applies to. The Phase 11.C.5 Tier 2 renames are
 /// PACKAGE ids — they live in `.fsproj` / `Directory.Packages.props` —
@@ -1394,6 +1399,13 @@ module Codemod =
             CodemodFileClass.Source
             @"\bAsyncStream\.from(?:Callback|Subscription)\b"
             "a streaming producer now runs under the request's abort token (a client that leaves cancels it) and behind a bounded channel: a `fromCallback` producer that outruns its consumer is held in `emit` until it reads; a `fromSubscription` feed drops its oldest waiting value instead. A producer that relied on unbounded buffering, or on running past a disconnect, is reviewed here"
+        // `Prefetch`'s stall reporter had no caller anywhere.
+        review
+            "1070-prefetch-stall"
+            CodemodMigration.RemoteAndMemo
+            CodemodFileClass.Source
+            @"\bPrefetch\.(?:warnIfStalled|setStallReporter|resetStallWarning)\b"
+            "`Prefetch.warnIfStalled`, `Prefetch.setStallReporter` and `Prefetch.resetStallWarning` are removed with no replacement: delete the call. A gate that can hang is a `Remote<_, _>` whose `Failed` case the view renders (`StateViews.remote`); a timeout belongs to the request that loads it"
     ]
 
 
@@ -2392,6 +2404,7 @@ module Codemod =
             CodemodMigration.TypedIdentity
             CodemodMigration.SubsystemNamespaces
             CodemodMigration.RequestPipeline
+            CodemodMigration.RemoteAndMemo
         ]
         |> List.tryFind (fun m -> CodemodMigration.label m = "Phase " + phase.Trim())
 

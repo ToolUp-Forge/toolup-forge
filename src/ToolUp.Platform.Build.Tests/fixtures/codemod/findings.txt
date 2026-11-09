@@ -1,4 +1,4 @@
-Codemod: 86 site(s) in 17 file(s) need human review (not rewritten):
+Codemod: 87 site(s) in 17 file(s) need human review (not rewritten):
   src/Client/App.fs
     L14 [66-dev-default-user-id] DevDefaultUserId = "dev-admin"
       -> Phase 66: `ClientConfig.DevDefaultUserId` is deleted — the public-utility-with-admin shape it approximated is `Surfaces = Surfaces.anonymousAndIndividual` (worked example 4)
@@ -8,6 +8,8 @@ Codemod: 86 site(s) in 17 file(s) need human review (not rewritten):
       -> Phase 11.C.5: T3.4 — `ClientConfig.create` takes a trailing `ClientHandlerRegistry` argument; pass the registry you wire (or `ClientHandlerRegistry.empty` explicitly)
     L26 [73-elmish-unknown-namespace] let navigable = Elmish.Navigation.Program.toNavigable parser urlUpdate program
       -> Phase 73: an `Elmish.*` sub-namespace the ToolUp runtime does not carry (Navigation / UrlParser / Debug / Browser stay upstream) — choose the ToolUp equivalent or keep the upstream package
+    L30 [1070-prefetch-stall] let stalled = Prefetch.warnIfStalled "configs" startedAt 30.0 [ configsReady; flagsReady ]
+      -> Phase 1070: `Prefetch.warnIfStalled`, `Prefetch.setStallReporter` and `Prefetch.resetStallWarning` are removed with no replacement: delete the call. A gate that can hang is a `Remote<_, _>` whose `Failed` case the view renders (`StateViews.remote`); a timeout belongs to the request that loads it
   src/Client/Grid.fs
     L10 [815-aggrid-theme-class] prop.className ThemeClass.Balham
       -> Phase 815: the legacy `ThemeClass.*` CSS-class strings are removed: drop the `prop.className` wrapper and the `theme = "legacy"` prop, and pass `AgGrid.theme Theme.themeAlpine` / `Theme.themeBalham` / `Theme.themeMaterial` (a `*Dark` class is `|> Theme.withPart Theme.colorSchemeDark`) — no stylesheet import is needed under the Theming API
@@ -193,6 +195,7 @@ Codemod: 86 site(s) in 17 file(s) need human review (not rewritten):
     Phase 1056 — docs/migrations/1056-redesign-b-request-pipeline-as-stages-with-streaming-inside.md
     Phase 1066 — docs/migrations/1066-redesign-d-schedulerpolicy-coalesced-and-joblifecycle-transition.md
     Phase 1067 — docs/migrations/1067-redesign-d-hosting-register-placement-and-options-records.md
+    Phase 1070 — docs/migrations/1070-redesign-e-remote-and-memo-primitives.md
     Phase 1077 — docs/migrations/1077-redesign-f-turnoutcome-loopstate-and-loop-step.md
     Phase 1094 — docs/migrations/1094-redesign-h-factscompose-options-modelling-dedup-and-fact-tools.md
     Phase 1095 — docs/migrations/1095-redesign-h-deliveryplan-and-connector-capabilities.md
