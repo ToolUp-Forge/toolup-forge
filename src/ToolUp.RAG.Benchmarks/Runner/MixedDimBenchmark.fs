@@ -94,7 +94,7 @@ let private loadFixture (path: string) : LoadedFixture =
         failwithf "Mixed-dim fixture not found at %s" path
 
     let json = File.ReadAllText path
-    let options = FableConverters.create ()
+    let options = PlatformJson.options
     let meta = JsonSerializer.Deserialize<FixtureMetadata>(json, options)
     let rng = Random meta.seed
 

@@ -115,7 +115,7 @@ module PostgresTable =
         Keep = false
     }
 
-let private json = FableConverters.create ()
+let private json = PlatformJson.options
 
 let private hierarchy = "load"
 let private yearStart = DateTime(2025, 1, 6, 0, 0, 0, DateTimeKind.Utc)
