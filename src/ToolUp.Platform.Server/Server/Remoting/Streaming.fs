@@ -8,9 +8,10 @@ open System.Text.Json
 open System.Threading.Channels
 open System.Threading.Tasks
 open Microsoft.FSharp.Reflection
+open ToolUp.Remoting
 
 // =============================================================================
-// Phase 69c — server-sent streaming via IAsyncEnumerable<'T>
+// Server-sent streaming via IAsyncEnumerable<'T>
 // =============================================================================
 //
 // API record fields whose F# function shape returns `IAsyncEnumerable<'T>`
@@ -18,10 +19,11 @@ open Microsoft.FSharp.Reflection
 // dispatcher bypasses the proxy entirely:
 //   * Body is parsed; the first argument is deserialised via STJ
 //   * The method's function value is invoked via reflection on the impl
-//   * The returned IAsyncEnumerable is iterated; each element framed as
-//     an SSE event `event: chunk\ndata: <json>\n\n`
-//   * On normal end of sequence: `event: complete\ndata: {}\n\n`
-//   * On exception: `event: error\ndata: <message>\n\n`
+//   * The returned IAsyncEnumerable is iterated; each element is framed as
+//     an `event: chunk` carrying `id: <correlation-id>-<chunk-index>`
+//   * On normal end of sequence: `event: complete`
+//   * On exception: `event: error` carrying `{"message":"…"}`
+// The bytes are Core's `Sse.encode`, the grammar the Fable client parses with.
 //
 // v0 supports unary methods only (single arg → IAsyncEnumerable). Multi-arg
 // curried methods are a follow-up (need recursive Invoke unfurling).
@@ -29,7 +31,7 @@ open Microsoft.FSharp.Reflection
 // the reflection path simple; an Async<IAsyncEnumerable> shape is a
 // follow-up that adds the `Async.StartAsTask` reflection bridge.
 
-/// Phase 69c.tail — public helpers for *producing* the `IAsyncEnumerable<'T>`
+/// Public helpers for *producing* the `IAsyncEnumerable<'T>`
 /// a streaming method returns. The dispatcher (internal `Streaming` module
 /// below) handles classification + SSE framing; this module gives consumers
 /// a ready-made bridge for the common case where the value source is a
@@ -102,7 +104,7 @@ module AsyncStream =
                 }
         }
 
-    /// Phase 69c.tail D - bridge a SUBSCRIPTION-based producer to an
+    /// Bridge a SUBSCRIPTION-based producer to an
     /// `IAsyncEnumerable<'T>`.
     ///
     /// `fromCallback` above is for a producer that RUNS - an agent turn, a
@@ -177,7 +179,7 @@ module internal Streaming =
     // Reflect over public AND non-public records so an internal / private
     // streaming API record arms the classifier (and the unenforceable-
     // attribute refusal) exactly like a public one — the same fail-open
-    // hole Phase 69d.tail closed for the auth classifier. Without it a
+    // hole the auth classifier closed. Without it a
     // non-public record's streaming method carrying `[<RequiresRole>]`
     // would silently start with the requirement UNenforced.
     let private reflectionFlags = BindingFlags.Public ||| BindingFlags.NonPublic
@@ -218,13 +220,13 @@ module internal Streaming =
                 | None -> None)
             |> Map.ofArray
 
-    // ── Phase 727 — align this diagnostic with the dispatch classifiers.
+    // ── Align this diagnostic with the dispatch classifiers.
     //
-    // Phase 69d.tail matched every marker here by bare simple type name,
-    // which was consistent with the classifiers of the day. Phase 335
-    // moved the auth classifier to CLR type identity and left this one
-    // behind, so two matchers have disagreed since about what counts as
-    // `[<RequiresRole>]` — exactly the drift 335 was written to end.
+    // This diagnostic once matched every marker by bare simple type name,
+    // which was consistent with the classifiers of the day. The auth
+    // classifier then moved to CLR type identity and left this one
+    // behind, so two matchers disagreed about what counts as
+    // `[<RequiresRole>]` — exactly the drift that move was written to end.
     //
     // The diagnostic is fail-SAFE (a missed match produces a diagnostic,
     // not an authorisation), so this is a correctness-of-message item
@@ -368,7 +370,7 @@ module internal Streaming =
     /// generic interface (`IEnumerator`-shaped). Uses reflection over
     /// the FSharpFunc's `Invoke` method.
     ///
-    /// 0.1.16 — null-guards on both `pi` (property missing) AND on
+    /// Null-guards on both `pi` (property missing) AND on
     /// `funcObj` (the property's value is null — e.g. the impl
     /// record was constructed with `Unchecked.defaultof<_>` or a
     /// partial-record builder that didn't populate every field).
@@ -394,143 +396,22 @@ module internal Streaming =
             let invokeMethod = funcObj.GetType().GetMethod "Invoke"
             invokeMethod.Invoke(funcObj, [| arg |])
 
-    /// 0.1.16 — split a string containing line terminators into one
-    /// `data:` line per source line per the SSE spec
-    /// (https://html.spec.whatwg.org/multipage/server-sent-events.html#event-stream-interpretation).
-    /// Previously `formatChunk` used a single `data: %s` line, which
-    /// silently corrupted the stream when `json` contained literal
-    /// `\n` (e.g. when the consumer composed
-    /// `JsonSerializerOptions(WriteIndented = true)`) — the first
-    /// embedded newline ended the SSE event prematurely.
-    let private dataFraming (payload: string) : string =
-        // Normalise CRLF / CR to LF first so the spec's `\n\n` event
-        // delimiter isn't mis-parsed.
-        let normalised = payload.Replace("\r\n", "\n").Replace("\r", "\n")
-        // Per the SSE spec, every line of the value is its own
-        // `data:` line. Lines are joined with `\n`; the event ends
-        // with the standard `\n\n` delimiter (which `formatChunk` /
-        // `formatComplete` / `formatError` append).
-        normalised.Split('\n')
-        |> Array.map (fun line -> "data: " + line)
-        |> String.concat "\n"
-
-    /// Frame a single element as an SSE `chunk` event (no `id:` line).
-    let formatChunk (json: string) : byte[] =
-        let frame = sprintf "event: chunk\n%s\n\n" (dataFraming json)
-        Encoding.UTF8.GetBytes frame
-
-    /// Phase 69c.C — frame a single element as an SSE `chunk` event
-    /// carrying an `id:` line. The dispatcher stamps
-    /// `<correlation-id>-<chunk-index>` (zero-based) so every chunk is
+    /// Frame one element as an `event: chunk` carrying the dispatcher's
+    /// `id: <correlation-id>-<chunk-index>` (zero-based), so every chunk is
     /// attributable to its call from the wire alone: the browser's
-    /// `EventSource.lastEventId` and any proxy log carry the same token
-    /// the telemetry event and the `x-correlation-id` response header
-    /// carry. The `id:` line precedes `data:` (SSE fields are
-    /// order-independent; `id` first keeps the frame greppable). A
-    /// correlation id never contains a line terminator — the dispatcher
-    /// generates a GUID or takes a header value, and a header value
-    /// cannot carry one — so single-line framing is safe.
+    /// `EventSource.lastEventId` and any proxy log carry the token the
+    /// telemetry event and the `x-correlation-id` response header carry.
     let formatChunkWithId (id: string) (json: string) : byte[] =
-        let frame = sprintf "event: chunk\nid: %s\n%s\n\n" id (dataFraming json)
-        Encoding.UTF8.GetBytes frame
+        Encoding.UTF8.GetBytes(Sse.encode (StreamFrame.Chunk(Some id, json)))
 
     /// Frame the terminal `complete` event.
     let formatComplete () : byte[] =
-        Encoding.UTF8.GetBytes "event: complete\ndata: {}\n\n"
+        Encoding.UTF8.GetBytes(Sse.encode StreamFrame.Complete)
 
-    /// Frame an exception as an SSE `error` event. Carries the message
-    /// only — stack traces stay server-side.
+    /// Frame an exception as an `event: error` carrying `{"message":"…"}`.
+    /// The message only: stack traces stay server-side.
     let formatError (message: string) : byte[] =
-        let safe = JsonEncodedText.Encode(message).ToString()
-        // The JSON-encoded string never contains literal newlines (they
-        // become `\n` escape sequences), so single-line framing is
-        // safe here. Kept consistent with `formatChunk`'s shape.
-        let payload = sprintf "{\"message\":\"%s\"}" safe
-        let frame = sprintf "event: error\n%s\n\n" (dataFraming payload)
-        Encoding.UTF8.GetBytes frame
+        let payload =
+            sprintf "{\"message\":\"%s\"}" (JsonEncodedText.Encode(message).ToString())
 
-/// Phase 69c.C — one decoded server-sent event, as `Streaming.formatChunk`
-/// / `formatChunkWithId` / `formatComplete` / `formatError` encode it.
-///
-/// `Event` is the `event:` field (`"chunk"` / `"complete"` / `"error"` on
-/// this wire; `"message"` when absent, per the SSE spec's default). `Id` is
-/// the `id:` field when present — `<correlation-id>-<chunk-index>` on a
-/// dispatcher chunk. `Data` is every `data:` line of the event joined with
-/// `\n`, which is the inverse of the spec's multiline framing, so a
-/// payload that was split over several `data:` lines decodes to the exact
-/// string that was framed.
-type SseFrame = {
-    /// The `event:` field; `"message"` when the event carried none.
-    Event: string
-    /// The `id:` field when present (`<correlation-id>-<chunk-index>` on a dispatcher chunk).
-    Id: string option
-    /// Every `data:` line of the event, joined with a line feed.
-    Data: string
-}
-
-/// Phase 69c.C — the DECODER for the framing `Streaming` encodes. Pure and
-/// total over text: this is the contract's other half, kept beside the
-/// encoder so the two cannot drift, and it is what the contract tests read
-/// the wire with. It decodes the event-stream grammar
-/// (https://html.spec.whatwg.org/multipage/server-sent-events.html#event-stream-interpretation)
-/// — `event:` / `data:` / `id:` fields, `:` comments, blank-line delimiters,
-/// CRLF / CR / LF terminators — and nothing transport-specific: a caller
-/// hands it the text of a response body (or of a buffered slice ending on
-/// an event boundary) and gets the events back in order. An event with no
-/// `data:` line is dropped, as the spec requires.
-[<RequireQualifiedAccess>]
-module SseFrame =
-
-    /// Decode every complete event in `text`. A trailing partial event
-    /// (text after the last blank-line delimiter) is ignored, exactly as
-    /// a browser's parser holds it until the next chunk arrives.
-    let parse (text: string) : SseFrame list =
-        let lines = text.Replace("\r\n", "\n").Replace("\r", "\n").Split('\n')
-
-        let flush (eventName: string option) (id: string option) (data: string list) (acc: SseFrame list) =
-            match data with
-            | [] -> acc
-            | _ ->
-                {
-                    Event = defaultArg eventName "message"
-                    Id = id
-                    Data = data |> List.rev |> String.concat "\n"
-                }
-                :: acc
-
-        let fieldValue (line: string) (name: string) =
-            // `field:value` — a single leading space after the colon is
-            // stripped, per the spec; `field` alone is the empty value.
-            if line = name then
-                Some ""
-            elif line.StartsWith(name + ":") then
-                let rest = line.Substring(name.Length + 1)
-                Some(if rest.StartsWith " " then rest.Substring 1 else rest)
-            else
-                None
-
-        let mutable eventName: string option = None
-        let mutable id: string option = None
-        let mutable data: string list = []
-        let mutable acc: SseFrame list = []
-
-        for line in lines do
-            if line = "" then
-                acc <- flush eventName id data acc
-                eventName <- None
-                id <- None
-                data <- []
-            elif line.StartsWith ":" then
-                () // comment (keepalive) — ignored
-            else
-                match fieldValue line "data" with
-                | Some v -> data <- v :: data
-                | None ->
-                    match fieldValue line "event" with
-                    | Some v -> eventName <- Some v
-                    | None ->
-                        match fieldValue line "id" with
-                        | Some v -> id <- Some v
-                        | None -> () // unknown field (e.g. `retry`) — ignored
-
-        List.rev acc
+        Encoding.UTF8.GetBytes(Sse.encode (StreamFrame.Error payload))

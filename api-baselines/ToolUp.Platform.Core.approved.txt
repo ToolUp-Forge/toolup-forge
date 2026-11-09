@@ -15336,6 +15336,31 @@ ToolUp.Remoting.RemotingDecoders.registered() : Microsoft.FSharp.Collections.FSh
 ToolUp.Remoting.RemotingDecoders.resetForTests() : System.Void
 ToolUp.Remoting.RemotingDecoders.tryGet(System.Type) : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[System.Object, ToolUp.Remoting.DecodeError]]]
 ToolUp.Remoting.RemotingDecoders.verifyThrough`1(Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[System.Type, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[System.Object, ToolUp.Remoting.DecodeError]], Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Remoting.DecoderVerification, ToolUp.Remoting.DecoderRefusal]]]]], System.Int32, System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Remoting.DecoderVerification, ToolUp.Remoting.DecoderRefusal]
+ToolUp.Remoting.Sse (class)
+ToolUp.Remoting.Sse.encode(ToolUp.Remoting.StreamFrame) : System.String
+ToolUp.Remoting.Sse.parse(System.String) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.StreamFrame]
+ToolUp.Remoting.Sse.splitComplete(System.String) : System.Tuple`2[System.String, System.String]
+ToolUp.Remoting.StreamFrame (class)
+ToolUp.Remoting.StreamFrame.Complete : ToolUp.Remoting.StreamFrame { get }
+ToolUp.Remoting.StreamFrame.IsChunk : System.Boolean { get }
+ToolUp.Remoting.StreamFrame.IsComplete : System.Boolean { get }
+ToolUp.Remoting.StreamFrame.IsError : System.Boolean { get }
+ToolUp.Remoting.StreamFrame.IsOther : System.Boolean { get }
+ToolUp.Remoting.StreamFrame.Tag : System.Int32 { get }
+ToolUp.Remoting.StreamFrame+Chunk (class)
+ToolUp.Remoting.StreamFrame+Chunk.id : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Remoting.StreamFrame+Chunk.json : System.String { get }
+ToolUp.Remoting.StreamFrame+Error (class)
+ToolUp.Remoting.StreamFrame+Error.json : System.String { get }
+ToolUp.Remoting.StreamFrame+Other (class)
+ToolUp.Remoting.StreamFrame+Other.data : System.String { get }
+ToolUp.Remoting.StreamFrame+Other.event : System.String { get }
+ToolUp.Remoting.StreamFrame+Other.id : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Remoting.StreamFrame+Tags (class)
+ToolUp.Remoting.StreamFrame+Tags.Chunk : System.Int32 (literal)
+ToolUp.Remoting.StreamFrame+Tags.Complete : System.Int32 (literal)
+ToolUp.Remoting.StreamFrame+Tags.Error : System.Int32 (literal)
+ToolUp.Remoting.StreamFrame+Tags.Other : System.Int32 (literal)
 Toolup.TimeManagement (class)
 Toolup.TimeManagement+ComparisonPeriods (class)
 Toolup.TimeManagement+ComparisonPeriods..ctor(Toolup.TimeManagement+TimeRange, Toolup.TimeManagement+TimeRange)

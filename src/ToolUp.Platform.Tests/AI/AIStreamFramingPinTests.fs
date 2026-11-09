@@ -13,13 +13,14 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.AI
 open ToolUp.AI
+open ToolUp.Remoting
 open ToolUp.Remoting.Server
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform.Jobs
 
-// ─── Phase 69c.F — the legacy AI channel is byte-pinned across the migration ──
+// ─── The legacy AI channel is byte-pinned across the migration ──
 //
-// Phase 69c.F makes the chat turn ONE implementation with two sinks: the
+// Makes the chat turn ONE implementation with two sinks: the
 // typed `AIStreamingApi.StreamChatV2` (per-call SSE, `event: chunk`
 // frames) and the legacy `SubmitMessage` + `/api/ai/events` pair (the
 // per-user push channel toolup-app's AI side panel reads with
@@ -101,7 +102,7 @@ let private legacyWire (scopeId: string) (events: AIStreamEvent list) : string =
     for e in events do
         SSEHandler.sendEvent manager scopeId e
 
-    // Phase 6k: delivery is per-connection and asynchronous now, so
+    // Delivery is per-connection and asynchronous now, so
     // "I broadcast, therefore the sink has the bytes" stopped being
     // true. The manager's own drain point is the sync barrier; the
     // pinned bytes below are unchanged, only the moment we read them.
@@ -152,7 +153,7 @@ let private legacyGolden =
     + "data: {\"MessageComplete\":[\"0a3d3e4c-1a2b-4c5d-8e9f-000000000001\",\"0a3d3e4c-1a2b-4c5d-8e9f-000000000004\"]}\n\n"
     + "data: {\"TaskStatusChanged\":[\"0a3d3e4c-1a2b-4c5d-8e9f-000000000002\",\"AITaskCompleted\"]}\n\n"
 
-// ─── Phase 1131 — the block event ───────────────────────────────────────
+// ─── The block event ───────────────────────────────────────
 //
 // A part a server-resident tool attached reaches the stream as one more
 // default `message` frame, framed exactly as every other event. The part is
@@ -199,6 +200,24 @@ let private blockGolden =
 let private refusedGolden =
     "data: {\"TaskStatusChanged\":[\"0a3d3e4c-1a2b-4c5d-8e9f-000000000002\",{\"AITaskFailed\":\"Conversation does not belong to the current user — refusing to append.\"}]}\n\n"
 
+/// The typed channel's frame for one serialised event: an id-less chunk.
+let private typedChunk (json: string) : string =
+    Sse.encode (StreamFrame.Chunk(None, json))
+
+/// A frame's data, whatever its event.
+let private payloadOf (frame: StreamFrame) : string =
+    match frame with
+    | StreamFrame.Chunk(_, json)
+    | StreamFrame.Error json -> json
+    | StreamFrame.Other(_, _, data) -> data
+    | StreamFrame.Complete -> "{}"
+
+/// A default `message` event with no `id:` line: the legacy channel's shape.
+let private isDefaultMessage (frame: StreamFrame) : bool =
+    match frame with
+    | StreamFrame.Other("message", None, _) -> true
+    | _ -> false
+
 [<Tests>]
 let tests =
     testList "Phase 69c.F — legacy AI SSE channel byte pin" [
@@ -221,47 +240,60 @@ let tests =
             if actual <> blockGolden then
                 failtestf "block event framing changed.\n--- expected ---\n%s\n--- actual ---\n%s" blockGolden actual
 
-            let frames = SseFrame.parse actual
+            let frames = Sse.parse actual
 
-            Expect.all
-                frames
-                (fun f -> f.Event = "message" && f.Id.IsNone)
-                "the block event is a default message frame, like every legacy event"
+            Expect.all frames isDefaultMessage "the block event is a default message frame, like every legacy event"
 
             let typedPayloads =
                 blockTurn
-                |> List.map (typedPayload >> Streaming.formatChunk >> Encoding.UTF8.GetString)
+                |> List.map (typedPayload >> typedChunk)
                 |> String.concat ""
-                |> SseFrame.parse
-                |> List.map _.Data
+                |> Sse.parse
+                |> List.map payloadOf
 
-            Expect.equal typedPayloads (frames |> List.map _.Data) "the typed channel carries the same payload bytes"
+            Expect.equal typedPayloads (frames |> List.map payloadOf) "the typed channel carries the same payload bytes"
+
+            let blockFrame = payloadOf (List.item 2 frames)
 
             Expect.stringContains
-                frames[2].Data
+                blockFrame
                 (JsonSerializer.Serialize(blockPart, fableJson))
                 "the part is the conversation record's own encoding of the part"
         }
 
+        test "the notification channel's frames are Core's grammar, bytes unchanged" {
+            Expect.equal
+                (Encoding.UTF8.GetString(SSE.dataFrame "{\"a\":1}"))
+                "data: {\"a\":1}\n\n"
+                "a default message event carries no event: line"
+
+            Expect.equal
+                (Encoding.UTF8.GetString(SSE.namedFrame "kind" "{\"a\":1}"))
+                "event: kind\ndata: {\"a\":1}\n\n"
+                "a named event"
+
+            Expect.equal
+                (Encoding.UTF8.GetString(SSE.dataFrame "{\n\"a\":1}"))
+                "data: {\ndata: \"a\":1}\n\n"
+                "a payload carrying a line feed is framed one data: line per line, never cut short"
+        }
+
         test "legacy frames are default `message` events — the client reads them with onmessage" {
-            let frames = SseFrame.parse (legacyWire "user-1" turn)
+            let frames = Sse.parse (legacyWire "user-1" turn)
             Expect.equal frames.Length turn.Length "one frame per event"
 
-            Expect.all
-                frames
-                (fun f -> f.Event = "message" && f.Id.IsNone)
-                "no event: and no id: line on the legacy channel"
+            Expect.all frames isDefaultMessage "no event: and no id: line on the legacy channel"
         }
 
         test "the typed channel's chunk payloads are the legacy data payloads byte-for-byte" {
-            let legacyPayloads = SseFrame.parse (legacyWire "user-1" turn) |> List.map _.Data
+            let legacyPayloads = Sse.parse (legacyWire "user-1" turn) |> List.map payloadOf
 
             let typedPayloads =
                 turn
-                |> List.map (typedPayload >> Streaming.formatChunk >> Encoding.UTF8.GetString)
+                |> List.map (typedPayload >> typedChunk)
                 |> String.concat ""
-                |> SseFrame.parse
-                |> List.map _.Data
+                |> Sse.parse
+                |> List.map payloadOf
 
             Expect.equal typedPayloads legacyPayloads "same serializer on both channels ⇒ same payload bytes per event"
         }
@@ -292,7 +324,7 @@ let tests =
             Expect.equal sink.Text legacyGolden "the legacy sink over the same producer writes the pinned bytes"
         }
 
-        // ─── Phase 69c.tail E — the deprecation window, on the wire ──
+        // ─── The deprecation window, on the wire ──
         //
         // The legacy channel stays mounted and byte-identical; what it
         // gains is a header saying so. Both halves are pinned here

@@ -763,6 +763,9 @@
              Platform.Client's proxy, which is why it lives in Core (the
              only tier whose source ships under fable/, GP 10). -->
         <Compile Include="Shared\Remoting\DecodeError.fs" />
+        <!-- The event-stream grammar both hosts frame and parse a
+             streaming method through. Lexical, FSharp.Core only. -->
+        <Compile Include="Shared\Remoting\Sse.fs" />
         <!-- 0.4.4 — MsgPack binary format folded in from
              ToolUp.Remoting.MsgPack. Used by Platform.Server's remoting
              dispatcher (Server/Remoting/Proxy.fs) and Platform.Client's

@@ -2,12 +2,14 @@
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
 /// The streaming wire's bytes, pinned. Every literal here was captured from
-/// the server's framing and the client's splitter as they stood before the
-/// grammar moved into Core; they are the oracle the one grammar answers to.
+/// the server's framing and the client's splitter as they stood when each
+/// host still carried its own copy of the grammar; they are the oracle Core's
+/// `Sse` answers to on both hosts.
 module ToolUp.Platform.Tests.Remoting.SseGrammarTests
 
 open System.Text
 open Expecto
+open ToolUp.Remoting
 
 let private utf8 (bytes: byte[]) = Encoding.UTF8.GetString bytes
 
@@ -48,13 +50,50 @@ let tests =
                 + "event: complete\ndata: {}\n\n"
 
             Expect.equal
-                (ToolUp.Remoting.Client.SseFrame.splitComplete (body + "event: chunk\nid: corr-9\ndata: par"))
+                (Sse.splitComplete (body + "event: chunk\nid: corr-9\ndata: par"))
                 (body, "event: chunk\nid: corr-9\ndata: par")
                 "every complete event before the last delimiter; the partial event after it"
 
             Expect.equal
-                (ToolUp.Remoting.Client.SseFrame.splitComplete (body.Replace("\n", "\r\n")))
+                (Sse.splitComplete (body.Replace("\n", "\r\n")))
                 (body, "")
                 "CRLF terminators are normalised; nothing is held after the terminal frame"
+        }
+
+        test "Sse.encode writes every pinned frame, and Sse.parse reads each back" {
+            let frames = [
+                "chunk with an id", StreamFrame.Chunk(Some "corr-0", "{\"x\":1}")
+                "multi-line chunk with an id", StreamFrame.Chunk(Some "corr-1", "line-a\nline-b")
+                "complete", StreamFrame.Complete
+                "error", StreamFrame.Error "{\"message\":\"boom\"}"
+            ]
+
+            for name, frame in frames do
+                let pinned = pins |> List.find (fst >> (=) name) |> snd
+                Expect.equal (Sse.encode frame) pinned name
+                Expect.equal (Sse.parse pinned) [ frame ] (name + " reads back")
+
+            // A CRLF payload is framed one data: line per source line, so it
+            // reads back with its terminators normalised to LF.
+            Expect.equal
+                (Sse.parse (pins |> List.find (fst >> (=) "CRLF chunk payload") |> snd))
+                [ StreamFrame.Chunk(Some "corr-2", "a\nb\nc") ]
+                "CRLF chunk payload reads back normalised"
+        }
+
+        test "events outside the stream's vocabulary are framed and read as Other" {
+            let wire = "data: {\"a\":1}\n\nevent: kind\ndata: {\"a\":1}\n\n"
+
+            let frames = [
+                StreamFrame.Other("message", None, "{\"a\":1}")
+                StreamFrame.Other("kind", None, "{\"a\":1}")
+            ]
+
+            Expect.equal
+                (frames |> List.map Sse.encode |> String.concat "")
+                wire
+                "a default message event carries no event: line; a named one does"
+
+            Expect.equal (Sse.parse wire) frames "both read back as the events they are"
         }
     ]

@@ -6923,14 +6923,6 @@ ToolUp.Remoting.Client.RequestBody+Tags (class)
 ToolUp.Remoting.Client.RequestBody+Tags.Empty : System.Int32 (literal)
 ToolUp.Remoting.Client.RequestBody+Tags.Json : System.Int32 (literal)
 ToolUp.Remoting.Client.RequestBody+Tags.Multipart : System.Int32 (literal)
-ToolUp.Remoting.Client.SseFrame (class)
-ToolUp.Remoting.Client.SseFrame..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String)
-ToolUp.Remoting.Client.SseFrame.Data : System.String { get }
-ToolUp.Remoting.Client.SseFrame.Event : System.String { get }
-ToolUp.Remoting.Client.SseFrame.Id : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Remoting.Client.SseFrameModule (class)
-ToolUp.Remoting.Client.SseFrameModule.parse(System.String) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.Client.SseFrame]
-ToolUp.Remoting.Client.SseFrameModule.splitComplete(System.String) : System.Tuple`2[System.String, System.String]
 ToolUp.Remoting.Client.StreamObserver`1 (class)
 ToolUp.Remoting.Client.StreamObserver`1..ctor(Microsoft.FSharp.Core.FSharpFunc`2[T, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[System.Exception, Microsoft.FSharp.Core.Unit])
 ToolUp.Remoting.Client.StreamObserver`1.OnChunk : Microsoft.FSharp.Core.FSharpFunc`2[T, Microsoft.FSharp.Core.Unit] { get }

@@ -10,10 +10,11 @@ open Microsoft.AspNetCore.Http
 open Microsoft.AspNetCore.TestHost
 open Microsoft.Extensions.Hosting
 open Giraffe
+open ToolUp.Remoting
 open ToolUp.Remoting.Server
 open ToolUp.Remoting.Giraffe
 
-// ─── Phase 69i.H — long-running typed handles over the real dispatcher ──
+// ─── Long-running typed handles over the real dispatcher ──
 //
 // Mirrors 69c's `StreamingDispatchTests`: an API record whose method returns
 // `Async<JobHandle<'T>>` is mounted on a real ToolUp.Remoting dispatcher
@@ -203,6 +204,13 @@ let private authedHandler (jobs: IJobDispatcher) (telemetry: IRemotingTelemetry 
     | Some sink -> options |> Remoting.withTelemetry sink |> Remoting.buildHttpHandler
     | None -> options |> Remoting.buildHttpHandler
 
+/// The JSON payload of every `chunk` frame, in order.
+let private chunkPayloads (frames: StreamFrame list) : string list =
+    frames
+    |> List.choose (function
+        | StreamFrame.Chunk(_, json) -> Some json
+        | _ -> None)
+
 [<Tests>]
 let tests =
     testList "Phase 69i — long-running typed handles (integration)" [
@@ -282,23 +290,23 @@ let tests =
             let! code, sse = post client "/LongOpApi/Start/progress" (sprintf "[%s]" handle) None None None
             Expect.equal code 200 "SSE 200"
 
-            let frames = SseFrame.parse sse
-            let chunks = frames |> List.filter (fun f -> f.Event = "chunk")
+            let frames = Sse.parse sse
+            let chunks = chunkPayloads frames
             Expect.isNonEmpty chunks "at least one status frame"
 
             let last = List.last chunks
-            Expect.stringContains last.Data "Succeeded" "the terminal frame carries Succeeded"
-            Expect.stringContains last.Data "done:3" "with the typed result"
+            Expect.stringContains last "Succeeded" "the terminal frame carries Succeeded"
+            Expect.stringContains last "done:3" "with the typed result"
 
             Expect.equal
-                (List.last frames).Event
-                "complete"
+                (List.last frames)
+                StreamFrame.Complete
                 "the stream closes with event: complete after the terminal frame"
 
             // Only CHANGES are framed: no two consecutive chunks are equal.
             chunks
             |> List.pairwise
-            |> List.iter (fun (a, b) -> Expect.notEqual a.Data b.Data "consecutive frames differ")
+            |> List.iter (fun (a, b) -> Expect.notEqual a b "consecutive frames differ")
         }
 
         // ── 69i.F — idempotency-key dedup ──────────────────────────────────
@@ -359,9 +367,9 @@ let tests =
 
             let! _, progress = post client "/LongOpApi/Start/progress" body (Some "tenant-b:bob") None None
 
-            let chunks = SseFrame.parse progress |> List.filter (fun f -> f.Event = "chunk")
+            let chunks = Sse.parse progress |> chunkPayloads
             Expect.equal chunks.Length 1 "the progress companion is owner-bound too: one terminal frame"
-            Expect.stringContains chunks.Head.Data "job-not-found" "and it is not-found"
+            Expect.stringContains chunks.Head "job-not-found" "and it is not-found"
         }
 
         // ── 69i.G — cancellation ───────────────────────────────────────────
@@ -402,10 +410,10 @@ let tests =
             Expect.stringContains status "Cancelled" "status transitions to Cancelled"
 
             let! _, sse = subscription |> Async.AwaitTask
-            let frames = SseFrame.parse sse
-            let last = frames |> List.filter (fun f -> f.Event = "chunk") |> List.last
-            Expect.stringContains last.Data "Cancelled" "the subscriber's terminal frame is Cancelled"
-            Expect.equal (List.last frames).Event "complete" "and the stream closes"
+            let frames = Sse.parse sse
+            let last = chunkPayloads frames |> List.last
+            Expect.stringContains last "Cancelled" "the subscriber's terminal frame is Cancelled"
+            Expect.equal (List.last frames) StreamFrame.Complete "and the stream closes"
 
             let names = telemetry.Events |> List.map _.MethodName |> Set.ofList
             Expect.contains names "Start/cancel" "the cancel companion is visible to telemetry"

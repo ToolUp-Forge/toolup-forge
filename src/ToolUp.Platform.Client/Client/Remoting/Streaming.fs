@@ -9,7 +9,7 @@ open Fable.Core
 open Fable.SimpleJson
 open ToolUp.Remoting
 
-/// Phase 911 — int64 / uint64 on the REFLECTIVE response path: exact, or a
+/// Int64 / uint64 on the REFLECTIVE response path: exact, or a
 /// named refusal, never a silently wrong value.
 ///
 /// `Fable.SimpleJson`'s `Convert.fromJsonAs` reads an int64 JSON NUMBER
@@ -26,7 +26,7 @@ open ToolUp.Remoting
 /// ±(2^53 − 1), where `JSON.parse` may already have rounded it — is REFUSED
 /// with the path to it, and the proxy raises it as a `DecodeError` on
 /// `ProxyRequestException`, the same carrier the algebra's refusals use.
-/// Phase 937 — an OBJECT at an int64 / uint64 position (the Fable/Long.js
+/// An OBJECT at an int64 / uint64 position (the Fable/Long.js
 /// runtime form `{"high","low","unsigned"}`, which the library reads) is
 /// refused the same way, so the reflective read accepts exactly the forms
 /// `JsonDecode.asInt64` / `asUInt64` accept.
@@ -66,7 +66,7 @@ module internal ReflectiveWideIntegers =
 
         refusedAs path typeName found
 
-    /// Phase 937 — an object at an int64 / uint64 position: the Fable/Long.js
+    /// An object at an int64 / uint64 position: the Fable/Long.js
     /// runtime shape `{"high","low","unsigned"}` the library would otherwise
     /// read. No SDK writer emits it, and the JSON algebra refuses it too.
     let private objectRefusal (path: string list) (typeName: string) (members: Map<string, Json>) : DecodeError =
@@ -239,7 +239,7 @@ module internal ReflectiveWideIntegers =
             | other -> Ok other)
         |> Result.map JArray
 
-// ─── Phase 69c.D — the Fable consumer of a streaming method ────────────────
+// ─── The Fable consumer of a streaming method ────────────────
 //
 // A server API record field shaped `'arg -> IAsyncEnumerable<'T>` is served
 // as server-sent events (`Server/Remoting/Streaming.fs`: `event: chunk` per
@@ -266,99 +266,6 @@ module internal ReflectiveWideIntegers =
 // a type — it is listed with the sanctioned boundaries in CLAUDE.md. A
 // consumer never sees it: `RemoteStream.subscribe (api.Tail req) observer`
 // is the whole surface.
-
-/// One decoded server-sent event — the client-side mirror of the server's
-/// `SseFrame`. `Event` is the `event:` field (`"message"` when absent, per
-/// the SSE spec); `Id` is the `id:` field when present; `Data` is every
-/// `data:` line joined with a line feed (the inverse of the spec's multiline
-/// framing).
-type SseFrame = {
-    /// The `event:` field; `"message"` when the event carried none.
-    Event: string
-    /// The `id:` field when present (`<correlation-id>-<chunk-index>` on a dispatcher chunk).
-    Id: string option
-    /// Every `data:` line of the event, joined with a line feed.
-    Data: string
-}
-
-/// The event-stream decoder (https://html.spec.whatwg.org/multipage/server-sent-events.html#event-stream-interpretation).
-/// Pure and total over text, so it is testable under Node without a
-/// transport: `splitComplete` is the buffering half (a response body arrives
-/// in chunks that need not align with event boundaries), `parse` the
-/// decoding half.
-[<RequireQualifiedAccess>]
-module SseFrame =
-
-    let private normalise (text: string) : string =
-        text.Replace("\r\n", "\n").Replace("\r", "\n")
-
-    /// Split a receive buffer at its last complete-event boundary: the
-    /// first element holds every complete event (each ending in the blank
-    /// line that delimits it), the second is the trailing partial event to
-    /// keep for the next chunk. Line terminators are normalised to `\n`.
-    let splitComplete (buffer: string) : string * string =
-        let text = normalise buffer
-        let last = text.LastIndexOf "\n\n"
-
-        if last < 0 then
-            "", text
-        else
-            text.Substring(0, last + 2), text.Substring(last + 2)
-
-    /// Decode every complete event in `text`, in order. A trailing partial
-    /// event is ignored (hand it to `splitComplete` first); an event with no
-    /// `data:` line is dropped, as the spec requires; `:` comment lines
-    /// (keepalives) are ignored.
-    let parse (text: string) : SseFrame list =
-        let lines = (normalise text).Split('\n')
-
-        let fieldValue (line: string) (name: string) : string option =
-            if line = name then
-                Some ""
-            elif line.StartsWith(name + ":") then
-                let rest = line.Substring(name.Length + 1)
-                Some(if rest.StartsWith " " then rest.Substring 1 else rest)
-            else
-                None
-
-        let mutable eventName: string option = None
-        let mutable id: string option = None
-        let mutable data: string list = []
-        let mutable acc: SseFrame list = []
-
-        let flush () =
-            match data with
-            | [] -> ()
-            | _ ->
-                acc <-
-                    {
-                        Event = defaultArg eventName "message"
-                        Id = id
-                        Data = data |> List.rev |> String.concat "\n"
-                    }
-                    :: acc
-
-            eventName <- None
-            id <- None
-            data <- []
-
-        for line in lines do
-            if line = "" then
-                flush ()
-            elif line.StartsWith ":" then
-                ()
-            else
-                match fieldValue line "data" with
-                | Some v -> data <- v :: data
-                | None ->
-                    match fieldValue line "event" with
-                    | Some v -> eventName <- Some v
-                    | None ->
-                        match fieldValue line "id" with
-                        | Some v -> id <- Some v
-                        | None -> ()
-
-        List.rev acc
 
 /// How a subscribed streaming call reports to its consumer. Exactly one of
 /// `OnComplete` / `OnError` is called, after the last `OnChunk`, unless the
@@ -452,7 +359,7 @@ module RemoteStream =
 
     /// Build the cold stream for one streaming method. `elementType` is the
     /// `'T` of the field's `IAsyncEnumerable<'T>`, resolved at proxy-build
-    /// time; `decodeErrorOf` reads a Phase 783 decode-refusal envelope out
+    /// time; `decodeErrorOf` reads a decode-refusal envelope out
     /// of a non-200 body (the proxy's own reader, passed in so this module
     /// stays independent of it).
     let create
@@ -481,16 +388,16 @@ module RemoteStream =
                             finish ()
                             observer.OnError exn
 
-                    let handleFrame (frame: SseFrame) =
+                    let handleFrame (frame: StreamFrame) =
                         if not finished then
-                            match frame.Event with
-                            | "chunk" ->
-                                // Phase 911 — an int64 / uint64 number in a chunk
-                                // is read exactly or refused by name, as on the
+                            match frame with
+                            | StreamFrame.Chunk(_, data) ->
+                                // An int64 / uint64 number in a chunk is read
+                                // exactly or refused by name, as on the
                                 // request/response path.
                                 let decoded =
                                     try
-                                        let parsed = SimpleJson.parseNative frame.Data
+                                        let parsed = SimpleJson.parseNative data
 
                                         let widened =
                                             if holdsWideIntegers then
@@ -511,36 +418,36 @@ module RemoteStream =
                                         ProxyRequestException(
                                             {
                                                 StatusCode = 200
-                                                ResponseBody = frame.Data
+                                                ResponseBody = data
                                             },
                                             sprintf "A chunk streamed from %s did not decode: %s" url message,
-                                            frame.Data,
+                                            data,
                                             decodeError
                                         )
                                     )
-                            | "complete" ->
+                            | StreamFrame.Complete ->
                                 finish ()
                                 observer.OnComplete()
-                            | "error" ->
+                            | StreamFrame.Error data ->
                                 fail (
                                     ProxyRequestException(
                                         {
                                             StatusCode = 200
-                                            ResponseBody = frame.Data
+                                            ResponseBody = data
                                         },
-                                        sprintf "Error streamed from %s: %s" url (errorMessage frame.Data),
-                                        frame.Data
+                                        sprintf "Error streamed from %s: %s" url (errorMessage data),
+                                        data
                                     )
                                 )
-                            | _ -> ()
+                            | StreamFrame.Other _ -> ()
 
                     let onText (text: string) =
                         if not finished then
                             buffer <- buffer + text
-                            let complete, rest = SseFrame.splitComplete buffer
+                            let complete, rest = Sse.splitComplete buffer
                             buffer <- rest
 
-                            for frame in SseFrame.parse complete do
+                            for frame in Sse.parse complete do
                                 handleFrame frame
 
                     let onEnd () =

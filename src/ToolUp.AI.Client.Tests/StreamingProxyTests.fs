@@ -3,7 +3,7 @@
 
 module ToolUp.AI.Client.Tests.StreamingProxyTests
 
-// ─── Phase 69c.D — the Fable proxy over a streaming method ───────────────
+// ─── The Fable proxy over a streaming method ───────────────
 //
 // Exercises `ToolUp.Remoting.Client`'s streaming consumer under Node (the
 // module lives in Platform.Client, reached transitively — the same route
@@ -28,6 +28,7 @@ open System.Collections.Generic
 open Fable.Core
 open Fable.Core.JsInterop
 open ToolUp.Elmish
+open ToolUp.Remoting
 open ToolUp.Remoting.Client
 open ToolUp.AI.Client.Tests.NodeTest
 
@@ -95,7 +96,7 @@ type TickStreamApi = {
 let private api: TickStreamApi =
     Remoting.createApi () |> Remoting.buildProxy<TickStreamApi>
 
-/// Phase 911 — a stream of int64 elements, read by the reflective path.
+/// A stream of int64 elements, read by the reflective path.
 type WideStreamApi = {
     Counts: TickRequest -> IAsyncEnumerable<int64>
 }
@@ -119,10 +120,11 @@ type private Recorder() =
         OnError = fun e -> errors <- e :: errors
     }
 
+/// One stamped chunk, framed by Core's grammar: the bytes the server writes.
 let private frame (id: string) (json: string) =
-    sprintf "event: chunk\nid: %s\ndata: %s\n\n" id json
+    Sse.encode (StreamFrame.Chunk(Some id, json))
 
-// -- Phase 69c.tail C: the Elmish side ------------------------------
+// -- The Elmish side ------------------------------
 
 /// The messages a consumer of `Cmd.OfRemoting.callStreaming` dispatches:
 /// one per element, one terminal, plus the abort handle the
@@ -144,7 +146,7 @@ let private run (dispatch: StreamMsg -> unit) (cmd: Cmd<StreamMsg>) =
 let tests =
     testList "Phase 69c.D — streaming proxy (Fable)" [
 
-        testList "SseFrame decoder (pure)" [
+        testList "Sse decoder (pure, Core's grammar under Fable)" [
             testCase "parse decodes chunk / complete / error frames with ids and multiline data" (fun () ->
                 let wire =
                     "event: chunk\nid: c-0\ndata: {\"a\":1}\n\n"
@@ -155,56 +157,50 @@ let tests =
                     + "event: error\ndata: {\"message\":\"boom\"}\n\n"
 
                 Expect.equal
-                    (SseFrame.parse wire)
+                    (Sse.parse wire)
                     [
-                        {
-                            Event = "chunk"
-                            Id = Some "c-0"
-                            Data = "{\"a\":1}"
-                        }
-                        {
-                            Event = "chunk"
-                            Id = Some "c-1"
-                            Data = "line-a\nline-b"
-                        }
-                        {
-                            Event = "message"
-                            Id = None
-                            Data = "no-event-field"
-                        }
-                        {
-                            Event = "complete"
-                            Id = None
-                            Data = "{}"
-                        }
-                        {
-                            Event = "error"
-                            Id = None
-                            Data = "{\"message\":\"boom\"}"
-                        }
+                        StreamFrame.Chunk(Some "c-0", "{\"a\":1}")
+                        StreamFrame.Chunk(Some "c-1", "line-a\nline-b")
+                        StreamFrame.Other("message", None, "no-event-field")
+                        StreamFrame.Complete
+                        StreamFrame.Error "{\"message\":\"boom\"}"
                     ]
                     "frames decode in order; the comment is dropped; a missing event: is `message`")
 
             testCase "parse tolerates CRLF and drops an event with no data" (fun () ->
                 Expect.equal
-                    (SseFrame.parse "event: chunk\r\nid: x\r\ndata: 1\r\n\r\nevent: chunk\r\nid: y\r\n\r\n")
-                    [
-                        {
-                            Event = "chunk"
-                            Id = Some "x"
-                            Data = "1"
-                        }
-                    ]
+                    (Sse.parse "event: chunk\r\nid: x\r\ndata: 1\r\n\r\nevent: chunk\r\nid: y\r\n\r\n")
+                    [ StreamFrame.Chunk(Some "x", "1") ]
                     "CRLF decodes; the data-less event is dropped")
+
+            testCase "encode writes the bytes the server pins, and parse reads them back" (fun () ->
+                let frames = [
+                    StreamFrame.Chunk(Some "corr-0", "{\"x\":1}")
+                    StreamFrame.Chunk(Some "corr-1", "line-a\nline-b")
+                    StreamFrame.Complete
+                    StreamFrame.Error "{\"message\":\"boom\"}"
+                ]
+
+                let wire = frames |> List.map Sse.encode |> String.concat ""
+
+                Expect.equal
+                    wire
+                    ("event: chunk\nid: corr-0\ndata: {\"x\":1}\n\n"
+                     + "event: chunk\nid: corr-1\ndata: line-a\ndata: line-b\n\n"
+                     + "event: complete\ndata: {}\n\n"
+                     + "event: error\ndata: {\"message\":\"boom\"}\n\n")
+                    "the Fable host frames the same bytes as the .NET host"
+
+                Expect.equal (Sse.parse wire) frames "parse is the inverse of encode")
 
             testCase "splitComplete keeps the trailing partial event for the next chunk" (fun () ->
                 Expect.equal
-                    (SseFrame.splitComplete "event: chunk\ndata: 1\n\nevent: chunk\ndata: 2")
+                    (Sse.splitComplete "event: chunk\ndata: 1\n\nevent: chunk\ndata: 2")
                     ("event: chunk\ndata: 1\n\n", "event: chunk\ndata: 2")
                     "complete events before the last delimiter; the partial event after it"
 
                 Expect.equal
-                    (SseFrame.splitComplete "event: chunk\ndata: par")
+                    (Sse.splitComplete "event: chunk\ndata: par")
                     ("", "event: chunk\ndata: par")
                     "nothing complete yet")
         ]
@@ -325,7 +321,7 @@ let tests =
                 Expect.equal recorder.Completed 0 "no complete after dispose"
                 Expect.isEmpty recorder.Errors "no error after dispose")
 
-        // ─── Phase 69c.tail C — the Elmish cmd helper over that stream ───
+        // ─── The Elmish cmd helper over that stream ───
 
         testList "Cmd.OfRemoting.callStreaming" [
 
