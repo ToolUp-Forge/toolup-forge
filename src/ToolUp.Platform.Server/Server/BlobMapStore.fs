@@ -482,9 +482,11 @@ type BlobDocumentStore<'T>(storage: IBlobStorage, codec: BlobCodec<'T>, logger: 
     // conditional write; in one process the stripe keeps concurrent writers
     // from spending the retry budget on each other, and it is the whole
     // guarantee on a backend without conditional writes.
-    let stripes = Array.init 64 (fun _ -> new SemaphoreSlim(1, 1))
+    // Allocated on the first write, so a read-only instance costs nothing.
+    let stripes = lazy (Array.init 64 (fun _ -> new SemaphoreSlim(1, 1)))
 
     let stripeFor (container: string) (blobName: string) =
+        let stripes = stripes.Value
         stripes[(StringComparer.Ordinal.GetHashCode(container + "/" + blobName) &&& 0x7fffffff) % stripes.Length]
 
     let update (container: string) (blobName: string) (transform: 'T option -> BlobUpdate<'T, 'R>) = async {
@@ -503,6 +505,22 @@ type BlobDocumentStore<'T>(storage: IBlobStorage, codec: BlobCodec<'T>, logger: 
             | None -> return! updatePlain container blobName transform
         finally
             stripe.Release() |> ignore
+    }
+
+    /// Read `names` with at most `degree` at once, each with its own
+    /// verdict, absent ones left out, in the order given.
+    let readRows (container: string) (names: string list) (degree: int) = async {
+        let! rows =
+            names
+            |> List.map (fun name -> async {
+                match! readPlain container name with
+                | Ok(Some value) -> return Some(DocPath.ofBlobName name, Ok value)
+                | Ok None -> return None
+                | Error e -> return Some(DocPath.ofBlobName name, Error e)
+            })
+            |> fun reads -> Async.Parallel(reads, maxDegreeOfParallelism = BlobDocumentStoreLimits.clamp degree)
+
+        return rows |> Array.choose id |> Array.toList
     }
 
     let supportsConditionalWrites (container: string) (blobName: string) =
@@ -578,18 +596,19 @@ type BlobDocumentStore<'T>(storage: IBlobStorage, codec: BlobCodec<'T>, logger: 
                 listed
                 |> List.filter (fun name -> not (name.Contains ".corrupt-" || name.EndsWith ".etag-probe"))
 
-            let! rows =
-                names
-                |> List.map (fun name -> async {
-                    match! readPlain container name with
-                    | Ok(Some value) -> return Some(DocPath.ofBlobName name, Ok value)
-                    | Ok None -> return None
-                    | Error e -> return Some(DocPath.ofBlobName name, Error e)
-                })
-                |> fun reads -> Async.Parallel(reads, maxDegreeOfParallelism = BlobDocumentStoreLimits.clamp degree)
-
-            return rows |> Array.choose id |> Array.toList
+            return! readRows container names degree
         }
+
+    /// The documents at `paths` (names a caller already listed, or an index
+    /// resolved), each with its own verdict as `List` gives them: a document
+    /// that cannot be read or decoded is an `Error` row naming it, one that
+    /// is absent is left out. At most `degree` reads run at once, clamped to
+    /// 1..`BlobDocumentStoreLimits.MaxListDegree`; rows keep the order of
+    /// `paths`.
+    member _.ReadMany
+        (scope: ScopeKey, paths: DocPath list, degree: int)
+        : Async<(DocPath * Result<'T, BlobMapStoreError>) list> =
+        readRows (ScopeKey.container scope) (paths |> List.map DocPath.value) degree
 
     /// Whether `Update` on this document runs as a conditional write: the
     /// backend implements `IConditionalBlobStorage` AND answers the
