@@ -144,7 +144,7 @@ type BlobUserSchemaStore(dataObjectStore: IDataObjectStore, auditLog: IAuditLog 
         match auditLog with
         | Some log ->
             try
-                do! log.Record(scopeId, evt)
+                do! log.Record(scopeId, evt) |> AuditRow.bestEffort
             with _ ->
                 ()
         | None -> ()

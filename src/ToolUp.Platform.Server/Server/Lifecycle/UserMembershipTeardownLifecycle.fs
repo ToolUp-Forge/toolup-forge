@@ -114,6 +114,7 @@ let hook: TenantHook<TeardownSubstrate> = {
                                         AffectedUserId = userId
                                     }
                                 )
+                                |> AuditRow.orRefuse
                     | None -> ()
 
                     // Pending-invite sweep — a purged user must not

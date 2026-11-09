@@ -55,7 +55,7 @@ let private consentHandler: HttpHandler =
 
                 try
                     auditLog.Record(PlatformScope, AuditEvent.ConsentRecorded ev)
-                    |> Background.startAudit warn "ConsentRecorded audit"
+                    |> Background.startAuditRow warn "ConsentRecorded audit"
                 with ex ->
                     warn "ConsentRecorded audit" ex
             | _ -> ()

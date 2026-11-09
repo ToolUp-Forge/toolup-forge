@@ -5,6 +5,7 @@ module ToolUp.Platform.Scope.GrantPolicyGuard
 
 open System
 open ToolUp.Platform
+open ToolUp.Platform.Config
 open ToolUp.Platform.Scope.PermissionStore
 
 // ─── Module-declared grant policy (Phase 551) ────────────────────────
@@ -162,44 +163,30 @@ let refusalPayload
 /// `UnauthorizedAccessException`, which the Remoting error handler
 /// renders as HTTP 403).
 ///
-/// `schedule` runs the best-effort audit emission. Production passes
-/// `Async.Start` (audit is best-effort per the `IAuditLog` contract and
-/// must never block a refusal); a test passes a synchronous scheduler
-/// and observes the decision AND the row from one call — so "refuses"
-/// and "audits" cannot drift apart with only one of them covered.
-///
-/// Emission failures are swallowed, deliberately: the control is the
-/// refusal, not the row, and a downed audit pipeline must not turn a
-/// denial into an admission.
+/// The refusal's row is emitted detached and best-effort: the control is
+/// the refusal, not the row, and a downed audit pipeline must not turn a
+/// denial into an admission or delay it. The row starts on the caller's
+/// thread, so a synchronous log has recorded it before the decision
+/// returns — "refuses" and "audits" are observed from one call.
 let guardDispatch
     (registry: ModuleGrantPolicyRegistry)
     (grants: Map<string, ModuleGrantRecord>)
-    (auditLog: IAuditLog option)
-    (schedule: Async<unit> -> unit)
+    (auditLog: IAuditLog)
     (scopeId: string)
     (userId: string)
     (moduleName: string)
     : Result<unit, UnconsentedGrantRefusedPayload> =
     if ModuleGrantPolicyRegistry.isEmpty registry then
         // No module declares a policy — the pre-551 path, taken without
-        // touching grants, the audit log, or the scheduler.
+        // touching grants or the audit log.
         Ok()
     elif isDispatchGrantLive registry grants moduleName then
         Ok()
     else
         let payload = refusalPayload registry grants userId moduleName
 
-        match auditLog with
-        | Some log ->
-            schedule (
-                async {
-                    try
-                        do! log.Record(scopeId, UnconsentedGrantRefused payload)
-                    with _ ->
-                        ()
-                }
-            )
-        | None -> ()
+        AuditRow.emit auditLog scopeId (UnconsentedGrantRefused payload)
+        |> Background.startAuditRowImmediate
 
         Error payload
 
@@ -447,13 +434,12 @@ let private validateDefaults
 /// deployment that declares no policy resolves the undecorated store and
 /// is byte-for-byte unchanged (GP 11 / GP 13).
 ///
-/// `auditLog` is optional so the decorator is constructible in tests and
-/// in a composition with no audit substrate; a refusal without a log
-/// still refuses (audit is best-effort per the `IAuditLog` contract, and
-/// the control is the refusal, not the row).
-/// **Phase 552 note on the constructors.** The primary now takes a
-/// `CounterpartyConsentOracle`, and the secondary preserves the pre-552
-/// argument shape exactly — `(inner, registry, ?auditLog, ?actorId)` —
+/// `auditLog` is `NoOpAuditLog` in a composition with no audit substrate;
+/// a refusal whose row does not land still refuses (the control is the
+/// refusal, not the row).
+/// **Phase 552 note on the constructors.** The primary takes a
+/// `CounterpartyConsentOracle`, and the secondary keeps the pre-552
+/// argument shape — `(inner, registry, auditLog, ?actorId)` —
 /// delegating with `CounterpartyConsentOracle.denyAll`. That is a
 /// deliberate two-constructor shape rather than a fifth optional
 /// argument: an optional parameter folds into ONE widened constructor,
@@ -467,33 +453,24 @@ type GrantPolicyPermissionStore
         inner: IPermissionStore,
         registry: ModuleGrantPolicyRegistry,
         consent: CounterpartyConsentOracle,
-        auditLog: IAuditLog option,
+        auditLog: IAuditLog,
         actorId: string option
     ) =
 
     let actor = defaultArg actorId "unknown"
 
     let record (subjectId: string) (moduleName: string) (refusal: GrantRefusal) (teamId: string) =
-        match auditLog with
-        | None -> ()
-        | Some log ->
-            let payload: GrantPolicyRefusedPayload = {
-                ActorId = actor
-                SubjectId = subjectId
-                ModuleName = moduleName
-                DeclaredPolicy = ModuleGrantPolicyRegistry.resolve registry moduleName |> GrantPolicy.toToken
-                RefusalCode = GrantRefusal.code refusal
-            }
+        let payload: GrantPolicyRefusedPayload = {
+            ActorId = actor
+            SubjectId = subjectId
+            ModuleName = moduleName
+            DeclaredPolicy = ModuleGrantPolicyRegistry.resolve registry moduleName |> GrantPolicy.toToken
+            RefusalCode = GrantRefusal.code refusal
+        }
 
-            // Best-effort per the IAuditLog contract — the refusal below
-            // fires regardless of whether the row lands.
-            async {
-                try
-                    do! log.Record(AuditStreamKey.ofTeam teamId, GrantPolicyRefused payload)
-                with _ ->
-                    ()
-            }
-            |> Async.Start
+        // Best-effort: the refusal fires regardless of whether the row lands.
+        AuditRow.emit auditLog (AuditStreamKey.ofTeam teamId) (GrantPolicyRefused payload)
+        |> Background.startAuditRowImmediate
 
     /// Phase 730 — the success twin of `record`, emitted from this same
     /// decorator so a grant cannot be admitted without a row.
@@ -510,10 +487,9 @@ type GrantPolicyPermissionStore
         (permissions: ModulePermission list)
         (grantRecord: ModuleGrantRecord option)
         =
-        match auditLog, grantRecord with
-        | None, _
-        | _, None -> ()
-        | Some log, Some r ->
+        match grantRecord with
+        | None -> ()
+        | Some r ->
             let payload: GrantRecordedPayload = {
                 ActorId = actor
                 SubjectId = subjectId
@@ -535,13 +511,8 @@ type GrantPolicyPermissionStore
             // refusal path. The write has already committed by the time
             // this runs; a downed audit pipeline must not turn a
             // successful grant into an error.
-            async {
-                try
-                    do! log.Record(AuditStreamKey.ofTeam teamId, GrantRecorded payload)
-                with _ ->
-                    ()
-            }
-            |> Async.Start
+            AuditRow.emit auditLog (AuditStreamKey.ofTeam teamId) (GrantRecorded payload)
+            |> Background.startAuditRowImmediate
 
     /// The policy-bearing subset of a write's delta — the entries this
     /// event covers. Shared by both write paths so they cannot disagree
@@ -700,7 +671,7 @@ type GrantPolicyPermissionStore
     /// refuses every grant exactly as Phase 551 shipped it. Preserved as
     /// an explicit secondary constructor, not folded into an optional
     /// parameter — see the type's doc comment for why.
-    new(inner: IPermissionStore, registry: ModuleGrantPolicyRegistry, ?auditLog: IAuditLog, ?actorId: string) =
+    new(inner: IPermissionStore, registry: ModuleGrantPolicyRegistry, auditLog: IAuditLog, ?actorId: string) =
         GrantPolicyPermissionStore(inner, registry, CounterpartyConsentOracle.denyAll, auditLog, actorId)
 
     interface IPermissionStore with

@@ -40,7 +40,11 @@ type private RecordingAuditLog() =
     member _.Count = recorded.Count
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async { recorded.Enqueue(scopeId, audit) }
+        member _.Record(scopeId, audit) = async {
+            recorded.Enqueue(scopeId, audit)
+            return Ok()
+        }
+
         member _.GetAuditTrail(_, _, _) = async { return [] }
 
 let private silentLogger =
@@ -118,7 +122,7 @@ let private classificationGateKey () = async {
         }
 
     let ctx = AccessContext.unrestricted (TeamMember("alice", teamId))
-    do! ClassificationGate.recordWrites classifier audit ctx "Employee" [ "salary" ]
+    let! _ = ClassificationGate.recordWrites classifier audit ctx "Employee" [ "salary" ]
     return audit.Keys
 }
 

@@ -85,6 +85,7 @@ let exportAuditHandler: HttpHandler =
                                 ExportedBy = resolveUserId ctx
                             }
                         )
+                        |> AuditRow.orRefuse
                 | _ -> ()
 
                 ctx.Response.StatusCode <- 202

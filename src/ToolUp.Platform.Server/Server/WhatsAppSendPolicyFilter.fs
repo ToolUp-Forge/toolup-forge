@@ -155,6 +155,7 @@ type WhatsAppSendPolicyFilter
                             CorrelationId = correlationId
                         }
                     )
+                    |> AuditRow.orRefuse
         }
 
     /// Whether `recipient` is inside the customer-care window. A platform

@@ -303,19 +303,22 @@ type PerScopeKeyResolver
                             | Some n -> sprintf "stored key is %d bytes, expected %d" n KeyByteLength
                             | None -> "stored key is not valid base64"
 
+                        // The refusal below is the control, whether or not
+                        // this row lands.
                         match auditLog with
                         | Some log ->
                             do!
-                                log.Record(
-                                    scopeId,
-                                    EncryptionKeyUnreadable {
+                                AuditRow.emit
+                                    log
+                                    scopeId
+                                    (EncryptionKeyUnreadable {
                                         ScopeId = scopeId
                                         KeyId = keyIdFor scopeId
                                         Resolver = ResolverName
                                         LengthSeen = lengthSeen
                                         Reason = reason
-                                    }
-                                )
+                                    })
+                                |> AuditRow.bestEffort
                         | None -> ()
 
                         return
@@ -331,18 +334,22 @@ type PerScopeKeyResolver
 
                     match result with
                     | Ok() ->
+                        // The resolver's failure channel is the raise the
+                        // unpersistable-key path below takes: a refused row
+                        // fails the resolution the same way.
                         match auditLog with
                         | Some log ->
                             do!
-                                log.Record(
-                                    scopeId,
-                                    EncryptionKeyCreated {
+                                AuditRow.emit
+                                    log
+                                    scopeId
+                                    (EncryptionKeyCreated {
                                         UserId = UserId "system"
                                         ScopeId = scopeId
                                         KeyId = keyIdFor scopeId
                                         Resolver = ResolverName
-                                    }
-                                )
+                                    })
+                                |> AuditRow.orRefuse
                         | None -> ()
 
                         return {
@@ -454,19 +461,25 @@ type PerScopeKeyResolver
 
         match result with
         | Ok() ->
-            match auditLog with
-            | Some log ->
-                do!
-                    log.Record(
-                        scopeId,
-                        EncryptionKeyDestroyed {
-                            UserId = UserId actorUserId
-                            ScopeId = scopeId
-                            KeyId = keyIdFor scopeId
-                            Resolver = ResolverName
-                        }
-                    )
-            | None -> ()
+            // The destruction has committed and the broadcast below must run
+            // regardless, so a refused row is answered AFTER it, never
+            // instead of it: a sibling left decrypting from its cache is the
+            // worse outcome.
+            let! recorded = async {
+                match auditLog with
+                | Some log ->
+                    return!
+                        AuditRow.emit
+                            log
+                            scopeId
+                            (EncryptionKeyDestroyed {
+                                UserId = UserId actorUserId
+                                ScopeId = scopeId
+                                KeyId = keyIdFor scopeId
+                                Resolver = ResolverName
+                            })
+                | None -> return Ok()
+            }
 
             // Gap audit #1 / Phase 22b — broadcast destruction to other
             // silos so they evict their caches. Channel-handler
@@ -514,7 +527,7 @@ type PerScopeKeyResolver
                         )
                     | None -> ()
 
-            return Ok()
+            return recorded |> Result.mapError (AuditWriteError.describe >> StorageFailure)
         | Error msg -> return Error(StorageFailure msg)
     }
 
@@ -653,7 +666,7 @@ type PerScopeKeyResolver
 
                         try
                             log.Record(scopeId, row)
-                            |> Background.startAudit warn "EncryptionKeyDestroyAcknowledged audit"
+                            |> Background.startAuditRow warn "EncryptionKeyDestroyAcknowledged audit"
                         with ex ->
                             warn "EncryptionKeyDestroyAcknowledged audit" ex
                     // A pre-Phase-22b payload (bare scopeId) carries

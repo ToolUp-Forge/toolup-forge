@@ -43,7 +43,7 @@ type private RecordingAuditLog() =
         member _.Record(scopeId, audit) =
             // Eager enqueue — see determinism note above.
             events.Enqueue(scopeId, audit)
-            async.Return()
+            async.Return(Ok())
 
         member _.GetAuditTrail(_scopeId, _dateRange, _eventType) = async.Return []
 

@@ -9,6 +9,7 @@ open System.Text
 open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
+open ToolUp.Platform.Config
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Scope.PermissionStore
 open ToolUp.Platform.Infra
@@ -449,23 +450,12 @@ let consentVerdictsFromItems
     | true, (:? Map<string, Result<unit, ConsentDenial>> as verdicts) -> verdicts
     | _ -> Map.empty
 
-/// Emit one audit row, best-effort. `schedule` is `Async.Start` in
-/// production and a synchronous runner in a test, so one call yields both
-/// the decision and the row and the two cannot be covered separately.
-let private emit (auditLog: IAuditLog option) (schedule: Async<unit> -> unit) (scopeId: string) (event: AuditEvent) =
-    match auditLog with
-    | None -> ()
-    | Some log ->
-        schedule (
-            async {
-                try
-                    do! log.Record(scopeId, event)
-                with _ ->
-                    ()
-            }
-        )
-
-
+/// Emit one audit row, detached and best-effort. The row starts on the
+/// caller's thread, so a synchronous log has recorded it before the
+/// decision returns: one call yields both the decision and the row, and the
+/// two cannot be covered separately.
+let private emit (auditLog: IAuditLog) (scopeId: string) (event: AuditEvent) =
+    AuditRow.emit auditLog scopeId event |> Background.startAuditRowImmediate
 
 /// The tamper alert (552.E). Fires ONLY for a trust failure — a record
 /// presenting itself as consent that is not. An ordinary revocation,
@@ -474,8 +464,7 @@ let private emit (auditLog: IAuditLog option) (schedule: Async<unit> -> unit) (s
 /// second row for each would bury the forgery signal in the volume of
 /// routine ones.
 let private emitTrustDenial
-    (auditLog: IAuditLog option)
-    (schedule: Async<unit> -> unit)
+    (auditLog: IAuditLog)
     (subject: ConsentSubject)
     (party: PartyRef)
     (record: GrantConsentRecord option)
@@ -484,7 +473,6 @@ let private emitTrustDenial
     if ConsentDenial.isTrustFailure denial then
         emit
             auditLog
-            schedule
             (AuditStreamKey.ofTeam subject.TeamId.Value)
             (GrantConsentVerificationDenied {
                 ConsentId =
@@ -518,8 +506,7 @@ let private emitTrustDenial
 let resolveLive
     (store: IGrantConsentStore option)
     (verifier: IGrantConsentVerifier)
-    (auditLog: IAuditLog option)
-    (schedule: Async<unit> -> unit)
+    (auditLog: IAuditLog)
     (now: DateTimeOffset)
     (subject: ConsentSubject)
     (party: PartyRef)
@@ -535,17 +522,17 @@ let resolveLive
             | Ok records ->
                 match GrantConsent.current now records with
                 | Error denial ->
-                    emitTrustDenial auditLog schedule subject party None denial
+                    emitTrustDenial auditLog subject party None denial
                     return Error denial
                 | Ok record ->
                     match GrantConsent.addressesGrant subject party record with
                     | Error denial ->
-                        emitTrustDenial auditLog schedule subject party (Some record) denial
+                        emitTrustDenial auditLog subject party (Some record) denial
                         return Error denial
                     | Ok() ->
                         match verifier.Verify record with
                         | Error denial ->
-                            emitTrustDenial auditLog schedule subject party (Some record) denial
+                            emitTrustDenial auditLog subject party (Some record) denial
                             return Error denial
                         | Ok() -> return Ok record
     }
@@ -593,8 +580,7 @@ module GrantConsents =
     let private lodge
         (store: IGrantConsentStore)
         (verifier: IGrantConsentVerifier)
-        (auditLog: IAuditLog option)
-        (schedule: Async<unit> -> unit)
+        (auditLog: IAuditLog)
         (expectedStatus: ConsentStatus)
         (record: GrantConsentRecord)
         (event: GrantConsentRecord -> AuditEvent)
@@ -609,7 +595,7 @@ module GrantConsents =
                 // re-litigation of a write that should never have landed.
                 match verifier.Verify record with
                 | Error denial ->
-                    emitTrustDenial auditLog schedule record.Subject record.Party (Some record) denial
+                    emitTrustDenial auditLog record.Subject record.Party (Some record) denial
                     return Error denial
                 | Ok() ->
                     let! written = store.Put record
@@ -617,14 +603,14 @@ module GrantConsents =
                     match written with
                     | Error e -> return Error(ConsentDenial.StoreUnavailable e)
                     | Ok() ->
-                        emit auditLog schedule (AuditStreamKey.ofTeam record.Subject.TeamId.Value) (event record)
+                        emit auditLog (AuditStreamKey.ofTeam record.Subject.TeamId.Value) (event record)
                         return Ok record
         }
 
     /// Lodge a signed PROPOSAL. Confers nothing — it is the request the
     /// counterparty answers.
-    let propose store verifier auditLog schedule (record: GrantConsentRecord) =
-        lodge store verifier auditLog schedule ConsentStatus.Proposed record (fun r ->
+    let propose store verifier auditLog (record: GrantConsentRecord) =
+        lodge store verifier auditLog ConsentStatus.Proposed record (fun r ->
             GrantConsentProposed {
                 ConsentId = r.ConsentId
                 TeamId = r.Subject.TeamId
@@ -640,8 +626,8 @@ module GrantConsents =
     /// proposal it answers, or is `None` for an out-of-band agreement
     /// recorded in one act — legitimate, and visible as such on the audit
     /// row rather than being forced into a fake proposal.
-    let approve store verifier auditLog schedule (record: GrantConsentRecord) =
-        lodge store verifier auditLog schedule ConsentStatus.Approved record (fun r ->
+    let approve store verifier auditLog (record: GrantConsentRecord) =
+        lodge store verifier auditLog ConsentStatus.Approved record (fun r ->
             GrantConsentApproved {
                 ConsentId = r.ConsentId
                 TeamId = r.Subject.TeamId
@@ -658,8 +644,8 @@ module GrantConsents =
     /// stays in the store as the evidence that consent was once given.
     /// Effective at the next call, because dispatch resolves consent on
     /// use.
-    let revoke store verifier auditLog schedule (record: GrantConsentRecord) =
-        lodge store verifier auditLog schedule ConsentStatus.Revoked record (fun r ->
+    let revoke store verifier auditLog (record: GrantConsentRecord) =
+        lodge store verifier auditLog ConsentStatus.Revoked record (fun r ->
             GrantConsentRevoked {
                 ConsentId = r.ConsentId
                 TeamId = r.Subject.TeamId
@@ -677,17 +663,13 @@ module GrantConsents =
 /// Phase 551 write guard's blanket counterparty refusal into a real
 /// question, without that guard knowing anything about signatures.
 type StoreCounterpartyConsentOracle
-    (
-        store: IGrantConsentStore option,
-        verifier: IGrantConsentVerifier,
-        now: unit -> DateTimeOffset,
-        ?auditLog: IAuditLog
-    ) =
+    (store: IGrantConsentStore option, verifier: IGrantConsentVerifier, now: unit -> DateTimeOffset, auditLog: IAuditLog)
+    =
     interface GrantPolicyGuard.CounterpartyConsentOracle with
         member _.IsConsentLive(teamId, subjectId, moduleName, party) = async {
             let subject = ConsentSubject.create teamId.Value subjectId moduleName
 
-            let! resolved = resolveLive store verifier auditLog Async.Start (now ()) subject party
+            let! resolved = resolveLive store verifier auditLog (now ()) subject party
 
             return Result.isOk resolved
         }
@@ -712,7 +694,7 @@ let grantWithCounterpartyApproval
     (registry: GrantPolicyGuard.ModuleGrantPolicyRegistry)
     (consentStore: IGrantConsentStore option)
     (verifier: IGrantConsentVerifier)
-    (auditLog: IAuditLog option)
+    (auditLog: IAuditLog)
     (now: DateTimeOffset)
     (teamId: string)
     (subjectId: string)
@@ -727,7 +709,7 @@ let grantWithCounterpartyApproval
         | GrantPolicy.RequiresCounterpartyApproval party ->
             let subject = ConsentSubject.create teamId subjectId moduleName
 
-            let! resolved = resolveLive consentStore verifier auditLog Async.Start now subject party
+            let! resolved = resolveLive consentStore verifier auditLog now subject party
 
             match resolved with
             | Error denial -> return Error denial
@@ -883,8 +865,7 @@ let guardDispatchWithConsent
     (registry: GrantPolicyGuard.ModuleGrantPolicyRegistry)
     (grants: Map<string, ModuleGrantRecord>)
     (consentVerdicts: Map<string, Result<unit, ConsentDenial>>)
-    (auditLog: IAuditLog option)
-    (schedule: Async<unit> -> unit)
+    (auditLog: IAuditLog)
     (scopeId: string)
     (userId: string)
     (moduleName: string)
@@ -904,6 +885,6 @@ let guardDispatchWithConsent
                     InertReason = inertReason
                 }
 
-                emit auditLog schedule scopeId (UnconsentedGrantRefused payload)
+                emit auditLog scopeId (UnconsentedGrantRefused payload)
                 Error payload
-        | _ -> GrantPolicyGuard.guardDispatch registry grants auditLog schedule scopeId userId moduleName
+        | _ -> GrantPolicyGuard.guardDispatch registry grants auditLog scopeId userId moduleName

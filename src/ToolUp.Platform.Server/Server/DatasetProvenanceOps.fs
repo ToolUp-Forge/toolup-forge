@@ -67,6 +67,7 @@ module DatasetProvenance =
                                     Reason = reason
                                 }
                             )
+                            |> AuditRow.orRefuse
 
                         return
                             Ok {

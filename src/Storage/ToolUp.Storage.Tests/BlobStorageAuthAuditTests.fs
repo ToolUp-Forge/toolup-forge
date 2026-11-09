@@ -44,7 +44,11 @@ type private RecordingAuditLog() =
     member _.Recorded = List.ofSeq recorded
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async { recorded.Add(scopeId, audit) }
+        member _.Record(scopeId, audit) = async {
+            recorded.Add(scopeId, audit)
+            return Ok()
+        }
+
         member _.GetAuditTrail(_, _, _) = async { return [] }
 
 /// A sink that fails on every write. `record`'s contract is that a

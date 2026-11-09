@@ -353,6 +353,7 @@ let private recordAndAuditRefusal (ctx: HttpContext) (ip: string) (reason: strin
                     OccurredAt = DateTimeOffset.UtcNow
                 }
             )
+            |> AuditRow.orRefuse
     | None -> ()
 }
 
@@ -410,6 +411,7 @@ let private auditResolved
                         OccurredAt = DateTimeOffset.UtcNow
                     }
                 )
+                |> AuditRow.orRefuse
         | None -> ()
     }
 

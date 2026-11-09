@@ -243,6 +243,7 @@ let tryConsumePendingForUser
                                     Reason = reason
                                 }
                             )
+                            |> AuditRow.orRefuse
 
                         return Some entry
                     | Ok() ->
@@ -261,6 +262,7 @@ let tryConsumePendingForUser
                                     Role = entry.Role
                                 }
                             )
+                            |> AuditRow.orRefuse
 
                         return Some entry
     }
@@ -323,7 +325,9 @@ let teamInvitationApi
                                     MaxUses = maxUses
                                 }
 
-                                do! auditLog.Record(AuditStreamKey.ofTeam req.TeamId, TeamInviteIssued payload)
+                                do!
+                                    auditLog.Record(AuditStreamKey.ofTeam req.TeamId, TeamInviteIssued payload)
+                                    |> AuditRow.orRefuse
 
                                 return
                                     Ok {
@@ -427,6 +431,7 @@ let teamInvitationApi
                                             Role = role
                                         }
                                     )
+                                    |> AuditRow.orRefuse
 
                                 do!
                                     auditLog.Record(
@@ -437,6 +442,7 @@ let teamInvitationApi
                                             RemainingUses = remaining
                                         }
                                     )
+                                    |> AuditRow.orRefuse
 
                                 return
                                     Ok {
@@ -506,6 +512,7 @@ let teamInvitationApi
                                         ActorUserId = UserId access.UserId
                                     }
                                 )
+                                |> AuditRow.orRefuse
 
                             return Ok()
             }
@@ -593,20 +600,19 @@ let teamInvitationApi
                             // 0.5.8 — wrap audit-log emission. The
                             // pending-invite store has already accepted
                             // the row, so the user-facing invitation is
-                            // durable regardless of audit success. If
-                            // Record throws (audit sink misconfigured,
-                            // serialisation bug, EventStore unreachable),
-                            // log it and continue — failing the invite
-                            // would be the wrong trade.
+                            // durable regardless of audit success. A refused
+                            // row is logged and the invite continues —
+                            // failing it would be the wrong trade.
                             logger.Info "[invite] audit Record: starting"
 
-                            try
-                                do! auditLog.Record(AuditStreamKey.ofTeam req.TeamId, TeamInviteIssued payload)
-                                logger.Info "[invite] audit Record: ok"
-                            with ex ->
+                            match!
+                                AuditRow.emit auditLog (AuditStreamKey.ofTeam req.TeamId) (TeamInviteIssued payload)
+                            with
+                            | Ok() -> logger.Info "[invite] audit Record: ok"
+                            | Error e ->
                                 logger.Error(
-                                    sprintf "[invite] audit Record FAILED: %s | %s" (ex.GetType().FullName) ex.Message,
-                                    Some ex
+                                    sprintf "[invite] audit Record FAILED: %s" (AuditWriteError.describe e),
+                                    None
                                 )
 
                             // 0.5.7 — opportunistic invitation email.
@@ -793,17 +799,17 @@ let teamInvitationApi
                                 match! pendingStore.Remove normalised with
                                 | Ok()
                                 | Error PendingInviteStoreError.NotFound ->
-                                    do!
-                                        auditLog.Record(
-                                            AuditStreamKey.ofTeam entry.TeamId,
-                                            TeamInviteRevoked {
+                                    let! recorded =
+                                        AuditRow.emit
+                                            auditLog
+                                            (AuditStreamKey.ofTeam entry.TeamId)
+                                            (TeamInviteRevoked {
                                                 TeamId = TeamId entry.TeamId
                                                 TokenId = sprintf "pending:%s" normalised
                                                 ActorUserId = UserId access.UserId
-                                            }
-                                        )
+                                            })
 
-                                    return Ok()
+                                    return recorded |> Result.mapError AuditWriteError.describe
                                 | Error err -> return Error(sprintf "Could not revoke pending invite: %A" err)
             }
 

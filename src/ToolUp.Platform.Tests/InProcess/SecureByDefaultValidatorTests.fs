@@ -239,7 +239,7 @@ let private bootstrapTests =
 
     let noOpAudit =
         { new IAuditLog with
-            member _.Record(_, _) = async { return () }
+            member _.Record(_, _) = async { return Result.Ok() }
             member _.GetAuditTrail(_, _, _) = async { return [] }
         }
 

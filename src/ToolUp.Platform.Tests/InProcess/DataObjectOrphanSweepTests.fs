@@ -157,7 +157,11 @@ type private CapturingAuditLog() =
         this.Events |> List.filter (fun (_, e) -> AuditEvent.eventTypeName e = name)
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async { lock gate (fun () -> events.Add((scopeId, audit))) }
+        member _.Record(scopeId, audit) = async {
+            lock gate (fun () -> events.Add((scopeId, audit)))
+            return Ok()
+        }
+
         member _.GetAuditTrail(_, _, _) = async { return [] }
 
 let private noopLogger =

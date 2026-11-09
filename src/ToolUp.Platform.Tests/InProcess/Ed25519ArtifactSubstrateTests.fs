@@ -33,7 +33,11 @@ type private CapturingAuditLog() =
     member _.Recorded = recorded |> Seq.toList
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async { recorded.Enqueue(scopeId, audit) }
+        member _.Record(scopeId, audit) = async {
+            recorded.Enqueue(scopeId, audit)
+            return Ok()
+        }
+
         member _.GetAuditTrail(_, _, _) = async { return [] }
 
 // ─── Contract-pack bindings ───────────────────────────────────────────

@@ -11,7 +11,7 @@ module ToolUp.Platform.Tests.InProcess.AuditEmitTests
 // The red fixture this pack opened with: under `RefuseAction`, a classified
 // read whose audit row could not be written went ahead, because the gate
 // wrapped `Record` in `try … with _ -> ()` — a refusal policy that could not
-// refuse.
+// refuse. Each mode is pinned here, and the call-site shapes beside it.
 
 open System
 open Expecto
@@ -52,23 +52,96 @@ let private ctx = AccessContext.unrestricted (AuthenticatedUser "u1")
 let private logUnder policy =
     AuditLog.EventStoreAuditLog(RefusingEventStore(), silentLogger, failurePolicy = policy) :> IAuditLog
 
+let private row =
+    UserLoggedIn {
+        UserId = UserId "alice"
+        AuthProvider = "Header"
+    }
+
+let private read policy =
+    ClassificationGate.redactFields
+        classifier
+        ClassificationGate.defaultPolicy
+        (logUnder policy)
+        ctx
+        "Customer"
+        (Map.ofList [ "Email", "ceo@acme.example" ])
+
 [<Tests>]
 let tests =
     testList "Phase 1062 — audit failure is data at the seam" [
         testCaseAsync "RefuseAction: a classified read whose audit row fails is refused, not served"
         <| async {
-            let! outcome =
-                ClassificationGate.redactFields
-                    classifier
-                    ClassificationGate.defaultPolicy
-                    (logUnder RefuseAction)
-                    ctx
-                    "Customer"
-                    (Map.ofList [ "Email", "ceo@acme.example" ])
-                |> Async.Catch
-
-            match outcome with
-            | Choice1Of2 served -> failtestf "the gated read proceeded under RefuseAction: %A" served
-            | Choice2Of2 _ -> ()
+            match! read RefuseAction with
+            | Error(AuditWriteError.StoreUnavailable _) -> ()
+            | other -> failtestf "the gated read must be refused under RefuseAction; got %A" other
         }
+
+        testCaseAsync "LogAndContinue: the same read is served, its row counted and logged as lost"
+        <| async {
+            match! read LogAndContinue with
+            | Ok fields -> Expect.equal fields["Email"] ClassificationGate.RedactedPlaceholder "served, redacted"
+            | Error e -> failtestf "LogAndContinue must not refuse the read; got %A" e
+        }
+
+        testList "the seam decides, per mode" [
+            testCaseAsync "RefuseAction answers StoreUnavailable"
+            <| async {
+                match! (logUnder RefuseAction).Record("team-acme", row) with
+                | Error(AuditWriteError.StoreUnavailable _) -> ()
+                | other -> failtestf "expected StoreUnavailable; got %A" other
+            }
+
+            testCaseAsync "LogAndContinue answers Ok"
+            <| async {
+                let! answer = (logUnder LogAndContinue).Record("team-acme", row)
+                Expect.equal answer (Ok()) "the action completes"
+            }
+
+            testCaseAsync "DegradeToFile answers Ok (nothing to spill to is logged as lost)"
+            <| async {
+                let! answer = (logUnder DegradeToFile).Record("team-acme", row)
+                Expect.equal answer (Ok()) "the action completes"
+            }
+
+            testCaseAsync "NoOpAuditLog answers Ok"
+            <| async {
+                let! answer = (AuditLog.NoOpAuditLog() :> IAuditLog).Record("team-acme", row)
+                Expect.equal answer (Ok()) "a log with no substrate never refuses"
+            }
+
+            testCaseAsync "a write that lands answers Ok under RefuseAction"
+            <| async {
+                let log =
+                    AuditLog.EventStoreAuditLog(
+                        InMemoryEventStore.InMemoryEventStore(),
+                        silentLogger,
+                        failurePolicy = RefuseAction
+                    )
+                    :> IAuditLog
+
+                let! answer = log.Record("team-acme", row)
+                Expect.equal answer (Ok()) "a persisted row is Ok"
+            }
+        ]
+
+        testList "the call-site shapes" [
+            testCaseAsync "orRefuse turns a refused row into AuditWriteRefusedException"
+            <| async {
+                let! outcome =
+                    AuditRow.emit (logUnder RefuseAction) "team-acme" row
+                    |> AuditRow.orRefuse
+                    |> Async.Catch
+
+                match outcome with
+                | Choice2Of2(:? AuditWriteRefusedException as ex) ->
+                    match ex.Error with
+                    | AuditWriteError.StoreUnavailable _ -> ()
+                    | other -> failtestf "the exception carries the seam's answer; got %A" other
+                | other -> failtestf "expected AuditWriteRefusedException; got %A" other
+            }
+
+            testCaseAsync "bestEffort discards a refused row"
+            <| async { do! AuditRow.emit (logUnder RefuseAction) "team-acme" row |> AuditRow.bestEffort }
+        ]
     ]

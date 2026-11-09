@@ -60,6 +60,7 @@ module ModelFitEnvelope =
                             ScopeId = request.ScopeId
                         }
                     )
+                    |> AuditRow.orRefuse
 
                 let! raw = async {
                     try
@@ -105,6 +106,7 @@ module ModelFitEnvelope =
                                     ScopeId = request.ScopeId
                                 }
                             )
+                            |> AuditRow.orRefuse
 
                         if not (List.isEmpty failed) then
                             do!
@@ -117,6 +119,7 @@ module ModelFitEnvelope =
                                         ScopeId = request.ScopeId
                                     }
                                 )
+                                |> AuditRow.orRefuse
 
                         return Ok outcome
         }
@@ -308,6 +311,7 @@ module ModelFitBatch =
                                 ScopeId = batch.ScopeId
                             }
                         )
+                        |> AuditRow.orRefuse
 
                     let scheduled = ResizeArray<int * JobId>()
                     let failures = ResizeArray<int * FitEnqueueRefusal>()

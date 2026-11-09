@@ -323,6 +323,7 @@ type BlobModelRegistry
                                 ScopeId = scopeId
                             }
                         )
+                        |> AuditRow.orRefuse
 
                     // Phase 651 — the novelty, decided from the version the
                     // store MINTED rather than from the emptiness check
@@ -465,6 +466,7 @@ type BlobModelRegistry
                                     ScopeId = scopeId
                                 }
                             )
+                            |> AuditRow.orRefuse
                     }
 
                     // Legality first — an illegal edge is refused regardless
@@ -498,6 +500,7 @@ type BlobModelRegistry
                                         ScopeId = scopeId
                                     }
                                 )
+                                |> AuditRow.orRefuse
 
                             return Ok updated
         }
@@ -559,6 +562,7 @@ type BlobModelRegistry
                                             ScopeId = scopeId
                                         }
                                     )
+                                    |> AuditRow.orRefuse
 
                                 return Ok updated
         }

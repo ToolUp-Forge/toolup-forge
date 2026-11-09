@@ -37,7 +37,7 @@ type Ed25519ArtifactVerifier(keyStore: IPublisherKeyStore, audit: IAuditLog, edg
 
     let recordAudit event = async {
         try
-            do! audit.Record(edgeScopeId, event)
+            do! audit.Record(edgeScopeId, event) |> AuditRow.bestEffort
         with _ ->
             // IAuditLog.Record is best-effort; swallow per the
             // documented contract (audit emission must never block

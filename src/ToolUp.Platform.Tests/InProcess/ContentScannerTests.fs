@@ -114,7 +114,11 @@ type private CapturingAuditLog() =
         |> List.ofSeq
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async { lock rows (fun () -> rows.Add(scopeId, audit)) }
+        member _.Record(scopeId, audit) = async {
+            lock rows (fun () -> rows.Add(scopeId, audit))
+            return Ok()
+        }
+
         member _.GetAuditTrail(_, _, _) = async { return [] }
 
 // ─── Harness ─────────────────────────────────────────────────────────

@@ -61,7 +61,11 @@ type private RecordingAuditLog() =
     member _.Events = events |> List.ofSeq
 
     interface IAuditLog with
-        member _.Record(scopeId, event) = async { events.Add(scopeId, event) }
+        member _.Record(scopeId, event) = async {
+            events.Add(scopeId, event)
+            return Ok()
+        }
+
         member _.GetAuditTrail(_, _, _) = async { return [] }
 
 let private diagnoseNow (storage: IBlobStorage) =

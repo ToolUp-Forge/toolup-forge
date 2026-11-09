@@ -85,7 +85,11 @@ let private sinks (failure: (FailureMode * string) option) : Sinks =
     {
         AuditLog =
             { new IAuditLog with
-                member _.Record(_, _) = write ()
+                member _.Record(_, _) = async {
+                    do! write ()
+                    return Ok()
+                }
+
                 member _.GetAuditTrail(_, _, _) = async { return [] }
             }
         Hook =

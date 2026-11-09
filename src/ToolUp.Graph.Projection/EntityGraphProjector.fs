@@ -266,13 +266,15 @@ type ProjectingAuditLog(inner: IAuditLog, projector: unit -> IEntityGraphProject
     interface IAuditLog with
         member _.Record(scopeId, audit) = async {
             // Forward first — audit persistence is never gated on projection.
-            do! inner.Record(scopeId, audit)
+            do! inner.Record(scopeId, audit) |> AuditRow.orRefuse
 
             match audit with
             | EntityCreated p
             | EntityUpdated p -> do! drive scopeId ((projector ()).SyncEntity(scopeId, p.EntityType, p.EntityId))
             | EntityDeleted p -> do! drive scopeId ((projector ()).RemoveEntity(scopeId, p.EntityType, p.EntityId))
             | _ -> ()
+
+            return Ok()
         }
 
         member _.GetAuditTrail(scopeId, dateRange, eventType) =

@@ -200,7 +200,7 @@ type BackupCoordinator
         match auditLog with
         | Some log ->
             try
-                do! log.Record(BackupScope.PlatformContainer, event)
+                do! log.Record(BackupScope.PlatformContainer, event) |> AuditRow.orRefuse
             with ex ->
                 logger
                 |> Option.iter (fun l -> l.Warn(sprintf "[Phase 445] audit emission failed: %s" ex.Message))

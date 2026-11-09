@@ -177,7 +177,7 @@ type private CapturingAuditLog() =
     interface IAuditLog with
         member _.Record(scopeId, audit) =
             lock recorded (fun () -> recorded.Add((scopeId, audit)))
-            async { return () }
+            async { return Ok() }
 
         member _.GetAuditTrail(_scopeId, _dateRange, _eventType) = async { return [] }
 

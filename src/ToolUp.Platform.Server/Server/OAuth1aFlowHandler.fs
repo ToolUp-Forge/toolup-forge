@@ -261,7 +261,7 @@ let private callback (flowName: string) : HttpHandler =
                                                     ConnectedAt = DateTime.UtcNow
                                                 }
                                             )
-                                            |> Background.startAudit warn "OAuth1aConnected audit"
+                                            |> Background.startAuditRow warn "OAuth1aConnected audit"
                                         with ex ->
                                             warn "OAuth1aConnected audit" ex
                                     | None -> ()

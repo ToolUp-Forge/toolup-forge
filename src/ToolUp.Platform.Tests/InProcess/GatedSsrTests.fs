@@ -2094,7 +2094,11 @@ let private recordingAuditLog () =
 
     let log =
         { new IAuditLog with
-            member _.Record(scopeId, audit) = async { rows.Enqueue((scopeId, audit)) }
+            member _.Record(scopeId, audit) = async {
+                rows.Enqueue((scopeId, audit))
+                return Ok()
+            }
+
             member _.GetAuditTrail(_, _, _) = async { return [] }
         }
 

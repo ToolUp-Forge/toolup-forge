@@ -416,7 +416,7 @@ module internal ApiSeams =
                             | _ -> false
 
                         if not queued then
-                            do! auditLog.Record(scopeId, event)
+                            do! auditLog.Record(scopeId, event) |> AuditRow.orRefuse
                     | _ -> ()
             }
         }

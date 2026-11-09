@@ -308,6 +308,7 @@ module InProcessOAuthTokenRefresher =
                     ElapsedMs = elapsedMs
                 }
             )
+            |> AuditRow.orRefuse
 
         let emitInvalidatedAudit (descriptor: OAuthRefreshDescriptor) (reason: string) : Async<unit> =
             auditLog.Record(
@@ -319,6 +320,7 @@ module InProcessOAuthTokenRefresher =
                     Reason = reason
                 }
             )
+            |> AuditRow.orRefuse
 
         /// Run one refresh attempt against the descriptor's upstream.
         /// The refresh-token read + rotation-write happen inside this

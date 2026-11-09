@@ -212,7 +212,7 @@ let private record (ctx: HttpContext) (payload: CrossModuleReadPayload) : Async<
     match ctx.RequestServices.GetService(typeof<IAuditLog>) with
     | :? IAuditLog as auditLog ->
         try
-            do! auditLog.Record(scopeIdOf ctx, CrossModuleRead payload)
+            do! auditLog.Record(scopeIdOf ctx, CrossModuleRead payload) |> AuditRow.bestEffort
         with _ ->
             // `IAuditLog.Record` already logs and swallows its own
             // failures; this catches a substrate that throws OUT of it.

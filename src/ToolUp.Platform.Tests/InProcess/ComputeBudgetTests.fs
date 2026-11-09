@@ -100,7 +100,11 @@ type private RecordingAuditLog() =
         this.Kinds |> List.filter ((=) name) |> List.length
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async { lock gate (fun () -> recorded.Add((scopeId, audit))) }
+        member _.Record(scopeId, audit) = async {
+            lock gate (fun () -> recorded.Add((scopeId, audit)))
+            return Ok()
+        }
+
         member _.GetAuditTrail(_, _, _) = async { return lock gate (fun () -> recorded |> Seq.map snd |> List.ofSeq) }
 
 /// A dispatcher that records every spec it was handed and mints a handle.

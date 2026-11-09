@@ -99,6 +99,7 @@ type ObservedModelRegistry
                                 ScopeId = scopeId
                             }
                         )
+                        |> AuditRow.bestEffort
                 with _ ->
                     // An audit store having a bad day must not turn one
                     // isolated observer failure into a failed registration

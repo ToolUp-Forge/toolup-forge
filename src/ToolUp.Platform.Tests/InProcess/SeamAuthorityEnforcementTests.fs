@@ -249,6 +249,8 @@ type private RecordingAuditLog() =
             lock gate (fun () ->
                 recorded.Add(scopeId, audit)
                 Threading.Monitor.PulseAll gate)
+
+            return Ok()
         }
 
         member _.GetAuditTrail(_, _, _) = async { return lock gate (fun () -> recorded |> Seq.map snd |> List.ofSeq) }

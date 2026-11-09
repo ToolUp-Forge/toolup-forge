@@ -446,6 +446,7 @@ module FactImport =
                                     Reason = FactImportRefusal.describe refusal
                             }
                         )
+                        |> AuditRow.orRefuse
 
                     return Error refusal
                 }
@@ -625,6 +626,7 @@ module FactImport =
                                                                 ImportedFactId = fact.FactId
                                                         }
                                                     )
+                                                    |> AuditRow.orRefuse
 
                                                 return Ok fact
             }

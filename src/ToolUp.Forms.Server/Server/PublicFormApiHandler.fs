@@ -178,7 +178,10 @@ let publicFormApi
                                         InitialState = SubmissionState.toIndexValue saved.State
                                     }
 
-                                    do! auditLog.Record(claim.ScopeId, AuditEvent.FormSubmitted payload)
+                                    do!
+                                        auditLog.Record(claim.ScopeId, AuditEvent.FormSubmitted payload)
+                                        |> AuditRow.orRefuse
+
                                     return Ok saved
             }
     }

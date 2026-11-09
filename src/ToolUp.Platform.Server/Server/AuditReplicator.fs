@@ -255,9 +255,11 @@ type AuditReplicator
         }
         // Emitted under `_platform` for operator-level visibility; the
         // anti-recursion guard in the hook decorator prevents this
-        // event from re-entering the replicator pipeline.
-        // Emitted under `_platform` for operator-level visibility.
-        do! auditLog.Record(ScopeKey.PlatformContainer, AuditSinkDelivered payload)
+        // event from re-entering the replicator pipeline. Best-effort: the
+        // replicator's own rows never stall its delivery loop.
+        do!
+            AuditRow.emit auditLog ScopeKey.PlatformContainer (AuditSinkDelivered payload)
+            |> AuditRow.bestEffort
     }
 
     let emitFailed (sinkName: string) (scopeId: string) (batchSize: int) (attempt: int) (error: string) = async {
@@ -270,7 +272,9 @@ type AuditReplicator
             FailedAt = DateTime.UtcNow
         }
 
-        do! auditLog.Record(ScopeKey.PlatformContainer, AuditSinkFailed payload)
+        do!
+            AuditRow.emit auditLog ScopeKey.PlatformContainer (AuditSinkFailed payload)
+            |> AuditRow.bestEffort
     }
 
     let emitDeadLettered (sinkName: string) (scopeId: string) (batchSize: int) (attempts: int) (lastError: string) = async {
@@ -283,7 +287,9 @@ type AuditReplicator
             DeadLetteredAt = DateTime.UtcNow
         }
 
-        do! auditLog.Record(ScopeKey.PlatformContainer, AuditSinkDeadLettered payload)
+        do!
+            AuditRow.emit auditLog ScopeKey.PlatformContainer (AuditSinkDeadLettered payload)
+            |> AuditRow.bestEffort
     }
 
     // ─── Per-batch delivery ─────────────────────────────────────────
@@ -381,7 +387,9 @@ type AuditReplicator
                         FailedAt = DateTime.UtcNow
                     }
 
-                    do! auditLog.Record(ScopeKey.PlatformContainer, AuditEventDecodeFailed payload)
+                    do!
+                        AuditRow.emit auditLog ScopeKey.PlatformContainer (AuditEventDecodeFailed payload)
+                        |> AuditRow.bestEffort
 
                 if List.isEmpty decodedPairs then
                     // Every event failed to decode — advance cursor anyway

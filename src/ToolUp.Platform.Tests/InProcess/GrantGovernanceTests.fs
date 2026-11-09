@@ -59,6 +59,14 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Scope
 open ToolUp.Platform.Compose
 
+/// A log that records nothing and never refuses — the test's "no audit".
+let private noAudit =
+    { new IAuditLog with
+        member _.Record(_, _) = async { return Ok() }
+        member _.GetAuditTrail(_, _, _) = async { return [] }
+    }
+
+
 // ─── Fixtures ────────────────────────────────────────────────────────
 
 let private Read = ModulePermission.Read
@@ -90,7 +98,11 @@ type private RecordingAuditLog() =
             | _ -> None)
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async { recorded.Add((scopeId, audit)) }
+        member _.Record(scopeId, audit) = async {
+            recorded.Add((scopeId, audit))
+            return Ok()
+        }
+
         member _.GetAuditTrail(_, _, _) = async { return [] }
 
 /// The decorator emits its success row through `Async.Start`, exactly as
@@ -382,7 +394,7 @@ let tests =
                         FailingStore message :> IPermissionStore,
                         registry,
                         GrantPolicyGuard.CounterpartyConsentOracle.denyAll,
-                        None,
+                        noAudit,
                         Some "admin-bob"
                     )
                     :> IPermissionStore
@@ -429,7 +441,7 @@ let tests =
                         FailingStore queuedMessage :> IPermissionStore,
                         registry,
                         GrantPolicyGuard.CounterpartyConsentOracle.denyAll,
-                        None,
+                        noAudit,
                         Some "admin-bob"
                     )
                     :> IPermissionStore
@@ -724,8 +736,7 @@ let tests =
                                 registry
                                 grants
                                 verdicts
-                                None
-                                Async.RunSynchronously
+                                noAudit
                                 "t1"
                                 "alice"
                                 moduleName

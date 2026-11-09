@@ -1003,6 +1003,7 @@ module DatasetRevintage =
                                             ScopeId = spec.Scope
                                         }
                                     )
+                                    |> AuditRow.orRefuse
 
                                 return Ok produced
         }

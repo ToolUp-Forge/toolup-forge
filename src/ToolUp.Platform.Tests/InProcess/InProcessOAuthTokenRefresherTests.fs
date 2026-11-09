@@ -95,7 +95,10 @@ type CapturingAuditLog() =
         entries |> Seq.choose (fun (_, e) -> picker e) |> List.ofSeq
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async { entries.Add(scopeId, audit) }
+        member _.Record(scopeId, audit) = async {
+            entries.Add(scopeId, audit)
+            return Ok()
+        }
 
         member _.GetAuditTrail(_, _, _) = async { return [] }
 

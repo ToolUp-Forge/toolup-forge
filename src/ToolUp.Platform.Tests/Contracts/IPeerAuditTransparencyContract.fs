@@ -108,7 +108,7 @@ let private longRunningSeed = [
 /// (Phase 310) the second read for the terminal rows.
 type private StubAuditLog(events: AuditEvent list) =
     interface IAuditLog with
-        member _.Record(_scopeId, _audit) = async { return () }
+        member _.Record(_scopeId, _audit) = async { return Ok() }
 
         member _.GetAuditTrail(_scopeId, _dateRange, eventType) = async {
             return

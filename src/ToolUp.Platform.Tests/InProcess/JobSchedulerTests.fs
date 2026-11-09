@@ -1521,7 +1521,7 @@ let private defect1064Tests =
 
             let auditLog =
                 { new IAuditLog with
-                    member _.Record(_, _) = async.Return()
+                    member _.Record(_, _) = async.Return(Ok())
                     member _.GetAuditTrail(_, _, _) = async.Return []
                 }
 

@@ -589,6 +589,7 @@ let private performReset (deps: KnowledgeApiDeps) : Async<Result<unit, string>> 
                         OrphanChunkCount = orphanChunkCount
                     }
                 )
+                |> AuditRow.orRefuse
         | None -> ()
 
         do! deps.Notifications.Publish(deps.UserId.Value, DataRefreshed("KnowledgeBase", deps.Scope.ScopeId))

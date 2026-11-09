@@ -355,6 +355,7 @@ let run
                                         SnapshotTakenAt = now
                                     }
                                 )
+                                |> AuditRow.orRefuse
 
                         return true
                     with ex ->

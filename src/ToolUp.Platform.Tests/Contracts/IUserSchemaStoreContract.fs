@@ -34,7 +34,10 @@ type private CapturingAuditLog() =
         |> Seq.toList
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async { events.Enqueue((scopeId, audit)) }
+        member _.Record(scopeId, audit) = async {
+            events.Enqueue((scopeId, audit))
+            return Ok()
+        }
 
         member _.GetAuditTrail(scopeId, _dateRange, eventType) = async {
             return

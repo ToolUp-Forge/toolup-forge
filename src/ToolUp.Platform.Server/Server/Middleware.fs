@@ -316,7 +316,7 @@ let private observeResolverErrorDowngrade
                         OccurredAt = DateTimeOffset.UtcNow
                     }
                 )
-                |> Background.startAudit warn "scope-downgrade audit"
+                |> Background.startAuditRow warn "scope-downgrade audit"
             | _ -> ()
         with ex ->
             warn "scope-downgrade audit" ex
@@ -363,7 +363,7 @@ let internal recordPublicationReaderSignIn
                         OccurredAt = DateTimeOffset.UtcNow
                     }
                 )
-                |> Background.startAudit warn "reader sign-in audit"
+                |> Background.startAuditRow warn "reader sign-in audit"
         | _ -> ()
     with ex ->
         warn "reader sign-in audit" ex
@@ -516,7 +516,7 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                         OccurredAt = DateTimeOffset.UtcNow
                     }
                 )
-                |> Background.startAudit warn "scope-resolution-failure audit"
+                |> Background.startAuditRow warn "scope-resolution-failure audit"
             | _ -> ()
         with writeEx ->
             warn "scope-resolution-failure audit" writeEx
@@ -749,7 +749,7 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                                                 AuthProvider = authProv.GetType().Name
                                             }
                                         )
-                                        |> Background.startAudit warn "login audit"
+                                        |> Background.startAuditRow warn "login audit"
                                     with ex ->
                                         warn "login audit" ex
                             | _ -> ()
@@ -888,8 +888,8 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
 
                                             let auditLog =
                                                 match ctx.RequestServices.GetService(typeof<IAuditLog>) with
-                                                | :? IAuditLog as log -> Some log
-                                                | _ -> None
+                                                | :? IAuditLog as log -> log
+                                                | _ -> ToolUp.Platform.Audit.AuditLog.NoOpAuditLog() :> IAuditLog
 
                                             let mutable verdicts = Map.empty<string, Result<unit, ConsentDenial>>
 
@@ -903,9 +903,6 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                                                             consentStore
                                                             verifier
                                                             auditLog
-                                                            (Background.startAudit
-                                                                warn
-                                                                "grant-consent trust-denial audit")
                                                             DateTimeOffset.UtcNow
                                                             subject
                                                             party

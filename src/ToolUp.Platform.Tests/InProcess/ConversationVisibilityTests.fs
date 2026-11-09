@@ -75,7 +75,11 @@ type private CapturingAudit() =
             | _ -> None)
 
     interface IAuditLog with
-        member _.Record(scopeId, event) = async { lock rows (fun () -> rows.Add((scopeId, event))) }
+        member _.Record(scopeId, event) = async {
+            lock rows (fun () -> rows.Add((scopeId, event)))
+            return Ok()
+        }
+
         member _.GetAuditTrail(_, _, _) = async { return [] }
 
 type private World = {

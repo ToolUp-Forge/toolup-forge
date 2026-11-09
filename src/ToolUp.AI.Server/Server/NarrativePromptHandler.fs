@@ -390,6 +390,7 @@ let narrativePromptApi (ctx: HttpContext) : NarrativePromptApi =
                         Payload = Map.ofList ([ "teamId", caller.TeamId.Value; "runKey", runKey ] @ payload)
                     }
                 )
+                |> AuditRow.orRefuse
         | None -> ()
     }
 

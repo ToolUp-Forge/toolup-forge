@@ -89,6 +89,8 @@ type private RecordingAuditLog() =
             lock gate (fun () ->
                 recorded.Add audit
                 Threading.Monitor.PulseAll gate)
+
+            return Ok()
         }
 
         member _.GetAuditTrail(_, _, _) = async { return lock gate (fun () -> List.ofSeq recorded) }

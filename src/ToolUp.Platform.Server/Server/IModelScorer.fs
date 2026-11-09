@@ -369,6 +369,7 @@ type ModelScorer
                     ScopeId = request.ScopeId
                 }
             )
+            |> AuditRow.orRefuse
 
         return Error error
     }
@@ -510,6 +511,7 @@ type ModelScorer
                                                     ScopeId = request.ScopeId
                                                 }
                                             )
+                                            |> AuditRow.orRefuse
 
                                         return Ok outputRef
         }

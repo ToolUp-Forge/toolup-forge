@@ -63,7 +63,11 @@ type private RecordingAuditLog() =
     member _.All = recorded |> Seq.map snd |> List.ofSeq
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async { recorded.Enqueue((scopeId, audit)) }
+        member _.Record(scopeId, audit) = async {
+            recorded.Enqueue((scopeId, audit))
+            return Ok()
+        }
+
         member _.GetAuditTrail(_, _, _) = async { return [] }
 
 /// A service provider over an explicit type→instance table. Small on

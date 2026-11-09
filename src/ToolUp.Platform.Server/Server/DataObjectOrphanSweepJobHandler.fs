@@ -260,6 +260,7 @@ let sweepScope
                                             AgeHours = int64 (now - reclaimed.LastModified).TotalHours
                                         }
                                     )
+                                    |> AuditRow.orRefuse
                             | None -> ()
                         | Error _ -> ()
 
@@ -294,6 +295,7 @@ let sweepScope
                                 FailureCount = failures.Length
                             }
                         )
+                        |> AuditRow.orRefuse
                 | None -> ()
 
                 logger.Info(

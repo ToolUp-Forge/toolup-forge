@@ -141,7 +141,7 @@ let private auditTests =
                 Surface = BeaconSurfaceLabel
             }
 
-            do! auditLog.Record("team-acme", BeaconRejected payload)
+            do! auditLog.Record("team-acme", BeaconRejected payload) |> AuditRow.orRefuse
 
             let! trail = auditLog.GetAuditTrail("team-acme", None, Some "BeaconRejected")
 
@@ -171,6 +171,7 @@ let private auditTests =
                         Surface = "submit"
                     }
                 )
+                |> AuditRow.orRefuse
 
             let! trail = auditLog.GetAuditTrail("team-acme", None, Some "BeaconRejected")
 
@@ -193,6 +194,7 @@ let private auditTests =
                         Surface = BeaconSurfaceLabel
                     }
                 )
+                |> AuditRow.orRefuse
 
             let! unrelated = auditLog.GetAuditTrail("team-acme", None, Some "ConversationExported")
             Expect.isEmpty unrelated "the filter must not return BeaconRejected under another type"

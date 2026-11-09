@@ -141,6 +141,7 @@ module DataProvenancePolicy =
                             Reason = reason
                         }
                     )
+                    |> AuditRow.orRefuse
 
                 return Error reason
         }
@@ -166,6 +167,7 @@ module DataProvenancePolicy =
                             Reason = reason
                         }
                     )
+                    |> AuditRow.orRefuse
 
                 return Error reason
         }

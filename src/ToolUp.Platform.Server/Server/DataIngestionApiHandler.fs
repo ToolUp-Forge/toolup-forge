@@ -375,7 +375,7 @@ let dataIngestionApi (ctx: HttpContext) : IDataIngestionApi =
                                             UpstreamRevoked = upstreamRevoked
                                         }
                                     )
-                                    |> Background.startAudit warn "OAuthDisconnected audit"
+                                    |> Background.startAuditRow warn "OAuthDisconnected audit"
                                 with ex ->
                                     warn "OAuthDisconnected audit" ex
                             | _ -> ()

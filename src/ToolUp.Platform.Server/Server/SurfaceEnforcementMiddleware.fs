@@ -562,7 +562,7 @@ let private emitDenialAudit
                     ReaderRoles = readerEnrichment |> Option.map snd
                 }
             )
-            |> Background.startAudit warn "SurfaceDenied audit"
+            |> Background.startAuditRow warn "SurfaceDenied audit"
         | _ -> ()
     with ex ->
         warn "SurfaceDenied audit" ex

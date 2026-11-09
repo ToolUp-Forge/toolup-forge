@@ -1099,7 +1099,9 @@ module EvidenceChainWalker =
                 OccurredAt = DateTimeOffset.UtcNow
             }
 
-            do! auditLog.Record(PlatformScopeId, EvidenceChainWalked payload)
+            do!
+                auditLog.Record(PlatformScopeId, EvidenceChainWalked payload)
+                |> AuditRow.orRefuse
         | _ -> ()
     }
 

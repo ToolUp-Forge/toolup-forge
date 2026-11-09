@@ -143,6 +143,7 @@ let bootstrap (logger: ILogger) (auditLog: IAuditLog) (teamStore: ITeamStore) : 
                                 TeamName = teamName
                             }
                         )
+                        |> AuditRow.orRefuse
 
                     let! addResult = teamStore.AddMember(TeamId teamId, UserId adminUserId, Owner)
 
@@ -177,6 +178,7 @@ let bootstrap (logger: ILogger) (auditLog: IAuditLog) (teamStore: ITeamStore) : 
                                     Role = TeamRoles.displayName Owner
                                 }
                             )
+                            |> AuditRow.orRefuse
 
                         let! activeResult = teamStore.SetActiveTeam(UserId adminUserId, TeamId teamId)
 

@@ -1781,7 +1781,9 @@ let private composePeer (options: PeerOptions) (app: ServerApp) : ServerApp =
                                     | svc ->
                                         let auditLog = svc :?> IAuditLog
 
-                                        fun payload -> auditLog.Record(PeerJob.Scope, PeerCleanRoomDecision payload)
+                                        fun payload ->
+                                            auditLog.Record(PeerJob.Scope, PeerCleanRoomDecision payload)
+                                            |> AuditRow.orRefuse
 
                                 // Phase 481 — the calibrated-noise
                                 // posture for THIS contract, paired

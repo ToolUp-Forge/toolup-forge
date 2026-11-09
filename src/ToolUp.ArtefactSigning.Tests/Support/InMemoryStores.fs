@@ -59,7 +59,10 @@ type InMemoryAuditLog() =
         |> List.choose (fun (s, e) -> if s = scopeId then Some e else None)
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async { events.Add(scopeId, audit) }
+        member _.Record(scopeId, audit) = async {
+            events.Add(scopeId, audit)
+            return Ok()
+        }
 
         member this.GetAuditTrail(scopeId, _, eventTypeFilter) = async {
             return

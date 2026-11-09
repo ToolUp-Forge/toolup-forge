@@ -243,6 +243,7 @@ type InProcessRateLimiter
                                     WaitedMs = int64 waited.TotalMilliseconds
                                 }
                             )
+                            |> AuditRow.orRefuse
                 | Refused reason ->
                     metricsSink.Increment("toolup.ratelimit.refused_total", metricTags key.Provider)
 
@@ -256,6 +257,7 @@ type InProcessRateLimiter
                                 Reason = reason
                             }
                         )
+                        |> AuditRow.orRefuse
 
                 return resolved
         }

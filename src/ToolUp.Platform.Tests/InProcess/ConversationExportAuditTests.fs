@@ -43,7 +43,7 @@ let tests =
                 ExportedBy = "alice"
             }
 
-            do! auditLog.Record("user-alice", ConversationExported payload)
+            do! auditLog.Record("user-alice", ConversationExported payload) |> AuditRow.orRefuse
 
             let! trail = auditLog.GetAuditTrail("user-alice", None, Some "ConversationExported")
 
@@ -68,6 +68,7 @@ let tests =
                         ExportedBy = "bob"
                     }
                 )
+                |> AuditRow.orRefuse
 
             let! trail = auditLog.GetAuditTrail("user-bob", None, None)
 
@@ -89,6 +90,7 @@ let tests =
                         ExportedBy = "carol"
                     }
                 )
+                |> AuditRow.orRefuse
 
             let! unrelated = auditLog.GetAuditTrail("user-carol", None, Some "UserLoggedIn")
             Expect.isEmpty unrelated "the filter must not return ConversationExported under another type"

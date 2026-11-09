@@ -46,6 +46,14 @@ open ToolUp.Platform.Jobs.GrantNotification
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Scope
 
+/// A log that records nothing and never refuses — the test's "no audit".
+let private noAudit =
+    { new IAuditLog with
+        member _.Record(_, _) = async { return Ok() }
+        member _.GetAuditTrail(_, _, _) = async { return [] }
+    }
+
+
 /// A permission read the case expects to succeed; an `Error` fails it by name.
 let private readOk (read: Async<Result<'T, PermissionStoreError>>) : Async<'T> = async {
     match! read with
@@ -506,7 +514,8 @@ let tests =
                 let guarded =
                     GrantPolicyGuard.GrantPolicyPermissionStore(
                         freshStore (),
-                        registryOf [ "Partner", GrantPolicy.RequiresAcknowledgement ]
+                        registryOf [ "Partner", GrantPolicy.RequiresAcknowledgement ],
+                        noAudit
                     )
                     :> IPermissionStore
 

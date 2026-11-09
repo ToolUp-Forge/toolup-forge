@@ -189,7 +189,7 @@ type PostgresEntityStore
         match auditLog with
         | Some log ->
             try
-                do! log.Record(scopeId, event)
+                do! log.Record(scopeId, event) |> AuditRow.bestEffort
             with _ ->
                 ()
         | None -> ()

@@ -10,6 +10,19 @@ open ToolUp.Platform.Classification.Tests.Support.Doubles
 open ToolUp.Platform.Classification.Tests.Contracts
 open ToolUp.Platform.Audit
 
+/// The gate over a log that records: a refusal here is a test failure.
+let private redactOk classifier policy (audit: IAuditLog) ctx entityName fields = async {
+    match! ClassificationGate.redactFields classifier policy audit ctx entityName fields with
+    | Ok redacted -> return redacted
+    | Error e -> return failtestf "the gated read was refused: %A" e
+}
+
+let private recordWritesOk classifier (audit: IAuditLog) ctx entityName paths = async {
+    match! ClassificationGate.recordWrites classifier audit ctx entityName paths with
+    | Ok() -> ()
+    | Error e -> failtestf "the write rows were refused: %A" e
+}
+
 let private classifier () : IFieldClassifier =
     DefaultFieldClassifier.create SampleRegistry.customer
 
@@ -57,14 +70,7 @@ let private gateTests =
             let audit = InMemoryAuditLog()
             let ctx = Ctx.plainUser "u1"
 
-            let! result =
-                ClassificationGate.redactFields
-                    (classifier ())
-                    ClassificationGate.defaultPolicy
-                    audit
-                    ctx
-                    "Customer"
-                    customerFields
+            let! result = redactOk (classifier ()) ClassificationGate.defaultPolicy audit ctx "Customer" customerFields
 
             Expect.equal result["Email"] ClassificationGate.RedactedPlaceholder "Pii redacted for plain user"
             Expect.equal result["RevenueUsd"] ClassificationGate.RedactedPlaceholder "Financial redacted"
@@ -78,14 +84,7 @@ let private gateTests =
             let audit = InMemoryAuditLog()
             let ctx = Ctx.readerOf Pii "u2"
 
-            let! result =
-                ClassificationGate.redactFields
-                    (classifier ())
-                    ClassificationGate.defaultPolicy
-                    audit
-                    ctx
-                    "Customer"
-                    customerFields
+            let! result = redactOk (classifier ()) ClassificationGate.defaultPolicy audit ctx "Customer" customerFields
 
             Expect.equal result["Email"] "ceo@acme.example" "Pii visible to a PiiReader"
             // But Financial (different axis) is still redacted.
@@ -101,14 +100,7 @@ let private gateTests =
             let audit = InMemoryAuditLog()
             let ctx = Ctx.plainUser "u1"
 
-            let! _ =
-                ClassificationGate.redactFields
-                    (classifier ())
-                    ClassificationGate.defaultPolicy
-                    audit
-                    ctx
-                    "Customer"
-                    customerFields
+            let! _ = redactOk (classifier ()) ClassificationGate.defaultPolicy audit ctx "Customer" customerFields
 
             let reads =
                 audit.AllEvents
@@ -136,14 +128,7 @@ let private gateTests =
             let audit = InMemoryAuditLog()
             let ctx = Ctx.readerOf Pii "u2"
 
-            let! _ =
-                ClassificationGate.redactFields
-                    (classifier ())
-                    ClassificationGate.defaultPolicy
-                    audit
-                    ctx
-                    "Customer"
-                    customerFields
+            let! _ = redactOk (classifier ()) ClassificationGate.defaultPolicy audit ctx "Customer" customerFields
 
             let emailRead =
                 audit.AllEvents
@@ -163,12 +148,7 @@ let private gateTests =
             let audit = InMemoryAuditLog()
             let ctx = Ctx.plainUser "u1"
 
-            do!
-                ClassificationGate.recordWrites (classifier ()) audit ctx "Customer" [
-                    "Email"
-                    "DisplayHandle"
-                    "NotAField"
-                ]
+            do! recordWritesOk (classifier ()) audit ctx "Customer" [ "Email"; "DisplayHandle"; "NotAField" ]
 
             let writes =
                 audit.AllEvents

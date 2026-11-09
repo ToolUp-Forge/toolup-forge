@@ -487,6 +487,7 @@ module ConversationRetention =
                                         FailedCount = failures.Length
                                     }
                                 )
+                                |> AuditRow.orRefuse
                         | None -> ()
 
                         logger.Info(
@@ -1683,7 +1684,7 @@ let aiAssistantApi
             }
 
             try
-                do! auditLog.Record(scope.ScopeId, BeaconRejected payload)
+                do! auditLog.Record(scope.ScopeId, BeaconRejected payload) |> AuditRow.orRefuse
             with ex ->
                 logger.Warn $"BeaconRejected audit write failed (submit; conversation {conversationId}): {ex.Message}"
         | None -> ()

@@ -60,7 +60,11 @@ type private CapturingAuditLog() =
     member _.Events = lock gate (fun () -> events |> List.ofSeq)
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async { lock gate (fun () -> events.Add(scopeId, audit)) }
+        member _.Record(scopeId, audit) = async {
+            lock gate (fun () -> events.Add(scopeId, audit))
+            return Ok()
+        }
+
         member _.GetAuditTrail(_, _, _) = async { return [] }
 
 let private mkDoc (docId: string) (fileName: string) (fileType: string) (source: KnowledgeSource) : KnowledgeDocument = {

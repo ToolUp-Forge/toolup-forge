@@ -244,7 +244,7 @@ type AnonymousSessionMigrationMiddleware(next: RequestDelegate) =
                                                     OccurredAt = DateTimeOffset.UtcNow
                                                 }
                                             )
-                                            |> Background.startAudit warn "AnonymousSessionMigrated audit"
+                                            |> Background.startAuditRow warn "AnonymousSessionMigrated audit"
                                         with ex ->
                                             warn "AnonymousSessionMigrated audit" ex
                                     | _ -> ()

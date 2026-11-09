@@ -211,7 +211,7 @@ type BlobServiceAccountStore(storage: IBlobStorage, audit: IAuditLog option, log
             let what = sprintf "%s audit" (AuditEvent.eventTypeName event)
 
             try
-                a.Record(scopeId, event) |> Background.startAudit auditWarn what
+                a.Record(scopeId, event) |> Background.startAuditRow auditWarn what
             with ex ->
                 auditWarn what ex
         | None -> ()

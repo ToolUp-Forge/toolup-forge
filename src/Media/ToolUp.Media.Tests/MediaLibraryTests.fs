@@ -2832,7 +2832,11 @@ type private RecordingMediaAuditLog() =
             | _ -> None)
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async { recorded.Add((scopeId, audit)) }
+        member _.Record(scopeId, audit) = async {
+            recorded.Add((scopeId, audit))
+            return Ok()
+        }
+
         member _.GetAuditTrail(_, _, _) = async { return [] }
 
 /// Poll to a deadline rather than sleeping a fixed interval: a fixed

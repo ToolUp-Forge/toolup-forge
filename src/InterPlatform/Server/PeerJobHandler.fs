@@ -484,7 +484,7 @@ type PeerJobHandler
                     OccurredAt = DateTimeOffset.UtcNow
                 }
 
-                do! log.Record(PeerJob.Scope, PeerJobCompleted payload)
+                do! log.Record(PeerJob.Scope, PeerJobCompleted payload) |> AuditRow.orRefuse
             with _ ->
                 ()
     }

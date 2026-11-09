@@ -12,6 +12,13 @@ open ToolUp.Platform.Scope
 /// Bind the `IPermissionStore` contract test pack to the blob-backed
 /// `PermissionStore` and to every decorator the scope part composes over
 /// it, so the absent / unreadable / corrupt answers hold through each.
+/// A log that records nothing and never refuses.
+let private noAudit =
+    { new IAuditLog with
+        member _.Record(_, _) = async { return Ok() }
+        member _.GetAuditTrail(_, _, _) = async { return [] }
+    }
+
 let tests =
     let store (backing: IBlobStorage) =
         PermissionStore(backing) :> IPermissionStore
@@ -27,7 +34,8 @@ let tests =
                 store backing,
                 GrantPolicyGuard.ModuleGrantPolicyRegistry.ofDeclarations [
                     "Governed", GrantPolicy.RequiresAcknowledgement
-                ]
+                ],
+                noAudit
             )
             :> IPermissionStore)
 
@@ -41,7 +49,8 @@ let tests =
                 BlobAdminMutationApprovalStore(backing),
                 (fun _ -> false),
                 (fun () -> Some "admin"),
-                (fun () -> DateTimeOffset.UtcNow)
+                (fun () -> DateTimeOffset.UtcNow),
+                noAudit
             )
             :> IPermissionStore)
     ]

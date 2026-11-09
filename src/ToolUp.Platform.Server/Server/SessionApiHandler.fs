@@ -38,7 +38,7 @@ let private audit (auditLogOpt: IAuditLog option) (logger: ILogger option) (scop
     | None -> return ()
     | Some auditLog ->
         try
-            do! auditLog.Record(scopeId, event)
+            do! auditLog.Record(scopeId, event) |> AuditRow.orRefuse
         with ex ->
             match logger with
             | Some l -> l.Warn(sprintf "SessionApi: audit write failed for scope %s: %s" scopeId ex.Message)

@@ -329,6 +329,7 @@ type MetaWhatsAppInboundWebhookHandler
                             CorrelationId = status.CorrelationId
                         }
                     )
+                    |> AuditRow.orRefuse
 
             return true
     }

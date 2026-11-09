@@ -191,7 +191,7 @@ let private recordAudit (ctx: HttpContext) (event: AuditEvent) : unit =
         let what = sprintf "%s audit" (AuditEvent.eventTypeName event)
 
         try
-            log.Record(PlatformAdsConfigScope, event) |> Background.startAudit warn what
+            log.Record(PlatformAdsConfigScope, event) |> Background.startAuditRow warn what
         with ex ->
             warn what ex)
 

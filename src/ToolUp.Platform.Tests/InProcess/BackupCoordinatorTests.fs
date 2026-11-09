@@ -46,7 +46,11 @@ type private RecordingAuditLog() =
     member _.Recorded = List.ofSeq recorded
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async { recorded.Add((scopeId, audit)) }
+        member _.Record(scopeId, audit) = async {
+            recorded.Add((scopeId, audit))
+            return Ok()
+        }
+
         member _.GetAuditTrail(_, _, _) = async { return [] }
 
 /// One key, destroyable at will — the crypto-shred half of Phase 22 in

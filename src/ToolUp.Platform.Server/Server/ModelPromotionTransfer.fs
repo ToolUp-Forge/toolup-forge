@@ -456,6 +456,7 @@ module ModelPromotion =
                             ScopeId = scopeId
                         }
                     )
+                    |> AuditRow.bestEffort
             with _ ->
                 ()
         }

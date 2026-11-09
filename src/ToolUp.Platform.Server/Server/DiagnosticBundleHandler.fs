@@ -572,6 +572,7 @@ let private bundleHandler (config: ServerConfig) (capture: DevDiagnosticsHandler
                         Truncated = auditTruncated
                     }
                 )
+                |> AuditRow.orRefuse
         | None -> ()
 
         let stampUtc = DateTime.UtcNow.ToString("yyyyMMdd-HHmmss")

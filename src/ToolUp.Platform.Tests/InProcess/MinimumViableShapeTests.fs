@@ -220,7 +220,7 @@ let private noOpChannelTests =
                     AuthProvider = "test"
                 }
 
-            do! log.Record("scope-x", payload)
+            do! log.Record("scope-x", payload) |> AuditRow.orRefuse
         }
 
         testCaseAsync "NoOpAuditLog.GetAuditTrail returns empty list"

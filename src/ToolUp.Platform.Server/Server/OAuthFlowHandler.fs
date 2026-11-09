@@ -876,7 +876,7 @@ let private callback (flowName: string) : HttpHandler =
                                                                     ConnectedAt = connectedAt
                                                                 }
                                                             )
-                                                            |> Background.startAudit warn "OAuthConnected audit"
+                                                            |> Background.startAuditRow warn "OAuthConnected audit"
                                                         with ex ->
                                                             warn "OAuthConnected audit" ex
                                                     | None -> ()

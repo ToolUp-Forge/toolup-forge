@@ -726,6 +726,7 @@ module GroundingCertificate =
                             OccurredAt = body.IssuedAt
                         }
                     )
+                    |> AuditRow.orRefuse
         }
 
     /// Verify a certificate **offline** (Phase 565.C): needs only the

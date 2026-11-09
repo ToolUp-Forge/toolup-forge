@@ -227,7 +227,11 @@ type private RecordingAuditLog() =
             | _ -> None)
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async { lock recorded (fun () -> recorded.Add((scopeId, audit))) }
+        member _.Record(scopeId, audit) = async {
+            lock recorded (fun () -> recorded.Add((scopeId, audit)))
+            return Ok()
+        }
+
         member _.GetAuditTrail(_scopeId, _dateRange, _eventType) = async { return [] }
 
 type private InMemorySecretStore() =

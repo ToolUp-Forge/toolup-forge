@@ -874,6 +874,7 @@ type ModelPromotionPolicyEvaluator(policies: PromotionPolicy list, deps: Promoti
                         ScopeId = decision.ScopeId
                     }
                 )
+                |> AuditRow.orRefuse
 
             match decision.SupersededKeyHash with
             | Some superseded when decision.TransitionApplied ->
@@ -889,6 +890,7 @@ type ModelPromotionPolicyEvaluator(policies: PromotionPolicy list, deps: Promoti
                             ScopeId = decision.ScopeId
                         }
                     )
+                    |> AuditRow.orRefuse
             | _ -> ()
 
             return Ok decision

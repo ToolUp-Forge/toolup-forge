@@ -127,7 +127,10 @@ type private RecordingAuditLog() =
         this.Events
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async { events.Enqueue(scopeId, audit) }
+        member _.Record(scopeId, audit) = async {
+            events.Enqueue(scopeId, audit)
+            return Ok()
+        }
 
         member _.GetAuditTrail(_, _, _) = async { return [] }
 

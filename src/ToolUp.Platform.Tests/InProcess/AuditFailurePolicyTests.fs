@@ -9,6 +9,11 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Scope
 open ToolUp.Platform.Audit
 
+/// The row was refused: `Record` answered an `Error` (it never raises).
+let private expectRefused (record: unit -> Result<unit, AuditWriteError>) (message: string) =
+    Expect.isError (record ()) message
+
+
 // ─── Phase 9t — audit-write failure policy ───────────────────────────
 //
 // `AuditFailurePolicy` selects what `EventStoreAuditLog.Record` does
@@ -108,7 +113,7 @@ let tests =
                 AuditLog.EventStoreAuditLog(FaultingEventStore(), silentLogger, failurePolicy = RefuseAction)
                 :> IAuditLog
 
-            Expect.throwsT<AuditLog.AuditWriteRefusedException>
+            expectRefused
                 (fun () ->
                     auditLog.Record("team-acme", sampleAudit (UserId "alice"))
                     |> Async.RunSynchronously)
@@ -226,7 +231,7 @@ let tests =
                 )
                 :> IAuditLog
 
-            Expect.throwsT<AuditLog.AuditWriteRefusedException>
+            expectRefused
                 (fun () ->
                     auditLog.Record("team-acme", sampleAudit (UserId "alice"))
                     |> Async.RunSynchronously)

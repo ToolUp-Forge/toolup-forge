@@ -255,6 +255,7 @@ type VirtualDatasetReader
                                 RowCount = rowCount
                             }
                         )
+                        |> AuditRow.orRefuse
 
                     return
                         Ok {
@@ -293,6 +294,7 @@ type VirtualDatasetReader
                             Reason = reason
                         }
                     )
+                    |> AuditRow.orRefuse
 
                 return Ok()
         }

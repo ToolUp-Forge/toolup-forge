@@ -138,7 +138,10 @@ type private RecordingAuditLog() =
     member _.Events = events |> List.ofSeq
 
     interface IAuditLog with
-        member _.Record(_scopeId, audit) = async { events.Add audit }
+        member _.Record(_scopeId, audit) = async {
+            events.Add audit
+            return Ok()
+        }
 
         member _.GetAuditTrail(_scopeId, _dateRange, _eventType) = async { return events |> List.ofSeq }
 

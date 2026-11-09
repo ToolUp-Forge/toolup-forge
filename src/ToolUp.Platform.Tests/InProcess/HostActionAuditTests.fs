@@ -40,6 +40,8 @@ type private CapturingAuditLog() =
             match audit with
             | HostActionDispatched p -> rows.Enqueue(scopeId, p)
             | _ -> ()
+
+            return Ok()
         }
 
         member _.GetAuditTrail(_, _, _) = async { return [] }

@@ -293,6 +293,7 @@ module internal PendingInviteExpiryHook =
                                     ExpiredAt = entry.ExpiresAt
                                 }
                             )
+                            |> AuditRow.orRefuse
                     with ex ->
                         logger.Warn(
                             sprintf

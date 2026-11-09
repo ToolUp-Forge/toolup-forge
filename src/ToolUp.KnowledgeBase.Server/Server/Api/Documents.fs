@@ -1173,6 +1173,7 @@ let uploadDocumentCore
                                 OccurredAt = DateTimeOffset.UtcNow
                             }
                         )
+                        |> AuditRow.orRefuse
                 | None -> ()
 
                 return refusal
@@ -1227,6 +1228,7 @@ let uploadDocumentCore
                                     ContentHash = contentHash
                                 }
                             )
+                            |> AuditRow.orRefuse
                     | None -> ()
 
                     // Suppressed under bulk import; the batch's
@@ -1922,7 +1924,7 @@ let private sourceKindName (source: KnowledgeSource) =
 /// gaps never fail the fetch.
 let private recordOriginalAccessAudit (deps: KnowledgeApiDeps) (event: AuditEvent) : Async<unit> =
     match deps.AuditLog with
-    | Some a -> a.Record(deps.Scope.ScopeId, event)
+    | Some a -> a.Record(deps.Scope.ScopeId, event) |> AuditRow.orRefuse
     | None -> async.Return()
 
 /// Fetch the *original* ingested document for a `docId`,

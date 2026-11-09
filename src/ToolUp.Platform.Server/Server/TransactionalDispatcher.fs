@@ -238,7 +238,9 @@ let private runDelivery
                     CorrelationId = correlationId
                 }
 
-                do! auditLog.Record(envelope.ScopeId, NotificationSilentlySkipped payload)
+                do!
+                    auditLog.Record(envelope.ScopeId, NotificationSilentlySkipped payload)
+                    |> AuditRow.orRefuse
             else
                 let recipientUserIds, correlationId = auditFieldsOf envelope.Notification
                 let mutable attempt = 1
@@ -275,6 +277,7 @@ let private runDelivery
                                     CorrelationId = correlationId
                                 }
                             )
+                            |> AuditRow.orRefuse
 
                         terminate <- true
                     | SinkResult.Skipped reason ->
@@ -317,6 +320,7 @@ let private runDelivery
                                         CorrelationId = correlationId
                                     }
                                 )
+                                |> AuditRow.orRefuse
                     | SinkResult.PermanentFailure error ->
                         logger.Error(
                             $"%s{LogPrefix} delivery_failed scope=%s{envelope.ScopeId} kind=%s{sinkKindWire} provider=%s{sink.Provider} attempts=%d{attempt} error=%s{error}",
@@ -337,6 +341,7 @@ let private runDelivery
                                     CorrelationId = correlationId
                                 }
                             )
+                            |> AuditRow.orRefuse
 
                         terminate <- true
         finally
@@ -495,6 +500,7 @@ type TransactionalDispatcher
                                                 CorrelationId = correlationId
                                             }
                                         )
+                                        |> AuditRow.orRefuse
                                 })
         with
         | :? OperationCanceledException -> ()

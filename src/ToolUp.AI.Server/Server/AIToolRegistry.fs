@@ -671,8 +671,8 @@ let guardToolGrant (ctx: HttpContext) (access: AccessContext) (moduleName: strin
         ->
         let auditLog =
             match ctx.RequestServices.GetService(typeof<IAuditLog>) with
-            | :? IAuditLog as log -> Some log
-            | _ -> None
+            | :? IAuditLog as log -> log
+            | _ -> ToolUp.Platform.Audit.AuditLog.NoOpAuditLog() :> IAuditLog
 
         let scopeId =
             match ctx.Items.TryGetValue "ToolUp.StorageScope" with
@@ -685,7 +685,6 @@ let guardToolGrant (ctx: HttpContext) (access: AccessContext) (moduleName: strin
                 (GrantPolicyGuard.grantsFromItems ctx.Items)
                 (GrantConsentStore.consentVerdictsFromItems ctx.Items)
                 auditLog
-                Async.Start
                 scopeId
                 access.UserId
                 moduleName

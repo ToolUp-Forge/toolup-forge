@@ -400,6 +400,7 @@ module MembershipDoctorStorage =
                                     AffectedUserId = UserId affectedUserId
                                 }
                             )
+                            |> AuditRow.orRefuse
                     | None -> ()
 
                     do! publish teamId affectedUserId MembershipChangeKind.Removed

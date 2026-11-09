@@ -84,6 +84,7 @@ let publicationReaderApi (ctx: HttpContext) : IPublicationReaderApi =
                             OccurredAt = DateTimeOffset.UtcNow
                         }
                     )
+                    |> AuditRow.orRefuse
             | None -> ()
         }
 

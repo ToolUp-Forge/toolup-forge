@@ -211,7 +211,7 @@ module private ConsentAudit =
             let what = sprintf "%s audit" kind
 
             try
-                log.Record(scopeId, event) |> Background.startAudit warn what
+                log.Record(scopeId, event) |> Background.startAuditRow warn what
             with ex ->
                 warn what ex
 

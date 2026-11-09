@@ -392,7 +392,7 @@ let private impressionHandler: HttpHandler =
 
                             try
                                 auditLog.Record(PlatformScope, AuditEvent.AdImpressionRecorded ev)
-                                |> Background.startAudit warn "AdImpressionRecorded audit"
+                                |> Background.startAuditRow warn "AdImpressionRecorded audit"
                             with ex ->
                                 warn "AdImpressionRecorded audit" ex
                         | _ -> ()
@@ -440,7 +440,7 @@ let private clickHandler: HttpHandler =
 
                             try
                                 auditLog.Record(PlatformScope, AuditEvent.AdClickRecorded ev)
-                                |> Background.startAudit warn "AdClickRecorded audit"
+                                |> Background.startAuditRow warn "AdClickRecorded audit"
                             with ex ->
                                 warn "AdClickRecorded audit" ex
                         | _ -> ()

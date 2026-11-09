@@ -116,7 +116,7 @@ let private grantHandler (userId: string) : HttpHandler =
                             PlatformScope,
                             AuditEvent.PremiumGranted(UserId userId, grantor, reason, occurredAt)
                         )
-                        |> Background.startAudit warn "PremiumGranted audit"
+                        |> Background.startAuditRow warn "PremiumGranted audit"
                     with ex ->
                         warn "PremiumGranted audit" ex)
 
@@ -150,7 +150,7 @@ let private revokeHandler (userId: string) : HttpHandler =
                             PlatformScope,
                             AuditEvent.PremiumRevoked(UserId userId, grantor, reason, DateTimeOffset.UtcNow)
                         )
-                        |> Background.startAudit warn "PremiumRevoked audit"
+                        |> Background.startAuditRow warn "PremiumRevoked audit"
                     with ex ->
                         warn "PremiumRevoked audit" ex)
 

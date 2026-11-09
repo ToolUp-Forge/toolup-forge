@@ -109,8 +109,8 @@ let internal permissionGuardedApiCore<'T> (moduleName: string) (apiBuilder: Http
     let assertGrantLive (ctx: HttpContext) (accessCtx: AccessContext) =
         let auditLog =
             match ctx.RequestServices.GetService(typeof<IAuditLog>) with
-            | :? IAuditLog as log -> Some log
-            | _ -> None
+            | :? IAuditLog as log -> log
+            | _ -> ToolUp.Platform.Audit.AuditLog.NoOpAuditLog() :> IAuditLog
 
         let scopeId =
             accessCtx.TeamId
@@ -132,7 +132,6 @@ let internal permissionGuardedApiCore<'T> (moduleName: string) (apiBuilder: Http
                 (GrantPolicyGuard.grantsFromItems ctx.Items)
                 (GrantConsentStore.consentVerdictsFromItems ctx.Items)
                 auditLog
-                Async.Start
                 scopeId
                 accessCtx.UserId
                 moduleName

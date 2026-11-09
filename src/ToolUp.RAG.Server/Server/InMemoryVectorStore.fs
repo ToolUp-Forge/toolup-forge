@@ -333,6 +333,7 @@ type InMemoryVectorStore
                             BlobLocation = location
                         }
                     )
+                    |> AuditRow.orRefuse
             | None -> ()
 
             match notifications with

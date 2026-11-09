@@ -316,6 +316,7 @@ module EgressEnforcement =
                                 Reason = reason
                             }
                         )
+                        |> AuditRow.bestEffort
                 with _ ->
                     // Best-effort by contract; the denial itself still
                     // stands and is still ledgered.

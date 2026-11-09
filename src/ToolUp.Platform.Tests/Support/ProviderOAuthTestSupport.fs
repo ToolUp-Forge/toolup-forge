@@ -58,6 +58,9 @@ type RecordingAuditLog() =
     member _.Recorded = recorded |> List.ofSeq
 
     interface IAuditLog with
-        member _.Record(_scopeId, audit) = async { lock recorded (fun () -> recorded.Add audit) }
+        member _.Record(_scopeId, audit) = async {
+            lock recorded (fun () -> recorded.Add audit)
+            return Ok()
+        }
 
         member _.GetAuditTrail(_scopeId, _dateRange, _eventType) = async { return recorded |> List.ofSeq }

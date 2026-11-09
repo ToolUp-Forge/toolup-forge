@@ -342,7 +342,7 @@ let registerTeamPermissionStores
                 :> GrantPolicyGuard.CounterpartyConsentOracle
 
             let guarded =
-                GrantPolicyGuard.GrantPolicyPermissionStore(inner, registry, consentOracle, Some auditLog, None)
+                GrantPolicyGuard.GrantPolicyPermissionStore(inner, registry, consentOracle, auditLog, None)
                 :> IPermissionStore
 
             // Phase 556 — the grant-event notice loop, OUTSIDE the write

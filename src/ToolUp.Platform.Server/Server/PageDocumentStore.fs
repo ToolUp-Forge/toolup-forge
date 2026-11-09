@@ -776,6 +776,7 @@ type BlobPageDocumentStore
                             OccurredAt = DateTimeOffset.UtcNow
                         }
                     )
+                    |> AuditRow.orRefuse
 
             return result
         }
@@ -787,9 +788,10 @@ type BlobPageDocumentStore
         (act: string)
         (opCount: int)
         =
-        audit.Record(
-            auditScope receipt.Key scope,
-            PageSaved {
+        AuditRow.emit
+            audit
+            (auditScope receipt.Key scope)
+            (PageSaved {
                 PageSavedPayload.Module = receipt.Key.Page.Module
                 Page = receipt.Key.Page.Page
                 Layer = PageLayer.toToken receipt.Key.Layer
@@ -802,8 +804,8 @@ type BlobPageDocumentStore
                 ChainHead = receipt.ChainHead
                 Version = receipt.Version
                 OccurredAt = DateTimeOffset.UtcNow
-            }
-        )
+            })
+        |> AuditRow.orRefuse
 
     let decodeSeed (seed: PageSeed) : Result<string, PageStoreError> =
         try
@@ -868,6 +870,7 @@ type BlobPageDocumentStore
                                            OccurredAt = DateTimeOffset.UtcNow
                                        }
                                    )
+                                   |> AuditRow.orRefuse
 
                                return Ok(SeedOutcome.Seeded(version, seedHash))
                            }))
@@ -1075,6 +1078,7 @@ type BlobPageDocumentStore
                                                OccurredAt = DateTimeOffset.UtcNow
                                            }
                                        )
+                                       |> AuditRow.orRefuse
 
                                    return
                                        Ok {
@@ -1120,6 +1124,7 @@ type BlobPageDocumentStore
                                     OccurredAt = DateTimeOffset.UtcNow
                                 }
                             )
+                            |> AuditRow.orRefuse
 
                         return
                             Ok {

@@ -23,7 +23,7 @@ type DefaultArtefactSigner
 
     let recordAudit event = async {
         try
-            do! audit.Record(SigningKeyMaterial.SecretScope, event)
+            do! audit.Record(SigningKeyMaterial.SecretScope, event) |> AuditRow.bestEffort
         with _ ->
             // IAuditLog.Record is best-effort; swallow per its contract
             // (audit emission must never fail the primary operation).

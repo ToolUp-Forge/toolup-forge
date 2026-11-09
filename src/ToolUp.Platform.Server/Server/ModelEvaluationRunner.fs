@@ -455,6 +455,7 @@ type ModelEvaluationRunner
                                                     ScopeId = request.ScopeId
                                                 }
                                             )
+                                            |> AuditRow.orRefuse
 
                                         return Ok run
         }
@@ -695,6 +696,7 @@ type ChampionChallengerGate
                                     ScopeId = scopeId
                                 }
                             )
+                            |> AuditRow.orRefuse
 
                         return Error(PromotionError.GateRefused verdict)
         }

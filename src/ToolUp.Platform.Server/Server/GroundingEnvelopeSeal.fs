@@ -913,7 +913,9 @@ module GroundingEnvelopeMutator =
 
                 match outcome with
                 | Ok record ->
-                    do! auditLog.Record(scopeId, AuditEvent.GroundingEnvelopeMutated(mutatedPayload profile record))
+                    do!
+                        auditLog.Record(scopeId, AuditEvent.GroundingEnvelopeMutated(mutatedPayload profile record))
+                        |> AuditRow.orRefuse
 
                     return Ok record
                 | Error(currentDigest, liveDigest, refusals) ->
@@ -924,6 +926,7 @@ module GroundingEnvelopeMutator =
                                 refusedPayload profile request currentDigest liveDigest refusals
                             )
                         )
+                        |> AuditRow.orRefuse
 
                     return Error refusals
             }

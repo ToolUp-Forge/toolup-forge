@@ -286,6 +286,7 @@ let emitIngestionDrop
                             Reason = reason
                         }
                     )
+                    |> AuditRow.orRefuse
             with ex ->
                 logger.Warn(
                     sprintf "[RAGCompose] KnowledgeIngestionDropped audit write failed for %s: %s" docId ex.Message

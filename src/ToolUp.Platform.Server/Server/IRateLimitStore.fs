@@ -125,6 +125,7 @@ module RateLimitVerdict =
                             Reason = sprintf "rate-limit store failed under StorePosture.FailClosed: %s" reason
                         }
                     )
+                    |> AuditRow.bestEffort
             with _ ->
                 ()
         | None -> ()

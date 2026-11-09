@@ -257,7 +257,11 @@ type private RecordingAuditLog() =
             | _ -> None)
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async { recorded.Add((scopeId, audit)) }
+        member _.Record(scopeId, audit) = async {
+            recorded.Add((scopeId, audit))
+            return Ok()
+        }
+
         member _.GetAuditTrail(_scopeId, _dateRange, _eventType) = async { return [] }
 
 /// `IAuditLog` whose writes always throw — the flaky-store control. The

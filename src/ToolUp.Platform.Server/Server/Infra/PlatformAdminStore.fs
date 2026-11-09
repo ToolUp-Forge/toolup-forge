@@ -118,8 +118,10 @@ type BlobBackedPlatformAdminStore(storage: IBlobStorage, auditLog: IAuditLog, ?d
             | Ok(Error refusal) -> return Error refusal
             | Ok(Ok false) -> return Ok()
             | Ok(Ok true) ->
-                do! auditLog.Record(platformContainer, audit)
-                return Ok()
+                // The row is propagated: a refused row answers the change's
+                // own error channel.
+                let! recorded = AuditRow.emit auditLog platformContainer audit
+                return recorded |> Result.mapError AuditWriteError.describe
         })
 
     interface IPlatformAdminStore with

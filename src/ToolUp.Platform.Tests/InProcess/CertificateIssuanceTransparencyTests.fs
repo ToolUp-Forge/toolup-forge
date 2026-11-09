@@ -86,7 +86,10 @@ type private RecordingAuditLog() =
     member _.All = recorded |> Seq.map snd |> List.ofSeq
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async { recorded.Enqueue((scopeId, audit)) }
+        member _.Record(scopeId, audit) = async {
+            recorded.Enqueue((scopeId, audit))
+            return Ok()
+        }
 
         member _.GetAuditTrail(scopeId, _dateRange, eventType) = async {
             return
@@ -217,7 +220,7 @@ let private perturb (storage: IBlobStorage) (transform: string list -> string li
 /// perturbation, not by an in-memory list the tamper never touched.
 type private LedgerBackedAuditLog(storage: IBlobStorage) =
     interface IAuditLog with
-        member _.Record(_scopeId, _audit) = async { return () }
+        member _.Record(_scopeId, _audit) = async { return Ok() }
 
         member _.GetAuditTrail(scopeId, _dateRange, eventType) = async {
             let! name = segmentName storage

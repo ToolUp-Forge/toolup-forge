@@ -39,7 +39,11 @@ type private CapturingAuditLog() =
     member _.Recorded = recorded |> Seq.toList
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async { recorded.Enqueue(scopeId, audit) }
+        member _.Record(scopeId, audit) = async {
+            recorded.Enqueue(scopeId, audit)
+            return Ok()
+        }
+
         member _.GetAuditTrail(_, _, _) = async { return [] }
 
 let private freshTeamStore () =
@@ -825,7 +829,10 @@ type private TrailAuditLog() =
     let recorded = ConcurrentQueue<string * AuditEvent * DateTime>()
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async { recorded.Enqueue(scopeId, audit, DateTime.UtcNow) }
+        member _.Record(scopeId, audit) = async {
+            recorded.Enqueue(scopeId, audit, DateTime.UtcNow)
+            return Ok()
+        }
 
         member _.GetAuditTrail(scopeId, dateRange, eventType) = async {
             return
@@ -959,6 +966,7 @@ let expiredInviteVisibilityTests =
                             ExpiredAt = DateTime.UtcNow.AddDays -2.0
                         }
                     )
+                |> AuditRow.orRefuse
 
             let ctx = ctxWithPendingStore storage store "alice@example.com"
             let api = teamInvitationApi sts ts (audit :> IAuditLog) cfg ctx
@@ -999,6 +1007,7 @@ let expiredInviteVisibilityTests =
                             ExpiredAt = DateTime.UtcNow.AddDays -40.0
                         }
                     )
+                |> AuditRow.orRefuse
 
             let ctx = ctxWithPendingStore storage store "alice@example.com"
             let api = teamInvitationApi sts ts (audit :> IAuditLog) cfg ctx

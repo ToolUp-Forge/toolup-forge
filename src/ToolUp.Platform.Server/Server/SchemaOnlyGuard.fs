@@ -115,7 +115,9 @@ let assertReadAllowed
             }
 
             try
-                do! auditLog.Record(scopeId, SchemaOnlyAccessAttempted payload)
+                do!
+                    auditLog.Record(scopeId, SchemaOnlyAccessAttempted payload)
+                    |> AuditRow.bestEffort
             with _ ->
                 // Audit best-effort — swallow per IAuditLog contract.
                 // The refusal still fires regardless.

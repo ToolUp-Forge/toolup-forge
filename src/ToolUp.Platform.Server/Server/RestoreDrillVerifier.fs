@@ -144,7 +144,7 @@ type RestoreDrillVerifier
         match auditLog with
         | Some log ->
             try
-                do! log.Record(BackupScope.PlatformContainer, event)
+                do! log.Record(BackupScope.PlatformContainer, event) |> AuditRow.orRefuse
             with ex ->
                 logger
                 |> Option.iter (fun l -> l.Warn(sprintf "[Phase 445] drill audit emission failed: %s" ex.Message))

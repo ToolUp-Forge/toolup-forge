@@ -468,7 +468,10 @@ module JsonRpcPeerHost =
                     OccurredAt = DateTimeOffset.UtcNow
                 }
 
-                do! auditLog.Record(PeerJob.Scope, PeerCallCompleted payload) |> Async.StartAsTask
+                do!
+                    auditLog.Record(PeerJob.Scope, PeerCallCompleted payload)
+                    |> AuditRow.orRefuse
+                    |> Async.StartAsTask
         }
 
     /// Phase 630 — the group edge's terminal-outcome row.
@@ -534,7 +537,10 @@ module JsonRpcPeerHost =
                             OccurredAt = DateTimeOffset.UtcNow
                         }
 
-                        do! auditLog.Record(PeerJob.Scope, PeerJobCompleted payload) |> Async.StartAsTask
+                        do!
+                            auditLog.Record(PeerJob.Scope, PeerJobCompleted payload)
+                            |> AuditRow.orRefuse
+                            |> Async.StartAsTask
             with _ ->
                 ()
         }

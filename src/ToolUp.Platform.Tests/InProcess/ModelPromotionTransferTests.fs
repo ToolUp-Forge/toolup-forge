@@ -64,7 +64,11 @@ type private RecordingAuditLog() =
             | _ -> None)
 
     interface IAuditLog with
-        member _.Record(_, audit) = async { recorded.Add audit }
+        member _.Record(_, audit) = async {
+            recorded.Add audit
+            return Ok()
+        }
+
         member _.GetAuditTrail(_, _, _) = async { return List.ofSeq recorded }
 
 /// A signer that mints a deterministic, verifiable-by-construction

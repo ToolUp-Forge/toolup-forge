@@ -48,7 +48,11 @@ type private RecordingAuditLog() =
     member _.Events = List.ofSeq recorded
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async { recorded.Add(scopeId, audit) }
+        member _.Record(scopeId, audit) = async {
+            recorded.Add(scopeId, audit)
+            return Ok()
+        }
+
         member _.GetAuditTrail(_, _, _) = async { return recorded |> Seq.map snd |> List.ofSeq }
 
 /// An evaluation runner whose one read raises — the Phase 645 "policy

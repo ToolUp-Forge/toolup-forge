@@ -337,6 +337,7 @@ module ModelTransition =
                             ScopeId = scopeId
                         }
                     )
+                    |> AuditRow.bestEffort
             with _ ->
                 ()
         }

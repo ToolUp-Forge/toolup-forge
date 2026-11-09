@@ -44,7 +44,11 @@ type private RecordingAuditLog() =
     member _.Events = recorded |> List.ofSeq
 
     interface IAuditLog with
-        member _.Record(_scopeId, audit) = async { recorded.Enqueue audit }
+        member _.Record(_scopeId, audit) = async {
+            recorded.Enqueue audit
+            return Ok()
+        }
+
         member this.GetAuditTrail(_scopeId, _dateRange, _eventType) = async { return this.Events }
 
 /// Records every notification published. Subscribe / Unsubscribe are

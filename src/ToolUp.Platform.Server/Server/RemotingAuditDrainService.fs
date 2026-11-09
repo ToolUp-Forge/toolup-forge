@@ -31,7 +31,10 @@ open ToolUp.Platform.Config
 let internal writeOne (logger: ILogger) (metrics: unit -> Metrics.IMetricsSink) (work: RemotingAuditWork) : Task =
     task {
         try
-            do! work.AuditLog.Record(work.ScopeId, work.Event) |> Async.StartAsTask
+            do!
+                work.AuditLog.Record(work.ScopeId, work.Event)
+                |> AuditRow.orRefuse
+                |> Async.StartAsTask
         with ex ->
             let eventTypeName = AuditEvent.eventTypeName work.Event
 

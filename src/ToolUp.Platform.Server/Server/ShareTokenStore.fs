@@ -436,7 +436,7 @@ type BlobShareTokenStore(storage: IBlobStorage, secretStore: ISecretStore, audit
             let what = sprintf "%s audit" (AuditEvent.eventTypeName event)
 
             try
-                a.Record(scopeId, event) |> Background.startAudit auditWarn what
+                a.Record(scopeId, event) |> Background.startAuditRow auditWarn what
             with ex ->
                 auditWarn what ex
         | None -> ()

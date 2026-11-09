@@ -210,7 +210,7 @@ let internal completeConnectObserved
                                         ConnectedAt = connectedAt
                                     }
                                 )
-                                |> Background.startAudit warn "OAuthConnected audit"
+                                |> Background.startAuditRow warn "OAuthConnected audit"
                             with ex ->
                                 warn "OAuthConnected audit" ex
                         | None -> ()
@@ -316,6 +316,7 @@ let private markNeedsReauthorization
                         Reason = reason
                     }
                 )
+                |> AuditRow.orRefuse
         | None -> ()
     }
 

@@ -91,7 +91,10 @@ type private CapturingAuditLog() =
             |> List.ofSeq)
 
     interface IAuditLog with
-        member _.Record(_, audit) = async { lock events (fun () -> events.Add audit) }
+        member _.Record(_, audit) = async {
+            lock events (fun () -> events.Add audit)
+            return Ok()
+        }
 
         member _.GetAuditTrail(_, _, _) = async { return lock events (fun () -> List.ofSeq events) }
 

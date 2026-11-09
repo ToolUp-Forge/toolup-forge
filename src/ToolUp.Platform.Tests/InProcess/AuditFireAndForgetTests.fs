@@ -50,7 +50,11 @@ let private healthyAuditLog () =
 
     rows,
     { new IAuditLog with
-        member _.Record(_, event) = async { rows.Enqueue event }
+        member _.Record(_, event) = async {
+            rows.Enqueue event
+            return Ok()
+        }
+
         member _.GetAuditTrail(_, _, _) = async { return [] }
     }
 

@@ -1421,7 +1421,9 @@ module BootVerificationPreflight =
                 OccurredAt = DateTimeOffset.UtcNow
             }
 
-            do! auditLog.Record(options.ScopeId, AuditEvent.CompositionVerificationRecorded payload)
+            do!
+                auditLog.Record(options.ScopeId, AuditEvent.CompositionVerificationRecorded payload)
+                |> AuditRow.orRefuse
     }
 
     /// Run the preflight against a deployment that may have
@@ -1538,6 +1540,7 @@ module VerifiedCompositionProfile =
         (denial: CapabilityDenial)
         : Async<unit> =
         auditLog.Record(scopeId, AuditEvent.CompositionCapabilityRefused(refusalPayload profile denial))
+        |> AuditRow.orRefuse
 
     /// The warning a failed refusal audit write is logged as.
     let private refusalWarn =

@@ -930,7 +930,9 @@ let runVerificationStageWithScope
                     let! winner = Task.WhenAny(recordTask :> Task, timeoutTask) |> Async.AwaitTask
 
                     if winner = (recordTask :> Task) then
-                        do! recordTask |> Async.AwaitTask
+                        // Best-effort: the conversation is unaffected by the row.
+                        let! _ = recordTask |> Async.AwaitTask
+                        ()
                     else
                         logger.Warn
                             $"AI answer-verification audit row timed out (taskId={taskId}); record dropped, conversation unaffected."

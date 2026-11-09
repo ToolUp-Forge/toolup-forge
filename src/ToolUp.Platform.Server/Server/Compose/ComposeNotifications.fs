@@ -211,7 +211,8 @@ let buildNotificationStack
                 resolvedLogger,
                 metricsSinkLookup,
                 config.AuditFailurePolicy,
-                ?fallbackStore = auditFallbackStore
+                ?fallbackStore = auditFallbackStore,
+                chainHeadStorage = resolvedBlobStorage
             )
             :> _
 

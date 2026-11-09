@@ -158,6 +158,7 @@ type ExternalContactConsentFilter
                             CorrelationId = correlationId
                         }
                     )
+                    |> AuditRow.orRefuse
         }
 
     /// Production shape: the system clock.

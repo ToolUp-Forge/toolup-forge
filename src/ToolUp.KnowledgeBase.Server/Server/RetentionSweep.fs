@@ -304,6 +304,7 @@ let sweepScope
                                     OrphanChunkCount = orphanChunks
                                 }
                             )
+                            |> AuditRow.orRefuse
                     | None -> ()
 
                     logger.Info(

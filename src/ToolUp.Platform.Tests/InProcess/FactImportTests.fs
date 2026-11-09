@@ -80,7 +80,10 @@ type private RecordingAuditLog() =
         this.Events |> List.filter (fun e -> AuditEvent.eventTypeName e = name)
 
     interface IAuditLog with
-        member _.Record(_scopeId, audit) = async { recorded.Enqueue audit }
+        member _.Record(_scopeId, audit) = async {
+            recorded.Enqueue audit
+            return Ok()
+        }
 
         member _.GetAuditTrail(_scopeId, _dateRange, _eventType) = async { return recorded |> List.ofSeq }
 

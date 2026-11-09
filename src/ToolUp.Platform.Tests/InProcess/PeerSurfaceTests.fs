@@ -475,7 +475,7 @@ let tests =
             // if the host's registration drifts, this fails.
             let inertAudit =
                 { new IAuditLog with
-                    member _.Record(_, _) = async.Return()
+                    member _.Record(_, _) = async.Return(Ok())
                     member _.GetAuditTrail(_, _, _) = async.Return []
                 }
 

@@ -184,3 +184,34 @@ let internal startAudit (warn: string -> exn -> unit) (what: string) (work: Asyn
         | Choice2Of2 ex -> warn what ex
     }
     |> Async.Start
+
+/// `startAudit` for an audit row: the fire-and-forget shape over
+/// `IAuditLog.Record`, for a site that chose not to await its row (the
+/// response never waits on it and never changes because of it). A row the
+/// log refused reaches `warn` exactly as a write that raised does.
+let internal startAuditRow
+    (warn: string -> exn -> unit)
+    (what: string)
+    (row: Async<Result<unit, AuditWriteError>>)
+    : unit =
+    startAudit
+        warn
+        what
+        (async {
+            match! row with
+            | Ok() -> ()
+            | Error e -> warn what (Exception(AuditWriteError.describe e))
+        })
+
+/// The detached shape for a row its site must never wait on — a refusal
+/// whose row must not delay or alter it. The row starts IMMEDIATELY on the
+/// caller's thread and continues detached at its first asynchronous step, so
+/// a log that completes synchronously has recorded the row before this
+/// returns. Never raises; the log has already counted and logged a failure.
+let internal startAuditRowImmediate (row: Async<Result<unit, AuditWriteError>>) : unit =
+    Async.StartImmediate(
+        async {
+            let! _ = Async.Catch row
+            return ()
+        }
+    )

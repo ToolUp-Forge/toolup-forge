@@ -125,6 +125,7 @@ type private GatedAuditLog(gate: Task) =
         member _.Record(scopeId, audit) = async {
             do! gate |> Async.AwaitTask
             written.Enqueue(scopeId, audit)
+            return Ok()
         }
 
         member _.GetAuditTrail(_, _, _) = async { return [] }

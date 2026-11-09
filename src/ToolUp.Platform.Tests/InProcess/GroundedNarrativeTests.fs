@@ -2202,7 +2202,11 @@ let private promptApi
 
     services.AddSingleton<IAuditLog>(
         { new IAuditLog with
-            member _.Record(stream, event) = async { audit.Enqueue((stream, event)) }
+            member _.Record(stream, event) = async {
+                audit.Enqueue((stream, event))
+                return Ok()
+            }
+
             member _.GetAuditTrail(_, _, _) = async { return [] }
         }
     )

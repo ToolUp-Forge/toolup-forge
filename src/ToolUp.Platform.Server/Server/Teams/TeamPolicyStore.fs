@@ -411,6 +411,7 @@ module OutputVisibilityAudit =
                                 ]
                         }
                     )
+                    |> AuditRow.orRefuse
             | None -> ()
         }
 

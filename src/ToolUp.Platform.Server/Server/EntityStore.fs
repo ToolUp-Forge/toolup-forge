@@ -556,22 +556,21 @@ type BlobEntityStore
                     do! idx.Upsert scope core.Id chunk
             | _ -> ()
 
-            // Emit audit event. Best-effort — exceptions swallowed so
-            // audit emission never fails the primary write.
+            // The lifecycle row records a write that has ALREADY committed: a
+            // refusal now would report a persisted entity as failed, so the
+            // row is best-effort here and the seam counts and logs a loss.
             match auditLog with
             | Some log ->
-                try
-                    let payload = lifecyclePayload actor core.Type core.Id newVersion
+                let payload = lifecyclePayload actor core.Type core.Id newVersion
 
-                    let evt =
-                        if newVersion = 1 then
-                            EntityCreated payload
-                        else
-                            EntityUpdated payload
+                let evt =
+                    if newVersion = 1 then
+                        EntityCreated payload
+                    else
+                        EntityUpdated payload
 
-                    do! log.Record(scopeId, evt)
-                with _ ->
-                    ()
+                // best-effort-write: the entity write has committed; its row cannot un-commit it
+                do! AuditRow.emit log scopeId evt |> AuditRow.bestEffort
             | None -> ()
 
             return refFromDataObject<'T> savedObject core.Id core.Type
@@ -688,14 +687,13 @@ type BlobEntityStore
                     if headVersion > 0 then
                         match auditLog with
                         | Some log ->
-                            try
-                                do!
-                                    log.Record(
-                                        scopeId,
-                                        EntityDeleted(lifecyclePayload actor entityType entityId headVersion)
-                                    )
-                            with _ ->
-                                ()
+                            // best-effort-write: the delete has committed; its row cannot un-commit it
+                            do!
+                                AuditRow.emit
+                                    log
+                                    scopeId
+                                    (EntityDeleted(lifecyclePayload actor entityType entityId headVersion))
+                                |> AuditRow.bestEffort
                         | None -> ()
 
                     return Ok()

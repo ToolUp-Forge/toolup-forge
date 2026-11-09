@@ -393,7 +393,9 @@ let private recordDelivery (ctx: HttpContext) (container: string) (id: MediaId) 
         }
 
         try
-            log.Record(container, MediaKeyDelivered payload) |> Async.Start
+            log.Record(container, MediaKeyDelivered payload)
+            |> AuditRow.bestEffort
+            |> Async.Start
         with _ ->
             ()
 

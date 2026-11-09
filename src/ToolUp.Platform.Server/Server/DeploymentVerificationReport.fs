@@ -3370,7 +3370,9 @@ module DeploymentVerificationReport =
                 OccurredAt = DateTimeOffset.UtcNow
             }
 
-            do! auditLog.Record(PlatformScopeId, DeploymentVerified payload)
+            do!
+                auditLog.Record(PlatformScopeId, DeploymentVerified payload)
+                |> AuditRow.orRefuse
         | _ -> ()
     }
 

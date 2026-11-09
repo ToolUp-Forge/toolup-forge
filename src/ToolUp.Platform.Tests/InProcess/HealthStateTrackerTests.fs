@@ -59,7 +59,10 @@ type private FakeAuditLog() =
         |> Seq.toList
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async { captured.Add(scopeId, audit) }
+        member _.Record(scopeId, audit) = async {
+            captured.Add(scopeId, audit)
+            return Ok()
+        }
         // Tests don't exercise the read side — the tracker is a
         // write-only consumer of IAuditLog.
         member _.GetAuditTrail(_, _, _) = async { return [] }

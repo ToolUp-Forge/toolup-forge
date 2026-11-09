@@ -199,6 +199,7 @@ let auditToLog (auditLog: IAuditLog) : AuditOnDsr =
         }
 
         auditLog.Record(ev.ScopeId, AuditEvent.DataSubjectRequest payload)
+        |> AuditRow.orRefuse
 
 /// Phase 9h.A — substrate the async export methods route through. Built
 /// per-request by the compose mount when
