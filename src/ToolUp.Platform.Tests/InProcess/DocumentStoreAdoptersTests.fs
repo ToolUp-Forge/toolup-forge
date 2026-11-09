@@ -235,4 +235,26 @@ let tests =
 
             expectSetAside storage platform name
         }
+
+        test "NotificationAddressBook — an undecodable contact is no address by decision, and is set aside" {
+            let name = "contacts/t1/u1.json"
+            let storage = planted platform name
+            let warned = ResizeArray<string>()
+
+            let logger =
+                { new ILogger with
+                    member _.Debug _ = ()
+                    member _.Info _ = ()
+                    member _.Warn message = warned.Add message
+                    member _.Error(_, _) = ()
+                }
+
+            let book =
+                ToolUp.Platform.Jobs.NotificationAddressBook.BlobBackedNotificationAddressBook(storage, Some logger)
+                :> INotificationAddressBook
+
+            Expect.isNone (book.ResolveEmail(RecipientId.User(UserId "u1"), "t1") |> run) "the one send is skipped"
+            Expect.isNonEmpty warned "and never silently, as though the user had no address"
+            expectQuarantined storage platform name
+        }
     ]

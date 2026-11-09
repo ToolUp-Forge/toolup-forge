@@ -4462,7 +4462,6 @@ let main args =
         "EntityOutbox.fs"
         "ILifecycleLedger.fs"
         "ILifecycleSummaryStore.fs"
-        "NotificationAddressBook.fs"
         "Providers/BlobProviderProfile.fs"
         "Remoting/Idempotency.fs"
         "ResultStore.fs"
