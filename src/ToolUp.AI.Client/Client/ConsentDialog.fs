@@ -25,7 +25,7 @@ open ToolUp.AI
 // UI-state concern, and routing it through Elmish would put the question
 // in one surface's model — so a user chatting in the full-page assistant
 // while the side panel is collapsed, or vice versa, would answer a dialog
-// the other surface owns. `SSEClient` hands the event straight here; a
+// the other surface owns. `ChatStream.AIStream` hands the event straight here; a
 // module-level bridge holds the pending request and a mounted component
 // renders it, which is the `PromptAccessoryBridge` / `FastPathBridge`
 // idiom this tier already uses.
@@ -81,8 +81,8 @@ let subscribe (listener: PendingConsentRequest list -> unit) : unit -> unit =
 
     fun () -> listeners <- listeners |> List.filter (fun l -> not (obj.ReferenceEquals(l, listener)))
 
-/// Phase 36.D: handle an incoming `AIConsentRequired` SSE event. Called by
-/// `SSEClient.subscribe`, not dispatched into Elmish — see the module
+/// Handle an incoming `AIConsentRequired` SSE event. Called once per tab by
+/// `ChatStream.AIStream`, not dispatched into Elmish — see the module
 /// header for why.
 ///
 /// Idempotent on `ConsentId`: SSE delivery can repeat across a reconnect,
