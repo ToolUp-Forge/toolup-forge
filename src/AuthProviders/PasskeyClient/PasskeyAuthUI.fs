@@ -26,19 +26,13 @@ let private pageFrame (children: ReactElement list) : ReactElement =
         ]
     ]
 
-// Phase 751 — the two plain public render functions gained additive
-// `…With` variants rather than a widened arity, which would read as a
-// REMOVAL in the public-API approval baseline (444's recorded pattern).
-// `SignInScreen` needs neither: it is already a component, so it reads
-// the catalog with the ordinary hook and its arity is untouched.
+// Each screen takes the resolved `AuthMessages`; the shell wrapper below is
+// a component and reads them with `MessageCatalogProvider.useMessages`.
 
 let LoadingScreenWith (msgs: AuthMessages) : ReactElement =
     pageFrame [
         Html.div [ prop.className $"{Tokens.Text.secondary} text-sm"; prop.text msgs.SigningIn ]
     ]
-
-let LoadingScreen () : ReactElement =
-    LoadingScreenWith MessageCatalog.english.Auth
 
 [<ReactComponent>]
 let SignInScreen
@@ -109,9 +103,6 @@ let ErrorScreenWith (msgs: AuthMessages) (message: string) (onRetry: unit -> uni
             prop.onClick (fun _ -> onRetry ())
         ]
     ]
-
-let ErrorScreen (message: string) (onRetry: unit -> unit) : ReactElement =
-    ErrorScreenWith MessageCatalog.english.Auth message onRetry
 
 // ─── Shell wrapper ───────────────────────────────────────────────────
 //
