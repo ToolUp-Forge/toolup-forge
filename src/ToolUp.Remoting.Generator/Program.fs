@@ -9,7 +9,7 @@ open System.Reflection
 open ToolUp.Remoting.Generator
 
 // =============================================================================
-// Phase 69k.A — the generator's command line
+// The generator's command line
 // =============================================================================
 //
 // A dev-time tool over a BUILT assembly, not an in-compiler generator. `Plan`'s
@@ -26,11 +26,11 @@ open ToolUp.Remoting.Generator
 //              nobody declared; this can.
 //   decoders — emit a registration module for the named API records.
 //   dispatch — emit the typed argument-parse table for one API record.
-//   json-decoders  — (Phase 853, exposing Phase 841) emit the JSON algebra
+//   json-decoders  — emit the JSON algebra
 //              decoders for the ARGUMENTS the named records' methods take,
 //              each registered scoped to its record — the server's
 //              argument seam reads through them.
-//   client-proxies — (Phase 853) emit generated client proxies: argument
+//   client-proxies — emit generated client proxies: argument
 //              encoders, response decoders and one proxy builder per record,
 //              which `Api.makeProxy` uses in place of the reflective proxy.
 
@@ -41,6 +41,7 @@ let private usage =
   decoders --assembly <path> --out <file> [--namespace N] [--module M]
            [--open NS]... [--api-record FullName]... [--corpus-covered FullName]...
   dispatch --assembly <path> --api-record <FullName> --out <file> [--namespace N]
+           [--server-assembly <path to ToolUp.Platform.Server.Remoting.dll>]
   json-decoders  --assembly <path> --out <file> [--namespace N] [--module M]
                  [--open NS]... [--api-record FullName]...
   client-proxies --assembly <path> --out <file> [--namespace N] [--module M]
@@ -62,7 +63,7 @@ let private parse (argv: string list) =
 
     go [] argv
 
-/// Phase 804 — a repeated flag also accepts a `;`-separated list in one
+/// A repeated flag also accepts a `;`-separated list in one
 /// value (`--api-record "A;B"`), because that is the shape MSBuild item
 /// metadata arrives in: the build-time target hands `%(ApiRecords)`
 /// through verbatim rather than re-splitting it in XML.
@@ -80,7 +81,7 @@ let private required name args =
     | Some v -> v
     | None -> failwithf "--%s is required" name
 
-/// Phase 804 — write only when the text differs. The build-time target runs
+/// Write only when the text differs. The build-time target runs
 /// this tool after every build of the declaring project, and the emitted
 /// file is a `<Compile>` input of a sibling project; rewriting identical
 /// bytes would move its timestamp and force that sibling to recompile on
@@ -197,7 +198,7 @@ let private opensFor (args: (string * string) list) (roots: Type list) =
     | [] -> Plan.namespacesReachedBy roots
     | given -> given
 
-/// Phase 853 — Phase 841's argument-decoder emission, exposed: what
+/// Phase 841's argument-decoder emission, exposed: what
 /// ToolUp.Platform.Core's `PlatformJsonDecoders` is, for a consumer's own
 /// records.
 let private jsonDecoders (records: Type list) (args: (string * string) list) =
@@ -227,7 +228,7 @@ let private jsonDecoders (records: Type list) (args: (string * string) list) =
 
     printfn "%s" (Emit.refusalReport plan)
 
-/// Phase 853 — generated client proxies for the named records.
+/// Generated client proxies for the named records.
 let private clientProxies (records: Type list) (args: (string * string) list) =
     let plan = Plan.forClientProxies records
 
@@ -264,6 +265,11 @@ let private dispatch (records: Type list) (args: (string * string) list) =
 
     let out = required "out" args
     let ns = defaultArg (value "namespace" args) "ToolUp.Remoting.Server.Generated"
+
+    // The contract is emitted by the server's own reader: load it from where
+    // the caller says, when it is not beside the API record's assembly.
+    value "server-assembly" args |> Option.iter (load >> ignore)
+
     let table = Dispatch.tableFor record
 
     let written =

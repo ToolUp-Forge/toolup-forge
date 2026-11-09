@@ -42,6 +42,8 @@
         <Compile Include="..\ToolUp.Platform.Tests\Remoting\ReadPolicyAttributeTests.fs" Link="Remoting\ReadPolicyAttributeTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Remoting\ReadCatalogClientProxies.fs" Link="Remoting\ReadCatalogClientProxies.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Remoting\RemotingBatchTests.fs" Link="Remoting\RemotingBatchTests.fs" />
+        <Compile Include="..\..\samples\HelloWorld-AOT\HelloWorld.AOT.Contract\CorpusApi.fs" Link="Remoting\CorpusApi.fs" />
+        <Compile Include="..\..\samples\HelloWorld-AOT\HelloWorld.AOT\Generated\CorpusApiDispatch.fs" Link="Remoting\CorpusApiDispatch.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Remoting\GeneratorFidelityTests.fs" Link="Remoting\GeneratorFidelityTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Remoting\ClientEncoderFixture.fs" Link="Remoting\ClientEncoderFixture.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Remoting\ClientProxyGenerationTests.fs" Link="Remoting\ClientProxyGenerationTests.fs" />
