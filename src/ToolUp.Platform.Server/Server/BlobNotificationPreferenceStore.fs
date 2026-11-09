@@ -4,11 +4,9 @@
 module ToolUp.Platform.Jobs.BlobNotificationPreferenceStore
 
 open System
-open System.Text
-open System.Text.Json
-open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.Infra
 
 // ─── Phase 441 — blob-backed INotificationPreferenceStore ────────────
 //
@@ -33,22 +31,16 @@ open ToolUp.Platform.BlobStorage
 // any backend that sorts names, and the sort here makes it true on the
 // ones that do not.
 //
-// Watermarks (`digest/{user}.json`) are written by the digest job
-// alone, so a plain overwrite is safe.
+// Every document reads and writes through `BlobDocumentStore`. A record
+// that cannot be READ refuses (preferences) or is logged and skipped (a
+// listing). One that does not DECODE is set aside by the store; a corrupt
+// preference record then reads as "nothing chosen" by decision (a corrupt
+// record must not block every send to the user), and the next save — or,
+// for watermarks, the digest job's next write — starts it again.
 
 let private platformContainer = ScopeKey.PlatformContainer
+
 let private root = "notification-preferences"
-
-let private jsonOptions = PlatformJson.options
-
-let private serialise (value: 'T) : byte[] =
-    Encoding.UTF8.GetBytes(JsonSerializer.Serialize(value, jsonOptions))
-
-let private tryDeserialise<'T> (bytes: byte[]) : 'T option =
-    try
-        Some(JsonSerializer.Deserialize<'T>(Encoding.UTF8.GetString bytes, jsonOptions))
-    with _ ->
-        None
 
 let private seg (value: string) : string = Uri.EscapeDataString value
 let private unseg (value: string) : string = Uri.UnescapeDataString value
@@ -80,6 +72,23 @@ type BlobNotificationPreferenceStore(storage: IBlobStorage, logger: ILogger opti
     let warn (message: string) =
         logger |> Option.iter (fun l -> l.Warn message)
 
+    let storeLogger =
+        logger
+        |> Option.defaultWith (fun () -> JsonConsoleLogger.JsonConsoleLogger() :> ILogger)
+
+    let preferences =
+        BlobDocumentStore<UserNotificationPreferences>(
+            storage,
+            BlobCodec.json<UserNotificationPreferences>,
+            storeLogger
+        )
+
+    let pending =
+        BlobDocumentStore<PendingNotification>(storage, BlobCodec.json<PendingNotification>, storeLogger)
+
+    let watermarks =
+        BlobDocumentStore<Map<string, DateTime>>(storage, BlobCodec.json<Map<string, DateTime>>, storeLogger)
+
     let listNames (prefix: string) = async {
         let! names = storage.List(platformContainer, prefix)
         return names |> List.sort
@@ -87,50 +96,49 @@ type BlobNotificationPreferenceStore(storage: IBlobStorage, logger: ILogger opti
 
     interface INotificationPreferenceStore with
         member _.GetPreferences(scopeId, userId) = async {
-            let name = prefsBlob scopeId userId.Value
-            let! exists = storage.Exists(platformContainer, name)
+            let path = DocPath.ofString (prefsBlob scopeId userId.Value)
 
-            if not exists then
+            match! preferences.Read(ScopeKey.platform, path) with
+            | Ok(Some prefs) -> return Ok prefs
+            | Ok None -> return Ok UserNotificationPreferences.empty
+            | Error(BlobMapStoreError.Quarantined _ as e) ->
+                // A corrupt record reads as "nothing chosen" rather than
+                // blocking every send to the user; the store set its bytes
+                // aside, and the warning is the operator's cue.
+                warn $"[NotificationPreferences] {BlobMapStoreError.describe e}; treating as empty"
                 return Ok UserNotificationPreferences.empty
-            else
-                match! storage.Download(platformContainer, name) with
-                | Error e -> return Error $"Could not read notification preferences for {userId}: {e}"
-                | Ok bytes ->
-                    match tryDeserialise<UserNotificationPreferences> bytes with
-                    | Some prefs -> return Ok prefs
-                    | None ->
-                        // A corrupt record reads as "nothing chosen" rather
-                        // than blocking every send to the user; the warning
-                        // is the operator's cue to inspect the blob.
-                        warn $"[NotificationPreferences] unreadable preference record at {name}; treating as empty"
-                        return Ok UserNotificationPreferences.empty
+            | Error e ->
+                return Error $"Could not read notification preferences for {userId}: {BlobMapStoreError.describe e}"
         }
 
-        member _.SavePreferences(scopeId, userId, preferences) = async {
-            match! storage.Upload(platformContainer, prefsBlob scopeId userId.Value, serialise preferences) with
-            | Ok _ -> return Ok()
-            | Error e -> return Error $"Could not save notification preferences for {userId}: {e}"
+        member _.SavePreferences(scopeId, userId, value) = async {
+            let path = DocPath.ofString (prefsBlob scopeId userId.Value)
+
+            match! preferences.Replace(ScopeKey.platform, path, value) with
+            | Ok() -> return Ok()
+            | Error e ->
+                return Error $"Could not save notification preferences for {userId}: {BlobMapStoreError.describe e}"
         }
 
         member _.Enqueue(scopeId, item) = async {
-            match! storage.Upload(platformContainer, pendingBlob scopeId item, serialise item) with
+            match!
+                storage.Upload(
+                    platformContainer,
+                    pendingBlob scopeId item,
+                    BlobCodec.json<PendingNotification>.Encode item
+                )
+            with
             | Ok _ -> return Ok()
             | Error e -> return Error $"Could not hold notification {item.Id} for {item.UserId}: {e}"
         }
 
         member _.ListPending(scopeId, userId) = async {
             let! names = listNames (pendingPrefix scopeId userId.Value)
-            let items = ResizeArray<PendingNotification>()
 
-            for name in names do
-                match! storage.Download(platformContainer, name) with
-                | Ok bytes ->
-                    match tryDeserialise<PendingNotification> bytes with
-                    | Some item -> items.Add item
-                    | None -> warn $"[NotificationPreferences] unreadable pending item at {name}; skipped"
-                | Error e -> warn $"[NotificationPreferences] could not read pending item at {name}: {e}"
+            let! items =
+                BlobDocuments.readAvailable pending storeLogger "NotificationPreferences" ScopeKey.platform names
 
-            return items |> Seq.sortBy (fun i -> i.QueuedAt, i.Id) |> List.ofSeq
+            return items |> List.sortBy (fun i -> i.QueuedAt, i.Id)
         }
 
         member _.Remove(scopeId, userId, ids) = async {
@@ -179,29 +187,38 @@ type BlobNotificationPreferenceStore(storage: IBlobStorage, logger: ILogger opti
         }
 
         member _.GetDigestWatermarks(scopeId, userId) = async {
-            let name = digestBlob scopeId userId.Value
-            let! exists = storage.Exists(platformContainer, name)
-
-            if not exists then
+            match! watermarks.Read(ScopeKey.platform, DocPath.ofString (digestBlob scopeId userId.Value)) with
+            | Ok(Some marks) -> return marks
+            | Ok None -> return Map.empty
+            | Error e ->
+                warn $"[NotificationPreferences] digest watermarks unavailable: {BlobMapStoreError.describe e}"
                 return Map.empty
-            else
-                match! storage.Download(platformContainer, name) with
-                | Ok bytes -> return tryDeserialise<Map<string, DateTime>> bytes |> Option.defaultValue Map.empty
-                | Error e ->
-                    warn $"[NotificationPreferences] could not read digest watermarks at {name}: {e}"
-                    return Map.empty
         }
 
-        member this.SetDigestWatermark(scopeId, userId, frequency, sentAt) = async {
-            let! current = (this :> INotificationPreferenceStore).GetDigestWatermarks(scopeId, userId)
+        member _.SetDigestWatermark(scopeId, userId, frequency, sentAt) = async {
+            let key = DigestFrequency.toWireString frequency
+            let path = DocPath.ofString (digestBlob scopeId userId.Value)
 
-            let updated =
-                current
-                |> Map.add (DigestFrequency.toWireString frequency) (sentAt.ToUniversalTime())
+            // One guarded update: a read failure writes nothing (it used to
+            // read as "no watermarks" and erase the other frequencies'),
+            // and an undecodable map is set aside and started again — the
+            // cost is one digest window, never a send to an opted-out user.
+            let! written =
+                watermarks.UpdateOrRestart(
+                    ScopeKey.platform,
+                    path,
+                    fun current ->
+                        let marks =
+                            current
+                            |> Option.defaultValue Map.empty
+                            |> Map.add key (sentAt.ToUniversalTime())
 
-            match! storage.Upload(platformContainer, digestBlob scopeId userId.Value, serialise updated) with
-            | Ok _ -> return Ok()
-            | Error e -> return Error $"Could not record digest watermark for {userId}: {e}"
+                        BlobUpdate.Write(marks, ())
+                )
+
+            match written with
+            | Ok() -> return Ok()
+            | Error e -> return Error $"Could not record digest watermark for {userId}: {BlobMapStoreError.describe e}"
         }
 
 /// Construct the default store over the composed `IBlobStorage`.

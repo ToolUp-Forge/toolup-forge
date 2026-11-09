@@ -257,4 +257,30 @@ let tests =
             Expect.isNonEmpty warned "and never silently, as though the user had no address"
             expectQuarantined storage platform name
         }
+
+        test
+            "NotificationPreferenceStore — an undecodable watermark map is set aside, and the next digest starts it again" {
+            let name = "notification-preferences/t1/digest/u1.json"
+            let storage = planted platform name
+
+            let store =
+                ToolUp.Platform.Jobs.BlobNotificationPreferenceStore.create storage (Some silentLogger)
+
+            Expect.isEmpty (store.GetDigestWatermarks("t1", UserId "u1") |> run) "no watermark is vouched for"
+
+            let sentAt = DateTime(2026, 11, 9, 8, 0, 0, DateTimeKind.Utc)
+
+            Expect.equal
+                (store.SetDigestWatermark("t1", UserId "u1", DigestFrequency.Daily, sentAt)
+                 |> run)
+                (Ok())
+                "the digest job is not wedged behind the corrupt map"
+
+            Expect.equal
+                (store.GetDigestWatermarks("t1", UserId "u1") |> run)
+                (Map [ DigestFrequency.toWireString DigestFrequency.Daily, sentAt ])
+                "the new watermark reads back"
+
+            expectSetAside storage platform name
+        }
     ]

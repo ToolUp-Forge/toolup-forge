@@ -4455,7 +4455,6 @@ let main args =
         "AuditReplicator.fs"
         "BlobBackedBackgroundExportStore.fs"
         "BlobCrdtDocumentStore.fs"
-        "BlobNotificationPreferenceStore.fs"
         "BudgetLedger.fs"
         "ConfigDriftDetector.fs"
         // Excluded from the move by Phase 1061's own rule until 976 and 979 ship.
