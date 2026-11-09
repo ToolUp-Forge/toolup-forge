@@ -115,7 +115,7 @@ type OfflineEntityReplay = {
 /// through DUs, options and Maps exactly as a live write would. Using a
 /// different serialiser here would be a silent wire fork.
 module private Json =
-    let private options = FableConverters.create ()
+    let private options = PlatformJson.options
 
     let serialize<'T> (value: 'T) : string =
         JsonSerializer.Serialize(value, options)
