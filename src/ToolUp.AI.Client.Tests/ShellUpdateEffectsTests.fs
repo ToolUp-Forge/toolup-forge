@@ -149,7 +149,7 @@ let private recordPublishes () =
 
 let private permissionsModel: PermissionsAdminUI.Model = {
     ActiveTab = PermissionsAdminUI.ModulesTab
-    Snapshot = PermissionsAdminUI.NotLoaded
+    Snapshot = Remote.NotAsked
     EditingDefaults = None
     SelectedMember = None
     EditingMembers = Map.empty
@@ -591,7 +591,11 @@ let tests =
                         ))
                         permissionsModel
 
-                Expect.equal (model.Banner |> Option.map fst) (Some false) "success is not an error")
+                Expect.isTrue
+                    (match model.Banner with
+                     | Some(Notice.Info _) -> true
+                     | _ -> false)
+                    "success is not an error")
 
             testCase "a failed exposure change shows the error banner" (fun () ->
                 let model, _ =
@@ -604,6 +608,10 @@ let tests =
                         ))
                         permissionsModel
 
-                Expect.equal (model.Banner |> Option.map fst) (Some true) "failure is an error")
+                Expect.isTrue
+                    (match model.Banner with
+                     | Some(Notice.Problem _) -> true
+                     | _ -> false)
+                    "failure is an error")
         ]
     ]
