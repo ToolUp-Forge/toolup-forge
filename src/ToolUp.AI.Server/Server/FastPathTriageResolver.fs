@@ -1261,7 +1261,7 @@ let private emitTelemetry (ctx: HttpContext) (payload: TriageEventPayload) : Asy
         }
 
         try
-            do! store.Write evt
+            do! EventStore.writeOrRaise store evt
         with ex ->
             logger.Warn
                 $"FastPath triage telemetry write failed (conversation={payload.ConversationId}, outcome={payload.Outcome}): {ex.Message}. Row dropped; conversation unaffected."

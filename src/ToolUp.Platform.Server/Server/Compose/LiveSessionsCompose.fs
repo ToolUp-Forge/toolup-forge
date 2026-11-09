@@ -176,17 +176,18 @@ module LiveSessionHandler =
                         | None
                         | Some(RateLimitVerdict.Answered(Admission.Admit _))
                         | Some(RateLimitVerdict.AdmittedOnStoreFailure _) ->
-                            // Phase 870 — every byte after the headers goes
-                            // through ONE writer: a bounded single-reader
+                            // Every byte after the headers goes through ONE
+                            // writer (Phase 870): a bounded single-reader
                             // queue drained by a loop that awaits each write
                             // and flush — `SSEConnectionManager`'s
                             // `ConnectionWriter`, reused rather than copied.
-                            // `ILiveSessionHost.Subscribe`'s callback is
-                            // `string -> unit`, so it cannot await a write;
-                            // it only queues. Kestrel refuses a write issued
-                            // while another is in flight, so the callback
-                            // writing directly raced two close frames and
-                            // faulted inside a task nobody observed.
+                            // The handler is asynchronous now,
+                            // but awaiting it does not remove the need for
+                            // the queue: two concurrent pushes, and the
+                            // keepalive below, are still separate writers,
+                            // and Kestrel refuses a write issued while
+                            // another is in flight. The queue is what makes
+                            // them one; the handler only enqueues.
                             let logger =
                                 match ctx.RequestServices.GetService(typeof<ILogger>) with
                                 | :? ILogger as l -> Some l
@@ -270,9 +271,10 @@ module LiveSessionHandler =
                             // Subscribe inside the caller's own scope
                             // partition — a cross-scope session id resolves
                             // to None here, structurally (GP 4).
-                            let writeFrame (payload: string) =
+                            let writeFrame (payload: string) = async {
                                 if not ctx.RequestAborted.IsCancellationRequested then
                                     enqueue (SSE.namedFrame FrameEventName payload)
+                            }
 
                             let stopWriter () = task {
                                 Volatile.Write(&stopping.contents, 1)

@@ -145,7 +145,10 @@ let runIfEnabled
                     // arm is defensive.
                     match eventStore with
                     | Some es ->
-                        do! es.Write(Events.create PlatformContainer SeedSourceModule SeedAppliedEventType payload)
+                        do!
+                            EventStore.writeOrRaise
+                                es
+                                (Events.create PlatformContainer SeedSourceModule SeedAppliedEventType payload)
                     | None -> ()
 
                     logger.Info(sprintf "seed: applied %s@%s (%d item(s))" pack.Name pack.Version report.ItemsSeeded)

@@ -1,4 +1,4 @@
-Codemod: 97 site(s) in 18 file(s) need human review (not rewritten):
+Codemod: 102 site(s) in 19 file(s) need human review (not rewritten):
   src/Client/App.fs
     L14 [66-dev-default-user-id] DevDefaultUserId = "dev-admin"
       -> Phase 66: `ClientConfig.DevDefaultUserId` is deleted — the public-utility-with-admin shape it approximated is `Surfaces = Surfaces.anonymousAndIndividual` (worked example 4)
@@ -124,6 +124,17 @@ Codemod: 97 site(s) in 18 file(s) need human review (not rewritten):
       -> Phase 878: `StorageScope.tryTeamId` answers `TeamId option`: map `TeamId.value` where a string is needed
     L23 [878-retired-abbreviation-site] abstract Current: unit -> TenantId
       -> Phase 878: `EntityId`, `TenantId` and `ScopeId` are gone: each was an abbreviation for `string`. If this names the type, write `string`; if it is a value or a field of your own with the same name, it is unchanged
+  src/Server/Infrastructure.fs
+    L15 [873-job-transition-call] do! scheduler.Cancel(scopeId, jobId)
+      -> Phase 873: `IJobScheduler.Cancel` / `Disable` / `Enable` answer `Result<unit, JobTransitionError>`: `Busy` (an in-flight dispatch held the lease; nothing changed, retry) or `StoreFailed` — match it, render it with `JobTransitionError.message`, or `JobTransition.orRaise` where the failure path is already an exception
+    L19 [873-write-call] let! written = store.Write(e)
+      -> Phase 873: if this is `IEventStore.Write`, it answers `Result<unit, EventStoreError>`: match it where the site can decide (a lost write is `EventStoreError.WriteFailed`), or `EventStore.writeOrRaise store evt` where the failure path is already an exception
+    L24 [873-job-store-call] do! store.Update job
+      -> Phase 873: if this is an `IJobStore` write, it answers `Result<unit, JobStoreError>` (`WriteFailed` / `PriorUnreadable`): match it, or `JobStoreWrite.orRaise <| store.Save job` where the failure path is already an exception
+    L28 [873-implementer] interface IEventStore with
+      -> Phase 873: an implementer of a seam Phase 873 retyped: `IEventStore.Write` answers `Result<unit, EventStoreError>`, the `IJobStore` writes `Result<unit, JobStoreError>`, `IWebhookDispatcher.Dispatch` `Async<Result<unit, WebhookDispatchError>>` (`Dropped` when not enqueued), and `ILiveSessionHost.Subscribe` takes `string -> Async<unit>`; a decorator propagates its inner `Error` unchanged and runs its hook only after `Ok`
+    L32 [873-scheduler-implementer] member _.Cancel(scopeId, jobId) = async { return Ok() }
+      -> Phase 873: if this implements `IJobScheduler`, `Cancel` / `Disable` / `Enable` answer `Result<unit, JobTransitionError>`: a scheduler over `SchedulerPolicy.setStatus` maps its `JobStoreError` with `JobTransitionError.StoreFailed`, and a lease it could not take is `Busy`
   src/Server/Jobs.fs
     L8 [1066-schedule-call] match! scheduler.Schedule registration with
       -> Phase 1066: `Schedule` answers `Ok(Scheduled jobId)` for a job it created and `Ok(Coalesced jobId)` for one an idempotency key recovered: `Ok _` still compiles; a site that reads the id matches both (`Ok(Scheduled jobId | Coalesced jobId)`) or calls `ScheduleOutcome.jobId`, and a site that fires what it schedules fires only `Scheduled`, so a replayed request runs once
@@ -227,6 +238,7 @@ Codemod: 97 site(s) in 18 file(s) need human review (not rewritten):
     Phase 66 — docs/migrations/0.X.0-platform-mode-to-surfaces.md
     Phase 73 — docs/migrations/73-namespace-rename-to-toolup-remoting-and-toolup-elmish.md
     Phase 815 — docs/migrations/815-remove-open-deprecations.md
+    Phase 873 — docs/migrations/873-portable-infrastructure-interfaces.md
     Phase 876 — docs/migrations/876-composition-contributions.md
     Phase 877 — docs/migrations/877-nested-server-config.md
     Phase 878 — docs/migrations/878-typed-identity.md

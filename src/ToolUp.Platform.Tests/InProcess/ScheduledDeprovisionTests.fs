@@ -70,11 +70,11 @@ type private InMemoryJobScheduler() =
             | true, j -> jobs[jobId] <- { j with Status = JobStatus.Cancelled }
             | _ -> ()
 
-            return ()
+            return Ok()
         }
 
-        member _.Disable(_, _) = async { return () }
-        member _.Enable(_, _) = async { return () }
+        member _.Disable(_, _) = async { return Ok() }
+        member _.Enable(_, _) = async { return Ok() }
 
         member _.Get(_scopeId, jobId) = async {
             return

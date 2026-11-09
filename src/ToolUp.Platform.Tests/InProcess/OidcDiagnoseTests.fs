@@ -10,7 +10,7 @@ open ToolUp.AuthProviders.Oidc.OidcTokenStore
 // ─── diagnose : AuthError -> AuthDiagnostic ──────────────────────────
 //
 // `diagnose` is the developer-facing structured counterpart to
-// `describeError`. UI code consumes `describeError` (deliberately
+// `describeErrorWith`. UI code consumes `describeErrorWith` (deliberately
 // opaque on security-sensitive branches); structured logs + the auth
 // tracer consume `diagnose` (carries the withheld sub-cause + an
 // actionable hint).
@@ -20,7 +20,7 @@ open ToolUp.AuthProviders.Oidc.OidcTokenStore
 // them would invalidate every dashboard that filters on it. The
 // per-variant cases also assert that the *security-sensitive* branches
 // (signature, nonce, issuer, audience, expiry) carry a richer
-// developer-facing sub-cause than `describeError` exposes to the UI.
+// developer-facing sub-cause than `describeErrorWith` exposes to the UI.
 
 let tests: Test =
     testList "OidcClient.diagnose" [
@@ -93,15 +93,18 @@ let tests: Test =
             Expect.equal d.Kind "ID_TOKEN_MALFORMED" ""
             Expect.isSome d.SubCause ""
 
-        testCase "IdTokenSignatureInvalid (security-sensitive) → richer sub-cause than describeError"
+        testCase "IdTokenSignatureInvalid (security-sensitive) → richer sub-cause than describeErrorWith"
         <| fun () ->
             let d = diagnose IdTokenSignatureInvalid
-            let userFacing = describeError IdTokenSignatureInvalid
+
+            let userFacing =
+                describeErrorWith ToolUp.Platform.MessageCatalog.english.Auth.Errors IdTokenSignatureInvalid
+
             Expect.equal d.Kind "ID_TOKEN_SIGNATURE_INVALID" ""
             Expect.isSome d.SubCause ""
             // anti-tampering stance: user message MUST stay opaque, dev sub-cause MUST NOT.
             Expect.stringContains d.SubCause.Value "JWKS" "developer sub-cause must name the JWKS-side reason"
-            Expect.isFalse (userFacing.Contains "JWKS") "describeError must NOT leak JWKS reasoning to the UI"
+            Expect.isFalse (userFacing.Contains "JWKS") "describeErrorWith must NOT leak JWKS reasoning to the UI"
 
         testCase "IdTokenIssuerInvalid → kind + hint references Entra tenant GUID pitfall"
         <| fun () ->

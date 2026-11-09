@@ -848,7 +848,7 @@ module FactStoreMigration =
             let id = Guid.NewGuid()
 
             do!
-                events.Write {
+                EventStore.writeOrRaise events {
                     Id = id
                     OccurredAt = DateTime.UtcNow
                     ScopeId = report.Scope

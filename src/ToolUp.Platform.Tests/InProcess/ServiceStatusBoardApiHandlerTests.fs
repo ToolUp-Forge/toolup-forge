@@ -162,12 +162,12 @@ let tests =
 
             let store =
                 { new IJobStore with
-                    member _.Save(_) = async { return () }
+                    member _.Save(_) = async { return Ok() }
                     member _.Get(_, _) = async { return None }
                     member _.ListJobs(scope) = async { return jobs |> List.filter (fun j -> j.ScopeId = scope) }
-                    member _.Update(_) = async { return () }
+                    member _.Update(_) = async { return Ok() }
                     member _.FindByIdempotencyKey(_, _, _, _) = async { return None }
-                    member _.RecordRun(_) = async { return () }
+                    member _.RecordRun(_) = async { return Ok() }
                     member _.GetRecentRuns(_, _, _) = async { return [] }
                     member _.DueJobs(_, _) = async { return [] }
                     // Phase 319 — this stub exercises the job-queue
@@ -225,7 +225,7 @@ let tests =
         <| async {
             let store =
                 { new IEventStore with
-                    member _.Write(_) = async { return () }
+                    member _.Write(_) = async { return Ok() }
                     member _.ReadAll(_) = async { return [] }
                     member _.ReadByType(_, _) = async { return [] }
                     member _.ReadBySource(_, _) = async { return [] }

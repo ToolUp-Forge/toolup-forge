@@ -290,9 +290,9 @@ let tests =
             let store: IEventStore =
                 ToolUp.Platform.Infra.InMemoryEventStore.InMemoryEventStore() :> _
 
-            do! store.Write(Events.create "team-1" "m" "E" """{"userId":"u1","tag":"T1ONLY"}""")
-            do! store.Write(Events.create "team-1" "m" "E" """{"userId":"u2","tag":"OTHERUSER"}""")
-            do! store.Write(Events.create "team-2" "m" "E" """{"userId":"u1","tag":"T2ONLY"}""")
+            do! EventStore.writeOrRaise store (Events.create "team-1" "m" "E" """{"userId":"u1","tag":"T1ONLY"}""")
+            do! EventStore.writeOrRaise store (Events.create "team-1" "m" "E" """{"userId":"u2","tag":"OTHERUSER"}""")
+            do! EventStore.writeOrRaise store (Events.create "team-2" "m" "E" """{"userId":"u1","tag":"T2ONLY"}""")
 
             let exp = ToolUp.Platform.Audit.EventStoreErasureHandler.exporter store
             let! segments = exp.Export("team-1", UserId "u1")
@@ -309,9 +309,9 @@ let tests =
             let store: IEventStore =
                 ToolUp.Platform.Infra.InMemoryEventStore.InMemoryEventStore() :> _
 
-            do! store.Write(Events.create "team-1" "m" "E" """{"userId":"u1","tag":"T1ONLY"}""")
-            do! store.Write(Events.create "team-1" "m" "E" """{"userId":"u2","tag":"KEEPME"}""")
-            do! store.Write(Events.create "team-2" "m" "E" """{"userId":"u1","tag":"T2ONLY"}""")
+            do! EventStore.writeOrRaise store (Events.create "team-1" "m" "E" """{"userId":"u1","tag":"T1ONLY"}""")
+            do! EventStore.writeOrRaise store (Events.create "team-1" "m" "E" """{"userId":"u2","tag":"KEEPME"}""")
+            do! EventStore.writeOrRaise store (Events.create "team-2" "m" "E" """{"userId":"u1","tag":"T2ONLY"}""")
 
             let h = ToolUp.Platform.Audit.EventStoreErasureHandler.erasureHandler store
 
@@ -353,8 +353,8 @@ let tests =
             let store: IEventStore =
                 ToolUp.Platform.Infra.InMemoryEventStore.InMemoryEventStore() :> _
 
-            do! store.Write(Events.create "team-1" "m" "E" """{"userId":"u1"}""")
-            do! store.Write(Events.create "team-1" "m" "E" """{"userId":"u2"}""")
+            do! EventStore.writeOrRaise store (Events.create "team-1" "m" "E" """{"userId":"u1"}""")
+            do! EventStore.writeOrRaise store (Events.create "team-1" "m" "E" """{"userId":"u2"}""")
 
             let h = ToolUp.Platform.Audit.EventStoreErasureHandler.erasureHandler store
             let! result = h.Erase("team-1", UserId "u1", ErasurePolicy.HardDelete)
@@ -373,7 +373,7 @@ let tests =
             let store: IEventStore =
                 ToolUp.Platform.Infra.InMemoryEventStore.InMemoryEventStore() :> _
 
-            do! store.Write(Events.create "team-1" "m" "E" """{"userId":"u1"}""")
+            do! EventStore.writeOrRaise store (Events.create "team-1" "m" "E" """{"userId":"u1"}""")
 
             let h = ToolUp.Platform.Audit.EventStoreErasureHandler.erasureHandler store
             let! result = h.Erase("team-1", UserId "u1", ErasurePolicy.RetainPerCompliance)
@@ -391,7 +391,7 @@ let tests =
             let store: IEventStore =
                 ToolUp.Platform.Infra.InMemoryEventStore.InMemoryEventStore() :> _
 
-            do! store.Write(Events.create "team-1" "m" "E" """{"userId":"u1"}""")
+            do! EventStore.writeOrRaise store (Events.create "team-1" "m" "E" """{"userId":"u1"}""")
 
             let h = ToolUp.Platform.Audit.EventStoreErasureHandler.erasureHandler store
             let! result = h.Erase("team-1", UserId "  ", ErasurePolicy.HardDelete)

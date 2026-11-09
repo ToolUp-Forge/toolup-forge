@@ -46,6 +46,10 @@ type Model = {
     /// masked representation and the secret is gone forever (the only
     /// way to obtain a new value is another rotation).
     NewlyCreatedSecret: (Guid * string) option
+    /// This module's section of `ClientModuleContext.Messages`,
+    /// kept from `init` so `update` authors reader-facing text in the
+    /// session's language (a locale switch re-initialises the module).
+    Messages: WebhookAdminMessages
 }
 
 type Msg =
@@ -80,7 +84,7 @@ let private loadSubscriptionsCmd () =
     Cmd.OfRemoting.call webhookApi.ListSubscriptions () SubscriptionsLoaded (fun e ->
         SubscriptionsLoaded(Error e.Message))
 
-let init () =
+let init (ctx: ClientModuleContext) =
     let model = {
         Subscriptions = []
         SelectedId = None
@@ -90,6 +94,7 @@ let init () =
         Deliveries = Map.empty
         TestResults = Map.empty
         NewlyCreatedSecret = None
+        Messages = ctx.Messages.WebhookAdmin
     }
 
     model, loadSubscriptionsCmd ()
@@ -195,9 +200,7 @@ let update (msg: Msg) (model: Model) =
     | StatusUpdateCompleted(id, Ok()) ->
         {
             model with
-                Status =
-                    model.Status
-                    |> Map.add id (Done MessageCatalog.english.WebhookAdmin.StatusUpdated)
+                Status = model.Status |> Map.add id (Done model.Messages.StatusUpdated)
         },
         loadSubscriptionsCmd ()
 
@@ -267,9 +270,7 @@ let update (msg: Msg) (model: Model) =
                 // response reveals the new value transiently as `Some`.
                 NewlyCreatedSecret = Some(sub.SubscriptionId, sub.Secret |> Option.defaultValue "")
                 SelectedId = Some sub.SubscriptionId
-                Status =
-                    model.Status
-                    |> Map.add id (Done MessageCatalog.english.WebhookAdmin.SecretRotated)
+                Status = model.Status |> Map.add id (Done model.Messages.SecretRotated)
         },
         loadSubscriptionsCmd ()
 
@@ -292,7 +293,7 @@ let update (msg: Msg) (model: Model) =
         cmd
 
     | TestFireCompleted(id, Ok result) ->
-        let msgs = MessageCatalog.english.WebhookAdmin
+        let msgs = model.Messages
 
         let label =
             match result.StatusCode with
@@ -871,11 +872,12 @@ let create (config: ModuleLabel option) : ErasedModule =
     // SDK-built-in — reserved under the `_sdk.` Id namespace so it can
     // never collide with an app's RBAC-managed `ServerConfig.ModuleNames`.
     ToolUp.Platform.ClientModule.create {
-        Init = init
+        Init = fun () -> init ToolUp.Platform.ClientModuleContext.empty
         Update = update
         Name = name
         Icon = icon
     }
+    |> ToolUp.Platform.ClientModule.withContextInit init
     |> ToolUp.Platform.ClientModule.withId moduleId
     |> ToolUp.Platform.ClientModule.withFullWidthView view
     |> ToolUp.Platform.ClientModule.withGroup "Team Management"

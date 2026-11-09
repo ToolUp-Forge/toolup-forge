@@ -259,7 +259,7 @@ let writeApprovalAudit
             }
 
             try
-                do! store.Write evt
+                do! EventStore.writeOrRaise store evt
             with ex ->
                 logger.Warn
                     $"[ToolApproval] audit write failed ({eventType}, tool={pending.ToolName}, conversation={pending.ConversationId}): {ex.Message}. Record dropped; the decision still applied."

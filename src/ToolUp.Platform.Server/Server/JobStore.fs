@@ -317,18 +317,28 @@ type BlobJobStore(storage: IBlobStorage, eventStore: IEventStore) =
         // left behind in the index, scheduling a job the save replaced.
         let! prior = definitions.Read(ScopeKey.platform, definitionPath definition.ScopeId definition.JobId)
 
-        let priorBucket = prior |> DocumentUnavailable.orRaise |> Option.bind activeBucket
+        match prior with
+        | Error unavailable ->
+            return
+                Error(
+                    JobStoreError.PriorUnreadable(
+                        definition.ScopeId,
+                        definition.JobId,
+                        BlobMapStoreError.describe unavailable
+                    )
+                )
+        | Ok prior ->
+            let priorBucket = prior |> Option.bind activeBucket
+            let bytes = Json.serialize definition
 
-        let bytes = Json.serialize definition
+            let! result = storage.Upload(platformContainer, definitionBlob definition.ScopeId definition.JobId, bytes)
 
-        let! result = storage.Upload(platformContainer, definitionBlob definition.ScopeId definition.JobId, bytes)
-
-        match result with
-        | Ok _ ->
-            do! writeIdempotencyEntry definition
-            do! syncNextRunEntry priorBucket definition
-            return ()
-        | Error e -> return failwith $"JobStore: failed to persist definition {definition.JobId}: {e}"
+            match result with
+            | Ok _ ->
+                do! writeIdempotencyEntry definition
+                do! syncNextRunEntry priorBucket definition
+                return Ok()
+            | Error e -> return Error(JobStoreError.WriteFailed(definition.ScopeId, definition.JobId, "definition", e))
     }
 
     /// Re-write the idempotency and next-run indexes for `scopeId`
@@ -364,7 +374,7 @@ type BlobJobStore(storage: IBlobStorage, eventStore: IEventStore) =
             |}
 
         let evt = Events.create scopeId MaintenanceSourceModule "IndexRebuilt" payload
-        do! eventStore.Write evt
+        do! EventStore.writeOrRaise eventStore evt
 
         return defs.Length
     }
@@ -525,8 +535,8 @@ type BlobJobStore(storage: IBlobStorage, eventStore: IEventStore) =
                 // first would publish a run into the reconciliation
                 // batch that no canonical blob backs.
                 do! syncAwaitingExternalEntry run
-                return ()
-            | Error e -> return failwith $"JobStore: failed to persist run {run.RunId}: {e}"
+                return Ok()
+            | Error e -> return Error(JobStoreError.WriteFailed(run.ScopeId, run.JobId, $"run %O{run.RunId}", e))
         }
 
         member _.GetRecentRuns(scopeId, jobId, count) = async {

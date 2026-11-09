@@ -43,7 +43,7 @@ let tests (name: string) (factory: unit -> IEventStore) =
             let scope = uniqueScope ()
             let event = makeEvent scope "AnalysisStarted" "sku" 0.0
 
-            do! store.Write event
+            do! EventStore.writeOrRaise store event
             let! events = store.ReadAll scope
 
             Expect.hasLength events 1 "exactly one event"
@@ -60,9 +60,9 @@ let tests (name: string) (factory: unit -> IEventStore) =
 
             // Intentionally write out of order — ordering should come
             // from OccurredAt, not insertion time.
-            do! store.Write middle
-            do! store.Write older
-            do! store.Write newer
+            do! EventStore.writeOrRaise store middle
+            do! EventStore.writeOrRaise store older
+            do! EventStore.writeOrRaise store newer
 
             let! events = store.ReadAll scope
             let ids = events |> List.map _.Id
@@ -76,7 +76,7 @@ let tests (name: string) (factory: unit -> IEventStore) =
             let scopeA = uniqueScope ()
             let scopeB = uniqueScope ()
 
-            do! store.Write(makeEvent scopeA "Private" "secret" 0.0)
+            do! EventStore.writeOrRaise store (makeEvent scopeA "Private" "secret" 0.0)
 
             let! eventsInB = store.ReadAll scopeB
             Expect.isEmpty eventsInB "scope B never sees scope A's events"
@@ -87,9 +87,9 @@ let tests (name: string) (factory: unit -> IEventStore) =
             let store = factory ()
             let scope = uniqueScope ()
 
-            do! store.Write(makeEvent scope "AnalysisStarted" "m" 0.0)
-            do! store.Write(makeEvent scope "AnalysisCompleted" "m" 0.0)
-            do! store.Write(makeEvent scope "AnalysisStarted" "m" -1.0)
+            do! EventStore.writeOrRaise store (makeEvent scope "AnalysisStarted" "m" 0.0)
+            do! EventStore.writeOrRaise store (makeEvent scope "AnalysisCompleted" "m" 0.0)
+            do! EventStore.writeOrRaise store (makeEvent scope "AnalysisStarted" "m" -1.0)
 
             let! started = store.ReadByType(scope, "AnalysisStarted")
             let! completed = store.ReadByType(scope, "AnalysisCompleted")
@@ -107,7 +107,7 @@ let tests (name: string) (factory: unit -> IEventStore) =
             let scopeA = uniqueScope ()
             let scopeB = uniqueScope ()
 
-            do! store.Write(makeEvent scopeA "AnalysisStarted" "m" 0.0)
+            do! EventStore.writeOrRaise store (makeEvent scopeA "AnalysisStarted" "m" 0.0)
 
             let! events = store.ReadByType(scopeB, "AnalysisStarted")
             Expect.isEmpty events "scope B never sees scope A's type queries"
@@ -118,9 +118,9 @@ let tests (name: string) (factory: unit -> IEventStore) =
             let store = factory ()
             let scope = uniqueScope ()
 
-            do! store.Write(makeEvent scope "E" "SkuAnalysis" 0.0)
-            do! store.Write(makeEvent scope "E" "PriceElasticity" 0.0)
-            do! store.Write(makeEvent scope "E" "SkuAnalysis" -1.0)
+            do! EventStore.writeOrRaise store (makeEvent scope "E" "SkuAnalysis" 0.0)
+            do! EventStore.writeOrRaise store (makeEvent scope "E" "PriceElasticity" 0.0)
+            do! EventStore.writeOrRaise store (makeEvent scope "E" "SkuAnalysis" -1.0)
 
             let! sku = store.ReadBySource(scope, "SkuAnalysis")
             let! price = store.ReadBySource(scope, "PriceElasticity")
@@ -138,7 +138,7 @@ let tests (name: string) (factory: unit -> IEventStore) =
             let scopeA = uniqueScope ()
             let scopeB = uniqueScope ()
 
-            do! store.Write(makeEvent scopeA "E" "SkuAnalysis" 0.0)
+            do! EventStore.writeOrRaise store (makeEvent scopeA "E" "SkuAnalysis" 0.0)
 
             let! events = store.ReadBySource(scopeB, "SkuAnalysis")
             Expect.isEmpty events "scope B never sees scope A's source queries"
@@ -149,7 +149,7 @@ let tests (name: string) (factory: unit -> IEventStore) =
             let store = factory ()
             let scope = uniqueScope ()
 
-            do! store.Write(makeEvent scope "OnlyOne" "m" 0.0)
+            do! EventStore.writeOrRaise store (makeEvent scope "OnlyOne" "m" 0.0)
 
             let! events = store.ReadByType(scope, "OtherType")
             Expect.isEmpty events "unknown type returns empty, not Error"
@@ -169,10 +169,10 @@ let tests (name: string) (factory: unit -> IEventStore) =
             let scopeB = uniqueScope ()
             let scopeC = uniqueScope ()
 
-            do! store.Write(makeEvent scopeA "E" "m" 0.0)
-            do! store.Write(makeEvent scopeA "E" "m" -1.0)
-            do! store.Write(makeEvent scopeB "E" "m" 0.0)
-            do! store.Write(makeEvent scopeC "E" "m" 0.0)
+            do! EventStore.writeOrRaise store (makeEvent scopeA "E" "m" 0.0)
+            do! EventStore.writeOrRaise store (makeEvent scopeA "E" "m" -1.0)
+            do! EventStore.writeOrRaise store (makeEvent scopeB "E" "m" 0.0)
+            do! EventStore.writeOrRaise store (makeEvent scopeC "E" "m" 0.0)
 
             let! scopes = store.ListScopes()
             let asSet = Set.ofList scopes
@@ -186,10 +186,58 @@ let tests (name: string) (factory: unit -> IEventStore) =
             let scope = uniqueScope ()
 
             for i in 0..9 do
-                do! store.Write(makeEvent scope $"E{i}" "m" (float -i))
+                do! EventStore.writeOrRaise store (makeEvent scope $"E{i}" "m" (float -i))
 
             let! scopes = store.ListScopes()
             let matching = scopes |> List.filter (fun s -> s = scope)
             Expect.hasLength matching 1 "scope enumerated exactly once across 10 events"
+        }
+    ]
+
+/// The failing-backend arm. `factory` builds the implementation
+/// over a backend that refuses every write — the implementation's own
+/// failure mode, not a double of the interface. A store with no backend to
+/// fail (a purely in-memory one) has no honest binding for this arm and
+/// does not bind it.
+///
+/// What it holds every implementation to: a write that did not persist
+/// answers `EventStoreError.WriteFailed` naming the event's scope and id —
+/// never `Ok`, never an exception — and nothing a later read returns.
+let failingBackendTests (name: string) (factory: unit -> IEventStore) =
+    let event (scopeId: string) : ModuleEvent = {
+        Id = Guid.NewGuid()
+        OccurredAt = DateTime.UtcNow
+        ScopeId = scopeId
+        SourceModule = "contract"
+        EventType = "FailingBackendProbe"
+        Payload = "{}"
+    }
+
+    testList $"{name} — IEventStore contract, failing backend" [
+        testCaseAsync "a write the backend refused answers WriteFailed, naming the scope and the event"
+        <| async {
+            let store = factory ()
+            let scope = "team-" + Guid.NewGuid().ToString("N").Substring(0, 8)
+            let evt = event scope
+
+            let! written = Async.Catch(store.Write evt)
+
+            match written with
+            | Choice1Of2(Error(EventStoreError.WriteFailed(scopeId, eventId, location, reason))) ->
+                Expect.equal scopeId scope "the scope is the event's"
+                Expect.equal eventId evt.Id "the event is named"
+                Expect.isNotEmpty location "what was not written is named"
+                Expect.isNotEmpty reason "the backend's account is carried"
+            | Choice1Of2(Ok()) -> failtest "a write the backend refused must not answer Ok"
+            | Choice2Of2 ex -> failtestf "a refused write is data, not an exception: %s" ex.Message
+        }
+
+        testCaseAsync "a refused write leaves nothing a read returns"
+        <| async {
+            let store = factory ()
+            let scope = "team-" + Guid.NewGuid().ToString("N").Substring(0, 8)
+            let! _ = store.Write(event scope)
+            let! events = store.ReadAll scope
+            Expect.isEmpty events "an Error persisted nothing"
         }
     ]

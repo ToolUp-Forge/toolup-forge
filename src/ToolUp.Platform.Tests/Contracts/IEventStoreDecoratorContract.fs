@@ -44,6 +44,11 @@ open ToolUp.Platform.Infra
 //   8. `EventStoreChain.describe` sees the decorator as the outermost
 //      link over the given inner store — the walk and the declaration
 //      agree, which is the property everything downstream assumes.
+//   9. A write the inner store refused is answered with the inner store's
+//      `Error`, unchanged — the failing-backend case. A
+//      decorator that answered `Ok` would report a lost write as
+//      persisted, and one that raised would turn data back into the
+//      exception the signature retired.
 
 /// Build the decorator under test around a supplied inner store. The
 /// pack hands in its own recording store, so an implementation's other
@@ -54,12 +59,20 @@ type EventStoreDecoratorFactory = IEventStore -> IEventStore
 /// Records every write and answers reads from a fixed script, so laws 6
 /// and 7 can tell "reached the declared inner store" from "reached
 /// something".
-type private RecordingEventStore(scripted: ModuleEvent list) =
+type private RecordingEventStore(scripted: ModuleEvent list, refusal: EventStoreError option) =
     let written = ResizeArray<ModuleEvent>()
+    new(scripted) = RecordingEventStore(scripted, None)
     member _.Written = written |> List.ofSeq
 
     interface IEventStore with
-        member _.Write(evt) = async { written.Add evt }
+        member _.Write(evt) = async {
+            match refusal with
+            | Some error -> return Error error
+            | None ->
+                written.Add evt
+                return Ok()
+        }
+
         member _.ReadAll(_) = async { return scripted }
         member _.ReadByType(_, _) = async { return scripted }
         member _.ReadBySource(_, _) = async { return scripted }
@@ -151,7 +164,7 @@ let tests (name: string) (factory: EventStoreDecoratorFactory) =
         <| fun _ ->
             let inner, decorated, _ = build ()
             let evt = anEvent ()
-            decorated.Write evt |> Async.RunSynchronously
+            EventStore.writeOrRaise decorated evt |> Async.RunSynchronously
 
             Expect.equal
                 (inner.Written |> List.map _.Id)
@@ -186,4 +199,18 @@ let tests (name: string) (factory: EventStoreDecoratorFactory) =
 
             Expect.equal chain.InnerStoreName "RecordingEventStore" "the walk terminates at the supplied store"
             Expect.isFalse chain.Truncated "a single decorator cannot truncate the walk"
+
+        testCase "9. A write the inner store refused is answered with its Error, unchanged"
+        <| fun _ ->
+            let evt = anEvent ()
+
+            let refusal =
+                EventStoreError.WriteFailed(evt.ScopeId, evt.Id, "contract-backend", "refused by the backend")
+
+            let decorated = factory (RecordingEventStore([], Some refusal))
+
+            match Async.Catch(decorated.Write evt) |> Async.RunSynchronously with
+            | Choice1Of2 answered ->
+                Expect.equal answered (Error refusal) "the inner store's Error, propagated unchanged"
+            | Choice2Of2 ex -> failtestf "a refused write is data, not an exception: %s" ex.Message
     ]

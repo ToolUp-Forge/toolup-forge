@@ -50,7 +50,7 @@ let setAIContext (deps: KnowledgeApiDeps) (body: string) : Async<Result<AIContex
                     let evt =
                         Events.create deps.Scope.ScopeId "KnowledgeBase" "AIContextUpdated" payload
 
-                    do! es.Write evt
+                    do! EventStore.writeOrRaise es evt
                 with ex ->
                     deps.Logger.Warn(sprintf "[KnowledgeBase] AIContextUpdated event write failed: %s" ex.Message)
             | None -> ()

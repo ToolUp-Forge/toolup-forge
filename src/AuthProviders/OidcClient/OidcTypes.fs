@@ -84,7 +84,7 @@ type AuthState =
 
 // ─── Developer-facing diagnostic ─────────────────────────────────────
 //
-// `describeError` produces the user-facing message — deliberately
+// `describeErrorWith` produces the user-facing message — deliberately
 // opaque for failures whose sub-cause must not be revealed to a
 // tampering attacker (signature, nonce, issuer, audience). `diagnose`
 // is its developer-facing counterpart: stable `Kind` tag for log
@@ -99,7 +99,7 @@ type AuthDiagnostic = {
     /// to use as a metric tag or log field key.
     Kind: string
     /// Developer-facing explanation. May reveal information the
-    /// user-facing `describeError` withholds. Never pass to the UI.
+    /// user-facing `describeErrorWith` withholds. Never pass to the UI.
     SubCause: string option
     /// Optional actionable hint — provider quirk, env-var, or
     /// app-registration knob most likely to fix the failure.

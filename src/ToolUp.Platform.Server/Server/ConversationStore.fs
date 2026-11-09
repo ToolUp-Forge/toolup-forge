@@ -252,7 +252,7 @@ module private Events =
                     Payload = payloadJson
                 }
 
-                do! store.Write event
+                do! EventStore.writeOrRaise store event
         }
 
     let started (eventStore: IEventStore option) (scopeId: string) (conv: Conversation) : Async<unit> =

@@ -184,16 +184,9 @@ let describeErrorWith (msgs: AuthErrorMessages) (err: AuthError) : string =
     | IdTokenAudienceInvalid -> msgs.AudienceInvalid
     | IdTokenExpired -> msgs.Expired
 
-/// The pre-751 entry point, unchanged in arity and behaviour — a widened
-/// arity would read as a REMOVAL in the public-API approval baseline and
-/// would break every caller, for a parameter only a catalog-resolving
-/// caller can supply (444's recorded `...With` pattern).
-let describeError (err: AuthError) : string =
-    describeErrorWith MessageCatalog.english.Auth.Errors err
-
 // ─── Developer-facing diagnostic ─────────────────────────────────────
 //
-// `diagnose` is the structured counterpart to `describeError`. It
+// `diagnose` is the structured counterpart to `describeErrorWith`. It
 // returns a `{ Kind; SubCause; Hint }` record consumed by the auth
 // tracer + structured log emission paths — never by the UI.
 //

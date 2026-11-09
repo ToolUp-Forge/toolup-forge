@@ -5,14 +5,13 @@ namespace ToolUp.Platform
 
 // ─── The built-in English catalog + locale resolution (Phase 444) ─────
 //
-// Two modules, both deliberately Feliz-free so they compile and run on
-// .NET as well as under Fable. That is the same discipline
-// `SidebarVisibility.fs` / `NoActiveTeamLanding.fs` / `AdminTiles.fs`
-// document immediately below this point in the compile order: the
-// DECISION (which locale wins, what the resolved catalog is) is pure,
-// so the in-process test harness exercises it without a browser, a
-// React renderer, or a Fable build. The React context + hook that
-// publish the result to the view tree live in
+// Two modules, both Feliz-free so they compile and run on .NET as well
+// as under Fable: the DECISION (which locale wins, what the resolved
+// catalog is) is pure, so the in-process test harness exercises it
+// without a browser, a React renderer, or a Fable build. In Core because
+// `ClientModuleContext.empty` (ConfigTypes.fs, next in the compile order)
+// carries `english`. The React context + hook that
+// publish the result to the view tree live in Platform.Client's
 // `MessageCatalogProvider.fs`, which is where the Feliz dependency
 // starts.
 
@@ -25,8 +24,7 @@ namespace ToolUp.Platform
 /// (FS0250) unless the module's compiled name is distinguished. The
 /// type-plus-companion-module pairing is the idiom this substrate wants
 /// (`Translations` / `LocaleCode` in Core do the same, in one file); the
-/// attribute is what lets the pairing survive the split that keeps the
-/// type declarations ahead of `SDK.ClientTypes.fs`.
+/// attribute is what lets the pairing survive the split into two files.
 [<RequireQualifiedAccess; CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module MessageCatalog =
 
@@ -2012,9 +2010,7 @@ module MessageCatalog =
 /// Mirrors `NavigationRequest` exactly — a sanctioned mutable global
 /// with subscribe/publish, so a module (a settings page, a language
 /// picker in a consumer's own chrome) can ask the shell to change locale
-/// without taking a dependency on the shell's internal `Msg` type, and
-/// without `ClientModuleContext` growing a field every consumer's
-/// full-literal construction would have to be re-written for.
+/// without taking a dependency on the shell's internal `Msg` type.
 ///
 /// The shell subscribes once at boot and translates each request into
 /// the same reset path `TeamSwitched` takes: every module's state is

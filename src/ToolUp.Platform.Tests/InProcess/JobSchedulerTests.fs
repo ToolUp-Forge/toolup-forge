@@ -297,7 +297,7 @@ let private catchUpTests =
 
             // Durably written, never notified — the crash window.
             let missed = eventAt scope "inventory.moved" (DateTime.UtcNow.AddMinutes -2.0)
-            eventStore.Write missed |> Async.RunSynchronously
+            EventStore.writeOrRaise eventStore missed |> Async.RunSynchronously
 
             scheduler.RunCatchUpScan true |> Async.RunSynchronously
 
@@ -317,7 +317,7 @@ let private catchUpTests =
             scheduleOnEventJob (scheduler :> IJobScheduler) handler scope "inventory.moved"
 
             // Pre-feature history that already fired live (or never will).
-            eventStore.Write(eventAt scope "inventory.moved" (DateTime.UtcNow.AddMinutes -10.0))
+            EventStore.writeOrRaise eventStore (eventAt scope "inventory.moved" (DateTime.UtcNow.AddMinutes -10.0))
             |> Async.RunSynchronously
 
             scheduler.RunCatchUpScan true |> Async.RunSynchronously
@@ -343,7 +343,7 @@ let private catchUpTests =
 
             // Already-dispatched event 10 minutes back; cursor advanced
             // 5 minutes back — the event sits well past the 30s overlap.
-            eventStore.Write(eventAt scope "inventory.moved" (DateTime.UtcNow.AddMinutes -10.0))
+            EventStore.writeOrRaise eventStore (eventAt scope "inventory.moved" (DateTime.UtcNow.AddMinutes -10.0))
             |> Async.RunSynchronously
 
             watermark.Advance(eventAt scope "seed" (DateTime.UtcNow.AddMinutes -5.0))
@@ -366,11 +366,11 @@ let private catchUpTests =
 
             // Dropped by the live hook, older than the settle window.
             let settled = eventAt scope "sweep.event" (DateTime.UtcNow.AddMinutes -2.0)
-            eventStore.Write settled |> Async.RunSynchronously
+            EventStore.writeOrRaise eventStore settled |> Async.RunSynchronously
 
             // Too fresh — its notify may still be in flight.
             let fresh = eventAt scope "sweep.event" (DateTime.UtcNow.AddSeconds -5.0)
-            eventStore.Write fresh |> Async.RunSynchronously
+            EventStore.writeOrRaise eventStore fresh |> Async.RunSynchronously
 
             scheduler.RunCatchUpScan false |> Async.RunSynchronously
 
@@ -1480,8 +1480,9 @@ let private defect1064Tests =
             Expect.isTrue returned $"Cancel returned inside the ceiling (waited %d{sw.ElapsedMilliseconds} ms)"
 
             match outcome.Result with
-            | Choice2Of2(:? JobScheduler.JobStatusBusyException as busy) ->
-                Expect.equal busy.JobId jobId "the refusal names the job"
+            | Choice1Of2(Error(JobTransitionError.Busy(busyScope, busyJob, _))) ->
+                Expect.equal busyScope scope "the refusal names the scope"
+                Expect.equal busyJob jobId "the refusal names the job"
             | other -> failtestf "expected a typed busy refusal, got %A" other
 
             Expect.equal handler.Attempts 1 "the backoff was not cut short"
@@ -2024,7 +2025,8 @@ let private pinCapture () : string =
 
             // An awaiting row that carries no handle: hand-edited state, or
             // a store that lost the field on a round-trip.
-            (pinStore f).RecordRun {
+            JobStoreWrite.orRaise
+            <| (pinStore f).RecordRun {
                 RunId = Guid.NewGuid()
                 JobId = jobId
                 ScopeId = scope
@@ -2365,6 +2367,36 @@ let tests =
 
     testList "InProcessJobScheduler" [
         IJobSchedulerContract.tests "InProcessJobScheduler" factory
+        IJobSchedulerContract.failingStoreTests "InProcessJobScheduler" (fun decorate handler ->
+            let root =
+                Path.Combine(Path.GetTempPath(), "toolup-jobsched-tests-" + Guid.NewGuid().ToString("N"))
+
+            Directory.CreateDirectory root |> ignore
+            let storage = LocalFileStorage.LocalFileStorage(root) :> IBlobStorage
+            let eventStore = InMemoryEventStore.InMemoryEventStore() :> IEventStore
+
+            let scheduler =
+                JobScheduler.create
+                    ({
+                        Store = decorate (JobStore.create storage eventStore)
+                        EventStore = eventStore
+                        NotificationChannel = silentChannel
+                        Config = ServerConfig.defaults
+                        Logger = silentLogger
+                        ActivitySink = (NoOpActivitySink() :> IActivitySink)
+                    }
+                    : JobScheduler.SchedulerDeps)
+                    JobScheduler.SchedulerOptions.defaults
+                :> IJobScheduler
+
+            scheduler.RegisterHandler(
+                handler,
+                { new IJobHandler with
+                    member _.Execute(_) = async { return JobResult.Success }
+                }
+            )
+
+            scheduler, "team-" + Guid.NewGuid().ToString("N").Substring(0, 8))
         restartContractTests
         carriedScopeContractTests
         // Phase 935 — the carrier binding, over schedulers nothing has bound.

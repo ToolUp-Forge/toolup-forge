@@ -125,3 +125,38 @@ type InMemoryBlobStorage() =
                     }
             | false, _ -> return Error $"not found: {container}/{blobName}"
         }
+
+/// An `IBlobStorage` whose `Upload` answers `Error` for every blob name
+/// `refuses` selects, passing every other operation through to `inner` —
+/// the failing backend a contract pack's failing-backend arm composes a
+/// blob-backed store over.
+type WriteRefusingBlobStorage(inner: IBlobStorage, refuses: string -> bool) =
+    /// The reason every refused upload answers with.
+    static member Reason = "simulated storage write failure"
+
+    /// Refuses every upload.
+    new(inner: IBlobStorage) = WriteRefusingBlobStorage(inner, fun _ -> true)
+
+    interface IBlobStorage with
+        member _.CanComposeFrom = false
+
+        member _.ComposeFrom(_, _, _) =
+            composeNotSupported "WriteRefusingBlobStorage"
+
+        member _.Upload(container, blobName, content) =
+            if refuses blobName then
+                async { return Error WriteRefusingBlobStorage.Reason }
+            else
+                inner.Upload(container, blobName, content)
+
+        member _.Download(container, blobName) = inner.Download(container, blobName)
+        member _.Delete(container, blobName) = inner.Delete(container, blobName)
+        member _.List(container, prefix) = inner.List(container, prefix)
+        member _.Exists(container, blobName) = inner.Exists(container, blobName)
+        member _.GetMetadata(container, blobName) = inner.GetMetadata(container, blobName)
+
+        member _.DownloadRange(container, blobName, offset, length) =
+            inner.DownloadRange(container, blobName, offset, length)
+
+        member _.Erase(container, prefix, policy, dryRun) =
+            inner.Erase(container, prefix, policy, dryRun)

@@ -989,6 +989,12 @@ module DeclaredDelivery =
                 return Ok()
             }
 
+            let cancel (c: DeliveryCancel) = async {
+                match! deps.Scheduler.Cancel(c.ScopeId, c.JobId) with
+                | Ok() -> return Ok()
+                | Error e -> return Error(sprintf "cancelling its job failed: %s" (JobTransitionError.message e))
+            }
+
             let schedule (r: DeliveryRegistration) = async {
                 match! deps.Scheduler.Schedule(r.Scope, r.Registration) with
                 | Ok _ -> return Ok()
@@ -1000,8 +1006,7 @@ module DeclaredDelivery =
                     (s.Config.Id, s.Scope.ScopeId), step (fun () -> deps.Configs.Save(s.Scope.ScopeId, s.Config))
                 for r in plan.Register -> (r.SourceId, r.Scope.ScopeId), schedule r
                 for r in plan.Restamp -> (r.SourceId, r.Scope.ScopeId), restamp deps r
-                for c in plan.Cancel ->
-                    (c.SourceId, c.ScopeId), step (fun () -> deps.Scheduler.Cancel(c.ScopeId, c.JobId))
+                for c in plan.Cancel -> (c.SourceId, c.ScopeId), cancel c
             ]
 
             for row, work in steps do

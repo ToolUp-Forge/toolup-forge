@@ -459,7 +459,7 @@ type AdminHomeMessages = {
 }
 
 /// The user-facing sentences an OIDC failure is described by
-/// (`OidcTokenStore.describeError`). One field per `AuthError` case, so
+/// (`OidcTokenStore.describeErrorWith`). One field per `AuthError` case, so
 /// adding a case upstream fails to compile here until it is worded.
 ///
 /// The security-sensitive branches (signature / nonce / issuer /

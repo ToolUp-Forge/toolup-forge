@@ -161,7 +161,7 @@ let private drawerTests =
     testList "version-history drawer MVU" [
         testCase "the list load never touches the drawer — the fetch is tied to the OPEN"
         <| fun _ ->
-            let m0, _ = ClientModel.init ()
+            let m0, _ = ClientModel.init ClientModuleContext.empty
             Expect.isNone m0.VersionHistory "init: drawer closed"
 
             let loaded, _ =
@@ -173,7 +173,7 @@ let private drawerTests =
 
         testCase "opening enters the loading state for that document"
         <| fun _ ->
-            let m0, _ = ClientModel.init ()
+            let m0, _ = ClientModel.init ClientModuleContext.empty
 
             let opened, _ =
                 ClientModel.update (ClientModel.OpenVersionHistory("doc-1", "handbook.pdf")) m0
@@ -188,7 +188,7 @@ let private drawerTests =
 
         testCase "loaded versions arrive newest-first"
         <| fun _ ->
-            let m0, _ = ClientModel.init ()
+            let m0, _ = ClientModel.init ClientModuleContext.empty
 
             let opened, _ =
                 ClientModel.update (ClientModel.OpenVersionHistory("doc-1", "handbook.pdf")) m0
@@ -210,7 +210,7 @@ let private drawerTests =
 
         testCase "a stale answer for another document is discarded"
         <| fun _ ->
-            let m0, _ = ClientModel.init ()
+            let m0, _ = ClientModel.init ClientModuleContext.empty
 
             let opened, _ =
                 ClientModel.update (ClientModel.OpenVersionHistory("doc-2", "other.pdf")) m0
@@ -226,7 +226,7 @@ let private drawerTests =
 
         testCase "a failed fetch is reported, not silently empty"
         <| fun _ ->
-            let m0, _ = ClientModel.init ()
+            let m0, _ = ClientModel.init ClientModuleContext.empty
 
             let opened, _ =
                 ClientModel.update (ClientModel.OpenVersionHistory("doc-1", "handbook.pdf")) m0
@@ -242,7 +242,7 @@ let private drawerTests =
 
         testCase "a download failure is surfaced and clears the in-flight marker"
         <| fun _ ->
-            let m0, _ = ClientModel.init ()
+            let m0, _ = ClientModel.init ClientModuleContext.empty
 
             let opened, _ =
                 ClientModel.update (ClientModel.OpenVersionHistory("doc-1", "handbook.pdf")) m0
@@ -271,7 +271,7 @@ let private drawerTests =
 
         testCase "closing discards the drawer entirely"
         <| fun _ ->
-            let m0, _ = ClientModel.init ()
+            let m0, _ = ClientModel.init ClientModuleContext.empty
 
             let opened, _ =
                 ClientModel.update (ClientModel.OpenVersionHistory("doc-1", "handbook.pdf")) m0

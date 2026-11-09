@@ -73,9 +73,10 @@ type LiveSessionRefusal = {
 /// is the SSE endpoint in `LiveSessionsCompose`; a WebSocket transport
 /// is an additive companion behind the same interface.
 type ILiveChannel =
-    /// Push one frame to every current subscriber. Failures writing to
-    /// an individual subscriber are contained (the subscriber is the
-    /// transport's concern to evict); the push itself never throws.
+    /// Push one frame to every current subscriber and complete once every
+    /// subscriber's handler has. Failures writing to an individual
+    /// subscriber are contained (the subscriber is the transport's concern
+    /// to evict); the push itself never throws.
     abstract PushFrame: payload: string -> Async<unit>
 
 /// Scope-partitioned live-session host. All operations resolve within
@@ -93,8 +94,11 @@ type ILiveSessionHost =
     abstract TryGetChannel: scopeId: string * sessionId: string -> Async<ILiveChannel option>
 
     /// Subscribe a frame handler to a session within `scopeId`.
-    /// `None` when the session does not exist in that scope.
-    abstract Subscribe: scopeId: string * sessionId: string * handler: (string -> unit) -> Async<Guid option>
+    /// `None` when the session does not exist in that scope. The handler
+    /// is asynchronous: a push awaits it, so a subscriber can
+    /// await its own write. A handler that fails is contained — the push
+    /// still reaches every other subscriber and never throws.
+    abstract Subscribe: scopeId: string * sessionId: string * handler: (string -> Async<unit>) -> Async<Guid option>
 
     /// Remove a subscription. Idempotent.
     abstract Unsubscribe: scopeId: string * sessionId: string * subscriptionId: Guid -> Async<unit>
@@ -115,18 +119,24 @@ type InMemoryLiveSessionHost(?maxSessionsPerScope: int) =
     let scopes =
         ConcurrentDictionary<
             string,
-            ConcurrentDictionary<string, DateTimeOffset * ConcurrentDictionary<Guid, string -> unit>>
+            ConcurrentDictionary<string, DateTimeOffset * ConcurrentDictionary<Guid, string -> Async<unit>>>
          >()
 
-    let channelFor (subscribers: ConcurrentDictionary<Guid, string -> unit>) : ILiveChannel =
+    /// Every subscriber's handler runs concurrently, so a slow subscriber
+    /// does not hold the frame back from the others, and a failed one is
+    /// contained to itself.
+    let channelFor (subscribers: ConcurrentDictionary<Guid, string -> Async<unit>>) : ILiveChannel =
         { new ILiveChannel with
-            member _.PushFrame payload = async {
-                for KeyValue(_, handler) in subscribers do
+            member _.PushFrame payload =
+                subscribers.Values
+                |> Seq.map (fun handler -> async {
                     try
-                        handler payload
+                        do! handler payload
                     with _ ->
                         ()
-            }
+                })
+                |> Async.Parallel
+                |> Async.Ignore
         }
 
     interface ILiveSessionHost with

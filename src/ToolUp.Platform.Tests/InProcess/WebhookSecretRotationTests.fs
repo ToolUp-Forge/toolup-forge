@@ -95,7 +95,11 @@ type private CapturingEventStore() =
     member _.Written = written |> List.ofSeq
 
     interface IEventStore with
-        member _.Write(evt) = async { written.Add evt }
+        member _.Write(evt) = async {
+            written.Add evt
+            return Ok()
+        }
+
         member _.ReadAll(_) = async { return [] }
         member _.ReadByType(_, _) = async { return [] }
         member _.ReadBySource(_, _) = async { return [] }
@@ -106,7 +110,7 @@ type private CapturingEventStore() =
 /// resolves `IWebhookDispatcher` from DI eagerly at construction.
 type private StubDispatcher() =
     interface IWebhookDispatcher with
-        member _.Dispatch(_) = ()
+        member _.Dispatch(_) = async { return Ok() }
         member _.TestFire(_, _) = async { return Error "not exercised by the rotate path" }
 
 let private buildHandler

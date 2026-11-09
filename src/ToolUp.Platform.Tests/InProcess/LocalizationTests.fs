@@ -752,7 +752,7 @@ module private CatalogSkeleton =
 
         let header = [
             "// GENERATED FILE — do not edit by hand. Regenerate with `dev-scripts/generate-localization-skeleton.ps1`."
-            "// The source of truth is `MessageCatalog.english` in src/ToolUp.Platform.Client/Client/MessageCatalog.fs."
+            "// The source of truth is `MessageCatalog.english` in src/ToolUp.Platform.Core/Shared/MessageCatalog.fs."
             "//"
             "// A translation skeleton for `MessageCatalog` (Phase 767): every string the SDK's client"
             "// shell and built-in modules can render, keyed by section and field, with its English"
@@ -849,5 +849,158 @@ let private skeletonTests =
         }
     ]
 
+// ─── 3. The reducer half (Phase 1072) ─────────────────────────────────
+//
+// A module's `init` and `update` read reader-facing strings from
+// `ClientModuleContext.Messages` — the catalog the shell resolved for the
+// session — carried on the module's model from init. A reference to
+// `MessageCatalog.english` in a module file is a string a deployment that
+// sets `Locale` still renders in English, so the scan below fails on
+// every one outside the allowlist.
+//
+// The scan covers every `*UI.fs` under `src/` (each built-in admin module
+// and each auth-provider client UI) plus the two reducer files whose names
+// do not end in `UI` (the KnowledgeBase client's `ClientModel.fs` and the
+// OIDC client's `OidcTokenStore.fs`), and the two files the allowlist
+// names, so the allowlist is measured against code the scan actually
+// reads. The allowlist holds the two pre-catalog back-compat entry points
+// that render outside both a reducer and a provider; Phase 1075 retires
+// them and deletes the list.
+
+/// The files the reducer-pin scan reads, as `relative * full` paths.
+let private reducerPinFiles () =
+    let root = repoRoot ()
+    let src = Path.Combine(root, "src")
+
+    let named = [
+        Path.Combine("src", "ToolUp.KnowledgeBase.Client", "Client", "ClientModel.fs")
+        Path.Combine("src", "AuthProviders", "OidcClient", "OidcTokenStore.fs")
+        Path.Combine("src", "ToolUp.Platform.Client", "Client", "UI", "Sidebar.fs")
+        Path.Combine("src", "ToolUp.Platform.Client", "Client", "BootDegradation.fs")
+    ]
+
+    let uiFiles =
+        Directory.EnumerateFiles(src, "*UI.fs", SearchOption.AllDirectories)
+        |> Seq.map (fun full -> Path.GetRelativePath(root, full))
+        |> Seq.filter (fun relative ->
+            let segments = relative.Split([| '\\'; '/' |])
+            not (segments |> Array.exists (fun s -> s = "bin" || s = "obj" || s = "node_modules")))
+        |> List.ofSeq
+
+    (named @ uiFiles)
+    |> List.distinct
+    |> List.sort
+    |> List.map (fun relative -> relative, Path.Combine(root, relative))
+
+/// `(file name, enclosing top-level binding)` pairs admitted by the scan.
+/// Exactly two, both deleted by Phase 1075.
+let private reducerPinAllowlist =
+    set [ "Sidebar.fs", "buildSections"; "BootDegradation.fs", "banner" ]
+
+let private englishPin =
+    Regex(@"\bMessageCatalog\.english\b", RegexOptions.Compiled)
+
+let private topLevelBinding =
+    Regex(@"^let\s+(?:(?:private|internal|inline|rec)\s+)*([A-Za-z_][A-Za-z0-9_']*)", RegexOptions.Compiled)
+
+/// Every `MessageCatalog.english` reference in `lines`, as
+/// `line number * enclosing top-level binding` (`"<top>"` before the first
+/// binding). Comment lines are skipped: a comment reaches no reader.
+let internal englishPins (lines: string array) : (int * string) list =
+    let mutable enclosing = "<top>"
+
+    [
+        for i in 0 .. lines.Length - 1 do
+            let line = lines[i]
+            let m = topLevelBinding.Match line
+
+            if m.Success then
+                enclosing <- m.Groups[1].Value
+
+            if not (commentLine.IsMatch line) && englishPin.IsMatch line then
+                yield i + 1, enclosing
+    ]
+
+/// A lower bound on the files the scan reads: the eleven built-in admin
+/// module UIs, the three auth-provider client UIs and the four named
+/// files are 18, and many more `*UI.fs` exist. Below it the scan has
+/// stopped seeing the code (a moved package, a renamed suffix) and a
+/// clean result would mean nothing.
+let private reducerPinFileFloor = 30
+
+let private reducerPinTests =
+    testList "no module reducer pins the English catalog (Phase 1072)" [
+
+        test "the scan is still looking at real files" {
+            let files = reducerPinFiles ()
+
+            Expect.isGreaterThanOrEqual
+                (List.length files)
+                reducerPinFileFloor
+                $"the reducer-pin scan found only {List.length files} files"
+
+            for relative, full in files do
+                Expect.isTrue (File.Exists full) $"the scan names {relative}, which does not exist"
+        }
+
+        test "no MessageCatalog.english reference outside the two-entry allowlist" {
+            let hits =
+                reducerPinFiles ()
+                |> List.collect (fun (relative, full) ->
+                    englishPins (File.ReadAllLines full)
+                    |> List.map (fun (line, binding) -> relative, line, binding))
+
+            let offending =
+                hits
+                |> List.filter (fun (relative, _, binding) ->
+                    not (reducerPinAllowlist.Contains(Path.GetFileName relative, binding)))
+
+            let report =
+                offending
+                |> List.map (fun (relative, line, binding) -> $"  {relative}:{line} (in `{binding}`)")
+                |> String.concat Environment.NewLine
+
+            Expect.isEmpty
+                offending
+                ($"{List.length offending} reference(s) to `MessageCatalog.english` in a module file. A reducer reads `ctx.Messages.<Section>` carried on its model from `init`; a view reads the resolved catalog (Phase 1072):"
+                 + Environment.NewLine
+                 + report)
+
+            // The allowlist is measured, not trusted: an entry whose pin is
+            // gone is deleted with it, so the list can only shrink.
+            let present =
+                hits
+                |> List.map (fun (relative, _, binding) -> Path.GetFileName relative, binding)
+                |> Set.ofList
+
+            let stale = Set.difference reducerPinAllowlist present
+
+            Expect.isEmpty
+                stale
+                $"allowlist entries with no pin left — delete them from `reducerPinAllowlist`: %A{stale}"
+        }
+
+        test "the scan flags a re-added pin, names its binding, and skips a comment — go-red" {
+            let lines = [|
+                "let update (msg: Msg) (model: Model) ="
+                "    // MessageCatalog.english.Shell.SignOut in a comment reaches no reader"
+                "    { model with Error = Some MessageCatalog.english.FileManager.DeleteFailed }"
+                "let private view model ="
+                "    model.Messages.SignOut"
+            |]
+
+            Expect.equal (englishPins lines) [ 3, "update" ] "one pin, on line 3, inside `update`"
+
+            Expect.isFalse
+                (reducerPinAllowlist.Contains("FileManagerUI.fs", "update"))
+                "a reducer is never on the allowlist"
+        }
+    ]
+
 let tests =
-    testList "ToolUp.Platform localization gate (Phase 758)" [ coverageTests; sourceGateTests; skeletonTests ]
+    testList "ToolUp.Platform localization gate (Phase 758)" [
+        coverageTests
+        sourceGateTests
+        skeletonTests
+        reducerPinTests
+    ]

@@ -458,8 +458,14 @@ let create
                                     let reason = $"trigger refused: {TriggerError.message refusal}"
                                     do! deps.Store.Fail(ticket, reason)
                                     do! deps.Notify ticket (ExportStatus.Failed reason)
-                                    do! deps.Scheduler.Cancel(scopeId, jobId)
-                                    return Result.Error $"Scheduled the export job but could not start it: {reason}"
+
+                                    match! deps.Scheduler.Cancel(scopeId, jobId) with
+                                    | Result.Ok() ->
+                                        return Result.Error $"Scheduled the export job but could not start it: {reason}"
+                                    | Result.Error notCancelled ->
+                                        return
+                                            Result.Error
+                                                $"Scheduled the export job but could not start it: {reason}; the job could not be cancelled either: {JobTransitionError.message notCancelled}"
                         with ex ->
                             return Result.Error ex.Message
             }

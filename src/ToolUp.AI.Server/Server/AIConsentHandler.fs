@@ -84,7 +84,7 @@ let private writeConsentAudit
             }
 
             try
-                do! store.Write evt
+                do! EventStore.writeOrRaise store evt
             with ex ->
                 logger.Warn
                     $"[AIConsent] audit write failed (conversation={pending.ConversationId}, module={pending.TargetModule}): {ex.Message}. Record dropped; the decision still applied."

@@ -209,7 +209,7 @@ let eventStoreAccount (store: IEventStore) (now: unit -> DateTime) : BudgetAccou
         }
 
         try
-            let! child = Async.StartChild(store.Write evt, BudgetAuditWriteTimeoutMs)
+            let! child = Async.StartChild(EventStore.writeOrRaise store evt, BudgetAuditWriteTimeoutMs)
             do! child
         with _ ->
             // Timed out or threw. The refusal itself stands and the
@@ -791,7 +791,7 @@ let spendEventStoreAccount
         }
 
         try
-            let! child = Async.StartChild(store.Write evt, BudgetAuditWriteTimeoutMs)
+            let! child = Async.StartChild(EventStore.writeOrRaise store evt, BudgetAuditWriteTimeoutMs)
             do! child
         with _ ->
             // The refusal itself stands and the user is being told;

@@ -176,7 +176,7 @@ let private write (ctx: HttpContext) (scopeId: string) (sourceModule: string) (e
                 Payload = JsonSerializer.Serialize(payload, jsonOptions)
             }
 
-            do! store.Write evt
+            do! EventStore.writeOrRaise store evt
         with _ ->
             // Deliberately silent at this level: the caller starts every
             // audit write with `Async.Start`, so there is nobody to

@@ -79,7 +79,7 @@ let private buildApi
     let eventStore = InMemoryEventStore.InMemoryEventStore() :> IEventStore
 
     for evt in events do
-        (eventStore.Write evt) |> Async.RunSynchronously
+        (EventStore.writeOrRaise eventStore evt) |> Async.RunSynchronously
 
     services.AddSingleton<AccessContext>(accessContext) |> ignore
     services.AddSingleton<IEventStore>(eventStore) |> ignore

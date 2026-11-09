@@ -559,7 +559,7 @@ type EventStoreAmendmentAudit(events: IEventStore, scopeId: string) =
             // exception on the answer path.
             try
                 do!
-                    events.Write {
+                    EventStore.writeOrRaise events {
                         Id = Guid.NewGuid()
                         OccurredAt = DateTime.UtcNow
                         ScopeId = scopeId

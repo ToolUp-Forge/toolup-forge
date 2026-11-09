@@ -49,33 +49,6 @@ type private FaultingEventStore() =
 // These cases drive the policy through the real store over a blob
 // double whose `Upload` returns `Error`.
 
-/// Returns `Error` from `Upload` for blob names matching `shouldFail`,
-/// passing every other operation through to `inner`.
-type private WriteFailingBlobStorage(inner: BlobStorage.IBlobStorage, shouldFail: string -> bool) =
-    interface BlobStorage.IBlobStorage with
-        member _.CanComposeFrom = false
-
-        member _.ComposeFrom(_, _, _) =
-            BlobStorage.composeNotSupported "test double"
-
-        member _.Upload(container, blobName, content) =
-            if shouldFail blobName then
-                async { return Error "simulated storage write failure" }
-            else
-                inner.Upload(container, blobName, content)
-
-        member _.Download(container, blobName) = inner.Download(container, blobName)
-        member _.Delete(container, blobName) = inner.Delete(container, blobName)
-        member _.List(container, prefix) = inner.List(container, prefix)
-        member _.Exists(container, blobName) = inner.Exists(container, blobName)
-        member _.GetMetadata(container, blobName) = inner.GetMetadata(container, blobName)
-
-        member _.DownloadRange(container, blobName, offset, length) =
-            inner.DownloadRange(container, blobName, offset, length)
-
-        member _.Erase(container, prefix, policy, dryRun) =
-            inner.Erase(container, prefix, policy, dryRun)
-
 /// Records every counter increment, so a case can assert the failure
 /// was COUNTED as well as acted on.
 type private CountingMetricsSink() =
@@ -92,7 +65,10 @@ type private CountingMetricsSink() =
 /// The default event store over a blob whose writes fail for `shouldFail`.
 let private defaultStoreFailing (shouldFail: string -> bool) =
     let blob =
-        WriteFailingBlobStorage(ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage.InMemoryBlobStorage(), shouldFail)
+        ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage.WriteRefusingBlobStorage(
+            ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage.InMemoryBlobStorage(),
+            shouldFail
+        )
 
     PersistentEventStore.PersistentEventStore(blob, EventRetentionPolicy.unlimited) :> IEventStore
 
@@ -283,22 +259,31 @@ let tests =
                 "the lost write is counted under the default policy too"
         }
 
-        test "Phase 863 — the default store's Write raises a typed EventStoreWriteException on a failed upload" {
+        test "Phase 873 — the default store's Write answers WriteFailed on a failed upload (Phase 863's raise, retired)" {
+            let store = defaultStoreFailing (fun name -> not (isIndexRef name))
+            let evt = Events.create "team-acme" "_platform.audit" "UserLoggedIn" "{}"
+
+            match store.Write evt |> Async.RunSynchronously with
+            | Error(EventStoreError.WriteFailed(scopeId, eventId, _, reason)) ->
+                Expect.equal scopeId "team-acme" "the scope is carried"
+                Expect.equal eventId evt.Id "the event is named"
+                Expect.stringContains reason "simulated storage write failure" "the storage error is carried"
+            | Ok() -> failtest "a failed canonical upload must not complete the write"
+        }
+
+        test "Phase 873 — EventStore.writeOrRaise raises the failure as EventStoreWriteFailed, carrying the error" {
             let store = defaultStoreFailing (fun name -> not (isIndexRef name))
 
-            let raised =
-                match
-                    Async.Catch(store.Write(Events.create "team-acme" "_platform.audit" "UserLoggedIn" "{}"))
-                    |> Async.RunSynchronously
-                with
-                | Choice1Of2() -> None
-                | Choice2Of2 ex -> Some ex
-
-            match raised with
-            | Some(:? PersistentEventStore.EventStoreWriteException as ex) ->
-                Expect.stringContains ex.Message "simulated storage write failure" "the storage error is carried"
-            | Some other -> failtestf "expected EventStoreWriteException, got %s" (other.GetType().FullName)
-            | None -> failtest "a failed canonical upload must not complete the write"
+            match
+                Async.Catch(
+                    EventStore.writeOrRaise store (Events.create "team-acme" "_platform.audit" "UserLoggedIn" "{}")
+                )
+                |> Async.RunSynchronously
+            with
+            | Choice2Of2(EventStoreWriteFailed(EventStoreError.WriteFailed(_, _, _, reason))) ->
+                Expect.stringContains reason "simulated storage write failure" "the storage error is carried"
+            | Choice2Of2 other -> failtestf "expected EventStoreWriteFailed, got %s" (other.GetType().FullName)
+            | Choice1Of2() -> failtest "a failed canonical upload must not complete the write"
         }
 
         test "Phase 863 — a failed INDEX write stays best-effort: the canonical event is written and readable" {
@@ -306,7 +291,7 @@ let tests =
             let evt = Events.create "team-acme" "_platform.audit" "UserLoggedIn" "{}"
 
             // Must not throw — the canonical blob is authoritative.
-            store.Write evt |> Async.RunSynchronously
+            EventStore.writeOrRaise store evt |> Async.RunSynchronously
 
             let all = store.ReadAll "team-acme" |> Async.RunSynchronously
             Expect.equal (all |> List.map _.Id) [ evt.Id ] "the canonical event persisted despite the index failure"

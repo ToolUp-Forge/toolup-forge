@@ -720,9 +720,11 @@ module Client =
 
     /// Phase 444 — resolve the active locale and the message catalog the
     /// shell renders from. One definition, called from `view` (chrome +
-    /// the provider mount) and from `update` (the handful of arms that
+    /// the provider mount), from `update` (the handful of arms that
     /// author user-visible text outside a render, e.g. the cross-module
-    /// results toast), so the two cannot answer differently.
+    /// results toast) and from `buildContext` (the catalog a
+    /// module's `init` and `update` read as `ClientModuleContext.Messages`),
+    /// so the three cannot answer differently.
     ///
     /// Precedence: an in-session choice (`Model.LocaleOverride`, set by
     /// `LocaleSwitched`) first, then the declared `ClientConfig.Locale`
@@ -745,7 +747,7 @@ module Client =
                 locale1 = locale2 && obj.ReferenceEquals(override1, override2))
             (fun (locale, catalogOverride) -> MessageCatalog.resolve locale catalogOverride)
 
-    let private resolveCatalog
+    let internal resolveCatalog
         (config: ClientConfig)
         (localeOverride: string option)
         (platformConfig: Map<string, string>)
@@ -959,6 +961,11 @@ module Client =
             QueryBus = queryBus
             OnTeamSwitched = buildOnTeamSwitched config
             OnAccessibleModulesChanged = buildOnAccessibleModulesChanged config
+            // The catalog the provider is handed for the same
+            // model. A `LocaleSwitched` reset sets `LocaleOverride` and
+            // clears every module state, so each module is re-initialised
+            // through here with the new language's catalog.
+            Messages = resolveCatalog config model.LocaleOverride model.PlatformConfig
         }
 
     // ─── Phase 569 — the route guard's shared inputs ──────────────────
@@ -1551,6 +1558,7 @@ module Client =
                     QueryBus = queryBus
                     OnTeamSwitched = buildOnTeamSwitched _config
                     OnAccessibleModulesChanged = buildOnAccessibleModulesChanged _config
+                    Messages = resolveCatalog _config None Map.empty
                 }
 
                 let state, cmd = moduleImpl.Init seedCtx
@@ -4720,8 +4728,7 @@ module Client =
         // and the same teardown contract as the navigation subscription
         // above; the seam is a mutable global for the same reason
         // `NavigationRequest` is, so a language picker in a consumer's own
-        // chrome needs no dependency on the shell's `Msg` type and
-        // `ClientModuleContext` needs no new field.
+        // chrome needs no dependency on the shell's `Msg` type.
         let localeRequestEffect =
             EffectHandle.programLifetime "locale-request" (fun dispatch ->
                 let unsubscribe =

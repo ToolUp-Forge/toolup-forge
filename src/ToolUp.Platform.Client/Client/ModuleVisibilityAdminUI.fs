@@ -92,6 +92,10 @@ type Model = {
     Error: Notice option
     /// Transient confirmation after a save / clear.
     Status: Notice option
+    /// This module's section of `ClientModuleContext.Messages`,
+    /// kept from `init` so `update` authors reader-facing text in the
+    /// session's language (a locale switch re-initialises the module).
+    Messages: ModuleVisibilityAdminMessages
 }
 
 type Msg =
@@ -181,7 +185,7 @@ let profileInput (note: string) (model: Model) : ModuleVisibilityProfileInput =
 
 // ─── Init ────────────────────────────────────────────────────────────
 
-let init () : Model * Cmd<Msg> =
+let init (ctx: ClientModuleContext) : Model * Cmd<Msg> =
     {
         RegisteredModuleIds = []
         StoredProfile = None
@@ -195,6 +199,7 @@ let init () : Model * Cmd<Msg> =
         Busy = false
         Error = None
         Status = None
+        Messages = ctx.Messages.ModuleVisibilityAdmin
     },
     loadAllCmd ()
 
@@ -289,7 +294,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         {
             model with
                 Busy = false
-                Status = Some(Notice.Info MessageCatalog.english.ModuleVisibilityAdmin.ProfileSaved)
+                Status = Some(Notice.Info model.Messages.ProfileSaved)
         },
         Cmd.ofMsg Load
 
@@ -317,7 +322,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         {
             model with
                 Busy = false
-                Status = Some(Notice.Info MessageCatalog.english.ModuleVisibilityAdmin.ProfileCleared)
+                Status = Some(Notice.Info model.Messages.ProfileCleared)
         },
         Cmd.ofMsg Load
 
@@ -609,11 +614,12 @@ let create (config: ModuleLabel option) : ErasedModule =
     // and so a profile stated over that list can never hide the surface
     // profiles are administered from.
     ToolUp.Platform.ClientModule.create {
-        Init = init
+        Init = fun () -> init ToolUp.Platform.ClientModuleContext.empty
         Update = update
         Name = name
         Icon = icon
     }
+    |> ToolUp.Platform.ClientModule.withContextInit init
     |> ToolUp.Platform.ClientModule.withId moduleId
     |> ToolUp.Platform.ClientModule.withFullWidthView view
     |> ToolUp.Platform.ClientModule.withGroup "Team Management"

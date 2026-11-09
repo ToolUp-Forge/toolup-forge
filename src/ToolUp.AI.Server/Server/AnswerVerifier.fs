@@ -848,7 +848,7 @@ let runVerificationStageWithScope
                         }
 
                         try
-                            let writeTask = store.Write evt |> Async.StartAsTask
+                            let writeTask = EventStore.writeOrRaise store evt |> Async.StartAsTask
                             let timeoutTask = Task.Delay 5_000
                             let! winner = Task.WhenAny(writeTask :> Task, timeoutTask) |> Async.AwaitTask
 

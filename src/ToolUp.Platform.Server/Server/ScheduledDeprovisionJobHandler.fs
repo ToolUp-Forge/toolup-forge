@@ -64,8 +64,12 @@ type ScheduledDeprovisionJobHandler(services: IServiceProvider) =
                         // offboard's own `JobSchedulerLifecycle` hook also
                         // cancels in-scope jobs, but cancel explicitly so
                         // retirement does not depend on hook ordering.
-                        do! scheduler.Cancel(ctx.ScopeId, ctx.JobId)
-                        return Success
+                        match! scheduler.Cancel(ctx.ScopeId, ctx.JobId) with
+                        | Ok() -> return Success
+                        | Error error ->
+                            // The offboard is enqueued; a poll job that did
+                            // not retire is retried as transient.
+                            return TransientFailure(JobTransitionError.message error)
                     | _ ->
                         // The handler only runs because a scheduler
                         // dispatched it, so this is unreachable in practice;

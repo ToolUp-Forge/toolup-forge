@@ -36,13 +36,53 @@ open ToolUp.Platform
 // concern of its own — round-trip the field, and the scheduler that
 // wraps it owns the contract.
 
+//
+// **Failure as data** (Rule 3). Every write answers
+// `Result<unit, JobStoreError>`: an `Error` persisted nothing a later read
+// returns, and an implementation never completes a failed write as `Ok`.
+
+/// Why an `IJobStore` write did not persist.
+[<RequireQualifiedAccess>]
+type JobStoreError =
+    /// The record was not written. `record` names it (`definition` or
+    /// `run <runId>`); `reason` is the backing store's own account.
+    | WriteFailed of scopeId: string * jobId: JobId * record: string * reason: string
+    /// The definition's prior state could not be read, so the write was
+    /// refused rather than leave the prior state's index entries behind.
+    | PriorUnreadable of scopeId: string * jobId: JobId * reason: string
+
+module JobStoreError =
+    /// The failure as one sentence, for a log line or an error message.
+    let describe (error: JobStoreError) : string =
+        match error with
+        | JobStoreError.WriteFailed(scopeId, jobId, record, reason) ->
+            $"job store write failed: the %s{record} of job %O{jobId} (scope %s{scopeId}) was not persisted: %s{reason}"
+        | JobStoreError.PriorUnreadable(scopeId, jobId, reason) ->
+            $"job store write refused: the prior definition of job %O{jobId} (scope %s{scopeId}) could not be read: %s{reason}"
+
+/// Raised by `JobStoreWrite.orRaise` — the adapter for a caller whose
+/// failure path is already an exception.
+exception JobStoreWriteFailed of JobStoreError with
+    override this.Message = JobStoreError.describe this.Data0
+
+module JobStoreWrite =
+    /// Await a store write and raise `JobStoreWriteFailed` on `Error`. For a
+    /// caller whose failure handling is already an exception handler (the
+    /// in-process scheduler's dispatch loop); a caller that can decide
+    /// matches the `Result` instead.
+    let orRaise (write: Async<Result<unit, JobStoreError>>) : Async<unit> = async {
+        match! write with
+        | Ok() -> ()
+        | Error error -> return raise (JobStoreWriteFailed error)
+    }
+
 type IJobStore =
     /// Persist a fresh `JobDefinition` keyed by `JobId`. Caller is
     /// responsible for generating `JobId` (`Guid.NewGuid()`) and
     /// computing `NextRunAt` from the `Trigger`. The store does not
     /// validate the trigger or compute `NextRunAt` itself — those
     /// concerns live in `IJobScheduler`.
-    abstract Save: definition: JobDefinition -> Async<unit>
+    abstract Save: definition: JobDefinition -> Async<Result<unit, JobStoreError>>
 
     /// Read one job by id. Returns `None` when the job does not exist
     /// in `scopeId` — does not fall back to other scopes (cross-scope
@@ -66,7 +106,7 @@ type IJobStore =
     /// a per-`JobId` lease on `IDistributedLock` around the cycle,
     /// while distributed implementations rely on
     /// `IConditionalBlobStorage.UploadWithETag` (Phase 9c follow-up).
-    abstract Update: definition: JobDefinition -> Async<unit>
+    abstract Update: definition: JobDefinition -> Async<Result<unit, JobStoreError>>
 
     /// Idempotency lookup — returns the existing `JobId` if any job
     /// in `scopeId` carries `Idempotency.Key = key` and was created
@@ -80,7 +120,7 @@ type IJobStore =
     /// alongside the definition (one blob per run under
     /// `{scopeId}/{jobId}/runs/{runId}.json`). Callers retain the
     /// `JobRun` value; the store does not return it.
-    abstract RecordRun: run: JobRun -> Async<unit>
+    abstract RecordRun: run: JobRun -> Async<Result<unit, JobStoreError>>
 
     /// Read the most recent `count` run rows for a job. Newest first.
     /// Used by the admin UI's per-job history panel and by the

@@ -307,19 +307,36 @@ let private logAnswering (answer: Result<unit, string>) =
     }
 
 let private deliveryLogTests =
-    testList "the delivery-log write (Phase 1064)" [
-        testCaseAsync "an Error from the delivery log is logged at Warning with the best-effort marker and counted"
+    testList "the delivery-log write (Phase 1064, typed by Phase 873)" [
+        testCaseAsync "an Error from the delivery log is DeliveryLogWriteFailed, carrying the store's reason"
         <| async {
+            let! recorded =
+                WebhookDispatcher.recordDelivery (logAnswering (Error "the log store is down")) "scope-1064" delivery
+
+            match recorded with
+            | Error(WebhookDispatcher.WebhookDispatchError.DeliveryLogWriteFailed(scopeId,
+                                                                                  subscriptionId,
+                                                                                  deliveryId,
+                                                                                  reason)) ->
+                Expect.equal scopeId "scope-1064" "the scope is carried"
+                Expect.equal subscriptionId delivery.SubscriptionId "the subscription is named"
+                Expect.equal deliveryId delivery.DeliveryId "the delivery is named"
+                Expect.equal reason "the log store is down" "with the store's reason"
+            | other -> failtestf "expected DeliveryLogWriteFailed, got %A" other
+        }
+
+        test "a reported DeliveryLogWriteFailed is logged at Warning with the best-effort marker and counted" {
             let log = CountingLogger()
             let failures = ref 0L
 
-            do!
-                WebhookDispatcher.recordDeliveryBestEffort
-                    log
-                    (logAnswering (Error "the log store is down"))
-                    failures
-                    "scope-1064"
-                    delivery
+            WebhookDispatcher.reportDispatchErrors log failures [
+                WebhookDispatcher.WebhookDispatchError.DeliveryLogWriteFailed(
+                    "scope-1064",
+                    delivery.SubscriptionId,
+                    delivery.DeliveryId,
+                    "the log store is down"
+                )
+            ]
 
             Expect.equal failures.Value 1L "the failure is counted"
             Expect.equal (log.Count("warn", "event=delivery_log_write_failed")) 1 "and logged at Warning, once"
@@ -327,15 +344,70 @@ let private deliveryLogTests =
             Expect.equal (log.Count("warn", "the log store is down")) 1 "with the store's reason"
         }
 
-        testCaseAsync "a successful delivery-log write logs nothing and counts nothing (GP 11)"
+        testCaseAsync
+            "a successful delivery-log write answers Ok, and reporting no errors logs and counts nothing (GP 11)"
         <| async {
             let log = CountingLogger()
             let failures = ref 0L
 
-            do! WebhookDispatcher.recordDeliveryBestEffort log (logAnswering (Ok())) failures "scope-1064" delivery
+            let! recorded = WebhookDispatcher.recordDelivery (logAnswering (Ok())) "scope-1064" delivery
+            Expect.isOk recorded "the row is written"
+            WebhookDispatcher.reportDispatchErrors log failures []
 
             Expect.equal failures.Value 0L "nothing counted"
             Expect.equal log.Total 0 "nothing logged"
+        }
+
+        testCaseAsync "a full queue answers Dropped, after writing the WebhookEventDropped row"
+        <| async {
+            let log = CountingLogger()
+            let storage = InMemoryBlobStorage.InMemoryBlobStorage() :> IBlobStorage
+            let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
+
+            // Never started, so nothing drains the bounded queue.
+            use svc =
+                WebhookDispatcher.create
+                    ({
+                        Registry = (WebhookRegistry.createRegistry storage)
+                        DeliveryLog = (WebhookRegistry.createDeliveryLog storage)
+                        EventStore = events
+                        HttpClient = (new HttpClient())
+                        RetryPolicy = WebhookRetryPolicy.defaults
+                        Logger = log
+                        ActivitySink = (NoOpActivitySink() :> IActivitySink)
+                        SecretStore = emptySecretStore
+                        GetRateLimiter = (fun () -> permissiveRateLimiter)
+                        UrlPolicy = { AllowedHosts = [] }
+                    }
+                    : WebhookDispatcher.WebhookDeps)
+                    WebhookDispatcher.WebhookOptions.defaults
+
+            let dispatcher = svc :> WebhookDispatcher.IWebhookDispatcher
+
+            let anEvent () =
+                Events.create "scope-873" "orders" "OrderPlaced" "{}"
+
+            let mutable enqueued = 0
+            let mutable dropped = None
+
+            while dropped.IsNone && enqueued < 100_000 do
+                let evt = anEvent ()
+
+                match! dispatcher.Dispatch evt with
+                | Ok() -> enqueued <- enqueued + 1
+                | Error error -> dropped <- Some(evt, error)
+
+            match dropped with
+            | Some(evt, WebhookDispatcher.WebhookDispatchError.Dropped(scopeId, eventId, eventType, capacity)) ->
+                Expect.equal scopeId "scope-873" "the scope is named"
+                Expect.equal eventId evt.Id "the dropped event is named"
+                Expect.equal eventType "OrderPlaced" "with its type"
+                Expect.equal capacity enqueued "the queue held exactly its capacity"
+            | other -> failtestf "expected Dropped once the queue was full, got %A" other
+
+            let! rows = events.ReadByType("scope-873", "WebhookEventDropped")
+            Expect.hasLength rows 1 "the drop's audit row is written before Dispatch answers"
+            Expect.equal (log.Count("warn", "event=queue_full")) 1 "and the drop is logged once"
         }
 
         test "a fresh dispatcher has counted no delivery-log failures" {

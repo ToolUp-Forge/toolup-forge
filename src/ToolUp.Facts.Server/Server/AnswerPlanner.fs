@@ -560,7 +560,7 @@ type AnswerPlanner
 
         member _.Record(scope: ResolvedScope, messageId, plan) = async {
             do!
-                events.Write {
+                EventStore.writeOrRaise events {
                     Id = Guid.NewGuid()
                     OccurredAt = clock().ToUniversalTime()
                     ScopeId = scope.ScopeId

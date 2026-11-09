@@ -704,7 +704,7 @@ type FactDisclosureGate
     let writeEvent (scopeId: string) (eventType: string) (payload: string) : Async<unit> = async {
         try
             do!
-                events.Write {
+                EventStore.writeOrRaise events {
                     Id = Guid.NewGuid()
                     OccurredAt = DateTime.UtcNow
                     ScopeId = scopeId

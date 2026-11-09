@@ -1303,7 +1303,7 @@ type GroundedNarrativeRunner
         | Some events ->
             try
                 do!
-                    events.Write {
+                    EventStore.writeOrRaise events {
                         Id = Guid.NewGuid()
                         OccurredAt = DateTime.UtcNow
                         ScopeId = scopeId

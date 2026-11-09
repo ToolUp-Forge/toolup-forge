@@ -1,5 +1,5 @@
 // GENERATED FILE — do not edit by hand. Regenerate with `dev-scripts/generate-localization-skeleton.ps1`.
-// The source of truth is `MessageCatalog.english` in src/ToolUp.Platform.Client/Client/MessageCatalog.fs.
+// The source of truth is `MessageCatalog.english` in src/ToolUp.Platform.Core/Shared/MessageCatalog.fs.
 //
 // A translation skeleton for `MessageCatalog` (Phase 767): every string the SDK's client
 // shell and built-in modules can render, keyed by section and field, with its English

@@ -340,7 +340,7 @@ module FactAudit =
     let write (events: IEventStore) (scopeId: string) (audit: FactAuditEvent list) : Async<unit> = async {
         for event in audit do
             do!
-                events.Write {
+                EventStore.writeOrRaise events {
                     Id = Guid.NewGuid()
                     OccurredAt = FactAuditEvent.occurredAt event
                     ScopeId = scopeId

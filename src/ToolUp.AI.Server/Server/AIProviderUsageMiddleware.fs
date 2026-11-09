@@ -738,7 +738,7 @@ let private failoverSink (sp: System.IServiceProvider) : AIProviderFailoverRecor
             }
 
             try
-                let! child = Async.StartChild(store.Write evt, FailoverAuditWriteTimeoutMs)
+                let! child = Async.StartChild(EventStore.writeOrRaise store evt, FailoverAuditWriteTimeoutMs)
                 do! child
             with _ ->
                 // Timed out or threw. The failover itself already

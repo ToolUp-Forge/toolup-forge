@@ -59,13 +59,16 @@ type JobNotifyEventStore
 
     interface IEventStore with
         member _.Write(evt) = async {
-            do! inner.Write evt
+            match! inner.Write evt with
+            | Error _ as failed -> return failed
+            | Ok() ->
+                match schedulerLookup () with
+                | Some scheduler ->
+                    do! scheduler.NotifyEventWritten(evt.ScopeId, evt.EventType, evt.Id)
+                    watermark |> Option.iter _.Advance(evt)
+                | None -> ()
 
-            match schedulerLookup () with
-            | Some scheduler ->
-                do! scheduler.NotifyEventWritten(evt.ScopeId, evt.EventType, evt.Id)
-                watermark |> Option.iter _.Advance(evt)
-            | None -> ()
+                return Ok()
         }
 
         member _.ReadAll(scopeId) = inner.ReadAll(scopeId)

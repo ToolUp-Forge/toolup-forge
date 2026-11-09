@@ -14,7 +14,10 @@ type InMemoryEventStore() =
         lock lockObj (fun () -> events |> List.filter (fun e -> e.ScopeId = scopeId))
 
     interface IEventStore with
-        member _.Write(event) = async { lock lockObj (fun () -> events <- event :: events) }
+        member _.Write(event) = async {
+            lock lockObj (fun () -> events <- event :: events)
+            return Ok()
+        }
 
         // Sort by `OccurredAt` on read — the contract promises
         // reverse-chronological ordering by that field, not by insertion

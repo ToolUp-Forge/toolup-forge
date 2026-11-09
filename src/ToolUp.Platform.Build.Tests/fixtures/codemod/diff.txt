@@ -275,6 +275,14 @@
 @@ L14 [878-scopekey-literal]
 -let userScope = ScopeKey.User("alice")
 +let userScope = ScopeKey.User(UserId "alice")
+--- a/src/Server/Infrastructure.fs
++++ b/src/Server/Infrastructure.fs
+@@ L7 [873-event-store-write]
+-    do! eventStore.Write evt
++    do! EventStore.writeOrRaise eventStore evt
+@@ L11 [873-job-store-write]
+-    do! jobStore.Save job
++    do! JobStoreWrite.orRaise <| jobStore.Save job
 --- a/src/Server/Jobs.fs
 +++ b/src/Server/Jobs.fs
 @@ L6 [1066-schedule-result-type]
@@ -387,4 +395,4 @@
 @@ L41 [73-remoting-namespace]
 -let legacyJson = Fable.Remoting.Json.FableJsonConverter()
 +let legacyJson = ToolUp.Remoting.Json.FableJsonConverter()
-Codemod: 97 rewrite(s) across 17 file(s) pending.
+Codemod: 99 rewrite(s) across 18 file(s) pending.

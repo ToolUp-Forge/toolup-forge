@@ -171,9 +171,9 @@ type ManualJobScheduler() =
                 return Ok(Scheduled jobId)
         }
 
-        member _.Cancel(_, _) = async.Return()
-        member _.Disable(_, _) = async.Return()
-        member _.Enable(_, _) = async.Return()
+        member _.Cancel(_, _) = async.Return(Ok())
+        member _.Disable(_, _) = async.Return(Ok())
+        member _.Enable(_, _) = async.Return(Ok())
         member _.Get(_, _) = async.Return None
         member _.ListJobs _ = async.Return []
         member _.GetRecentRuns(_, _, _) = async.Return []

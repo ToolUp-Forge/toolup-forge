@@ -649,7 +649,7 @@ module CoherenceCheck =
             DetectedAt = now
         }
 
-        events.Write {
+        EventStore.writeOrRaise events {
             Id = Guid.NewGuid()
             OccurredAt = now
             ScopeId = scopeId

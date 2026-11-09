@@ -167,7 +167,7 @@ let private emitAudit (eventStore: IEventStore) (logger: ILogger) (response: Smo
                 SmokeTest.AuditEventType
                 (JsonSerializer.Serialize(payload, auditJsonOptions))
 
-        do! eventStore.Write evt
+        do! EventStore.writeOrRaise eventStore evt
     with ex ->
         logger.Warn(sprintf "[SmokeTestHandler] audit write failed: %s" ex.Message)
 }

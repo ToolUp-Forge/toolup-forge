@@ -2265,7 +2265,7 @@ type EventStoreAuditLog
             if policy = RefuseAction then
                 raise (AuditWriteRefusedException(scopeId, eventTypeName, ex))
         | Ok evt ->
-            match! Async.Catch(eventStore.Write evt) with
+            match! Async.Catch(EventStore.writeOrRaise eventStore evt) with
             | Choice1Of2() -> ()
             | Choice2Of2 ex ->
                 // Phase 114 — promote the loss signal from Warn-only to

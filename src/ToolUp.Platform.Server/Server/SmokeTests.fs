@@ -150,7 +150,7 @@ type EventStoreSmoke(eventStore: IEventStore) =
                     Payload = nonceText
                 }
 
-                do! eventStore.Write evt
+                do! EventStore.writeOrRaise eventStore evt
 
                 let! readBack = eventStore.ReadBySource(SmokeTest.SentinelScope, eventStoreSmokeSource)
 
@@ -265,7 +265,12 @@ type JobSchedulerSmoke(scheduler: IJobScheduler, eventStore: IEventStore) =
                                     "Schedule returned Ok but no JobScheduled lifecycle event was observed in IEventStore."
                 finally
                     match scheduledJobId with
-                    | Some jobId -> scheduler.Cancel(SmokeTest.SentinelScope, jobId) |> Async.RunSynchronously
+                    | Some jobId ->
+                        // Cleanup of the sentinel job only: a refusal leaves it
+                        // in the `_smoke` scope and does not change the verdict.
+                        match scheduler.Cancel(SmokeTest.SentinelScope, jobId) |> Async.RunSynchronously with
+                        | Ok()
+                        | Error _ -> ()
                     | None -> ()
             }
 

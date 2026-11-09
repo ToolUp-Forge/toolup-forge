@@ -262,7 +262,9 @@ let private callbackFailed (sink: DeliverySink) (delivery: Delivery) (hook: Deli
 
         match!
             Async.Catch(
-                events.Write(Events.create delivery.Scope.ScopeId DeliverySourceModule CallbackFailedEventType payload)
+                EventStore.writeOrRaise
+                    events
+                    (Events.create delivery.Scope.ScopeId DeliverySourceModule CallbackFailedEventType payload)
             )
         with
         | Choice1Of2() -> ()

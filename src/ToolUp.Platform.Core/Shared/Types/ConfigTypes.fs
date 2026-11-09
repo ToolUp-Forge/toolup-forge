@@ -177,6 +177,14 @@ type ClientModuleContext = {
     /// otherwise. The built-in `PermissionsAdminUI` invokes it after a
     /// successful `SetModuleExposure`.
     OnAccessibleModulesChanged: (unit -> unit) option
+    /// The message catalog the shell resolved for this
+    /// session (locale + the deployment's `MessageCatalogOverride`), the
+    /// same value `MessageCatalogProvider` publishes to the view tree.
+    /// A module keeps the section it needs on its model from `Init`, so
+    /// `update` authors reader-facing text in the session's language; a
+    /// locale switch re-initialises every module with the new catalog.
+    /// `ClientModuleContext.empty` carries `MessageCatalog.english`.
+    Messages: MessageCatalog
 }
 
 /// No-op `IModuleQueryBus` used by `ClientModuleContext.empty` and
@@ -202,4 +210,5 @@ module ClientModuleContext =
         QueryBus = NoOpModuleQueryBus() :> IModuleQueryBus
         OnTeamSwitched = None
         OnAccessibleModulesChanged = None
+        Messages = MessageCatalog.english
     }

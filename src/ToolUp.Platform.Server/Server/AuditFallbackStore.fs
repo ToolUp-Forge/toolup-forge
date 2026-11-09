@@ -123,7 +123,7 @@ type AuditFallbackStore(root: string, maxBytes: int64, logger: ILogger) =
                         halted <- true
                 | Choice1Of2 evt ->
                     let written = async {
-                        do! eventStore.Write evt
+                        do! EventStore.writeOrRaise eventStore evt
                         File.Delete path
                     }
 

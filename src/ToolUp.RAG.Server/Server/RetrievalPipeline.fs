@@ -871,7 +871,10 @@ type RetrievalPipeline
                         | Some id -> VectorScope.auditScopeId (Team id)
                         | None -> VectorScope.auditScopeId Platform
 
-                    do! es.Write(Events.create scopeId "ToolUp.RAG" KnowledgeQueryRejectedEventType json)
+                    do!
+                        EventStore.writeOrRaise
+                            es
+                            (Events.create scopeId "ToolUp.RAG" KnowledgeQueryRejectedEventType json)
                 with _ ->
                     ()
         }

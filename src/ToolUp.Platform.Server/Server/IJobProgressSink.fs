@@ -203,7 +203,7 @@ type FanOutJobProgressSink
                             JobProgress.EventType
                             (ProgressJson.serialize payload)
 
-                    do! eventStore.Write evt
+                    do! EventStore.writeOrRaise eventStore evt
                 with ex ->
                     logger.Warn
                         $"[JobProgress] event=progress_event_write_failed jobId=%O{jobId} scope=%s{scopeId} terminal=%b{terminal}: {ex.Message}"

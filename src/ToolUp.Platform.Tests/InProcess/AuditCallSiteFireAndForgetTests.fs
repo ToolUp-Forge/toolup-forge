@@ -589,11 +589,6 @@ let private admitted: Admitted list = [
         Anchor = "Channel.CreateBounded<'T>(BoundedChannelOptions(Capacity, FullMode = BoundedChannelFullMode.Wait))"
         Reason = "runProducer runs under try/with, and emit never throws; a fault completes the channel"
     }
-    {
-        File = "WebhookDispatcher.fs"
-        Anchor = "Async.Start(emitAudit event.ScopeId \"WebhookEventDropped\""
-        Reason = "emitAudit wraps eventStore.Write in try/with and logs the failure"
-    }
 ]
 
 /// `Async.Start` as a whole word: never `StartAsTask`, `StartImmediate`,
