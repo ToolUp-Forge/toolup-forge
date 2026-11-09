@@ -273,10 +273,7 @@ module ValidationMessages =
 
 module internal Validation =
 
-    // Reflect over public AND non-public records — input DTOs are usually
-    // public, but a consumer may declare an internal input record; the
-    // engine must see its fields either way.
-    let private reflectionFlags = BindingFlags.Public ||| BindingFlags.NonPublic
+    let private reflectionFlags = ApiRecord.reflectionFlags
 
     // Family-agnostic attribute recognition. forge API records
     // sit in Platform.Core (Fable-compiled) and carry the tier-shared
@@ -401,21 +398,6 @@ module internal Validation =
                 |> Option.map (fun n -> MaxValueAttribute n :> ValidationAttribute)
             | _ -> None
 
-    /// Extract the input type from an API record field. ToolUp.Remoting
-    /// method signatures are F# function types (`'input -> Async<'output>`);
-    /// for multi-argument methods the signature is curried, so we walk
-    /// until we hit a non-function (the eventual `Async<'T>`).
-    /// Returns the FIRST input type (v0 — multi-arg validation is a
-    /// follow-up).
-    let firstInputType (apiField: PropertyInfo) : Type option =
-        let fieldType = apiField.PropertyType
-
-        if FSharpType.IsFunction fieldType then
-            let inputT, _ = FSharpType.GetFunctionElements fieldType
-            Some inputT
-        else
-            None
-
     /// The F# record type reachable directly from a field's type, if the
     /// field is a record, an array / list / seq of records, or an option
     /// of a record. Used both to decide whether to recurse at request
@@ -506,28 +488,27 @@ module internal Validation =
                     | None -> ()
             ]
 
-    /// The one rendering of a validator the engine cannot build. A declared
+    /// One validated method's unbuildable `[<Custom>]` validators, each
+    /// rendered as `method path: [<Custom>] validator T cannot be built (why)`.
+    let unbuildableOf (methodName: string) (inputType: Type) : string list = [
+        for path, validatorType, reason in unbuildableValidators (HashSet<Type>()) "" inputType do
+            sprintf "%s %s: [<Custom>] validator %s cannot be built (%s)" methodName path validatorType.FullName reason
+    ]
+
+    /// The one rendering of the validators the engine cannot build. A declared
     /// validator that never runs is a guard failing open, so the table build
     /// refuses it rather than skipping it per request.
-    let private refuseUnbuildableValidators (apiType: Type) (inputs: (string * Type) list) =
-        let refusals = [
-            for methodName, inputType in inputs do
-                for path, validatorType, reason in unbuildableValidators (HashSet<Type>()) "" inputType do
-                    sprintf
-                        "%s %s: [<Custom>] validator %s cannot be built (%s)"
-                        methodName
-                        path
-                        validatorType.FullName
-                        reason
-        ]
+    let unbuildableRefusal (apiTypeName: string) (refusals: string list) : string =
+        sprintf
+            "ToolUp.Remoting refused to start: API record %s declares validators that cannot run: %s"
+            apiTypeName
+            (String.concat "; " refusals)
 
-        if not (List.isEmpty refusals) then
-            invalidOp (
-                sprintf
-                    "ToolUp.Remoting refused to start: API record %s declares validators that cannot run: %s"
-                    apiType.Name
-                    (String.concat "; " refusals)
-            )
+    /// One field's validated input: its first argument, when that record (or
+    /// a record nested within it) carries at least one validation attribute.
+    let validatedInputOf (field: PropertyInfo) : Type option =
+        ApiRecord.firstInput field
+        |> Option.filter (recordHasValidations (HashSet<Type>()))
 
     /// Cache per-method: input type ONLY when the method's input record
     /// (or a record nested within it) carries at least one validation
@@ -536,19 +517,19 @@ module internal Validation =
     /// per-request lookup is a fast `Map.tryFind` miss. Refuses, by name, a
     /// `[<Custom>]` validator that cannot be built.
     let classify (apiType: Type) : Map<string, Type> =
-        if not (FSharpType.IsRecord(apiType, reflectionFlags)) then
-            Map.empty
-        else
-            let inputs =
-                FSharpType.GetRecordFields(apiType, reflectionFlags)
-                |> Array.choose (fun apiField ->
-                    match firstInputType apiField with
-                    | Some inputT when recordHasValidations (HashSet<Type>()) inputT -> Some(apiField.Name, inputT)
-                    | _ -> None)
-                |> List.ofArray
+        let inputs =
+            ApiRecord.fields apiType
+            |> Array.choose (fun field -> validatedInputOf field |> Option.map (fun t -> field.Name, t))
+            |> List.ofArray
 
-            refuseUnbuildableValidators apiType inputs
-            Map.ofList inputs
+        let refusals =
+            inputs
+            |> List.collect (fun (methodName, inputType) -> unbuildableOf methodName inputType)
+
+        if not (List.isEmpty refusals) then
+            invalidOp (unbuildableRefusal apiType.Name refusals)
+
+        Map.ofList inputs
 
     /// Unwrap an F# `option` value reflectively — `Some inner` → `Some
     /// inner`, `None` → `None`.

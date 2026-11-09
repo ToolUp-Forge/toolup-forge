@@ -38,21 +38,16 @@ open Microsoft.FSharp.Reflection
 // which is exactly the shape the per-method route carries. Recorded as the
 // 69i.C decision in `docs/migrations/69i-long-running-handle.md`.
 
-/// Phase 69i — which companion a request addresses.
+/// Which companion of a long-running method a request addresses.
 [<RequireQualifiedAccess>]
-type internal JobCompanion =
+type JobCompanion =
     | Status
     | Progress
     | Cancel
 
 module internal LongRunning =
 
-    // Reflect over public AND non-public records, for the same reason the
-    // streaming and auth classifiers do: an internal API record must arm
-    // the classification exactly like a public one.
-    let private reflectionFlags = BindingFlags.Public ||| BindingFlags.NonPublic
-
-    /// Phase 69i.D — the interval at which the progress companion polls the
+    /// The interval at which the progress companion polls the
     /// dispatcher between frames. The v0 dispatcher has no push seam, so
     /// the subscription is a poll loop that emits only status CHANGES; a
     /// dispatcher with its own change feed can shorten this to nothing.
@@ -80,30 +75,22 @@ module internal LongRunning =
         else
             None
 
+    /// One field's long-running result type `'T`, when its function shape
+    /// finally returns `Async<JobHandle<'T>>`.
+    let resultOf (apiField: PropertyInfo) : Type option =
+        if FSharpType.IsFunction apiField.PropertyType then
+            resultTypeOfJobHandleAsync (finalReturn apiField.PropertyType)
+        else
+            None
+
     /// Cache per-method classification at startup. Returns a map from
     /// method name → the handle's result type `'T` ONLY for methods whose
     /// function shape finally returns `Async<JobHandle<'T>>`; other methods
     /// are absent so per-call lookup is a fast Map.tryFind miss.
     let classify (apiType: Type) : Map<string, Type> =
-        if not (FSharpType.IsRecord(apiType, reflectionFlags)) then
-            Map.empty
-        else
-            FSharpType.GetRecordFields(apiType, reflectionFlags)
-            |> Array.choose (fun apiField ->
-                if FSharpType.IsFunction apiField.PropertyType then
-                    resultTypeOfJobHandleAsync (finalReturn apiField.PropertyType)
-                    |> Option.map (fun resultType -> apiField.Name, resultType)
-                else
-                    None)
-            |> Map.ofArray
-
-    /// The closed `JobHandle<'T>` type for a result type.
-    let handleType (resultType: Type) : Type =
-        typedefof<JobHandle<_>>.MakeGenericType([| resultType |])
-
-    /// The closed `JobStatus<'T>` type for a result type.
-    let statusType (resultType: Type) : Type =
-        typedefof<JobStatus<_>>.MakeGenericType([| resultType |])
+        ApiRecord.fields apiType
+        |> Array.choose (fun apiField -> resultOf apiField |> Option.map (fun resultType -> apiField.Name, resultType))
+        |> Map.ofArray
 
     /// Resolve `<method>/<companion>` from a request path: the last two
     /// segments name a classified long-running method and one of the three
@@ -113,7 +100,7 @@ module internal LongRunning =
     /// named `status` / `progress` / `cancel` — and even then only when the
     /// record carries long-running methods, since the map is otherwise
     /// empty and this is a fast miss.
-    let tryResolveCompanion (shapes: Map<string, Type>) (path: string) : (string * JobCompanion * Type) option =
+    let tryResolveCompanion (shapes: Map<string, 'calls>) (path: string) : (string * JobCompanion * 'calls) option =
         if Map.isEmpty shapes || String.IsNullOrEmpty path then
             None
         else
@@ -132,10 +119,10 @@ module internal LongRunning =
                     | _ -> None
 
                 match companion, Map.tryFind methodName shapes with
-                | Some c, Some resultType -> Some(methodName, c, resultType)
+                | Some c, Some calls -> Some(methodName, c, calls)
                 | _ -> None
 
-    /// Phase 69i.E — the subject a resolved auth context contributes to the
+    /// The subject a resolved auth context contributes to the
     /// call context: its `SubjectId`, unless the caller is anonymous (an
     /// anonymous "subject" would let every anonymous caller read every
     /// anonymous job, which is the same as no owner — so say so).
@@ -144,35 +131,26 @@ module internal LongRunning =
         | Some ctx when not (ctx.IsAnonymous()) -> Some ctx.SubjectId
         | _ -> None
 
-    /// Build a `JobHandle<'T>` value for `resultType` from a bare job id —
-    /// used when a companion body carried no parseable handle, so the call
-    /// resolves through the dispatcher's own not-found arm rather than a
-    /// second error shape.
-    let emptyHandle (resultType: Type) : obj =
-        let case = FSharpType.GetUnionCases(handleType resultType)[0]
-        FSharpValue.MakeUnion(case, [| box "" |])
-
-    // ── Typed bridges, closed over `'T` via MakeGenericMethod ─────────────
+    // ── Typed companion calls ──────────────────────────────────────────
     //
-    // The companion route knows `'T` only as a `Type` (from the
-    // classification), while `IJobDispatcher` is generic per call. Each
-    // bridge below is a generic method the route closes with
-    // `MakeGenericMethod resultType` and invokes with the boxed handle; the
-    // bridge does the typed call and boxes the answer back.
+    // `IJobDispatcher` is generic per call, while the companion route serves
+    // a method whose `'T` the dispatcher table knows as data. Each method's
+    // three calls are closed over its `'T` ONCE, when its contract is built
+    // (`JobCompanionCalls.For<'T>`), so a request runs a typed closure.
 
-    /// 69i.C — the poll companion: `GetStatus` on the composed dispatcher.
+    /// The poll companion: `GetStatus` on the composed dispatcher.
     let statusOf<'T> (dispatcher: IJobDispatcher) (handle: obj) : Async<obj> = async {
         let! status = dispatcher.GetStatus<'T>(handle :?> JobHandle<'T>)
         return box status
     }
 
-    /// 69i.G — the cancel companion: `Cancel` on the composed dispatcher.
+    /// The cancel companion: `Cancel` on the composed dispatcher.
     let cancelOf<'T> (dispatcher: IJobDispatcher) (handle: obj) : Async<obj> = async {
         do! dispatcher.Cancel<'T>(handle :?> JobHandle<'T>)
         return box ()
     }
 
-    /// 69i.D — the progress companion: a cold `IAsyncEnumerable<JobStatus<'T>>`
+    /// The progress companion: a cold `IAsyncEnumerable<JobStatus<'T>>`
     /// that polls the dispatcher every `PollInterval`, yields each status
     /// CHANGE, and ends with the first terminal status (`Succeeded` /
     /// `Failed` / `Cancelled`) — the shape `AsyncStream.fromCallback`
@@ -205,37 +183,59 @@ module internal LongRunning =
                     do! Async.Sleep PollInterval
         })
 
-    let private bridge (name: string) (resultType: Type) : MethodInfo =
-        let openMethod =
-            typeof<JobCompanion>.Assembly
-                .GetType("ToolUp.Remoting.Server.LongRunning")
-                .GetMethod(name, BindingFlags.Public ||| BindingFlags.NonPublic ||| BindingFlags.Static)
+/// A long-running method's companion calls, closed over its result type once,
+/// when the method's contract is built. Two values are equal when they serve
+/// the same result type.
+[<Sealed>]
+type JobCompanionCalls
+    private
+    (
+        resultType: Type,
+        handleType: Type,
+        statusType: Type,
+        emptyHandle: obj,
+        status: IJobDispatcher -> obj -> Async<obj>,
+        cancel: IJobDispatcher -> obj -> Async<obj>,
+        subscribe: IJobDispatcher -> string option -> bool -> obj -> obj
+    ) =
 
-        openMethod.MakeGenericMethod([| resultType |])
+    /// The job's result type `'T`.
+    member _.ResultType = resultType
 
-    /// Run the `status` or `cancel` companion for `resultType`, returning
-    /// the boxed `JobStatus<'T>` (status) or boxed `unit` (cancel).
-    let invokeCompanion
-        (companion: JobCompanion)
-        (dispatcher: IJobDispatcher)
-        (resultType: Type)
-        (handle: obj)
-        : Async<obj> =
-        let name =
-            match companion with
-            | JobCompanion.Status -> "statusOf"
-            | JobCompanion.Cancel -> "cancelOf"
-            | JobCompanion.Progress -> invalidArg "companion" "progress is served by the SSE path (subscribeCompanion)"
+    /// `JobHandle<'T>`: the type a companion's body decodes to.
+    member internal _.HandleType = handleType
 
-        (bridge name resultType).Invoke(null, [| box dispatcher; handle |]) :?> Async<obj>
+    /// `JobStatus<'T>`: what the status and progress companions answer with.
+    member internal _.StatusType = statusType
 
-    /// Build the boxed `IAsyncEnumerable<JobStatus<'T>>` the progress
-    /// companion streams, for `resultType`.
-    let subscribeCompanion
-        (dispatcher: IJobDispatcher)
-        (resultType: Type)
-        (subject: string option)
-        (jobAdmin: bool)
-        (handle: obj)
-        : obj =
-        (bridge "subscribe" resultType).Invoke(null, [| box dispatcher; box subject; box jobAdmin; handle |])
+    /// A handle naming no job, for a body that carried none: the call then
+    /// resolves through the dispatcher's own not-found arm.
+    member internal _.EmptyHandle = emptyHandle
+
+    /// The poll companion: `GetStatus` on the composed dispatcher.
+    member internal _.Status = status
+
+    /// The cancel companion: `Cancel` on the composed dispatcher.
+    member internal _.Cancel = cancel
+
+    /// The progress companion's `IAsyncEnumerable<JobStatus<'T>>`, boxed.
+    member internal _.Subscribe = subscribe
+
+    override _.Equals(other: obj) =
+        match other with
+        | :? JobCompanionCalls as calls -> calls.ResultType = resultType
+        | _ -> false
+
+    override _.GetHashCode() = resultType.GetHashCode()
+
+    /// The calls for a method whose handle carries `'T`.
+    static member For<'T>() : JobCompanionCalls =
+        JobCompanionCalls(
+            typeof<'T>,
+            typeof<JobHandle<'T>>,
+            typeof<JobStatus<'T>>,
+            box (JobHandle "": JobHandle<'T>),
+            LongRunning.statusOf<'T>,
+            LongRunning.cancelOf<'T>,
+            fun dispatcher subject jobAdmin handle -> box (LongRunning.subscribe<'T> dispatcher subject jobAdmin handle)
+        )

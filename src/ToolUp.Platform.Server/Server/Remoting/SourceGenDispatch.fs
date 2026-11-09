@@ -6,11 +6,11 @@ open System.Text.Json
 open System.Threading.Tasks
 
 // =============================================================================
-// Phase 69k — source-generator-driven dispatcher (substrate + manual PoC)
+// Source-generator-driven dispatcher (substrate + manual PoC)
 // =============================================================================
 //
 // This file ships the RUNTIME-side substrate of Phase 69k:
-//   * (Phase 946) the 69k v0 contract, `IGeneratedDispatchTable`, is
+//   * the 69k v0 contract, `IGeneratedDispatchTable`, is
 //     REMOVED: a route handler of that shape writes its own response and
 //     so would run outside the pre-flight chain (see "Phase 906" below).
 //     No adapter composed it, and none would.
@@ -18,7 +18,7 @@ open System.Threading.Tasks
 //     emitted `register ()` places its table.
 //   * `[<DispatcherTarget>]` marker attribute the source-generator would
 //     scan for when emitting tables.
-//   * (Phase 906) `GeneratedArguments`, `GeneratedMethod<'impl>`,
+//   * `GeneratedArguments`, `GeneratedMethod<'impl>`,
 //     `GeneratedInvocationTable<'impl>` and the `GeneratedInvocation`
 //     builders — the shape the generator's dispatch emission now targets.
 //
@@ -56,9 +56,9 @@ open System.Threading.Tasks
 // the record after generation) is served by the reflective proxy, built
 // lazily on its first request.
 
-/// Phase 69k — marker attribute on an API record type. The 69k sketch had
+/// Marker attribute on an API record type. The 69k sketch had
 /// a source-generator scan for this attribute and emit a dispatch table
-/// per attributed record; the generator that shipped (Phase 906) is driven
+/// per attributed record; the generator that shipped is driven
 /// by its build items instead and emits a `GeneratedInvocationTable<'impl>`.
 /// Without a registered table the runtime uses reflection.
 [<AttributeUsage(AttributeTargets.Interface
@@ -67,8 +67,8 @@ open System.Threading.Tasks
 type DispatcherTargetAttribute() =
     inherit Attribute()
 
-/// Phase 69k — process-wide registry of generated dispatch tables.
-/// A generated module's `register ()` (Phase 906) calls `register` once
+/// Process-wide registry of generated dispatch tables.
+/// A generated module's `register ()` calls `register` once
 /// per emitted table; the remoting proxy calls `tryGet<'TImpl>()` once,
 /// when it is built, and composes a `GeneratedInvocationTable<'TImpl>` it
 /// finds there (any other registered shape is ignored — reflection).
@@ -105,7 +105,7 @@ module GeneratedDispatchRegistry =
     /// this — registrations are once-per-process at startup.
     let internal clearForTests () = tables.Clear()
 
-/// Phase 906 — the arguments of ONE generated call, walked by the remoting
+/// The arguments of ONE generated call, walked by the remoting
 /// proxy's own code.
 ///
 /// Generated code receives one of these per request and does two things
@@ -130,7 +130,7 @@ type GeneratedArguments internal () =
     /// write its result to the response as the proxy does.
     abstract Complete<'T> : call: Async<'T> -> Task<InvocationResult>
 
-/// Phase 906 — one method of a generated invocation table: its name, its
+/// One method of a generated invocation table: its name, its
 /// flattened field type (the reflective proxy's `TypeInfo.flattenFuncTypes`
 /// of the record field, emitted rather than computed so building the table
 /// reflects over nothing) and the typed call.
@@ -150,22 +150,27 @@ type GeneratedMethod<'impl>
     /// then the `Async<_>` result.
     member _.FlattenedTypes = flattenedTypes
 
-    /// The first argument's decode for the validation stage's early parse
-    /// (Phase 856.B), when the method has a JSON first argument.
+    /// The first argument's decode for the validation stage's early parse,
+    /// when the method has a JSON first argument.
     member internal _.DecodeFirst = decodeFirst
 
     /// The typed call of the handler.
     member internal _.Call = call
 
-/// Phase 906 — a generated API record's invocations, one per method it
+/// A generated API record's invocations, one per method it
 /// covers. Registered through `GeneratedInvocation.register`; the remoting
 /// proxy composes it when it is built.
 [<Sealed>]
-type GeneratedInvocationTable<'impl> internal (methods: GeneratedMethod<'impl> list) =
+type GeneratedInvocationTable<'impl> internal (contract: Lazy<ApiContract>, methods: GeneratedMethod<'impl> list) =
     /// Every covered method, in the record's declaration order.
     member _.Methods = methods
 
-/// Phase 906 — the builders the generator's dispatch emission calls. Not
+    /// The record's contract: the value the generator emitted beside the
+    /// table, or — for a table emitted before the contract was — the one
+    /// `Contract.read` yields, read once, when first asked.
+    member _.Contract: ApiContract = contract.Value
+
+/// The builders the generator's dispatch emission calls. Not
 /// meant to be written by hand: a table is emitted from the record it
 /// dispatches for, so its method names and types cannot drift from it
 /// without failing to compile.
@@ -221,9 +226,21 @@ module GeneratedInvocation =
 
         GeneratedMethod<'impl>(name, flattenedTypes, Some decodeFirst, call)
 
-    /// The table of a record's generated invocations.
+    /// The table of a record's generated invocations, beside the contract the
+    /// generator emitted for it: a registered table reads nothing off the
+    /// record at boot.
+    let tableWith<'impl>
+        (contract: ApiContract)
+        (methods: GeneratedMethod<'impl> list)
+        : GeneratedInvocationTable<'impl> =
+        GeneratedInvocationTable<'impl>(Lazy<ApiContract>.CreateFromValue contract, methods)
+
+    /// The table of a record's generated invocations, as a module generated
+    /// before the contract was emitted declares it: its contract is read off
+    /// the record when first asked. Rerun the generator's `dispatch` command
+    /// to emit the contract as data.
     let table<'impl> (methods: GeneratedMethod<'impl> list) : GeneratedInvocationTable<'impl> =
-        GeneratedInvocationTable<'impl>(methods)
+        GeneratedInvocationTable<'impl>(lazy (Contract.read typeof<'impl>), methods)
 
     /// Register a table so the remoting proxy for `'impl` composes it. Call
     /// once, before the remoting handler is built.

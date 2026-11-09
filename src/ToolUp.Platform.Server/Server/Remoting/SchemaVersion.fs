@@ -6,7 +6,7 @@ open System.Reflection
 open Microsoft.FSharp.Reflection
 
 // =============================================================================
-// Phase 69j — schema-versioned wire envelopes
+// Schema-versioned wire envelopes
 // =============================================================================
 //
 // Phase 69j.A shipped the envelope half: `CategorisedErrorResult` carries
@@ -51,7 +51,7 @@ open Microsoft.FSharp.Reflection
 // enforcement is what keeps "the header means the same thing wherever it is
 // honoured" true without pretending the second adapter honours it.
 
-/// Phase 69j — declares which wire-schema versions an API record field
+/// Declares which wire-schema versions an API record field
 /// serves.
 ///
 /// Placed on a versioned handler (`GetThing_V2`) it OVERRIDES the version
@@ -73,7 +73,7 @@ type SupportsSchemaAttribute(versions: int[]) =
     /// The wire-schema versions this handler serves.
     member _.Versions = versions
 
-/// Phase 69j — marks a wire-schema version as scheduled for retirement.
+/// Marks a wire-schema version as scheduled for retirement.
 ///
 /// `retireAfter` is an ISO-8601 date (`"2027-01-01"`) or date-time, NOT a
 /// `System.DateTime`: CLR attribute arguments must be compile-time constants
@@ -96,7 +96,7 @@ type DeprecatedSchemaAttribute(retireAfter: string) =
     /// The published retirement date, ISO-8601.
     member _.RetireAfter = retireAfter
 
-/// Phase 69j — everything the dispatcher knows about one logical method's
+/// Everything the dispatcher knows about one logical method's
 /// wire-schema support, computed once at compose time.
 type MethodSchema = {
     /// version → the API record field name that serves it. Non-empty for
@@ -108,7 +108,7 @@ type MethodSchema = {
     Deprecated: Map<int, DateTime>
 }
 
-/// Phase 69j — what the dispatcher should do with a request, given the
+/// What the dispatcher should do with a request, given the
 /// version the caller asked for.
 [<RequireQualifiedAccess>]
 type SchemaRouting =
@@ -128,6 +128,18 @@ type SchemaRouting =
     /// it, so a malformed header is reported rather than coerced.
     | Refused of Requested: string * Supported: int list
 
+/// A wire-schema annotation that cannot be served as written. Each is a
+/// composition whose author believes it means something specific, and each
+/// would otherwise take effect as something else.
+[<RequireQualifiedAccess>]
+type SchemaVersionRefusal =
+    /// `[<SupportsSchema>]` declares a version that is not positive.
+    | NonPositiveVersion of field: string * version: int
+    /// `[<DeprecatedSchema>]` carries a date that does not parse.
+    | UnparseableRetirement of field: string * retireAfter: string
+    /// One logical method has two handlers for one version.
+    | DuplicateVersion of methodName: string * version: int * first: string * second: string
+
 module SchemaVersion =
 
     /// The request header a client sends to pin the wire schema it expects.
@@ -136,22 +148,33 @@ module SchemaVersion =
     [<Literal>]
     let Header = "X-Remoting-Schema"
 
-    /// Phase 69d.tail's flags, for the reason recorded there and in every
-    /// sibling classifier: an internal or private API record is a record
-    /// too, and without `NonPublic` its fields are invisible — which would
-    /// make this classifier silently return an empty table for exactly the
-    /// module-internal contracts the platform composes most.
-    let internal reflectionFlags = BindingFlags.Public ||| BindingFlags.NonPublic
+    /// The one flag set every reader of an API record uses (`ApiRecord`).
+    let internal reflectionFlags = ApiRecord.reflectionFlags
 
-    /// Compose-time refusal. Kept beside the classifier so the diagnostic
-    /// and the rule that produces it cannot drift apart.
-    let private refuse<'a> (apiTypeName: string) (detail: string) : 'a =
-        invalidOp (
-            sprintf
-                "ToolUp.Remoting refused to start: API record '%s' declares an invalid wire-schema versioning. %s Fix the annotation, or drop it — a method with neither a [<SupportsSchema>] attribute nor a _V<n> field-name suffix serves the composed default version only."
-                apiTypeName
-                detail
-        )
+    /// The compose-time sentence for one refusal. Kept beside the reader so
+    /// the diagnostic and the rule that produces it cannot drift apart.
+    let refusalSentence (apiTypeName: string) (refusal: SchemaVersionRefusal) : string =
+        let detail =
+            match refusal with
+            | SchemaVersionRefusal.NonPositiveVersion(field, version) ->
+                sprintf "Field '%s' declares wire-schema version %d; versions are positive integers." field version
+            | SchemaVersionRefusal.UnparseableRetirement(field, raw) ->
+                sprintf
+                    "Field '%s' carries [<DeprecatedSchema \"%s\">], which is not an ISO-8601 date. Use a form like \"2027-01-01\"."
+                    field
+                    raw
+            | SchemaVersionRefusal.DuplicateVersion(methodName, version, first, second) ->
+                sprintf
+                    "Method '%s' has two handlers for wire-schema version %d ('%s' and '%s'). One version, one handler."
+                    methodName
+                    version
+                    first
+                    second
+
+        sprintf
+            "ToolUp.Remoting refused to start: API record '%s' declares an invalid wire-schema versioning. %s Fix the annotation, or drop it — a method with neither a [<SupportsSchema>] attribute nor a _V<n> field-name suffix serves the composed default version only."
+            apiTypeName
+            detail
 
     /// Split a field name into `(logicalName, declaredVersion)`.
     /// `GetThing_V2` → `("GetThing", Some 2)`; anything else →
@@ -177,12 +200,6 @@ module SchemaVersion =
             else
                 fieldName, None
 
-    let private recordFields (apiType: Type) : PropertyInfo[] =
-        if FSharpType.IsRecord(apiType, reflectionFlags) then
-            FSharpType.GetRecordFields(apiType, reflectionFlags)
-        else
-            [||]
-
     let private declaredVersions (field: PropertyInfo) : int list option =
         field.GetCustomAttributes(true)
         |> Array.tryPick (fun a ->
@@ -197,21 +214,16 @@ module SchemaVersion =
             | :? DeprecatedSchemaAttribute as d -> Some d.RetireAfter
             | _ -> None)
 
-    /// Classify one API record's wire-schema support. The result is keyed
-    /// by LOGICAL method name — the name a caller addresses — and holds
-    /// ONLY the methods that participate in versioning. An ordinary
-    /// unversioned method is absent, so the per-request lookup is a fast
-    /// `Map.tryFind` miss on every record that never opted in.
-    ///
-    /// Refuses (rather than resolving quietly) on three shapes that cannot
-    /// be served correctly: a version served by two handlers, a
-    /// `[<SupportsSchema>]` declaring a non-positive version, and a
-    /// `[<DeprecatedSchema>]` whose date does not parse. Each is a
-    /// composition whose author believes it means something specific, and
-    /// each would otherwise take effect as something else.
-    let classify (apiType: Type) : Map<string, MethodSchema> =
+    /// Read one API record's wire-schema support from its fields. The table
+    /// is keyed by LOGICAL method name — the name a caller addresses — and
+    /// holds ONLY the methods that participate in versioning. Every annotation
+    /// that cannot be served as written is returned as a refusal, in field
+    /// order; a duplicated version keeps its first handler.
+    let read (fields: PropertyInfo[]) : Map<string, MethodSchema> * SchemaVersionRefusal list =
+        let refusals = ResizeArray<SchemaVersionRefusal>()
+
         let entries =
-            recordFields apiType
+            fields
             |> Array.collect (fun field ->
                 let logical, suffix = splitVersionSuffix field.Name
 
@@ -221,19 +233,13 @@ module SchemaVersion =
                     | None, Some n -> [ n ]
                     | None, None -> []
 
-                versions
-                |> List.iter (fun v ->
+                for v in versions do
                     if v <= 0 then
-                        refuse
-                            apiType.Name
-                            (sprintf
-                                "Field '%s' declares wire-schema version %d; versions are positive integers."
-                                field.Name
-                                v))
+                        refusals.Add(SchemaVersionRefusal.NonPositiveVersion(field.Name, v))
 
                 let retirement =
                     declaredRetirement field
-                    |> Option.map (fun raw ->
+                    |> Option.bind (fun raw ->
                         match
                             DateTime.TryParse(
                                 raw,
@@ -241,50 +247,53 @@ module SchemaVersion =
                                 DateTimeStyles.AssumeUniversal ||| DateTimeStyles.AdjustToUniversal
                             )
                         with
-                        | true, parsed -> parsed
+                        | true, parsed -> Some parsed
                         | _ ->
-                            refuse
-                                apiType.Name
-                                (sprintf
-                                    "Field '%s' carries [<DeprecatedSchema \"%s\">], which is not an ISO-8601 date. Use a form like \"2027-01-01\"."
-                                    field.Name
-                                    raw))
+                            refusals.Add(SchemaVersionRefusal.UnparseableRetirement(field.Name, raw))
+                            None)
 
                 versions
                 |> List.map (fun v -> logical, v, field.Name, retirement)
                 |> List.toArray)
 
-        entries
-        |> Array.groupBy (fun (logical, _, _, _) -> logical)
-        |> Array.map (fun (logical, forMethod) ->
-            let handlers =
-                forMethod
-                |> Array.fold
-                    (fun acc (_, version, fieldName, _) ->
-                        match Map.tryFind version acc with
-                        | Some existing when existing <> fieldName ->
-                            refuse
-                                apiType.Name
-                                (sprintf
-                                    "Method '%s' has two handlers for wire-schema version %d ('%s' and '%s'). One version, one handler."
-                                    logical
-                                    version
-                                    existing
-                                    fieldName)
-                        | _ -> Map.add version fieldName acc)
-                    Map.empty
+        let table =
+            entries
+            |> Array.groupBy (fun (logical, _, _, _) -> logical)
+            |> Array.map (fun (logical, forMethod) ->
+                let handlers =
+                    forMethod
+                    |> Array.fold
+                        (fun acc (_, version, fieldName, _) ->
+                            match Map.tryFind version acc with
+                            | Some existing when existing <> fieldName ->
+                                refusals.Add(
+                                    SchemaVersionRefusal.DuplicateVersion(logical, version, existing, fieldName)
+                                )
 
-            let deprecated =
-                forMethod
-                |> Array.choose (fun (_, version, _, retirement) -> retirement |> Option.map (fun d -> version, d))
-                |> Map.ofArray
+                                acc
+                            | _ -> Map.add version fieldName acc)
+                        Map.empty
 
-            logical,
-            {
-                Handlers = handlers
-                Deprecated = deprecated
-            })
-        |> Map.ofArray
+                let deprecated =
+                    forMethod
+                    |> Array.choose (fun (_, version, _, retirement) -> retirement |> Option.map (fun d -> version, d))
+                    |> Map.ofArray
+
+                logical,
+                {
+                    Handlers = handlers
+                    Deprecated = deprecated
+                })
+            |> Map.ofArray
+
+        table, List.ofSeq refusals
+
+    /// Classify one API record's wire-schema support (see `read`), refusing
+    /// at compose time on the first annotation that cannot be served.
+    let classify (apiType: Type) : Map<string, MethodSchema> =
+        match read (ApiRecord.fields apiType) with
+        | table, [] -> table
+        | _, refusal :: _ -> invalidOp (refusalSentence apiType.Name refusal)
 
     /// The supported-version vector for one logical method, sorted
     /// ascending. An unversioned method supports the composed server
@@ -295,7 +304,7 @@ module SchemaVersion =
         else
             schema.Handlers |> Map.toList |> List.map fst
 
-    /// Phase 69j.D — every logical method on `apiType` with the versions it
+    /// Every logical method on `apiType` with the versions it
     /// serves: the deploy-time discovery vector. Versioned handlers appear
     /// ONCE, under their logical name (`GetThing`, not `GetThing_V1` and
     /// `GetThing_V2`), because the logical name is what a caller addresses
@@ -313,7 +322,7 @@ module SchemaVersion =
             |> Set.ofList
 
         let unversioned =
-            recordFields apiType
+            ApiRecord.fields apiType
             |> Array.filter (fun field -> not (versionedFields.Contains field.Name))
             |> Array.map (fun field -> field.Name, [ serverDefault ])
             |> Array.toList
@@ -339,12 +348,12 @@ module SchemaVersion =
     /// shape of the Phase 69d defect recorded on the auth pre-flight,
     /// where failing closed on a classification miss let whichever API was
     /// composed first deny every other API's methods.
+    let addressable (fieldNames: string seq) (table: Map<string, MethodSchema>) : Set<string> =
+        Set.union (Set.ofSeq fieldNames) (table |> Map.keys |> Set.ofSeq)
+
+    /// `addressable` over a record type's own fields and wire-schema table.
     let addressableMethods (apiType: Type) : Set<string> =
-        let fields = recordFields apiType |> Array.map _.Name
-
-        let logicalNames = classify apiType |> Map.toList |> List.map fst |> List.toArray
-
-        Set.ofArray (Array.append fields logicalNames)
+        addressable (ApiRecord.fields apiType |> Array.map _.Name) (classify apiType)
 
     /// Read the requested version from the raw `X-Remoting-Schema` value.
     /// `None` for an absent or blank header. A present-but-unparseable

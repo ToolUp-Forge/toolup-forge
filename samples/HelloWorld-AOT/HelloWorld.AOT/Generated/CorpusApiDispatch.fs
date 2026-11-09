@@ -531,13 +531,531 @@ module ICorpusApiDispatch =
         | _ ->
             Error(DecodeError.at [ "TemplatedMessage(args)" ] "1 argument(s)" (sprintf "%d" (List.length args)))
 
+    /// The record's contract, as the server's `Contract.read` read it when
+    /// this module was generated: what a registered table hands the
+    /// dispatcher, so the record is not walked at boot.
+    let contract: ToolUp.Remoting.Server.ApiContract = {
+        ToolUp.Remoting.Server.ApiContract.Name = "ICorpusApi"
+        ToolUp.Remoting.Server.ApiContract.Key = "HelloWorld.AOT.Contract.ICorpusApi"
+        ToolUp.Remoting.Server.ApiContract.Record = true
+        ToolUp.Remoting.Server.ApiContract.Methods = [
+            {
+                ToolUp.Remoting.Server.MethodContract.Name = "Bool"
+                ToolUp.Remoting.Server.MethodContract.Route = "/ICorpusApi/Bool"
+                ToolUp.Remoting.Server.MethodContract.Arguments = [ typeof<bool> ]
+                ToolUp.Remoting.Server.MethodContract.Returns = typeof<Async<bool>>
+                ToolUp.Remoting.Server.MethodContract.Shape = ToolUp.Remoting.Server.MethodShape.Unary
+                ToolUp.Remoting.Server.MethodContract.Classification = None
+                ToolUp.Remoting.Server.MethodContract.Budgets = []
+                ToolUp.Remoting.Server.MethodContract.Audit = None
+                ToolUp.Remoting.Server.MethodContract.Idempotent = false
+                ToolUp.Remoting.Server.MethodContract.Validated = None
+            }
+            {
+                ToolUp.Remoting.Server.MethodContract.Name = "Int32"
+                ToolUp.Remoting.Server.MethodContract.Route = "/ICorpusApi/Int32"
+                ToolUp.Remoting.Server.MethodContract.Arguments = [ typeof<int> ]
+                ToolUp.Remoting.Server.MethodContract.Returns = typeof<Async<int>>
+                ToolUp.Remoting.Server.MethodContract.Shape = ToolUp.Remoting.Server.MethodShape.Unary
+                ToolUp.Remoting.Server.MethodContract.Classification = None
+                ToolUp.Remoting.Server.MethodContract.Budgets = []
+                ToolUp.Remoting.Server.MethodContract.Audit = None
+                ToolUp.Remoting.Server.MethodContract.Idempotent = false
+                ToolUp.Remoting.Server.MethodContract.Validated = None
+            }
+            {
+                ToolUp.Remoting.Server.MethodContract.Name = "String"
+                ToolUp.Remoting.Server.MethodContract.Route = "/ICorpusApi/String"
+                ToolUp.Remoting.Server.MethodContract.Arguments = [ typeof<string> ]
+                ToolUp.Remoting.Server.MethodContract.Returns = typeof<Async<string>>
+                ToolUp.Remoting.Server.MethodContract.Shape = ToolUp.Remoting.Server.MethodShape.Unary
+                ToolUp.Remoting.Server.MethodContract.Classification = None
+                ToolUp.Remoting.Server.MethodContract.Budgets = []
+                ToolUp.Remoting.Server.MethodContract.Audit = None
+                ToolUp.Remoting.Server.MethodContract.Idempotent = false
+                ToolUp.Remoting.Server.MethodContract.Validated = None
+            }
+            {
+                ToolUp.Remoting.Server.MethodContract.Name = "Char"
+                ToolUp.Remoting.Server.MethodContract.Route = "/ICorpusApi/Char"
+                ToolUp.Remoting.Server.MethodContract.Arguments = [ typeof<char> ]
+                ToolUp.Remoting.Server.MethodContract.Returns = typeof<Async<char>>
+                ToolUp.Remoting.Server.MethodContract.Shape = ToolUp.Remoting.Server.MethodShape.Unary
+                ToolUp.Remoting.Server.MethodContract.Classification = None
+                ToolUp.Remoting.Server.MethodContract.Budgets = []
+                ToolUp.Remoting.Server.MethodContract.Audit = None
+                ToolUp.Remoting.Server.MethodContract.Idempotent = false
+                ToolUp.Remoting.Server.MethodContract.Validated = None
+            }
+            {
+                ToolUp.Remoting.Server.MethodContract.Name = "Byte"
+                ToolUp.Remoting.Server.MethodContract.Route = "/ICorpusApi/Byte"
+                ToolUp.Remoting.Server.MethodContract.Arguments = [ typeof<byte> ]
+                ToolUp.Remoting.Server.MethodContract.Returns = typeof<Async<byte>>
+                ToolUp.Remoting.Server.MethodContract.Shape = ToolUp.Remoting.Server.MethodShape.Unary
+                ToolUp.Remoting.Server.MethodContract.Classification = None
+                ToolUp.Remoting.Server.MethodContract.Budgets = []
+                ToolUp.Remoting.Server.MethodContract.Audit = None
+                ToolUp.Remoting.Server.MethodContract.Idempotent = false
+                ToolUp.Remoting.Server.MethodContract.Validated = None
+            }
+            {
+                ToolUp.Remoting.Server.MethodContract.Name = "SByte"
+                ToolUp.Remoting.Server.MethodContract.Route = "/ICorpusApi/SByte"
+                ToolUp.Remoting.Server.MethodContract.Arguments = [ typeof<sbyte> ]
+                ToolUp.Remoting.Server.MethodContract.Returns = typeof<Async<sbyte>>
+                ToolUp.Remoting.Server.MethodContract.Shape = ToolUp.Remoting.Server.MethodShape.Unary
+                ToolUp.Remoting.Server.MethodContract.Classification = None
+                ToolUp.Remoting.Server.MethodContract.Budgets = []
+                ToolUp.Remoting.Server.MethodContract.Audit = None
+                ToolUp.Remoting.Server.MethodContract.Idempotent = false
+                ToolUp.Remoting.Server.MethodContract.Validated = None
+            }
+            {
+                ToolUp.Remoting.Server.MethodContract.Name = "Int16"
+                ToolUp.Remoting.Server.MethodContract.Route = "/ICorpusApi/Int16"
+                ToolUp.Remoting.Server.MethodContract.Arguments = [ typeof<int16> ]
+                ToolUp.Remoting.Server.MethodContract.Returns = typeof<Async<int16>>
+                ToolUp.Remoting.Server.MethodContract.Shape = ToolUp.Remoting.Server.MethodShape.Unary
+                ToolUp.Remoting.Server.MethodContract.Classification = None
+                ToolUp.Remoting.Server.MethodContract.Budgets = []
+                ToolUp.Remoting.Server.MethodContract.Audit = None
+                ToolUp.Remoting.Server.MethodContract.Idempotent = false
+                ToolUp.Remoting.Server.MethodContract.Validated = None
+            }
+            {
+                ToolUp.Remoting.Server.MethodContract.Name = "UInt16"
+                ToolUp.Remoting.Server.MethodContract.Route = "/ICorpusApi/UInt16"
+                ToolUp.Remoting.Server.MethodContract.Arguments = [ typeof<uint16> ]
+                ToolUp.Remoting.Server.MethodContract.Returns = typeof<Async<uint16>>
+                ToolUp.Remoting.Server.MethodContract.Shape = ToolUp.Remoting.Server.MethodShape.Unary
+                ToolUp.Remoting.Server.MethodContract.Classification = None
+                ToolUp.Remoting.Server.MethodContract.Budgets = []
+                ToolUp.Remoting.Server.MethodContract.Audit = None
+                ToolUp.Remoting.Server.MethodContract.Idempotent = false
+                ToolUp.Remoting.Server.MethodContract.Validated = None
+            }
+            {
+                ToolUp.Remoting.Server.MethodContract.Name = "UInt32"
+                ToolUp.Remoting.Server.MethodContract.Route = "/ICorpusApi/UInt32"
+                ToolUp.Remoting.Server.MethodContract.Arguments = [ typeof<uint32> ]
+                ToolUp.Remoting.Server.MethodContract.Returns = typeof<Async<uint32>>
+                ToolUp.Remoting.Server.MethodContract.Shape = ToolUp.Remoting.Server.MethodShape.Unary
+                ToolUp.Remoting.Server.MethodContract.Classification = None
+                ToolUp.Remoting.Server.MethodContract.Budgets = []
+                ToolUp.Remoting.Server.MethodContract.Audit = None
+                ToolUp.Remoting.Server.MethodContract.Idempotent = false
+                ToolUp.Remoting.Server.MethodContract.Validated = None
+            }
+            {
+                ToolUp.Remoting.Server.MethodContract.Name = "Int64"
+                ToolUp.Remoting.Server.MethodContract.Route = "/ICorpusApi/Int64"
+                ToolUp.Remoting.Server.MethodContract.Arguments = [ typeof<int64> ]
+                ToolUp.Remoting.Server.MethodContract.Returns = typeof<Async<int64>>
+                ToolUp.Remoting.Server.MethodContract.Shape = ToolUp.Remoting.Server.MethodShape.Unary
+                ToolUp.Remoting.Server.MethodContract.Classification = None
+                ToolUp.Remoting.Server.MethodContract.Budgets = []
+                ToolUp.Remoting.Server.MethodContract.Audit = None
+                ToolUp.Remoting.Server.MethodContract.Idempotent = false
+                ToolUp.Remoting.Server.MethodContract.Validated = None
+            }
+            {
+                ToolUp.Remoting.Server.MethodContract.Name = "UInt64"
+                ToolUp.Remoting.Server.MethodContract.Route = "/ICorpusApi/UInt64"
+                ToolUp.Remoting.Server.MethodContract.Arguments = [ typeof<uint64> ]
+                ToolUp.Remoting.Server.MethodContract.Returns = typeof<Async<uint64>>
+                ToolUp.Remoting.Server.MethodContract.Shape = ToolUp.Remoting.Server.MethodShape.Unary
+                ToolUp.Remoting.Server.MethodContract.Classification = None
+                ToolUp.Remoting.Server.MethodContract.Budgets = []
+                ToolUp.Remoting.Server.MethodContract.Audit = None
+                ToolUp.Remoting.Server.MethodContract.Idempotent = false
+                ToolUp.Remoting.Server.MethodContract.Validated = None
+            }
+            {
+                ToolUp.Remoting.Server.MethodContract.Name = "Float"
+                ToolUp.Remoting.Server.MethodContract.Route = "/ICorpusApi/Float"
+                ToolUp.Remoting.Server.MethodContract.Arguments = [ typeof<float> ]
+                ToolUp.Remoting.Server.MethodContract.Returns = typeof<Async<float>>
+                ToolUp.Remoting.Server.MethodContract.Shape = ToolUp.Remoting.Server.MethodShape.Unary
+                ToolUp.Remoting.Server.MethodContract.Classification = None
+                ToolUp.Remoting.Server.MethodContract.Budgets = []
+                ToolUp.Remoting.Server.MethodContract.Audit = None
+                ToolUp.Remoting.Server.MethodContract.Idempotent = false
+                ToolUp.Remoting.Server.MethodContract.Validated = None
+            }
+            {
+                ToolUp.Remoting.Server.MethodContract.Name = "Float32"
+                ToolUp.Remoting.Server.MethodContract.Route = "/ICorpusApi/Float32"
+                ToolUp.Remoting.Server.MethodContract.Arguments = [ typeof<float32> ]
+                ToolUp.Remoting.Server.MethodContract.Returns = typeof<Async<float32>>
+                ToolUp.Remoting.Server.MethodContract.Shape = ToolUp.Remoting.Server.MethodShape.Unary
+                ToolUp.Remoting.Server.MethodContract.Classification = None
+                ToolUp.Remoting.Server.MethodContract.Budgets = []
+                ToolUp.Remoting.Server.MethodContract.Audit = None
+                ToolUp.Remoting.Server.MethodContract.Idempotent = false
+                ToolUp.Remoting.Server.MethodContract.Validated = None
+            }
+            {
+                ToolUp.Remoting.Server.MethodContract.Name = "Decimal"
+                ToolUp.Remoting.Server.MethodContract.Route = "/ICorpusApi/Decimal"
+                ToolUp.Remoting.Server.MethodContract.Arguments = [ typeof<decimal> ]
+                ToolUp.Remoting.Server.MethodContract.Returns = typeof<Async<decimal>>
+                ToolUp.Remoting.Server.MethodContract.Shape = ToolUp.Remoting.Server.MethodShape.Unary
+                ToolUp.Remoting.Server.MethodContract.Classification = None
+                ToolUp.Remoting.Server.MethodContract.Budgets = []
+                ToolUp.Remoting.Server.MethodContract.Audit = None
+                ToolUp.Remoting.Server.MethodContract.Idempotent = false
+                ToolUp.Remoting.Server.MethodContract.Validated = None
+            }
+            {
+                ToolUp.Remoting.Server.MethodContract.Name = "DateTime"
+                ToolUp.Remoting.Server.MethodContract.Route = "/ICorpusApi/DateTime"
+                ToolUp.Remoting.Server.MethodContract.Arguments = [ typeof<DateTime> ]
+                ToolUp.Remoting.Server.MethodContract.Returns = typeof<Async<DateTime>>
+                ToolUp.Remoting.Server.MethodContract.Shape = ToolUp.Remoting.Server.MethodShape.Unary
+                ToolUp.Remoting.Server.MethodContract.Classification = None
+                ToolUp.Remoting.Server.MethodContract.Budgets = []
+                ToolUp.Remoting.Server.MethodContract.Audit = None
+                ToolUp.Remoting.Server.MethodContract.Idempotent = false
+                ToolUp.Remoting.Server.MethodContract.Validated = None
+            }
+            {
+                ToolUp.Remoting.Server.MethodContract.Name = "DateTimeOffset"
+                ToolUp.Remoting.Server.MethodContract.Route = "/ICorpusApi/DateTimeOffset"
+                ToolUp.Remoting.Server.MethodContract.Arguments = [ typeof<DateTimeOffset> ]
+                ToolUp.Remoting.Server.MethodContract.Returns = typeof<Async<DateTimeOffset>>
+                ToolUp.Remoting.Server.MethodContract.Shape = ToolUp.Remoting.Server.MethodShape.Unary
+                ToolUp.Remoting.Server.MethodContract.Classification = None
+                ToolUp.Remoting.Server.MethodContract.Budgets = []
+                ToolUp.Remoting.Server.MethodContract.Audit = None
+                ToolUp.Remoting.Server.MethodContract.Idempotent = false
+                ToolUp.Remoting.Server.MethodContract.Validated = None
+            }
+            {
+                ToolUp.Remoting.Server.MethodContract.Name = "TimeSpan"
+                ToolUp.Remoting.Server.MethodContract.Route = "/ICorpusApi/TimeSpan"
+                ToolUp.Remoting.Server.MethodContract.Arguments = [ typeof<TimeSpan> ]
+                ToolUp.Remoting.Server.MethodContract.Returns = typeof<Async<TimeSpan>>
+                ToolUp.Remoting.Server.MethodContract.Shape = ToolUp.Remoting.Server.MethodShape.Unary
+                ToolUp.Remoting.Server.MethodContract.Classification = None
+                ToolUp.Remoting.Server.MethodContract.Budgets = []
+                ToolUp.Remoting.Server.MethodContract.Audit = None
+                ToolUp.Remoting.Server.MethodContract.Idempotent = false
+                ToolUp.Remoting.Server.MethodContract.Validated = None
+            }
+            {
+                ToolUp.Remoting.Server.MethodContract.Name = "DateOnly"
+                ToolUp.Remoting.Server.MethodContract.Route = "/ICorpusApi/DateOnly"
+                ToolUp.Remoting.Server.MethodContract.Arguments = [ typeof<DateOnly> ]
+                ToolUp.Remoting.Server.MethodContract.Returns = typeof<Async<DateOnly>>
+                ToolUp.Remoting.Server.MethodContract.Shape = ToolUp.Remoting.Server.MethodShape.Unary
+                ToolUp.Remoting.Server.MethodContract.Classification = None
+                ToolUp.Remoting.Server.MethodContract.Budgets = []
+                ToolUp.Remoting.Server.MethodContract.Audit = None
+                ToolUp.Remoting.Server.MethodContract.Idempotent = false
+                ToolUp.Remoting.Server.MethodContract.Validated = None
+            }
+            {
+                ToolUp.Remoting.Server.MethodContract.Name = "TimeOnly"
+                ToolUp.Remoting.Server.MethodContract.Route = "/ICorpusApi/TimeOnly"
+                ToolUp.Remoting.Server.MethodContract.Arguments = [ typeof<TimeOnly> ]
+                ToolUp.Remoting.Server.MethodContract.Returns = typeof<Async<TimeOnly>>
+                ToolUp.Remoting.Server.MethodContract.Shape = ToolUp.Remoting.Server.MethodShape.Unary
+                ToolUp.Remoting.Server.MethodContract.Classification = None
+                ToolUp.Remoting.Server.MethodContract.Budgets = []
+                ToolUp.Remoting.Server.MethodContract.Audit = None
+                ToolUp.Remoting.Server.MethodContract.Idempotent = false
+                ToolUp.Remoting.Server.MethodContract.Validated = None
+            }
+            {
+                ToolUp.Remoting.Server.MethodContract.Name = "Guid"
+                ToolUp.Remoting.Server.MethodContract.Route = "/ICorpusApi/Guid"
+                ToolUp.Remoting.Server.MethodContract.Arguments = [ typeof<Guid> ]
+                ToolUp.Remoting.Server.MethodContract.Returns = typeof<Async<Guid>>
+                ToolUp.Remoting.Server.MethodContract.Shape = ToolUp.Remoting.Server.MethodShape.Unary
+                ToolUp.Remoting.Server.MethodContract.Classification = None
+                ToolUp.Remoting.Server.MethodContract.Budgets = []
+                ToolUp.Remoting.Server.MethodContract.Audit = None
+                ToolUp.Remoting.Server.MethodContract.Idempotent = false
+                ToolUp.Remoting.Server.MethodContract.Validated = None
+            }
+            {
+                ToolUp.Remoting.Server.MethodContract.Name = "Bytes"
+                ToolUp.Remoting.Server.MethodContract.Route = "/ICorpusApi/Bytes"
+                ToolUp.Remoting.Server.MethodContract.Arguments = [ typeof<byte[]> ]
+                ToolUp.Remoting.Server.MethodContract.Returns = typeof<Async<byte[]>>
+                ToolUp.Remoting.Server.MethodContract.Shape = ToolUp.Remoting.Server.MethodShape.Unary
+                ToolUp.Remoting.Server.MethodContract.Classification = None
+                ToolUp.Remoting.Server.MethodContract.Budgets = []
+                ToolUp.Remoting.Server.MethodContract.Audit = None
+                ToolUp.Remoting.Server.MethodContract.Idempotent = false
+                ToolUp.Remoting.Server.MethodContract.Validated = None
+            }
+            {
+                ToolUp.Remoting.Server.MethodContract.Name = "OptionInt"
+                ToolUp.Remoting.Server.MethodContract.Route = "/ICorpusApi/OptionInt"
+                ToolUp.Remoting.Server.MethodContract.Arguments = [ typeof<int option> ]
+                ToolUp.Remoting.Server.MethodContract.Returns = typeof<Async<int option>>
+                ToolUp.Remoting.Server.MethodContract.Shape = ToolUp.Remoting.Server.MethodShape.Unary
+                ToolUp.Remoting.Server.MethodContract.Classification = None
+                ToolUp.Remoting.Server.MethodContract.Budgets = []
+                ToolUp.Remoting.Server.MethodContract.Audit = None
+                ToolUp.Remoting.Server.MethodContract.Idempotent = false
+                ToolUp.Remoting.Server.MethodContract.Validated = None
+            }
+            {
+                ToolUp.Remoting.Server.MethodContract.Name = "OptionString"
+                ToolUp.Remoting.Server.MethodContract.Route = "/ICorpusApi/OptionString"
+                ToolUp.Remoting.Server.MethodContract.Arguments = [ typeof<string option> ]
+                ToolUp.Remoting.Server.MethodContract.Returns = typeof<Async<string option>>
+                ToolUp.Remoting.Server.MethodContract.Shape = ToolUp.Remoting.Server.MethodShape.Unary
+                ToolUp.Remoting.Server.MethodContract.Classification = None
+                ToolUp.Remoting.Server.MethodContract.Budgets = []
+                ToolUp.Remoting.Server.MethodContract.Audit = None
+                ToolUp.Remoting.Server.MethodContract.Idempotent = false
+                ToolUp.Remoting.Server.MethodContract.Validated = None
+            }
+            {
+                ToolUp.Remoting.Server.MethodContract.Name = "OptionAddress"
+                ToolUp.Remoting.Server.MethodContract.Route = "/ICorpusApi/OptionAddress"
+                ToolUp.Remoting.Server.MethodContract.Arguments = [ typeof<WireCorpus.Address option> ]
+                ToolUp.Remoting.Server.MethodContract.Returns = typeof<Async<WireCorpus.Address option>>
+                ToolUp.Remoting.Server.MethodContract.Shape = ToolUp.Remoting.Server.MethodShape.Unary
+                ToolUp.Remoting.Server.MethodContract.Classification = None
+                ToolUp.Remoting.Server.MethodContract.Budgets = []
+                ToolUp.Remoting.Server.MethodContract.Audit = None
+                ToolUp.Remoting.Server.MethodContract.Idempotent = false
+                ToolUp.Remoting.Server.MethodContract.Validated = None
+            }
+            {
+                ToolUp.Remoting.Server.MethodContract.Name = "ListInt"
+                ToolUp.Remoting.Server.MethodContract.Route = "/ICorpusApi/ListInt"
+                ToolUp.Remoting.Server.MethodContract.Arguments = [ typeof<int list> ]
+                ToolUp.Remoting.Server.MethodContract.Returns = typeof<Async<int list>>
+                ToolUp.Remoting.Server.MethodContract.Shape = ToolUp.Remoting.Server.MethodShape.Unary
+                ToolUp.Remoting.Server.MethodContract.Classification = None
+                ToolUp.Remoting.Server.MethodContract.Budgets = []
+                ToolUp.Remoting.Server.MethodContract.Audit = None
+                ToolUp.Remoting.Server.MethodContract.Idempotent = false
+                ToolUp.Remoting.Server.MethodContract.Validated = None
+            }
+            {
+                ToolUp.Remoting.Server.MethodContract.Name = "ListAddress"
+                ToolUp.Remoting.Server.MethodContract.Route = "/ICorpusApi/ListAddress"
+                ToolUp.Remoting.Server.MethodContract.Arguments = [ typeof<WireCorpus.Address list> ]
+                ToolUp.Remoting.Server.MethodContract.Returns = typeof<Async<WireCorpus.Address list>>
+                ToolUp.Remoting.Server.MethodContract.Shape = ToolUp.Remoting.Server.MethodShape.Unary
+                ToolUp.Remoting.Server.MethodContract.Classification = None
+                ToolUp.Remoting.Server.MethodContract.Budgets = []
+                ToolUp.Remoting.Server.MethodContract.Audit = None
+                ToolUp.Remoting.Server.MethodContract.Idempotent = false
+                ToolUp.Remoting.Server.MethodContract.Validated = None
+            }
+            {
+                ToolUp.Remoting.Server.MethodContract.Name = "ArrayString"
+                ToolUp.Remoting.Server.MethodContract.Route = "/ICorpusApi/ArrayString"
+                ToolUp.Remoting.Server.MethodContract.Arguments = [ typeof<string[]> ]
+                ToolUp.Remoting.Server.MethodContract.Returns = typeof<Async<string[]>>
+                ToolUp.Remoting.Server.MethodContract.Shape = ToolUp.Remoting.Server.MethodShape.Unary
+                ToolUp.Remoting.Server.MethodContract.Classification = None
+                ToolUp.Remoting.Server.MethodContract.Budgets = []
+                ToolUp.Remoting.Server.MethodContract.Audit = None
+                ToolUp.Remoting.Server.MethodContract.Idempotent = false
+                ToolUp.Remoting.Server.MethodContract.Validated = None
+            }
+            {
+                ToolUp.Remoting.Server.MethodContract.Name = "MapStringInt"
+                ToolUp.Remoting.Server.MethodContract.Route = "/ICorpusApi/MapStringInt"
+                ToolUp.Remoting.Server.MethodContract.Arguments = [ typeof<Map<string, int>> ]
+                ToolUp.Remoting.Server.MethodContract.Returns = typeof<Async<Map<string, int>>>
+                ToolUp.Remoting.Server.MethodContract.Shape = ToolUp.Remoting.Server.MethodShape.Unary
+                ToolUp.Remoting.Server.MethodContract.Classification = None
+                ToolUp.Remoting.Server.MethodContract.Budgets = []
+                ToolUp.Remoting.Server.MethodContract.Audit = None
+                ToolUp.Remoting.Server.MethodContract.Idempotent = false
+                ToolUp.Remoting.Server.MethodContract.Validated = None
+            }
+            {
+                ToolUp.Remoting.Server.MethodContract.Name = "MapIntString"
+                ToolUp.Remoting.Server.MethodContract.Route = "/ICorpusApi/MapIntString"
+                ToolUp.Remoting.Server.MethodContract.Arguments = [ typeof<Map<int, string>> ]
+                ToolUp.Remoting.Server.MethodContract.Returns = typeof<Async<Map<int, string>>>
+                ToolUp.Remoting.Server.MethodContract.Shape = ToolUp.Remoting.Server.MethodShape.Unary
+                ToolUp.Remoting.Server.MethodContract.Classification = None
+                ToolUp.Remoting.Server.MethodContract.Budgets = []
+                ToolUp.Remoting.Server.MethodContract.Audit = None
+                ToolUp.Remoting.Server.MethodContract.Idempotent = false
+                ToolUp.Remoting.Server.MethodContract.Validated = None
+            }
+            {
+                ToolUp.Remoting.Server.MethodContract.Name = "SetString"
+                ToolUp.Remoting.Server.MethodContract.Route = "/ICorpusApi/SetString"
+                ToolUp.Remoting.Server.MethodContract.Arguments = [ typeof<Set<string>> ]
+                ToolUp.Remoting.Server.MethodContract.Returns = typeof<Async<Set<string>>>
+                ToolUp.Remoting.Server.MethodContract.Shape = ToolUp.Remoting.Server.MethodShape.Unary
+                ToolUp.Remoting.Server.MethodContract.Classification = None
+                ToolUp.Remoting.Server.MethodContract.Budgets = []
+                ToolUp.Remoting.Server.MethodContract.Audit = None
+                ToolUp.Remoting.Server.MethodContract.Idempotent = false
+                ToolUp.Remoting.Server.MethodContract.Validated = None
+            }
+            {
+                ToolUp.Remoting.Server.MethodContract.Name = "SetInt"
+                ToolUp.Remoting.Server.MethodContract.Route = "/ICorpusApi/SetInt"
+                ToolUp.Remoting.Server.MethodContract.Arguments = [ typeof<Set<int>> ]
+                ToolUp.Remoting.Server.MethodContract.Returns = typeof<Async<Set<int>>>
+                ToolUp.Remoting.Server.MethodContract.Shape = ToolUp.Remoting.Server.MethodShape.Unary
+                ToolUp.Remoting.Server.MethodContract.Classification = None
+                ToolUp.Remoting.Server.MethodContract.Budgets = []
+                ToolUp.Remoting.Server.MethodContract.Audit = None
+                ToolUp.Remoting.Server.MethodContract.Idempotent = false
+                ToolUp.Remoting.Server.MethodContract.Validated = None
+            }
+            {
+                ToolUp.Remoting.Server.MethodContract.Name = "TuplePair"
+                ToolUp.Remoting.Server.MethodContract.Route = "/ICorpusApi/TuplePair"
+                ToolUp.Remoting.Server.MethodContract.Arguments = [ typeof<int * string> ]
+                ToolUp.Remoting.Server.MethodContract.Returns = typeof<Async<int * string>>
+                ToolUp.Remoting.Server.MethodContract.Shape = ToolUp.Remoting.Server.MethodShape.Unary
+                ToolUp.Remoting.Server.MethodContract.Classification = None
+                ToolUp.Remoting.Server.MethodContract.Budgets = []
+                ToolUp.Remoting.Server.MethodContract.Audit = None
+                ToolUp.Remoting.Server.MethodContract.Idempotent = false
+                ToolUp.Remoting.Server.MethodContract.Validated = None
+            }
+            {
+                ToolUp.Remoting.Server.MethodContract.Name = "TupleTriple"
+                ToolUp.Remoting.Server.MethodContract.Route = "/ICorpusApi/TupleTriple"
+                ToolUp.Remoting.Server.MethodContract.Arguments = [ typeof<int * string * bool> ]
+                ToolUp.Remoting.Server.MethodContract.Returns = typeof<Async<int * string * bool>>
+                ToolUp.Remoting.Server.MethodContract.Shape = ToolUp.Remoting.Server.MethodShape.Unary
+                ToolUp.Remoting.Server.MethodContract.Classification = None
+                ToolUp.Remoting.Server.MethodContract.Budgets = []
+                ToolUp.Remoting.Server.MethodContract.Audit = None
+                ToolUp.Remoting.Server.MethodContract.Idempotent = false
+                ToolUp.Remoting.Server.MethodContract.Validated = None
+            }
+            {
+                ToolUp.Remoting.Server.MethodContract.Name = "Priority"
+                ToolUp.Remoting.Server.MethodContract.Route = "/ICorpusApi/Priority"
+                ToolUp.Remoting.Server.MethodContract.Arguments = [ typeof<WireCorpus.Priority> ]
+                ToolUp.Remoting.Server.MethodContract.Returns = typeof<Async<WireCorpus.Priority>>
+                ToolUp.Remoting.Server.MethodContract.Shape = ToolUp.Remoting.Server.MethodShape.Unary
+                ToolUp.Remoting.Server.MethodContract.Classification = None
+                ToolUp.Remoting.Server.MethodContract.Budgets = []
+                ToolUp.Remoting.Server.MethodContract.Audit = None
+                ToolUp.Remoting.Server.MethodContract.Idempotent = false
+                ToolUp.Remoting.Server.MethodContract.Validated = None
+            }
+            {
+                ToolUp.Remoting.Server.MethodContract.Name = "Outcome"
+                ToolUp.Remoting.Server.MethodContract.Route = "/ICorpusApi/Outcome"
+                ToolUp.Remoting.Server.MethodContract.Arguments = [ typeof<WireCorpus.Outcome> ]
+                ToolUp.Remoting.Server.MethodContract.Returns = typeof<Async<WireCorpus.Outcome>>
+                ToolUp.Remoting.Server.MethodContract.Shape = ToolUp.Remoting.Server.MethodShape.Unary
+                ToolUp.Remoting.Server.MethodContract.Classification = None
+                ToolUp.Remoting.Server.MethodContract.Budgets = []
+                ToolUp.Remoting.Server.MethodContract.Audit = None
+                ToolUp.Remoting.Server.MethodContract.Idempotent = false
+                ToolUp.Remoting.Server.MethodContract.Validated = None
+            }
+            {
+                ToolUp.Remoting.Server.MethodContract.Name = "Address"
+                ToolUp.Remoting.Server.MethodContract.Route = "/ICorpusApi/Address"
+                ToolUp.Remoting.Server.MethodContract.Arguments = [ typeof<WireCorpus.Address> ]
+                ToolUp.Remoting.Server.MethodContract.Returns = typeof<Async<WireCorpus.Address>>
+                ToolUp.Remoting.Server.MethodContract.Shape = ToolUp.Remoting.Server.MethodShape.Unary
+                ToolUp.Remoting.Server.MethodContract.Classification = None
+                ToolUp.Remoting.Server.MethodContract.Budgets = []
+                ToolUp.Remoting.Server.MethodContract.Audit = None
+                ToolUp.Remoting.Server.MethodContract.Idempotent = false
+                ToolUp.Remoting.Server.MethodContract.Validated = None
+            }
+            {
+                ToolUp.Remoting.Server.MethodContract.Name = "Consignment"
+                ToolUp.Remoting.Server.MethodContract.Route = "/ICorpusApi/Consignment"
+                ToolUp.Remoting.Server.MethodContract.Arguments = [ typeof<WireCorpus.Consignment> ]
+                ToolUp.Remoting.Server.MethodContract.Returns = typeof<Async<WireCorpus.Consignment>>
+                ToolUp.Remoting.Server.MethodContract.Shape = ToolUp.Remoting.Server.MethodShape.Unary
+                ToolUp.Remoting.Server.MethodContract.Classification = None
+                ToolUp.Remoting.Server.MethodContract.Budgets = []
+                ToolUp.Remoting.Server.MethodContract.Audit = None
+                ToolUp.Remoting.Server.MethodContract.Idempotent = false
+                ToolUp.Remoting.Server.MethodContract.Validated = None
+            }
+            {
+                ToolUp.Remoting.Server.MethodContract.Name = "Customer"
+                ToolUp.Remoting.Server.MethodContract.Route = "/ICorpusApi/Customer"
+                ToolUp.Remoting.Server.MethodContract.Arguments = [ typeof<WireCorpus.Customer> ]
+                ToolUp.Remoting.Server.MethodContract.Returns = typeof<Async<WireCorpus.Customer>>
+                ToolUp.Remoting.Server.MethodContract.Shape = ToolUp.Remoting.Server.MethodShape.Unary
+                ToolUp.Remoting.Server.MethodContract.Classification = None
+                ToolUp.Remoting.Server.MethodContract.Budgets = []
+                ToolUp.Remoting.Server.MethodContract.Audit = None
+                ToolUp.Remoting.Server.MethodContract.Idempotent = false
+                ToolUp.Remoting.Server.MethodContract.Validated = None
+            }
+            {
+                ToolUp.Remoting.Server.MethodContract.Name = "Envelope"
+                ToolUp.Remoting.Server.MethodContract.Route = "/ICorpusApi/Envelope"
+                ToolUp.Remoting.Server.MethodContract.Arguments = [ typeof<WireCorpus.ApiEnvelope> ]
+                ToolUp.Remoting.Server.MethodContract.Returns = typeof<Async<WireCorpus.ApiEnvelope>>
+                ToolUp.Remoting.Server.MethodContract.Shape = ToolUp.Remoting.Server.MethodShape.Unary
+                ToolUp.Remoting.Server.MethodContract.Classification = None
+                ToolUp.Remoting.Server.MethodContract.Budgets = []
+                ToolUp.Remoting.Server.MethodContract.Audit = None
+                ToolUp.Remoting.Server.MethodContract.Idempotent = false
+                ToolUp.Remoting.Server.MethodContract.Validated = None
+            }
+            {
+                ToolUp.Remoting.Server.MethodContract.Name = "Tree"
+                ToolUp.Remoting.Server.MethodContract.Route = "/ICorpusApi/Tree"
+                ToolUp.Remoting.Server.MethodContract.Arguments = [ typeof<WireCorpus.Tree> ]
+                ToolUp.Remoting.Server.MethodContract.Returns = typeof<Async<WireCorpus.Tree>>
+                ToolUp.Remoting.Server.MethodContract.Shape = ToolUp.Remoting.Server.MethodShape.Unary
+                ToolUp.Remoting.Server.MethodContract.Classification = None
+                ToolUp.Remoting.Server.MethodContract.Budgets = []
+                ToolUp.Remoting.Server.MethodContract.Audit = None
+                ToolUp.Remoting.Server.MethodContract.Idempotent = false
+                ToolUp.Remoting.Server.MethodContract.Validated = None
+            }
+            {
+                ToolUp.Remoting.Server.MethodContract.Name = "MapUnionKey"
+                ToolUp.Remoting.Server.MethodContract.Route = "/ICorpusApi/MapUnionKey"
+                ToolUp.Remoting.Server.MethodContract.Arguments = [ typeof<Map<WireCorpus.Outcome, WireCorpus.Address>> ]
+                ToolUp.Remoting.Server.MethodContract.Returns = typeof<Async<Map<WireCorpus.Outcome, WireCorpus.Address>>>
+                ToolUp.Remoting.Server.MethodContract.Shape = ToolUp.Remoting.Server.MethodShape.Unary
+                ToolUp.Remoting.Server.MethodContract.Classification = None
+                ToolUp.Remoting.Server.MethodContract.Budgets = []
+                ToolUp.Remoting.Server.MethodContract.Audit = None
+                ToolUp.Remoting.Server.MethodContract.Idempotent = false
+                ToolUp.Remoting.Server.MethodContract.Validated = None
+            }
+            {
+                ToolUp.Remoting.Server.MethodContract.Name = "TemplatedMessage"
+                ToolUp.Remoting.Server.MethodContract.Route = "/ICorpusApi/TemplatedMessage"
+                ToolUp.Remoting.Server.MethodContract.Arguments = [ typeof<WireCorpus.TemplatedMessage> ]
+                ToolUp.Remoting.Server.MethodContract.Returns = typeof<Async<WireCorpus.TemplatedMessage>>
+                ToolUp.Remoting.Server.MethodContract.Shape = ToolUp.Remoting.Server.MethodShape.Unary
+                ToolUp.Remoting.Server.MethodContract.Classification = None
+                ToolUp.Remoting.Server.MethodContract.Budgets = []
+                ToolUp.Remoting.Server.MethodContract.Audit = None
+                ToolUp.Remoting.Server.MethodContract.Idempotent = false
+                ToolUp.Remoting.Server.MethodContract.Validated = None
+            }
+        ]
+        ToolUp.Remoting.Server.ApiContract.Companions = []
+        ToolUp.Remoting.Server.ApiContract.Schemas = Map.empty
+        ToolUp.Remoting.Server.ApiContract.Findings = []
+    }
+
     /// Phase 906 — every method's generated invocation. The server's
     /// remoting proxy composes it as the INNERMOST stage of the adapter's
     /// pre-flight chain (auth, rate limit, validation, idempotency and
     /// audit all run around it); arguments decode through the proxy's
     /// own seam, and only the call and the result's type are typed here.
     let invocations: ToolUp.Remoting.Server.GeneratedInvocationTable<HelloWorld.AOT.Contract.ICorpusApi> =
-        ToolUp.Remoting.Server.GeneratedInvocation.table [
+        ToolUp.Remoting.Server.GeneratedInvocation.tableWith contract [
             ToolUp.Remoting.Server.GeneratedInvocation.forMethodWithFirst<HelloWorld.AOT.Contract.ICorpusApi, bool>
                 "Bool"
                 [| typeof<bool>; typeof<Async<bool>> |]
