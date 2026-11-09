@@ -142,7 +142,7 @@ ToolUp.Platform.Client 2133/5334
 ToolUp.Platform.Core 8449/17470
 ToolUp.Platform.Server 3071/5523
 ToolUp.Platform.Server.Audit 370/690
-ToolUp.Platform.Server.Config 394/660
+ToolUp.Platform.Server.Config 395/661
 ToolUp.Platform.Server.Infra 2147/3655
 ToolUp.Platform.Server.Jobs 921/1730
 ToolUp.Platform.Server.Remoting 360/1027

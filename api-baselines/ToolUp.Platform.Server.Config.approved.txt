@@ -9,6 +9,7 @@ ToolUp.Platform.Config.Auth.IdentitySanitiser (class)
 ToolUp.Platform.Config.Auth.IdentitySanitiser.MaxLength : System.Int32 (literal)
 ToolUp.Platform.Config.Auth.IdentitySanitiser.sanitiseScopeId(System.String) : Microsoft.FSharp.Core.FSharpResult`2[System.String, System.String]
 ToolUp.Platform.Config.Background (class)
+ToolUp.Platform.Config.Background.auditLogOf(Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.IAuditLog
 ToolUp.Platform.Config.Background.requestActor(System.String, Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.AuditSubject
 ToolUp.Platform.Config.Background.resolveAuditLog(System.IServiceProvider) : ToolUp.Platform.IAuditLog
 ToolUp.Platform.Config.Background.start(ToolUp.Platform.Config.Background+DrainSet, ToolUp.Platform.ILogger, System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]) : System.Void
