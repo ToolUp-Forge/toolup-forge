@@ -147,28 +147,28 @@ let tests =
         testCaseAsync "EncryptionKeyLifecycle skips when no IBlobEncryptionKeyResolver is registered"
         <| async {
             let hook = EncryptionKeyLifecycle.create emptyProvider
-            let! result = hook.OnDeprovisioned("team-x", "admin")
+            let! result = hook.OnDeprovisioned("team-x", UserId "admin")
             Expect.isTrue (isSkipped result) "skipped without an encryption resolver"
         }
 
         testCaseAsync "MembershipCacheLifecycle skips when no TeamScopeResolver is registered"
         <| async {
             let hook = MembershipCacheLifecycle.create emptyProvider
-            let! result = hook.OnDeprovisioned("team-x", "admin")
+            let! result = hook.OnDeprovisioned("team-x", UserId "admin")
             Expect.isTrue (isSkipped result) "skipped without a team scope resolver"
         }
 
         testCaseAsync "JobSchedulerLifecycle skips when no IJobScheduler is registered"
         <| async {
             let hook = JobSchedulerLifecycle.create emptyProvider
-            let! result = hook.OnDeprovisioned("team-x", "admin")
+            let! result = hook.OnDeprovisioned("team-x", UserId "admin")
             Expect.isTrue (isSkipped result) "skipped without a scheduler"
         }
 
         testCaseAsync "DataSubjectRequestLifecycle skips when no IErasureHandler is registered"
         <| async {
             let hook = DataSubjectRequestLifecycle.create emptyProvider
-            let! result = hook.OnDeprovisioned("user-x", "admin")
+            let! result = hook.OnDeprovisioned("user-x", UserId "admin")
             Expect.isTrue (isSkipped result) "skipped without erasure handlers"
         }
 
@@ -177,28 +177,28 @@ let tests =
         testCaseAsync "ConversationStoreLifecycle skips when no IConversationStore is registered"
         <| async {
             let hook = ConversationStoreLifecycle.create emptyProvider
-            let! result = hook.OnDeprovisioned("team-x", "admin")
+            let! result = hook.OnDeprovisioned("team-x", UserId "admin")
             Expect.isTrue (isSkipped result) "skipped without a conversation store"
         }
 
         testCaseAsync "UserMembershipTeardownLifecycle skips when no ITeamStore is registered"
         <| async {
             let hook = UserMembershipTeardownLifecycle.create emptyProvider
-            let! result = hook.OnDeprovisioned("user-x", "admin")
+            let! result = hook.OnDeprovisioned("user-x", UserId "admin")
             Expect.isTrue (isSkipped result) "skipped without a team store"
         }
 
         testCaseAsync "KnowledgeBaseLifecycle skips when no IBlobStorage is registered"
         <| async {
             let hook = ToolUp.KnowledgeBase.Server.KnowledgeBaseLifecycle.create emptyProvider
-            let! result = hook.OnDeprovisioned("team-x", "admin")
+            let! result = hook.OnDeprovisioned("team-x", UserId "admin")
             Expect.isTrue (isSkipped result) "skipped without a blob store (KB substrate uncomposed)"
         }
 
         testCaseAsync "RagVectorStoreLifecycle skips when no IVectorStore is registered"
         <| async {
             let hook = ToolUp.RAG.RagVectorStoreLifecycle.create emptyProvider
-            let! result = hook.OnDeprovisioned("team-x", "admin")
+            let! result = hook.OnDeprovisioned("team-x", UserId "admin")
             Expect.isTrue (isSkipped result) "skipped without a vector store"
         }
 
@@ -216,7 +216,7 @@ let tests =
             ]
 
             for hook in hooks do
-                let! result = hook.OnProvisioned("team-x", "admin")
+                let! result = hook.OnProvisioned("team-x", UserId "admin")
                 Expect.isTrue (isSkipped result) (sprintf "%s provisioning is a no-op skip" hook.Name)
         }
 
@@ -318,7 +318,7 @@ let tests =
             ]
 
             for hook in hooks do
-                let! result = hook.OnProvisioned("team-x", "admin")
+                let! result = hook.OnProvisioned("team-x", UserId "admin")
                 Expect.isTrue (isSkipped result) (sprintf "%s skips without its substrate" hook.Name)
         }
 
@@ -336,7 +336,7 @@ let tests =
             ]
 
             for hook in hooks do
-                let! result = hook.OnDeprovisioned("team-x", "admin")
+                let! result = hook.OnDeprovisioned("team-x", UserId "admin")
                 Expect.isTrue (isSkipped result) (sprintf "%s offboard skips without its substrate" hook.Name)
         }
 
@@ -346,7 +346,7 @@ let tests =
             let provider = providerOf [ typeof<IConfigStore>, box store ]
             let hook = ConfigSeedLifecycle.create provider
 
-            let! result = hook.OnProvisioned("team-seed", "admin")
+            let! result = hook.OnProvisioned("team-seed", UserId "admin")
             Expect.isTrue (isCompleted result) "config seed completes when IConfigStore is present"
 
             let scope = lifecycleScope "team-seed"
@@ -378,7 +378,7 @@ let tests =
 
             Expect.isOk pre "pre-seed write succeeds"
 
-            let! result = hook.OnProvisioned("team-idem", "admin")
+            let! result = hook.OnProvisioned("team-idem", UserId "admin")
             Expect.isTrue (isCompleted result) "re-provision completes"
 
             let! raw = store.GetRaw(scope, ConfigKeys.PlatformModuleKey)
@@ -395,13 +395,13 @@ let tests =
             let provider = providerOf [ typeof<ITeamStore>, box store ]
             let hook = OwnerTeamBootstrapLifecycle.create provider
 
-            let! result = hook.OnProvisioned("team-acme", "owner-1")
+            let! result = hook.OnProvisioned("team-acme", UserId "owner-1")
             Expect.isTrue (isCompleted result) "owner-team bootstrap completes when ITeamStore is present"
 
-            let! team = store.GetTeam "acme"
+            let! team = store.GetTeam(TeamId "acme")
             Expect.isSome team "the owner team row was created"
 
-            let! role = store.GetMemberRole("acme", "owner-1")
+            let! role = store.GetMemberRole(TeamId "acme", UserId "owner-1")
             Expect.equal role (Some Owner) "the provisioning actor is attached as Owner"
         }
 
@@ -411,13 +411,13 @@ let tests =
             let provider = providerOf [ typeof<ITeamStore>, box store ]
             let hook = OwnerTeamBootstrapLifecycle.create provider
 
-            let! first = hook.OnProvisioned("team-acme", "owner-1")
+            let! first = hook.OnProvisioned("team-acme", UserId "owner-1")
             Expect.isTrue (isCompleted first) "first provision completes"
 
-            let! second = hook.OnProvisioned("team-acme", "owner-1")
+            let! second = hook.OnProvisioned("team-acme", UserId "owner-1")
             Expect.isTrue (isCompleted second) "re-provision completes (no 'already a member' error)"
 
-            let! members = store.GetTeamMembers "acme"
+            let! members = store.GetTeamMembers(TeamId "acme")
             Expect.equal members.Length 1 "re-provision produced no duplicate membership"
         }
 
@@ -427,7 +427,7 @@ let tests =
             let provider = providerOf [ typeof<ITeamStore>, box store ]
             let hook = OwnerTeamBootstrapLifecycle.create provider
 
-            let! result = hook.OnProvisioned("user-solo", "owner-1")
+            let! result = hook.OnProvisioned("user-solo", UserId "owner-1")
             Expect.isTrue (isSkipped result) "a user scope has no owner team to bootstrap"
         }
 
@@ -437,7 +437,7 @@ let tests =
             let provider = providerOf [ typeof<IBlobEncryptionKeyResolver>, box resolver ]
             let hook = EncryptionKeyProvisionLifecycle.create provider
 
-            let! result = hook.OnProvisioned("team-keyed", "admin")
+            let! result = hook.OnProvisioned("team-keyed", UserId "admin")
             Expect.isTrue (isCompleted result) "key provision completes under a PerScopeKeyResolver"
 
             // The key now resolves by id — proof it was minted + persisted.
@@ -452,12 +452,12 @@ let tests =
             let provider = providerOf [ typeof<IBlobEncryptionKeyResolver>, box resolver ]
             let hook = EncryptionKeyProvisionLifecycle.create provider
 
-            let! first = hook.OnProvisioned("team-keyed", "admin")
+            let! first = hook.OnProvisioned("team-keyed", UserId "admin")
             Expect.isTrue (isCompleted first) "first provision completes"
 
             let! keyBefore = (resolver :> IBlobEncryptionKeyResolver).ResolveKey(lifecycleScope "team-keyed")
 
-            let! second = hook.OnProvisioned("team-keyed", "admin")
+            let! second = hook.OnProvisioned("team-keyed", UserId "admin")
             Expect.isTrue (isCompleted second) "re-provision completes"
 
             let! keyAfter = (resolver :> IBlobEncryptionKeyResolver).ResolveKey(lifecycleScope "team-keyed")
@@ -472,7 +472,7 @@ let tests =
             let provider = providerOf [ typeof<IBlobEncryptionKeyResolver>, box single ]
             let hook = EncryptionKeyProvisionLifecycle.create provider
 
-            let! result = hook.OnProvisioned("team-keyed", "admin")
+            let! result = hook.OnProvisioned("team-keyed", UserId "admin")
             Expect.isTrue (isSkipped result) "a platform-wide / single key is not minted per scope"
         }
 
@@ -486,14 +486,14 @@ let tests =
             let provisionHook = EncryptionKeyProvisionLifecycle.create provider
             let offboardHook = EncryptionKeyLifecycle.create provider
 
-            let! provisioned = provisionHook.OnProvisioned("team-sym", "admin")
+            let! provisioned = provisionHook.OnProvisioned("team-sym", UserId "admin")
             Expect.isTrue (isCompleted provisioned) "provision mints the key"
 
             let! key = (resolver :> IBlobEncryptionKeyResolver).ResolveKey(lifecycleScope "team-sym")
             let! present = (resolver :> IBlobEncryptionKeyResolver).ResolveKeyById key.KeyId
             Expect.isOk present "the key is present after provision"
 
-            let! offboarded = offboardHook.OnDeprovisioned("team-sym", "admin")
+            let! offboarded = offboardHook.OnDeprovisioned("team-sym", UserId "admin")
             Expect.isTrue (isCompleted offboarded) "offboard crypto-shreds the key"
 
             let! afterShred = (resolver :> IBlobEncryptionKeyResolver).ResolveKeyById key.KeyId
@@ -519,10 +519,10 @@ let tests =
             let! result = hook.OnProvisionedWith ctx
             Expect.isTrue (isCompleted result) "request-aware bootstrap completes"
 
-            let! ownerRole = store.GetMemberRole("behalf", "customer-9")
+            let! ownerRole = store.GetMemberRole(TeamId "behalf", UserId "customer-9")
             Expect.equal ownerRole (Some Owner) "the request's OwnerUserId is the team Owner"
 
-            let! actorRole = store.GetMemberRole("behalf", "op-admin")
+            let! actorRole = store.GetMemberRole(TeamId "behalf", UserId "op-admin")
             Expect.equal actorRole None "the acting admin is NOT attached as owner"
         }
 
@@ -538,7 +538,7 @@ let tests =
             let! result = hook.OnProvisionedWith ctx
             Expect.isTrue (isCompleted result) "bootstrap completes on the fallback path"
 
-            let! role = store.GetMemberRole("fallback", "self-admin")
+            let! role = store.GetMemberRole(TeamId "fallback", UserId "self-admin")
             Expect.equal role (Some Owner) "the acting admin is the owner when the request carries no owner"
         }
 
@@ -551,7 +551,7 @@ let tests =
             let! result = hook.OnProvisionedWith(ctxOf "team-none" "actor-1" None)
             Expect.isTrue (isCompleted result) "no-request path completes"
 
-            let! role = store.GetMemberRole("none", "actor-1")
+            let! role = store.GetMemberRole(TeamId "none", UserId "actor-1")
             Expect.equal role (Some Owner) "with no request the actor is the owner (legacy behaviour)"
         }
 
@@ -582,7 +582,7 @@ let tests =
             let provider = providerOf [ typeof<IConfigStore>, box store ]
             let hook = ConfigSeedLifecycle.create provider
 
-            let! result = hook.OnProvisioned("team-plain", "admin")
+            let! result = hook.OnProvisioned("team-plain", UserId "admin")
             Expect.isTrue (isCompleted result) "base seed completes"
 
             let scope = lifecycleScope "team-plain"
@@ -626,7 +626,7 @@ let tests =
             let hook = ConfigSeedLifecycle.create provider
             let scope = lifecycleScope "team-teardown"
 
-            let! seeded = hook.OnProvisioned("team-teardown", "admin")
+            let! seeded = hook.OnProvisioned("team-teardown", UserId "admin")
             Expect.isTrue (isCompleted seeded) "provision seeds the config docs"
 
             let! platformBefore = store.GetRaw(scope, ConfigKeys.PlatformModuleKey)
@@ -634,7 +634,7 @@ let tests =
             Expect.isFalse (Map.isEmpty platformBefore) "the _platform doc exists after provision"
             Expect.isFalse (Map.isEmpty prefsBefore) "the notification_prefs doc exists after provision"
 
-            let! torndown = hook.OnDeprovisioned("team-teardown", "admin")
+            let! torndown = hook.OnDeprovisioned("team-teardown", UserId "admin")
             Expect.isTrue (isCompleted torndown) "offboard teardown completes"
 
             let! platformAfter = store.GetRaw(scope, ConfigKeys.PlatformModuleKey)
@@ -649,13 +649,13 @@ let tests =
             let provider = providerOf [ typeof<IConfigStore>, box store ]
             let hook = ConfigSeedLifecycle.create provider
 
-            let! _ = hook.OnProvisioned("team-idem-off", "admin")
-            let! first = hook.OnDeprovisioned("team-idem-off", "admin")
+            let! _ = hook.OnProvisioned("team-idem-off", UserId "admin")
+            let! first = hook.OnDeprovisioned("team-idem-off", UserId "admin")
             Expect.isTrue (isCompleted first) "first offboard completes"
 
             // Re-run over an already-torn-down scope (the resumable
             // re-dispatch) — Clear is idempotent, so this is a no-op.
-            let! second = hook.OnDeprovisioned("team-idem-off", "admin")
+            let! second = hook.OnDeprovisioned("team-idem-off", UserId "admin")
             Expect.isTrue (isCompleted second) "a second offboard over a torn-down scope still completes"
 
             let scope = lifecycleScope "team-idem-off"
@@ -670,7 +670,7 @@ let tests =
             let hook = ConfigSeedLifecycle.create provider
             let scope = lifecycleScope "team-foreign"
 
-            let! _ = hook.OnProvisioned("team-foreign", "admin")
+            let! _ = hook.OnProvisioned("team-foreign", UserId "admin")
 
             // A document under a module key this hook never seeds — a domain
             // module's own settings, or an admin-authored doc. It must
@@ -680,7 +680,7 @@ let tests =
 
             Expect.isOk wrote "the foreign doc write succeeds"
 
-            let! torndown = hook.OnDeprovisioned("team-foreign", "admin")
+            let! torndown = hook.OnDeprovisioned("team-foreign", UserId "admin")
             Expect.isTrue (isCompleted torndown) "offboard teardown completes"
 
             let! seededAfter = store.GetRaw(scope, ConfigKeys.PlatformModuleKey)
@@ -700,16 +700,16 @@ let tests =
             let provider = providerOf [ typeof<ITeamStore>, box store ]
             let hook = OwnerTeamBootstrapLifecycle.create provider
 
-            let! created = hook.OnProvisioned("team-del", "owner-1")
+            let! created = hook.OnProvisioned("team-del", UserId "owner-1")
             Expect.isTrue (isCompleted created) "provision creates the owner team"
 
-            let! before = store.GetTeam "del"
+            let! before = store.GetTeam(TeamId "del")
             Expect.isSome before "the owner team exists after provision"
 
-            let! torndown = hook.OnDeprovisioned("team-del", "owner-1")
+            let! torndown = hook.OnDeprovisioned("team-del", UserId "owner-1")
             Expect.isTrue (isCompleted torndown) "offboard teardown completes"
 
-            let! after = store.GetTeam "del"
+            let! after = store.GetTeam(TeamId "del")
             Expect.isNone after "the owner-team row is gone after offboard"
         }
 
@@ -719,14 +719,14 @@ let tests =
             let provider = providerOf [ typeof<ITeamStore>, box store ]
             let hook = OwnerTeamBootstrapLifecycle.create provider
 
-            let! _ = hook.OnProvisioned("team-del2", "owner-1")
+            let! _ = hook.OnProvisioned("team-del2", UserId "owner-1")
 
-            let! first = hook.OnDeprovisioned("team-del2", "owner-1")
+            let! first = hook.OnDeprovisioned("team-del2", UserId "owner-1")
             Expect.isTrue (isCompleted first) "first offboard deletes the team"
 
             // The team row is already gone — the GetTeam guard makes this a
             // no-op Completed rather than a DeleteTeam error.
-            let! second = hook.OnDeprovisioned("team-del2", "owner-1")
+            let! second = hook.OnDeprovisioned("team-del2", UserId "owner-1")
             Expect.isTrue (isCompleted second) "a second offboard over a deleted team still completes"
         }
 
@@ -736,7 +736,7 @@ let tests =
             let provider = providerOf [ typeof<ITeamStore>, box store ]
             let hook = OwnerTeamBootstrapLifecycle.create provider
 
-            let! result = hook.OnDeprovisioned("user-solo", "owner-1")
+            let! result = hook.OnDeprovisioned("user-solo", UserId "owner-1")
             Expect.isTrue (isSkipped result) "a user scope has no owner team to tear down"
         }
 
@@ -755,23 +755,23 @@ let tests =
             let teamHook = OwnerTeamBootstrapLifecycle.create provider
             let scope = lifecycleScope "team-sym306"
 
-            let! seeded = configHook.OnProvisioned("team-sym306", "owner-1")
-            let! bootstrapped = teamHook.OnProvisioned("team-sym306", "owner-1")
+            let! seeded = configHook.OnProvisioned("team-sym306", UserId "owner-1")
+            let! bootstrapped = teamHook.OnProvisioned("team-sym306", UserId "owner-1")
             Expect.isTrue (isCompleted seeded) "config seeded"
             Expect.isTrue (isCompleted bootstrapped) "owner team bootstrapped"
 
             let! platformBefore = configStore.GetRaw(scope, ConfigKeys.PlatformModuleKey)
-            let! teamBefore = teamStore.GetTeam "sym306"
+            let! teamBefore = teamStore.GetTeam(TeamId "sym306")
             Expect.isFalse (Map.isEmpty platformBefore) "seeded config present after provision"
             Expect.isSome teamBefore "owner team present after provision"
 
-            let! configOff = configHook.OnDeprovisioned("team-sym306", "owner-1")
-            let! teamOff = teamHook.OnDeprovisioned("team-sym306", "owner-1")
+            let! configOff = configHook.OnDeprovisioned("team-sym306", UserId "owner-1")
+            let! teamOff = teamHook.OnDeprovisioned("team-sym306", UserId "owner-1")
             Expect.isTrue (isCompleted configOff) "config teardown completes"
             Expect.isTrue (isCompleted teamOff) "team teardown completes"
 
             let! platformAfter = configStore.GetRaw(scope, ConfigKeys.PlatformModuleKey)
-            let! teamAfter = teamStore.GetTeam "sym306"
+            let! teamAfter = teamStore.GetTeam(TeamId "sym306")
             Expect.isTrue (Map.isEmpty platformAfter) "seeded config removed on offboard"
             Expect.isNone teamAfter "owner team removed on offboard"
         }
@@ -794,8 +794,8 @@ let tests =
             let teamHook = OwnerTeamBootstrapLifecycle.create provider
             let scope = lifecycleScope "team-export306"
 
-            let! _ = configHook.OnProvisioned("team-export306", "owner-1")
-            let! _ = teamHook.OnProvisioned("team-export306", "owner-1")
+            let! _ = configHook.OnProvisioned("team-export306", UserId "owner-1")
+            let! _ = teamHook.OnProvisioned("team-export306", UserId "owner-1")
 
             let noAudit (_scopeId: string) (_event: AuditEvent) = async { return () }
 
@@ -806,7 +806,7 @@ let tests =
 
             let runExport () = async {
                 let! platformRaw = configStore.GetRaw(scope, ConfigKeys.PlatformModuleKey)
-                let! team = teamStore.GetTeam "export306"
+                let! team = teamStore.GetTeam(TeamId "export306")
                 configAtCapture.Value <- not (Map.isEmpty platformRaw)
                 teamAtCapture.Value <- Option.isSome team
 
@@ -835,7 +835,7 @@ let tests =
             Expect.isTrue teamAtCapture.Value "the export saw the owner team present (captured before teardown)"
 
             let! platformAfter = configStore.GetRaw(scope, ConfigKeys.PlatformModuleKey)
-            let! teamAfter = teamStore.GetTeam "export306"
+            let! teamAfter = teamStore.GetTeam(TeamId "export306")
             Expect.isTrue (Map.isEmpty platformAfter) "the seeded config was torn down after the export"
             Expect.isNone teamAfter "the owner team was torn down after the export"
         }

@@ -34,7 +34,7 @@ let private email (userIds: string list) : Notification =
 
 let private pending (userId: string) (queuedAt: DateTime) (disposition: PendingDisposition) : PendingNotification = {
     Id = Guid.NewGuid()
-    UserId = userId
+    UserId = UserId userId
     Category = "reports.summary"
     Channel = PreferenceChannel.Email
     Notification = email [ userId ]
@@ -55,7 +55,7 @@ let contractTests (name: string) (factory: unit -> INotificationPreferenceStore)
         testCaseAsync "GetPreferences is empty (not an error) before any save"
         <| async {
             let store, scope, user = fresh ()
-            let! result = store.GetPreferences(scope, user)
+            let! result = store.GetPreferences(scope, UserId user)
             Expect.equal result (Ok UserNotificationPreferences.empty) "empty default"
         }
 
@@ -78,9 +78,9 @@ let contractTests (name: string) (factory: unit -> INotificationPreferenceStore)
                         }
             }
 
-            let! saved = store.SavePreferences(scope, user, prefs)
+            let! saved = store.SavePreferences(scope, UserId user, prefs)
             Expect.equal saved (Ok()) "saved"
-            let! loaded = store.GetPreferences(scope, user)
+            let! loaded = store.GetPreferences(scope, UserId user)
             Expect.equal loaded (Ok prefs) "round-trip"
         }
 
@@ -92,9 +92,9 @@ let contractTests (name: string) (factory: unit -> INotificationPreferenceStore)
                 UserNotificationPreferences.empty
                 |> UserNotificationPreferences.setDelivery "a" PreferenceChannel.Email Muted
 
-            let! _ = store.SavePreferences(scope, user, first)
-            let! _ = store.SavePreferences(scope, user, UserNotificationPreferences.empty)
-            let! loaded = store.GetPreferences(scope, user)
+            let! _ = store.SavePreferences(scope, UserId user, first)
+            let! _ = store.SavePreferences(scope, UserId user, UserNotificationPreferences.empty)
+            let! loaded = store.GetPreferences(scope, UserId user)
             Expect.equal loaded (Ok UserNotificationPreferences.empty) "replaced, not merged"
         }
 
@@ -106,8 +106,8 @@ let contractTests (name: string) (factory: unit -> INotificationPreferenceStore)
                 UserNotificationPreferences.empty
                 |> UserNotificationPreferences.setDelivery "a" PreferenceChannel.Email Muted
 
-            let! _ = store.SavePreferences(scope, user, prefs)
-            let! other = store.GetPreferences(scope + "-other", user)
+            let! _ = store.SavePreferences(scope, UserId user, prefs)
+            let! other = store.GetPreferences(scope + "-other", UserId user)
             Expect.equal other (Ok UserNotificationPreferences.empty) "other scope sees nothing"
         }
 
@@ -118,7 +118,7 @@ let contractTests (name: string) (factory: unit -> INotificationPreferenceStore)
             let earlier = pending user t0 (PendingDisposition.ForDigest Daily)
             let! _ = store.Enqueue(scope, later)
             let! _ = store.Enqueue(scope, earlier)
-            let! items = store.ListPending(scope, user)
+            let! items = store.ListPending(scope, UserId user)
             Expect.equal (items |> List.map _.Id) [ earlier.Id; later.Id ] "oldest first"
             Expect.equal items[0] earlier "item round-trips, notification included"
         }
@@ -129,7 +129,7 @@ let contractTests (name: string) (factory: unit -> INotificationPreferenceStore)
             let item = pending user t0 (PendingDisposition.ForDigest Hourly)
             let! _ = store.Enqueue(scope, item)
             let! _ = store.Enqueue(scope, item)
-            let! items = store.ListPending(scope, user)
+            let! items = store.ListPending(scope, UserId user)
             Expect.equal (List.length items) 1 "one item"
         }
 
@@ -140,13 +140,13 @@ let contractTests (name: string) (factory: unit -> INotificationPreferenceStore)
             let b = pending user (t0.AddMinutes 1.0) (PendingDisposition.ForDigest Daily)
             let! _ = store.Enqueue(scope, a)
             let! _ = store.Enqueue(scope, b)
-            let! removed = store.Remove(scope, user, [ a.Id ])
+            let! removed = store.Remove(scope, UserId user, [ a.Id ])
             Expect.equal removed (Ok()) "removed"
-            let! items = store.ListPending(scope, user)
+            let! items = store.ListPending(scope, UserId user)
             Expect.equal (items |> List.map _.Id) [ b.Id ] "b remains"
-            let! again = store.Remove(scope, user, [ a.Id; Guid.NewGuid() ])
+            let! again = store.Remove(scope, UserId user, [ a.Id; Guid.NewGuid() ])
             Expect.equal again (Ok()) "missing ids are not an error"
-            let! empty = store.Remove(scope, user, [])
+            let! empty = store.Remove(scope, UserId user, [])
             Expect.equal empty (Ok()) "empty list is a no-op"
         }
 
@@ -154,7 +154,7 @@ let contractTests (name: string) (factory: unit -> INotificationPreferenceStore)
         <| async {
             let store, scope, user = fresh ()
             let! _ = store.Enqueue(scope, pending user t0 (PendingDisposition.ForDigest Daily))
-            let! other = store.ListPending(scope + "-other", user)
+            let! other = store.ListPending(scope + "-other", UserId user)
             Expect.isEmpty other "other scope sees nothing"
         }
 
@@ -178,12 +178,12 @@ let contractTests (name: string) (factory: unit -> INotificationPreferenceStore)
         testCaseAsync "digest watermarks are empty until set and then round-trip per frequency"
         <| async {
             let store, scope, user = fresh ()
-            let! before = store.GetDigestWatermarks(scope, user)
+            let! before = store.GetDigestWatermarks(scope, UserId user)
             Expect.isTrue (Map.isEmpty before) "empty"
-            let! _ = store.SetDigestWatermark(scope, user, Daily, t0)
-            let! _ = store.SetDigestWatermark(scope, user, Weekly, t0.AddDays 1.0)
-            let! _ = store.SetDigestWatermark(scope, user, Daily, t0.AddHours 1.0)
-            let! after = store.GetDigestWatermarks(scope, user)
+            let! _ = store.SetDigestWatermark(scope, UserId user, Daily, t0)
+            let! _ = store.SetDigestWatermark(scope, UserId user, Weekly, t0.AddDays 1.0)
+            let! _ = store.SetDigestWatermark(scope, UserId user, Daily, t0.AddHours 1.0)
+            let! after = store.GetDigestWatermarks(scope, UserId user)
             Expect.equal (Map.tryFind "daily" after) (Some(t0.AddHours 1.0)) "daily replaced"
             Expect.equal (Map.tryFind "weekly" after) (Some(t0.AddDays 1.0)) "weekly kept"
         }
@@ -209,7 +209,7 @@ let tests =
                     Encoding.UTF8.GetBytes "{not json"
                 )
 
-            let! loaded = store.GetPreferences("team-x", "user-x")
+            let! loaded = store.GetPreferences("team-x", UserId "user-x")
             Expect.equal loaded (Ok UserNotificationPreferences.empty) "corrupt reads as empty, never as an error"
         }
 
@@ -217,7 +217,7 @@ let tests =
         <| async {
             let blobs = InMemoryBlobStorage() :> IBlobStorage
             let store = BlobNotificationPreferenceStore.create blobs (Some noopLogger)
-            let! _ = store.SavePreferences("team-x", "user/with/slashes", UserNotificationPreferences.empty)
+            let! _ = store.SavePreferences("team-x", UserId "user/with/slashes", UserNotificationPreferences.empty)
             let! _ = store.Enqueue("team-x", pending "user/with/slashes" t0 (PendingDisposition.ForDigest Daily))
             let! names = blobs.List("_platform", "notification-preferences/team-x/")
             Expect.equal (List.length names) 2 "one prefs blob + one pending blob"

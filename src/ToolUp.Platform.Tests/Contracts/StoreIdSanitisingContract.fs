@@ -71,7 +71,7 @@ let tests (label: string) (factory: StoreFactory) =
             for (kind, badId) in traversalIds do
                 let stores = factory ()
 
-                match! stores.Team.CreateTeam(badId, "Evil") with
+                match! stores.Team.CreateTeam(TeamId badId, "Evil") with
                 | Error _ ->
                     let! teams = stores.Team.ListTeams()
                     Expect.isEmpty teams (sprintf "%s teamId must not create a team" kind)
@@ -82,9 +82,9 @@ let tests (label: string) (factory: StoreFactory) =
         <| async {
             let stores = factory ()
             let teamId = benignScope ()
-            let! _ = stores.Team.CreateTeam(teamId, "Acme")
+            let! _ = stores.Team.CreateTeam(TeamId teamId, "Acme")
 
-            match! stores.Team.AddMember(teamId, "../../_platform/x", TeamRole.Member) with
+            match! stores.Team.AddMember(TeamId teamId, UserId "../../_platform/x", TeamRole.Member) with
             | Error _ -> ()
             | Ok() -> failtest "traversal userId must be rejected"
         }
@@ -94,9 +94,9 @@ let tests (label: string) (factory: StoreFactory) =
             let stores = factory ()
             let teamId = Guid.NewGuid().ToString("N")
 
-            match! stores.Team.CreateTeam(teamId, "Acme") with
+            match! stores.Team.CreateTeam(TeamId teamId, "Acme") with
             | Ok _ ->
-                let! fetched = stores.Team.GetTeam(teamId)
+                let! fetched = stores.Team.GetTeam(TeamId teamId)
                 Expect.isSome fetched "benign teamId persists + reads back"
             | Error e -> failtestf "benign teamId should pass: %s" e
         }
@@ -107,7 +107,9 @@ let tests (label: string) (factory: StoreFactory) =
         <| async {
             let stores = factory ()
 
-            match! stores.Permission.SetMemberPermissions("team-ok", "../../_platform/x", "ModuleA", []) with
+            match!
+                stores.Permission.SetMemberPermissions(TeamId "team-ok", UserId "../../_platform/x", "ModuleA", [])
+            with
             | Error _ -> ()
             | Ok() -> failtest "traversal userId must be rejected"
         }
@@ -116,7 +118,7 @@ let tests (label: string) (factory: StoreFactory) =
         <| async {
             let stores = factory ()
 
-            match! stores.Permission.SetTeamPermissions("_platform", TeamPermissions.empty) with
+            match! stores.Permission.SetTeamPermissions(TeamId "_platform", TeamPermissions.empty) with
             | Error _ -> ()
             | Ok() -> failtest "reserved _platform teamId must be rejected"
         }
@@ -141,7 +143,7 @@ let tests (label: string) (factory: StoreFactory) =
             | Error _ -> ()
             | Ok() -> failtest "traversal scopeId must be rejected at MarkUsed"
 
-            match! stores.ShareToken.Revoke("scope-ok", "../../_platform/x", "actor") with
+            match! stores.ShareToken.Revoke("scope-ok", "../../_platform/x", UserId "actor") with
             | Error _ -> ()
             | Ok() -> failtest "traversal tokenId must be rejected at Revoke"
         }
@@ -153,7 +155,7 @@ let tests (label: string) (factory: StoreFactory) =
             let! byResource = stores.ShareToken.ListByResource("../../_platform", "form", "survey-1")
             Expect.isEmpty byResource "traversal scopeId must not enumerate a chosen prefix"
 
-            let! byIssuer = stores.ShareToken.ListByIssuer("..\\..\\jobs", "user-issuer")
+            let! byIssuer = stores.ShareToken.ListByIssuer("..\\..\\jobs", UserId "user-issuer")
             Expect.isEmpty byIssuer "traversal scopeId must not enumerate a chosen prefix"
         }
 
@@ -168,7 +170,7 @@ let tests (label: string) (factory: StoreFactory) =
                 | Ok claim -> Expect.equal claim.ScopeId scopeId "validated claim carries the benign scope"
                 | Error e -> failtestf "benign token should validate: %A" e
 
-                let! claims = stores.ShareToken.ListByIssuer(scopeId, "user-issuer")
+                let! claims = stores.ShareToken.ListByIssuer(scopeId, UserId "user-issuer")
                 Expect.isNonEmpty claims "benign scope's issued token is enumerable"
             | Error e -> failtestf "benign scopeId should issue: %A" e
         }

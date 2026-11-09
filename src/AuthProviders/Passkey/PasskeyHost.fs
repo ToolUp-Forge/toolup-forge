@@ -196,7 +196,7 @@ let private registerCompleteHandler: HttpHandler =
                             ctx
                             PasskeyConfig.PlatformContainer
                             (PasskeyCredentialRegistered {
-                                UserId = record.UserId
+                                UserId = UserId record.UserId
                                 CredentialIdPrefix = credIdPrefix record.CredentialId
                                 Grant = pending.Grant |> Option.defaultValue "Unknown"
                             })
@@ -213,7 +213,7 @@ let private registerCompleteHandler: HttpHandler =
                             ctx
                             PasskeyConfig.PlatformContainer
                             (UserLoggedIn {
-                                UserId = record.UserId
+                                UserId = UserId record.UserId
                                 AuthProvider = "Passkey"
                             })
                         |> Async.StartAsTask
@@ -272,7 +272,7 @@ let private assertCompleteHandler: HttpHandler =
                             ctx
                             PasskeyConfig.PlatformContainer
                             (UserLoggedIn {
-                                UserId = record.UserId
+                                UserId = UserId record.UserId
                                 AuthProvider = "Passkey"
                             })
                         |> Async.StartAsTask

@@ -200,7 +200,7 @@ let tests (name: string) (factory: unit -> ITenantFleet) =
             let! _ = fleet.ProvisionTenant(mkRequest "owned-1b" "owner-1" "us-east")
             let! _ = fleet.ProvisionTenant(mkRequest "owned-2" "owner-2" "eu-west")
 
-            let! owner1Tenants = fleet.ListTenants(Some "owner-1")
+            let! owner1Tenants = fleet.ListTenants(Some(UserId "owner-1"))
             Expect.hasLength owner1Tenants 2 "owner-1 has two tenants"
             Expect.all owner1Tenants (fun t -> t.OwnerUserId = "owner-1") "all entries belong to owner-1"
         }
@@ -215,7 +215,7 @@ let tests (name: string) (factory: unit -> ITenantFleet) =
             let tenant =
                 okOrFail "ProvisionTenant" (Async.RunSynchronously(fleet.ProvisionTenant req))
 
-            let! evicted = fleet.EvictTenant(tenant.Id, "operator-1", "test reason")
+            let! evicted = fleet.EvictTenant(tenant.Id, UserId "operator-1", "test reason")
             Expect.isOk evicted "EvictTenant returns Ok"
 
             let! reread = fleet.GetTenant tenant.Id
@@ -233,17 +233,17 @@ let tests (name: string) (factory: unit -> ITenantFleet) =
             let tenant =
                 okOrFail "ProvisionTenant" (Async.RunSynchronously(fleet.ProvisionTenant req))
 
-            let! first = fleet.EvictTenant(tenant.Id, "operator-1", "first")
+            let! first = fleet.EvictTenant(tenant.Id, UserId "operator-1", "first")
             Expect.isOk first "first eviction succeeds"
 
-            let! second = fleet.EvictTenant(tenant.Id, "operator-1", "second")
+            let! second = fleet.EvictTenant(tenant.Id, UserId "operator-1", "second")
             Expect.isOk second "second eviction returns Ok (idempotent)"
         }
 
         testCaseAsync "EvictTenant on unknown id returns UnknownTenant"
         <| async {
             let fleet = factory ()
-            let! result = fleet.EvictTenant("ghost", "operator-1", "test")
+            let! result = fleet.EvictTenant("ghost", UserId "operator-1", "test")
 
             match result with
             | Error(UnknownTenant tid) -> Expect.equal tid "ghost" "id preserved"
@@ -260,8 +260,8 @@ let tests (name: string) (factory: unit -> ITenantFleet) =
             let tenant =
                 okOrFail "ProvisionTenant" (Async.RunSynchronously(fleet.ProvisionTenant req))
 
-            let! _ = fleet.EvictTenant(tenant.Id, "operator-1", "test")
-            let! result = fleet.RestartTenant(tenant.Id, "operator-1")
+            let! _ = fleet.EvictTenant(tenant.Id, UserId "operator-1", "test")
+            let! result = fleet.RestartTenant(tenant.Id, UserId "operator-1")
 
             match result with
             | Error(TenantEvicted tid) -> Expect.equal tid tenant.Id "id preserved"
@@ -276,7 +276,7 @@ let tests (name: string) (factory: unit -> ITenantFleet) =
             let tenant =
                 okOrFail "ProvisionTenant" (Async.RunSynchronously(fleet.ProvisionTenant req))
 
-            let! result = fleet.RestartTenant(tenant.Id, "operator-1")
+            let! result = fleet.RestartTenant(tenant.Id, UserId "operator-1")
             Expect.isOk result "RestartTenant on Active is Ok"
         }
 

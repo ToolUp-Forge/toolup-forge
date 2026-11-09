@@ -110,7 +110,7 @@ module ConversationVisibility =
         | Some(TeamMember(_, teamId)) -> Some teamId
         | _ ->
             match ScopeKey.tryParseContainer container with
-            | Some(ScopeKey.Team containerTeamId) -> Some containerTeamId
+            | Some(ScopeKey.Team containerTeamId) -> Some containerTeamId.Value
             | _ -> None
 
     /// The request's `AccessContext`: the DI one, else the items-backed

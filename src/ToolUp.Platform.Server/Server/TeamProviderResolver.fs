@@ -49,7 +49,7 @@ let noTeamRoles: TeamRoleLookup = fun _ _ -> async { return None }
 
 /// Adapt a registered `ITeamStore` into the lookup.
 let teamStoreRoles (store: ITeamStore) : TeamRoleLookup =
-    fun teamId userId -> store.GetMemberRole(teamId, userId)
+    fun teamId userId -> store.GetMemberRole(TeamId teamId, UserId userId)
 
 /// The user acting in a subject, for the role lookup. `None` for a
 /// subject that names no user, which cannot reach a team rung anyway.
@@ -126,7 +126,7 @@ type TeamProviderResolver(profiles: IProviderProfile, roleOf: TeamRoleLookup) =
                     match actingUser subject with
                     | None -> return Error "You are not a member of this team."
                     | Some userId ->
-                        let! role = roleOf teamId userId
+                        let! role = roleOf teamId.Value userId
 
                         match role with
                         | Some r when TeamRoles.canWriteTeamConfig r -> return Ok rung

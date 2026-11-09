@@ -612,7 +612,7 @@ let private scheduleManualJob (fixture: HandoffFixture) (handler: IJobHandler) (
 
 let private triggerOnce (fixture: HandoffFixture) (scope: string) (jobId: JobId) =
     match
-        (fixture.Scheduler :> IJobScheduler).TriggerOnce(scope, jobId, "test")
+        (fixture.Scheduler :> IJobScheduler).TriggerOnce(scope, jobId, UserId "test")
         |> Async.RunSynchronously
     with
     | Ok() -> ()
@@ -1212,7 +1212,7 @@ let private handoffTests =
             scheduler.ReconcileAwaitingExternal() |> Async.RunSynchronously
 
             // An ordinary handler still behaves exactly as before (GP 11).
-            match iface.TriggerOnce(scope, jobId, "test") |> Async.RunSynchronously with
+            match iface.TriggerOnce(scope, jobId, UserId "test") |> Async.RunSynchronously with
             | Ok() -> ()
             | Error e -> failtestf "TriggerOnce failed: %A" e
 
@@ -1942,7 +1942,7 @@ let private pinRun
         | Ok outcome -> pinJobId outcome
         | Error e -> failtestf "schedule failed: %A" e
 
-    match scheduler.TriggerOnce(scope, jobId, "test") |> Async.RunSynchronously with
+    match scheduler.TriggerOnce(scope, jobId, UserId "test") |> Async.RunSynchronously with
     | Ok() -> ()
     | Error e -> failtestf "TriggerOnce failed: %A" e
 

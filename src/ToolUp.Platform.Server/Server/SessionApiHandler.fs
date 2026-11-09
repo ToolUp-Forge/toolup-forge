@@ -112,7 +112,7 @@ let sessionApi (ctx: HttpContext) : ISessionApi =
         | TeamMember(actorId, teamId) ->
             match ctx.RequestServices.GetService typeof<ITeamStore> with
             | :? ITeamStore as teams ->
-                let! role = teams.GetMemberRole(teamId, actorId)
+                let! role = teams.GetMemberRole(TeamId teamId, UserId actorId)
 
                 match role with
                 | Some r when TeamRoles.canWriteTeamConfig r -> return Ok teamId
@@ -134,7 +134,7 @@ let sessionApi (ctx: HttpContext) : ISessionApi =
         ListMySessions =
             fun () ->
                 withRegistry (fun registry scopeId -> async {
-                    let! records = registry.ListForUser(scopeId, accessContext.UserId)
+                    let! records = registry.ListForUser(scopeId, UserId accessContext.UserId)
 
                     return records |> Result.map (List.sortByDescending _.LastSeenAt) |> toClientResult
                 })
@@ -147,7 +147,7 @@ let sessionApi (ctx: HttpContext) : ISessionApi =
                     // would let any caller cut off any session in their
                     // scope whose id they had seen — and in a team scope
                     // that is every colleague's.
-                    let! records = registry.ListForUser(scopeId, accessContext.UserId)
+                    let! records = registry.ListForUser(scopeId, UserId accessContext.UserId)
 
                     match records with
                     | Error e -> return toClientResult (Error e)
@@ -158,7 +158,7 @@ let sessionApi (ctx: HttpContext) : ISessionApi =
                             // — see `SessionError.toClientMessage`.
                             return toClientResult (Error(SessionError.NotFound sessionId))
                         | Some record ->
-                            let! revoked = registry.Revoke(scopeId, sessionId, accessContext.UserId)
+                            let! revoked = registry.Revoke(scopeId, sessionId, UserId accessContext.UserId)
 
                             match revoked with
                             | Error e -> return toClientResult (Error e)
@@ -169,8 +169,8 @@ let sessionApi (ctx: HttpContext) : ISessionApi =
                                         logger
                                         scopeId
                                         (AuditEvent.SessionRevoked {
-                                            ActorUserId = accessContext.UserId
-                                            SubjectUserId = record.UserId
+                                            ActorUserId = UserId accessContext.UserId
+                                            SubjectUserId = UserId record.UserId
                                             SessionId = record.SessionId
                                             DeviceDescriptor = record.DeviceDescriptor
                                             ByAdministrator = false
@@ -182,7 +182,8 @@ let sessionApi (ctx: HttpContext) : ISessionApi =
         RevokeAllMySessions =
             fun () ->
                 withRegistry (fun registry scopeId -> async {
-                    let! revoked = registry.RevokeAllForUser(scopeId, accessContext.UserId, accessContext.UserId)
+                    let! revoked =
+                        registry.RevokeAllForUser(scopeId, UserId accessContext.UserId, UserId accessContext.UserId)
 
                     match revoked with
                     | Error e -> return toClientResult (Error e)
@@ -193,8 +194,8 @@ let sessionApi (ctx: HttpContext) : ISessionApi =
                                 logger
                                 scopeId
                                 (AuditEvent.AllSessionsRevoked {
-                                    ActorUserId = accessContext.UserId
-                                    SubjectUserId = accessContext.UserId
+                                    ActorUserId = UserId accessContext.UserId
+                                    SubjectUserId = UserId accessContext.UserId
                                     RevokedCount = count
                                     ByAdministrator = false
                                 })
@@ -217,14 +218,19 @@ let sessionApi (ctx: HttpContext) : ISessionApi =
                         // is not scope-qualified (GP 4).
                         match ctx.RequestServices.GetService typeof<ITeamStore> with
                         | :? ITeamStore as teams ->
-                            let! targetRole = teams.GetMemberRole(teamId, targetUserId)
+                            let! targetRole = teams.GetMemberRole(TeamId teamId, UserId targetUserId)
 
                             match targetRole with
                             | None ->
                                 return
                                     Error(SessionError.toClientMessage (SessionError.AccessDenied "not a team member"))
                             | Some _ ->
-                                let! revoked = registry.RevokeAllForUser(scopeId, targetUserId, accessContext.UserId)
+                                let! revoked =
+                                    registry.RevokeAllForUser(
+                                        scopeId,
+                                        UserId targetUserId,
+                                        UserId accessContext.UserId
+                                    )
 
                                 match revoked with
                                 | Error e -> return toClientResult (Error e)
@@ -235,8 +241,8 @@ let sessionApi (ctx: HttpContext) : ISessionApi =
                                             logger
                                             scopeId
                                             (AuditEvent.AllSessionsRevoked {
-                                                ActorUserId = accessContext.UserId
-                                                SubjectUserId = targetUserId
+                                                ActorUserId = UserId accessContext.UserId
+                                                SubjectUserId = UserId targetUserId
                                                 RevokedCount = count
                                                 ByAdministrator = true
                                             })

@@ -96,7 +96,7 @@ let private ensureOwnerAdmin (ctx: HttpContext) (accessContext: AccessContext) :
     | TeamMember(userId, teamId) ->
         match tryGetService<ITeamStore> ctx with
         | Some ts ->
-            let! role = ts.GetMemberRole(teamId, userId)
+            let! role = ts.GetMemberRole(TeamId teamId, UserId userId)
 
             match role with
             | Some r when TeamRoles.canWriteTeamConfig r -> return Ok()
@@ -169,7 +169,7 @@ let private start (flowName: string) : HttpHandler =
                                     ScopeId = scope.ScopeId
                                     Container = scope.Container
                                     ResourceId = resourceId
-                                    UserId = accessContext.UserId
+                                    UserId = UserId accessContext.UserId
                                     FlowName = flowName
                                     RequestTokenSecret = rt.RequestTokenSecret
                                     CreatedAt = DateTime.UtcNow

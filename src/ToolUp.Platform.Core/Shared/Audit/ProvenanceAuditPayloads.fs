@@ -32,7 +32,7 @@ module UserSchemaSourceModule =
 /// durable end-to-end.
 type SchemaProposedPayload = {
     /// Actor the proposal is attributed to (the user in the conversation).
-    UserId: string
+    UserId: UserId
     /// Scope the proposed schema targets.
     ScopeId: string
     /// Schema id of the proposal.
@@ -50,7 +50,7 @@ type SchemaProposedPayload = {
 /// was `AuthoredBy.AIWithApproval`. Emitted by the store at commit time.
 type SchemaApprovedPayload = {
     /// Approving actor.
-    UserId: string
+    UserId: UserId
     /// Scope the schema belongs to.
     ScopeId: string
     SchemaId: string
@@ -69,7 +69,7 @@ type SchemaApprovedPayload = {
 /// change (GP 6). Identifiers + cardinality only.
 type SchemaChangedPayload = {
     /// Actor who triggered the change (`"system"` for job-driven runs).
-    UserId: string
+    UserId: UserId
     ScopeId: string
     SchemaId: string
     /// Store-assigned numeric version after the change (`0` for a delete).

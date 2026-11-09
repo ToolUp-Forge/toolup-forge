@@ -295,10 +295,10 @@ let private statusStoreTests =
             let! _ = store.Write mine
             let! _ = store.Write(MigrationStatus.idle "team-b" "SalesData" 3)
 
-            let! readBack = store.Read("team-a", "SalesData")
+            let! readBack = store.Read(TeamId "team-a", "SalesData")
             Expect.equal (readBack |> Option.map _.MigratedObjects) (Some 47) "counters survive the round-trip"
 
-            let! forTeam = store.ListForTeam "team-a"
+            let! forTeam = store.ListForTeam(TeamId "team-a")
             Expect.equal (forTeam |> List.map _.TeamId) [ "team-a" ] "a team read never widens to another team"
 
             let! all = store.ListAll()
@@ -549,7 +549,7 @@ let private runnerTests =
             let! _ = seed h "T" "obj-1" "a"
             let! _ = h.Runner.RunForTeam(h.Scope, dt)
 
-            let! persisted = h.StatusStore.Read(h.Scope, "T")
+            let! persisted = h.StatusStore.Read(TeamId h.Scope, "T")
             let status = Expect.wantSome persisted "the pass persisted its status"
             Expect.equal status.TargetVersion 2 "target version recorded"
             Expect.equal status.MigratedObjects 1 "count recorded"

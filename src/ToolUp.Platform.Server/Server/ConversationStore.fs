@@ -258,7 +258,7 @@ module private Events =
     let started (eventStore: IEventStore option) (scopeId: string) (conv: Conversation) : Async<unit> =
         write eventStore scopeId "ConversationStarted" {
             ConversationStartedPayload.ConversationId = conv.ConversationId
-            UserId = conv.CreatedBy
+            UserId = UserId conv.CreatedBy
             ScopeId = conv.ScopeId
             Provider = conv.Provider
             ModelName = conv.ModelName
@@ -316,7 +316,7 @@ module private Events =
             | ErasurePolicy.RetainPerCompliance -> "RetainPerCompliance"
 
         write eventStore scopeId "ConversationErased" {
-            ConversationErasedPayload.SubjectUserId = subjectUserId
+            ConversationErasedPayload.SubjectUserId = UserId subjectUserId
             Policy = policyName
             ConversationCount = conversationCount
         }
@@ -430,7 +430,7 @@ type InMemoryConversationStore internal (eventStore: IEventStore option, logger:
                 entries
                 |> Seq.filter (fun kvp -> fst kvp.Key = scopeId)
                 |> Seq.map _.Value.Conversation
-                |> Seq.filter (fun c -> c.CreatedBy = userId)
+                |> Seq.filter (fun c -> c.CreatedBy = userId.Value)
                 |> Seq.sortByDescending _.CreatedAt
                 |> Seq.toList
 
@@ -531,7 +531,7 @@ type InMemoryConversationStore internal (eventStore: IEventStore option, logger:
         // Eraser
 
         member this.Erase(scopeId, subjectUserId, policy, dryRun) = async {
-            if Erasure.isBlankSubject subjectUserId then
+            if Erasure.isBlankSubject subjectUserId.Value then
                 return
                     Ok {
                         HandlerName = "conversations"
@@ -541,7 +541,8 @@ type InMemoryConversationStore internal (eventStore: IEventStore option, logger:
             else
                 let matchedIds =
                     entries
-                    |> Seq.filter (fun kvp -> fst kvp.Key = scopeId && kvp.Value.Conversation.CreatedBy = subjectUserId)
+                    |> Seq.filter (fun kvp ->
+                        fst kvp.Key = scopeId && kvp.Value.Conversation.CreatedBy = subjectUserId.Value)
                     |> Seq.map (fun kvp -> snd kvp.Key)
                     |> Seq.toList
 
@@ -589,8 +590,10 @@ type InMemoryConversationStore internal (eventStore: IEventStore option, logger:
                                             CreatedBy = tombstone
                                     })
 
-                    Events.erased eventStore scopeId subjectUserId policy matchedIds.Length
-                    |> Background.startAudit warn (Events.erasedWrite scopeId subjectUserId policy matchedIds.Length)
+                    Events.erased eventStore scopeId subjectUserId.Value policy matchedIds.Length
+                    |> Background.startAudit
+                        warn
+                        (Events.erasedWrite scopeId subjectUserId.Value policy matchedIds.Length)
 
                     return
                         Ok {
@@ -598,7 +601,11 @@ type InMemoryConversationStore internal (eventStore: IEventStore option, logger:
                             RecordsAffected = matchedIds.Length
                             Note =
                                 Some(
-                                    sprintf "%d conversation(s) %A under user %s" matchedIds.Length policy subjectUserId
+                                    sprintf
+                                        "%d conversation(s) %A under user %s"
+                                        matchedIds.Length
+                                        policy
+                                        subjectUserId.Value
                                 )
                         }
         }
@@ -811,7 +818,7 @@ type PersistentConversationStore
         member this.ListByUser(scopeId, userId) = async {
             let reader = this :> IConversationReader
             let! all = reader.ListByScope scopeId
-            return all |> List.filter (fun c -> c.CreatedBy = userId)
+            return all |> List.filter (fun c -> c.CreatedBy = userId.Value)
         }
 
         member this.Query(scopeId, query) = async {
@@ -979,7 +986,7 @@ type PersistentConversationStore
         // Eraser
 
         member this.Erase(scopeId, subjectUserId, policy, dryRun) = async {
-            if Erasure.isBlankSubject subjectUserId then
+            if Erasure.isBlankSubject subjectUserId.Value then
                 return
                     Ok {
                         HandlerName = "conversations"
@@ -989,7 +996,7 @@ type PersistentConversationStore
             else
                 let reader = this :> IConversationReader
                 let writer = this :> IConversationWriter
-                let! allConversations = reader.ListByUser(scopeId, subjectUserId)
+                let! allConversations = reader.ListByUser(scopeId, UserId subjectUserId.Value)
                 let count = allConversations.Length
 
                 if dryRun then
@@ -1117,7 +1124,7 @@ type PersistentConversationStore
                                                     "%d of %d conversation(s) deleted under user %s"
                                                     deleted
                                                     count
-                                                    subjectUserId
+                                                    subjectUserId.Value
                                             )
                                     },
                                     sprintf
@@ -1127,13 +1134,14 @@ type PersistentConversationStore
                                 )
                             )
                     else
-                        Events.erased eventStore scopeId subjectUserId policy count
-                        |> Background.startAudit warn (Events.erasedWrite scopeId subjectUserId policy count)
+                        Events.erased eventStore scopeId subjectUserId.Value policy count
+                        |> Background.startAudit warn (Events.erasedWrite scopeId subjectUserId.Value policy count)
 
                         return
                             Ok {
                                 HandlerName = "conversations"
                                 RecordsAffected = count
-                                Note = Some(sprintf "%d conversation(s) %A under user %s" count policy subjectUserId)
+                                Note =
+                                    Some(sprintf "%d conversation(s) %A under user %s" count policy subjectUserId.Value)
                             }
         }

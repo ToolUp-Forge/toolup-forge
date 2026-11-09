@@ -737,7 +737,12 @@ type InMemoryVectorStore
             // own typed failure rather than an exception out of the erasure
             // fan-out; the orchestrator retries `StoreUnreachable`.
             match!
-                ToolUp.Platform.Infra.IVectorStore.eraseSubject (this :> IVectorStore) scope subjectUserId policy dryRun
+                ToolUp.Platform.Infra.IVectorStore.eraseSubject
+                    (this :> IVectorStore)
+                    scope
+                    subjectUserId.Value
+                    policy
+                    dryRun
                 |> Async.Catch
             with
             | Choice1Of2 result -> return result

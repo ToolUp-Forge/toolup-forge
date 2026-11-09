@@ -172,7 +172,7 @@ type BlobBackedNotificationAddressBook
         member _.ResolveEmail(recipient, scopeId) = async {
             match recipient with
             | RecipientId.User userId ->
-                let! contact = readContact scopeId userId
+                let! contact = readContact scopeId userId.Value
                 return contact.Email
             | RecipientId.External contactId ->
                 let! contact = readConsented scopeId contactId NotificationKind.SinkKind.Email
@@ -196,7 +196,7 @@ type BlobBackedNotificationAddressBook
         member _.ResolvePhone(recipient, scopeId) = async {
             match recipient with
             | RecipientId.User userId ->
-                let! contact = readContact scopeId userId
+                let! contact = readContact scopeId userId.Value
                 return contact.Phone
             | RecipientId.External contactId ->
                 let! contact = readConsented scopeId contactId NotificationKind.SinkKind.Sms
@@ -211,7 +211,7 @@ type BlobBackedNotificationAddressBook
         member _.ResolvePushTokens(recipient, scopeId) = async {
             match recipient with
             | RecipientId.User userId ->
-                let! contact = readContact scopeId userId
+                let! contact = readContact scopeId userId.Value
                 return contact.PushTokens
             | RecipientId.External _ ->
                 // An external contact has no device registration in the
@@ -249,7 +249,7 @@ type BlobBackedNotificationAddressBook
 let saveContact (storage: IBlobStorage) (scopeId: string) (contact: UserContact) : Async<Result<unit, string>> = async {
     let json = JsonSerializer.Serialize(contact, contactJsonOptions)
     let bytes = Encoding.UTF8.GetBytes json
-    let blobName = contactBlobName scopeId contact.UserId
+    let blobName = contactBlobName scopeId contact.UserId.Value
     let! result = storage.Upload(PlatformContainer, blobName, bytes)
 
     return

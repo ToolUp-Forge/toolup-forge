@@ -291,7 +291,7 @@ let tests =
 
             match result with
             | Ok user ->
-                Expect.equal user.UserId "alice" "sub resolves to the passkey identity"
+                Expect.equal user.UserId (UserId "alice") "sub resolves to the passkey identity"
                 Expect.equal user.DisplayName "Alice" "name claim carried"
                 Expect.equal user.Email (Some "alice@example.com") "email claim carried"
             | Error e -> failtestf "the minted token should validate: %s" e

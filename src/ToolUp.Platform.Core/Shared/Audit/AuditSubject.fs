@@ -52,7 +52,7 @@ type AuditSubject =
     /// `Subject.AuthenticatedUser` shape and the dispatcher-derived
     /// "scope is `_platform` so attribute to a system-pseudo-user" path
     /// — the `userId` field carries the sentinel in the latter case.
-    | UserAudit of userId: string
+    | UserAudit of userId: UserId
     /// Authenticated user acting within a team scope. Both fields
     /// populated when the originating `Subject` was `TeamMember`. When
     /// the dispatcher derives the envelope from `ScopeId` alone (e.g.
@@ -60,7 +60,7 @@ type AuditSubject =
     /// alongside the `ModuleEvent`), `userId` is the literal
     /// `"_dispatcher"` sentinel — sinks read this as "team event with
     /// unknown actor" rather than "team event by user named '_dispatcher'".
-    | TeamAudit of userId: string * teamId: string
+    | TeamAudit of userId: UserId * teamId: TeamId
     /// Anonymous reach into a persistent scope gated by a validated
     /// `ShareTokenClaim`. The flattened shape (vs the nested
     /// `ShareTokenClaim` record carried on `Subject.ClaimBearer`) is
@@ -69,7 +69,7 @@ type AuditSubject =
     /// Phase 1002 — a publication reader (`Subject.PublicationReader`):
     /// signed in, not an app user. Its own case so a sink never files a
     /// reader's row under `user`.
-    | ReaderAudit of userId: string
+    | ReaderAudit of userId: UserId
 
 // `AuditSubjectKind` is defined in `Shared/Types/AuditSampling.fs`
 // (compiled before SDK.Shared.fs so `ServerConfig` can carry an
@@ -106,10 +106,10 @@ module AuditSubject =
     let fromSubject (subject: Subject) : AuditSubject =
         match subject with
         | AnonymousSession sid -> AnonymousAudit sid
-        | AuthenticatedUser uid -> UserAudit uid
-        | TeamMember(uid, tid) -> TeamAudit(uid, tid)
+        | AuthenticatedUser uid -> UserAudit(UserId uid)
+        | TeamMember(uid, tid) -> TeamAudit(UserId uid, TeamId tid)
         | ClaimBearer claim -> ClaimAudit(claim.TokenId, claim.AttributedHandle, claim.ResourceKind, claim.ResourceId)
-        | PublicationReader uid -> ReaderAudit uid
+        | PublicationReader uid -> ReaderAudit(UserId uid)
 
     /// Project a `Subject` to the `(kind, id)` pair an audit ROW carries —
     /// the only subject information that reaches a flat payload, and no
@@ -173,17 +173,17 @@ module AuditSubject =
     /// the actor and deletes this function.
     let fromScopeId (scopeId: string) : AuditSubject =
         if System.String.IsNullOrWhiteSpace scopeId then
-            UserAudit PlatformSentinelUserId
+            UserAudit(UserId PlatformSentinelUserId)
         else
             // Phase 1060 — the one legacy parser; a padded or empty id after
             // a prefix is no scope, and falls to the last-resort arm.
             match ScopeKey.tryParseContainer scopeId with
-            | Some(ScopeKey.Platform _) -> UserAudit PlatformSentinelUserId
+            | Some(ScopeKey.Platform _) -> UserAudit(UserId PlatformSentinelUserId)
             | Some(ScopeKey.Session sessionId) -> AnonymousAudit sessionId
-            | Some(ScopeKey.User userId) -> UserAudit userId
-            | Some(ScopeKey.Team teamId) -> TeamAudit(DispatcherSentinelUserId, teamId)
+            | Some(ScopeKey.User userId) -> UserAudit(UserId userId.Value)
+            | Some(ScopeKey.Team teamId) -> TeamAudit(UserId DispatcherSentinelUserId, TeamId teamId.Value)
             | Some(ScopeKey.Claim _)
-            | None -> UserAudit scopeId
+            | None -> UserAudit(UserId scopeId)
 
 // `AuditSamplingPolicy` (Phase 66 Stream C.2) is defined in
 // `Shared/Types/AuditSampling.fs`, compiled before SDK.Shared.fs so

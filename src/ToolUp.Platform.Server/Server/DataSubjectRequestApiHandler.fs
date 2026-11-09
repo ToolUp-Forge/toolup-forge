@@ -192,7 +192,7 @@ let auditToLog (auditLog: IAuditLog) : AuditOnDsr =
                 | ErasureFailed -> "ErasureFailed"
                 | ExportCompleted -> "ExportCompleted"
                 | ExportSigned -> "ExportSigned"
-            SubjectUserId = ev.SubjectUserId
+            SubjectUserId = UserId ev.SubjectUserId
             Actor = ev.Actor
             Reason = ev.Reason
             Properties = ev.Properties
@@ -452,7 +452,7 @@ let create
                                 // later re-run works a failed ticket, and the
                                 // caller gets the refusal — never a ticket
                                 // that stays Preparing.
-                                match! deps.Scheduler.TriggerOnce(scopeId, jobId, actorUserId) with
+                                match! deps.Scheduler.TriggerOnce(scopeId, jobId, UserId actorUserId) with
                                 | Result.Ok() -> return Result.Ok ticket
                                 | Result.Error refusal ->
                                     let reason = $"trigger refused: {TriggerError.message refusal}"

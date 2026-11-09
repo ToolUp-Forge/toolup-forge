@@ -61,7 +61,7 @@ let private ensurePlatformAdmin (ctx: HttpContext) : Async<Result<unit, string>>
         match resolvePlatformAdminStore ctx with
         | None -> return Error "Platform Admin store not registered"
         | Some store ->
-            let! isAdmin = store.IsPlatformAdmin grantorId
+            let! isAdmin = store.IsPlatformAdmin(UserId grantorId)
 
             if isAdmin then
                 return Ok()
@@ -95,7 +95,7 @@ let private grantHandler (userId: string) : HttpHandler =
             let! reason = readReason ctx
             let grantor = resolveGrantorId ctx
             let claims = resolveUserClaims ctx
-            let! result = claims.GrantPremium(userId, grantor, reason) |> Async.StartAsTask
+            let! result = claims.GrantPremium(UserId userId, grantor, reason) |> Async.StartAsTask
 
             match result with
             | Error msg ->
@@ -112,7 +112,10 @@ let private grantHandler (userId: string) : HttpHandler =
                     let warn = auditWarner ctx
 
                     try
-                        auditLog.Record(PlatformScope, AuditEvent.PremiumGranted(userId, grantor, reason, occurredAt))
+                        auditLog.Record(
+                            PlatformScope,
+                            AuditEvent.PremiumGranted(UserId userId, grantor, reason, occurredAt)
+                        )
                         |> Background.startAudit warn "PremiumGranted audit"
                     with ex ->
                         warn "PremiumGranted audit" ex)
@@ -131,7 +134,7 @@ let private revokeHandler (userId: string) : HttpHandler =
             let! reason = readReason ctx
             let grantor = resolveGrantorId ctx
             let claims = resolveUserClaims ctx
-            let! result = claims.RevokePremium(userId, grantor, reason) |> Async.StartAsTask
+            let! result = claims.RevokePremium(UserId userId, grantor, reason) |> Async.StartAsTask
 
             match result with
             | Error msg ->
@@ -145,7 +148,7 @@ let private revokeHandler (userId: string) : HttpHandler =
                     try
                         auditLog.Record(
                             PlatformScope,
-                            AuditEvent.PremiumRevoked(userId, grantor, reason, DateTimeOffset.UtcNow)
+                            AuditEvent.PremiumRevoked(UserId userId, grantor, reason, DateTimeOffset.UtcNow)
                         )
                         |> Background.startAudit warn "PremiumRevoked audit"
                     with ex ->
@@ -162,7 +165,7 @@ let private statusHandler: HttpHandler =
     fun next (ctx: HttpContext) -> task {
         let userId = resolveGrantorId ctx
         let claims = resolveUserClaims ctx
-        let! status = claims.GetPremiumStatus userId |> Async.StartAsTask
+        let! status = claims.GetPremiumStatus(UserId userId) |> Async.StartAsTask
 
         let json = JsonSerializer.Serialize(status, jsonOptions)
         ctx.Response.StatusCode <- 200

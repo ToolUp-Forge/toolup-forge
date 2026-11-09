@@ -59,7 +59,7 @@ type PrincipalAdmission =
 /// Represents an authenticated user — provider-agnostic.
 /// No provider-specific fields (org_id, org_role, JWT claims) leak into this type.
 type AuthenticatedUser = {
-    UserId: string
+    UserId: UserId
     DisplayName: string
     Email: string option
     /// Optional provider-supplied tenant id.
@@ -104,7 +104,7 @@ type AuthenticatedUser = {
 module AuthenticatedUser =
     /// Anonymous/unauthenticated user
     let anonymous = {
-        UserId = "anonymous"
+        UserId = UserId "anonymous"
         DisplayName = "Anonymous"
         Email = None
         TenantId = None
@@ -113,7 +113,7 @@ module AuthenticatedUser =
         Admission = PrincipalAdmission.Member
     }
 
-    let isAnonymous (user: AuthenticatedUser) = user.UserId = "anonymous"
+    let isAnonymous (user: AuthenticatedUser) = user.UserId = UserId "anonymous"
 
     /// Phase 993 — the roles a page audience reads for `user`: its API
     /// roles and its directory roles, de-duplicated. The input to

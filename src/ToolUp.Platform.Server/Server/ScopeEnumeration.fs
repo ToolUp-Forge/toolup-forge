@@ -110,7 +110,7 @@ module ScopeEnumeration =
     let containerForTeam (teamId: string) : string =
         match ScopeKey.tryParseContainer teamId with
         | Some(ScopeKey.Team _) -> teamId
-        | _ -> ScopeKey.container (ScopeKey.Team teamId)
+        | _ -> ScopeKey.container (ScopeKey.Team(TeamId teamId))
 
     /// A fixed enumeration. The escape hatch for a deployment whose
     /// scopes are genuinely static (a single-tenant appliance, a test),

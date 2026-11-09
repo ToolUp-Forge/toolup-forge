@@ -508,7 +508,7 @@ let private jobContext (scope: ResolvedScope) : JobContext = {
     Attempt = 1
     Trigger = Trigger.Manual
     Scope = scope
-    TriggerSource = ScheduledManually "worker"
+    TriggerSource = ScheduledManually(UserId "worker")
     ScheduledAt = DateTime.UtcNow
     RunningAt = DateTime.UtcNow
     Payload = ""
@@ -759,7 +759,7 @@ let private publicationTests =
 
             let resolver =
                 DeclaredPrincipalResolver(fun request ->
-                    request.User |> Option.iter (fun u -> seen.Enqueue u.UserId)
+                    request.User |> Option.iter (fun u -> seen.Enqueue u.UserId.Value)
                     async.Return(Ok(storage publishing)))
 
             withSetting (Some "  reader-1 ") (fun () ->

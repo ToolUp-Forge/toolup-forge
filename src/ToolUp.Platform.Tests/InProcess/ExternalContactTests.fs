@@ -270,7 +270,7 @@ let private seedContact
     (channel: NotificationKind.SinkKind option)
     : Async<ExternalContact> =
     async {
-        let! created = store.Create(scope, actor, ContactOwner.Team "team-1", contactRequest name email phone)
+        let! created = store.Create(scope, UserId actor, ContactOwner.Team "team-1", contactRequest name email phone)
 
         let contact =
             match created with
@@ -280,7 +280,7 @@ let private seedContact
         match channel with
         | None -> return contact
         | Some channel ->
-            let! updated = store.RecordOptIn(scope, actor, contact.Id, channel, consentNow "manual-admin-entry")
+            let! updated = store.RecordOptIn(scope, UserId actor, contact.Id, channel, consentNow "manual-admin-entry")
 
             return
                 match updated with
@@ -350,7 +350,13 @@ let tests =
                     "carrying the Article 7 evidence verbatim, which is the whole point of the row"
 
                 let! _ =
-                    store.WithdrawOptIn(scope, actor, contact.Id, NotificationKind.SinkKind.Email, "recipient-request")
+                    store.WithdrawOptIn(
+                        scope,
+                        UserId actor,
+                        contact.Id,
+                        NotificationKind.SinkKind.Email,
+                        "recipient-request"
+                    )
 
                 Expect.equal (List.length audit.Withdrawals) 1 "one ContactOptInWithdrawn row"
                 Expect.equal (List.head audit.Withdrawals).Reason "recipient-request" "carrying why"
@@ -365,7 +371,8 @@ let tests =
                 let store = freshStore (Some(audit :> IAuditLog))
                 let! contact = seedContact store "Never opted in" (Some "never@example.com") None None
 
-                let! result = store.WithdrawOptIn(scope, actor, contact.Id, NotificationKind.SinkKind.Email, "bounce")
+                let! result =
+                    store.WithdrawOptIn(scope, UserId actor, contact.Id, NotificationKind.SinkKind.Email, "bounce")
 
                 Expect.isOk result "the withdrawal succeeds"
                 Expect.equal (List.length audit.Withdrawals) 1 "and is recorded"
@@ -484,7 +491,7 @@ let tests =
                             WhatsAppNumber = Some number
                     }
 
-                    let! created = store.Create(scope, actor, ContactOwner.Team "team-1", request)
+                    let! created = store.Create(scope, UserId actor, ContactOwner.Team "team-1", request)
 
                     let contact =
                         match created with
@@ -495,7 +502,7 @@ let tests =
                     | None -> return contact
                     | Some channel ->
                         let! updated =
-                            store.RecordOptIn(scope, actor, contact.Id, channel, consentNow "manual-admin-entry")
+                            store.RecordOptIn(scope, UserId actor, contact.Id, channel, consentNow "manual-admin-entry")
 
                         return
                             match updated with
@@ -529,13 +536,13 @@ let tests =
 
                 let! _ =
                     NotificationAddressBook.saveContact blob scope {
-                        UserId = "walter"
+                        UserId = UserId "walter"
                         Email = None
                         Phone = Some { E164 = "+447700900502" }
                         PushTokens = []
                     }
 
-                let! resolved = book.ResolveWhatsApp(RecipientId.User "walter", scope)
+                let! resolved = book.ResolveWhatsApp(RecipientId.User(UserId "walter"), scope)
 
                 Expect.isNone
                     resolved
@@ -554,7 +561,7 @@ let tests =
 
                 let! _ =
                     NotificationAddressBook.saveContact blob scope {
-                        UserId = "alice"
+                        UserId = UserId "alice"
                         Email =
                             Some {
                                 Address = "alice@example.com"
@@ -564,7 +571,7 @@ let tests =
                         PushTokens = []
                     }
 
-                let! resolved = book.ResolveEmail(RecipientId.User "alice", scope)
+                let! resolved = book.ResolveEmail(RecipientId.User(UserId "alice"), scope)
 
                 Expect.equal
                     (resolved |> Option.map _.Address)
@@ -675,7 +682,7 @@ let tests =
                     filter.Publish(
                         scope,
                         smsTo [
-                            RecipientId.User "alice"
+                            RecipientId.User(UserId "alice")
                             RecipientId.External yes.Id
                             RecipientId.External no.Id
                         ]
@@ -683,7 +690,7 @@ let tests =
 
                 Expect.equal
                     inner.RecipientsSeen
-                    [ RecipientId.User "alice"; RecipientId.External yes.Id ]
+                    [ RecipientId.User(UserId "alice"); RecipientId.External yes.Id ]
                     "platform users pass through untouched; only the unconsented external is dropped"
 
                 Expect.equal (List.head audit.Refusals).ContactIds [ no.Id ] "and only it is refused"
@@ -737,7 +744,13 @@ let tests =
                 Expect.equal (List.length inner.Published) 1 "delivered while the consent stood"
 
                 let! _ =
-                    store.WithdrawOptIn(scope, actor, contact.Id, NotificationKind.SinkKind.Sms, "recipient-request")
+                    store.WithdrawOptIn(
+                        scope,
+                        UserId actor,
+                        contact.Id,
+                        NotificationKind.SinkKind.Sms,
+                        "recipient-request"
+                    )
 
                 do! filter.Publish(scope, smsTo [ RecipientId.External contact.Id ])
                 Expect.equal (List.length inner.Published) 1 "and refused after it was withdrawn"
@@ -767,7 +780,7 @@ let tests =
                 let! _ =
                     store.RecordOptIn(
                         scope,
-                        actor,
+                        (UserId actor),
                         contact.Id,
                         NotificationKind.SinkKind.Sms,
                         {
@@ -845,13 +858,13 @@ let tests =
                     ExternalContactConsentFilter(inner, Some store, Some(audit :> IAuditLog), SilentLogger())
                     :> INotificationChannel
 
-                do! filter.Publish(scope, smsTo [ RecipientId.User "alice"; RecipientId.User "bob" ])
+                do! filter.Publish(scope, smsTo [ RecipientId.User(UserId "alice"); RecipientId.User(UserId "bob") ])
 
                 Expect.equal (List.length inner.Published) 1 "published"
 
                 Expect.equal
                     inner.RecipientsSeen
-                    [ RecipientId.User "alice"; RecipientId.User "bob" ]
+                    [ RecipientId.User(UserId "alice"); RecipientId.User(UserId "bob") ]
                     "unchanged, recipient for recipient"
 
                 Expect.isEmpty audit.Events "and nothing audited"
@@ -918,7 +931,7 @@ let tests =
                 do!
                     prefStore.SavePreferences(
                         scope,
-                        "alice",
+                        (UserId "alice"),
                         {
                             Channels = [
                                 {
@@ -943,7 +956,7 @@ let tests =
                         "reports.summary"
                         scope
                         (emailTo [
-                            RecipientId.User "alice"
+                            RecipientId.User(UserId "alice")
                             RecipientId.External refused.Id
                             RecipientId.External consented.Id
                         ])
@@ -952,7 +965,7 @@ let tests =
                 // preference has not.
                 Expect.equal
                     probe.RecipientsSeen
-                    [ RecipientId.User "alice"; RecipientId.External consented.Id ]
+                    [ RecipientId.User(UserId "alice"); RecipientId.External consented.Id ]
                     "the refused contact was already gone before the preference filter saw the envelope"
 
                 // The sink is below both: preference has run too.
@@ -990,7 +1003,7 @@ let tests =
                 let spying =
                     { new INotificationPreferenceStore with
                         member _.GetPreferences(s, u) =
-                            reads.Enqueue u
+                            reads.Enqueue u.Value
                             backing.GetPreferences(s, u)
 
                         member _.SavePreferences(s, u, p) = backing.SavePreferences(s, u, p)
@@ -1014,13 +1027,13 @@ let tests =
                         preference
                         "reports.summary"
                         scope
-                        (emailTo [ RecipientId.User "alice"; RecipientId.External "contact-1" ])
+                        (emailTo [ RecipientId.User(UserId "alice"); RecipientId.External "contact-1" ])
 
                 Expect.equal (reads |> Seq.toList) [ "alice" ] "only the platform user's record was read"
 
                 Expect.equal
                     sink.RecipientsSeen
-                    [ RecipientId.User "alice"; RecipientId.External "contact-1" ]
+                    [ RecipientId.User(UserId "alice"); RecipientId.External "contact-1" ]
                     "and the external rides the narrowing through untouched"
             }
         ]

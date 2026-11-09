@@ -48,7 +48,7 @@ type IDataExporter =
     /// Produce one or more segments naming the subject within the
     /// given scope. Returns `[]` when the subsystem has no records
     /// for the subject — the orchestrator skips silently.
-    abstract Export: scopeId: string * subjectUserId: string -> Async<ExportSegment list>
+    abstract Export: scopeId: string * subjectUserId: UserId -> Async<ExportSegment list>
 
 /// One persistent subsystem's contribution to a data-subject erasure
 /// run. Returns `ErasureSummary` on success or a typed `ErasureError`
@@ -61,9 +61,9 @@ type IErasureHandler =
     /// the supplied policy. Returns the affected-record count + any
     /// human-readable note.
     abstract Erase:
-        scopeId: string * subjectUserId: string * policy: ErasurePolicy -> Async<Result<ErasureSummary, ErasureError>>
+        scopeId: string * subjectUserId: UserId * policy: ErasurePolicy -> Async<Result<ErasureSummary, ErasureError>>
 
     /// Preview the erasure without applying it. Returns the count
     /// the corresponding `Erase` would affect — supports the API's
     /// two-phase commit (preview → admin confirm → execute).
-    abstract Preview: scopeId: string * subjectUserId: string * policy: ErasurePolicy -> Async<ErasureSummary>
+    abstract Preview: scopeId: string * subjectUserId: UserId * policy: ErasurePolicy -> Async<ErasureSummary>

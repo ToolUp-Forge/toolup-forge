@@ -407,7 +407,8 @@ let reconstructAccessContext (ctx: HttpContext) : AccessContext =
         | true, (:? StorageScope as s) -> Some s
         | _ -> None
 
-    let teamId = scopeOpt |> Option.bind StorageScope.tryTeamId
+    let teamId =
+        scopeOpt |> Option.bind StorageScope.tryTeamId |> Option.map TeamId.value
 
     let modulePermissions =
         match ctx.Items.TryGetValue "ToolUp.ModulePermissions" with

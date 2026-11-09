@@ -109,7 +109,7 @@ let contractTests (name: string) (factory: unit -> IGrantConsentStore) =
             "absent record reads as Ok None, never as an error"
             (async {
                 let store = factory ()
-                let! fetched = store.TryGet("team-a", "nope")
+                let! fetched = store.TryGet(TeamId "team-a", "nope")
                 Expect.equal (expectOk "tryGet" fetched) None "absence is an ordinary answer"
             })
 

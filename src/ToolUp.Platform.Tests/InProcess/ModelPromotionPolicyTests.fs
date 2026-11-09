@@ -140,7 +140,7 @@ let private register (stack: Stack) (seed: int64) (diagnostics: (string * float)
 /// Promote an artifact the ordinary Phase 453 way — the incumbent a policy
 /// then judges a challenger against.
 let private approve (stack: Stack) (keyHash: string) = async {
-    match! stack.Registry.TransitionStatus(scope, keyHash, ModelArtifactStatus.Approved, Owner, "u1") with
+    match! stack.Registry.TransitionStatus(scope, keyHash, ModelArtifactStatus.Approved, Owner, UserId "u1") with
     | Ok artifact -> return artifact
     | Error e -> return failwithf "approve failed: %s" (ModelRegistryError.describe e)
 }
@@ -739,7 +739,7 @@ let tests =
                 Attempt = 1
                 Trigger = Manual
                 Scope = ToolUp.Platform.ResolvedScope.anonymous
-                TriggerSource = ScheduledManually "system"
+                TriggerSource = ScheduledManually(UserId "system")
                 ScheduledAt = DateTime.UtcNow
                 RunningAt = DateTime.UtcNow
                 Payload = payload

@@ -73,7 +73,7 @@ module StorageScope =
     /// The team a storage scope belongs to: the id of a `ScopeKey.Team`
     /// key (`tryKey`), `None` for every other scope. What a handler asks
     /// of the request's scope before reading team-scoped configuration.
-    let tryTeamId (scope: StorageScope) : string option =
+    let tryTeamId (scope: StorageScope) : TeamId option =
         match tryKey scope with
         | Some(ScopeKey.Team teamId) -> Some teamId
         | _ -> None

@@ -522,7 +522,7 @@ type PersistentEventStore(blobStorage: IBlobStorage, retentionPolicy: EventReten
         }
 
         member _.Erase(scopeId, subjectUserId, policy, dryRun) = async {
-            if Erasure.isBlankSubject subjectUserId then
+            if Erasure.isBlankSubject subjectUserId.Value then
                 return
                     Result.Ok {
                         HandlerName = "events"
@@ -547,7 +547,8 @@ type PersistentEventStore(blobStorage: IBlobStorage, retentionPolicy: EventReten
                     let canonicalNames = names |> List.filter isCanonicalEventBlob
                     let! events = downloadAll blobStorage canonicalNames
 
-                    let matched = events |> List.filter (fun e -> e.Payload.Contains subjectUserId)
+                    let matched =
+                        events |> List.filter (fun e -> e.Payload.Contains subjectUserId.Value)
 
                     if dryRun || List.isEmpty matched then
                         let verb =

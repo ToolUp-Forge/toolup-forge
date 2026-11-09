@@ -70,18 +70,18 @@ type IPlatformAIKeyStore =
     /// Read the team-scope key for a given (teamId, providerId)
     /// pair. Returns `None` when no team-scope key is recorded;
     /// callers fall through to the platform-scope read.
-    abstract GetTeamKey: teamId: string * providerId: string -> Async<string option>
+    abstract GetTeamKey: teamId: TeamId * providerId: string -> Async<string option>
 
     /// Write (or overwrite) a team-scope key. Same idempotency
     /// contract as `SetPlatformKey`.
-    abstract SetTeamKey: teamId: string * providerId: string * apiKey: string -> Async<Result<unit, string>>
+    abstract SetTeamKey: teamId: TeamId * providerId: string * apiKey: string -> Async<Result<unit, string>>
 
     /// Remove the team-scope key for a (teamId, providerId) pair.
     /// Idempotent. Subsequent `Resolve` calls for this team fall
     /// through to the platform-scope read.
-    abstract DeleteTeamKey: teamId: string * providerId: string -> Async<Result<unit, string>>
+    abstract DeleteTeamKey: teamId: TeamId * providerId: string -> Async<Result<unit, string>>
 
     /// Test whether a team-scope key is recorded for a
     /// (teamId, providerId) pair. Lets the admin UI render
     /// "team override active" badges without reading the value.
-    abstract HasTeamKey: teamId: string * providerId: string -> Async<bool>
+    abstract HasTeamKey: teamId: TeamId * providerId: string -> Async<bool>

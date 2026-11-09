@@ -308,8 +308,8 @@ module AccessContext =
     /// calling this helper.
     let configScope (ctx: AccessContext) : StorageScope option =
         match ctx.Subject with
-        | TeamMember(_, teamId) -> Some(StorageScope.ofKey true (ScopeKey.Team teamId))
-        | AuthenticatedUser userId -> Some(StorageScope.ofKey true (ScopeKey.User userId))
+        | TeamMember(_, teamId) -> Some(StorageScope.ofKey true (ScopeKey.Team(TeamId teamId)))
+        | AuthenticatedUser userId -> Some(StorageScope.ofKey true (ScopeKey.User(UserId userId)))
         | ClaimBearer claim -> Some(StorageScope.ofKey true (ScopeKey.Claim claim.ScopeId))
         | AnonymousSession _ -> None
         // Phase 1002 — a publication reader holds no scope of its own.
@@ -334,8 +334,10 @@ module AccessContext =
         // container and the id agree: a scope whose two fields name
         // different principals is no team's and no user's.
         match ScopeKey.tryParseContainer scope.Container with
-        | Some(ScopeKey.Team teamId) when teamId = scope.ScopeId -> Some(unrestricted (TeamMember(memberId, teamId)))
-        | Some(ScopeKey.User userId) when userId = scope.ScopeId -> Some(unrestricted (AuthenticatedUser userId))
+        | Some(ScopeKey.Team teamId) when teamId = TeamId scope.ScopeId ->
+            Some(unrestricted (TeamMember(memberId, teamId.Value)))
+        | Some(ScopeKey.User userId) when userId = UserId scope.ScopeId ->
+            Some(unrestricted (AuthenticatedUser userId.Value))
         | _ -> None
 
     /// Resolve the `FlagScope` the caller writes feature-flag overrides

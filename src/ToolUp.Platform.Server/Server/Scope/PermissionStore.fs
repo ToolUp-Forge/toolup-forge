@@ -31,31 +31,31 @@ type IPermissionStore =
     /// or parsed raises `PermissionStoreUnavailableException` rather
     /// than degrading to the unrestricted empty map (fail closed on a
     /// storage blip / corrupt blob — never silently grant access).
-    abstract GetTeamPermissions: teamId: string -> Async<TeamPermissions>
+    abstract GetTeamPermissions: teamId: TeamId -> Async<TeamPermissions>
 
     /// Replace the entire per-team document. Used for bulk admin
     /// operations — bootstrapping a new team, importing config from
     /// another team, or rolling back a bad set of grants.
-    abstract SetTeamPermissions: teamId: string * permissions: TeamPermissions -> Async<Result<unit, string>>
+    abstract SetTeamPermissions: teamId: TeamId * permissions: TeamPermissions -> Async<Result<unit, string>>
 
     /// Compute a user's effective per-module permissions for a team:
     /// their explicit `Members[userId]` entries merged with team
     /// `Defaults` on any module the user has no explicit entry for.
     /// Returned shape matches `AccessContext.ModulePermissions`.
-    abstract GetEffectivePermissions: userId: string * teamId: string -> Async<Map<string, ModulePermission list>>
+    abstract GetEffectivePermissions: userId: UserId * teamId: TeamId -> Async<Map<string, ModulePermission list>>
 
     /// Set one member's permissions for one module. Pass an empty
     /// list to revoke all access for that user on that module; to
     /// fall the user back to team defaults instead, `SetTeamPermissions`
     /// with the member entry removed.
     abstract SetMemberPermissions:
-        teamId: string * userId: string * moduleName: string * permissions: ModulePermission list ->
+        teamId: TeamId * userId: UserId * moduleName: string * permissions: ModulePermission list ->
             Async<Result<unit, string>>
 
     /// Replace the team's default permissions. Defaults apply to
     /// members who lack an explicit per-module entry.
     abstract SetTeamDefaults:
-        teamId: string * defaults: Map<string, ModulePermission list> -> Async<Result<unit, string>>
+        teamId: TeamId * defaults: Map<string, ModulePermission list> -> Async<Result<unit, string>>
 
     /// The team's per-module exposure map (the per-team exposure axis).
     /// A module absent from the map is `Available`; entries hold the
@@ -63,14 +63,14 @@ type IPermissionStore =
     /// document exists or every module is Available. Read per-request by
     /// the scope-resolution middleware to populate
     /// `AccessContext.ModuleExposure`.
-    abstract GetModuleExposure: teamId: string -> Async<Map<string, ModuleExposure>>
+    abstract GetModuleExposure: teamId: TeamId -> Async<Map<string, ModuleExposure>>
 
     /// Set one module's exposure state for the team. `Available` clears
     /// the entry (back to the default); `Hidden` / `Unavailable` record
     /// it. Visibility/availability only — does not touch the permission
     /// maps.
     abstract SetModuleExposure:
-        teamId: string * moduleName: string * state: ModuleExposure -> Async<Result<unit, string>>
+        teamId: TeamId * moduleName: string * state: ModuleExposure -> Async<Result<unit, string>>
 
 // ─── JSON serialisation ──────────────────────────────────────────────
 
@@ -455,20 +455,20 @@ type PermissionStore(storage: IBlobStorage, ?logger: ILogger) =
     }
 
     interface IPermissionStore with
-        member _.GetTeamPermissions teamId = load teamId
+        member _.GetTeamPermissions teamId = load teamId.Value
 
-        member _.SetTeamPermissions(teamId, permissions) = save teamId permissions
+        member _.SetTeamPermissions(teamId, permissions) = save teamId.Value permissions
 
         member _.GetEffectivePermissions(userId, teamId) = async {
-            let! perms = load teamId
-            return mergeEffective perms.Defaults perms.Members userId
+            let! perms = load teamId.Value
+            return mergeEffective perms.Defaults perms.Members userId.Value
         }
 
         member _.SetMemberPermissions(teamId, userId, moduleName, permissions) = async {
-            let! existing = load teamId
+            let! existing = load teamId.Value
 
             let userEntries =
-                existing.Members |> Map.tryFind userId |> Option.defaultValue Map.empty
+                existing.Members |> Map.tryFind userId.Value |> Option.defaultValue Map.empty
 
             let updatedUserEntries =
                 if List.isEmpty permissions then
@@ -478,29 +478,29 @@ type PermissionStore(storage: IBlobStorage, ?logger: ILogger) =
 
             let updatedMembers =
                 if Map.isEmpty updatedUserEntries then
-                    existing.Members |> Map.remove userId
+                    existing.Members |> Map.remove userId.Value
                 else
-                    existing.Members |> Map.add userId updatedUserEntries
+                    existing.Members |> Map.add userId.Value updatedUserEntries
 
             return!
-                save teamId {
+                save teamId.Value {
                     existing with
                         Members = updatedMembers
                 }
         }
 
         member _.SetTeamDefaults(teamId, defaults) = async {
-            let! existing = load teamId
-            return! save teamId { existing with Defaults = defaults }
+            let! existing = load teamId.Value
+            return! save teamId.Value { existing with Defaults = defaults }
         }
 
         member _.GetModuleExposure teamId = async {
-            let! perms = load teamId
+            let! perms = load teamId.Value
             return perms.Exposure
         }
 
         member _.SetModuleExposure(teamId, moduleName, state) = async {
-            let! existing = load teamId
+            let! existing = load teamId.Value
 
             let updatedExposure =
                 match state with
@@ -508,7 +508,7 @@ type PermissionStore(storage: IBlobStorage, ?logger: ILogger) =
                 | s -> existing.Exposure |> Map.add moduleName s
 
             return!
-                save teamId {
+                save teamId.Value {
                     existing with
                         Exposure = updatedExposure
                 }

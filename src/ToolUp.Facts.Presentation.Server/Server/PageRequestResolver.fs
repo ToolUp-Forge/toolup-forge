@@ -221,12 +221,12 @@ module PageGateViewer =
 
             let! role =
                 match teamId, sources.Teams with
-                | Some team, Some teams -> teams.GetMemberRole(team, principal)
+                | Some team, Some teams -> teams.GetMemberRole(TeamId team, UserId principal)
                 | _ -> async.Return None
 
             let! level =
                 match teamId, sources.OutputVisibility with
-                | Some team, Some source -> source.Current team
+                | Some team, Some source -> source.Current(TeamId team)
                 | _ -> async.Return(Error "")
 
             return {

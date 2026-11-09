@@ -342,7 +342,7 @@ type TriggerSource =
     /// event by id from `IEventStore`.
     | ScheduledByEvent of eventType: string * eventId: Guid
     /// `IJobScheduler.TriggerOnce` was called.
-    | ScheduledManually of byUserId: string
+    | ScheduledManually of byUserId: UserId
 
 /// Job execution context — passed to every `IJobHandler.Execute` call
 /// (portability rule 4: stateless handlers receive all state via this

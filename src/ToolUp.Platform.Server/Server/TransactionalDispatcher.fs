@@ -266,7 +266,7 @@ let private runDelivery
                             auditLog.Record(
                                 envelope.ScopeId,
                                 NotificationSent {
-                                    UserId = SystemActorId
+                                    UserId = UserId SystemActorId
                                     ScopeId = envelope.ScopeId
                                     NotificationKind = sinkKindWire
                                     Provider = sink.Provider
@@ -307,7 +307,7 @@ let private runDelivery
                                 auditLog.Record(
                                     envelope.ScopeId,
                                     NotificationDeliveryFailed {
-                                        UserId = SystemActorId
+                                        UserId = UserId SystemActorId
                                         ScopeId = envelope.ScopeId
                                         NotificationKind = sinkKindWire
                                         Provider = sink.Provider
@@ -327,7 +327,7 @@ let private runDelivery
                             auditLog.Record(
                                 envelope.ScopeId,
                                 NotificationDeliveryFailed {
-                                    UserId = SystemActorId
+                                    UserId = UserId SystemActorId
                                     ScopeId = envelope.ScopeId
                                     NotificationKind = sinkKindWire
                                     Provider = sink.Provider
@@ -485,7 +485,7 @@ type TransactionalDispatcher
                                         auditLog.Record(
                                             task.Envelope.ScopeId,
                                             NotificationDeliveryFailed {
-                                                UserId = SystemActorId
+                                                UserId = UserId SystemActorId
                                                 ScopeId = task.Envelope.ScopeId
                                                 NotificationKind = task.SinkKind
                                                 Provider = "<unregistered>"

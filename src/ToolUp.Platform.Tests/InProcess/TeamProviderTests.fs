@@ -105,7 +105,11 @@ let private stubTeamStore (roles: (string * string * TeamRole) list) : ITeamStor
         member _.GetMemberRole(teamId, userId) = async {
             return
                 roles
-                |> List.tryPick (fun (t, u, r) -> if t = teamId && u = userId then Some r else None)
+                |> List.tryPick (fun (t, u, r) ->
+                    if t = teamId.Value && u = userId.Value then
+                        Some r
+                    else
+                        None)
         }
 
         member _.ListTeams() = async { return [] }
@@ -415,8 +419,8 @@ let private teamStoreAdapterTests =
             let teams = stubTeamStore [ "t1", "olive", Owner; "t1", "mary", Member ]
             let resolver = TeamProviderResolver.forTeamStore profiles teams
 
-            let! asOwner = resolver.CanWrite(TeamMember("olive", "t1"), ProviderProfileOwner.TeamOwned "t1")
-            let! asMember = resolver.CanWrite(TeamMember("mary", "t1"), ProviderProfileOwner.TeamOwned "t1")
+            let! asOwner = resolver.CanWrite(TeamMember("olive", "t1"), ProviderProfileOwner.TeamOwned(TeamId "t1"))
+            let! asMember = resolver.CanWrite(TeamMember("mary", "t1"), ProviderProfileOwner.TeamOwned(TeamId "t1"))
 
             Expect.isOk (asOwner |> Result.map ignore) "the Owner is admitted through the real store"
             Expect.isError (asMember |> Result.map ignore) "and the Member refused"
@@ -444,7 +448,7 @@ let private teamStoreAdapterTests =
                     }
                 )
 
-            let! write = resolver.CanWrite(TeamMember("olive", "t1"), ProviderProfileOwner.TeamOwned "t1")
+            let! write = resolver.CanWrite(TeamMember("olive", "t1"), ProviderProfileOwner.TeamOwned(TeamId "t1"))
             Expect.isError (write |> Result.map ignore) "no team management wired, no team write"
 
             let! read = resolver.Resolve(TeamMember("olive", "t1"), "ai.assistant", None)

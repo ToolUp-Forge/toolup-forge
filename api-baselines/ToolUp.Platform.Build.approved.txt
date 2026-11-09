@@ -292,6 +292,7 @@ ToolUp.Platform.CodemodMigration.IsRemotingLeftovers : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsShellSlots : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsSubsystemNamespaces : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsSurfaces : System.Boolean { get }
+ToolUp.Platform.CodemodMigration.IsTypedIdentity : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.JobOutcomes : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration.ModelCapabilities : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration.NestedConfig : ToolUp.Platform.CodemodMigration { get }
@@ -302,6 +303,7 @@ ToolUp.Platform.CodemodMigration.ShellSlots : ToolUp.Platform.CodemodMigration {
 ToolUp.Platform.CodemodMigration.SubsystemNamespaces : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration.Surfaces : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration.Tag : System.Int32 { get }
+ToolUp.Platform.CodemodMigration.TypedIdentity : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration+Tags (class)
 ToolUp.Platform.CodemodMigration+Tags.AgentLoop : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.ApiStability : System.Int32 (literal)
@@ -318,6 +320,7 @@ ToolUp.Platform.CodemodMigration+Tags.RemotingLeftovers : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.ShellSlots : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.SubsystemNamespaces : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.Surfaces : System.Int32 (literal)
+ToolUp.Platform.CodemodMigration+Tags.TypedIdentity : System.Int32 (literal)
 ToolUp.Platform.CodemodMigrationModule (class)
 ToolUp.Platform.CodemodMigrationModule.doc(ToolUp.Platform.CodemodMigration) : System.String
 ToolUp.Platform.CodemodMigrationModule.label(ToolUp.Platform.CodemodMigration) : System.String

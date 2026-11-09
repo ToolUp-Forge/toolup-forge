@@ -287,7 +287,7 @@ type AuditLogSmoke(auditLog: IAuditLog) =
 
                     let probeEvent =
                         AuditEvent.FileUploaded {
-                            UserId = "_smoke"
+                            UserId = UserId "_smoke"
                             FileName = sprintf "smoke-probe-%s" nonceText
                             DataType = "smoke_probe"
                             SizeBytes = 0L

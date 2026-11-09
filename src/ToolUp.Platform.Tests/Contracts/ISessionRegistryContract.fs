@@ -95,7 +95,7 @@ let tests (name: string) (factory: unit -> ISessionRegistry * string * string) =
             Expect.equal stored.AuthProvider "TestAuthProvider" "auth provider survives"
             Expect.equal stored.Status ActiveSession "a fresh record is active"
 
-            let! listed = registry.ListForUser(scope, "user-a")
+            let! listed = registry.ListForUser(scope, UserId "user-a")
             let sessions = expectOk "ListForUser" listed
 
             Expect.hasLength sessions 1 "exactly the one recorded session"
@@ -123,7 +123,7 @@ let tests (name: string) (factory: unit -> ISessionRegistry * string * string) =
 
             Expect.equal stored.CreatedAt baseTime "CreatedAt is the FIRST record's, not the returning one's"
 
-            let! listed = registry.ListForUser(scope, "user-a")
+            let! listed = registry.ListForUser(scope, UserId "user-a")
             Expect.hasLength (expectOk "ListForUser" listed) 1 "re-recording does not duplicate the session"
         }
 
@@ -132,7 +132,7 @@ let tests (name: string) (factory: unit -> ISessionRegistry * string * string) =
             let registry, scope, _ = factory ()
 
             let! _ = registry.Record(record scope "user-a" "a1")
-            let! _ = registry.Revoke(scope, sessionId "a1", "user-a")
+            let! _ = registry.Revoke(scope, sessionId "a1", UserId "user-a")
 
             // A revoked credential that keeps being presented must stay
             // revoked. If `Record` overwrote the stored row, every
@@ -157,7 +157,7 @@ let tests (name: string) (factory: unit -> ISessionRegistry * string * string) =
             let! _ = registry.Record(record scope "user-a" "a2")
             let! _ = registry.Record(record scope "user-b" "b1")
 
-            let! listed = registry.ListForUser(scope, "user-a")
+            let! listed = registry.ListForUser(scope, UserId "user-a")
             let sessions = expectOk "ListForUser" listed
 
             Expect.hasLength sessions 2 "both of user-a's sessions"
@@ -173,9 +173,9 @@ let tests (name: string) (factory: unit -> ISessionRegistry * string * string) =
 
             let! _ = registry.Record(record scope "user-a" "a1")
             let! _ = registry.Record(record scope "user-a" "a2")
-            let! _ = registry.Revoke(scope, sessionId "a1", "user-a")
+            let! _ = registry.Revoke(scope, sessionId "a1", UserId "user-a")
 
-            let! listed = registry.ListForUser(scope, "user-a")
+            let! listed = registry.ListForUser(scope, UserId "user-a")
             let sessions = expectOk "ListForUser" listed
 
             // Filtering revoked records away would make a revoke look
@@ -196,10 +196,10 @@ let tests (name: string) (factory: unit -> ISessionRegistry * string * string) =
 
             let! _ = registry.Record(record scope "user-a" "a1")
 
-            let! revoked = registry.Revoke(scope, sessionId "a1", "admin-x")
+            let! revoked = registry.Revoke(scope, sessionId "a1", UserId "admin-x")
             expectOk "Revoke" revoked
 
-            let! listed = registry.ListForUser(scope, "user-a")
+            let! listed = registry.ListForUser(scope, UserId "user-a")
             let stored = (expectOk "ListForUser" listed)[0]
 
             Expect.equal stored.Status RevokedSession "status flipped"
@@ -212,15 +212,15 @@ let tests (name: string) (factory: unit -> ISessionRegistry * string * string) =
             let registry, scope, _ = factory ()
 
             let! _ = registry.Record(record scope "user-a" "a1")
-            let! _ = registry.Revoke(scope, sessionId "a1", "admin-x")
+            let! _ = registry.Revoke(scope, sessionId "a1", UserId "admin-x")
 
-            let! listed1 = registry.ListForUser(scope, "user-a")
+            let! listed1 = registry.ListForUser(scope, UserId "user-a")
             let first = (expectOk "first list" listed1)[0]
 
-            let! second = registry.Revoke(scope, sessionId "a1", "someone-else")
+            let! second = registry.Revoke(scope, sessionId "a1", UserId "someone-else")
             expectOk "second Revoke" second
 
-            let! listed2 = registry.ListForUser(scope, "user-a")
+            let! listed2 = registry.ListForUser(scope, UserId "user-a")
             let after = (expectOk "second list" listed2)[0]
 
             // Overwriting would erase the forensic answer to "who cut
@@ -233,7 +233,7 @@ let tests (name: string) (factory: unit -> ISessionRegistry * string * string) =
         <| async {
             let registry, scope, _ = factory ()
 
-            let! revoked = registry.Revoke(scope, sessionId "never-recorded", "user-a")
+            let! revoked = registry.Revoke(scope, sessionId "never-recorded", UserId "user-a")
 
             match revoked with
             | Error(SessionError.NotFound _) -> ()
@@ -248,7 +248,7 @@ let tests (name: string) (factory: unit -> ISessionRegistry * string * string) =
             let! _ = registry.Record(record scope "user-a" "a2")
             let! _ = registry.Record(record scope "user-b" "b1")
 
-            let! revoked = registry.RevokeAllForUser(scope, "user-a", "user-a")
+            let! revoked = registry.RevokeAllForUser(scope, UserId "user-a", UserId "user-a")
             Expect.equal (expectOk "RevokeAllForUser" revoked) 2 "both of user-a's sessions moved"
 
             let! othersSession = registry.IsRevoked(scope, sessionId "b1")
@@ -256,7 +256,7 @@ let tests (name: string) (factory: unit -> ISessionRegistry * string * string) =
 
             // A repeat is a no-op returning 0 — which is what lets the
             // caller report something truthful rather than "done" twice.
-            let! again = registry.RevokeAllForUser(scope, "user-a", "user-a")
+            let! again = registry.RevokeAllForUser(scope, UserId "user-a", UserId "user-a")
             Expect.equal (expectOk "second RevokeAllForUser" again) 0 "nothing left to revoke"
         }
 
@@ -269,8 +269,8 @@ let tests (name: string) (factory: unit -> ISessionRegistry * string * string) =
             let! _ = registry.Record(record scopeA "user-a" "a1")
             let! _ = registry.Record(record scopeB "user-a" "b1")
 
-            let! inA = registry.ListForUser(scopeA, "user-a")
-            let! inB = registry.ListForUser(scopeB, "user-a")
+            let! inA = registry.ListForUser(scopeA, UserId "user-a")
+            let! inB = registry.ListForUser(scopeB, UserId "user-a")
 
             let sessionsA = expectOk "list in A" inA
             let sessionsB = expectOk "list in B" inB
@@ -289,7 +289,7 @@ let tests (name: string) (factory: unit -> ISessionRegistry * string * string) =
             let! _ = registry.Record(record scopeA "user-a" "shared")
             let! _ = registry.Record(record scopeB "user-a" "shared")
 
-            let! _ = registry.RevokeAllForUser(scopeA, "user-a", "user-a")
+            let! _ = registry.RevokeAllForUser(scopeA, UserId "user-a", UserId "user-a")
 
             let! inA = registry.IsRevoked(scopeA, sessionId "shared")
             let! inB = registry.IsRevoked(scopeB, sessionId "shared")
@@ -312,7 +312,7 @@ let tests (name: string) (factory: unit -> ISessionRegistry * string * string) =
             let! before = registry.IsRevoked(scope, sessionId "a1")
             Expect.isFalse before "an active session is not revoked"
 
-            let! _ = registry.Revoke(scope, sessionId "a1", "user-a")
+            let! _ = registry.Revoke(scope, sessionId "a1", UserId "user-a")
 
             // The store carries no staleness of its own. Every documented
             // millisecond of the revocation window belongs to the
@@ -346,7 +346,7 @@ let tests (name: string) (factory: unit -> ISessionRegistry * string * string) =
             expectOk "Touch on an unknown session" unknown
 
             let! _ = registry.Record(record scope "user-a" "a1")
-            let! _ = registry.Revoke(scope, sessionId "a1", "user-a")
+            let! _ = registry.Revoke(scope, sessionId "a1", UserId "user-a")
 
             // A touch is a liveness signal, not an assertion. Failing the
             // request that carried it — for a session that is merely
@@ -367,7 +367,7 @@ let tests (name: string) (factory: unit -> ISessionRegistry * string * string) =
             let! touched = registry.Touch(scope, sessionId "a1", later)
             expectOk "Touch" touched
 
-            let! listed = registry.ListForUser(scope, "user-a")
+            let! listed = registry.ListForUser(scope, UserId "user-a")
             let stored = (expectOk "ListForUser" listed)[0]
 
             Expect.isTrue (stored.LastSeenAt > baseTime) "LastSeenAt advanced"

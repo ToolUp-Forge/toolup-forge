@@ -105,7 +105,7 @@ let private authenticatedContext () = async {
     // scope, so a bare `AuthenticatedUser.anonymous` resolves to the
     // case constructor, not the module.
     let user: ToolUp.Platform.Auth.AuthenticatedUser = {
-        UserId = "u-619"
+        UserId = UserId "u-619"
         DisplayName = "Ordinary Caller"
         Email = Some "caller@example.test"
         TenantId = None

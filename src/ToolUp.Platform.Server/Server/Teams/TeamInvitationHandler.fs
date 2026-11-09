@@ -105,10 +105,10 @@ let private resolveAccessContext (ctx: HttpContext) : AccessContext =
 /// The share-token store scope a team's invitations live under. NOT its
 /// audit stream key: audit rows go through `AuditStreamKey.ofTeam`.
 let private teamScopeId (teamId: string) : string =
-    ScopeKey.container (ScopeKey.Team teamId)
+    ScopeKey.container (ScopeKey.Team(TeamId teamId))
 
 let private ensureManageMembers (ts: ITeamStore) (callerUserId: string) (teamId: string) : Async<Result<unit, string>> = async {
-    let! role = ts.GetMemberRole(teamId, callerUserId)
+    let! role = ts.GetMemberRole(TeamId teamId, UserId callerUserId)
 
     match role with
     | Some r when TeamRoles.canManageMembers r -> return Ok()
@@ -218,7 +218,7 @@ let tryConsumePendingForUser
             | Ok(Some entry) ->
                 // Skip if already a member — substrate state is the
                 // source of truth, the pending row is a hint.
-                let! existing = teamStore.GetMemberRole(entry.TeamId, user.UserId)
+                let! existing = teamStore.GetMemberRole(TeamId entry.TeamId, UserId user.UserId.Value)
 
                 match existing with
                 | Some _ ->
@@ -226,19 +226,19 @@ let tryConsumePendingForUser
                     // active-team pointer (pre-fix add paths never set
                     // it). Heal on the sign-in resolve — only writes
                     // when the pointer is unset.
-                    do! ActiveTeamPolicy.ensureActiveTeam teamStore user.UserId entry.TeamId
+                    do! ActiveTeamPolicy.ensureActiveTeam teamStore (UserId user.UserId.Value) (TeamId entry.TeamId)
                     return Some entry
                 | None ->
-                    match! teamStore.AddMember(entry.TeamId, user.UserId, entry.Role) with
+                    match! teamStore.AddMember(TeamId entry.TeamId, UserId user.UserId.Value, entry.Role) with
                     | Error reason ->
                         do!
                             auditLog.Record(
                                 AuditStreamKey.ofTeam entry.TeamId,
                                 TeamInviteAcceptedFromPendingFailed {
-                                    TeamId = entry.TeamId
+                                    TeamId = TeamId entry.TeamId
                                     InviteeUserId = user.UserId
                                     InviteeEmail = email
-                                    InviterUserId = entry.InviterUserId
+                                    InviterUserId = UserId entry.InviterUserId
                                     Role = entry.Role
                                     Reason = reason
                                 }
@@ -248,16 +248,16 @@ let tryConsumePendingForUser
                     | Ok() ->
                         // First-team-becomes-active — same policy as
                         // the interactive accept path above.
-                        do! ActiveTeamPolicy.ensureActiveTeam teamStore user.UserId entry.TeamId
+                        do! ActiveTeamPolicy.ensureActiveTeam teamStore (UserId user.UserId.Value) (TeamId entry.TeamId)
 
                         do!
                             auditLog.Record(
                                 AuditStreamKey.ofTeam entry.TeamId,
                                 TeamInviteAcceptedFromPending {
-                                    TeamId = entry.TeamId
+                                    TeamId = TeamId entry.TeamId
                                     InviteeUserId = user.UserId
                                     InviteeEmail = email
-                                    InviterUserId = entry.InviterUserId
+                                    InviterUserId = UserId entry.InviterUserId
                                     Role = entry.Role
                                 }
                             )
@@ -314,9 +314,9 @@ let teamInvitationApi
                             | Error msg -> return Error msg
                             | Ok url ->
                                 let payload: TeamInviteIssuedPayload = {
-                                    TeamId = req.TeamId
+                                    TeamId = TeamId req.TeamId
                                     TokenId = token.Claim.TokenId
-                                    InviterUserId = access.UserId
+                                    InviterUserId = UserId access.UserId
                                     Role = req.Role
                                     EmailHint = req.EmailHint
                                     ExpiresAt = expiresAt.UtcDateTime
@@ -370,13 +370,13 @@ let teamInvitationApi
                             // recipient may have followed the link a
                             // second time. Bump the use count to keep
                             // accounting honest.
-                            let! existingRole = teamStore.GetMemberRole(teamId, access.UserId)
+                            let! existingRole = teamStore.GetMemberRole(TeamId teamId, UserId access.UserId)
 
                             let addResult = async {
                                 match existingRole with
                                 | Some _ -> return Ok()
                                 | None ->
-                                    match! teamStore.AddMember(teamId, access.UserId, role) with
+                                    match! teamStore.AddMember(TeamId teamId, UserId access.UserId, role) with
                                     | Ok() -> return Ok()
                                     | Error e -> return Error e
                             }
@@ -392,7 +392,7 @@ let teamInvitationApi
                                 // writes when their pointer is unset;
                                 // also heals already-member re-redeems
                                 // left stranded by pre-fix adds.
-                                do! ActiveTeamPolicy.ensureActiveTeam teamStore access.UserId teamId
+                                do! ActiveTeamPolicy.ensureActiveTeam teamStore (UserId access.UserId) (TeamId teamId)
 
                                 // Best-effort use-count bump. A failure
                                 // here does not roll back the add —
@@ -409,7 +409,7 @@ let teamInvitationApi
                                     | _ -> 0
 
                                 let teamName = async {
-                                    match! teamStore.GetTeam teamId with
+                                    match! teamStore.GetTeam(TeamId teamId) with
                                     | Some info -> return info.Name
                                     | None -> return teamId
                                 }
@@ -420,10 +420,10 @@ let teamInvitationApi
                                     auditLog.Record(
                                         AuditStreamKey.ofTeam teamId,
                                         TeamInviteAccepted {
-                                            TeamId = teamId
+                                            TeamId = TeamId teamId
                                             TokenId = claim.TokenId
-                                            InviteeUserId = access.UserId
-                                            InviterUserId = claim.IssuedBy
+                                            InviteeUserId = UserId access.UserId
+                                            InviterUserId = UserId claim.IssuedBy
                                             Role = role
                                         }
                                     )
@@ -432,7 +432,7 @@ let teamInvitationApi
                                     auditLog.Record(
                                         AuditStreamKey.ofTeam teamId,
                                         TeamInviteRedeemed {
-                                            TeamId = teamId
+                                            TeamId = TeamId teamId
                                             TokenId = claim.TokenId
                                             RemainingUses = remaining
                                         }
@@ -478,7 +478,7 @@ let teamInvitationApi
                         // Fall back to walking every team the
                         // caller is a member of. Bounded by the
                         // caller's own membership cardinality.
-                        let! callerTeams = teamStore.GetTeamsForUser access.UserId
+                        let! callerTeams = teamStore.GetTeamsForUser(UserId access.UserId)
 
                         return!
                             findInTeams (
@@ -494,16 +494,16 @@ let teamInvitationApi
                     match! ensureManageMembers teamStore access.UserId teamId with
                     | Error msg -> return Error msg
                     | Ok() ->
-                        match! shareTokenStore.Revoke(teamScopeId teamId, claim.TokenId, access.UserId) with
+                        match! shareTokenStore.Revoke(teamScopeId teamId, claim.TokenId, UserId access.UserId) with
                         | Error err -> return Error(sprintf "Revoke failed: %A" err)
                         | Ok() ->
                             do!
                                 auditLog.Record(
                                     AuditStreamKey.ofTeam teamId,
                                     TeamInviteRevoked {
-                                        TeamId = teamId
+                                        TeamId = TeamId teamId
                                         TokenId = claim.TokenId
-                                        ActorUserId = access.UserId
+                                        ActorUserId = UserId access.UserId
                                     }
                                 )
 
@@ -577,13 +577,13 @@ let teamInvitationApi
                                     }
 
                             let payload: TeamInviteIssuedPayload = {
-                                TeamId = req.TeamId
+                                TeamId = TeamId req.TeamId
                                 // No token-id for the pending-by-email
                                 // flow — the email is the "token". Use a
                                 // synthetic prefix so audit consumers can
                                 // tell the two flows apart at a glance.
                                 TokenId = sprintf "pending:%s" (req.Email.ToLowerInvariant())
-                                InviterUserId = access.UserId
+                                InviterUserId = UserId access.UserId
                                 Role = req.Role
                                 EmailHint = Some req.Email
                                 ExpiresAt = expiresAt
@@ -645,7 +645,7 @@ let teamInvitationApi
                                         | Ok(s :: _) -> s.DisplayName
                                         | _ -> None
 
-                                    let! teamLookup = teamStore.GetTeam req.TeamId
+                                    let! teamLookup = teamStore.GetTeam(TeamId req.TeamId)
                                     logger.Info(sprintf "[invite] GetTeam: %A" teamLookup)
 
                                     let teamName =
@@ -797,9 +797,9 @@ let teamInvitationApi
                                         auditLog.Record(
                                             AuditStreamKey.ofTeam entry.TeamId,
                                             TeamInviteRevoked {
-                                                TeamId = entry.TeamId
+                                                TeamId = TeamId entry.TeamId
                                                 TokenId = sprintf "pending:%s" normalised
-                                                ActorUserId = access.UserId
+                                                ActorUserId = UserId access.UserId
                                             }
                                         )
 
@@ -897,7 +897,7 @@ let teamInvitationApi
                     | true, (:? AuthenticatedUser as u) -> u
                     | _ -> {
                         AuthenticatedUser.anonymous with
-                            UserId = access.UserId
+                            UserId = UserId access.UserId
                       }
 
                 if AuthenticatedUser.isAnonymous user then
@@ -923,7 +923,7 @@ let teamInvitationApi
                             // complete, and reporting `Ok None` would
                             // read as "no invitation" after the pending
                             // row had already been destroyed.
-                            let! role = teamStore.GetMemberRole(entry.TeamId, user.UserId)
+                            let! role = teamStore.GetMemberRole(TeamId entry.TeamId, UserId user.UserId.Value)
 
                             match role with
                             | None ->
@@ -932,7 +932,7 @@ let teamInvitationApi
                                         "We found an invitation for you but could not add you to the team. \
                                          Ask a team owner or admin to re-issue it."
                             | Some _ ->
-                                match! teamStore.GetTeam entry.TeamId with
+                                match! teamStore.GetTeam(TeamId entry.TeamId) with
                                 | Some team -> return Ok(Some team)
                                 | None ->
                                     // Membership landed but the team

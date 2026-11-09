@@ -337,7 +337,7 @@ type PerScopeKeyResolver
                                 log.Record(
                                     scopeId,
                                     EncryptionKeyCreated {
-                                        UserId = "system"
+                                        UserId = UserId "system"
                                         ScopeId = scopeId
                                         KeyId = keyIdFor scopeId
                                         Resolver = ResolverName
@@ -460,7 +460,7 @@ type PerScopeKeyResolver
                     log.Record(
                         scopeId,
                         EncryptionKeyDestroyed {
-                            UserId = actorUserId
+                            UserId = UserId actorUserId
                             ScopeId = scopeId
                             KeyId = keyIdFor scopeId
                             Resolver = ResolverName
@@ -638,7 +638,7 @@ type PerScopeKeyResolver
                     | Some e, Some log ->
                         let row =
                             EncryptionKeyDestroyAcknowledged {
-                                UserId = e.RequestedBy
+                                UserId = UserId e.RequestedBy
                                 ScopeId = e.ScopeId
                                 KeyId = e.KeyId
                                 Resolver = ResolverName

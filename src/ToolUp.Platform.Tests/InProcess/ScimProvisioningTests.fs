@@ -179,8 +179,8 @@ let private freshWorld () =
     let auditLog = RecordingAuditLog()
 
     async {
-        let! _ = teams.CreateTeam(teamId, teamName)
-        let! _ = teams.AddMember(teamId, "founder@acme.test", Owner)
+        let! _ = teams.CreateTeam(TeamId teamId, teamName)
+        let! _ = teams.AddMember(TeamId teamId, UserId "founder@acme.test", Owner)
 
         return
             teams,
@@ -195,13 +195,13 @@ let private freshWorld () =
     |> Async.RunSynchronously
 
 let private memberIds (teams: ITeamStore) =
-    teams.GetTeamMembers teamId
+    teams.GetTeamMembers(TeamId teamId)
     |> Async.RunSynchronously
     |> List.map _.UserId
     |> List.sort
 
 let private roleOf (teams: ITeamStore) (userId: string) =
-    teams.GetMemberRole(teamId, userId) |> Async.RunSynchronously
+    teams.GetMemberRole(TeamId teamId, UserId userId) |> Async.RunSynchronously
 
 let private expectOk (label: string) (r: Result<'a, ScimError>) : 'a =
     match r with
@@ -340,9 +340,9 @@ let tests =
                     events
                     |> List.map (fun e ->
                         match e with
-                        | MemberAdded p -> "added:" + p.UserId
-                        | MemberRoleChanged p -> "role:" + p.UserId + ":" + p.OldRole + "->" + p.NewRole
-                        | MemberRemoved p -> "removed:" + p.UserId
+                        | MemberAdded p -> "added:" + p.UserId.Value
+                        | MemberRoleChanged p -> "role:" + p.UserId.Value + ":" + p.OldRole + "->" + p.NewRole
+                        | MemberRemoved p -> "removed:" + p.UserId.Value
                         | _ -> "other")
 
                 Expect.equal
@@ -394,7 +394,7 @@ let tests =
                         | MemberRemoved p -> Some p.AffectedUserId
                         | _ -> None)
 
-                Expect.equal removals [ "grace@acme.test" ] "exactly one removal was audited"
+                Expect.equal removals [ UserId "grace@acme.test" ] "exactly one removal was audited"
             }
 
             test "DELETE deprovisions, and the targeted group removal does too" {
@@ -455,7 +455,7 @@ let tests =
 
                 Expect.equal
                     adds
-                    [ "alan@acme.test"; "grace@acme.test" ]
+                    [ UserId "alan@acme.test"; UserId "grace@acme.test" ]
                     "a replace emits a delta, not one event per member"
             }
         ]
@@ -761,7 +761,7 @@ let tests =
 
                 let config = ScimConfig.create teamId
 
-                teams.AddMember(teamId, "ada@acme.test", Member)
+                teams.AddMember(TeamId teamId, UserId "ada@acme.test", Member)
                 |> Async.RunSynchronously
                 |> ignore
 

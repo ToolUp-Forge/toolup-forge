@@ -546,12 +546,12 @@ ToolUp.Platform.Audit.IBackgroundExportStore.Fail(System.String, System.String) 
 ToolUp.Platform.Audit.IBackgroundExportStore.GetStatus(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.ExportStatus]
 ToolUp.Platform.Audit.IDataExporter (class)
 ToolUp.Platform.Audit.IDataExporter+IDataExporter (interface)
-ToolUp.Platform.Audit.IDataExporter+IDataExporter.Export(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ExportSegment]]
+ToolUp.Platform.Audit.IDataExporter+IDataExporter.Export(System.String, ToolUp.Platform.UserId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ExportSegment]]
 ToolUp.Platform.Audit.IDataExporter+IDataExporter.Name : System.String { get }
 ToolUp.Platform.Audit.IDataExporter+IErasureHandler (interface)
-ToolUp.Platform.Audit.IDataExporter+IErasureHandler.Erase(System.String, System.String, ToolUp.Platform.ErasurePolicy) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ErasureSummary, ToolUp.Platform.ErasureError]]
+ToolUp.Platform.Audit.IDataExporter+IErasureHandler.Erase(System.String, ToolUp.Platform.UserId, ToolUp.Platform.ErasurePolicy) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ErasureSummary, ToolUp.Platform.ErasureError]]
 ToolUp.Platform.Audit.IDataExporter+IErasureHandler.Name : System.String { get }
-ToolUp.Platform.Audit.IDataExporter+IErasureHandler.Preview(System.String, System.String, ToolUp.Platform.ErasurePolicy) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.ErasureSummary]
+ToolUp.Platform.Audit.IDataExporter+IErasureHandler.Preview(System.String, ToolUp.Platform.UserId, ToolUp.Platform.ErasurePolicy) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.ErasureSummary]
 ToolUp.Platform.Audit.IEgressGate (interface)
 ToolUp.Platform.Audit.IEgressGate.Apply(ToolUp.Platform.Audit.EgressContext, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]]
 ToolUp.Platform.Audit.IEvidenceChainWalker (interface)

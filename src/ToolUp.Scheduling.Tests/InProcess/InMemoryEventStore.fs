@@ -46,7 +46,7 @@ type InMemoryEventStore() =
         // audit-emission contract (the DSR contract pack exercises the
         // real Server-tier InMemoryEventStore).
         member _.Erase(scopeId, subjectUserId, policy, dryRun) = async {
-            if Erasure.isBlankSubject subjectUserId then
+            if Erasure.isBlankSubject subjectUserId.Value then
                 return
                     Result.Ok {
                         HandlerName = "events"
@@ -67,7 +67,7 @@ type InMemoryEventStore() =
                     let all = List.ofSeq drained
 
                     let isMatch (e: ModuleEvent) =
-                        e.ScopeId = scopeId && e.Payload.Contains subjectUserId
+                        e.ScopeId = scopeId && e.Payload.Contains subjectUserId.Value
 
                     let matched = all |> List.filter isMatch
 

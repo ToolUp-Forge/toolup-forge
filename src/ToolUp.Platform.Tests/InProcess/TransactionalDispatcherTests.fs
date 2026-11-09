@@ -44,7 +44,7 @@ type FakeConfigStore(prefs: Map<string, string>) =
 
         member _.Clear(_: StorageScope, _: string) = async { return () }
 
-        member _.Erase(_: string, _: string, _: ErasurePolicy, _: bool) = async {
+        member _.Erase(_: string, _: UserId, _: ErasurePolicy, _: bool) = async {
             return
                 Result.Ok {
                     HandlerName = "config"
@@ -158,7 +158,7 @@ let private prefsBlockingEmail =
     Map.ofList [ ConfigKeys.NotificationPrefsKeys.EmailEnabled, "false" ]
 
 let private emptyEnvelope () : EmailEnvelope = {
-    Recipients = [ RecipientId.User "user-1" ]
+    Recipients = [ RecipientId.User(UserId "user-1") ]
     Content = InlineEmail("Subject", "Body", None)
     CorrelationId = None
 }
@@ -343,7 +343,7 @@ let tests =
 
             try
                 let envelopePayload = {
-                    Recipients = [ RecipientId.User "user-a"; RecipientId.User "user-b" ]
+                    Recipients = [ RecipientId.User(UserId "user-a"); RecipientId.User(UserId "user-b") ]
                     Content = InlineEmail("hi", "body", None)
                     CorrelationId = Some "corr-1"
                 }

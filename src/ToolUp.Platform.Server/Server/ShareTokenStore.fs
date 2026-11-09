@@ -547,7 +547,7 @@ type BlobShareTokenStore(storage: IBlobStorage, secretStore: ISecretStore, audit
                             recordAudit
                                 request.ScopeId
                                 (AuditEvent.ShareTokenIssued {
-                                    UserId = request.IssuedBy
+                                    UserId = UserId request.IssuedBy
                                     TokenId = tokenId
                                     ResourceKind = request.ResourceKind
                                     ResourceId = request.ResourceId
@@ -660,7 +660,7 @@ type BlobShareTokenStore(storage: IBlobStorage, secretStore: ISecretStore, audit
                     recordAudit
                         scopeId
                         (AuditEvent.ShareTokenRevoked {
-                            UserId = actorUserId
+                            UserId = UserId actorUserId.Value
                             TokenId = tokenId
                             ResourceKind = claim.ResourceKind
                             ResourceId = claim.ResourceId
@@ -758,7 +758,7 @@ type BlobShareTokenStore(storage: IBlobStorage, secretStore: ISecretStore, audit
             return
                 claims
                 |> Array.choose id
-                |> Array.filter (fun c -> c.IssuedBy = issuerUserId)
+                |> Array.filter (fun c -> c.IssuedBy = issuerUserId.Value)
                 |> Array.toList
                 |> List.sortByDescending _.IssuedAt
         }

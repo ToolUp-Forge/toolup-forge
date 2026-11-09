@@ -37,8 +37,8 @@ type MembershipChangeKind =
 /// portability rule 1. `PublishedAt` is informational — not a
 /// scheduling primitive, no precision contract.
 type MembershipChangedPayload = {
-    TeamId: string
-    AffectedUserId: string
+    TeamId: TeamId
+    AffectedUserId: UserId
     ChangeKind: MembershipChangeKind
     PublishedAt: DateTime
 }
@@ -103,7 +103,7 @@ type PushToken = { Token: string; Platform: string }
 type RecipientId =
     /// An authenticated platform user, resolved through the address
     /// book's `(userId, scopeId)` lookup exactly as before Phase 6f.A.
-    | User of userId: string
+    | User of userId: UserId
     /// A non-platform recipient held as an `ExternalContact` in the
     /// scope's external address book. Resolution is consent-gated.
     | External of contactId: string
@@ -119,7 +119,7 @@ module RecipientId =
     /// apart without consulting the envelope.
     let toWireString (recipient: RecipientId) : string =
         match recipient with
-        | RecipientId.User userId -> "user:" + userId
+        | RecipientId.User userId -> "user:" + userId.Value
         | RecipientId.External contactId -> "external:" + contactId
 
     /// Inverse of `toWireString`. Returns `None` for an unrecognised
@@ -131,13 +131,13 @@ module RecipientId =
         if System.String.IsNullOrEmpty wire then
             None
         elif wire.StartsWith "user:" then
-            Some(RecipientId.User(wire.Substring 5))
+            Some(RecipientId.User(UserId(wire.Substring 5)))
         elif wire.StartsWith "external:" then
             Some(RecipientId.External(wire.Substring 9))
         elif wire.Contains ":" then
             None
         else
-            Some(RecipientId.User wire)
+            Some(RecipientId.User(UserId wire))
 
     /// The form audit payloads carry. A `User` recipient renders as the
     /// BARE `userId` — byte-for-byte what `NotificationSentPayload`
@@ -149,15 +149,16 @@ module RecipientId =
     /// through `tryParse`, whose bare-string arm exists for exactly this.
     let toAuditString (recipient: RecipientId) : string =
         match recipient with
-        | RecipientId.User userId -> userId
+        | RecipientId.User userId -> userId.Value
         | RecipientId.External contactId -> "external:" + contactId
 
     /// Wrap a plain `userId` — the migration helper for every call site
     /// that addressed an envelope before Phase 6f.A widened it.
-    let ofUserId (userId: string) : RecipientId = RecipientId.User userId
+    let ofUserId (userId: string) : RecipientId = RecipientId.User(UserId userId)
 
     /// Wrap a list of plain `userId`s.
-    let ofUserIds (userIds: string list) : RecipientId list = userIds |> List.map RecipientId.User
+    let ofUserIds (userIds: string list) : RecipientId list =
+        userIds |> List.map (UserId >> RecipientId.User)
 
     /// The `userId`s among `recipients`, dropping external contacts.
     /// Used by the per-user preference filter, which has no record to
@@ -165,7 +166,7 @@ module RecipientId =
     let userIds (recipients: RecipientId list) : string list =
         recipients
         |> List.choose (function
-            | RecipientId.User userId -> Some userId
+            | RecipientId.User userId -> Some userId.Value
             | RecipientId.External _ -> None)
 
     /// The `contactId`s among `recipients`, dropping platform users.
@@ -187,7 +188,7 @@ type UserContact = {
     /// Identity of the user this record describes. Duplicated as the
     /// blob filename for human readability, but the canonical lookup
     /// key is the path.
-    UserId: string
+    UserId: UserId
     Email: EmailAddress option
     Phone: PhoneNumber option
     PushTokens: PushToken list
@@ -198,7 +199,7 @@ module UserContact =
     /// by the blob-backed implementation when no contact JSON exists
     /// for the queried `(userId, scopeId)`.
     let empty (userId: string) : UserContact = {
-        UserId = userId
+        UserId = UserId userId
         Email = None
         Phone = None
         PushTokens = []

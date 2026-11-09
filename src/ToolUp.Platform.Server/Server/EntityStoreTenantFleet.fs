@@ -153,7 +153,7 @@ type EntityStoreTenantFleet
                 | Error e -> Error(FleetStorageFailure(EntityError.message e))
         }
 
-        member _.ListTenants(ownerUserId: string option) : Async<Tenant list> = async {
+        member _.ListTenants(ownerUserId: UserId option) : Async<Tenant list> = async {
             match ownerUserId with
             | Some uid ->
                 let! refs =
@@ -161,7 +161,7 @@ type EntityStoreTenantFleet
                         Tenant.CatalogScope,
                         Tenant.EntityType,
                         Tenant.OwnerUserIdIndex,
-                        uid
+                        uid.Value
                     )
 
                 match refs with
@@ -216,7 +216,7 @@ type EntityStoreTenantFleet
                             request.TenantId,
                             request.BuildId,
                             request.Manifest,
-                            request.SubmittedBy
+                            (UserId request.SubmittedBy)
                         )
 
                     return
@@ -267,7 +267,7 @@ type EntityStoreTenantFleet
         }
 
         member self.EvictTenant
-            (tenantId: TenantId, byUserId: string, reason: string)
+            (tenantId: TenantId, byUserId: UserId, reason: string)
             : Async<Result<unit, TenantFleetError>> =
             async {
                 let lock = acquireTenantLock tenantId
@@ -288,7 +288,7 @@ type EntityStoreTenantFleet
                             let! saved =
                                 entityStore.Save<Tenant>(
                                     Tenant.CatalogScope,
-                                    EntityPrincipal.ofPrincipal byUserId,
+                                    EntityPrincipal.ofPrincipal byUserId.Value,
                                     next
                                 )
 
@@ -311,7 +311,7 @@ type EntityStoreTenantFleet
                                             sprintf
                                                 "EvictTenant %s (by %s, reason: %s): failed to stop container %s: %A"
                                                 tenantId
-                                                byUserId
+                                                byUserId.Value
                                                 reason
                                                 c.ContainerId
                                                 err
@@ -322,7 +322,7 @@ type EntityStoreTenantFleet
                     lock.Release() |> ignore
             }
 
-        member self.RestartTenant(tenantId: TenantId, byUserId: string) : Async<Result<unit, TenantFleetError>> = async {
+        member self.RestartTenant(tenantId: TenantId, byUserId: UserId) : Async<Result<unit, TenantFleetError>> = async {
             let lock = acquireTenantLock tenantId
             do! lock.WaitAsync() |> Async.AwaitTask
 
@@ -340,11 +340,15 @@ type EntityStoreTenantFleet
                     | Error msg -> return Error(FleetStorageFailure msg)
                     | Ok next ->
                         let! saved =
-                            entityStore.Save<Tenant>(Tenant.CatalogScope, EntityPrincipal.ofPrincipal byUserId, next)
+                            entityStore.Save<Tenant>(
+                                Tenant.CatalogScope,
+                                EntityPrincipal.ofPrincipal byUserId.Value,
+                                next
+                            )
 
                         match saved with
                         | Ok _ ->
-                            logger.Info(sprintf "Tenant %s restarted by %s" tenantId byUserId)
+                            logger.Info(sprintf "Tenant %s restarted by %s" tenantId byUserId.Value)
                             return Ok()
                         | Error e -> return Error(FleetStorageFailure(EntityError.message e))
             finally

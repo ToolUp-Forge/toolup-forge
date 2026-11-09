@@ -472,7 +472,7 @@ let tests =
                 Expect.equal (List.length world.Sink.Emails) 1 "one email was sent"
                 let scope, email = world.Sink.Emails |> List.head
                 Expect.equal scope scopeA "at the subscription's scope"
-                Expect.equal email.Recipients [ RecipientId.User "alice" ] "to the resolvable recipient"
+                Expect.equal email.Recipients [ RecipientId.User(UserId "alice") ] "to the resolvable recipient"
 
                 Expect.isSome email.CorrelationId "carrying a correlation id so a retry de-duplicates at the vendor"
 
@@ -547,7 +547,11 @@ let tests =
                 Expect.equal result Success "the run still succeeds"
 
                 let _, email = world.Sink.Emails |> List.head
-                Expect.equal email.Recipients [ RecipientId.User "alice" ] "only the reachable recipient is addressed"
+
+                Expect.equal
+                    email.Recipients
+                    [ RecipientId.User(UserId "alice") ]
+                    "only the reachable recipient is addressed"
 
                 match world.Audit.Last with
                 | Some entry ->

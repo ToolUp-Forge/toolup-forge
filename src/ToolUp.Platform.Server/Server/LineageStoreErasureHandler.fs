@@ -26,7 +26,7 @@ type LineageStoreErasureHandler(lineageStore: ILineageStore) =
             lineageStore.Erase(scopeId, subjectUserId, policy, false)
 
         member _.Preview(scopeId, subjectUserId, policy) = async {
-            let! result = lineageStore.Erase(scopeId, subjectUserId, policy, true)
+            let! result = lineageStore.Erase(scopeId, UserId subjectUserId.Value, policy, true)
 
             return
                 match result with

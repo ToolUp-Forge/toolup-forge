@@ -46,7 +46,7 @@ let hook: TenantHook<TeamScopeResolver * ITeamStore> = {
     OnProvisioned = None
     OnDeprovisioned =
         Some(fun (resolver, store) scopeId _ -> async {
-            let! members = store.GetTeamMembers(teamIdOf scopeId)
+            let! members = store.GetTeamMembers(TeamId(teamIdOf scopeId))
 
             // InvalidateUser publishes a MembershipChanged event per
             // member; the resolver (and any cross-instance companion)
@@ -60,7 +60,7 @@ let hook: TenantHook<TeamScopeResolver * ITeamStore> = {
     // WOULD be invalidated), via the read-only GetTeamMembers.
     Preview =
         Some(fun (_, store) scopeId _ -> async {
-            let! members = store.GetTeamMembers(teamIdOf scopeId)
+            let! members = store.GetTeamMembers(TeamId(teamIdOf scopeId))
             return members.Length, sprintf "%d member cache entr(y/ies) would be invalidated" members.Length
         })
 }

@@ -51,7 +51,7 @@ let tests =
 
         test "Absent document (Download error + Exists false) → empty (bootstrap fail-open)" {
             let s = store (FakeBlob(Result.Error "Blob not found", Ok false))
-            let perms = s.GetTeamPermissions "team-x" |> Async.RunSynchronously
+            let perms = s.GetTeamPermissions(TeamId "team-x") |> Async.RunSynchronously
             Expect.equal perms TeamPermissions.empty "no document = pre-Phase-4 unrestricted bootstrap"
         }
 
@@ -59,7 +59,7 @@ let tests =
             let s = store (FakeBlob(Result.Error "transient storage error", Ok true))
 
             Expect.throwsT<PermissionStoreUnavailableException>
-                (fun () -> s.GetTeamPermissions "team-x" |> Async.RunSynchronously |> ignore)
+                (fun () -> s.GetTeamPermissions(TeamId "team-x") |> Async.RunSynchronously |> ignore)
                 "a readable-but-failed document must not degrade to unrestricted"
         }
 
@@ -68,7 +68,7 @@ let tests =
                 store (FakeBlob(Result.Error "storage down", Result.Error(exn "exists probe failed")))
 
             Expect.throwsT<PermissionStoreUnavailableException>
-                (fun () -> s.GetTeamPermissions "team-x" |> Async.RunSynchronously |> ignore)
+                (fun () -> s.GetTeamPermissions(TeamId "team-x") |> Async.RunSynchronously |> ignore)
                 "cannot prove absence → must not assume unrestricted"
         }
 
@@ -77,7 +77,7 @@ let tests =
             let s = store (FakeBlob(Ok garbage, Ok true))
 
             Expect.throwsT<PermissionStoreUnavailableException>
-                (fun () -> s.GetTeamPermissions "team-x" |> Async.RunSynchronously |> ignore)
+                (fun () -> s.GetTeamPermissions(TeamId "team-x") |> Async.RunSynchronously |> ignore)
                 "a corrupt RBAC document must not be treated as unrestricted"
         }
 
@@ -88,7 +88,10 @@ let tests =
             let s = store (FakeBlob(Result.Error "transient storage error", Ok true))
 
             Expect.throwsT<PermissionStoreUnavailableException>
-                (fun () -> s.GetEffectivePermissions("u-1", "team-x") |> Async.RunSynchronously |> ignore)
+                (fun () ->
+                    s.GetEffectivePermissions(UserId "u-1", TeamId "team-x")
+                    |> Async.RunSynchronously
+                    |> ignore)
                 "the effective-permission read must surface the fault, not an empty (unrestricted) map"
         }
 
@@ -96,7 +99,7 @@ let tests =
             let valid = System.Text.Encoding.UTF8.GetBytes """{"defaults":{},"members":{}}"""
 
             let s = store (FakeBlob(Ok valid, Ok true))
-            let perms = s.GetTeamPermissions "team-x" |> Async.RunSynchronously
+            let perms = s.GetTeamPermissions(TeamId "team-x") |> Async.RunSynchronously
             Expect.equal perms TeamPermissions.empty "well-formed empty document parses cleanly"
         }
     ]

@@ -107,7 +107,7 @@ type DefaultSubjectResolver
         | Some store ->
             let key = cacheKey userId
 
-            match cache.TryGetValue<string option> key with
+            match cache.TryGetValue<TeamId option> key with
             | true, cached -> return Ok cached
             | false, _ ->
                 try
@@ -143,7 +143,7 @@ type DefaultSubjectResolver
                 | None, Some user when not (AuthenticatedUser.isAnonymous user) ->
                     // Step 2 — authenticated subject.
                     if supportsTeam then
-                        let! activeTeamResult = getActiveTeam user.UserId
+                        let! activeTeamResult = getActiveTeam (UserId user.UserId.Value)
 
                         match activeTeamResult with
                         | Result.Error ex ->
@@ -157,7 +157,7 @@ type DefaultSubjectResolver
                             // step 2b fall-through when User is
                             // in Surfaces; otherwise step 2c.
                             if supportsUser then
-                                return Ok(Subject.AuthenticatedUser user.UserId)
+                                return Ok(Subject.AuthenticatedUser user.UserId.Value)
                             else
                                 return Error(SubjectResolutionError.UnsupportedSubject UserKind)
                         | Ok(Some teamId) ->
@@ -174,16 +174,16 @@ type DefaultSubjectResolver
                                     )
                             | Some store ->
                                 try
-                                    let! role = store.GetMemberRole(teamId, user.UserId)
+                                    let! role = store.GetMemberRole(TeamId teamId.Value, UserId user.UserId.Value)
 
                                     match role with
-                                    | Some _ -> return Ok(Subject.TeamMember(user.UserId, teamId))
-                                    | None -> return Error(SubjectResolutionError.NotTeamMember teamId)
+                                    | Some _ -> return Ok(Subject.TeamMember(user.UserId.Value, teamId.Value))
+                                    | None -> return Error(SubjectResolutionError.NotTeamMember(TeamId teamId.Value))
                                 with ex ->
                                     return Error(SubjectResolutionError.SubjectResolutionFailed ex.Message)
                     elif supportsUser then
                         // Step 2b — Team not in Surfaces, User is.
-                        return Ok(Subject.AuthenticatedUser user.UserId)
+                        return Ok(Subject.AuthenticatedUser user.UserId.Value)
                     else
                         // Step 2c — deployment admits no
                         // authenticated-user-shape subject.

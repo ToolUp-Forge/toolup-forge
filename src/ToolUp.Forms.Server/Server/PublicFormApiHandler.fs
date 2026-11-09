@@ -169,7 +169,7 @@ let publicFormApi
                                     // respondent identity (`respondent:{tokenId}`)
                                     // — never the raw email.
                                     let payload: FormSubmittedPayload = {
-                                        UserId = "respondent:" + claim.TokenId
+                                        UserId = UserId("respondent:" + claim.TokenId)
                                         FormId = saved.FormId
                                         SubmissionId = saved.Id
                                         SchemaVersion = saved.SchemaVersion

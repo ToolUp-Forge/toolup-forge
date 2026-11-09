@@ -203,7 +203,7 @@ type EventStoreLineageStore(eventStore: IEventStore) =
         }
 
         member _.Erase(scopeId, subjectUserId, policy, _dryRun) = async {
-            if Erasure.isBlankSubject subjectUserId then
+            if Erasure.isBlankSubject subjectUserId.Value then
                 return
                     Result.Ok {
                         HandlerName = "lineage"
@@ -228,7 +228,8 @@ type EventStoreLineageStore(eventStore: IEventStore) =
                     // double-mutate the shared event store.
                     let! events = eventStore.ReadByType(scopeId, LineageEventType.Link)
 
-                    let matched = events |> List.filter (fun e -> e.Payload.Contains subjectUserId)
+                    let matched =
+                        events |> List.filter (fun e -> e.Payload.Contains subjectUserId.Value)
 
                     let verb =
                         match policy with

@@ -154,7 +154,7 @@ let notificationHandler
                 // additional `DataRefreshed(<kind>, _)` clauses here.
                 let sendPlatformEnvelope (env: NotificationEnvelope) =
                     match env.Notification with
-                    | MembershipChanged payload when payload.AffectedUserId = scopeId -> sendEnvelope env
+                    | MembershipChanged payload when payload.AffectedUserId = UserId scopeId -> sendEnvelope env
                     | DataRefreshed("PlatformKnowledgeBase", _) -> sendEnvelope env
                     | _ -> ()
 

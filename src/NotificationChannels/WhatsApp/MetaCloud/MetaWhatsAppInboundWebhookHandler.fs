@@ -319,7 +319,7 @@ type MetaWhatsAppInboundWebhookHandler
                     auditLog.Record(
                         scopeId,
                         NotificationDeliveryFailed {
-                            UserId = "system"
+                            UserId = UserId "system"
                             ScopeId = scopeId
                             NotificationKind = NotificationKind.SinkKind.toWireString NotificationKind.SinkKind.WhatsApp
                             Provider = "meta-cloud"

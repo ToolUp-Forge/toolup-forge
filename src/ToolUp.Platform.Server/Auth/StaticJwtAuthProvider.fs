@@ -159,7 +159,7 @@ let private validateToken (config: StaticJwtConfig) (token: string) : Result<Aut
                 | Result.Error reason -> Error $"Invalid 'sub' claim: {reason}"
 
         return {
-            UserId = userId
+            UserId = UserId userId
             DisplayName = Jwt.getClaim "name" doc |> Option.defaultValue userId
             Email = Jwt.getClaim "email" doc
             TenantId = None

@@ -188,7 +188,7 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
         | AnyAuthenticatedUser -> return true
         | PlatformAdminOnly ->
             match resolvePlatformAdminStore ctx with
-            | Some store -> return! store.IsPlatformAdmin userId
+            | Some store -> return! store.IsPlatformAdmin(UserId userId)
             | None ->
                 // Fail closed when the policy is `PlatformAdminOnly`
                 // but the store is missing. This branch is unreachable
@@ -210,7 +210,7 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
     // silently elevate every caller.
     let isPlatformAdmin () = async {
         match resolvePlatformAdminStore ctx with
-        | Some store -> return! store.IsPlatformAdmin userId
+        | Some store -> return! store.IsPlatformAdmin(UserId userId)
         | None -> return false
     }
 
@@ -226,7 +226,7 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
         if isAdmin then
             return Some Owner
         else
-            return! ts.GetMemberRole(teamId, userId)
+            return! ts.GetMemberRole(TeamId teamId, UserId userId)
     }
 
     // ── Phase 549 — directory existence proof for direct adds ───────
@@ -355,11 +355,11 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
                         if isAdmin then
                             return None
                         else
-                            let! teams = ts.GetTeamsForUser userId
+                            let! teams = ts.GetTeamsForUser(UserId userId)
 
                             let! roles =
                                 teams
-                                |> List.map (fun t -> ts.GetMemberRole(t.TeamId, userId))
+                                |> List.map (fun t -> ts.GetMemberRole(TeamId t.TeamId, UserId userId))
                                 |> Async.Parallel
 
                             let owned = roles |> Array.filter (fun r -> r = Some Owner) |> Array.length
@@ -395,7 +395,7 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
                     audit
                         ScopeKey.PlatformContainer
                         (TeamCreationDenied {
-                            UserId = userId
+                            UserId = UserId userId
                             AttemptedName = trimmedName
                         })
 
@@ -404,7 +404,7 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
                     audit
                         ScopeKey.PlatformContainer
                         (TeamCreationDenied {
-                            UserId = userId
+                            UserId = UserId userId
                             AttemptedName = trimmedName
                         })
 
@@ -418,11 +418,11 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
                     // (GP 4). `CreateTeam` additionally fails closed on an
                     // existing blob.
                     let teamId = Guid.NewGuid().ToString("N")
-                    let! result = ts.CreateTeam(teamId, trimmedName)
+                    let! result = ts.CreateTeam(TeamId teamId, trimmedName)
 
                     match result with
                     | Ok team ->
-                        let! addResult = ts.AddMember(teamId, ownerUserId, Owner)
+                        let! addResult = ts.AddMember(TeamId teamId, UserId ownerUserId, Owner)
 
                         match addResult with
                         | Ok() ->
@@ -432,17 +432,17 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
                             audit
                                 teamId
                                 (TeamCreated {
-                                    UserId = userId
-                                    TeamId = teamId
+                                    UserId = UserId userId
+                                    TeamId = TeamId teamId
                                     TeamName = trimmedName
                                 })
 
                             audit
                                 teamId
                                 (MemberAdded {
-                                    UserId = userId
-                                    TeamId = teamId
-                                    AffectedUserId = ownerUserId
+                                    UserId = UserId userId
+                                    TeamId = TeamId teamId
+                                    AffectedUserId = UserId ownerUserId
                                     Role = TeamRoles.displayName Owner
                                 })
 
@@ -460,21 +460,21 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
                                 // (the team and its Owner are already durable),
                                 // and reported through the same channel rather
                                 // than discarded.
-                                match! ts.SetActiveTeam(userId, teamId) with
+                                match! ts.SetActiveTeam(UserId userId, TeamId teamId) with
                                 | Ok() -> ()
                                 | Error e ->
                                     ActiveTeamPolicy.errorReporter
                                         userId
                                         (exn (sprintf "SetActiveTeam(%s, %s) refused: %s" userId teamId e))
                             else
-                                do! ActiveTeamPolicy.ensureActiveTeam ts ownerUserId teamId
+                                do! ActiveTeamPolicy.ensureActiveTeam ts (UserId ownerUserId) (TeamId teamId)
 
                             return Ok team
                         | Error addErr ->
                             // Owner-membership write failed — roll back the
                             // orphan team blob and fail honestly rather than
                             // returning Ok over an owner-less, inaccessible team.
-                            let! _ = ts.DeleteTeam teamId
+                            let! _ = ts.DeleteTeam(TeamId teamId)
                             return Error addErr
                     | Error e -> return Error e
         | None -> return Error "Team management not available in this mode"
@@ -496,7 +496,7 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
             fun () -> async {
                 match teamStore with
                 | Some ts ->
-                    let! teams = ts.GetTeamsForUser(userId)
+                    let! teams = ts.GetTeamsForUser(UserId userId)
                     // Archived teams are hidden from members — they can't
                     // be selected as active and shouldn't clutter the
                     // switcher. A Platform Admin restores via RestoreTeam.
@@ -523,16 +523,16 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
                         match proof with
                         | Error proofErr -> return Error proofErr
                         | Ok() ->
-                            let! result = ts.AddMember(teamId, memberId, role)
+                            let! result = ts.AddMember(TeamId teamId, UserId memberId, role)
 
                             match result with
                             | Ok() ->
                                 audit
                                     teamId
                                     (MemberAdded {
-                                        UserId = userId
-                                        TeamId = teamId
-                                        AffectedUserId = memberId
+                                        UserId = UserId userId
+                                        TeamId = TeamId teamId
+                                        AffectedUserId = UserId memberId
                                         Role = TeamRoles.displayName role
                                     })
 
@@ -543,7 +543,7 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
                                 // empty module list — with no affordance
                                 // to transition. Never re-points an
                                 // existing selection.
-                                do! ActiveTeamPolicy.ensureActiveTeam ts memberId teamId
+                                do! ActiveTeamPolicy.ensureActiveTeam ts (UserId memberId) (TeamId teamId)
                             | Error _ -> ()
 
                             return result
@@ -559,7 +559,7 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
                     // old and new roles — promoting Member → Admin
                     // and demoting Admin → Member are both Owner-only
                     // operations.
-                    let! oldRoleOpt = ts.GetMemberRole(teamId, memberId)
+                    let! oldRoleOpt = ts.GetMemberRole(TeamId teamId, UserId memberId)
                     let! authorisedNew = authoriseManageRole ts teamId newRole
 
                     let! authorisedOld =
@@ -574,16 +574,16 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
 
                     match authorisedNew, authorisedOld with
                     | Ok(), Ok() ->
-                        let! result = ts.ChangeMemberRole(teamId, memberId, newRole)
+                        let! result = ts.ChangeMemberRole(TeamId teamId, UserId memberId, newRole)
 
                         match result, oldRoleOpt with
                         | Ok(), Some oldRole when oldRole <> newRole ->
                             audit
                                 teamId
                                 (MemberRoleChanged {
-                                    UserId = userId
-                                    TeamId = teamId
-                                    AffectedUserId = memberId
+                                    UserId = UserId userId
+                                    TeamId = TeamId teamId
+                                    AffectedUserId = UserId memberId
                                     OldRole = TeamRoles.displayName oldRole
                                     NewRole = TeamRoles.displayName newRole
                                 })
@@ -609,7 +609,7 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
                     // non-members (incl. Platform Admins with no membership
                     // row) are refused: ownership hand-over is the Owner's
                     // own act.
-                    let! callerRole = ts.GetMemberRole(teamId, userId)
+                    let! callerRole = ts.GetMemberRole(TeamId teamId, UserId userId)
 
                     match callerRole with
                     | role when role <> Some Owner -> return Error "Only the team Owner can transfer ownership"
@@ -619,7 +619,7 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
                         // Target must already be a member — ownership can
                         // only move to someone on the team, never mint a new
                         // membership row.
-                        let! targetRole = ts.GetMemberRole(teamId, target)
+                        let! targetRole = ts.GetMemberRole(TeamId teamId, UserId target)
 
                         match targetRole with
                         | None -> return Error "The new owner must be an existing member of the team"
@@ -636,12 +636,12 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
                             // momentarily) so it isn't rejected as "last
                             // Owner". An interruption between the two writes
                             // leaves two Owners — recoverable — never zero.
-                            let! promote = ts.ChangeMemberRole(teamId, target, Owner)
+                            let! promote = ts.ChangeMemberRole(TeamId teamId, UserId target, Owner)
 
                             match promote with
                             | Error e -> return Error e
                             | Ok() ->
-                                let! demote = ts.ChangeMemberRole(teamId, userId, Admin)
+                                let! demote = ts.ChangeMemberRole(TeamId teamId, UserId userId, Admin)
 
                                 match demote with
                                 | Error e -> return Error e
@@ -649,10 +649,10 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
                                     audit
                                         teamId
                                         (TeamOwnershipTransferred {
-                                            TeamId = teamId
-                                            FromUserId = userId
-                                            ToUserId = target
-                                            ActorUserId = userId
+                                            TeamId = TeamId teamId
+                                            FromUserId = UserId userId
+                                            ToUserId = UserId target
+                                            ActorUserId = UserId userId
                                         })
 
                                     return Ok()
@@ -664,7 +664,7 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
                     // Gate against the target's CURRENT role: Admin
                     // callers cannot remove other Admins or Owners;
                     // only Owners (or Platform Admins) can.
-                    let! targetRoleOpt = ts.GetMemberRole(teamId, memberId)
+                    let! targetRoleOpt = ts.GetMemberRole(TeamId teamId, UserId memberId)
 
                     let! authorised =
                         match targetRoleOpt with
@@ -682,16 +682,16 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
                         // `_platform` topic, which `TeamScopeResolver`
                         // subscribes to. Per-request membership re-check
                         // remains the defense-in-depth braces.
-                        let! result = ts.RemoveMember(teamId, memberId)
+                        let! result = ts.RemoveMember(TeamId teamId, UserId memberId)
 
                         match result with
                         | Ok() ->
                             audit
                                 teamId
                                 (MemberRemoved {
-                                    UserId = userId
-                                    TeamId = teamId
-                                    AffectedUserId = memberId
+                                    UserId = UserId userId
+                                    TeamId = TeamId teamId
+                                    AffectedUserId = UserId memberId
                                 })
                         | Error _ -> ()
 
@@ -708,10 +708,10 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
                     // empty list (not an error — same observable
                     // shape for "no such team" and "not my team",
                     // which avoids leaking team existence).
-                    let! callerRole = ts.GetMemberRole(teamId, userId)
+                    let! callerRole = ts.GetMemberRole(TeamId teamId, UserId userId)
 
                     match callerRole with
-                    | Some _ -> return! ts.GetTeamMembers(teamId)
+                    | Some _ -> return! ts.GetTeamMembers(TeamId teamId)
                     | None -> return []
                 | None -> return []
             }
@@ -726,25 +726,27 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
                     // membership check would deny the scope anyway,
                     // but the stored pointer would be junk. Reject
                     // eagerly — cleaner error path, no stale state.
-                    let! callerRole = ts.GetMemberRole(teamId, userId)
+                    let! callerRole = ts.GetMemberRole(TeamId teamId, UserId userId)
 
                     match callerRole with
                     | Some _ ->
                         // Reject selecting an archived team — it is no
                         // longer an accessible scope (the same reason it
                         // is filtered from GetMyTeams).
-                        let! team = ts.GetTeam(teamId)
+                        let! team = ts.GetTeam(TeamId teamId)
 
                         match team with
                         | Some t when t.Archived -> return Error "This team is archived"
-                        | _ -> return! ts.SetActiveTeam(userId, teamId)
+                        | _ -> return! ts.SetActiveTeam(UserId userId, TeamId teamId)
                     | None -> return Error "You are not a member of this team"
                 | None -> return Error "Team management not available in this mode"
             }
         GetActiveTeam =
             fun () -> async {
                 match teamStore with
-                | Some ts -> return! ts.GetActiveTeam(userId)
+                | Some ts ->
+                    let! active = ts.GetActiveTeam(UserId userId)
+                    return active |> Option.map TeamId.value
                 | None -> return None
             }
         GetTeamCreationPolicy = fun () -> async { return config.TeamCreationPolicy }
@@ -763,7 +765,7 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
                         let! summaries =
                             teams
                             |> List.map (fun team -> async {
-                                let! members = ts.GetTeamMembers(team.TeamId)
+                                let! members = ts.GetTeamMembers(TeamId team.TeamId)
 
                                 let ofRole role =
                                     members |> List.filter (fun m -> m.Role = role) |> List.map _.UserId
@@ -794,16 +796,16 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
                     match teamStore with
                     | None -> return Error "Team management not available in this mode"
                     | Some ts ->
-                        let! team = ts.GetTeam(teamId)
-                        let! result = ts.SetArchived(teamId, true)
+                        let! team = ts.GetTeam(TeamId teamId)
+                        let! result = ts.SetArchived(TeamId teamId, true)
 
                         match result with
                         | Ok() ->
                             audit
                                 teamId
                                 (TeamArchived {
-                                    UserId = userId
-                                    TeamId = teamId
+                                    UserId = UserId userId
+                                    TeamId = TeamId teamId
                                     TeamName = team |> Option.map _.Name |> Option.defaultValue teamId
                                 })
 
@@ -820,16 +822,16 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
                     match teamStore with
                     | None -> return Error "Team management not available in this mode"
                     | Some ts ->
-                        let! team = ts.GetTeam(teamId)
-                        let! result = ts.SetArchived(teamId, false)
+                        let! team = ts.GetTeam(TeamId teamId)
+                        let! result = ts.SetArchived(TeamId teamId, false)
 
                         match result with
                         | Ok() ->
                             audit
                                 teamId
                                 (TeamRestored {
-                                    UserId = userId
-                                    TeamId = teamId
+                                    UserId = UserId userId
+                                    TeamId = TeamId teamId
                                     TeamName = team |> Option.map _.Name |> Option.defaultValue teamId
                                 })
 
@@ -848,17 +850,17 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
                     | Some ts ->
                         // Capture the name before the purge — once the
                         // record is gone the audit can't recover it.
-                        let! team = ts.GetTeam(teamId)
+                        let! team = ts.GetTeam(TeamId teamId)
                         let teamName = team |> Option.map _.Name |> Option.defaultValue teamId
-                        let! result = ts.PurgeTeam(teamId)
+                        let! result = ts.PurgeTeam(TeamId teamId)
 
                         match result with
                         | Ok() ->
                             audit
                                 teamId
                                 (TeamDeleted {
-                                    UserId = userId
-                                    TeamId = teamId
+                                    UserId = UserId userId
+                                    TeamId = TeamId teamId
                                     TeamName = teamName
                                 })
 
@@ -891,11 +893,11 @@ let permissionApiHandler (_config: ServerConfig) =
                 fun teamId -> async {
                     match teamStore, permStore with
                     | Some ts, Some ps ->
-                        let! callerRole = ts.GetMemberRole(teamId, userId)
+                        let! callerRole = ts.GetMemberRole(TeamId teamId, UserId userId)
 
                         match callerRole with
                         | Some r when TeamRoles.canManageMembers r ->
-                            let! perms = ps.GetTeamPermissions teamId
+                            let! perms = ps.GetTeamPermissions(TeamId teamId)
                             return Ok perms
                         | _ -> return Error "Insufficient permissions"
                     | _ -> return Error "Team management not available in this mode"
@@ -905,20 +907,21 @@ let permissionApiHandler (_config: ServerConfig) =
                 fun (teamId, memberId, moduleName, permissions) -> async {
                     match teamStore, permStore with
                     | Some ts, Some ps ->
-                        let! callerRole = ts.GetMemberRole(teamId, userId)
+                        let! callerRole = ts.GetMemberRole(TeamId teamId, UserId userId)
 
                         match callerRole with
                         | Some r when TeamRoles.canManageMembers r ->
-                            let! result = ps.SetMemberPermissions(teamId, memberId, moduleName, permissions)
+                            let! result =
+                                ps.SetMemberPermissions(TeamId teamId, UserId memberId, moduleName, permissions)
 
                             match result with
                             | Ok() ->
                                 audit
                                     teamId
                                     (PermissionChanged {
-                                        UserId = userId
-                                        TeamId = teamId
-                                        AffectedUserId = memberId
+                                        UserId = UserId userId
+                                        TeamId = TeamId teamId
+                                        AffectedUserId = UserId memberId
                                         ModuleName = moduleName
                                         Permissions = permissionsToCsv permissions
                                         // Phase 553 — the chain link is
@@ -938,11 +941,11 @@ let permissionApiHandler (_config: ServerConfig) =
                 fun (teamId, defaults) -> async {
                     match teamStore, permStore with
                     | Some ts, Some ps ->
-                        let! callerRole = ts.GetMemberRole(teamId, userId)
+                        let! callerRole = ts.GetMemberRole(TeamId teamId, UserId userId)
 
                         match callerRole with
                         | Some r when TeamRoles.canManageMembers r ->
-                            let! result = ps.SetTeamDefaults(teamId, defaults)
+                            let! result = ps.SetTeamDefaults(TeamId teamId, defaults)
 
                             match result with
                             | Ok() ->
@@ -956,9 +959,9 @@ let permissionApiHandler (_config: ServerConfig) =
                                 audit
                                     teamId
                                     (PermissionChanged {
-                                        UserId = userId
-                                        TeamId = teamId
-                                        AffectedUserId = ""
+                                        UserId = UserId userId
+                                        TeamId = TeamId teamId
+                                        AffectedUserId = UserId ""
                                         ModuleName = ""
                                         Permissions = defaultsSummary defaults
                                         Chain = None
@@ -974,11 +977,11 @@ let permissionApiHandler (_config: ServerConfig) =
                 fun (teamId, moduleName, state) -> async {
                     match teamStore, permStore with
                     | Some ts, Some ps ->
-                        let! callerRole = ts.GetMemberRole(teamId, userId)
+                        let! callerRole = ts.GetMemberRole(TeamId teamId, UserId userId)
 
                         match callerRole with
                         | Some r when TeamRoles.canManageMembers r ->
-                            let! result = ps.SetModuleExposure(teamId, moduleName, state)
+                            let! result = ps.SetModuleExposure(TeamId teamId, moduleName, state)
 
                             match result with
                             | Ok() ->
@@ -991,9 +994,9 @@ let permissionApiHandler (_config: ServerConfig) =
                                 audit
                                     teamId
                                     (PermissionChanged {
-                                        UserId = userId
-                                        TeamId = teamId
-                                        AffectedUserId = ""
+                                        UserId = UserId userId
+                                        TeamId = TeamId teamId
+                                        AffectedUserId = UserId ""
                                         ModuleName = moduleName
                                         Permissions = ModuleExposure.toToken state
                                         Chain = None
@@ -1152,7 +1155,7 @@ let accessibilityApiHandler (config: ServerConfig) =
                     // the Anonymous branch above wins anyway).
                     let! isPlatformAdmin =
                         match ctx.RequestServices.GetService(typeof<IPlatformAdminStore>) with
-                        | :? IPlatformAdminStore as store -> store.IsPlatformAdmin accessCtx.UserId
+                        | :? IPlatformAdminStore as store -> store.IsPlatformAdmin(UserId accessCtx.UserId)
                         | _ -> async { return false }
 
                     // Phase 637 — resolve the module-visibility profile

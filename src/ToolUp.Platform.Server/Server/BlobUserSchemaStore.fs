@@ -177,7 +177,7 @@ type BlobUserSchemaStore(dataObjectStore: IDataObjectStore, auditLog: IAuditLog 
                         objectId,
                         serialise committed,
                         UserAuthoredSchema.dataType,
-                        actorUserId,
+                        actorUserId.Value,
                         Map.empty,
                         VersioningPolicy.Versioned
                     )
@@ -190,7 +190,7 @@ type BlobUserSchemaStore(dataObjectStore: IDataObjectStore, auditLog: IAuditLog 
                         emit
                             scopeId
                             (SchemaChanged {
-                                UserId = actorUserId
+                                UserId = UserId actorUserId.Value
                                 ScopeId = scopeId
                                 SchemaId = committed.SchemaId
                                 Version = newVersion
@@ -207,7 +207,7 @@ type BlobUserSchemaStore(dataObjectStore: IDataObjectStore, auditLog: IAuditLog 
                             emit
                                 scopeId
                                 (SchemaApproved {
-                                    UserId = actorUserId
+                                    UserId = UserId actorUserId.Value
                                     ScopeId = scopeId
                                     SchemaId = committed.SchemaId
                                     Version = newVersion
@@ -292,7 +292,7 @@ type BlobUserSchemaStore(dataObjectStore: IDataObjectStore, auditLog: IAuditLog 
                         emit
                             scopeId
                             (SchemaChanged {
-                                UserId = actorUserId
+                                UserId = UserId actorUserId.Value
                                 ScopeId = scopeId
                                 SchemaId = schemaId
                                 Version = 0
@@ -350,7 +350,7 @@ type BlobUserSchemaStore(dataObjectStore: IDataObjectStore, auditLog: IAuditLog 
                                         o.ObjectId,
                                         Encoding.UTF8.GetBytes migrated,
                                         schemaId,
-                                        actorUserId,
+                                        actorUserId.Value,
                                         o.Metadata,
                                         VersioningPolicy.Versioned
                                     )
@@ -369,7 +369,7 @@ type BlobUserSchemaStore(dataObjectStore: IDataObjectStore, auditLog: IAuditLog 
                         emit
                             scopeId
                             (SchemaChanged {
-                                UserId = actorUserId
+                                UserId = UserId actorUserId.Value
                                 ScopeId = scopeId
                                 SchemaId = schemaId
                                 Version = committed.Version

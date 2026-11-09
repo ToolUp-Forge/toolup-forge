@@ -147,7 +147,7 @@ let refusalPayload
     let policy = ModuleGrantPolicyRegistry.resolve registry moduleName
 
     {
-        UserId = userId
+        UserId = UserId userId
         ModuleName = moduleName
         DeclaredPolicy = GrantPolicy.toToken policy
         InertReason = GrantPolicy.inertReason policy (Map.tryFind moduleName grants)
@@ -228,7 +228,7 @@ type CounterpartyConsentOracle =
     /// `true` only when consent is live for this exact grant under this
     /// exact party, verified NOW. Async because resolving it is a store
     /// read plus a signature check (GP 12 rule 2).
-    abstract IsConsentLive: teamId: string * subjectId: string * moduleName: string * party: PartyRef -> Async<bool>
+    abstract IsConsentLive: teamId: TeamId * subjectId: string * moduleName: string * party: PartyRef -> Async<bool>
 
 module CounterpartyConsentOracle =
     /// The pre-552 oracle: nothing is ever consented. What a deployment
@@ -403,7 +403,7 @@ let private validateEntry
                 // without a record is a grant nobody actually wrote.
                 let record = records |> Map.tryFind userId |> Option.bind (Map.tryFind moduleName)
 
-                let! consented = consent.IsConsentLive(teamId, userId, moduleName, party)
+                let! consented = consent.IsConsentLive(TeamId teamId, userId, moduleName, party)
 
                 if consented && isCounterpartyRecordAdequate policy record then
                     return Ok()
@@ -609,7 +609,7 @@ type GrantPolicyPermissionStore
                         | Some _ as found -> return found
                         | None ->
                             match!
-                                validateEntry registry consent teamId permissions.Grants userId moduleName perms
+                                validateEntry registry consent teamId.Value permissions.Grants userId moduleName perms
                             with
                             | Ok() -> return None
                             | Error e -> return Some(userId, moduleName, e)
@@ -617,7 +617,7 @@ type GrantPolicyPermissionStore
                     (async { return None })
 
             match entryFailure with
-            | Some(userId, moduleName, e) -> return refuse userId moduleName e teamId
+            | Some(userId, moduleName, e) -> return refuse userId moduleName e teamId.Value
             | None ->
                 match validateDefaults registry previous.Defaults permissions.Defaults with
                 | Error e ->
@@ -627,7 +627,7 @@ type GrantPolicyPermissionStore
                         | GrantRefusal.CounterpartyApprovalUnavailable(m, _) -> m
                         | _ -> ""
 
-                    return refuse "" moduleName e teamId
+                    return refuse "" moduleName e teamId.Value
                 | Ok() ->
                     let! written = inner.SetTeamPermissions(teamId, permissions)
 
@@ -641,7 +641,7 @@ type GrantPolicyPermissionStore
                             let grantRecord =
                                 permissions.Grants |> Map.tryFind userId |> Option.bind (Map.tryFind moduleName)
 
-                            recordGranted teamId userId moduleName perms grantRecord
+                            recordGranted teamId.Value userId moduleName perms grantRecord
                     | Error _ -> ()
 
                     return written
@@ -671,9 +671,11 @@ type GrantPolicyPermissionStore
                     let! existing = inner.GetTeamPermissions teamId
 
                     let existingRecord =
-                        existing.Grants |> Map.tryFind userId |> Option.bind (Map.tryFind moduleName)
+                        existing.Grants
+                        |> Map.tryFind userId.Value
+                        |> Option.bind (Map.tryFind moduleName)
 
-                    let! consented = consent.IsConsentLive(teamId, userId, moduleName, party)
+                    let! consented = consent.IsConsentLive(teamId, userId.Value, moduleName, party)
 
                     if consented && isCounterpartyRecordAdequate policy existingRecord then
                         let! written = inner.SetMemberPermissions(teamId, userId, moduleName, permissions)
@@ -683,19 +685,20 @@ type GrantPolicyPermissionStore
                         // row. The record is the one already on the
                         // document: this path cannot create one.
                         match written with
-                        | Ok() -> recordGranted teamId userId moduleName permissions existingRecord
+                        | Ok() -> recordGranted teamId.Value userId.Value moduleName permissions existingRecord
                         | Error _ -> ()
 
                         return written
                     elif consented then
-                        return refuse userId moduleName (GrantRefusal.UnbackedGrant(moduleName, policy)) teamId
+                        return
+                            refuse userId.Value moduleName (GrantRefusal.UnbackedGrant(moduleName, policy)) teamId.Value
                     else
                         return
                             refuse
-                                userId
+                                userId.Value
                                 moduleName
                                 (GrantRefusal.CounterpartyApprovalUnavailable(moduleName, party))
-                                teamId
+                                teamId.Value
                 | policy ->
                     // An adequate record may already exist (a re-grant of
                     // an already-consented module), in which case the
@@ -704,7 +707,9 @@ type GrantPolicyPermissionStore
                     let! existing = inner.GetTeamPermissions teamId
 
                     let record =
-                        existing.Grants |> Map.tryFind userId |> Option.bind (Map.tryFind moduleName)
+                        existing.Grants
+                        |> Map.tryFind userId.Value
+                        |> Option.bind (Map.tryFind moduleName)
 
                     if isBacked policy record then
                         let! written = inner.SetMemberPermissions(teamId, userId, moduleName, permissions)
@@ -713,13 +718,17 @@ type GrantPolicyPermissionStore
                         // arm above: the policy question is a no-op on a
                         // re-grant, the authority question is not.
                         match written with
-                        | Ok() -> recordGranted teamId userId moduleName permissions record
+                        | Ok() -> recordGranted teamId.Value userId.Value moduleName permissions record
                         | Error _ -> ()
 
                         return written
                     else
                         return
-                            refuse userId moduleName (GrantRefusal.AcknowledgementRequired(moduleName, policy)) teamId
+                            refuse
+                                userId.Value
+                                moduleName
+                                (GrantRefusal.AcknowledgementRequired(moduleName, policy))
+                                teamId.Value
         }
 
         member _.SetTeamDefaults(teamId, defaults) = async {
@@ -733,7 +742,7 @@ type GrantPolicyPermissionStore
                     | GrantRefusal.CounterpartyApprovalUnavailable(m, _) -> m
                     | _ -> ""
 
-                return refuse "" moduleName e teamId
+                return refuse "" moduleName e teamId.Value
             | Ok() -> return! inner.SetTeamDefaults(teamId, defaults)
         }
 
@@ -763,7 +772,7 @@ module PermissionGrants =
             match evaluateGrant policy request.ModuleName request.SubjectId request.Permissions request.Evidence with
             | Error refusal -> return Error refusal
             | Ok recordOpt ->
-                let! existing = store.GetTeamPermissions request.TeamId
+                let! existing = store.GetTeamPermissions(TeamId request.TeamId)
 
                 let priorForUser =
                     existing.Members
@@ -803,7 +812,7 @@ module PermissionGrants =
 
                 let! written =
                     store.SetTeamPermissions(
-                        request.TeamId,
+                        TeamId request.TeamId,
                         {
                             existing with
                                 Members = updatedMembers
@@ -876,7 +885,7 @@ module PermissionGrants =
         (moduleName: string)
         : Async<Result<unit, string>> =
         async {
-            let! existing = store.GetTeamPermissions teamId
+            let! existing = store.GetTeamPermissions(TeamId teamId)
 
             let record =
                 existing.Grants |> Map.tryFind subjectId |> Option.bind (Map.tryFind moduleName)
@@ -901,7 +910,7 @@ module PermissionGrants =
 
                 return!
                     store.SetTeamPermissions(
-                        teamId,
+                        TeamId teamId,
                         {
                             existing with
                                 Grants = existing.Grants |> Map.add subjectId forUser

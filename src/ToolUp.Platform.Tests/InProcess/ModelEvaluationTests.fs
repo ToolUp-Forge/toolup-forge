@@ -608,7 +608,7 @@ let private jobCtx (payload: string) : JobContext = {
     Attempt = 1
     Trigger = Manual
     Scope = ToolUp.Platform.ResolvedScope.anonymous
-    TriggerSource = ScheduledManually "system"
+    TriggerSource = ScheduledManually(UserId "system")
     ScheduledAt = DateTime.UtcNow
     RunningAt = DateTime.UtcNow
     Payload = payload
@@ -1087,7 +1087,9 @@ let tests =
 
             // Approve the LOSER as the incumbent champion (Owner — the human
             // gate), then promote the winner through the gate: permitted.
-            match! stack.Registry.TransitionStatus("team-1", loser, ModelArtifactStatus.Approved, Owner, "alice") with
+            match!
+                stack.Registry.TransitionStatus("team-1", loser, ModelArtifactStatus.Approved, Owner, UserId "alice")
+            with
             | Error e -> failtestf "champion approval failed: %s" (ModelRegistryError.describe e)
             | Ok _ -> ()
 
@@ -1135,7 +1137,9 @@ let tests =
                     ChampionChallengerPolicy.strictImprovement
 
             // Approve the WINNER as champion; the loser cannot pass the gate.
-            match! stack.Registry.TransitionStatus("team-1", winner, ModelArtifactStatus.Approved, Owner, "alice") with
+            match!
+                stack.Registry.TransitionStatus("team-1", winner, ModelArtifactStatus.Approved, Owner, UserId "alice")
+            with
             | Error e -> failtestf "champion approval failed: %s" (ModelRegistryError.describe e)
             | Ok _ -> ()
 

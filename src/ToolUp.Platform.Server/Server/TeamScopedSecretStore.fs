@@ -62,7 +62,7 @@ module TeamSecretKey =
     /// `team-{teamId}` shape `AccessContext.configScope` and the
     /// `ISecretStore` doc comment both name.
     let container (teamId: string) =
-        ScopeKey.container (ScopeKey.Team teamId)
+        ScopeKey.container (ScopeKey.Team(TeamId teamId))
 
     /// The at-rest key for `key` under `teamId`. Length-tagged so no
     /// two `(teamId, key)` pairs can produce the same string — see the

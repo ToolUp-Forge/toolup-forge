@@ -76,7 +76,7 @@ module ScimConfig =
 
     let create (teamId: string) : ScimConfig = {
         TeamId = teamId
-        SecretScope = ScopeKey.container (ScopeKey.Team teamId)
+        SecretScope = ScopeKey.container (ScopeKey.Team(TeamId teamId))
         TokenKey = DefaultTokenKey
         Mapping = ScimAttributeMapping.defaults
         BaseUrl = None
@@ -180,7 +180,7 @@ let private toScimGroup (deps: ScimDeps) (team: TeamInfo) (members: TeamMembersh
 // ─── Reads ───────────────────────────────────────────────────────────
 
 let private members (deps: ScimDeps) =
-    deps.Teams.GetTeamMembers deps.Config.TeamId
+    deps.Teams.GetTeamMembers(TeamId deps.Config.TeamId)
 
 /// `GET /scim/v2/Users`. The filter is applied BEFORE pagination, which
 /// is what RFC 7644 §3.4.2 requires and what makes the IdP's
@@ -218,7 +218,7 @@ let listUsers (deps: ScimDeps) (page: ScimPage) (filter: ScimFilter) : Async<Res
 }
 
 let getUser (deps: ScimDeps) (userId: string) : Async<Result<string, ScimError>> = async {
-    let! role = deps.Teams.GetMemberRole(deps.Config.TeamId, userId)
+    let! role = deps.Teams.GetMemberRole(TeamId deps.Config.TeamId, UserId userId)
 
     match role with
     | None -> return Error(ScimError.notFound $"No SCIM User resource with id '{userId}'")
@@ -240,7 +240,7 @@ let listGroups (deps: ScimDeps) (page: ScimPage) (filter: ScimFilter) : Async<Re
                     "externalId eq — this service provider does not persist externalId; filter on displayName"
             )
     | _ ->
-        let! team = deps.Teams.GetTeam deps.Config.TeamId
+        let! team = deps.Teams.GetTeam(TeamId deps.Config.TeamId)
 
         match team with
         | None -> return Ok(ScimJson.encodeGroupList page 0 [])
@@ -267,7 +267,7 @@ let getGroup (deps: ScimDeps) (groupId: string) : Async<Result<string, ScimError
     if groupId <> deps.Config.TeamId then
         return Error(ScimError.notFound $"No SCIM Group resource with id '{groupId}'")
     else
-        let! team = deps.Teams.GetTeam groupId
+        let! team = deps.Teams.GetTeam(TeamId groupId)
 
         match team with
         | None -> return Error(ScimError.notFound $"No SCIM Group resource with id '{groupId}'")
@@ -284,12 +284,12 @@ let getGroup (deps: ScimDeps) (groupId: string) : Async<Result<string, ScimError
 /// uniqueness`, which is the shape RFC 7644 §3.3 defines and which
 /// Entra and Okta both handle by switching to an update.
 let private addMember (deps: ScimDeps) (userId: string) (role: TeamRole) : Async<Result<unit, ScimError>> = async {
-    let! existing = deps.Teams.GetMemberRole(deps.Config.TeamId, userId)
+    let! existing = deps.Teams.GetMemberRole(TeamId deps.Config.TeamId, UserId userId)
 
     match existing with
     | Some _ -> return Error(ScimError.uniqueness $"User '{userId}' is already provisioned in this group")
     | None ->
-        let! result = deps.Teams.AddMember(deps.Config.TeamId, userId, role)
+        let! result = deps.Teams.AddMember(TeamId deps.Config.TeamId, UserId userId, role)
 
         match result with
         | Error e -> return Error(ScimError.invalidValue e)
@@ -297,9 +297,9 @@ let private addMember (deps: ScimDeps) (userId: string) (role: TeamRole) : Async
             audit
                 deps
                 (MemberAdded {
-                    UserId = ScimActorId
-                    TeamId = deps.Config.TeamId
-                    AffectedUserId = userId
+                    UserId = UserId ScimActorId
+                    TeamId = TeamId deps.Config.TeamId
+                    AffectedUserId = UserId userId
                     Role = TeamRoles.displayName role
                 })
 
@@ -312,12 +312,12 @@ let private addMember (deps: ScimDeps) (userId: string) (role: TeamRole) : Async
 /// that silently "succeeded" at removing the last Owner would report a
 /// user as deprovisioned while their access remained.
 let private removeMember (deps: ScimDeps) (userId: string) : Async<Result<unit, ScimError>> = async {
-    let! existing = deps.Teams.GetMemberRole(deps.Config.TeamId, userId)
+    let! existing = deps.Teams.GetMemberRole(TeamId deps.Config.TeamId, UserId userId)
 
     match existing with
     | None -> return Error(ScimError.notFound $"No SCIM User resource with id '{userId}'")
     | Some _ ->
-        let! result = deps.Teams.RemoveMember(deps.Config.TeamId, userId)
+        let! result = deps.Teams.RemoveMember(TeamId deps.Config.TeamId, UserId userId)
 
         match result with
         | Error e -> return Error(ScimError.invalidValue e)
@@ -325,22 +325,22 @@ let private removeMember (deps: ScimDeps) (userId: string) : Async<Result<unit, 
             audit
                 deps
                 (MemberRemoved {
-                    UserId = ScimActorId
-                    TeamId = deps.Config.TeamId
-                    AffectedUserId = userId
+                    UserId = UserId ScimActorId
+                    TeamId = TeamId deps.Config.TeamId
+                    AffectedUserId = UserId userId
                 })
 
             return Ok()
 }
 
 let private changeRole (deps: ScimDeps) (userId: string) (newRole: TeamRole) : Async<Result<unit, ScimError>> = async {
-    let! existing = deps.Teams.GetMemberRole(deps.Config.TeamId, userId)
+    let! existing = deps.Teams.GetMemberRole(TeamId deps.Config.TeamId, UserId userId)
 
     match existing with
     | None -> return Error(ScimError.notFound $"No SCIM User resource with id '{userId}'")
     | Some oldRole when oldRole = newRole -> return Ok()
     | Some oldRole ->
-        let! result = deps.Teams.ChangeMemberRole(deps.Config.TeamId, userId, newRole)
+        let! result = deps.Teams.ChangeMemberRole(TeamId deps.Config.TeamId, UserId userId, newRole)
 
         match result with
         | Error e -> return Error(ScimError.invalidValue e)
@@ -348,9 +348,9 @@ let private changeRole (deps: ScimDeps) (userId: string) (newRole: TeamRole) : A
             audit
                 deps
                 (MemberRoleChanged {
-                    UserId = ScimActorId
-                    TeamId = deps.Config.TeamId
-                    AffectedUserId = userId
+                    UserId = UserId ScimActorId
+                    TeamId = TeamId deps.Config.TeamId
+                    AffectedUserId = UserId userId
                     OldRole = TeamRoles.displayName oldRole
                     NewRole = TeamRoles.displayName newRole
                 })
@@ -369,7 +369,7 @@ let createUser (deps: ScimDeps) (body: string) : Async<Result<string, ScimError>
         | Error message -> return Error(ScimError.invalidValue message)
         | Ok userId ->
             if not scimUser.Active then
-                let! existing = deps.Teams.GetMemberRole(deps.Config.TeamId, userId)
+                let! existing = deps.Teams.GetMemberRole(TeamId deps.Config.TeamId, UserId userId)
 
                 match existing with
                 | Some _ ->
@@ -422,7 +422,7 @@ let replaceUser (deps: ScimDeps) (userId: string) (body: string) : Async<Result<
     match ScimJson.decodeUser body with
     | Error e -> return Error e
     | Ok scimUser ->
-        let! existing = deps.Teams.GetMemberRole(deps.Config.TeamId, userId)
+        let! existing = deps.Teams.GetMemberRole(TeamId deps.Config.TeamId, UserId userId)
 
         match existing with
         | None -> return Error(ScimError.notFound $"No SCIM User resource with id '{userId}'")
@@ -479,7 +479,7 @@ let patchUser (deps: ScimDeps) (userId: string) (body: string) : Async<Result<st
     match ScimJson.decodePatch body with
     | Error e -> return Error e
     | Ok patch ->
-        let! existing = deps.Teams.GetMemberRole(deps.Config.TeamId, userId)
+        let! existing = deps.Teams.GetMemberRole(TeamId deps.Config.TeamId, UserId userId)
 
         match existing with
         | None -> return Error(ScimError.notFound $"No SCIM User resource with id '{userId}'")
@@ -520,7 +520,7 @@ let patchGroup (deps: ScimDeps) (groupId: string) (body: string) : Async<Result<
         match ScimJson.decodePatch body with
         | Error e -> return Error e
         | Ok patch ->
-            let! team = deps.Teams.GetTeam groupId
+            let! team = deps.Teams.GetTeam(TeamId groupId)
 
             match team with
             | None -> return Error(ScimError.notFound $"No SCIM Group resource with id '{groupId}'")
@@ -541,7 +541,7 @@ let patchGroup (deps: ScimDeps) (groupId: string) (body: string) : Async<Result<
                             // `remove` with the target in the path —
                             // both Entra and Okta deprovision this way.
                             | PatchRemove, Some(MemberValuePath target), _ ->
-                                let! existing = deps.Teams.GetMemberRole(groupId, target)
+                                let! existing = deps.Teams.GetMemberRole(TeamId groupId, UserId target)
 
                                 match existing with
                                 | None -> return Ok() // already absent — idempotent
@@ -551,7 +551,7 @@ let patchGroup (deps: ScimDeps) (groupId: string) (body: string) : Async<Result<
                                     match xs with
                                     | [] -> return Ok()
                                     | m :: tail ->
-                                        let! present = deps.Teams.GetMemberRole(groupId, m.Value)
+                                        let! present = deps.Teams.GetMemberRole(TeamId groupId, UserId m.Value)
 
                                         match present with
                                         | None -> return! removeAll tail
@@ -576,7 +576,7 @@ let patchGroup (deps: ScimDeps) (groupId: string) (body: string) : Async<Result<
                                                         $"Nested groups are not supported; member '{m.Value}' is of type Group"
                                                 )
                                         else
-                                            let! present = deps.Teams.GetMemberRole(groupId, m.Value)
+                                            let! present = deps.Teams.GetMemberRole(TeamId groupId, UserId m.Value)
 
                                             match present with
                                             | Some current when current = role -> return! addAll tail
@@ -633,7 +633,7 @@ let replaceGroup (deps: ScimDeps) (groupId: string) (body: string) : Async<Resul
         match ScimJson.decodeGroup body with
         | Error e -> return Error e
         | Ok group ->
-            let! team = deps.Teams.GetTeam groupId
+            let! team = deps.Teams.GetTeam(TeamId groupId)
 
             match team with
             | None -> return Error(ScimError.notFound $"No SCIM Group resource with id '{groupId}'")

@@ -140,17 +140,17 @@ let tests =
             let! _ = inner.Issue(mkIssue teamId "form-2" "alice")
             let! _ = inner.Issue(mkIssue teamId "form-3" "bob")
 
-            do! publishRemoved channel teamId "alice"
+            do! publishRemoved channel (TeamId teamId) (UserId "alice")
 
             let! revoked =
                 pollUntil deliveryTimeout (fun () -> async {
-                    let! aliceClaims = inner.ListByIssuer(teamId, "alice")
+                    let! aliceClaims = inner.ListByIssuer(teamId, UserId "alice")
                     return not aliceClaims.IsEmpty && (aliceClaims |> List.forall _.Revoked)
                 })
 
             Expect.isTrue revoked "alice's claims all revoked within timeout"
 
-            let! bobClaims = inner.ListByIssuer(teamId, "bob")
+            let! bobClaims = inner.ListByIssuer(teamId, UserId "bob")
             Expect.equal bobClaims.Length 1 "bob still has his claim"
             Expect.isFalse (bobClaims |> List.exists _.Revoked) "bob's claim is untouched"
         }
@@ -163,7 +163,7 @@ let tests =
             let! _ = inner.Issue(mkIssue teamId "form-a" "carol")
             let! _ = inner.Issue(mkIssue teamId "form-b" "carol")
 
-            do! publishRemoved channel teamId "carol"
+            do! publishRemoved channel (TeamId teamId) (UserId "carol")
 
             let! audited = pollUntil deliveryTimeout (fun () -> async { return audit.ShareTokenRevocations.Length = 2 })
 
@@ -173,7 +173,7 @@ let tests =
 
             Expect.all
                 revocations
-                (fun (scope, p) -> scope = teamId && p.UserId = RevocationActor)
+                (fun (scope, p) -> scope = teamId && p.UserId = UserId RevocationActor)
                 "every revocation audited under the team scope with the system actor"
 
             let resources = revocations |> List.map (fun (_, p) -> p.ResourceId) |> List.sort
@@ -187,7 +187,7 @@ let tests =
 
             let! _ = inner.Issue(mkIssue teamId "form-x" "dave")
 
-            do! publishRemoved channel teamId "dave"
+            do! publishRemoved channel (TeamId teamId) (UserId "dave")
 
             let! firstPass =
                 pollUntil deliveryTimeout (fun () -> async { return audit.ShareTokenRevocations.Length = 1 })
@@ -197,12 +197,12 @@ let tests =
             // Re-deliver the identical event. The handler re-enumerates,
             // finds the claim already revoked, filters it out, and issues
             // no Revoke — so no second audit event is emitted.
-            do! publishRemoved channel teamId "dave"
+            do! publishRemoved channel (TeamId teamId) (UserId "dave")
             do! Async.Sleep 300
 
             Expect.equal audit.ShareTokenRevocations.Length 1 "no second audit event on redelivery"
 
-            let! claims = inner.ListByIssuer(teamId, "dave")
+            let! claims = inner.ListByIssuer(teamId, UserId "dave")
             Expect.equal claims.Length 1 "still exactly one claim"
             Expect.isTrue (claims |> List.forall _.Revoked) "claim remains revoked"
         }
@@ -225,8 +225,8 @@ let tests =
                     channel.Publish(
                         NotificationKind.PlatformReservedScope,
                         MembershipChanged {
-                            TeamId = teamId
-                            AffectedUserId = "erin"
+                            TeamId = TeamId teamId
+                            AffectedUserId = UserId "erin"
                             ChangeKind = kind
                             PublishedAt = DateTime.UtcNow
                         }
@@ -234,7 +234,7 @@ let tests =
 
             do! Async.Sleep 300
 
-            let! claims = inner.ListByIssuer(teamId, "erin")
+            let! claims = inner.ListByIssuer(teamId, UserId "erin")
             Expect.equal claims.Length 1 "claim still present"
             Expect.isFalse (claims |> List.exists _.Revoked) "no revocation from non-Removed events"
             Expect.equal audit.ShareTokenRevocations.Length 0 "no audit events from non-Removed events"
@@ -248,10 +248,10 @@ let tests =
 
             (decorator :> IDisposable).Dispose()
 
-            do! publishRemoved channel teamId "frank"
+            do! publishRemoved channel (TeamId teamId) (UserId "frank")
             do! Async.Sleep 300
 
-            let! claims = inner.ListByIssuer(teamId, "frank")
+            let! claims = inner.ListByIssuer(teamId, UserId "frank")
             Expect.isFalse (claims |> List.exists _.Revoked) "no revocation after Dispose unsubscribed the handler"
             Expect.equal audit.ShareTokenRevocations.Length 0 "no audit events after Dispose"
         }

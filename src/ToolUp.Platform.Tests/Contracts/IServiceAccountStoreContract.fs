@@ -240,13 +240,13 @@ let tests (name: string) (factory: unit -> IServiceAccountStore * string * strin
             let! account = createAccount store scopeA "ci" readOnly
             let! minted = mint store account "deploy-key" None
 
-            let! first = store.RevokeToken(scopeA, minted.Record.TokenId, "alice")
+            let! first = store.RevokeToken(scopeA, minted.Record.TokenId, UserId "alice")
             okOrFail "revoke" first |> ignore
 
             let! result = store.ValidateToken minted.Secret
             Expect.equal (errOrFail "revoked" result) ServiceAccountError.RevokedToken "a revoked token stops working"
 
-            let! second = store.RevokeToken(scopeA, minted.Record.TokenId, "alice")
+            let! second = store.RevokeToken(scopeA, minted.Record.TokenId, UserId "alice")
             Expect.isOk (Result.map ignore second) "revoking twice is a success, not an error"
         }
 
@@ -257,7 +257,7 @@ let tests (name: string) (factory: unit -> IServiceAccountStore * string * strin
             let! first = mint store account "key-one" None
             let! second = mint store account "key-two" None
 
-            let! disabled = store.SetStatus(scopeA, account.AccountId, ServiceAccountStatus.Disabled, "alice")
+            let! disabled = store.SetStatus(scopeA, account.AccountId, ServiceAccountStatus.Disabled, UserId "alice")
             okOrFail "disable" disabled |> ignore
 
             let! firstResult = store.ValidateToken first.Secret
@@ -280,8 +280,8 @@ let tests (name: string) (factory: unit -> IServiceAccountStore * string * strin
             let! account = createAccount store scopeA "ci" readOnly
             let! minted = mint store account "deploy-key" None
 
-            let! _ = store.SetStatus(scopeA, account.AccountId, ServiceAccountStatus.Disabled, "alice")
-            let! _ = store.SetStatus(scopeA, account.AccountId, ServiceAccountStatus.Active, "alice")
+            let! _ = store.SetStatus(scopeA, account.AccountId, ServiceAccountStatus.Disabled, UserId "alice")
+            let! _ = store.SetStatus(scopeA, account.AccountId, ServiceAccountStatus.Active, UserId "alice")
 
             let! result = store.ValidateToken minted.Secret
 
@@ -295,7 +295,7 @@ let tests (name: string) (factory: unit -> IServiceAccountStore * string * strin
         <| async {
             let store, scopeA, _ = factory ()
             let! account = createAccount store scopeA "ci" readOnly
-            let! _ = store.SetStatus(scopeA, account.AccountId, ServiceAccountStatus.Disabled, "alice")
+            let! _ = store.SetStatus(scopeA, account.AccountId, ServiceAccountStatus.Disabled, UserId "alice")
 
             let! result =
                 store.MintToken {
@@ -333,7 +333,7 @@ let tests (name: string) (factory: unit -> IServiceAccountStore * string * strin
             let! account = createAccount store scopeA "a-ci" readOnly
             let! minted = mint store account "deploy-key" None
 
-            let! wrongScope = store.RevokeToken(scopeB, minted.Record.TokenId, "mallory")
+            let! wrongScope = store.RevokeToken(scopeB, minted.Record.TokenId, UserId "mallory")
             Expect.isError (Result.map ignore wrongScope) "scope B cannot name scope A's token"
 
             let! stillValid = store.ValidateToken minted.Secret
@@ -361,7 +361,7 @@ let tests (name: string) (factory: unit -> IServiceAccountStore * string * strin
             let! account = createAccount store scopeA "ci" readWrite
             let! minted = mint store account "deploy-key" None
 
-            let! narrowed = store.SetPermissions(scopeA, account.AccountId, readOnly, "alice")
+            let! narrowed = store.SetPermissions(scopeA, account.AccountId, readOnly, UserId "alice")
             okOrFail "narrow" narrowed |> ignore
 
             let! validated = store.ValidateToken minted.Secret
@@ -379,7 +379,7 @@ let tests (name: string) (factory: unit -> IServiceAccountStore * string * strin
             let! account = createAccount store scopeA "ci" readOnly
             let! minted = mint store account "deploy-key" None
 
-            let! widened = store.SetPermissions(scopeA, account.AccountId, readWrite, "alice")
+            let! widened = store.SetPermissions(scopeA, account.AccountId, readWrite, UserId "alice")
             okOrFail "widen" widened |> ignore
 
             let! validated = store.ValidateToken minted.Secret
@@ -406,7 +406,7 @@ let tests (name: string) (factory: unit -> IServiceAccountStore * string * strin
             let store, scopeA, _ = factory ()
             let! account = createAccount store scopeA "ci" readOnly
 
-            let! result = store.SetPermissions(scopeA, account.AccountId, Map.empty, "alice")
+            let! result = store.SetPermissions(scopeA, account.AccountId, Map.empty, UserId "alice")
 
             Expect.equal
                 (errOrFail "empty update" result)
@@ -419,7 +419,7 @@ let tests (name: string) (factory: unit -> IServiceAccountStore * string * strin
             let store, scopeA, scopeB = factory ()
             let! account = createAccount store scopeA "a-ci" readOnly
 
-            let! result = store.SetPermissions(scopeB, account.AccountId, readWrite, "mallory")
+            let! result = store.SetPermissions(scopeB, account.AccountId, readWrite, UserId "mallory")
 
             Expect.isError (Result.map ignore result) "authority cannot be granted across a scope boundary"
         }

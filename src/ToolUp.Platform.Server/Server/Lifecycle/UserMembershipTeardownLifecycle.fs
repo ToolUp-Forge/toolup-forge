@@ -97,9 +97,9 @@ let hook: TenantHook<TeardownSubstrate> = {
                 // Snapshot the affected teams BEFORE the purge — the audit
                 // trail records one MemberRemoved per stripped team, and the
                 // membership rows are gone afterwards.
-                let! teams = store.GetTeamsForUser userId
+                let! teams = store.GetTeamsForUser(UserId userId)
 
-                match! store.PurgeUser userId with
+                match! store.PurgeUser(UserId userId) with
                 | Error err -> return LifecycleHookResult.Failed err
                 | Ok() ->
                     match substrate.Audit with
@@ -109,9 +109,9 @@ let hook: TenantHook<TeardownSubstrate> = {
                                 auditLog.Record(
                                     team.TeamId,
                                     MemberRemoved {
-                                        UserId = actorUserId
-                                        TeamId = team.TeamId
-                                        AffectedUserId = userId
+                                        UserId = UserId actorUserId
+                                        TeamId = TeamId team.TeamId
+                                        AffectedUserId = UserId userId
                                     }
                                 )
                     | None -> ()
@@ -149,7 +149,7 @@ let hook: TenantHook<TeardownSubstrate> = {
         Some(fun substrate scopeId _ -> async {
             match ScopeId.parse scopeId with
             | ScopeKind.User userId ->
-                let! teams = substrate.Teams.GetTeamsForUser userId
+                let! teams = substrate.Teams.GetTeamsForUser(UserId userId)
                 return teams.Length, sprintf "%d team membership row(s) would be stripped" teams.Length
             | ScopeKind.Team _
             | ScopeKind.Other _ -> return 0, "not a user scope — nothing to tear down"

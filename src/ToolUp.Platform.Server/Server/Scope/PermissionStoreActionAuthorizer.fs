@@ -49,7 +49,7 @@ module PermissionStoreActionAuthorizer =
         async {
             let! effective =
                 match ctx.Subject with
-                | TeamMember(userId, teamId) -> store.GetEffectivePermissions(userId, teamId)
+                | TeamMember(userId, teamId) -> store.GetEffectivePermissions(UserId userId, TeamId teamId)
                 | _ -> async { return ctx.ModulePermissions }
 
             let granted =
@@ -71,7 +71,7 @@ module PermissionStoreActionAuthorizer =
         | None ->
             return AuthorizationDecision.Deny "action requires the premium tier but no tier provider is registered"
         | Some c ->
-            let! status = c.GetPremiumStatus ctx.UserId
+            let! status = c.GetPremiumStatus(UserId ctx.UserId)
 
             match status with
             | Premium _ -> return AuthorizationDecision.Allow

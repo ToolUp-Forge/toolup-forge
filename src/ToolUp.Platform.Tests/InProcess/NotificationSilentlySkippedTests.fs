@@ -82,7 +82,7 @@ let tests =
             auditLog.Record(
                 payload.ScopeId,
                 UserLoggedIn {
-                    UserId = "alice"
+                    UserId = UserId "alice"
                     AuthProvider = "Header"
                 }
             )

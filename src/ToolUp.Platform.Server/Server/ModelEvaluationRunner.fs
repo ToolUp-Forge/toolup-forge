@@ -675,7 +675,7 @@ type ChampionChallengerGate
                                 challengerKeyHash,
                                 ModelArtifactStatus.Approved,
                                 callerRole,
-                                actorUserId
+                                (UserId actorUserId)
                             )
                         with
                         | Ok artifact -> return Ok artifact
@@ -690,7 +690,7 @@ type ChampionChallengerGate
                                 ModelArtifactTransitionDenied {
                                     CompositeKeyHash = challengerKeyHash
                                     AttemptedStatus = ModelArtifactStatus.name ModelArtifactStatus.Approved
-                                    ActorUserId = actorUserId
+                                    ActorUserId = UserId actorUserId
                                     Reason = "champion-challenger gate: " + PromotionVerdict.describe verdict
                                     ScopeId = scopeId
                                 }

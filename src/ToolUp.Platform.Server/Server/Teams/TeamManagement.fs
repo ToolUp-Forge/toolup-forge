@@ -14,14 +14,14 @@ open ToolUp.Platform.Infra
 // same layout and must not mirror the literals.
 
 let internal platformContainer = ScopeKey.PlatformContainer
-let internal teamBlobName teamId = $"teams/{teamId}.json"
-let internal membershipBlobName userId = $"memberships/{userId}.json"
-let internal activeTeamBlobName userId = $"active-team/{userId}.txt"
+let internal teamBlobName (teamId: TeamId) = $"teams/{teamId.Value}.json"
+let internal membershipBlobName (userId: UserId) = $"memberships/{userId.Value}.json"
+let internal activeTeamBlobName (userId: UserId) = $"active-team/{userId.Value}.txt"
 
 // ─── User membership record (stored per user) ───────────────────
 
 type StoredMembership = {
-    TeamId: string
+    TeamId: TeamId
     Role: TeamRole
     JoinedAt: DateTime
 }
@@ -92,7 +92,7 @@ module internal Json =
         [
             for elem in doc.RootElement.EnumerateArray() do
                 {
-                    TeamId = elem.GetProperty("teamId").GetString()
+                    TeamId = TeamId(elem.GetProperty("teamId").GetString())
                     Role = stringToRole (elem.GetProperty("role").GetString())
                     JoinedAt = DateTime.Parse(elem.GetProperty("joinedAt").GetString())
                 }
@@ -113,38 +113,38 @@ module internal Json =
 type ITeamStore =
     /// Create a new team with the given id and display name. Persists to
     /// the backing store. Returns the constructed `TeamInfo` on success.
-    abstract CreateTeam: teamId: string * name: string -> Async<Result<TeamInfo, string>>
+    abstract CreateTeam: teamId: TeamId * name: string -> Async<Result<TeamInfo, string>>
     /// Delete a team's metadata blob. Used to roll back a half-created
     /// team when the owner-membership write fails, so a partial create
     /// can't leave an orphan (owner-less, inaccessible) team behind.
-    abstract DeleteTeam: teamId: string -> Async<Result<unit, string>>
+    abstract DeleteTeam: teamId: TeamId -> Async<Result<unit, string>>
     /// Look up a team by id. `None` when the team does not exist.
-    abstract GetTeam: teamId: string -> Async<TeamInfo option>
+    abstract GetTeam: teamId: TeamId -> Async<TeamInfo option>
     /// List every team in the store. Used by admin surfaces and diagnostics.
     abstract ListTeams: unit -> Async<TeamInfo list>
     /// Add `userId` to `teamId` with `role`. Returns `Error` when the user
     /// is already a member.
-    abstract AddMember: teamId: string * userId: string * role: TeamRole -> Async<Result<unit, string>>
+    abstract AddMember: teamId: TeamId * userId: UserId * role: TeamRole -> Async<Result<unit, string>>
     /// Remove `userId` from `teamId`. Refuses to remove the last Owner —
     /// a team without an Owner would be unmanageable. Clears the user's
     /// active-team pointer when it matched `teamId`.
-    abstract RemoveMember: teamId: string * userId: string -> Async<Result<unit, string>>
+    abstract RemoveMember: teamId: TeamId * userId: UserId -> Async<Result<unit, string>>
     /// Change an existing member's role on a team. Idempotent when the
     /// role is unchanged. Refuses to demote the last Owner.
-    abstract ChangeMemberRole: teamId: string * userId: string * newRole: TeamRole -> Async<Result<unit, string>>
+    abstract ChangeMemberRole: teamId: TeamId * userId: UserId * newRole: TeamRole -> Async<Result<unit, string>>
     /// List every team `userId` is a member of.
-    abstract GetTeamsForUser: userId: string -> Async<TeamInfo list>
+    abstract GetTeamsForUser: userId: UserId -> Async<TeamInfo list>
     /// List every member of `teamId` as a `TeamMembership` record.
-    abstract GetTeamMembers: teamId: string -> Async<TeamMembership list>
+    abstract GetTeamMembers: teamId: TeamId -> Async<TeamMembership list>
     /// Look up `userId`'s role on `teamId`. `None` when the user is not
     /// a member.
-    abstract GetMemberRole: teamId: string * userId: string -> Async<TeamRole option>
+    abstract GetMemberRole: teamId: TeamId * userId: UserId -> Async<TeamRole option>
     /// Return the user's currently-selected active team id. `None` when
     /// the user has no active team set.
-    abstract GetActiveTeam: userId: string -> Async<string option>
+    abstract GetActiveTeam: userId: UserId -> Async<TeamId option>
     /// Set the user's active team. Returns `Error` when the user is not
     /// a member of the requested team.
-    abstract SetActiveTeam: userId: string * teamId: string -> Async<Result<unit, string>>
+    abstract SetActiveTeam: userId: UserId * teamId: TeamId -> Async<Result<unit, string>>
     /// Set a team's archived flag. Archiving (`archived = true`) also
     /// bumps every member whose active-team pointer is this team to the
     /// no-active-team state (clears the pointer + publishes
@@ -152,13 +152,13 @@ type ITeamStore =
     /// must not remain a member's active scope. Restoring
     /// (`archived = false`) flips the flag only; members re-select the
     /// team themselves. `Error` when the team does not exist.
-    abstract SetArchived: teamId: string * archived: bool -> Async<Result<unit, string>>
+    abstract SetArchived: teamId: TeamId * archived: bool -> Async<Result<unit, string>>
     /// **Irreversibly** purge a team: delete the team record AND strip
     /// the team from every member's membership rows + clear active-team
     /// pointers referencing it. Distinct from `DeleteTeam`, which only
     /// removes the team blob (the create-rollback primitive). `Error`
     /// when the team does not exist.
-    abstract PurgeTeam: teamId: string -> Async<Result<unit, string>>
+    abstract PurgeTeam: teamId: TeamId -> Async<Result<unit, string>>
     /// **Irreversibly** purge a user's platform membership state — the
     /// user-scope twin of `PurgeTeam` (Phase 545): strip every
     /// membership row, delete the active-team pointer, and publish
@@ -168,7 +168,7 @@ type ITeamStore =
     /// purge that team first, the same unmanageable-team safeguard as
     /// `RemoveMember`. Idempotent — purging a user with no membership
     /// state returns `Ok`.
-    abstract PurgeUser: userId: string -> Async<Result<unit, string>>
+    abstract PurgeUser: userId: UserId -> Async<Result<unit, string>>
 
 // ─── TeamStore ───────────────────────────────────────────────────
 
@@ -209,7 +209,7 @@ type TeamStore(storage: IBlobStorage, notifications: INotificationChannel, logge
     // users, a `SemaphoreSlim(1, 1)` is small (~200 bytes), and a sweeper
     // would add complexity for negligible memory. If userid cardinality
     // ever grows unbounded (e.g. anonymous-user fan-out), revisit.
-    let userLocks = ConcurrentDictionary<string, SemaphoreSlim>()
+    let userLocks = ConcurrentDictionary<UserId, SemaphoreSlim>()
 
     // Guarded read-modify-write of one user's membership list, and of a
     // team record at creation. A read failure or a decode failure is an
@@ -242,7 +242,7 @@ type TeamStore(storage: IBlobStorage, notifications: INotificationChannel, logge
     /// Read-modify-write `userId`'s memberships (absent = no memberships).
     /// A storage-level failure surfaces as `Error`; nothing is written.
     let updateMemberships
-        (userId: string)
+        (userId: UserId)
         (transform: StoredMembership list -> BlobUpdate<StoredMembership list, 'R>)
         : Async<Result<'R, string>> =
         async {
@@ -256,7 +256,7 @@ type TeamStore(storage: IBlobStorage, notifications: INotificationChannel, logge
             return result |> Result.mapError BlobMapStoreError.describe
         }
 
-    let withUserLock (userId: string) (work: Async<'a>) : Async<'a> = async {
+    let withUserLock (userId: UserId) (work: Async<'a>) : Async<'a> = async {
         let sem = userLocks.GetOrAdd(userId, fun _ -> new SemaphoreSlim(1, 1))
         do! sem.WaitAsync() |> Async.AwaitTask
 
@@ -272,10 +272,10 @@ type TeamStore(storage: IBlobStorage, notifications: INotificationChannel, logge
     // re-check on every request is defense-in-depth. We log via the
     // channel's own exception path (handlers swallow on the
     // subscriber side) and proceed.
-    let publishChange (teamId: string) (userId: string) (kind: MembershipChangeKind) = async {
+    let publishChange (teamId: TeamId) (userId: UserId) (kind: MembershipChangeKind) = async {
         let payload: MembershipChangedPayload = {
-            TeamId = teamId
-            AffectedUserId = userId
+            TeamId = TeamId teamId.Value
+            AffectedUserId = UserId userId.Value
             ChangeKind = kind
             PublishedAt = DateTime.UtcNow
         }
@@ -290,7 +290,7 @@ type TeamStore(storage: IBlobStorage, notifications: INotificationChannel, logge
 
     // ── Team CRUD ────────────────────────────────────────────
 
-    member _.CreateTeam(teamId: string, name: string) = async {
+    member _.CreateTeam(teamId: TeamId, name: string) = async {
         // Fail-closed on an already-existing team blob. The team id is the
         // data partition key (`team-{teamId}`), so silently overwriting an
         // existing team would co-tenant two distinct teams onto one
@@ -300,7 +300,7 @@ type TeamStore(storage: IBlobStorage, notifications: INotificationChannel, logge
         // one id admit exactly one. A team blob that exists but cannot be
         // read or decoded is an error, never "absent, so overwrite".
         let team: TeamInfo = {
-            TeamId = teamId
+            TeamId = teamId.Value
             Name = name
             CreatedAt = DateTime.UtcNow
             Archived = false
@@ -323,9 +323,9 @@ type TeamStore(storage: IBlobStorage, notifications: INotificationChannel, logge
     /// Delete the team's metadata blob. Used by the create path to roll
     /// back a team whose owner-membership write failed; deletes only the
     /// team record (a half-created team has no members to clean up).
-    member _.DeleteTeam(teamId: string) = async { return! storage.Delete(platformContainer, teamBlobName teamId) }
+    member _.DeleteTeam(teamId: TeamId) = async { return! storage.Delete(platformContainer, teamBlobName teamId) }
 
-    member _.GetTeam(teamId: string) = async {
+    member _.GetTeam(teamId: TeamId) = async {
         let! result = storage.Download(platformContainer, teamBlobName teamId)
 
         return
@@ -358,7 +358,7 @@ type TeamStore(storage: IBlobStorage, notifications: INotificationChannel, logge
 
     // ── Membership ───────────────────────────────────────────
 
-    member private _.LoadMemberships(userId: string) = async {
+    member private _.LoadMemberships(userId: UserId) = async {
         let! result = storage.Download(platformContainer, membershipBlobName userId)
 
         return
@@ -367,7 +367,7 @@ type TeamStore(storage: IBlobStorage, notifications: INotificationChannel, logge
             | Error _ -> []
     }
 
-    member _.AddMember(teamId: string, userId: string, role: TeamRole) =
+    member _.AddMember(teamId: TeamId, userId: UserId, role: TeamRole) =
         withUserLock
             userId
             (async {
@@ -396,15 +396,15 @@ type TeamStore(storage: IBlobStorage, notifications: INotificationChannel, logge
     /// Owners? If yes, the operation must be rejected — a team
     /// without an Owner is unmanageable (no one can add members,
     /// change roles, or recover).
-    member private this.IsLastOwner(teamId: string, userId: string) : Async<bool> = async {
+    member private this.IsLastOwner(teamId: TeamId, userId: UserId) : Async<bool> = async {
         let! (members: TeamMembership list) = this.GetTeamMembers(teamId)
 
         let owners = members |> List.filter (fun m -> m.Role = Owner)
 
-        return owners.Length = 1 && owners[0].UserId = userId
+        return owners.Length = 1 && owners[0].UserId = userId.Value
     }
 
-    member this.RemoveMember(teamId: string, userId: string) =
+    member this.RemoveMember(teamId: TeamId, userId: UserId) =
         withUserLock
             userId
             (async {
@@ -477,7 +477,7 @@ type TeamStore(storage: IBlobStorage, notifications: INotificationChannel, logge
     /// `Error` when the user is not a member of the team, or when the
     /// change would leave the team with no Owners (demoting the last
     /// Owner).
-    member this.ChangeMemberRole(teamId: string, userId: string, newRole: TeamRole) =
+    member this.ChangeMemberRole(teamId: TeamId, userId: UserId, newRole: TeamRole) =
         withUserLock
             userId
             (async {
@@ -528,7 +528,7 @@ type TeamStore(storage: IBlobStorage, notifications: INotificationChannel, logge
                                 return Ok()
             })
 
-    member this.GetTeamsForUser(userId: string) = async {
+    member this.GetTeamsForUser(userId: UserId) = async {
         let! memberships = this.LoadMemberships(userId)
 
         // Bounded parallelism (cap = 32) — see `ListTeams` for rationale.
@@ -540,7 +540,7 @@ type TeamStore(storage: IBlobStorage, notifications: INotificationChannel, logge
         return teams |> Array.choose id |> Array.toList
     }
 
-    member this.GetTeamMembers(teamId: string) = async {
+    member this.GetTeamMembers(teamId: TeamId) = async {
         let! blobNames = storage.List(platformContainer, "memberships/")
 
         let! allMemberships =
@@ -556,7 +556,7 @@ type TeamStore(storage: IBlobStorage, notifications: INotificationChannel, logge
                         Json.deserializeMemberships bytes
                         |> List.filter (fun m -> m.TeamId = teamId)
                         |> List.map (fun m -> {
-                            TeamId = m.TeamId
+                            TeamId = m.TeamId.Value
                             UserId = userId
                             Role = m.Role
                             JoinedAt = m.JoinedAt
@@ -572,7 +572,7 @@ type TeamStore(storage: IBlobStorage, notifications: INotificationChannel, logge
         return allMemberships |> Array.toList |> List.collect id
     }
 
-    member this.GetMemberRole(teamId: string, userId: string) = async {
+    member this.GetMemberRole(teamId: TeamId, userId: UserId) = async {
         let! memberships = this.LoadMemberships(userId)
 
         return memberships |> List.tryFind (fun m -> m.TeamId = teamId) |> Option.map _.Role
@@ -580,7 +580,7 @@ type TeamStore(storage: IBlobStorage, notifications: INotificationChannel, logge
 
     // ── Active team ──────────────────────────────────────────
 
-    member _.GetActiveTeam(userId: string) = async {
+    member _.GetActiveTeam(userId: UserId) = async {
         let! result = storage.Download(platformContainer, activeTeamBlobName userId)
 
         return
@@ -588,17 +588,22 @@ type TeamStore(storage: IBlobStorage, notifications: INotificationChannel, logge
             | Ok bytes ->
                 let teamId = Encoding.UTF8.GetString(bytes).Trim()
 
-                if String.IsNullOrEmpty(teamId) then None else Some teamId
+                if String.IsNullOrEmpty(teamId) then
+                    None
+                else
+                    Some(TeamId teamId)
             | Error _ -> None
     }
 
-    member this.SetActiveTeam(userId: string, teamId: string) = async {
+    member this.SetActiveTeam(userId: UserId, teamId: TeamId) = async {
         let! memberships = this.LoadMemberships(userId)
 
         if memberships |> List.exists (fun m -> m.TeamId = teamId) then
             // Phase 863 — a refused write is the caller's failure, and
             // nothing is published for a change that did not happen.
-            match! storage.Upload(platformContainer, activeTeamBlobName userId, Encoding.UTF8.GetBytes(teamId)) with
+            match!
+                storage.Upload(platformContainer, activeTeamBlobName userId, Encoding.UTF8.GetBytes(teamId.Value))
+            with
             | Ok _ ->
                 do! publishChange teamId userId MembershipChangeKind.ActiveTeamSet
                 return Ok()
@@ -616,11 +621,11 @@ type TeamStore(storage: IBlobStorage, notifications: INotificationChannel, logge
     /// Phase 971 — a refused delete answers `Error` naming the pointer
     /// still at rest (both callers have a `Result` to carry it), and
     /// nothing is published for a clear that did not happen.
-    member private _.ClearActiveTeamIfMatches(userId: string, teamId: string) : Async<Result<unit, string>> = async {
+    member private _.ClearActiveTeamIfMatches(userId: UserId, teamId: TeamId) : Async<Result<unit, string>> = async {
         let! result = storage.Download(platformContainer, activeTeamBlobName userId)
 
         match result with
-        | Ok bytes when Encoding.UTF8.GetString(bytes).Trim() = teamId ->
+        | Ok bytes when Encoding.UTF8.GetString(bytes).Trim() = teamId.Value ->
             match! storage.Delete(platformContainer, activeTeamBlobName userId) with
             | Ok() ->
                 do! publishChange teamId userId MembershipChangeKind.ActiveTeamSet
@@ -630,14 +635,14 @@ type TeamStore(storage: IBlobStorage, notifications: INotificationChannel, logge
                     Error(
                         sprintf
                             "user '%s': active-team pointer %s could not be cleared: %s"
-                            userId
+                            userId.Value
                             (activeTeamBlobName userId)
                             storageError
                     )
         | _ -> return Ok()
     }
 
-    member this.SetArchived(teamId: string, archived: bool) = async {
+    member this.SetArchived(teamId: TeamId, archived: bool) = async {
         let! existing = this.GetTeam(teamId)
 
         match existing with
@@ -665,7 +670,7 @@ type TeamStore(storage: IBlobStorage, notifications: INotificationChannel, logge
 
                     let! cleared =
                         members
-                        |> List.map (fun m -> this.ClearActiveTeamIfMatches(m.UserId, teamId))
+                        |> List.map (fun m -> this.ClearActiveTeamIfMatches(UserId m.UserId, teamId))
                         |> Async.Sequential
 
                     let failures =
@@ -682,7 +687,7 @@ type TeamStore(storage: IBlobStorage, notifications: INotificationChannel, logge
                             Error(
                                 sprintf
                                     "Team '%s' was archived, but %d member(s) still have it as their active team — %s"
-                                    teamId
+                                    teamId.Value
                                     failures.Length
                                     (String.concat "; " failures)
                             )
@@ -690,7 +695,7 @@ type TeamStore(storage: IBlobStorage, notifications: INotificationChannel, logge
                     return Ok()
     }
 
-    member this.PurgeTeam(teamId: string) = async {
+    member this.PurgeTeam(teamId: TeamId) = async {
         let! existing = this.GetTeam(teamId)
 
         match existing with
@@ -707,17 +712,17 @@ type TeamStore(storage: IBlobStorage, notifications: INotificationChannel, logge
                 members
                 |> List.map (fun m ->
                     withUserLock
-                        m.UserId
+                        (UserId m.UserId)
                         (async {
                             // Phase 971 — the pointer goes BEFORE the row: the
                             // row is what lists this user as a member, so a
                             // refused pointer delete keeps it and the re-run
                             // (which re-reads the members) revisits the pointer.
-                            match! this.ClearActiveTeamIfMatches(m.UserId, teamId) with
+                            match! this.ClearActiveTeamIfMatches(UserId m.UserId, teamId) with
                             | Error e -> return Error e
                             | Ok() ->
                                 let! outcome =
-                                    updateMemberships m.UserId (fun current ->
+                                    updateMemberships (UserId m.UserId) (fun current ->
                                         let remaining = current |> List.filter (fun x -> x.TeamId <> teamId)
 
                                         if remaining.Length <> current.Length then
@@ -728,7 +733,7 @@ type TeamStore(storage: IBlobStorage, notifications: INotificationChannel, logge
                                 match outcome with
                                 | Error e -> return Error $"user '{m.UserId}': {e}"
                                 | Ok() ->
-                                    do! publishChange teamId m.UserId MembershipChangeKind.Removed
+                                    do! publishChange teamId (UserId m.UserId) MembershipChangeKind.Removed
                                     return Ok()
                         }))
                 |> Async.Sequential
@@ -753,13 +758,13 @@ type TeamStore(storage: IBlobStorage, notifications: INotificationChannel, logge
                     Error(
                         sprintf
                             "Team '%s' was not purged: %d member(s) could not be detached — %s"
-                            teamId
+                            teamId.Value
                             failures.Length
                             (String.concat "; " failures)
                     )
     }
 
-    member this.PurgeUser(userId: string) = async {
+    member this.PurgeUser(userId: UserId) = async {
         // Last-Owner safeguard: purging the sole Owner of a team would
         // leave it unmanageable — the operator must transfer ownership
         // or purge that team first. `IsLastOwner` is a cross-user scan,
@@ -779,13 +784,16 @@ type TeamStore(storage: IBlobStorage, notifications: INotificationChannel, logge
         let blocking = lastOwnerChecks |> Array.choose id |> Array.toList
 
         if not (List.isEmpty blocking) then
-            let teams = blocking |> List.map (sprintf "'%s'") |> String.concat ", "
+            let teams =
+                blocking
+                |> List.map (fun (t: TeamId) -> sprintf "'%s'" t.Value)
+                |> String.concat ", "
 
             return
                 Error(
                     sprintf
                         "Cannot purge user '%s' — they are the last Owner of team(s) %s. Transfer ownership or purge the team first."
-                        userId
+                        userId.Value
                         teams
                 )
         else
@@ -812,7 +820,7 @@ type TeamStore(storage: IBlobStorage, notifications: INotificationChannel, logge
                                 Error(
                                     sprintf
                                         "User '%s' was not purged: the active-team pointer %s could not be deleted (%s); the membership record %s was left in place so a re-run re-finds it"
-                                        userId
+                                        userId.Value
                                         (activeTeamBlobName userId)
                                         storageError
                                         (membershipBlobName userId)
@@ -830,7 +838,7 @@ type TeamStore(storage: IBlobStorage, notifications: INotificationChannel, logge
                                     Error(
                                         sprintf
                                             "User '%s' was not purged: the membership record %s could not be deleted (%s)"
-                                            userId
+                                            userId.Value
                                             (membershipBlobName userId)
                                             storageError
                                     )
@@ -916,7 +924,7 @@ module ActiveTeamPolicy =
     /// `MembershipChanged.ActiveTeamSet`, which both evicts the
     /// resolver-side active-team caches and live-switches any
     /// connected client via the `MembershipActiveTeamSet` push.
-    let ensureActiveTeam (store: ITeamStore) (userId: string) (teamId: string) : Async<unit> = async {
+    let ensureActiveTeam (store: ITeamStore) (userId: UserId) (teamId: TeamId) : Async<unit> = async {
         try
             let! current = store.GetActiveTeam userId
 
@@ -927,12 +935,15 @@ module ActiveTeamPolicy =
                 // not discarded: the comment below relies on the report.
                 match! store.SetActiveTeam(userId, teamId) with
                 | Ok() -> ()
-                | Error e -> errorReporter userId (exn (sprintf "SetActiveTeam(%s, %s) refused: %s" userId teamId e))
+                | Error e ->
+                    errorReporter
+                        userId.Value
+                        (exn (sprintf "SetActiveTeam(%s, %s) refused: %s" userId.Value teamId.Value e))
         with ex ->
             // Best-effort: don't fail the membership add. But report it —
             // the user lands in the no-active-team state (recoverable via
             // the SetActiveTeam route / onboarding surface from the
             // client), and a silent failure here is exactly the
             // "TenantScoped 401s and nobody knows why" trap.
-            errorReporter userId ex
+            errorReporter userId.Value ex
     }

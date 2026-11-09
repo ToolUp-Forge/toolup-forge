@@ -78,7 +78,7 @@ let notificationPreferenceApi (config: ServerConfig) (ctx: HttpContext) : INotif
         GetMyPreferences =
             fun () ->
                 authorised (fun s scopeId userId -> async {
-                    match! s.GetPreferences(scopeId, userId) with
+                    match! s.GetPreferences(scopeId, UserId userId) with
                     | Error e -> return Error e
                     | Ok preferences ->
                         return
@@ -94,6 +94,6 @@ let notificationPreferenceApi (config: ServerConfig) (ctx: HttpContext) : INotif
                 authorised (fun s scopeId userId -> async {
                     match UserNotificationPreferences.validate preferences with
                     | Error e -> return Error e
-                    | Ok valid -> return! s.SavePreferences(scopeId, userId, valid)
+                    | Ok valid -> return! s.SavePreferences(scopeId, UserId userId, valid)
                 })
     }

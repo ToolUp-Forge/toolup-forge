@@ -44,7 +44,7 @@ let preview
         let mutable result = Map.empty
 
         for handler in handlers |> List.sortBy _.Name do
-            let! summary = handler.Preview(scopeId, request.SubjectUserId, request.Policy)
+            let! summary = handler.Preview(scopeId, UserId request.SubjectUserId, request.Policy)
             result <- result.Add(handler.Name, summary)
 
         return result
@@ -64,7 +64,7 @@ let executeErase
         let mutable allSucceeded = true
 
         for handler in handlers |> List.sortBy _.Name do
-            let! outcome = handler.Erase(scopeId, request.SubjectUserId, request.Policy)
+            let! outcome = handler.Erase(scopeId, UserId request.SubjectUserId, request.Policy)
 
             match outcome with
             | Result.Error _ -> allSucceeded <- false
@@ -94,7 +94,7 @@ let executeExport
         let collected = System.Collections.Generic.List<ExportSegment>()
 
         for exporter in exporters |> List.sortBy _.Name do
-            let! segments = exporter.Export(scopeId, request.SubjectUserId)
+            let! segments = exporter.Export(scopeId, UserId request.SubjectUserId)
 
             for segment in segments do
                 collected.Add segment

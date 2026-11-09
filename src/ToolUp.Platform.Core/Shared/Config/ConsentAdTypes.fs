@@ -70,7 +70,7 @@ module ConsentState =
 /// UUID until [Phase 62](62-premium-claim-recognition.md) establishes
 /// an authenticated-user seam for consent state.
 type ConsentEvent = {
-    AnonymousUserId: string
+    AnonymousUserId: UserId
     Category: ConsentCategory
     Decision: ConsentDecision
     Timestamp: DateTimeOffset

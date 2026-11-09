@@ -93,8 +93,8 @@ let private invokeHook
                                 ActorUserId = actorUserId
                                 Request = request
                             }
-                        | _ -> hook.OnProvisioned(scopeId, actorUserId)
-                    | Deprovisioning -> hook.OnDeprovisioned(scopeId, actorUserId)
+                        | _ -> hook.OnProvisioned(scopeId, UserId actorUserId)
+                    | Deprovisioning -> hook.OnDeprovisioned(scopeId, UserId actorUserId)
 
                 let probeTask = Async.StartImmediateAsTask(work, cts.Token)
                 let! result = probeTask |> Async.AwaitTask
@@ -476,7 +476,7 @@ let enqueue
             // Fire it now: a `Manual` job never fires on its own. Phase 1059 —
             // a refused trigger is reported, not discarded: discarded, the
             // caller held a handle to an offboard that would never start.
-            match! scheduler.TriggerOnce(scopeId, jobId, actorUserId) with
+            match! scheduler.TriggerOnce(scopeId, jobId, UserId actorUserId) with
             | Error refusal ->
                 return
                     Error(
@@ -754,7 +754,7 @@ let previewDeprovision
                 match hook with
                 | :? ITenantLifecyclePreview as p ->
                     try
-                        return! p.OnDeprovisionPreview(scopeId, actorUserId)
+                        return! p.OnDeprovisionPreview(scopeId, UserId actorUserId)
                     with ex ->
                         // A preview should never mutate, so a throw is a
                         // bug in the hook — degrade to no-preview rather

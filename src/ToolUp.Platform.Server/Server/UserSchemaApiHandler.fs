@@ -47,7 +47,7 @@ let private isWriteAllowed (ctx: HttpContext) (accessContext: AccessContext) : A
     | TeamMember(userId, teamId) ->
         match ctx.RequestServices.GetService(typeof<ITeamStore>) with
         | :? ITeamStore as ts ->
-            let! role = ts.GetMemberRole(teamId, userId)
+            let! role = ts.GetMemberRole(TeamId teamId, UserId userId)
 
             return
                 match role with
@@ -89,9 +89,10 @@ let userSchemaApi (ctx: HttpContext) : IUserSchemaApi =
                 let! versions = store.History(scopeId, schemaId)
                 return Ok versions
             }
-        SaveSchema = fun schema -> withWrite (fun () -> store.Save(scopeId, { schema with Owner = scopeId }, actor))
+        SaveSchema =
+            fun schema -> withWrite (fun () -> store.Save(scopeId, { schema with Owner = scopeId }, UserId actor))
         MigrateSchema =
             fun (schemaId, migrations) ->
-                withWrite (fun () -> store.ExecuteMigration(scopeId, schemaId, migrations, actor))
-        DeleteSchema = fun schemaId -> withWrite (fun () -> store.Delete(scopeId, schemaId, actor))
+                withWrite (fun () -> store.ExecuteMigration(scopeId, schemaId, migrations, UserId actor))
+        DeleteSchema = fun schemaId -> withWrite (fun () -> store.Delete(scopeId, schemaId, UserId actor))
     }

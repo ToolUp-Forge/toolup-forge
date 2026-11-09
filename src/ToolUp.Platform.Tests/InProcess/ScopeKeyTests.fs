@@ -24,11 +24,11 @@ open ToolUp.Platform.Compose
 /// One row per scope shape the five mint sites produced: the key, the
 /// container it was stored under, and the bare id it was keyed on.
 let private fixture: (string * ScopeKey * string * string) list = [
-    "team (middleware, resolver, configScope)", ScopeKey.Team "acme", "team-acme", "acme"
-    "team, guid id", ScopeKey.Team "3f2a9c1e7b6d4e0f", "team-3f2a9c1e7b6d4e0f", "3f2a9c1e7b6d4e0f"
-    "team id that itself contains the prefix", ScopeKey.Team "team-x", "team-team-x", "team-x"
-    "user (middleware, resolvers, configScope, file management)", ScopeKey.User "alice", "user-alice", "alice"
-    "user, email-shaped id", ScopeKey.User "alice@example.com", "user-alice@example.com", "alice@example.com"
+    "team (middleware, resolver, configScope)", ScopeKey.Team(TeamId "acme"), "team-acme", "acme"
+    "team, guid id", ScopeKey.Team(TeamId "3f2a9c1e7b6d4e0f"), "team-3f2a9c1e7b6d4e0f", "3f2a9c1e7b6d4e0f"
+    "team id that itself contains the prefix", ScopeKey.Team(TeamId "team-x"), "team-team-x", "team-x"
+    "user (middleware, resolvers, configScope, file management)", ScopeKey.User(UserId "alice"), "user-alice", "alice"
+    "user, email-shaped id", ScopeKey.User(UserId "alice@example.com"), "user-alice@example.com", "alice@example.com"
     ("session (middleware, anonymous resolver)",
      ScopeKey.Session "0b1c2d3e-4f50-6172-8394-a5b6c7d8e9f0",
      "session-0b1c2d3e-4f50-6172-8394-a5b6c7d8e9f0",
@@ -54,7 +54,7 @@ let private claimFor (scopeId: string) : ShareTokenClaim = {
 }
 
 let private alice: AuthenticatedUser = {
-    UserId = "alice"
+    UserId = UserId "alice"
     DisplayName = "Alice"
     Email = Some "alice@example.com"
     TenantId = None
@@ -150,8 +150,8 @@ let private mintTests =
 
             let cases = [
                 AnonymousSession "s-1", ScopeKey.Session "s-1"
-                Subject.AuthenticatedUser "alice", ScopeKey.User "alice"
-                TeamMember("alice", "acme"), ScopeKey.Team "acme"
+                Subject.AuthenticatedUser "alice", ScopeKey.User(UserId "alice")
+                TeamMember("alice", "acme"), ScopeKey.Team(TeamId "acme")
                 Subject.ClaimBearer(claimFor "team-acme"), ScopeKey.Claim "team-acme"
             ]
 
@@ -177,9 +177,15 @@ let private mintTests =
 
             let claim = AccessContext.unrestricted (Subject.ClaimBearer(claimFor "survey-2026"))
 
-            Expect.equal (AccessContext.configScope team) (Some(StorageScope.ofKey true (ScopeKey.Team "acme"))) "team"
+            Expect.equal
+                (AccessContext.configScope team)
+                (Some(StorageScope.ofKey true (ScopeKey.Team(TeamId "acme"))))
+                "team"
 
-            Expect.equal (AccessContext.configScope user) (Some(StorageScope.ofKey true (ScopeKey.User "alice"))) "user"
+            Expect.equal
+                (AccessContext.configScope user)
+                (Some(StorageScope.ofKey true (ScopeKey.User(UserId "alice"))))
+                "user"
 
             Expect.equal
                 (AccessContext.configScope claim)
@@ -187,13 +193,13 @@ let private mintTests =
                 "claim"
 
             Expect.equal
-                (AccessContext.forConfigScope "bob" (StorageScope.ofKey true (ScopeKey.Team "acme"))
+                (AccessContext.forConfigScope "bob" (StorageScope.ofKey true (ScopeKey.Team(TeamId "acme")))
                  |> Option.map _.Subject)
                 (Some(TeamMember("bob", "acme")))
                 "a team scope round-trips"
 
             Expect.equal
-                (AccessContext.forConfigScope "bob" (StorageScope.ofKey true (ScopeKey.User "alice"))
+                (AccessContext.forConfigScope "bob" (StorageScope.ofKey true (ScopeKey.User(UserId "alice")))
                  |> Option.map _.Subject)
                 (Some(Subject.AuthenticatedUser "alice"))
                 "a user scope round-trips"
@@ -223,8 +229,8 @@ let private mintTests =
             let! individual = (AuthenticatedScopeResolver() :> IStorageScopeResolver).Resolve request
 
             Expect.equal anonymous (Ok(StorageScope.ofKey false (ScopeKey.Session "s-1"))) "anonymous"
-            Expect.equal ephemeral (Ok(StorageScope.ofKey false (ScopeKey.User "alice"))) "ephemeral"
-            Expect.equal individual (Ok(StorageScope.ofKey true (ScopeKey.User "alice"))) "individual"
+            Expect.equal ephemeral (Ok(StorageScope.ofKey false (ScopeKey.User(UserId "alice")))) "ephemeral"
+            Expect.equal individual (Ok(StorageScope.ofKey true (ScopeKey.User(UserId "alice")))) "individual"
         }
     ]
 
@@ -243,16 +249,16 @@ let private persistenceTests =
              [ SurfaceProfile.anonymousPersistent ],
              ScopeKey.Session "s",
              { Persist = true; Defaulted = false })
-            "a trial user", Surfaces.trial, ScopeKey.User "u", { Persist = false; Defaulted = false }
-            "an individual user", Surfaces.individual, ScopeKey.User "u", { Persist = true; Defaulted = false }
+            "a trial user", Surfaces.trial, ScopeKey.User(UserId "u"), { Persist = false; Defaulted = false }
+            "an individual user", Surfaces.individual, ScopeKey.User(UserId "u"), { Persist = true; Defaulted = false }
             ("a user under team-only Surfaces fails closed",
              Surfaces.team,
-             ScopeKey.User "u",
+             ScopeKey.User(UserId "u"),
              { Persist = false; Defaulted = true })
-            "a team", Surfaces.team, ScopeKey.Team "t", { Persist = true; Defaulted = false }
+            "a team", Surfaces.team, ScopeKey.Team(TeamId "t"), { Persist = true; Defaulted = false }
             ("a team under individual Surfaces fails closed",
              Surfaces.individual,
-             ScopeKey.Team "t",
+             ScopeKey.Team(TeamId "t"),
              { Persist = false; Defaulted = true })
             "a claim is never matched", Surfaces.anonymous, ScopeKey.Claim "c", { Persist = true; Defaulted = false }
             "the platform shard always persists",
@@ -281,13 +287,13 @@ let private auditTests =
         testCase "AuditSubject.fromScopeId reads through the one parser"
         <| fun _ ->
             let rows = [
-                "_platform", UserAudit AuditSubject.PlatformSentinelUserId
-                "", UserAudit AuditSubject.PlatformSentinelUserId
+                "_platform", UserAudit(UserId AuditSubject.PlatformSentinelUserId)
+                "", UserAudit(UserId AuditSubject.PlatformSentinelUserId)
                 "session-s1", AnonymousAudit "s1"
-                "user-alice", UserAudit "alice"
-                "team-acme", TeamAudit(AuditSubject.DispatcherSentinelUserId, "acme")
-                "acme", UserAudit "acme"
-                "team-", UserAudit "team-"
+                "user-alice", UserAudit(UserId "alice")
+                "team-acme", TeamAudit(UserId AuditSubject.DispatcherSentinelUserId, TeamId "acme")
+                "acme", UserAudit(UserId "acme")
+                "team-", UserAudit(UserId "team-")
             ]
 
             for scopeId, expected in rows do

@@ -70,7 +70,7 @@ type private InMemoryObjectStore() =
         member _.Purge(_) = async { return Ok() }
 
         member _.Erase(scopeId, subjectUserId, policy, dryRun) = async {
-            if Erasure.isBlankSubject subjectUserId then
+            if Erasure.isBlankSubject subjectUserId.Value then
                 return
                     Result.Ok {
                         HandlerName = "data-objects"
@@ -79,8 +79,8 @@ type private InMemoryObjectStore() =
                     }
             else
                 let namesSubject (o: DataObject) =
-                    o.CreatedBy = subjectUserId
-                    || (o.Metadata |> Map.exists (fun _ v -> v.Contains subjectUserId))
+                    o.CreatedBy = subjectUserId.Value
+                    || (o.Metadata |> Map.exists (fun _ v -> v.Contains subjectUserId.Value))
 
                 let matchedKeys =
                     store
@@ -98,14 +98,14 @@ type private InMemoryObjectStore() =
                                 let redacted = {
                                     o with
                                         CreatedBy =
-                                            (if o.CreatedBy = subjectUserId then
+                                            (if o.CreatedBy = subjectUserId.Value then
                                                  Erasure.TombstoneMarker
                                              else
                                                  o.CreatedBy)
                                         Metadata =
                                             o.Metadata
                                             |> Map.map (fun _ v ->
-                                                if v.Contains subjectUserId then
+                                                if v.Contains subjectUserId.Value then
                                                     Erasure.TombstoneMarker
                                                 else
                                                     v)

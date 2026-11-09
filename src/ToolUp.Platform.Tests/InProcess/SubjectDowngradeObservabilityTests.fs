@@ -39,7 +39,7 @@ let tests =
         // ── resolverDowngradeSignal (distinct named signal + suppression) ──
 
         test "NotTeamMember → a distinct named signal" {
-            match resolverDowngradeSignal (SubjectResolutionError.NotTeamMember "team-42") with
+            match resolverDowngradeSignal (SubjectResolutionError.NotTeamMember(TeamId "team-42")) with
             | Some(label, detail) ->
                 Expect.equal label "NotTeamMember" "names the bridged case"
                 Expect.stringContains detail "team-42" "carries the team id"

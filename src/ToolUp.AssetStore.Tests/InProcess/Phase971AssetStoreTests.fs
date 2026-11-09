@@ -156,7 +156,7 @@ type private Fixture(refusing: bool ref) =
     member _.Retrigger() =
         let jobId = scheduler.ScheduledJobIds |> List.exactlyOne
 
-        (scheduler :> IJobScheduler).TriggerOnce(container, jobId, "test")
+        (scheduler :> IJobScheduler).TriggerOnce(container, jobId, UserId "test")
         |> Async.RunSynchronously
         |> ignore
 

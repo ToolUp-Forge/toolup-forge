@@ -511,7 +511,7 @@ let auditTests =
                 Expect.notEqual evt.OccurredAt enqueuedAt.UtcDateTime "the envelope is not backdated"
 
                 let payload = decodeLifecycle evt
-                Expect.equal payload.UserId "alice" "the applying user is preserved, not 'system'"
+                Expect.equal payload.UserId (UserId "alice") "the applying user is preserved, not 'system'"
                 Expect.isNone payload.OnBehalfOf "the user's own write"
                 Expect.equal payload.EntityType "Inspection" "entity type"
                 Expect.equal payload.EntityId "e1" "entity id"
@@ -565,7 +565,7 @@ let auditTests =
             | [ evt ] ->
                 let payload = decodeLifecycle evt
                 Expect.equal payload.Version 2 "the new version"
-                Expect.equal payload.UserId "alice" "the replaying user"
+                Expect.equal payload.UserId (UserId "alice") "the replaying user"
                 Expect.isSome payload.Replay "with the provenance"
             | other -> failtestf "expected exactly one update row, got %d" (List.length other)
         }
@@ -660,7 +660,7 @@ let auditTests =
             let payload =
                 JsonSerializer.Deserialize<EntityLifecycleEventPayload>(legacy, jsonOptions)
 
-            Expect.equal payload.UserId "system" "the legacy actor"
+            Expect.equal payload.UserId (UserId "system") "the legacy actor"
             Expect.equal payload.Version 3 "the legacy version"
             Expect.isNone payload.Replay "an absent field is a live write"
             Expect.isNone payload.OnBehalfOf "an absent field is an undelegated write"
@@ -683,7 +683,7 @@ let auditTests =
 
             match lifecycleRows trail with
             | [ ("EntityCreated", p) ] ->
-                Expect.equal p.UserId "alice" "the real user survives the round trip"
+                Expect.equal p.UserId (UserId "alice") "the real user survives the round trip"
 
                 match p.Replay with
                 | Some replay ->
@@ -764,10 +764,10 @@ let auditTests =
             Expect.equal
                 observed
                 [
-                    1, "EntityCreated", "alice", true
-                    2, "EntityUpdated", "bob", false
-                    3, "EntityDeleted", "alice", true
-                    3, "EntityUpdated", "alice", true
+                    1, "EntityCreated", UserId "alice", true
+                    2, "EntityUpdated", UserId "bob", false
+                    3, "EntityDeleted", UserId "alice", true
+                    3, "EntityUpdated", UserId "alice", true
                 ]
                 "four applied versions, four rows — never a double; replays carry the real user + provenance, the live write carries its own actor"
 

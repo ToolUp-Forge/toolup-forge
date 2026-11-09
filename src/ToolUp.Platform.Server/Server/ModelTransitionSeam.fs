@@ -435,7 +435,7 @@ module ModelTransition =
                         request.ArtifactKey,
                         request.Target,
                         ModelTransitionAuthor.registryRole request.Author,
-                        ModelTransitionAuthor.id request.Author
+                        (UserId(ModelTransitionAuthor.id request.Author))
                     )
                 with
                 | Error error ->

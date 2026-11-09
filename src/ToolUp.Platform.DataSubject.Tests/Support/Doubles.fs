@@ -87,7 +87,7 @@ type FakeExporter(name: string) =
     interface IDataExporter with
         member _.Name = name
 
-        member _.Export(_scopeId: string, subjectUserId: string) = async {
+        member _.Export(_scopeId: string, subjectUserId: UserId) = async {
             return [
                 {
                     Name = name
@@ -133,7 +133,7 @@ let jobContext (scopeId: string) (payload: string) : JobContext = {
     Attempt = 1
     Trigger = Manual
     Scope = ToolUp.Platform.ResolvedScope.anonymous
-    TriggerSource = ScheduledManually "admin"
+    TriggerSource = ScheduledManually(UserId "admin")
     ScheduledAt = DateTime.UtcNow
     RunningAt = DateTime.UtcNow
     Payload = payload

@@ -240,7 +240,7 @@ module ReportSubscriptionJobHandler =
                     // and Phase 6f.A deliberately left it as `string
                     // list`: a subscription names people who can open
                     // the report, which an external contact cannot.
-                    let! address = deps.AddressBook.ResolveEmail(RecipientId.User userId, subscription.ScopeId)
+                    let! address = deps.AddressBook.ResolveEmail(RecipientId.User(UserId userId), subscription.ScopeId)
                     return userId, Option.isSome address
                 })
                 |> Async.Sequential

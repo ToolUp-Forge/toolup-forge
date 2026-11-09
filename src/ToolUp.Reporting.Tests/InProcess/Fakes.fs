@@ -253,7 +253,7 @@ type RecordingScheduler() =
         member _.TriggerOnce(_, jobId, byUserId) = async {
             match jobs.TryGetValue jobId with
             | true, _ ->
-                lock triggered (fun () -> triggered.Add(jobId, byUserId))
+                lock triggered (fun () -> triggered.Add(jobId, byUserId.Value))
                 return Result.Ok()
             | _ -> return Result.Error(TriggerError.DispatchRefused "unknown job")
         }

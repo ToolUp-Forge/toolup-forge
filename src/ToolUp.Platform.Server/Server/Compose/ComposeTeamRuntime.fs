@@ -81,7 +81,7 @@ let registerTeamPermissionStores
                     let! teamName = async {
                         match teamStoreOpt with
                         | Some ts ->
-                            match! (ts :> ITeamStore).GetTeam entry.TeamId with
+                            match! (ts :> ITeamStore).GetTeam(TeamId entry.TeamId) with
                             | Some info -> return info.Name
                             | None -> return entry.TeamId
                         | None -> return entry.TeamId
@@ -100,9 +100,9 @@ let registerTeamPermissionStores
 
                     do!
                         resolvedNotificationChannel.Publish(
-                            ScopeKey.container (ScopeKey.Team entry.TeamId),
+                            ScopeKey.container (ScopeKey.Team(TeamId entry.TeamId)),
                             TransactionalEmail {
-                                Recipients = [ RecipientId.User entry.InviterUserId ]
+                                Recipients = [ RecipientId.User(UserId entry.InviterUserId) ]
                                 Content = InlineEmail(subject, body, None)
                                 CorrelationId = Some $"invite-expiry:{entry.TeamId}:{email}:{entry.ExpiresAt.Ticks}"
                             }

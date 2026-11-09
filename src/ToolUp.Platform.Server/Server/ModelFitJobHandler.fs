@@ -343,7 +343,7 @@ module ModelFitBatch =
                         match! scheduler.Schedule registration with
                         | Error e -> failures.Add(index, FitEnqueueRefusal.ScheduleRefused e)
                         | Ok(Scheduled jobId | Coalesced jobId) ->
-                            match! scheduler.TriggerOnce(batch.ScopeId, jobId, submittedBy) with
+                            match! scheduler.TriggerOnce(batch.ScopeId, jobId, UserId submittedBy) with
                             | Ok() -> scheduled.Add(index, jobId)
                             | Error refusal ->
                                 failures.Add(index, FitEnqueueRefusal.TriggerRefused(TriggerError.message refusal))

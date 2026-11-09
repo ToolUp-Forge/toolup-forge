@@ -596,7 +596,7 @@ module DeclaredDelivery =
             RetryPolicy = JobRetryPolicy.defaults
             ShardKey = Some sourceId
             Precision = JobPrecision.Minute
-            CreatedBy = c.Principal.UserId
+            CreatedBy = c.Principal.UserId.Value
             Tags =
                 Map [
                     SourceTag, sourceId

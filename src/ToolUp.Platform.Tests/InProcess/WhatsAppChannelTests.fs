@@ -167,7 +167,7 @@ let private seedContact
             Notes = None
         }
 
-        let! created = store.Create(scope, actor, ContactOwner.Team "team-1", request)
+        let! created = store.Create(scope, UserId actor, ContactOwner.Team "team-1", request)
 
         let contact =
             match created with
@@ -178,7 +178,7 @@ let private seedContact
             let! recorded =
                 store.RecordOptIn(
                     scope,
-                    actor,
+                    (UserId actor),
                     contact.Id,
                     channel,
                     {
@@ -298,7 +298,7 @@ let tests =
             }
 
             test "TransactionalWhatsApp is transactional, kind-named, and ungoverned by preferences" {
-                let notification = freeForm [ RecipientId.User "u-1" ]
+                let notification = freeForm [ RecipientId.User(UserId "u-1") ]
                 Expect.isTrue (NotificationKind.isTransactional notification) "never written to the SSE stream"
 
                 Expect.equal
@@ -316,18 +316,18 @@ let tests =
             INotificationSinkContract.tests
                 "InMemoryWhatsAppSink"
                 (fun () -> InMemoryWhatsAppSink true :> INotificationSink)
-                (fun scopeId -> NotificationEnvelope.create scopeId (freeForm [ RecipientId.User "u-1" ]))
+                (fun scopeId -> NotificationEnvelope.create scopeId (freeForm [ RecipientId.User(UserId "u-1") ]))
 
             INotificationSinkContract.whatsAppTests
                 "InMemoryWhatsAppSink (templates)"
                 (fun () -> InMemoryWhatsAppSink true :> INotificationSink)
-                (RecipientId.User "u-1")
+                (RecipientId.User(UserId "u-1"))
                 INotificationSinkContract.SupportsTemplates
 
             INotificationSinkContract.whatsAppTests
                 "InMemoryWhatsAppSink (free-form only)"
                 (fun () -> InMemoryWhatsAppSink false :> INotificationSink)
-                (RecipientId.User "u-1")
+                (RecipientId.User(UserId "u-1"))
                 INotificationSinkContract.FreeFormOnly
         ]
 
@@ -507,7 +507,7 @@ let tests =
                         freeForm [
                             RecipientId.External recent
                             RecipientId.External stale
-                            RecipientId.User "u-1"
+                            RecipientId.User(UserId "u-1")
                         ]
                     )
 
@@ -524,7 +524,7 @@ let tests =
             <| async {
                 let beneath, audit, channel = policy (noTemplates ()) None
 
-                do! channel.Publish(scope, freeForm [ RecipientId.User "u-1" ])
+                do! channel.Publish(scope, freeForm [ RecipientId.User(UserId "u-1") ])
 
                 Expect.isEmpty beneath.Published "a business-initiated message must be a template"
 
@@ -553,7 +553,7 @@ let tests =
 
                 let notification =
                     templated
-                        [ RecipientId.External silent; RecipientId.User "u-1" ]
+                        [ RecipientId.External silent; RecipientId.User(UserId "u-1") ]
                         "appointment_reminder"
                         (Some "en_GB")
                         [ "Dr Evans"; "Alex"; "10:00" ]
@@ -571,7 +571,7 @@ let tests =
                 let registry = InMemoryTemplateRegistry [ reminder ]
                 let beneath, audit, channel = policy registry None
 
-                do! channel.Publish(scope, templated [ RecipientId.User "u-1" ] "order_shipped" None [ "x" ])
+                do! channel.Publish(scope, templated [ RecipientId.User(UserId "u-1") ] "order_shipped" None [ "x" ])
 
                 Expect.isEmpty beneath.Published "refused"
                 Expect.equal registry.Lookups 1 "the registry was asked"
@@ -590,7 +590,10 @@ let tests =
                 do!
                     channel.Publish(
                         scope,
-                        templated [ RecipientId.User "u-1" ] "appointment_reminder" (Some "en_GB") [ "Alex"; "10:00" ]
+                        templated [ RecipientId.User(UserId "u-1") ] "appointment_reminder" (Some "en_GB") [
+                            "Alex"
+                            "10:00"
+                        ]
                     )
 
                 Expect.isEmpty beneath.Published "refused"
@@ -609,7 +612,7 @@ let tests =
                 do!
                     channel.Publish(
                         scope,
-                        templated [ RecipientId.User "u-1" ] "appointment_reminder" (Some "fr_FR") parameters
+                        templated [ RecipientId.User(UserId "u-1") ] "appointment_reminder" (Some "fr_FR") parameters
                     )
 
                 Expect.isEmpty beneath.Published "fr_FR is not approved"
@@ -619,12 +622,16 @@ let tests =
                     [ WhatsAppSendPolicy.TemplateLanguageReason ]
                     "typed reason"
 
-                do! channel.Publish(scope, templated [ RecipientId.User "u-1" ] "appointment_reminder" None parameters)
+                do!
+                    channel.Publish(
+                        scope,
+                        templated [ RecipientId.User(UserId "u-1") ] "appointment_reminder" None parameters
+                    )
 
                 do!
                     channel.Publish(
                         scope,
-                        templated [ RecipientId.User "u-1" ] "appointment_reminder" (Some "CY") parameters
+                        templated [ RecipientId.User(UserId "u-1") ] "appointment_reminder" (Some "CY") parameters
                     )
 
                 Expect.equal beneath.Published.Length 2 "unspecified, and a case-insensitive match, are admitted"
@@ -637,7 +644,7 @@ let tests =
                 do!
                     channel.Publish(
                         scope,
-                        templated [ RecipientId.User "u-1" ] "appointment_reminder" None [ "a"; "b"; "c" ]
+                        templated [ RecipientId.User(UserId "u-1") ] "appointment_reminder" None [ "a"; "b"; "c" ]
                     )
 
                 Expect.isEmpty beneath.Published "refused"
@@ -654,7 +661,7 @@ let tests =
 
                 let neither =
                     TransactionalWhatsApp {
-                        Recipients = [ RecipientId.User "u-1" ]
+                        Recipients = [ RecipientId.User(UserId "u-1") ]
                         TemplateName = None
                         TemplateLanguage = None
                         TemplateParameters = []
@@ -664,7 +671,9 @@ let tests =
                     }
 
                 let both =
-                    match templated [ RecipientId.User "u-1" ] "appointment_reminder" None [ "a"; "b"; "c" ] with
+                    match
+                        templated [ RecipientId.User(UserId "u-1") ] "appointment_reminder" None [ "a"; "b"; "c" ]
+                    with
                     | TransactionalWhatsApp w -> TransactionalWhatsApp { w with Body = Some "and some text" }
                     | other -> other
 
@@ -686,7 +695,7 @@ let tests =
 
                 let sms =
                     TransactionalSms {
-                        Recipients = [ RecipientId.User "u-1" ]
+                        Recipients = [ RecipientId.User(UserId "u-1") ]
                         Body = "hi"
                         CorrelationId = None
                     }
@@ -807,7 +816,7 @@ let tests =
                         )
                         :> INotificationChannel
 
-                    do! channel.Publish(scope, freeForm [ RecipientId.User "u-1" ])
+                    do! channel.Publish(scope, freeForm [ RecipientId.User(UserId "u-1") ])
 
                     let! winner =
                         Task.WhenAny(sink.FirstCallTask, Task.Delay(TimeSpan.FromSeconds 10.0))
@@ -844,7 +853,7 @@ let tests =
                         )
                         :> INotificationChannel
 
-                    do! channel.Publish(scope, freeForm [ RecipientId.User "u-1" ])
+                    do! channel.Publish(scope, freeForm [ RecipientId.User(UserId "u-1") ])
                     audit.WaitFor 1
 
                     Expect.isEmpty sink.Calls "default-off"

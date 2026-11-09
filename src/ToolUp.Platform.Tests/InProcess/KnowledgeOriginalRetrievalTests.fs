@@ -254,7 +254,7 @@ let private handlerTests =
             match audit.Events with
             | [ (scopeId, KnowledgeOriginalRetrieved p) ] ->
                 Expect.equal scopeId "team-a" "recorded under the caller's scope"
-                Expect.equal p.UserId "user-1" "actor"
+                Expect.equal p.UserId (UserId "user-1") "actor"
                 Expect.equal p.DocumentId "doc-1" "doc id"
                 Expect.equal p.ScopeId "team-a" "payload scope"
                 Expect.equal p.SourceKind "UploadedFile" "source kind"
@@ -278,7 +278,7 @@ let private handlerTests =
             | [ (_, KnowledgeOriginalRetrievalDenied p) ] ->
                 Expect.equal p.Reason "NotInScope" "denial reason"
                 Expect.equal p.DocumentId "doc-nope" "requested id recorded verbatim"
-                Expect.equal p.UserId "user-1" "actor"
+                Expect.equal p.UserId (UserId "user-1") "actor"
             | other -> failtest $"expected exactly one denial audit, got %A{other}"
         }
 
@@ -1245,7 +1245,7 @@ let private redactedHandlerTests =
             Expect.isTrue row.Redacted "and it is recorded as a redaction, not an allowed read"
             Expect.equal row.FieldPath "doc-1" "keyed by document id"
             Expect.equal row.EntityName Redactor.KnowledgeOriginalEntityName "under the KB original entity"
-            Expect.equal row.UserId "user-1" "attributed to the caller"
+            Expect.equal row.UserId (UserId "user-1") "attributed to the caller"
         }
 
         testCaseAsync "a reader gets the original intact and NO redaction row"

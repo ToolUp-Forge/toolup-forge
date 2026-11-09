@@ -719,10 +719,10 @@ let private newWorld () = async {
         TeamStore(InMemoryBlobStorage() :> IBlobStorage, InMemoryNotificationChannel(None) :> INotificationChannel)
         :> ITeamStore
 
-    let! _ = teams.CreateTeam(team, "Alpha")
+    let! _ = teams.CreateTeam(TeamId team, "Alpha")
 
     for userId, role in Map.toList roles do
-        let! _ = teams.AddMember(team, userId, role)
+        let! _ = teams.AddMember(TeamId team, UserId userId, role)
         ()
 
     return {
@@ -810,8 +810,7 @@ let private recordTests =
             let! current =
                 (TeamPolicyOutputVisibilitySource((requestFor world enabled "olga").RequestServices)
                 :> ITeamOutputVisibilitySource)
-                    .Current
-                    team
+                    .Current(TeamId team)
 
             Expect.equal current (Ok TeamAdmins) "the gate's source reads the same record"
         }
@@ -901,7 +900,7 @@ let private recordTests =
                 TeamPolicyOutputVisibilitySource((requestFor world (Some defaultAdmins) "olga").RequestServices)
                 :> ITeamOutputVisibilitySource
 
-            let! unset = source.Current team
+            let! unset = source.Current(TeamId team)
             Expect.equal unset (Ok TeamAdmins) "the deployment default"
 
             let! _ =
@@ -911,7 +910,7 @@ let private recordTests =
                     Encoding.UTF8.GetBytes """{"Changes":[],"OutputChanges":"not a list"}"""
                 )
 
-            let! broken = source.Current team
+            let! broken = source.Current(TeamId team)
             Expect.isError broken "unreadable ⇒ Error, and the gate denies"
         }
 

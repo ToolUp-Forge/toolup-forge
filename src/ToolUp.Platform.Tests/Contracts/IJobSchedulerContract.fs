@@ -295,7 +295,7 @@ let tests (name: string) (factory: unit -> IJobScheduler * string * string) =
         <| async {
             let scheduler, scopeA, _ = factory ()
 
-            match! scheduler.TriggerOnce(scopeA, Guid.NewGuid(), "alice") with
+            match! scheduler.TriggerOnce(scopeA, Guid.NewGuid(), UserId "alice") with
             | Error _ -> ()
             | Ok _ -> failtest "expected Error for unknown JobId"
         }
@@ -308,7 +308,7 @@ let tests (name: string) (factory: unit -> IJobScheduler * string * string) =
             let jobId = jobIdOrFail "Schedule" (scheduler.Schedule r |> Async.RunSynchronously)
             do! scheduler.Cancel(scopeA, jobId)
 
-            match! scheduler.TriggerOnce(scopeA, jobId, "alice") with
+            match! scheduler.TriggerOnce(scopeA, jobId, UserId "alice") with
             | Error TriggerError.JobCancelled -> ()
             | other -> failtestf "expected Error JobCancelled when triggering a cancelled job, got %A" other
         }
@@ -335,7 +335,7 @@ let tests (name: string) (factory: unit -> IJobScheduler * string * string) =
             let jobId = jobIdOrFail "Schedule" (scheduler.Schedule r |> Async.RunSynchronously)
             do! scheduler.Disable(scopeA, jobId)
 
-            match! scheduler.TriggerOnce(scopeA, jobId, "alice") with
+            match! scheduler.TriggerOnce(scopeA, jobId, UserId "alice") with
             | Error TriggerError.JobDisabled -> ()
             | other -> failtestf "expected Error JobDisabled when triggering a disabled job, got %A" other
 
@@ -372,7 +372,7 @@ let tests (name: string) (factory: unit -> IJobScheduler * string * string) =
             | :? Microsoft.Extensions.Hosting.IHostedService as hosted ->
                 do! hosted.StopAsync Threading.CancellationToken.None |> Async.AwaitTask
 
-                match! scheduler.TriggerOnce(scopeA, jobId, "alice") with
+                match! scheduler.TriggerOnce(scopeA, jobId, UserId "alice") with
                 | Error TriggerError.SchedulerStopping -> ()
                 | other ->
                     failtestf "expected Error SchedulerStopping after the host stopped the scheduler, got %A" other
@@ -389,7 +389,7 @@ let tests (name: string) (factory: unit -> IJobScheduler * string * string) =
             let scheduler, scopeA, _ = factory ()
             let unknown = Guid.NewGuid()
 
-            match! scheduler.TriggerOnce(scopeA, unknown, "alice") with
+            match! scheduler.TriggerOnce(scopeA, unknown, UserId "alice") with
             | Error(TriggerError.JobNotFound(scope, jobId)) ->
                 Expect.equal (scope, jobId) (scopeA, unknown) "the refusal names the scope and the job"
             | other -> failtestf "expected Error JobNotFound, got %A" other
@@ -613,7 +613,7 @@ let restartTests (name: string) (factory: unit -> RestartableScheduler) =
                 | Ok outcome -> ScheduleOutcome.jobId outcome
                 | Error e -> failtestf "Schedule: %A" e
 
-            match! first.TriggerOnce(scope, jobId, "alice") with
+            match! first.TriggerOnce(scope, jobId, UserId "alice") with
             | Ok() -> ()
             | Error e -> failtestf "TriggerOnce (before restart): %A" e
 
@@ -647,7 +647,7 @@ let restartTests (name: string) (factory: unit -> RestartableScheduler) =
                 Expect.equal job.LastRunStatus (Some Succeeded) "and so did the first run's outcome"
             | None -> failtest "the definition did not survive the restart"
 
-            match! second.TriggerOnce(scope, jobId, "bob") with
+            match! second.TriggerOnce(scope, jobId, UserId "bob") with
             | Ok() -> ()
             | Error e -> failtestf "TriggerOnce (after restart): %A" e
 
@@ -676,7 +676,7 @@ let restartTests (name: string) (factory: unit -> RestartableScheduler) =
 
             match ctx.TriggerSource with
             | ScheduledManually user ->
-                Expect.equal user "bob" "the trigger source is this dispatch's, not the previous one's"
+                Expect.equal user (UserId "bob") "the trigger source is this dispatch's, not the previous one's"
             | other -> failtestf "expected ScheduledManually, got %A" other
 
             Expect.isTrue
@@ -761,7 +761,7 @@ let carriedScopeTests (name: string) (factory: unit -> RestartableScheduler) =
         | Error e -> failtestf "%s: %A" label e
 
     let fire (scheduler: IJobScheduler) (scopeId: string) (jobId: JobId) = async {
-        match! scheduler.TriggerOnce(scopeId, jobId, "alice") with
+        match! scheduler.TriggerOnce(scopeId, jobId, UserId "alice") with
         | Ok() -> ()
         | Error e -> failtestf "TriggerOnce: %A" e
     }

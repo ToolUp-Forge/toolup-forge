@@ -397,7 +397,7 @@ let tests =
 
             let keyStore = keyStoreOpt.Value
             let! _ = keyStore.SetPlatformKey(anthropic.Id, "platform-key")
-            let! _ = keyStore.SetTeamKey("team-alpha", anthropic.Id, "team-key")
+            let! _ = keyStore.SetTeamKey(TeamId "team-alpha", anthropic.Id, "team-key")
 
             let ctx = AccessContext.unrestricted teamMember
             let! result = factory.Resolve ctx
@@ -416,7 +416,7 @@ let tests =
                 buildFactory recorder [ anthropic ] bootstraps PlatformOnly true
 
             let keyStore = keyStoreOpt.Value
-            let! _ = keyStore.SetTeamKey("team-alpha", anthropic.Id, "team-key")
+            let! _ = keyStore.SetTeamKey(TeamId "team-alpha", anthropic.Id, "team-key")
 
             let ctx = AccessContext.unrestricted authenticatedUser
             let! result = factory.Resolve ctx

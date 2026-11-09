@@ -365,10 +365,10 @@ module ProviderProfile =
 type ProviderProfileOwner =
     /// The caller's own profile. Overrides the team's, for that caller
     /// only.
-    | UserOwned of userId: string
+    | UserOwned of userId: UserId
     /// The team's profile. Applies to every member of the team that
     /// does not hold an override.
-    | TeamOwned of teamId: string
+    | TeamOwned of teamId: TeamId
     /// A claim-bearer's scope — neither user nor team. Kept distinct
     /// rather than folded into `UserOwned` because a claim's scope id
     /// is issued by the claim, not by an account, and the two must not
@@ -397,10 +397,10 @@ module ProviderScope =
     /// profile written through the ordinary settings surface is the
     /// same blob this chain reads.
     let userOwned (userId: string) : ProviderScope = {
-        Owner = ProviderProfileOwner.UserOwned userId
+        Owner = ProviderProfileOwner.UserOwned(UserId userId)
         Storage = {
             ScopeId = userId
-            Container = ScopeKey.container (ScopeKey.User userId)
+            Container = ScopeKey.container (ScopeKey.User(UserId userId))
             Persist = true
         }
     }
@@ -409,10 +409,10 @@ module ProviderScope =
     /// `AccessContext.configScope`'s `TeamMember` branch, for the same
     /// reason.
     let teamOwned (teamId: string) : ProviderScope = {
-        Owner = ProviderProfileOwner.TeamOwned teamId
+        Owner = ProviderProfileOwner.TeamOwned(TeamId teamId)
         Storage = {
             ScopeId = teamId
-            Container = ScopeKey.container (ScopeKey.Team teamId)
+            Container = ScopeKey.container (ScopeKey.Team(TeamId teamId))
             Persist = true
         }
     }

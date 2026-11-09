@@ -33,7 +33,7 @@ type InMemoryEventStore() =
         member _.ListScopes() = async { return lock lockObj (fun () -> events |> List.map _.ScopeId |> List.distinct) }
 
         member _.Erase(scopeId, subjectUserId, policy, dryRun) = async {
-            if Erasure.isBlankSubject subjectUserId then
+            if Erasure.isBlankSubject subjectUserId.Value then
                 return
                     Result.Ok {
                         HandlerName = "events"
@@ -44,7 +44,7 @@ type InMemoryEventStore() =
                 return
                     lock lockObj (fun () ->
                         let isMatch (e: ModuleEvent) =
-                            e.ScopeId = scopeId && e.Payload.Contains subjectUserId
+                            e.ScopeId = scopeId && e.Payload.Contains subjectUserId.Value
 
                         match policy with
                         | ErasurePolicy.RetainPerCompliance ->

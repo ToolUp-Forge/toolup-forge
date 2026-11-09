@@ -94,7 +94,7 @@ type private TokenStore(token: string option) =
         member _.DeleteSecret(_, _) = async { return Error "read-only" }
         member _.ListKeys _ = async { return [] }
 
-let private alice = RecipientId.User "wa-alice"
+let private alice = RecipientId.User(UserId "wa-alice")
 let private bob = RecipientId.External "wa-bob"
 let private aliceNumber = "+447700900601"
 let private bobNumber = "+447700900602"
@@ -179,7 +179,7 @@ let private unroutableFactory () =
 let tests =
     testList "Phase 6f.B — Twilio WhatsApp companion" [
         INotificationSinkContract.tests "TwilioWhatsAppNotificationSink" unroutableFactory (fun scopeId ->
-            NotificationEnvelope.create scopeId (TransactionalWhatsApp(freeForm [ RecipientId.User "user-x" ])))
+            NotificationEnvelope.create scopeId (TransactionalWhatsApp(freeForm [ RecipientId.User(UserId "user-x") ])))
 
         INotificationSinkContract.whatsAppTests
             "TwilioWhatsAppNotificationSink (fake transport)"

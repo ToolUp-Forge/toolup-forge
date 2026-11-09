@@ -19,7 +19,7 @@ open System
 /// no "login" callback (only OIDC's callback handler does), so
 /// per-session is the closest practical equivalent.
 type UserLoggedInPayload = {
-    UserId: string
+    UserId: UserId
     /// `Header` / `StaticJwt` / `Oidc` / etc. — the resolved provider's
     /// own kind name.
     AuthProvider: string
@@ -65,8 +65,8 @@ type PublicationReaderGrantChangedPayload = {
 }
 
 type TeamCreatedPayload = {
-    UserId: string
-    TeamId: string
+    UserId: UserId
+    TeamId: TeamId
     TeamName: string
 }
 
@@ -80,7 +80,7 @@ type TeamCreatedPayload = {
 /// what the caller was trying to create.
 type TeamCreationDeniedPayload = {
     /// The caller whose `CreateTeam` was refused.
-    UserId: string
+    UserId: UserId
     /// The team name the caller submitted. Echoed as-is — operators
     /// triaging a series of denials want to see what the user was
     /// asking for. No team-id is recorded because the gate fires
@@ -92,16 +92,16 @@ type TeamCreationDeniedPayload = {
 /// (data retained); the team is hidden from members until restored.
 type TeamArchivedPayload = {
     /// The Platform Admin who archived the team.
-    UserId: string
-    TeamId: string
+    UserId: UserId
+    TeamId: TeamId
     TeamName: string
 }
 
 /// A Platform Admin restored a previously-archived team via
 /// `TeamApi.RestoreTeam`.
 type TeamRestoredPayload = {
-    UserId: string
-    TeamId: string
+    UserId: UserId
+    TeamId: TeamId
     TeamName: string
 }
 
@@ -110,8 +110,8 @@ type TeamRestoredPayload = {
 /// referencing it were purged. The team name is captured here because
 /// the record no longer exists after the event fires.
 type TeamDeletedPayload = {
-    UserId: string
-    TeamId: string
+    UserId: UserId
+    TeamId: TeamId
     TeamName: string
 }
 
@@ -123,46 +123,46 @@ type TeamDeletedPayload = {
 /// as a distinct field so a future admin-driven reassignment path stays
 /// wire-compatible. Recorded under the team's audit stream, `AuditStreamKey.ofTeam` (GP 6).
 type TeamOwnershipTransferredPayload = {
-    TeamId: string
+    TeamId: TeamId
     /// Outgoing Owner, demoted to `Admin` by the transfer.
-    FromUserId: string
+    FromUserId: UserId
     /// Incoming Owner, promoted from their prior role.
-    ToUserId: string
+    ToUserId: UserId
     /// Caller who invoked the transfer. Equal to `FromUserId` today.
-    ActorUserId: string
+    ActorUserId: UserId
 }
 
 type MemberAddedPayload = {
-    UserId: string
-    TeamId: string
+    UserId: UserId
+    TeamId: TeamId
     /// The user being added. Distinct from `UserId`, which is the actor.
-    AffectedUserId: string
+    AffectedUserId: UserId
     Role: string
 }
 
 type MemberRemovedPayload = {
-    UserId: string
-    TeamId: string
+    UserId: UserId
+    TeamId: TeamId
     /// The user being removed. Distinct from `UserId`, which is the actor.
-    AffectedUserId: string
+    AffectedUserId: UserId
 }
 
 type MemberRoleChangedPayload = {
-    UserId: string
-    TeamId: string
-    AffectedUserId: string
+    UserId: UserId
+    TeamId: TeamId
+    AffectedUserId: UserId
     OldRole: string
     NewRole: string
 }
 
 type FileUploadedPayload = {
-    UserId: string
+    UserId: UserId
     FileName: string
     DataType: string
     SizeBytes: int64
 }
 
-type FileDeletedPayload = { UserId: string; FileName: string }
+type FileDeletedPayload = { UserId: UserId; FileName: string }
 
 /// Emitted by the file manager when a previously-uploaded file is
 /// re-processed (the user clicks "Reprocess" on the file list, or
@@ -174,7 +174,7 @@ type FileDeletedPayload = { UserId: string; FileName: string }
 /// so audit consumers can distinguish recoveries from stale-state
 /// indicators without parsing the entry body.
 type FileReprocessedPayload = {
-    UserId: string
+    UserId: UserId
     FileName: string
     DataType: string
     HadError: bool
@@ -188,7 +188,7 @@ type FileReprocessedPayload = {
 /// signal in the audit trail. `FileCount` is the count of files
 /// removed (could be zero — empty-reset is still a recordable
 /// operator action).
-type DataStoreResetPayload = { UserId: string; FileCount: int }
+type DataStoreResetPayload = { UserId: UserId; FileCount: int }
 
 /// An ephemeral `SessionFileStore` was dropped by the TTL
 /// eviction sweep and has since been RE-CREATED under the same scope
@@ -215,7 +215,7 @@ type SessionStoreResetPayload = { Container: string; Reason: string }
 /// the SDK never names a module so SDK never emits `AnalysisRun`
 /// itself.
 type AnalysisRunPayload = {
-    UserId: string
+    UserId: UserId
     ModuleName: string
     /// Free-form summary suitable for compliance review — module-defined
     /// shape. Modules typically include the kind of analysis, data types
@@ -254,12 +254,12 @@ type PermissionAuditChainLink = {
 /// Permission grant or revocation. `ModuleName = ""` denotes a
 /// team-defaults change (the defaults map was replaced wholesale).
 type PermissionChangedPayload = {
-    UserId: string
-    TeamId: string
+    UserId: UserId
+    TeamId: TeamId
     /// The user whose permissions changed. May equal `UserId` for
     /// self-grants, but the audit event distinguishes actor from
     /// affected member explicitly.
-    AffectedUserId: string
+    AffectedUserId: UserId
     /// Module identifier. Empty string for team-defaults changes.
     ModuleName: string
     /// Comma-separated list of granted permissions (`Read`, `Write`,
@@ -295,7 +295,7 @@ type NotificationSentPayload = {
     /// Actor who initiated the publish. Typically `"system"` when the
     /// publish came from a job lifecycle (`JobCompleted`); the
     /// authenticated user's id when published from a request handler.
-    UserId: string
+    UserId: UserId
     /// Reserved `_platform.notifications` source-module label (set by
     /// the dispatcher; here for completeness so the trail is self-
     /// describing).
@@ -328,7 +328,7 @@ type NotificationSentPayload = {
 /// exhausted on `SinkResult.TransientFailure`. As with
 /// `NotificationSentPayload`, PII is intentionally absent.
 type NotificationDeliveryFailedPayload = {
-    UserId: string
+    UserId: UserId
     ScopeId: string
     NotificationKind: string
     Provider: string
@@ -401,7 +401,7 @@ type NotificationSilentlySkippedPayload = {
 type FormSubmittedPayload = {
     /// Actor who submitted the form. Always the authenticated caller
     /// — server-set from `AccessContext.UserId`.
-    UserId: string
+    UserId: UserId
     /// Schema this submission satisfies.
     FormId: string
     /// Server-allocated submission identifier.
@@ -420,7 +420,7 @@ type FormSubmittedPayload = {
 }
 
 type FormSubmissionUpdatedPayload = {
-    UserId: string
+    UserId: UserId
     FormId: string
     SubmissionId: string
     /// Number of populated fields after the update. Cardinality only.
@@ -437,7 +437,7 @@ type FormSubmissionUpdatedPayload = {
 /// filtering audit events on `WorkflowTransitioned` for a given
 /// `SubmissionId`.
 type WorkflowTransitionedPayload = {
-    UserId: string
+    UserId: UserId
     FormId: string
     SubmissionId: string
     WorkflowId: string
@@ -486,7 +486,7 @@ type EntityLifecycleEventPayload = {
     /// `EntityPrincipal` on the store call, exactly as passed (Phase 806).
     /// `"system"` only when the caller passed `EntityPrincipal.system`; a
     /// store never infers it.
-    UserId: string
+    UserId: UserId
     /// The subject `UserId` acted FOR when the write was
     /// delegated (`EntityPrincipal.OnBehalfOf`); `None` when the principal
     /// acted for itself. Absent on every pre-806 row and deserialises to
@@ -531,7 +531,7 @@ type EncryptionKeyEventPayload = {
     /// Actor who triggered the lifecycle event. `"system"` for
     /// auto-creation on first resolution; the authenticated user's id
     /// for explicit destruction via the admin endpoint.
-    UserId: string
+    UserId: UserId
     /// Scope the key belongs to. `_platform` for the platform-wide
     /// `SingleKeyResolver` master key; the team / user scope id for
     /// `PerScopeKeyResolver` per-tenant keys.
@@ -587,7 +587,7 @@ type EncryptionKeyDestroyAckPayload = {
     /// requester, not the acknowledging replica — so a query for "who
     /// crypto-shredded this tenant" returns one actor across every
     /// replica's acknowledgement.
-    UserId: string
+    UserId: UserId
     /// Scope whose key was destroyed and whose cache entry this replica
     /// evicted.
     ScopeId: string
@@ -757,7 +757,7 @@ type OAuthConnectedPayload = {
     /// caller's `AccessContext.UserId` at /authorize time and pinned
     /// to the state-store entry — survives the round-trip even if
     /// the client switches teams during consent.
-    UserId: string
+    UserId: UserId
     /// Scope where the refresh token was persisted via
     /// `ISecretStore.SetSecret(scope, "{flowName}-refresh-{dataSourceId}", ...)`.
     ScopeId: string
@@ -778,7 +778,7 @@ type OAuthConnectedPayload = {
 /// call may have succeeded, returned `RevocationUnsupported`, or
 /// failed (see `UpstreamRevoked`).
 type OAuthDisconnectedPayload = {
-    UserId: string
+    UserId: UserId
     ScopeId: string
     FlowName: string
     DataSourceId: string
@@ -798,7 +798,7 @@ type OAuthRefreshFailedPayload = {
     /// Actor recorded on the most recent `OAuthConnected`. `"system"`
     /// when the failure surfaces from a scheduled-refresh job rather
     /// than an interactive request.
-    UserId: string
+    UserId: UserId
     ScopeId: string
     FlowName: string
     DataSourceId: string
@@ -824,7 +824,7 @@ module OAuth1aSourceModule =
 /// OAuth 1.0a access-token connection established — leg 3 succeeded and the
 /// access token pair was persisted via `ISecretStore`.
 type OAuth1aConnectedPayload = {
-    UserId: string
+    UserId: UserId
     ScopeId: string
     FlowName: string
     ResourceId: string
@@ -833,7 +833,7 @@ type OAuth1aConnectedPayload = {
 
 /// User-initiated OAuth 1.0a disconnect — the local token pair was deleted.
 type OAuth1aDisconnectedPayload = {
-    UserId: string
+    UserId: UserId
     ScopeId: string
     FlowName: string
     ResourceId: string
@@ -963,7 +963,7 @@ type OAuthRefreshDeadLetteredPayload = {
 /// An external contact was filed in a scope's address book.
 type ContactCreatedPayload = {
     /// The acting user.
-    UserId: string
+    UserId: UserId
     /// The scope whose address book gained the contact.
     ScopeId: string
     /// The new contact's id. Never its email or phone (PII stays in the
@@ -979,7 +979,7 @@ type ContactCreatedPayload = {
 /// editable through this path, so this row never means a consent moved.
 type ContactUpdatedPayload = {
     /// The acting user.
-    UserId: string
+    UserId: UserId
     /// The scope the contact belongs to.
     ScopeId: string
     /// The contact edited.
@@ -993,7 +993,7 @@ type ContactUpdatedPayload = {
 /// with it.
 type ContactDeletedPayload = {
     /// The acting user.
-    UserId: string
+    UserId: UserId
     /// The scope the contact belonged to.
     ScopeId: string
     /// The contact deleted.
@@ -1009,7 +1009,7 @@ type ContactDeletedPayload = {
 type ContactOptInRecordedPayload = {
     /// The user who asserted the consent (Owner/Admin, or the system
     /// actor for an automated intake).
-    UserId: string
+    UserId: UserId
     /// The scope the contact belongs to.
     ScopeId: string
     /// The contact consenting.
@@ -1029,7 +1029,7 @@ type ContactOptInRecordedPayload = {
 /// removed by the withdrawal — this row is where the history lives.
 type ContactOptInWithdrawnPayload = {
     /// The user who withdrew it.
-    UserId: string
+    UserId: UserId
     /// The scope the contact belongs to.
     ScopeId: string
     /// The contact whose consent was withdrawn.

@@ -53,7 +53,12 @@ let create (store: IUserSchemaStore) : IJobHandler =
             | Error msg -> return PermanentFailure(sprintf "malformed migration payload: %s" msg)
             | Ok payload ->
                 let! result =
-                    store.ExecuteMigration(ctx.ScopeId, payload.SchemaId, payload.Migrations, payload.ActorUserId)
+                    store.ExecuteMigration(
+                        ctx.ScopeId,
+                        payload.SchemaId,
+                        payload.Migrations,
+                        UserId payload.ActorUserId
+                    )
 
                 match result with
                 | Ok _ -> return Success

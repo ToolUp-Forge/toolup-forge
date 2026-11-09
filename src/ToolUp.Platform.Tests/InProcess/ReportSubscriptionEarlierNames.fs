@@ -25,7 +25,7 @@ open ToolUp.Platform.Jobs
 let earlierPrincipalNameTest = test "the standing-subscription principal IS the shared declared principal (Phase 1029)" {
     let earlier: StandingSubscriptionPrincipal = {
         Name = "ops"
-        UserId = "svc-ops"
+        UserId = UserId "svc-ops"
         DisplayName = "Ops"
     }
 

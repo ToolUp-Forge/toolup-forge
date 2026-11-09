@@ -305,7 +305,7 @@ let narrativePromptApi (ctx: HttpContext) : NarrativePromptApi =
                 match serviceOf<ITeamStore> ctx with
                 | None -> return Error "Team management is not available in this deployment."
                 | Some teams ->
-                    match! teams.GetMemberRole(teamId, userId) with
+                    match! teams.GetMemberRole(TeamId teamId, UserId userId) with
                     | Some role when TeamRoles.canWriteTeamConfig role ->
                         let resolved = StorageScopeResolver.ScopeResolution.forRequest ctx
 
@@ -582,7 +582,7 @@ let narrativePromptApi (ctx: HttpContext) : NarrativePromptApi =
                         match! scheduler.Schedule(caller.Resolved, registration) with
                         | Error error -> return Error(describeScheduleError error)
                         | Ok(Scheduled jobId | Coalesced jobId) ->
-                            match! scheduler.TriggerOnce(caller.Scope.ScopeId, jobId, caller.UserId) with
+                            match! scheduler.TriggerOnce(caller.Scope.ScopeId, jobId, UserId caller.UserId) with
                             | Error refusal -> return Error(TriggerError.message refusal)
                             | Ok() -> return Ok jobId
                 })

@@ -30,7 +30,7 @@ type private RecordingTeamStore() =
 
             return
                 Ok {
-                    TeamId = teamId
+                    TeamId = teamId.Value
                     Name = name
                     CreatedAt = DateTime.UtcNow
                     Archived = false
@@ -146,7 +146,7 @@ let tests =
             let inner = RecordingTeamStore()
             let store = SanitisingTeamStore(inner) :> ITeamStore
 
-            match! store.AddMember("../../_platform/permissions/t", "user-1", TeamRole.Owner) with
+            match! store.AddMember(TeamId "../../_platform/permissions/t", UserId "user-1", TeamRole.Owner) with
             | Error _ -> Expect.isEmpty inner.Calls "inner store must not be written to"
             | Ok() -> failtest "traversal teamId must be rejected"
         }
@@ -156,7 +156,7 @@ let tests =
             let inner = RecordingTeamStore()
             let store = SanitisingTeamStore(inner) :> ITeamStore
 
-            match! store.AddMember("_platform", "user-1", TeamRole.Owner) with
+            match! store.AddMember(TeamId "_platform", UserId "user-1", TeamRole.Owner) with
             | Error _ -> Expect.isEmpty inner.Calls "reserved scope must not reach the store"
             | Ok() -> failtest "_platform teamId must be rejected"
         }
@@ -167,7 +167,7 @@ let tests =
             let store = SanitisingTeamStore(inner) :> ITeamStore
             let teamId = Guid.NewGuid().ToString("N")
 
-            match! store.AddMember(teamId, "user-42", TeamRole.Member) with
+            match! store.AddMember(TeamId teamId, UserId "user-42", TeamRole.Member) with
             | Ok() -> Expect.equal inner.Calls [ $"AddMember:{teamId}:user-42" ] "delegates a valid id"
             | Error e -> failtestf "valid id should pass: %s" e
         }
@@ -177,7 +177,7 @@ let tests =
             let inner = RecordingTeamStore()
             let store = SanitisingTeamStore(inner) :> ITeamStore
 
-            match! store.CreateTeam("../evil", "Evil") with
+            match! store.CreateTeam(TeamId "../evil", "Evil") with
             | Error _ -> Expect.isEmpty inner.Calls "inner store must not be written to"
             | Ok _ -> failtest "traversal teamId must be rejected"
         }
@@ -187,7 +187,7 @@ let tests =
             let inner = RecordingPermissionStore()
             let store = SanitisingPermissionStore(inner) :> IPermissionStore
 
-            match! store.SetMemberPermissions("team-ok", "../../_platform/x", "ModuleA", []) with
+            match! store.SetMemberPermissions(TeamId "team-ok", UserId "../../_platform/x", "ModuleA", []) with
             | Error _ -> Expect.isEmpty inner.Calls "inner store must not be written to"
             | Ok() -> failtest "traversal userId must be rejected"
         }

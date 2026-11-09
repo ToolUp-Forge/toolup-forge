@@ -127,5 +127,5 @@ type IConfigStore =
     /// boundary, failure as `ErasureError`, stateless, single-scope,
     /// precision declared above.
     abstract Erase:
-        scopeId: string * subjectUserId: string * policy: ErasurePolicy * dryRun: bool ->
+        scopeId: string * subjectUserId: UserId * policy: ErasurePolicy * dryRun: bool ->
             Async<Result<ErasureSummary, ErasureError>>

@@ -305,7 +305,7 @@ type JobSchedulerBuildOrchestrator(scheduler: IJobScheduler, eventStore: IEventS
             // tick. The scheduler's `Async.Start dispatchOne` runs
             // the handler in the background; our state dict tracks
             // the transition.
-            let! triggered = scheduler.TriggerOnce(BuildScopeId, jobId, request.SubmittedBy)
+            let! triggered = scheduler.TriggerOnce(BuildScopeId, jobId, UserId request.SubmittedBy)
 
             match triggered with
             | Ok _ -> return Ok buildId
@@ -383,7 +383,7 @@ type JobSchedulerBuildOrchestrator(scheduler: IJobScheduler, eventStore: IEventS
 
                         let cancelled = {
                             current with
-                                Status = BuildStatus.Cancelled(cancelledAt, byUserId)
+                                Status = BuildStatus.Cancelled(cancelledAt, UserId byUserId.Value)
                         }
 
                         builds[buildId] <- cancelled
@@ -396,7 +396,7 @@ type JobSchedulerBuildOrchestrator(scheduler: IJobScheduler, eventStore: IEventS
                             emitEvent "BuildCancelled" {
                                 BuildId = buildId
                                 AppSlug = current.AppSlug
-                                CancelledBy = byUserId
+                                CancelledBy = byUserId.Value
                                 CancelledAt = cancelledAt
                             }
 

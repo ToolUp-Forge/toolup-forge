@@ -332,7 +332,7 @@ let private reissueTests =
             "a dry run lists the refused fact jobs by name and writes nothing; a run re-issues them under the named key" {
             let scheduler, carrier = scheduler ()
             let shard = "a" + Guid.NewGuid().ToString "N"
-            let key = ScopeKey.Team shard
+            let key = ScopeKey.Team(TeamId shard)
             let recompute = unscoped scheduler shard RecomputeJobHandler.HandlerName
             let coherence = unscoped scheduler shard CoherenceJobHandler.HandlerName
             let other = unscoped scheduler shard "reports.weekly"
@@ -390,8 +390,8 @@ let private reissueTests =
                 FactJobReissue.reissue
                     scheduler
                     carrier
-                    (resolvingTo (ScopeKey.Team shard))
-                    (ScopeKey.User shard)
+                    (resolvingTo (ScopeKey.Team(TeamId shard)))
+                    (ScopeKey.User(UserId shard))
                     (Some "operator")
                     false
                 |> Async.RunSynchronously
@@ -405,8 +405,8 @@ let private reissueTests =
                 FactJobReissue.reissue
                     scheduler
                     carrier
-                    (resolvingTo (ScopeKey.Team shard))
-                    (ScopeKey.Team shard)
+                    (resolvingTo (ScopeKey.Team(TeamId shard)))
+                    (ScopeKey.Team(TeamId shard))
                     None
                     false
                 |> Async.RunSynchronously
@@ -416,8 +416,8 @@ let private reissueTests =
         }
 
         test "the kind is the operator's to say: a key the grammar does not render is refused" {
-            Expect.equal (FactJobReissue.parseKey "team:a1") (Ok(ScopeKey.Team "a1")) "team"
-            Expect.equal (FactJobReissue.parseKey "user:u-7") (Ok(ScopeKey.User "u-7")) "user"
+            Expect.equal (FactJobReissue.parseKey "team:a1") (Ok(ScopeKey.Team(TeamId "a1"))) "team"
+            Expect.equal (FactJobReissue.parseKey "user:u-7") (Ok(ScopeKey.User(UserId "u-7"))) "user"
             Expect.equal (FactJobReissue.parseKey "session:s1") (Ok(ScopeKey.Session "s1")) "session"
 
             for text in [ "a1"; "org:a1"; "team:"; ":a1"; "team: a1" ] do

@@ -89,10 +89,12 @@ let platformAdminApi (ctx: HttpContext) : PlatformAdminApi =
             }
 
         AssignPlatformAdmin =
-            fun targetUserId -> withGate (fun store -> store.AssignPlatformAdmin(accessContext.UserId, targetUserId))
+            fun targetUserId ->
+                withGate (fun store -> store.AssignPlatformAdmin(UserId accessContext.UserId, UserId targetUserId))
 
         RevokePlatformAdmin =
-            fun targetUserId -> withGate (fun store -> store.RevokePlatformAdmin(accessContext.UserId, targetUserId))
+            fun targetUserId ->
+                withGate (fun store -> store.RevokePlatformAdmin(UserId accessContext.UserId, UserId targetUserId))
 
         GetPlatformKnowledgeBase =
             fun () -> async {

@@ -32,7 +32,7 @@ type DataObjectStoreExporter(store: IDataObjectStore) =
         member _.Name = HandlerName
 
         member _.Export(scopeId, subjectUserId) = async {
-            if Erasure.isBlankSubject subjectUserId then
+            if Erasure.isBlankSubject subjectUserId.Value then
                 return []
             else
                 let! objects = store.ListObjects scopeId
@@ -40,8 +40,8 @@ type DataObjectStoreExporter(store: IDataObjectStore) =
                 let matched =
                     objects
                     |> List.filter (fun o ->
-                        o.CreatedBy = subjectUserId
-                        || (o.Metadata |> Map.exists (fun _ v -> v.Contains subjectUserId)))
+                        o.CreatedBy = subjectUserId.Value
+                        || (o.Metadata |> Map.exists (fun _ v -> v.Contains subjectUserId.Value)))
 
                 if List.isEmpty matched then
                     return []
@@ -67,7 +67,7 @@ type DataObjectStoreErasureHandler(store: IDataObjectStore) =
             store.Erase(scopeId, subjectUserId, policy, false)
 
         member _.Preview(scopeId, subjectUserId, policy) = async {
-            let! result = store.Erase(scopeId, subjectUserId, policy, true)
+            let! result = store.Erase(scopeId, UserId subjectUserId.Value, policy, true)
 
             return
                 match result with

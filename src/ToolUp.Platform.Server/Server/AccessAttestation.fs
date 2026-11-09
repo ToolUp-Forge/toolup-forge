@@ -434,7 +434,7 @@ let private liveApprovalsFor
     async {
         let! perms = async {
             try
-                let! p = sources.Permissions.GetTeamPermissions teamId
+                let! p = sources.Permissions.GetTeamPermissions(TeamId teamId)
                 return Ok p
             with ex ->
                 return Error $"permission document for team '{teamId}' could not be read: {ex.Message}"

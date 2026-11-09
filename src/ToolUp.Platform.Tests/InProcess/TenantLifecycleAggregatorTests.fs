@@ -74,7 +74,7 @@ type private RecordingProvisionHook(name: string) =
         member _.OnProvisioned(scopeId, actorUserId) = async {
             received.Add {
                 ScopeId = scopeId
-                ActorUserId = actorUserId
+                ActorUserId = actorUserId.Value
                 Request = None
             }
 

@@ -861,7 +861,7 @@ type DataObjectStore(blobStorage: IBlobStorage, ?logger: ILogger) =
         }
 
         member _.Erase(scopeId, subjectUserId, policy, dryRun) = async {
-            if Erasure.isBlankSubject subjectUserId then
+            if Erasure.isBlankSubject subjectUserId.Value then
                 return
                     Result.Ok {
                         HandlerName = "data-objects"
@@ -894,8 +894,8 @@ type DataObjectStore(blobStorage: IBlobStorage, ?logger: ILogger) =
                     |> Async.Parallel
 
                 let namesSubject (m: DataObject) =
-                    m.CreatedBy = subjectUserId
-                    || (m.Metadata |> Map.exists (fun _ v -> v.Contains subjectUserId))
+                    m.CreatedBy = subjectUserId.Value
+                    || (m.Metadata |> Map.exists (fun _ v -> v.Contains subjectUserId.Value))
 
                 let matched =
                     perObject
@@ -1034,14 +1034,14 @@ type DataObjectStore(blobStorage: IBlobStorage, ?logger: ILogger) =
                         let redact (m: DataObject) = {
                             m with
                                 CreatedBy =
-                                    (if m.CreatedBy = subjectUserId then
+                                    (if m.CreatedBy = subjectUserId.Value then
                                          Erasure.TombstoneMarker
                                      else
                                          m.CreatedBy)
                                 Metadata =
                                     m.Metadata
                                     |> Map.map (fun _ v ->
-                                        if v.Contains subjectUserId then
+                                        if v.Contains subjectUserId.Value then
                                             Erasure.TombstoneMarker
                                         else
                                             v)

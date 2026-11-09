@@ -203,7 +203,7 @@ let blobBackedTests =
             let! _ = registry.Record stale
             let! _ = registry.Record fresh
 
-            let! listed = registry.ListForUser("team-a", "user-a")
+            let! listed = registry.ListForUser("team-a", UserId "user-a")
 
             match listed with
             | Error e -> failtestf "ListForUser failed: %A" e
@@ -224,7 +224,7 @@ let blobBackedTests =
             // Without the sanitiser this read would enumerate a chosen
             // `_platform/...` prefix — the same cross-scope sink Phase 131
             // closed at the team / permission / share-token seams.
-            let! listed = registry.ListForUser("../../jobs", "user-a")
+            let! listed = registry.ListForUser("../../jobs", UserId "user-a")
 
             match listed with
             | Error(SessionError.AccessDenied _) -> ()

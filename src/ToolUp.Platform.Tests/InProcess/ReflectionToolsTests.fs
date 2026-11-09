@@ -105,9 +105,13 @@ let private teamStoreWith (teamId: string) (userId: string) (role: TeamRole) : I
     let storage = InMemoryBlobStorage() :> IBlobStorage
     let notifications = InMemoryNotificationChannel(None) :> INotificationChannel
     let store = TeamStore(storage, notifications)
-    store.CreateTeam(teamId, "Test Team") |> Async.RunSynchronously |> ignore
+    store.CreateTeam(TeamId teamId, "Test Team") |> Async.RunSynchronously |> ignore
     let teams = store :> ITeamStore
-    teams.AddMember(teamId, userId, role) |> Async.RunSynchronously |> ignore
+
+    teams.AddMember(TeamId teamId, UserId userId, role)
+    |> Async.RunSynchronously
+    |> ignore
+
     teams
 
 type private Fixture = {

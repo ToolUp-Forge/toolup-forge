@@ -145,10 +145,10 @@ type ClientModuleContext = {
     Flags: Map<string, FlagValue>
     /// Authenticated user's identifier. `"anonymous"` for an
     /// `AnonymousSession` subject.
-    UserId: string
+    UserId: UserId
     /// Active team identifier when the active subject is a
     /// `TeamMember`; `None` otherwise.
-    TeamId: string option
+    TeamId: TeamId option
     /// Cross-module query bus for in-browser / HTTP-fallback dispatch.
     /// Modules use this to ask other modules for data
     /// without importing them — see `ModuleQueryClient.ask` for the
@@ -197,7 +197,7 @@ module ClientModuleContext =
         Config = Map.empty
         PlatformConfig = Map.empty
         Flags = Map.empty
-        UserId = "anonymous"
+        UserId = UserId "anonymous"
         TeamId = None
         QueryBus = NoOpModuleQueryBus() :> IModuleQueryBus
         OnTeamSwitched = None

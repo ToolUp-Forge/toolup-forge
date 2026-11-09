@@ -20,7 +20,7 @@ open System
 /// distribution choice — the audit echoes whatever the issuer
 /// supplied so forensics can reconstruct the recipient mapping.
 type ShareTokenIssuedPayload = {
-    UserId: string
+    UserId: UserId
     TokenId: string
     ResourceKind: string
     ResourceId: string
@@ -43,7 +43,7 @@ type ShareTokenUsedPayload = {
 /// or the issuer's automation). Subsequent `Validate` calls return
 /// `Error RevokedToken`.
 type ShareTokenRevokedPayload = {
-    UserId: string
+    UserId: UserId
     TokenId: string
     ResourceKind: string
     ResourceId: string
@@ -62,8 +62,8 @@ type ShareTokenRevokedPayload = {
 /// when", and anything more would put credential-adjacent material into
 /// the one store designed to be replicated off-box.
 type SessionRevokedPayload = {
-    ActorUserId: string
-    SubjectUserId: string
+    ActorUserId: UserId
+    SubjectUserId: UserId
     SessionId: string
     /// Coarse device descriptor as stored on the record — enough to
     /// recognise which session was cut off without re-deriving it.
@@ -80,8 +80,8 @@ type SessionRevokedPayload = {
 /// how many records moved from active to revoked, so a trail reader can
 /// tell a real sign-out-everywhere from a no-op repeat.
 type AllSessionsRevokedPayload = {
-    ActorUserId: string
-    SubjectUserId: string
+    ActorUserId: UserId
+    SubjectUserId: UserId
     RevokedCount: int
     ByAdministrator: bool
 }
@@ -107,7 +107,7 @@ type AllSessionsRevokedPayload = {
 /// live on the account record) so an operator can see the credential's
 /// reach without a second read.
 type ServiceAccountCreatedPayload = {
-    UserId: string
+    UserId: UserId
     AccountId: string
     DisplayName: string
     Modules: string list
@@ -118,7 +118,7 @@ type ServiceAccountCreatedPayload = {
 /// "what was it before" is the question an incident asks first, and the
 /// prior value is otherwise unrecoverable from the account record.
 type ServiceAccountPermissionsChangedPayload = {
-    UserId: string
+    UserId: UserId
     AccountId: string
     PreviousModules: string list
     Modules: string list
@@ -128,7 +128,7 @@ type ServiceAccountPermissionsChangedPayload = {
 /// NOT in this payload and never can be — the store retains only a
 /// salted hash.
 type ServiceAccountTokenMintedPayload = {
-    UserId: string
+    UserId: UserId
     AccountId: string
     TokenId: string
     DisplayName: string
@@ -138,7 +138,7 @@ type ServiceAccountTokenMintedPayload = {
 /// `IServiceAccountStore.RevokeToken` succeeded. Subsequent validations
 /// of this token return `RevokedToken`.
 type ServiceAccountTokenRevokedPayload = {
-    UserId: string
+    UserId: UserId
     AccountId: string
     TokenId: string
 }
@@ -148,7 +148,7 @@ type ServiceAccountTokenRevokedPayload = {
 /// tokens themselves are untouched, so the transition is reversible and
 /// this event is emitted for both directions.
 type ServiceAccountStatusChangedPayload = {
-    UserId: string
+    UserId: UserId
     AccountId: string
     Disabled: bool
 }
@@ -234,7 +234,7 @@ module ConversationsSourceModule =
 /// reading the conversation blob.
 type ConversationStartedPayload = {
     ConversationId: string
-    UserId: string
+    UserId: UserId
     ScopeId: string
     Provider: string
     ModelName: string
@@ -281,7 +281,7 @@ type ConversationCompletedPayload = {
 /// the broader run.
 type ConversationErasedPayload = {
     /// The DSR subject — the user whose conversations were erased.
-    SubjectUserId: string
+    SubjectUserId: UserId
     /// `"HardDelete"` / `"Tombstone"` / `"RetainPerCompliance"`.
     Policy: string
     /// Total conversations matched. The per-conversation `Id`s are
@@ -382,7 +382,7 @@ type DiagnosticBundleAccessedPayload = {
     /// sentinel when no identity was resolved (the endpoint stays
     /// usable while operators are diagnosing auth failures, mirroring
     /// `/dev/inspect`'s posture).
-    UserId: string
+    UserId: UserId
     /// Caller's resolved `StorageScope.ScopeId` when scope resolution
     /// succeeded; `None` when no scope resolved (the bundle still
     /// produces, but the audit-tail section narrows to `_platform`
@@ -532,7 +532,7 @@ type DataSubjectRequestAuditPayload = {
     Kind: string
     /// Subject of the request — the `SubjectUserId` whose records were
     /// (or would have been) affected.
-    SubjectUserId: string
+    SubjectUserId: UserId
     /// Admin actor who initiated the request.
     Actor: string
     /// Free-text rationale carried from the originating request (ticket

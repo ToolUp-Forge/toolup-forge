@@ -305,7 +305,7 @@ let tests =
                 | other -> failtestf "expected JustificationRequired, got %A" other
 
                 // Nothing was persisted by either refusal.
-                let! doc = store.GetTeamPermissions "t1"
+                let! doc = store.GetTeamPermissions(TeamId "t1")
                 Expect.isEmpty doc.Members "a refused grant writes nothing"
                 Expect.isEmpty doc.Grants "a refused grant records nothing"
             }
@@ -327,7 +327,7 @@ let tests =
 
                 Expect.equal outcome (Ok GrantWriteOutcome.Granted) "granted outright — no third party is involved"
 
-                let! doc = store.GetTeamPermissions "t1"
+                let! doc = store.GetTeamPermissions(TeamId "t1")
                 let record = TeamPermissions.grantsFor "alice" doc |> Map.tryFind "Partner"
 
                 match record with
@@ -362,7 +362,7 @@ let tests =
                     (Ok(GrantWriteOutcome.RecordedPendingConsent "alice"))
                     "the admin cannot consent on the subject's behalf"
 
-                let! pending = store.GetTeamPermissions "t1"
+                let! pending = store.GetTeamPermissions(TeamId "t1")
 
                 let pendingRecord =
                     TeamPermissions.grantsFor "alice" pending |> Map.tryFind "Partner"
@@ -374,14 +374,14 @@ let tests =
                 // The permission entry EXISTS meanwhile — which is
                 // exactly why liveness has to be a separate question from
                 // `canAccessModule`.
-                let! effective = store.GetEffectivePermissions("alice", "t1")
+                let! effective = store.GetEffectivePermissions(UserId "alice", TeamId "t1")
                 Expect.isTrue (effective.ContainsKey "Partner") "the permission entry is written; it is just inert"
 
                 match! GrantPolicyGuard.PermissionGrants.acceptGrant store "t1" "alice" "Partner" with
                 | Error e -> failtestf "acceptGrant failed: %s" e
                 | Ok() -> ()
 
-                let! accepted = store.GetTeamPermissions "t1"
+                let! accepted = store.GetTeamPermissions(TeamId "t1")
 
                 let acceptedRecord =
                     TeamPermissions.grantsFor "alice" accepted |> Map.tryFind "Partner"
@@ -430,7 +430,7 @@ let tests =
                     Expect.equal named party "the refusal names the party whose approval is missing"
                 | other -> failtestf "expected CounterpartyApprovalUnavailable, got %A" other
 
-                let! doc = store.GetTeamPermissions "t1"
+                let! doc = store.GetTeamPermissions(TeamId "t1")
                 Expect.isEmpty doc.Members "nothing persisted — an emailed approval is not an artifact"
             }
 
@@ -469,18 +469,18 @@ let tests =
                     GrantPolicyGuard.GrantPolicyPermissionStore(freshStore (), registry, audit, "admin")
                     :> IPermissionStore
 
-                match! store.SetMemberPermissions("t1", "alice", "Partner", [ Read ]) with
+                match! store.SetMemberPermissions(TeamId "t1", UserId "alice", "Partner", [ Read ]) with
                 | Error msg -> Expect.stringContains msg "GRANT-POLICY-ACK-REQUIRED" "typed, greppable refusal"
                 | Ok() -> failtest "an unevidenced grant on a policy-bearing module must refuse"
 
                 // An AdminDiscretion module through the same store is
                 // untouched — this is the GP 11 half of the decorator.
-                match! store.SetMemberPermissions("t1", "alice", "Ordinary", [ Read ]) with
+                match! store.SetMemberPermissions(TeamId "t1", UserId "alice", "Ordinary", [ Read ]) with
                 | Error e -> failtestf "an AdminDiscretion grant must pass unchanged: %s" e
                 | Ok() -> ()
 
                 // And a revocation on the policy-bearing module passes.
-                match! store.SetMemberPermissions("t1", "alice", "Partner", []) with
+                match! store.SetMemberPermissions(TeamId "t1", UserId "alice", "Partner", []) with
                 | Error e -> failtestf "revocation must pass: %s" e
                 | Ok() -> ()
             }
@@ -495,11 +495,11 @@ let tests =
                 let store =
                     GrantPolicyGuard.GrantPolicyPermissionStore(freshStore (), registry) :> IPermissionStore
 
-                match! store.SetTeamDefaults("t1", Map.ofList [ "Partner", [ Read ] ]) with
+                match! store.SetTeamDefaults(TeamId "t1", Map.ofList [ "Partner", [ Read ] ]) with
                 | Error msg -> Expect.stringContains msg "GRANT-POLICY-UNBACKED-GRANT" "refused, naming the module"
                 | Ok() -> failtest "a policy-bearing module must not be grantable by default"
 
-                match! store.SetTeamDefaults("t1", Map.ofList [ "Ordinary", [ Read ] ]) with
+                match! store.SetTeamDefaults(TeamId "t1", Map.ofList [ "Ordinary", [ Read ] ]) with
                 | Error e -> failtestf "an AdminDiscretion default must pass unchanged: %s" e
                 | Ok() -> ()
             }
@@ -513,7 +513,7 @@ let tests =
                     GrantPolicyGuard.GrantPolicyPermissionStore(freshStore (), registry, audit, "admin-7")
                     :> IPermissionStore
 
-                let! _ = store.SetMemberPermissions("t1", "alice", "Partner", [ Read ])
+                let! _ = store.SetMemberPermissions(TeamId "t1", UserId "alice", "Partner", [ Read ])
 
                 // The decorator's emission is fire-and-forget per the
                 // IAuditLog contract, so poll briefly rather than assume
@@ -558,7 +558,7 @@ let tests =
 
                 match outcome with
                 | Error payload ->
-                    Expect.equal payload.UserId "mallory" "names the caller"
+                    Expect.equal payload.UserId (UserId "mallory") "names the caller"
                     Expect.equal payload.ModuleName "Partner" "names the module"
 
                     Expect.equal
@@ -705,14 +705,14 @@ let tests =
             <| async {
                 let store = freshStore ()
 
-                match! store.SetMemberPermissions("t1", "alice", "Ordinary", [ Read; Write ]) with
+                match! store.SetMemberPermissions(TeamId "t1", UserId "alice", "Ordinary", [ Read; Write ]) with
                 | Error e -> failtestf "SetMemberPermissions failed: %s" e
                 | Ok() -> ()
 
-                let! doc = store.GetTeamPermissions "t1"
+                let! doc = store.GetTeamPermissions(TeamId "t1")
                 Expect.isEmpty doc.Grants "no records are minted for an AdminDiscretion module"
 
-                let! effective = store.GetEffectivePermissions("alice", "t1")
+                let! effective = store.GetEffectivePermissions(UserId "alice", TeamId "t1")
                 Expect.equal effective (Map.ofList [ "Ordinary", [ Read; Write ] ]) "and the merge is unchanged"
             }
 
@@ -738,7 +738,7 @@ let tests =
                 | Ok _ -> ()
 
                 let store = PermissionStore(storage) :> IPermissionStore
-                let! doc = store.GetTeamPermissions "t1"
+                let! doc = store.GetTeamPermissions(TeamId "t1")
 
                 Expect.isEmpty doc.Grants "absent ⇒ empty ⇒ every module behaves as AdminDiscretion"
                 Expect.equal (Map.count doc.Members) 1 "and the rest of the document is unaffected"

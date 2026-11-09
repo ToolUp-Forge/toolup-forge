@@ -335,7 +335,7 @@ type DeclaredPrincipalResolver
     member _.Resolve(principal: Auth.AuthenticatedUser) : Async<Result<ResolvedScope, ScopeResolutionError>> = async {
         if
             isNull (box principal)
-            || String.IsNullOrWhiteSpace principal.UserId
+            || String.IsNullOrWhiteSpace principal.UserId.Value
             || Auth.AuthenticatedUser.isAnonymous principal
         then
             return Error NotAuthenticated
@@ -373,7 +373,7 @@ module DeclaredPrincipal =
     /// roles, no email and no tenant, as a request carrying only that
     /// identity would be.
     let userOf (userId: string) (displayName: string) : Auth.AuthenticatedUser = {
-        UserId = userId
+        UserId = UserId userId
         DisplayName = displayName
         Email = None
         TenantId = None
@@ -385,7 +385,7 @@ module DeclaredPrincipal =
     /// The identity `DeclaredPrincipalResolver.Resolve` resolves for
     /// `principal`.
     let user (principal: DeclaredPrincipal) : Auth.AuthenticatedUser =
-        userOf principal.UserId principal.DisplayName
+        userOf principal.UserId.Value principal.DisplayName
 
     /// The grant a scope-resolution refusal says a declared principal lacks.
     let missingGrant (error: ScopeResolutionError) : string =

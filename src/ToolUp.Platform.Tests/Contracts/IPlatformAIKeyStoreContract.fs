@@ -3,6 +3,7 @@ module ToolUp.Platform.Tests.Contracts.IPlatformAIKeyStoreContract
 open Expecto
 open ToolUp.AI
 open ToolUp.Platform.Compose
+open ToolUp.Platform
 
 // ─── IPlatformAIKeyStore contract pack (Phase 70) ────────────────
 //
@@ -101,36 +102,36 @@ let tests (name: string) (factory: unit -> IPlatformAIKeyStore) =
         testCaseAsync "GetTeamKey on empty store returns None"
         <| async {
             let store = factory ()
-            let! key = store.GetTeamKey("team-alpha", "anthropic-claude")
+            let! key = store.GetTeamKey(TeamId "team-alpha", "anthropic-claude")
             Expect.isNone key "no key recorded"
         }
 
         testCaseAsync "SetTeamKey then GetTeamKey round-trips the value"
         <| async {
             let store = factory ()
-            let! _ = store.SetTeamKey("team-alpha", "anthropic-claude", "sk-team-alpha")
-            let! key = store.GetTeamKey("team-alpha", "anthropic-claude")
+            let! _ = store.SetTeamKey(TeamId "team-alpha", "anthropic-claude", "sk-team-alpha")
+            let! key = store.GetTeamKey(TeamId "team-alpha", "anthropic-claude")
             Expect.equal key (Some "sk-team-alpha") "team key value matches"
         }
 
         testCaseAsync "HasTeamKey reflects GetTeamKey.IsSome"
         <| async {
             let store = factory ()
-            let! before = store.HasTeamKey("team-alpha", "openai")
+            let! before = store.HasTeamKey(TeamId "team-alpha", "openai")
             Expect.isFalse before "no key before write"
-            let! _ = store.SetTeamKey("team-alpha", "openai", "sk-team")
-            let! after = store.HasTeamKey("team-alpha", "openai")
+            let! _ = store.SetTeamKey(TeamId "team-alpha", "openai", "sk-team")
+            let! after = store.HasTeamKey(TeamId "team-alpha", "openai")
             Expect.isTrue after "key present after write"
         }
 
         testCaseAsync "DeleteTeamKey clears only the targeted team's value"
         <| async {
             let store = factory ()
-            let! _ = store.SetTeamKey("team-alpha", "anthropic-claude", "alpha-key")
-            let! _ = store.SetTeamKey("team-beta", "anthropic-claude", "beta-key")
-            let! _ = store.DeleteTeamKey("team-alpha", "anthropic-claude")
-            let! alphaKey = store.GetTeamKey("team-alpha", "anthropic-claude")
-            let! betaKey = store.GetTeamKey("team-beta", "anthropic-claude")
+            let! _ = store.SetTeamKey(TeamId "team-alpha", "anthropic-claude", "alpha-key")
+            let! _ = store.SetTeamKey(TeamId "team-beta", "anthropic-claude", "beta-key")
+            let! _ = store.DeleteTeamKey(TeamId "team-alpha", "anthropic-claude")
+            let! alphaKey = store.GetTeamKey(TeamId "team-alpha", "anthropic-claude")
+            let! betaKey = store.GetTeamKey(TeamId "team-beta", "anthropic-claude")
             Expect.isNone alphaKey "alpha key cleared"
             Expect.equal betaKey (Some "beta-key") "beta key untouched"
         }
@@ -138,8 +139,8 @@ let tests (name: string) (factory: unit -> IPlatformAIKeyStore) =
         testCaseAsync "Team-scope writes do not bleed across teams"
         <| async {
             let store = factory ()
-            let! _ = store.SetTeamKey("team-alpha", "anthropic-claude", "alpha-only")
-            let! beta = store.GetTeamKey("team-beta", "anthropic-claude")
+            let! _ = store.SetTeamKey(TeamId "team-alpha", "anthropic-claude", "alpha-only")
+            let! beta = store.GetTeamKey(TeamId "team-beta", "anthropic-claude")
             Expect.isNone beta "team-beta has no key for the same provider"
         }
 
@@ -149,14 +150,14 @@ let tests (name: string) (factory: unit -> IPlatformAIKeyStore) =
         <| async {
             let store = factory ()
             let! _ = store.SetPlatformKey("anthropic-claude", "platform-default")
-            let! teamKey = store.GetTeamKey("team-alpha", "anthropic-claude")
+            let! teamKey = store.GetTeamKey(TeamId "team-alpha", "anthropic-claude")
             Expect.isNone teamKey "platform-scope key does not surface as team-scope"
         }
 
         testCaseAsync "Team-scope write is invisible to platform-scope reads"
         <| async {
             let store = factory ()
-            let! _ = store.SetTeamKey("team-alpha", "anthropic-claude", "team-override")
+            let! _ = store.SetTeamKey(TeamId "team-alpha", "anthropic-claude", "team-override")
             let! platformKey = store.GetPlatformKey "anthropic-claude"
             Expect.isNone platformKey "team-scope key does not surface as platform-scope"
         }
@@ -165,9 +166,9 @@ let tests (name: string) (factory: unit -> IPlatformAIKeyStore) =
         <| async {
             let store = factory ()
             let! _ = store.SetPlatformKey("anthropic-claude", "platform-default")
-            let! _ = store.SetTeamKey("team-alpha", "anthropic-claude", "team-override")
+            let! _ = store.SetTeamKey(TeamId "team-alpha", "anthropic-claude", "team-override")
             let! platformKey = store.GetPlatformKey "anthropic-claude"
-            let! teamKey = store.GetTeamKey("team-alpha", "anthropic-claude")
+            let! teamKey = store.GetTeamKey(TeamId "team-alpha", "anthropic-claude")
             Expect.equal platformKey (Some "platform-default") "platform key unchanged"
             Expect.equal teamKey (Some "team-override") "team key unchanged"
         }
@@ -176,9 +177,9 @@ let tests (name: string) (factory: unit -> IPlatformAIKeyStore) =
         <| async {
             let store = factory ()
             let! _ = store.SetPlatformKey("anthropic-claude", "platform-default")
-            let! _ = store.SetTeamKey("team-alpha", "anthropic-claude", "team-override")
+            let! _ = store.SetTeamKey(TeamId "team-alpha", "anthropic-claude", "team-override")
             let! _ = store.DeletePlatformKey "anthropic-claude"
-            let! teamKey = store.GetTeamKey("team-alpha", "anthropic-claude")
+            let! teamKey = store.GetTeamKey(TeamId "team-alpha", "anthropic-claude")
             Expect.equal teamKey (Some "team-override") "team key survives platform delete"
         }
     ]

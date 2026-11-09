@@ -214,7 +214,11 @@ let private noOpChannelTests =
         <| async {
             let log = AuditLog.NoOpAuditLog() :> IAuditLog
 
-            let payload = UserLoggedIn { UserId = "u1"; AuthProvider = "test" }
+            let payload =
+                UserLoggedIn {
+                    UserId = UserId "u1"
+                    AuthProvider = "test"
+                }
 
             do! log.Record("scope-x", payload)
         }

@@ -120,7 +120,7 @@ let dataIngestionApi (ctx: HttpContext) : IDataIngestionApi =
         | TeamMember(userId, teamId) ->
             match ctx.RequestServices.GetService(typeof<ITeamStore>) with
             | :? ITeamStore as ts ->
-                let! role = ts.GetMemberRole(teamId, userId)
+                let! role = ts.GetMemberRole(TeamId teamId, UserId userId)
 
                 match role with
                 | Some r when TeamRoles.canWriteTeamConfig r -> return Ok()
@@ -217,7 +217,7 @@ let dataIngestionApi (ctx: HttpContext) : IDataIngestionApi =
                             // so admin-UI "Refresh now" actually runs the
                             // ingestion within seconds rather than at the
                             // next minute tick.
-                            match! s.TriggerOnce(scope.ScopeId, jobId, accessContext.UserId) with
+                            match! s.TriggerOnce(scope.ScopeId, jobId, UserId accessContext.UserId) with
                             | Ok() -> return Ok jobId
                             | Error refusal -> return Error(TriggerError.message refusal)
                         | Error err -> return Error(sprintf "%A" err)
@@ -368,7 +368,7 @@ let dataIngestionApi (ctx: HttpContext) : IDataIngestionApi =
                                     auditLog.Record(
                                         scopeId,
                                         OAuthDisconnected {
-                                            UserId = accessContext.UserId
+                                            UserId = UserId accessContext.UserId
                                             ScopeId = scopeId
                                             FlowName = meta.FlowName
                                             DataSourceId = sourceId

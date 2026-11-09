@@ -70,7 +70,7 @@ type IExternalContactStore =
     /// rows for one person means two sends, and a withdrawal that
     /// silences only one of them.
     abstract Create:
-        scopeId: string * actorUserId: string * owner: ContactOwner * request: CreateExternalContactRequest ->
+        scopeId: string * actorUserId: UserId * owner: ContactOwner * request: CreateExternalContactRequest ->
             Async<Result<ExternalContact, ExternalContactError>>
 
     /// Read one contact. `Error ScopeMismatch` when the contact exists
@@ -90,7 +90,7 @@ type IExternalContactStore =
     /// see the preamble. Re-runs the duplicate check when an address
     /// changes, for the same reason `Create` runs it.
     abstract Update:
-        scopeId: string * actorUserId: string * request: UpdateExternalContactRequest ->
+        scopeId: string * actorUserId: UserId * request: UpdateExternalContactRequest ->
             Async<Result<ExternalContact, ExternalContactError>>
 
     /// Delete a contact and every consent it carried. Returns the
@@ -99,7 +99,7 @@ type IExternalContactStore =
     /// gone (`Ok []`): a deletion request honoured twice is still a
     /// deletion request honoured.
     abstract Delete:
-        scopeId: string * actorUserId: string * contactId: string ->
+        scopeId: string * actorUserId: UserId * contactId: string ->
             Async<Result<NotificationKind.SinkKind list, ExternalContactError>>
 
     /// Record a per-channel consent, replacing any prior record for that
@@ -107,7 +107,7 @@ type IExternalContactStore =
     /// its Article 7 `Source` evidence.
     abstract RecordOptIn:
         scopeId: string *
-        actorUserId: string *
+        actorUserId: UserId *
         contactId: string *
         channel: NotificationKind.SinkKind *
         record: OptInRecord ->
@@ -124,7 +124,7 @@ type IExternalContactStore =
     /// nobody recorded is the half of the consent history that a
     /// complaint actually turns on.
     abstract WithdrawOptIn:
-        scopeId: string * actorUserId: string * contactId: string * channel: NotificationKind.SinkKind * reason: string ->
+        scopeId: string * actorUserId: UserId * contactId: string * channel: NotificationKind.SinkKind * reason: string ->
             Async<Result<ExternalContact, ExternalContactError>>
 
     /// Stamp `LastInboundUtc`. Driven by a channel's inbound webhook so

@@ -929,7 +929,7 @@ let internal auditEventCodecs: AuditEventCodec list = [
             | PremiumGranted(subjectUserId, grantor, reason, occurredAt) ->
                 Some(
                     toAuditJson {
-                        SubjectUserId = subjectUserId
+                        SubjectUserId = subjectUserId.Value
                         Grantor = grantor
                         Reason = reason
                         OccurredAt = occurredAt
@@ -939,7 +939,7 @@ let internal auditEventCodecs: AuditEventCodec list = [
         Decode =
             fun j ->
                 let p = fromAuditJson<PremiumAuditPayload> j
-                PremiumGranted(p.SubjectUserId, p.Grantor, p.Reason, p.OccurredAt)
+                PremiumGranted(UserId p.SubjectUserId, p.Grantor, p.Reason, p.OccurredAt)
     }
     {
         EventType = "PremiumRevoked"
@@ -948,7 +948,7 @@ let internal auditEventCodecs: AuditEventCodec list = [
             | PremiumRevoked(subjectUserId, grantor, reason, occurredAt) ->
                 Some(
                     toAuditJson {
-                        SubjectUserId = subjectUserId
+                        SubjectUserId = subjectUserId.Value
                         Grantor = grantor
                         Reason = reason
                         OccurredAt = occurredAt
@@ -958,7 +958,7 @@ let internal auditEventCodecs: AuditEventCodec list = [
         Decode =
             fun j ->
                 let p = fromAuditJson<PremiumAuditPayload> j
-                PremiumRevoked(p.SubjectUserId, p.Grantor, p.Reason, p.OccurredAt)
+                PremiumRevoked(UserId p.SubjectUserId, p.Grantor, p.Reason, p.OccurredAt)
     }
     {
         EventType = "AdSlotConfigCreated"

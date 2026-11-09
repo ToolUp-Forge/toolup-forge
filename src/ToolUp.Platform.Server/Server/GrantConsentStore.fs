@@ -89,7 +89,7 @@ type IGrantConsentStore =
     abstract Put: record: GrantConsentRecord -> Async<Result<unit, string>>
 
     /// One record by id, scoped to the team it belongs to.
-    abstract TryGet: teamId: string * consentId: string -> Async<Result<GrantConsentRecord option, string>>
+    abstract TryGet: teamId: TeamId * consentId: string -> Async<Result<GrantConsentRecord option, string>>
 
     /// Every record the registry holds for one grant subject, in no
     /// promised order.
@@ -114,9 +114,9 @@ let private validateForPut (record: GrantConsentRecord) =
     elif ConsentSubject.isIncomplete record.Subject then
         Error "consent subject must name a team, a subject and a module"
     elif
-        String.IsNullOrWhiteSpace record.Subject.TeamId
-        || record.Subject.TeamId.Contains "/"
-        || record.Subject.TeamId.Contains "\\"
+        String.IsNullOrWhiteSpace record.Subject.TeamId.Value
+        || record.Subject.TeamId.Value.Contains "/"
+        || record.Subject.TeamId.Value.Contains "\\"
     then
         Error "consent team id must not contain a path separator"
     else
@@ -137,12 +137,12 @@ type InMemoryGrantConsentStore() =
             match validateForPut record with
             | Error e -> return Error e
             | Ok() ->
-                records[(record.Subject.TeamId, record.ConsentId)] <- record
+                records[(record.Subject.TeamId.Value, record.ConsentId)] <- record
                 return Ok()
         }
 
         member _.TryGet(teamId, consentId) = async {
-            match records.TryGetValue((teamId, consentId)) with
+            match records.TryGetValue((teamId.Value, consentId)) with
             | true, r -> return Ok(Some r)
             | _ -> return Ok None
         }
@@ -189,7 +189,11 @@ type BlobGrantConsentStore(storage: IBlobStorage, ?logger: ILogger) =
                     let bytes = JsonSerializer.Serialize(record, jsonOptions) |> Encoding.UTF8.GetBytes
 
                     let! result =
-                        storage.Upload(PlatformContainer, consentBlobName record.Subject.TeamId record.ConsentId, bytes)
+                        storage.Upload(
+                            PlatformContainer,
+                            consentBlobName record.Subject.TeamId.Value record.ConsentId,
+                            bytes
+                        )
 
                     return
                         match result with
@@ -202,7 +206,7 @@ type BlobGrantConsentStore(storage: IBlobStorage, ?logger: ILogger) =
         }
 
         member _.TryGet(teamId, consentId) = async {
-            let blobName = consentBlobName teamId consentId
+            let blobName = consentBlobName teamId.Value consentId
             let! exists = storage.Exists(PlatformContainer, blobName)
 
             if not exists then
@@ -231,7 +235,7 @@ type BlobGrantConsentStore(storage: IBlobStorage, ?logger: ILogger) =
 
         member _.ListForSubject subject = async {
             try
-                let! names = storage.List(PlatformContainer, teamPrefix subject.TeamId)
+                let! names = storage.List(PlatformContainer, teamPrefix subject.TeamId.Value)
 
                 let! loaded =
                     names
@@ -499,7 +503,7 @@ let private emitTrustDenial
         emit
             auditLog
             schedule
-            (AuditStreamKey.ofTeam subject.TeamId)
+            (AuditStreamKey.ofTeam subject.TeamId.Value)
             (GrantConsentVerificationDenied {
                 ConsentId =
                     match record with
@@ -631,7 +635,7 @@ module GrantConsents =
                     match written with
                     | Error e -> return Error(ConsentDenial.StoreUnavailable e)
                     | Ok() ->
-                        emit auditLog schedule (AuditStreamKey.ofTeam record.Subject.TeamId) (event record)
+                        emit auditLog schedule (AuditStreamKey.ofTeam record.Subject.TeamId.Value) (event record)
                         return Ok record
         }
 
@@ -699,7 +703,7 @@ type StoreCounterpartyConsentOracle
     ) =
     interface GrantPolicyGuard.CounterpartyConsentOracle with
         member _.IsConsentLive(teamId, subjectId, moduleName, party) = async {
-            let subject = ConsentSubject.create teamId subjectId moduleName
+            let subject = ConsentSubject.create teamId.Value subjectId moduleName
 
             let! resolved = resolveLive store verifier auditLog Async.Start (now ()) subject party
 
@@ -746,7 +750,7 @@ let grantWithCounterpartyApproval
             match resolved with
             | Error denial -> return Error denial
             | Ok consentRecord ->
-                let! existing = store.GetTeamPermissions teamId
+                let! existing = store.GetTeamPermissions(TeamId teamId)
 
                 let priorForUser =
                     existing.Members |> Map.tryFind subjectId |> Option.defaultValue Map.empty
@@ -772,7 +776,7 @@ let grantWithCounterpartyApproval
 
                 let! written =
                     store.SetTeamPermissions(
-                        teamId,
+                        TeamId teamId,
                         {
                             existing with
                                 Members =
@@ -911,7 +915,7 @@ let guardDispatchWithConsent
             | Ok() -> Ok()
             | Error inertReason ->
                 let payload: UnconsentedGrantRefusedPayload = {
-                    UserId = userId
+                    UserId = UserId userId
                     ModuleName = moduleName
                     DeclaredPolicy = GrantPolicy.toToken policy
                     InertReason = inertReason

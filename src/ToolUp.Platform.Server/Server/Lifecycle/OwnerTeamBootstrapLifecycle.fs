@@ -50,9 +50,9 @@ let private ensureOwner (store: ITeamStore) (teamId: string) (actorUserId: strin
     if String.IsNullOrWhiteSpace actorUserId then
         return Ok()
     else
-        match! store.GetMemberRole(teamId, actorUserId) with
+        match! store.GetMemberRole(TeamId teamId, UserId actorUserId) with
         | Some _ -> return Ok()
-        | None -> return! store.AddMember(teamId, actorUserId, Owner)
+        | None -> return! store.AddMember(TeamId teamId, UserId actorUserId, Owner)
 }
 
 /// Bootstrap the owner team for `scopeId`, attaching `ownerUserId` as the
@@ -65,7 +65,7 @@ let private bootstrap (store: ITeamStore) (scopeId: string) (ownerUserId: string
     | ScopeKind.User _
     | ScopeKind.Other _ -> return LifecycleHookResult.Skipped "scope is not a team scope — no owner team to bootstrap"
     | ScopeKind.Team teamId ->
-        let! existing = store.GetTeam teamId
+        let! existing = store.GetTeam(TeamId teamId)
 
         match existing with
         | Some _ ->
@@ -75,7 +75,7 @@ let private bootstrap (store: ITeamStore) (scopeId: string) (ownerUserId: string
             | Ok() -> return LifecycleHookResult.Completed
             | Error e -> return LifecycleHookResult.Failed(sprintf "attach owner to %s: %s" teamId e)
         | None ->
-            match! store.CreateTeam(teamId, teamId) with
+            match! store.CreateTeam(TeamId teamId, teamId) with
             | Error e -> return LifecycleHookResult.Failed(sprintf "create team %s: %s" teamId e)
             | Ok _ ->
                 match! ensureOwner store teamId ownerUserId with
@@ -94,10 +94,10 @@ let private teardown (store: ITeamStore) (scopeId: string) : Async<LifecycleHook
     | ScopeKind.User _
     | ScopeKind.Other _ -> return LifecycleHookResult.Skipped "scope is not a team scope — no owner team to tear down"
     | ScopeKind.Team teamId ->
-        match! store.GetTeam teamId with
+        match! store.GetTeam(TeamId teamId) with
         | None -> return LifecycleHookResult.Completed
         | Some _ ->
-            match! store.DeleteTeam teamId with
+            match! store.DeleteTeam(TeamId teamId) with
             | Ok() -> return LifecycleHookResult.Completed
             | Error e -> return LifecycleHookResult.Failed(sprintf "delete owner team %s: %s" teamId e)
 }

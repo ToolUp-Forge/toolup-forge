@@ -76,7 +76,7 @@ type IServiceAccountStore =
     /// themselves, so enabling restores the prior credential set.
     /// Idempotent. `actorUserId` is the audit attribution.
     abstract SetStatus:
-        scopeId: string * accountId: string * status: ServiceAccountStatus * actorUserId: string ->
+        scopeId: string * accountId: string * status: ServiceAccountStatus * actorUserId: UserId ->
             Async<Result<ServiceAccount, ServiceAccountError>>
 
     /// Replace an account's declared permission set. Narrowing takes
@@ -86,7 +86,7 @@ type IServiceAccountStore =
     /// other half. Refuses an empty set for the same reason `Create`
     /// does.
     abstract SetPermissions:
-        scopeId: string * accountId: string * permissions: Map<string, ModulePermission list> * actorUserId: string ->
+        scopeId: string * accountId: string * permissions: Map<string, ModulePermission list> * actorUserId: UserId ->
             Async<Result<ServiceAccount, ServiceAccountError>>
 
     /// Mint a token for an account. **The returned
@@ -107,7 +107,7 @@ type IServiceAccountStore =
     /// already-revoked token returns `Ok`. `actorUserId` is the audit
     /// attribution.
     abstract RevokeToken:
-        scopeId: string * tokenId: string * actorUserId: string -> Async<Result<unit, ServiceAccountError>>
+        scopeId: string * tokenId: string * actorUserId: UserId -> Async<Result<unit, ServiceAccountError>>
 
     /// Validate a presented token string and resolve the machine
     /// principal it authenticates.

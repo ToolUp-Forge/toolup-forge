@@ -228,7 +228,7 @@ type IJobScheduler =
     /// `Disabled` (`JobDisabled`), and when the scheduler is stopping
     /// (`SchedulerStopping`). Every scheduler the contract pack runs against
     /// refuses all four the same way.
-    abstract TriggerOnce: scopeId: string * jobId: JobId * byUserId: string -> Async<Result<unit, TriggerError>>
+    abstract TriggerOnce: scopeId: string * jobId: JobId * byUserId: UserId -> Async<Result<unit, TriggerError>>
 
     /// Notify the scheduler that an event was written to
     /// `IEventStore`. The scheduler matches it against every

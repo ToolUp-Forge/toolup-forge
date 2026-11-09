@@ -276,7 +276,7 @@ type NotificationPreferenceFilter
         (userId: string)
         =
         async {
-            let! prefs = store.GetPreferences(scopeId, userId)
+            let! prefs = store.GetPreferences(scopeId, UserId userId)
 
             let prefs =
                 match prefs with
@@ -311,7 +311,7 @@ type NotificationPreferenceFilter
         async {
             let item: PendingNotification = {
                 Id = Guid.NewGuid()
-                UserId = userId
+                UserId = UserId userId
                 Category = category
                 Channel = channel
                 // A held copy is addressed to ONE platform user — the
@@ -320,7 +320,7 @@ type NotificationPreferenceFilter
                 // publishes now, never on the held one, or a digest
                 // release would re-send to a contact that already
                 // received it.
-                Notification = NotificationPreferenceFilter.narrowTo [ RecipientId.User userId ] notification
+                Notification = NotificationPreferenceFilter.narrowTo [ RecipientId.User(UserId userId) ] notification
                 QueuedAt = nowUtc
                 Disposition = disposition
             }
@@ -377,7 +377,8 @@ type NotificationPreferenceFilter
                 correlationId
                 (List.ofSeq deferred)
 
-        let keptRecipients = (kept |> Seq.map RecipientId.User |> List.ofSeq) @ externals
+        let keptRecipients =
+            (kept |> Seq.map (UserId >> RecipientId.User) |> List.ofSeq) @ externals
 
         if not (List.isEmpty keptRecipients) then
             do! inner.Publish(scopeId, NotificationPreferenceFilter.narrowTo keptRecipients notification)

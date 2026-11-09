@@ -527,9 +527,9 @@ let private deploy () : Deployment =
         :> TeamManagement.ITeamStore
 
     async {
-        let! _ = teams.CreateTeam(teamId, "Team")
-        let! _ = teams.AddMember(teamId, "olive", TeamRole.Owner)
-        let! _ = teams.AddMember(teamId, "mo", TeamRole.Member)
+        let! _ = teams.CreateTeam(TeamId teamId, "Team")
+        let! _ = teams.AddMember(TeamId teamId, UserId "olive", TeamRole.Owner)
+        let! _ = teams.AddMember(TeamId teamId, UserId "mo", TeamRole.Member)
         return ()
     }
     |> Async.RunSynchronously

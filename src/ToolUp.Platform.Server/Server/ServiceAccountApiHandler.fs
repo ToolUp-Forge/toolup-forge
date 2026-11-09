@@ -102,7 +102,7 @@ let serviceAccountApi (ctx: HttpContext) : IServiceAccountApi =
                     | TeamMember(userId, teamId) ->
                         match ctx.RequestServices.GetService(typeof<ITeamStore>) with
                         | :? ITeamStore as teams ->
-                            let! role = teams.GetMemberRole(teamId, userId)
+                            let! role = teams.GetMemberRole(TeamId teamId, UserId userId)
 
                             match role with
                             | Some r when TeamRoles.canWriteTeamConfig r -> return! f s scope.ScopeId
@@ -150,14 +150,14 @@ let serviceAccountApi (ctx: HttpContext) : IServiceAccountApi =
         SetAccountStatus =
             fun (accountId, status) ->
                 authorised (fun store scopeId -> async {
-                    let! result = store.SetStatus(scopeId, accountId, status, actor)
+                    let! result = store.SetStatus(scopeId, accountId, status, UserId actor)
                     return toResult id result
                 })
 
         SetAccountPermissions =
             fun (accountId, permissions) ->
                 authorised (fun store scopeId -> async {
-                    let! result = store.SetPermissions(scopeId, accountId, permissions, actor)
+                    let! result = store.SetPermissions(scopeId, accountId, permissions, UserId actor)
                     return toResult id result
                 })
 
@@ -199,7 +199,7 @@ let serviceAccountApi (ctx: HttpContext) : IServiceAccountApi =
         RevokeToken =
             fun tokenId ->
                 authorised (fun store scopeId -> async {
-                    let! result = store.RevokeToken(scopeId, tokenId, actor)
+                    let! result = store.RevokeToken(scopeId, tokenId, UserId actor)
                     return toResult id result
                 })
     }

@@ -66,7 +66,7 @@ let private subjectsFor (teams: ITeamStore option) (scopeId: string) : Async<Res
     | ScopeKind.Team teamId ->
         match teams with
         | Some store ->
-            let! members = store.GetTeamMembers teamId
+            let! members = store.GetTeamMembers(TeamId teamId)
             return Ok(members |> List.map _.UserId)
         | None -> return Error "team scope offboard requires an ITeamStore to enumerate member subjects"
     | ScopeKind.User userId -> return Ok [ userId ]
@@ -104,7 +104,7 @@ let hook: TenantHook<ErasureSubstrate> = {
 
                 for subject in subjects do
                     for handler in substrate.Handlers do
-                        let! result = handler.Erase(scopeId, subject, ErasurePolicy.HardDelete)
+                        let! result = handler.Erase(scopeId, UserId subject, ErasurePolicy.HardDelete)
 
                         match result with
                         | Ok _ -> ()
@@ -128,7 +128,7 @@ let hook: TenantHook<ErasureSubstrate> = {
 
                 for subject in subjects do
                     for handler in substrate.Handlers do
-                        let! summary = handler.Preview(scopeId, subject, ErasurePolicy.HardDelete)
+                        let! summary = handler.Preview(scopeId, UserId subject, ErasurePolicy.HardDelete)
                         total <- total + summary.RecordsAffected
 
                 return
@@ -174,7 +174,7 @@ let exportArchive (services: IServiceProvider) (scopeId: string) : Async<Result<
 
                 for subject in subjects do
                     for exporter in exporters do
-                        let! segs = exporter.Export(scopeId, subject)
+                        let! segs = exporter.Export(scopeId, UserId subject)
                         segments.AddRange segs
 
                 // Alphabetical by Name → deterministic archive bytes

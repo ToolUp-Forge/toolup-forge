@@ -224,7 +224,12 @@ let private fanoutTests =
             | [ EncryptionKeyDestroyAcknowledged p ] ->
                 Expect.equal p.ScopeId scopeId "acknowledgement names the destroyed scope"
                 Expect.stringContains p.KeyId scopeId "acknowledgement carries the destroyed KeyId"
-                Expect.equal p.UserId "admin-1" "UserId is the original requester, carried across from the envelope"
+
+                Expect.equal
+                    p.UserId
+                    (UserId "admin-1")
+                    "UserId is the original requester, carried across from the envelope"
+
                 Expect.equal p.AcknowledgedBy "replica-b" "acknowledgement names the replica that evicted"
                 Expect.equal p.OriginReplicaId "replica-a" "acknowledgement names the replica the destroy originated on"
                 Expect.equal p.Resolver "PerScopeKeyResolver" "resolver is named"

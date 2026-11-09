@@ -77,7 +77,7 @@ let tests =
         test "a TeamMember's TeamId is the subject's team, whatever the container is called" {
             let user = {
                 AuthenticatedUser.anonymous with
-                    UserId = "u-1059"
+                    UserId = UserId "u-1059"
                     DisplayName = "Member"
             }
 
@@ -96,7 +96,7 @@ let tests =
         test "an AuthenticatedUser in a team-prefixed container carries no TeamId" {
             let user = {
                 AuthenticatedUser.anonymous with
-                    UserId = "u-1059"
+                    UserId = UserId "u-1059"
                     DisplayName = "Member"
             }
 

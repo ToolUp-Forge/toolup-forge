@@ -247,7 +247,8 @@ type internal QuartzDispatchJob(context: QuartzDispatchContext) =
 
     let triggerSourceOf (map: JobDataMap) : TriggerSource =
         match readKey map QuartzDataKeys.TriggerSource with
-        | Some "manual" -> ScheduledManually(readKey map QuartzDataKeys.UserId |> Option.defaultValue SystemUserId)
+        | Some "manual" ->
+            ScheduledManually(readKey map QuartzDataKeys.UserId |> Option.defaultValue SystemUserId |> UserId)
         | Some "event" ->
             let eventType = readKey map QuartzDataKeys.EventType |> Option.defaultValue ""
 

@@ -470,9 +470,9 @@ let private buildCallerSummary (ctx: HttpContext) (config: ServerConfig) = async
             // surface mapping a real request would have produced.
             let fallbackSubject =
                 match teamId with
-                | Some tid when DeploymentConfig.hasTeamScope config -> TeamMember(user.UserId, tid)
-                | _ when DeploymentConfig.requiresAnyAuth config -> AuthenticatedUser user.UserId
-                | _ -> AnonymousSession user.UserId
+                | Some tid when DeploymentConfig.hasTeamScope config -> TeamMember(user.UserId.Value, tid.Value)
+                | _ when DeploymentConfig.requiresAnyAuth config -> AuthenticatedUser user.UserId.Value
+                | _ -> AnonymousSession user.UserId.Value
 
             AccessContext.unrestricted fallbackSubject
 
@@ -481,9 +481,9 @@ let private buildCallerSummary (ctx: HttpContext) (config: ServerConfig) = async
         |> Map.map (fun _ perms -> perms |> List.map permissionName)
 
     return {
-        UserId = user.UserId
+        UserId = user.UserId.Value
         IsAnonymous = AuthenticatedUser.isAnonymous user
-        TeamId = accessContext.TeamId |> Option.orElse teamId
+        TeamId = accessContext.TeamId |> Option.orElse (teamId |> Option.map TeamId.value)
         Mode = DeploymentConfig.surfacesLabel config
         StorageScope = scopeSummary
         StorageScopeError = scopeError

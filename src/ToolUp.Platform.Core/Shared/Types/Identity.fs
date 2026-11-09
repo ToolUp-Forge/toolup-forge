@@ -22,6 +22,8 @@ open Fable.Core
 //   * On .NET the same attribute is what the System.Text.Json converter
 //     set keys on: an erased union is written as its single field and read
 //     back from it, so a persisted record's identity field keeps its bytes.
+//   * A .NET serialiser configured without that converter set reads the
+//     type-level `JsonConverter` instead, which writes the same bare string.
 //   * `ToString` returns the wrapped string on .NET (Fable forbids an
 //     override on an erased type, and needs none: the value is already the
 //     string), so an interpolated blob name renders exactly as before.
@@ -56,6 +58,9 @@ module Identity =
 /// `sub` / `oid` claim the auth provider resolved). Encodes as the bare
 /// string it wraps on both hosts.
 [<Erase>]
+#if !FABLE_COMPILER
+[<System.Text.Json.Serialization.JsonConverter(typeof<UserIdJsonConverter>)>]
+#endif
 type UserId =
     | UserId of string
 
@@ -69,8 +74,11 @@ type UserId =
 #endif
 
 /// A team's identity. Encodes as the bare string it wraps on both hosts.
-[<Erase>]
-type TeamId =
+#if FABLE_COMPILER
+and [<Erase>] TeamId =
+#else
+and [<Erase; System.Text.Json.Serialization.JsonConverter(typeof<TeamIdJsonConverter>)>] TeamId =
+#endif
     | TeamId of string
 
     /// The wrapped id string.
@@ -80,6 +88,32 @@ type TeamId =
 
 #if !FABLE_COMPILER
     override this.ToString() = this.Value
+
+/// The bare-string JSON form of a `UserId` for a .NET serialiser configured
+/// WITHOUT the remoting converter set (which handles every erased wrapper):
+/// a value, and a dictionary key.
+and UserIdJsonConverter() =
+    inherit System.Text.Json.Serialization.JsonConverter<UserId>()
+
+    override _.Read(reader, _, _) = UserId(reader.GetString())
+
+    override _.Write(writer, value, _) = writer.WriteStringValue value.Value
+
+    override _.ReadAsPropertyName(reader, _, _) = UserId(reader.GetString())
+
+    override _.WriteAsPropertyName(writer, value, _) = writer.WritePropertyName value.Value
+
+/// The bare-string JSON form of a `TeamId`, as `UserIdJsonConverter`.
+and TeamIdJsonConverter() =
+    inherit System.Text.Json.Serialization.JsonConverter<TeamId>()
+
+    override _.Read(reader, _, _) = TeamId(reader.GetString())
+
+    override _.Write(writer, value, _) = writer.WriteStringValue value.Value
+
+    override _.ReadAsPropertyName(reader, _, _) = TeamId(reader.GetString())
+
+    override _.WriteAsPropertyName(writer, value, _) = writer.WritePropertyName value.Value
 #endif
 
 /// Construction and projection for `UserId`.

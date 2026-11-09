@@ -197,7 +197,7 @@ type IDataObjectStore =
     /// boundary, failure as `ErasureError`, stateless between calls,
     /// single-scope, precision declared above.
     abstract Erase:
-        scopeId: string * subjectUserId: string * policy: ErasurePolicy * dryRun: bool ->
+        scopeId: string * subjectUserId: UserId * policy: ErasurePolicy * dryRun: bool ->
             Async<Result<ErasureSummary, ErasureError>>
 
 // ─── IObjectCounter (Phase 171) ──────────────────────────────────

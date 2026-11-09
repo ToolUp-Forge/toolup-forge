@@ -188,15 +188,15 @@ type IAdminMutationApprovalStore =
     /// also what an already-decided request looks like, because a decided
     /// record is removed. `Error` means the store could not be read, and
     /// callers must NOT treat that as absence.
-    abstract TryGet: teamId: string * requestId: string -> Async<Result<PendingAdminMutation option, string>>
+    abstract TryGet: teamId: TeamId * requestId: string -> Async<Result<PendingAdminMutation option, string>>
 
     /// Every pending record for a team, newest proposal first. Unreadable
     /// records are skipped rather than failing the whole listing — one
     /// corrupt blob must not hide the rest of the queue.
-    abstract List: teamId: string -> Async<Result<PendingAdminMutation list, string>>
+    abstract List: teamId: TeamId -> Async<Result<PendingAdminMutation list, string>>
 
     /// Discard a record. Idempotent — removing an absent record is `Ok`.
-    abstract Remove: teamId: string * requestId: string -> Async<Result<unit, string>>
+    abstract Remove: teamId: TeamId * requestId: string -> Async<Result<unit, string>>
 
 [<Literal>]
 let private PlatformContainer = ScopeKey.PlatformContainer
@@ -243,7 +243,8 @@ type BlobAdminMutationApprovalStore(storage: IBlobStorage, ?logger: ILogger) =
             try
                 let bytes = JsonSerializer.Serialize(pending, jsonOptions) |> Encoding.UTF8.GetBytes
 
-                let! result = storage.Upload(PlatformContainer, pendingBlobName pending.TeamId pending.RequestId, bytes)
+                let! result =
+                    storage.Upload(PlatformContainer, pendingBlobName pending.TeamId.Value pending.RequestId, bytes)
 
                 return
                     match result with
@@ -257,7 +258,7 @@ type BlobAdminMutationApprovalStore(storage: IBlobStorage, ?logger: ILogger) =
         }
 
         member _.TryGet(teamId, requestId) = async {
-            let blobName = pendingBlobName teamId requestId
+            let blobName = pendingBlobName teamId.Value requestId
             let! exists = storage.Exists(PlatformContainer, blobName)
 
             if not exists then
@@ -288,7 +289,7 @@ type BlobAdminMutationApprovalStore(storage: IBlobStorage, ?logger: ILogger) =
 
         member _.List teamId = async {
             try
-                let! names = storage.List(PlatformContainer, pendingPrefix teamId)
+                let! names = storage.List(PlatformContainer, pendingPrefix teamId.Value)
 
                 let! records =
                     names
@@ -313,7 +314,7 @@ type BlobAdminMutationApprovalStore(storage: IBlobStorage, ?logger: ILogger) =
         }
 
         member _.Remove(teamId, requestId) = async {
-            let! result = storage.Delete(PlatformContainer, pendingBlobName teamId requestId)
+            let! result = storage.Delete(PlatformContainer, pendingBlobName teamId.Value requestId)
             return result
         }
 
@@ -384,7 +385,8 @@ let widenedModules (previous: TeamPermissions) (mutation: AdminMutation) : strin
         memberWidened @ defaultsWidened @ exposureWidened @ exposureCleared
         |> List.distinct
     | AdminMutation.SetMemberPermissions(userId, moduleName, permissions) ->
-        let prior = previous.Members |> Map.tryFind userId |> Option.defaultValue Map.empty
+        let prior =
+            previous.Members |> Map.tryFind userId.Value |> Option.defaultValue Map.empty
 
         if List.isEmpty permissions || Map.tryFind moduleName prior = Some permissions then
             []
@@ -471,7 +473,7 @@ let propose
 
             let pending = {
                 RequestId = Guid.NewGuid().ToString "N"
-                TeamId = teamId
+                TeamId = TeamId teamId
                 Mutation = mutation
                 Fingerprint = print
                 Summary = AdminMutation.summary mutation
@@ -489,7 +491,7 @@ let propose
                     teamId
                     (AdminMutationProposed {
                         RequestId = pending.RequestId
-                        TeamId = teamId
+                        TeamId = TeamId teamId
                         ProposerId = pending.ProposedBy
                         MutationKind = AdminMutationKind.toToken (AdminMutation.kind mutation)
                         Fingerprint = print
@@ -526,7 +528,7 @@ let private loadDecidable
                 teamId
                 (AdminMutationApprovalRefused {
                     RequestId = requestId
-                    TeamId = teamId
+                    TeamId = TeamId teamId
                     ProposerId = pending |> Option.map _.ProposedBy |> Option.defaultValue ""
                     AttemptedApproverId = actorId
                     MutationKind =
@@ -538,7 +540,7 @@ let private loadDecidable
 
             Error refusal
 
-        match! store.TryGet(teamId, requestId) with
+        match! store.TryGet(TeamId teamId, requestId) with
         | Error e -> return refuse None (AdminMutationRefusal.ApprovalStoreUnavailable e)
         | Ok None -> return refuse None (AdminMutationRefusal.UnknownRequest requestId)
         | Ok(Some pending) ->
@@ -560,7 +562,7 @@ let private loadDecidable
                 // leaves an expired record, which is never decidable (this
                 // branch re-checks expiry on every touch) and is swept, and
                 // recorded, at the next one.
-                match! store.Remove(teamId, requestId) with
+                match! store.Remove(TeamId teamId, requestId) with
                 | Error _ -> ()
                 | Ok() ->
                     emit
@@ -569,7 +571,7 @@ let private loadDecidable
                         teamId
                         (AdminMutationExpired {
                             RequestId = requestId
-                            TeamId = teamId
+                            TeamId = TeamId teamId
                             ProposerId = pending.ProposedBy
                             MutationKind = AdminMutationKind.toToken (AdminMutation.kind pending.Mutation)
                             Fingerprint = pending.Fingerprint
@@ -616,7 +618,7 @@ let approve
                 // Phase 1059 — the removal is what makes a double approval
                 // unable to apply twice (above), so a refused removal
                 // refuses the approval and applies nothing.
-                match! store.Remove(teamId, requestId) with
+                match! store.Remove(TeamId teamId, requestId) with
                 | Error e ->
                     let refusal = AdminMutationRefusal.RecordNotRemoved e
 
@@ -626,7 +628,7 @@ let approve
                         teamId
                         (AdminMutationApprovalRefused {
                             RequestId = requestId
-                            TeamId = teamId
+                            TeamId = TeamId teamId
                             ProposerId = pending.ProposedBy
                             AttemptedApproverId = approverId
                             MutationKind = AdminMutationKind.toToken (AdminMutation.kind pending.Mutation)
@@ -643,7 +645,7 @@ let approve
                         teamId
                         (AdminMutationApproved {
                             RequestId = requestId
-                            TeamId = teamId
+                            TeamId = TeamId teamId
                             ProposerId = pending.ProposedBy
                             ApproverId = approverId.Trim()
                             MutationKind = AdminMutationKind.toToken (AdminMutation.kind pending.Mutation)
@@ -682,7 +684,7 @@ let reject
             // Phase 1059 — a rejection IS the removal: a record still in the
             // queue can still be approved, so a refused removal is not
             // reported (or recorded) as a rejection.
-            match! store.Remove(teamId, requestId) with
+            match! store.Remove(TeamId teamId, requestId) with
             | Error e -> return Error(AdminMutationRefusal.RecordNotRemoved e)
             | Ok() ->
                 emit
@@ -691,7 +693,7 @@ let reject
                     teamId
                     (AdminMutationRejected {
                         RequestId = requestId
-                        TeamId = teamId
+                        TeamId = TeamId teamId
                         ProposerId = pending.ProposedBy
                         ApproverId = (if isNull (box actorId) then "" else actorId.Trim())
                         MutationKind = AdminMutationKind.toToken (AdminMutation.kind pending.Mutation)
@@ -714,7 +716,7 @@ let listPending
     (teamId: string)
     : Async<Result<PendingAdminMutation list, string>> =
     async {
-        match! store.List teamId with
+        match! store.List(TeamId teamId) with
         | Error e -> return Error e
         | Ok all ->
             let expired, live = all |> List.partition (PendingAdminMutation.isExpired now)
@@ -722,7 +724,7 @@ let listPending
             for pending in expired do
                 // Phase 1059 — recorded once actually discarded, as in
                 // `loadDecidable`; a refused removal is swept at the next read.
-                match! store.Remove(teamId, pending.RequestId) with
+                match! store.Remove(TeamId teamId, pending.RequestId) with
                 | Error _ -> ()
                 | Ok() ->
                     emit
@@ -731,7 +733,7 @@ let listPending
                         teamId
                         (AdminMutationExpired {
                             RequestId = pending.RequestId
-                            TeamId = teamId
+                            TeamId = TeamId teamId
                             ProposerId = pending.ProposedBy
                             MutationKind = AdminMutationKind.toToken (AdminMutation.kind pending.Mutation)
                             Fingerprint = pending.Fingerprint
@@ -780,11 +782,12 @@ type DualControlPermissionStore
     /// mutation cannot be gated into a second ceremony.
     let applyToInner (teamId: string) (mutation: AdminMutation) : Async<Result<unit, string>> =
         match mutation with
-        | AdminMutation.SetTeamPermissions p -> inner.SetTeamPermissions(teamId, p)
+        | AdminMutation.SetTeamPermissions p -> inner.SetTeamPermissions(TeamId teamId, p)
         | AdminMutation.SetMemberPermissions(userId, moduleName, permissions) ->
-            inner.SetMemberPermissions(teamId, userId, moduleName, permissions)
-        | AdminMutation.SetTeamDefaults defaults -> inner.SetTeamDefaults(teamId, defaults)
-        | AdminMutation.SetModuleExposure(moduleName, state) -> inner.SetModuleExposure(teamId, moduleName, state)
+            inner.SetMemberPermissions(TeamId teamId, UserId userId.Value, moduleName, permissions)
+        | AdminMutation.SetTeamDefaults defaults -> inner.SetTeamDefaults(TeamId teamId, defaults)
+        | AdminMutation.SetModuleExposure(moduleName, state) ->
+            inner.SetModuleExposure(TeamId teamId, moduleName, state)
 
     /// The queued-not-applied message the legacy `Result<unit, string>`
     /// channel carries. Prefixed with a stable greppable code and naming
@@ -808,7 +811,7 @@ type DualControlPermissionStore
     /// the gate does not touch has had its behaviour changed where the
     /// phase promised it would not be.
     let gate (teamId: string) (mutation: AdminMutation) : Async<Result<unit, string>> = async {
-        let! previous = inner.GetTeamPermissions teamId
+        let! previous = inner.GetTeamPermissions(TeamId teamId)
 
         if not (isGated settings.Scope isPolicyBearing previous mutation) then
             return! applyToInner teamId mutation
@@ -838,7 +841,7 @@ type DualControlPermissionStore
     /// policy-aware admin surface calls, so it can render "queued for
     /// approval, request X" instead of parsing prose.
     member _.Write(teamId: string, proposerId: string, mutation: AdminMutation) = async {
-        let! previous = inner.GetTeamPermissions teamId
+        let! previous = inner.GetTeamPermissions(TeamId teamId)
 
         if not (isGated settings.Scope isPolicyBearing previous mutation) then
             match! applyToInner teamId mutation with
@@ -876,13 +879,13 @@ type DualControlPermissionStore
         member _.GetModuleExposure teamId = inner.GetModuleExposure teamId
 
         member _.SetTeamPermissions(teamId, permissions) =
-            gate teamId (AdminMutation.SetTeamPermissions permissions)
+            gate teamId.Value (AdminMutation.SetTeamPermissions permissions)
 
         member _.SetMemberPermissions(teamId, userId, moduleName, permissions) =
-            gate teamId (AdminMutation.SetMemberPermissions(userId, moduleName, permissions))
+            gate teamId.Value (AdminMutation.SetMemberPermissions(UserId userId.Value, moduleName, permissions))
 
         member _.SetTeamDefaults(teamId, defaults) =
-            gate teamId (AdminMutation.SetTeamDefaults defaults)
+            gate teamId.Value (AdminMutation.SetTeamDefaults defaults)
 
         member _.SetModuleExposure(teamId, moduleName, state) =
-            gate teamId (AdminMutation.SetModuleExposure(moduleName, state))
+            gate teamId.Value (AdminMutation.SetModuleExposure(moduleName, state))

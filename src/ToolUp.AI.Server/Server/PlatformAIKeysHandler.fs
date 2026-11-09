@@ -234,7 +234,7 @@ let platformAIKeysApi (factory: IAIProviderFactory) (ctx: HttpContext) : Platfor
                     let! rows =
                         factory.PlatformDescriptors
                         |> List.map (fun d -> async {
-                            let! has = store.HasTeamKey(teamId, d.Id)
+                            let! has = store.HasTeamKey(TeamId teamId, d.Id)
 
                             return {
                                 TeamId = teamId
@@ -267,7 +267,7 @@ let platformAIKeysApi (factory: IAIProviderFactory) (ctx: HttpContext) : Platfor
                                 match teamStoreOpt with
                                 | None -> async { return Ok() }
                                 | Some ts -> async {
-                                    let! info = ts.GetTeam req.TeamId
+                                    let! info = ts.GetTeam(TeamId req.TeamId)
 
                                     return
                                         match info with
@@ -278,7 +278,7 @@ let platformAIKeysApi (factory: IAIProviderFactory) (ctx: HttpContext) : Platfor
                             match teamOk with
                             | Error e -> return Error e
                             | Ok() ->
-                                let! result = store.SetTeamKey(req.TeamId, req.ProviderId, trimmed)
+                                let! result = store.SetTeamKey(TeamId req.TeamId, req.ProviderId, trimmed)
 
                                 match result with
                                 | Ok() ->
@@ -296,7 +296,7 @@ let platformAIKeysApi (factory: IAIProviderFactory) (ctx: HttpContext) : Platfor
         DeleteTeamKey =
             fun (teamId, providerId) ->
                 withAdmin (fun () -> async {
-                    let! result = store.DeleteTeamKey(teamId, providerId)
+                    let! result = store.DeleteTeamKey(TeamId teamId, providerId)
 
                     match result with
                     | Ok() ->
@@ -314,5 +314,5 @@ let platformAIKeysApi (factory: IAIProviderFactory) (ctx: HttpContext) : Platfor
         TestTeamKey =
             fun (teamId, providerId) ->
                 withAdmin (fun () ->
-                    runTest $"team={teamId}" providerId (fun () -> store.GetTeamKey(teamId, providerId)))
+                    runTest $"team={teamId}" providerId (fun () -> store.GetTeamKey(TeamId teamId, providerId)))
     }

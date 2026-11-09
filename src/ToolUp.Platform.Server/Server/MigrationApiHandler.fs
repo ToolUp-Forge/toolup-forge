@@ -67,7 +67,7 @@ let dataMigrationApi (ctx: HttpContext) : IDataMigrationApi =
         | TeamMember(userId, teamId) ->
             match ctx.RequestServices.GetService(typeof<ITeamStore>) with
             | :? ITeamStore as ts ->
-                let! role = ts.GetMemberRole(teamId, userId)
+                let! role = ts.GetMemberRole(TeamId teamId, UserId userId)
 
                 match role with
                 | Some r when TeamRoles.canWriteTeamConfig r -> return Ok()
@@ -85,7 +85,7 @@ let dataMigrationApi (ctx: HttpContext) : IDataMigrationApi =
     /// admin table wants a row per data type from the first render,
     /// not a table that fills in as passes happen.
     let statusesFor (reg: MigrationRegistry) (store: IMigrationStatusStore) (scopeId: string) = async {
-        let! recorded = store.ListForTeam scopeId
+        let! recorded = store.ListForTeam(TeamId scopeId)
         let byDataType = recorded |> List.map (fun s -> s.DataTypeId, s) |> Map.ofList
 
         return

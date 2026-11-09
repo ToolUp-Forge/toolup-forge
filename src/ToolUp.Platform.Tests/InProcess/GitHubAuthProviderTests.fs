@@ -123,7 +123,7 @@ let tests =
 
             match result with
             | Ok user ->
-                Expect.equal user.UserId "583231" "UserId is the numeric GitHub id"
+                Expect.equal user.UserId (UserId "583231") "UserId is the numeric GitHub id"
                 Expect.equal user.DisplayName "The Octocat" "DisplayName from name claim"
                 Expect.equal user.Email (Some "octo@github.com") "Email carried through"
             | Error e -> failtestf "expected Ok, got Error %s" e
@@ -160,7 +160,7 @@ let tests =
             let provider = testConfig handler [ "acme" ] 0
 
             match provider.ValidateRequest(bearerCtx "gho_member") |> Async.RunSynchronously with
-            | Ok user -> Expect.equal user.UserId "583231" "member admitted"
+            | Ok user -> Expect.equal user.UserId (UserId "583231") "member admitted"
             | Error e -> failtestf "expected Ok for active member, got %s" e
         }
 

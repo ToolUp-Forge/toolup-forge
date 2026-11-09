@@ -101,9 +101,9 @@ let canonicalForm (scopeId: string) (prevHash: string) (payload: PermissionChang
     frame scopeId
     frame chainedEventType
     frame prevHash
-    frame payload.UserId
-    frame payload.TeamId
-    frame payload.AffectedUserId
+    frame payload.UserId.Value
+    frame payload.TeamId.Value
+    frame payload.AffectedUserId.Value
     frame payload.ModuleName
     frame payload.Permissions
 

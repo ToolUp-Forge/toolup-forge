@@ -1471,7 +1471,7 @@ module FactsCompose =
                     |> Result.mapError (fun e ->
                         sprintf
                             "the declared principal '%s' lacks %s"
-                            principal.UserId
+                            principal.UserId.Value
                             (DeclaredPrincipal.missingGrant e))
         }
 
@@ -2016,18 +2016,18 @@ module FactsCompose =
                 OutputVisibility =
                     fun teamId ->
                         match source with
-                        | Some source -> source.Current teamId
+                        | Some source -> source.Current(TeamId teamId)
                         | None -> async.Return(Ok settings.Default)
                 TeamRole =
                     fun teamId userId ->
                         match teams with
-                        | Some teams -> teams.GetMemberRole(teamId, userId)
+                        | Some teams -> teams.GetMemberRole(TeamId teamId, UserId userId)
                         | None -> async.Return None
                 IsTeam =
                     fun scopeId ->
                         match teams with
                         | Some teams -> async {
-                            let! team = teams.GetTeam scopeId
+                            let! team = teams.GetTeam(TeamId scopeId)
                             return team.IsSome
                           }
                         | None -> async.Return false
@@ -2211,7 +2211,7 @@ module FactsCompose =
                             (tryService<IFactTableWriter> sp)
                             (fun teamId userId ->
                                 match teams with
-                                | Some teams -> teams.GetMemberRole(teamId, userId)
+                                | Some teams -> teams.GetMemberRole(TeamId teamId, UserId userId)
                                 | None -> async.Return None)
                             (tryService<ToolUp.ArtefactSigning.IArtefactSigner> sp)
                             (tryService<ToolUp.ArtefactSigning.IArtefactVerifier> sp)

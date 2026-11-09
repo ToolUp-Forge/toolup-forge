@@ -22,7 +22,7 @@ let private emptyRequest: ScopeResolutionRequest = {
 }
 
 let private alice: AuthenticatedUser = {
-    UserId = "alice"
+    UserId = UserId "alice"
     DisplayName = "Alice"
     Email = Some "alice@example.com"
     TenantId = None
@@ -186,9 +186,9 @@ let private makeDetachedTeamResolver () =
     teamStore, new TeamScopeResolver(teamStore, cache, resolverChannel)
 
 let private seedTeam (teamStore: TeamStore) (userId: string) (teamId: string) = async {
-    let! _ = teamStore.CreateTeam(teamId, teamId + "-name")
-    let! _ = teamStore.AddMember(teamId, userId, Owner)
-    let! _ = teamStore.SetActiveTeam(userId, teamId)
+    let! _ = teamStore.CreateTeam(TeamId teamId, teamId + "-name")
+    let! _ = teamStore.AddMember(TeamId teamId, UserId userId, Owner)
+    let! _ = teamStore.SetActiveTeam(UserId userId, TeamId teamId)
     return ()
 }
 
@@ -203,7 +203,7 @@ let private seedTeam (teamStore: TeamStore) (userId: string) (teamId: string) = 
 /// refusal is real on every platform and the co-owner is what makes
 /// these tests exercise revocation rather than the guard. (Phase 617.)
 let private addCoOwner (teamStore: TeamStore) (teamId: string) = async {
-    let! _ = teamStore.AddMember(teamId, "co-owner", Owner)
+    let! _ = teamStore.AddMember(TeamId teamId, UserId "co-owner", Owner)
     return ()
 }
 
@@ -271,7 +271,7 @@ let private teamTests =
             // RemoveMember clears the active-team pointer when the
             // removed team is active; the API handler also invalidates
             // the resolver cache (simulated manually here).
-            match! teamStore.RemoveMember("acme", "alice") with
+            match! teamStore.RemoveMember(TeamId "acme", UserId "alice") with
             | Ok() -> ()
             | Error e -> failtestf "RemoveMember must succeed for this test to mean anything: %s" e
 
@@ -303,13 +303,13 @@ let private teamTests =
             // chance to invalidate, or a direct-to-store removal via
             // a script. The resolver's per-request membership check
             // is the braces that make this safe.
-            match! teamStore.RemoveMember("acme", "alice") with
+            match! teamStore.RemoveMember(TeamId "acme", UserId "alice") with
             | Ok() -> ()
             | Error e -> failtestf "RemoveMember must succeed for this test to mean anything: %s" e
 
             match! (resolver :> IStorageScopeResolver).Resolve request with
             | Ok _ -> failtest "Expected Error; stale cache should not grant access"
-            | Error(NotTeamMember teamId) -> Expect.equal teamId "acme" "names the team that denied"
+            | Error(NotTeamMember teamId) -> Expect.equal teamId (TeamId "acme") "names the team that denied"
             | Error other -> failtestf "Expected NotTeamMember; got %A" other
         }
 
@@ -324,9 +324,9 @@ let private teamTests =
             let! _ = (resolver :> IStorageScopeResolver).Resolve request
 
             // Simulate team switch (compose invokes this from PlatformApi.SetActiveTeam).
-            let! _ = teamStore.CreateTeam("second-team", "second-team-name")
-            let! _ = teamStore.AddMember("second-team", "alice", Owner)
-            let! _ = teamStore.SetActiveTeam("alice", "second-team")
+            let! _ = teamStore.CreateTeam(TeamId "second-team", "second-team-name")
+            let! _ = teamStore.AddMember(TeamId "second-team", UserId "alice", Owner)
+            let! _ = teamStore.SetActiveTeam(UserId "alice", TeamId "second-team")
             resolver.InvalidateUser "alice"
 
             match! (resolver :> IStorageScopeResolver).Resolve request with

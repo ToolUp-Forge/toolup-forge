@@ -625,7 +625,7 @@ type IngestionBackgroundService
                 | Ok(Scheduled jobId | Coalesced jobId) ->
                     // Manual trigger sits until fired; dispatch it now so
                     // the retry runs (the handler applies the backoff).
-                    match! scheduler.TriggerOnce(doc.ScopeId, jobId, "system") with
+                    match! scheduler.TriggerOnce(doc.ScopeId, jobId, UserId "system") with
                     | Ok() -> ()
                     | Error refusal ->
                         logger.Warn(

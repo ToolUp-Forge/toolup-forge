@@ -166,8 +166,8 @@ module StorageScopeDerivation =
     let tryKeyFromSubject (subject: Subject) : ScopeKey option =
         match subject with
         | AnonymousSession sid -> Some(ScopeKey.Session sid)
-        | Subject.AuthenticatedUser uid -> Some(ScopeKey.User uid)
-        | TeamMember(_, tid) -> Some(ScopeKey.Team tid)
+        | Subject.AuthenticatedUser uid -> Some(ScopeKey.User(UserId uid))
+        | TeamMember(_, tid) -> Some(ScopeKey.Team(TeamId tid))
         | Subject.ClaimBearer claim -> Some(ScopeKey.Claim claim.ScopeId)
         | Subject.PublicationReader _ -> None
 
@@ -249,7 +249,10 @@ module SubjectResolutionErrorBridge =
 let resolverDowngradeSignal (err: SubjectResolutionError) : (string * string) option =
     match err with
     | SubjectResolutionError.NotTeamMember teamId ->
-        Some("NotTeamMember", sprintf "active-team pointer set to team '%s' but the user is no longer a member" teamId)
+        Some(
+            "NotTeamMember",
+            sprintf "active-team pointer set to team '%s' but the user is no longer a member" teamId.Value
+        )
     | SubjectResolutionError.UnsupportedSubject kind ->
         Some("UnsupportedSubject", sprintf "the deployment's Surfaces admit no shape for subject kind %A" kind)
     // Already logged by the resolver + audited by A1 — do not duplicate.
@@ -373,7 +376,7 @@ let private claimPendingInvite (ctx: HttpContext) (user: AuthenticatedUser) : Sy
           Some _,
           (:? IPendingInviteStore as pendingStore),
           (:? ITeamStore as teamStore) ->
-            let key = "pending-invite:check:" + user.UserId
+            let key = "pending-invite:check:" + user.UserId.Value
 
             if not (fst (cache.TryGetValue(box key))) then
                 let options = MemoryCacheEntryOptions()
@@ -622,7 +625,7 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                             // refused scope, so it is not reported.
                             match err with
                             | SubjectResolutionError.UnsupportedSubject AnonymousKind when isPageRoute -> ()
-                            | _ -> observeResolverErrorDowngrade ctx loggerOpt err user.UserId
+                            | _ -> observeResolverErrorDowngrade ctx loggerOpt err user.UserId.Value
 
                             fallback, Error bridged
 
@@ -645,7 +648,8 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
 
                     let! publicationGrants =
                         match grantHolder, ctx.RequestServices.GetService(typeof<IPublicationReaderGrantStore>) with
-                        | Some userId, (:? IPublicationReaderGrantStore as store) -> runAsync (store.GrantsFor userId)
+                        | Some userId, (:? IPublicationReaderGrantStore as store) ->
+                            runAsync (store.GrantsFor(UserId userId))
                         | _ -> System.Threading.Tasks.Task.FromResult []
 
                     if not (List.isEmpty publicationGrants) then
@@ -709,7 +713,7 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                                 ctx.RequestServices.GetService(typeof<IAuditLog>)
                             with
                             | (:? IMemoryCache as cache), (:? IAuditLog as auditLog) ->
-                                let cacheKey = "audit:login:" + user.UserId
+                                let cacheKey = "audit:login:" + user.UserId.Value
 
                                 let mutable existing = Unchecked.defaultof<obj>
 
@@ -759,7 +763,12 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                                 // reads admits every module.
                                 try
                                     let! perms =
-                                        runAsync (permStore.GetEffectivePermissions(user.UserId, scope.ScopeId))
+                                        runAsync (
+                                            permStore.GetEffectivePermissions(
+                                                UserId user.UserId.Value,
+                                                TeamId scope.ScopeId
+                                            )
+                                        )
 
                                     ctx.Items["ToolUp.ModulePermissions"] <- box perms
 
@@ -767,7 +776,7 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                                     // (tri-state) map, alongside the permission
                                     // map, so the AccessContext factory sees a
                                     // populated `ModuleExposure`.
-                                    let! exposure = runAsync (permStore.GetModuleExposure scope.ScopeId)
+                                    let! exposure = runAsync (permStore.GetModuleExposure(TeamId scope.ScopeId))
 
                                     ctx.Items["ToolUp.ModuleExposure"] <- box exposure
 
@@ -795,9 +804,9 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                                     | :? GrantPolicyGuard.ModuleGrantPolicyRegistry as registry when
                                         not (GrantPolicyGuard.ModuleGrantPolicyRegistry.isEmpty registry)
                                         ->
-                                        let! doc = runAsync (permStore.GetTeamPermissions scope.ScopeId)
+                                        let! doc = runAsync (permStore.GetTeamPermissions(TeamId scope.ScopeId))
 
-                                        let subjectGrants = TeamPermissions.grantsFor user.UserId doc
+                                        let subjectGrants = TeamPermissions.grantsFor user.UserId.Value doc
 
                                         ctx.Items[GrantPolicyGuard.ModuleGrantsItemsKey] <- box subjectGrants
 
@@ -865,7 +874,8 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                                             let mutable verdicts = Map.empty<string, Result<unit, ConsentDenial>>
 
                                             for moduleName, party in counterpartyModules do
-                                                let subject = ConsentSubject.create scope.ScopeId user.UserId moduleName
+                                                let subject =
+                                                    ConsentSubject.create scope.ScopeId user.UserId.Value moduleName
 
                                                 let! resolved =
                                                     runAsync (
@@ -902,7 +912,7 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                         if permissionFault.Value.IsNone && not (AuthenticatedUser.isAnonymous user) then
                             match ctx.RequestServices.GetService(typeof<IPlatformAdminStore>) with
                             | :? IPlatformAdminStore as adminStore ->
-                                let! isAdmin = runAsync (adminStore.IsPlatformAdmin user.UserId)
+                                let! isAdmin = runAsync (adminStore.IsPlatformAdmin(UserId user.UserId.Value))
 
                                 if isAdmin then
                                     ctx.Items["ToolUp.PlatformRole"] <- box PlatformRole.PlatformAdmin

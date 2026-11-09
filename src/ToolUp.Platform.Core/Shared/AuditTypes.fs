@@ -373,10 +373,10 @@ type AuditEvent =
     /// Phase 62 — operator granted premium status to a user via
     /// the `GrantPremiumApi`. Reserved
     /// `SourceModule = "_platform.users"`.
-    | PremiumGranted of subjectUserId: string * grantor: string * reason: string option * occurredAt: DateTimeOffset
+    | PremiumGranted of subjectUserId: UserId * grantor: string * reason: string option * occurredAt: DateTimeOffset
     /// Phase 62 — operator revoked premium status from a user.
     /// Same `SourceModule` as `PremiumGranted`.
-    | PremiumRevoked of subjectUserId: string * grantor: string * reason: string option * occurredAt: DateTimeOffset
+    | PremiumRevoked of subjectUserId: UserId * grantor: string * reason: string option * occurredAt: DateTimeOffset
     /// Phase 61 — operator created an `AdSlotConfig` via the
     /// public-utility PlatformAdmin `AdUnitConfigApi`. Reserved
     /// `SourceModule = "_platform.ads.config"`.

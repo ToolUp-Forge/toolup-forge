@@ -282,7 +282,7 @@ type DefaultDeployPipeline
                         | BuildStatus.Succeeded(_, artefactRef) -> result <- Some(Ok artefactRef)
                         | BuildStatus.Failed(_, reason) -> result <- Some(Error reason)
                         | BuildStatus.Cancelled(_, byUserId) ->
-                            result <- Some(Error(sprintf "build cancelled by %s" byUserId))
+                            result <- Some(Error(sprintf "build cancelled by %s" byUserId.Value))
                         | _ -> do! Async.Sleep BuildPollInterval
                     | Error err -> result <- Some(Error(sprintf "build orchestrator: %A" err))
 
@@ -412,7 +412,7 @@ type DefaultDeployPipeline
     interface IDeployPipeline with
 
         member _.BeginDeploy
-            (tenantId: TenantId, buildId: BuildId, manifest: DeployManifest, byUserId: string)
+            (tenantId: TenantId, buildId: BuildId, manifest: DeployManifest, byUserId: UserId)
             : Async<Result<DeployId, DeployPipelineError>> =
             async {
                 let deployId = Guid.NewGuid().ToString("N")
@@ -426,7 +426,7 @@ type DefaultDeployPipeline
                     State = DeployQueued
                     StartedAt = startedAt
                     StateChangedAt = startedAt
-                    SubmittedBy = byUserId
+                    SubmittedBy = byUserId.Value
                 }
 
                 do! emitState summary
@@ -487,7 +487,7 @@ type DefaultDeployPipeline
                 | None -> Error(UnknownDeploy deployId)
         }
 
-        member _.Rollback(tenantId: TenantId, byUserId: string) : Async<Result<DeployId, DeployPipelineError>> = async {
+        member _.Rollback(tenantId: TenantId, UserId(byUserId: string)) : Async<Result<DeployId, DeployPipelineError>> = async {
             let! perDeploy = groupTenantHistory tenantId
 
             // Reject when any deploy is mid-flight.

@@ -166,7 +166,7 @@ let tests =
             match audit.Events with
             | [ (scopeId, KnowledgeScopeErased p) ] ->
                 Expect.equal scopeId "team-a" "recorded under the caller's scope"
-                Expect.equal p.UserId "user-1" "actor"
+                Expect.equal p.UserId (UserId "user-1") "actor"
                 Expect.equal p.ScopeId "team-a" "payload scope"
                 Expect.equal p.DocumentCount 2 "document count reflects the wiped scope"
                 Expect.equal p.OrphanChunkCount 0 "a clean fan-out leaves no surviving chunks"

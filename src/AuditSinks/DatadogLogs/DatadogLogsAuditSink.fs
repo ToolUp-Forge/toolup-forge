@@ -112,16 +112,16 @@ let private sanitizeTagValue (value: string) : string =
 let private buildSubjectTags (subject: AuditSubject) : string =
     match subject with
     | AnonymousAudit sid -> sprintf ",subject_kind:anonymous,session_id:%s" (sanitizeTagValue sid)
-    | UserAudit uid -> sprintf ",subject_kind:user,user_id:%s" (sanitizeTagValue uid)
+    | UserAudit uid -> sprintf ",subject_kind:user,user_id:%s" (sanitizeTagValue uid.Value)
     | TeamAudit(uid, tid) ->
-        sprintf ",subject_kind:team,user_id:%s,team_id:%s" (sanitizeTagValue uid) (sanitizeTagValue tid)
+        sprintf ",subject_kind:team,user_id:%s,team_id:%s" (sanitizeTagValue uid.Value) (sanitizeTagValue tid.Value)
     | ClaimAudit(tokenId, _, resourceKind, resourceId) ->
         sprintf
             ",subject_kind:claim,claim_token_id:%s,claim_resource_kind:%s,claim_resource_id:%s"
             (sanitizeTagValue tokenId)
             (sanitizeTagValue resourceKind)
             (sanitizeTagValue resourceId)
-    | ReaderAudit uid -> sprintf ",subject_kind:publication-reader,user_id:%s" (sanitizeTagValue uid)
+    | ReaderAudit uid -> sprintf ",subject_kind:publication-reader,user_id:%s" (sanitizeTagValue uid.Value)
 
 let private serializeBatch (settings: DatadogLogsSettings) (batch: AuditEnvelope list) : string =
     let entries =

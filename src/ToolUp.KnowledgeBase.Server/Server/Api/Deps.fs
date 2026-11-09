@@ -305,7 +305,7 @@ module KnowledgeApiDeps =
 
                 {
                     ScopeId = userId
-                    Container = ScopeKey.container (ScopeKey.User userId)
+                    Container = ScopeKey.container (ScopeKey.User(UserId userId))
                     Persist = true
                 }
 
@@ -320,7 +320,7 @@ module KnowledgeApiDeps =
         // deployment-wide shared content only.
         let vectorScope =
             match StorageScope.tryTeamId scope with
-            | Some teamId -> Team teamId
+            | Some teamId -> Team teamId.Value
             | None -> User scope.ScopeId
 
         // Vector store and event store are resolved lazily — only the Notes
@@ -502,7 +502,7 @@ module KnowledgeApiDeps =
             | TeamMember(userId, teamId) ->
                 match services.GetService(typeof<ITeamStore>) with
                 | :? ITeamStore as ts ->
-                    let! role = ts.GetMemberRole(teamId, userId)
+                    let! role = ts.GetMemberRole(TeamId teamId, UserId userId)
 
                     match role with
                     | Some r when TeamRoles.canWriteTeamConfig r -> return Ok()

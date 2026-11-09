@@ -201,7 +201,7 @@ let tests (name: string) (factory: unit -> IConversationStore * string * string)
             do! expectOk "BeginAlice" ((writer store).BeginConversation(scopeA, mkConversation cAlice scopeA "alice"))
             do! expectOk "BeginBob" ((writer store).BeginConversation(scopeA, mkConversation cBob scopeA "bob"))
 
-            let! aliceConvs = (reader store).ListByUser(scopeA, "alice")
+            let! aliceConvs = (reader store).ListByUser(scopeA, UserId "alice")
             Expect.equal aliceConvs.Length 1 "alice has 1"
             Expect.equal aliceConvs[0].ConversationId cAlice "alice's conv returned"
         }
@@ -265,7 +265,7 @@ let tests (name: string) (factory: unit -> IConversationStore * string * string)
             do! expectOk "BeginAlice" ((writer store).BeginConversation(scopeA, mkConversation cAlice scopeA "alice"))
             do! expectOk "BeginBob" ((writer store).BeginConversation(scopeA, mkConversation cBob scopeA "bob"))
 
-            let! eraseResult = (eraser store).Erase(scopeA, "alice", ErasurePolicy.HardDelete, false)
+            let! eraseResult = (eraser store).Erase(scopeA, UserId "alice", ErasurePolicy.HardDelete, false)
 
             let summary =
                 match eraseResult with
@@ -274,10 +274,10 @@ let tests (name: string) (factory: unit -> IConversationStore * string * string)
 
             Expect.equal summary.RecordsAffected 1 "one conversation matched alice"
 
-            let! aliceConvs = (reader store).ListByUser(scopeA, "alice")
+            let! aliceConvs = (reader store).ListByUser(scopeA, UserId "alice")
             Expect.equal aliceConvs.Length 0 "alice's conv gone after HardDelete"
 
-            let! bobConvs = (reader store).ListByUser(scopeA, "bob")
+            let! bobConvs = (reader store).ListByUser(scopeA, UserId "bob")
             Expect.equal bobConvs.Length 1 "bob's conv unaffected"
         }
 
@@ -288,7 +288,7 @@ let tests (name: string) (factory: unit -> IConversationStore * string * string)
             do! expectOk "Begin" ((writer store).BeginConversation(scopeA, mkConversation convId scopeA "alice"))
             do! expectOk "AppendUser" ((writer store).AppendTurn(scopeA, convId, mkTurn convId "user" "secret data"))
 
-            let! eraseResult = (eraser store).Erase(scopeA, "alice", ErasurePolicy.Tombstone, false)
+            let! eraseResult = (eraser store).Erase(scopeA, UserId "alice", ErasurePolicy.Tombstone, false)
 
             let _ =
                 match eraseResult with
@@ -309,7 +309,7 @@ let tests (name: string) (factory: unit -> IConversationStore * string * string)
             let convId = "conv-" + Guid.NewGuid().ToString("N")
             do! expectOk "Begin" ((writer store).BeginConversation(scopeA, mkConversation convId scopeA "alice"))
 
-            let! eraseResult = (eraser store).Erase(scopeA, "alice", ErasurePolicy.HardDelete, true)
+            let! eraseResult = (eraser store).Erase(scopeA, UserId "alice", ErasurePolicy.HardDelete, true)
 
             let summary =
                 match eraseResult with
@@ -318,7 +318,7 @@ let tests (name: string) (factory: unit -> IConversationStore * string * string)
 
             Expect.equal summary.RecordsAffected 1 "dryRun reports the count"
 
-            let! still = (reader store).ListByUser(scopeA, "alice")
+            let! still = (reader store).ListByUser(scopeA, UserId "alice")
             Expect.equal still.Length 1 "dryRun did not mutate"
         }
 
@@ -328,7 +328,7 @@ let tests (name: string) (factory: unit -> IConversationStore * string * string)
             let convId = "conv-" + Guid.NewGuid().ToString("N")
             do! expectOk "Begin" ((writer store).BeginConversation(scopeA, mkConversation convId scopeA "alice"))
 
-            let! eraseResult = (eraser store).Erase(scopeA, "", ErasurePolicy.HardDelete, false)
+            let! eraseResult = (eraser store).Erase(scopeA, UserId "", ErasurePolicy.HardDelete, false)
 
             let summary =
                 match eraseResult with
@@ -337,7 +337,7 @@ let tests (name: string) (factory: unit -> IConversationStore * string * string)
 
             Expect.equal summary.RecordsAffected 0 "blank subject zero-count"
 
-            let! still = (reader store).ListByUser(scopeA, "alice")
+            let! still = (reader store).ListByUser(scopeA, UserId "alice")
             Expect.equal still.Length 1 "no records mutated"
         }
     ]

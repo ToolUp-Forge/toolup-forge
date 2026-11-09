@@ -30,6 +30,7 @@ module ToolUp.Platform.Tests.Contracts.IAuthProviderContract
 
 open Expecto
 open ToolUp.Platform.Auth
+open ToolUp.Platform
 
 /// Everything the pack needs to exercise one provider. `ValidCtx` /
 /// `ExpiredCtx` / `EmptyCtx` are thunks (re-evaluated per case) so a
@@ -58,7 +59,7 @@ let tests (f: AuthProviderContractFixture) : Test =
             match! f.Provider.ValidateRequest(f.ValidCtx()) with
             | Error e -> failtestf "expected Ok for a valid credential; got Error: %s" e
             | Ok u ->
-                Expect.equal u.UserId f.ExpectedUserId "UserId resolved from the valid credential"
+                Expect.equal u.UserId (UserId f.ExpectedUserId) "UserId resolved from the valid credential"
                 Expect.isFalse (AuthenticatedUser.isAnonymous u) "a validated user must not be anonymous"
         }
 
@@ -85,7 +86,7 @@ let tests (f: AuthProviderContractFixture) : Test =
         testCaseAsync "GetUser: valid credential → resolved user"
         <| async {
             let! u = f.Provider.GetUser(f.ValidCtx())
-            Expect.equal u.UserId f.ExpectedUserId "UserId resolved from the valid credential"
+            Expect.equal u.UserId (UserId f.ExpectedUserId) "UserId resolved from the valid credential"
         }
 
         testCaseAsync "GetUser: expired/invalid credential → anonymous (lenient)"

@@ -460,7 +460,7 @@ type BlobModelRegistry
                                 ModelArtifactTransitionDenied {
                                     CompositeKeyHash = keyHash
                                     AttemptedStatus = ModelArtifactStatus.name target
-                                    ActorUserId = actorUserId
+                                    ActorUserId = UserId actorUserId.Value
                                     Reason = reason
                                     ScopeId = scopeId
                                 }
@@ -494,7 +494,7 @@ type BlobModelRegistry
                                         CompositeKeyHash = keyHash
                                         FromStatus = ModelArtifactStatus.name from
                                         ToStatus = ModelArtifactStatus.name target
-                                        ActorUserId = actorUserId
+                                        ActorUserId = UserId actorUserId.Value
                                         ScopeId = scopeId
                                     }
                                 )

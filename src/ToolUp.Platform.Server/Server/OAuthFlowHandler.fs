@@ -127,7 +127,7 @@ let private ensureOwnerAdmin (ctx: HttpContext) (accessContext: AccessContext) :
     | TeamMember(userId, teamId) ->
         match tryGetService<ITeamStore> ctx with
         | Some ts ->
-            let! role = ts.GetMemberRole(teamId, userId)
+            let! role = ts.GetMemberRole(TeamId teamId, UserId userId)
 
             match role with
             | Some r when TeamRoles.canWriteTeamConfig r -> return Ok()
@@ -863,7 +863,7 @@ let private callback (flowName: string) : HttpHandler =
                                                             auditLog.Record(
                                                                 entry.ScopeId,
                                                                 OAuthConnected {
-                                                                    UserId = entry.UserId
+                                                                    UserId = UserId entry.UserId
                                                                     ScopeId = entry.ScopeId
                                                                     FlowName = flowName
                                                                     DataSourceId = entry.DataSourceId

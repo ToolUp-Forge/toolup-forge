@@ -472,7 +472,7 @@ type GrantNotificationObserver
     let jsonOptions = FableConverters.create ()
 
     let scopeOf (teamId: string) =
-        ScopeKey.container (ScopeKey.Team teamId)
+        ScopeKey.container (ScopeKey.Team(TeamId teamId))
 
     /// Publish one notice. Swallow-and-log: a notification outage must
     /// never fail the grant write, and it has already succeeded by the
@@ -539,7 +539,7 @@ type GrantNotificationObserver
     let observing (teamId: string) (write: Async<Result<unit, string>>) = async {
         let! prior = async {
             try
-                let! doc = inner.GetTeamPermissions teamId
+                let! doc = inner.GetTeamPermissions(TeamId teamId)
                 return Some doc
             with ex ->
                 logger.Warn
@@ -553,7 +553,7 @@ type GrantNotificationObserver
         match result, prior with
         | Ok(), Some priorDoc ->
             try
-                let! written = inner.GetTeamPermissions teamId
+                let! written = inner.GetTeamPermissions(TeamId teamId)
                 fanOut teamId priorDoc written
             with ex ->
                 logger.Warn
@@ -582,10 +582,10 @@ type GrantNotificationObserver
             inner.SetModuleExposure(teamId, moduleName, state)
 
         member _.SetTeamPermissions(teamId, permissions) =
-            observing teamId (inner.SetTeamPermissions(teamId, permissions))
+            observing teamId.Value (inner.SetTeamPermissions(teamId, permissions))
 
         member _.SetMemberPermissions(teamId, userId, moduleName, permissions) =
-            observing teamId (inner.SetMemberPermissions(teamId, userId, moduleName, permissions))
+            observing teamId.Value (inner.SetMemberPermissions(teamId, userId, moduleName, permissions))
 
         // A team default has no subject to notify: it applies to every
         // member who lacks an explicit entry, which is why Phase 551

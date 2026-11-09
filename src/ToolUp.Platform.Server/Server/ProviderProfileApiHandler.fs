@@ -132,7 +132,7 @@ let providerProfileApi (providerProfile: IProviderProfile) (ctx: HttpContext) : 
         | TeamMember(userId, teamId) ->
             match ctx.RequestServices.GetService(typeof<ITeamStore>) with
             | :? ITeamStore as ts ->
-                let! role = ts.GetMemberRole(teamId, userId)
+                let! role = ts.GetMemberRole(TeamId teamId, UserId userId)
 
                 match role with
                 | Some r when TeamRoles.canWriteTeamConfig r -> return Ok()

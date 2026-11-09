@@ -180,7 +180,7 @@ type DefaultAssetStore
                             emitAudit
                                 scopeContainer
                                 (AuditEvent.AssetUploaded {
-                                    UserId = request.UploadedBy
+                                    UserId = UserId request.UploadedBy
                                     AssetId = AssetId.value assetId
                                     ContentHash = hash
                                     OriginalFilename = request.OriginalFilename
@@ -400,7 +400,7 @@ type DefaultAssetStore
                             emitAudit
                                 scopeContainer
                                 (AuditEvent.AssetDeleted {
-                                    UserId = record.UploadedBy
+                                    UserId = UserId record.UploadedBy
                                     AssetId = AssetId.value id
                                     ContentHash = record.ContentHash
                                 })

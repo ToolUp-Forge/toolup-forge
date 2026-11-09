@@ -82,7 +82,7 @@ let private warningLogger () =
 
 let private memberUser: AuthenticatedUser = {
     AuthenticatedUser.anonymous with
-        UserId = "u-1024"
+        UserId = UserId "u-1024"
         DisplayName = "Member"
         Email = Some "member@example.test"
 }
@@ -104,7 +104,7 @@ let private sites: Site list = [
         // A page route: the downgrade is reported there too, and no anonymous
         // binding cookie is issued.
         Path = "/p/report"
-        Resolve = fun () -> async { return Error(SubjectResolutionError.NotTeamMember "team-gone") }
+        Resolve = fun () -> async { return Error(SubjectResolutionError.NotTeamMember(TeamId "team-gone")) }
         ThroughInvites = false
     }
     {
@@ -116,13 +116,13 @@ let private sites: Site list = [
     {
         Write = "login audit"
         Path = "/api/x"
-        Resolve = fun () -> async { return Ok(Subject.AuthenticatedUser memberUser.UserId) }
+        Resolve = fun () -> async { return Ok(Subject.AuthenticatedUser memberUser.UserId.Value) }
         ThroughInvites = false
     }
     {
         Write = "invite consumption"
         Path = "/api/x"
-        Resolve = fun () -> async { return Ok(Subject.AuthenticatedUser memberUser.UserId) }
+        Resolve = fun () -> async { return Ok(Subject.AuthenticatedUser memberUser.UserId.Value) }
         ThroughInvites = true
     }
     {

@@ -31,10 +31,10 @@ type BlobStorageErasureHandler(storage: IBlobStorage) =
         member _.Name = HandlerName
 
         member _.Erase(scopeId, subjectUserId, policy) =
-            storage.Erase(scopeId, subjectUserId, policy, false)
+            storage.Erase(scopeId, subjectUserId.Value, policy, false)
 
         member _.Preview(scopeId, subjectUserId, policy) = async {
-            let! result = storage.Erase(scopeId, subjectUserId, policy, true)
+            let! result = storage.Erase(scopeId, subjectUserId.Value, policy, true)
 
             return
                 match result with

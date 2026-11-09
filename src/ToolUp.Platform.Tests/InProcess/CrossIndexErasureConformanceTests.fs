@@ -308,7 +308,7 @@ let private applyToSystem (h: Harness) (cmd: Command) = async {
         let! report = h.Lifecycle.DeleteByScope scope
         return Some report
     | EraseSubject(scope, subject, dryRun) ->
-        let! result = h.Lifecycle.Erase(scope, subject, ErasurePolicy.HardDelete, dryRun)
+        let! result = h.Lifecycle.Erase(scope, UserId subject, ErasurePolicy.HardDelete, dryRun)
 
         match result with
         | Result.Error e -> return failtest (sprintf "Erase must succeed: %s" (ErasureError.toMessage e))
@@ -602,7 +602,7 @@ let private phase960Tests =
 
             let refusing = UploadRefusingBlobStorage(inner, (=) modB) :> IBlobStorage
             let store = ToolUp.Platform.Config.ConfigStore.create refusing
-            let! result = store.Erase("team-1", "u1", ErasurePolicy.Tombstone, false)
+            let! result = store.Erase("team-1", UserId "u1", ErasurePolicy.Tombstone, false)
 
             let partial, detail = expectPartialFailure "config" result
             Expect.stringContains detail modB "the failure names the blob that did not redact"
@@ -622,7 +622,8 @@ let private phase960Tests =
 
             // Idempotent and re-runnable: a healthy store finishes the job.
             let! rerun =
-                (ToolUp.Platform.Config.ConfigStore.create inner).Erase("team-1", "u1", ErasurePolicy.Tombstone, false)
+                (ToolUp.Platform.Config.ConfigStore.create inner)
+                    .Erase("team-1", UserId "u1", ErasurePolicy.Tombstone, false)
 
             match rerun with
             | Ok s -> Expect.equal s.RecordsAffected 1 "the re-run redacts exactly the one that was left"
@@ -671,7 +672,7 @@ let private phase960Tests =
                     )
                     :> IDataObjectStore
 
-                let! result = failing.Erase("team-1", "u1", policy, false)
+                let! result = failing.Erase("team-1", UserId "u1", policy, false)
 
                 let partial, detail = expectPartialFailure "data-objects" result
                 Expect.stringContains detail refusedName "the failure names the blob that did not redact"
@@ -696,7 +697,7 @@ let private phase960Tests =
                         "its content was not reclaimed from under it"
                 | Error e -> failtestf "o2 must still be readable: %A" e
 
-                let! rerun = healthy.Erase("team-1", "u1", policy, false)
+                let! rerun = healthy.Erase("team-1", UserId "u1", policy, false)
 
                 match rerun with
                 | Ok s -> Expect.equal s.RecordsAffected 1 "the re-run redacts exactly the one that was left"
@@ -721,7 +722,7 @@ let private phase960Tests =
                 )
                 :> IDataObjectStore
 
-            let! result = failing.Erase("team-1", "u1", ErasurePolicy.Tombstone, false)
+            let! result = failing.Erase("team-1", UserId "u1", ErasurePolicy.Tombstone, false)
 
             let partial, detail = expectPartialFailure "data-objects" result
             Expect.stringContains detail "objects/_content/" "the failure names the tombstone content blob"
@@ -820,7 +821,7 @@ let private phase965Tests =
 
             let refusing = DeleteRefusingBlobStorage(inner, (=) modB) :> IBlobStorage
             let store = ToolUp.Platform.Config.ConfigStore.create refusing
-            let! result = store.Erase("team-1", "u1", ErasurePolicy.HardDelete, false)
+            let! result = store.Erase("team-1", UserId "u1", ErasurePolicy.HardDelete, false)
 
             let partial, detail = expectPartialFailure "config" result
             Expect.stringContains detail modB "the failure names the blob that was not deleted"
@@ -834,7 +835,8 @@ let private phase965Tests =
 
             // Idempotent and re-runnable: a healthy store finishes the job.
             let! rerun =
-                (ToolUp.Platform.Config.ConfigStore.create inner).Erase("team-1", "u1", ErasurePolicy.HardDelete, false)
+                (ToolUp.Platform.Config.ConfigStore.create inner)
+                    .Erase("team-1", UserId "u1", ErasurePolicy.HardDelete, false)
 
             match rerun with
             | Ok s -> Expect.equal s.RecordsAffected 1 "the re-run deletes exactly the one that was left"
@@ -855,7 +857,7 @@ let private phase965Tests =
 
             let! result =
                 (ToolUp.Platform.Config.ConfigStore.create refusing)
-                    .Erase("team-2", "u1", ErasurePolicy.HardDelete, false)
+                    .Erase("team-2", UserId "u1", ErasurePolicy.HardDelete, false)
 
             let partial, detail = expectPartialFailure "config" result
             Expect.stringContains detail modA "the first refused blob is named"
@@ -898,7 +900,7 @@ let private phase965Tests =
                 ToolUp.Platform.Infra.DataObjectStore.DataObjectStore(DeleteRefusingBlobStorage(inner, (=) refusedName))
                 :> IDataObjectStore
 
-            let! result = failing.Erase("team-1", "u1", ErasurePolicy.HardDelete, false)
+            let! result = failing.Erase("team-1", UserId "u1", ErasurePolicy.HardDelete, false)
 
             let partial, detail = expectPartialFailure "data-objects" result
             Expect.stringContains detail refusedName "the failure names the blob that was not deleted"
@@ -917,7 +919,7 @@ let private phase965Tests =
                 Expect.equal (Encoding.UTF8.GetString content) "secret-2" "its content was not reclaimed from under it"
             | Error e -> failtestf "o2 must still be readable: %A" e
 
-            let! rerun = healthy.Erase("team-1", "u1", ErasurePolicy.HardDelete, false)
+            let! rerun = healthy.Erase("team-1", UserId "u1", ErasurePolicy.HardDelete, false)
 
             match rerun with
             | Ok s -> Expect.equal s.RecordsAffected 1 "the re-run deletes exactly the one that was left"
@@ -951,7 +953,7 @@ let private phase965Tests =
                 )
                 :> IDataObjectStore
 
-            let! result = failing.Erase("team-c", "u1", ErasurePolicy.HardDelete, false)
+            let! result = failing.Erase("team-c", UserId "u1", ErasurePolicy.HardDelete, false)
             expectPartialFailure "data-objects" result |> ignore
 
             // o1's metadata went, so its bytes are reclaimed — a re-run
@@ -1061,7 +1063,7 @@ let tests =
                     let! denseBefore = h.VectorStore.ListChunks Deployment true
                     let! sparseBefore = h.Sparse.Search [ Deployment ] universalTerm sweepK
 
-                    let! preview = h.Lifecycle.Erase(Deployment, subject, ErasurePolicy.HardDelete, true)
+                    let! preview = h.Lifecycle.Erase(Deployment, UserId subject, ErasurePolicy.HardDelete, true)
 
                     match preview with
                     | Result.Error e -> failtest (sprintf "dry-run erase must succeed: %s" (ErasureError.toMessage e))
@@ -1226,7 +1228,7 @@ let tests =
             let lifecycle =
                 DefaultIndexLifecycle(vs, Some sparse, Some cache) :> IIndexLifecycle
 
-            let! result = lifecycle.Erase(Deployment, subject, ErasurePolicy.HardDelete, false)
+            let! result = lifecycle.Erase(Deployment, UserId subject, ErasurePolicy.HardDelete, false)
 
             match result with
             | Result.Error e -> failtest (sprintf "erase must succeed: %s" (ErasureError.toMessage e))

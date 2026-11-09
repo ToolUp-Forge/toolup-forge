@@ -63,7 +63,7 @@ let hook: TenantHook<IConversationStore> = {
             let errors = ResizeArray<string>()
 
             for subject in subjects do
-                let! result = store.Erase(scopeId, subject, ErasurePolicy.HardDelete, false)
+                let! result = store.Erase(scopeId, UserId subject, ErasurePolicy.HardDelete, false)
 
                 match result with
                 | Ok _ -> ()

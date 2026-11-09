@@ -1163,9 +1163,9 @@ let private memberOfNewTeam (teamStore: TeamManagement.TeamStore) (userId: strin
     let team = newTeam ()
 
     async {
-        let! _ = teamStore.CreateTeam(team, team + "-name")
-        let! _ = teamStore.AddMember(team, userId, TeamRole.Owner)
-        let! _ = teamStore.SetActiveTeam(userId, team)
+        let! _ = teamStore.CreateTeam(TeamId team, team + "-name")
+        let! _ = teamStore.AddMember(TeamId team, UserId userId, TeamRole.Owner)
+        let! _ = teamStore.SetActiveTeam(UserId userId, TeamId team)
         return ()
     }
     |> Async.RunSynchronously
@@ -1174,7 +1174,7 @@ let private memberOfNewTeam (teamStore: TeamManagement.TeamStore) (userId: strin
 
 let private principalNamed (name: string) : DeclaredPrincipal = {
     Name = name
-    UserId = "svc-" + Guid.NewGuid().ToString "N"
+    UserId = UserId("svc-" + Guid.NewGuid().ToString "N")
     DisplayName = $"{name} service principal"
 }
 
@@ -1270,7 +1270,7 @@ let standingSubscriptionTests =
             let world = worldWith (probe seen)
             let teamStore, resolver = teamResolution ()
             let principal = principalNamed "trading"
-            let team = memberOfNewTeam teamStore principal.UserId
+            let team = memberOfNewTeam teamStore principal.UserId.Value
             let id = StandingReportSubscription.subscriptionId "monday-brief"
 
             let report =
@@ -1297,11 +1297,11 @@ let standingSubscriptionTests =
 
             Expect.equal
                 (world.Audits |> List.map (fun a -> a.SubscriptionId, a.RunAs))
-                [ id, principal.UserId ]
+                [ id, principal.UserId.Value ]
                 "the run is audited as the declared principal"
 
             match world.Subscriptions.Get(team, id) |> Async.RunSynchronously with
-            | Some row -> Expect.equal row.CreatedBy principal.UserId "the row is the principal's"
+            | Some row -> Expect.equal row.CreatedBy principal.UserId.Value "the row is the principal's"
             | None -> failtest "the standing row was not stored"
         }
 
@@ -1309,7 +1309,7 @@ let standingSubscriptionTests =
             let deployment = deploy ()
             let teamStore, resolver = teamResolution ()
             let principal = principalNamed "trading"
-            let team = memberOfNewTeam teamStore principal.UserId
+            let team = memberOfNewTeam teamStore principal.UserId.Value
             let other = newTeam ()
             let fact = assertOk deployment.Store team (revenue 1250m)
             let _ = assertOk deployment.Store other (revenue 990m)
@@ -1336,7 +1336,7 @@ let standingSubscriptionTests =
 
             Expect.equal
                 (deployment.World.Audits |> List.map _.RunAs)
-                [ principal.UserId ]
+                [ principal.UserId.Value ]
                 "and audited as the principal"
         }
 
@@ -1346,7 +1346,7 @@ let standingSubscriptionTests =
             let world = worldWith (probe seen)
             let teamStore, resolver = teamResolution ()
             let principal = principalNamed "trading"
-            let team = memberOfNewTeam teamStore principal.UserId
+            let team = memberOfNewTeam teamStore principal.UserId.Value
             let id = StandingReportSubscription.subscriptionId "monday-brief"
             let declared = standingTo "monday-brief" "test.scope-probe" "trading"
 
@@ -1409,7 +1409,7 @@ let standingSubscriptionTests =
             let world = worldWith (probe seen)
             let teamStore, resolver = teamResolution ()
             let principal = principalNamed "trading"
-            let first = memberOfNewTeam teamStore principal.UserId
+            let first = memberOfNewTeam teamStore principal.UserId.Value
             let id = StandingReportSubscription.subscriptionId "monday-brief"
 
             let standing: ReportingCompose.StandingSubscriptions = {
@@ -1418,7 +1418,7 @@ let standingSubscriptionTests =
             }
 
             seeded world resolver standing |> ignore
-            let second = memberOfNewTeam teamStore principal.UserId
+            let second = memberOfNewTeam teamStore principal.UserId.Value
             let report = seeded world resolver standing
 
             Expect.equal report.Seeded [ second, id ] "seeded at the team it resolves to now"
@@ -1450,7 +1450,7 @@ let standingSubscriptionTests =
             let teamStore, resolver = teamResolution ()
             let noTeam = principalNamed "orphan"
             let resolvable = principalNamed "trading"
-            let team = memberOfNewTeam teamStore resolvable.UserId
+            let team = memberOfNewTeam teamStore resolvable.UserId.Value
 
             let refusals =
                 startRefusals world (providerWith (Some resolver)) {
@@ -1497,7 +1497,7 @@ let standingSubscriptionTests =
             Expect.equal
                 refusals
                 [
-                    ReportingCompose.PrincipalScopeNotPersistent("monday-brief", "trading", principal.UserId)
+                    ReportingCompose.PrincipalScopeNotPersistent("monday-brief", "trading", principal.UserId.Value)
                 ]
                 "a session-lived scope is no home for a standing report"
         }
@@ -1506,7 +1506,7 @@ let standingSubscriptionTests =
             let world = worldWith (probe (ConcurrentQueue()))
             let teamStore, resolver = teamResolution ()
             let principal = principalNamed "trading"
-            let team = memberOfNewTeam teamStore principal.UserId
+            let team = memberOfNewTeam teamStore principal.UserId.Value
 
             let refusals =
                 startRefusals world (providerWith (Some resolver)) {

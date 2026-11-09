@@ -1290,7 +1290,12 @@ type PgvectorVectorStore
         }
 
         member this.Erase(scope, subjectUserId, policy, dryRun) =
-            ToolUp.Platform.Infra.IVectorStore.eraseSubject (this :> IVectorStore) scope subjectUserId policy dryRun
+            ToolUp.Platform.Infra.IVectorStore.eraseSubject
+                (this :> IVectorStore)
+                scope
+                subjectUserId.Value
+                policy
+                dryRun
 
     // Phase 892 — one `INSERT … SELECT … FROM unnest(…)` per batch, the
     // vectors bound as one binary `real[]`. The statement count is one for

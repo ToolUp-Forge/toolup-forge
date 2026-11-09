@@ -148,7 +148,7 @@ type private Fixture(mimeRenderer: CountingMimeRenderer, observability: Derivati
     member _.RunAttempt(attempt: int) : JobResult =
         let jobId = scheduler.ScheduledJobIds |> List.exactlyOne
 
-        (scheduler :> IJobScheduler).TriggerOnce(container, jobId, "test")
+        (scheduler :> IJobScheduler).TriggerOnce(container, jobId, UserId "test")
         |> Async.RunSynchronously
         |> ignore
 
@@ -227,7 +227,7 @@ let tests =
                     // re-trigger for the next attempt.
                     let jobId = fixture.Scheduler.ScheduledJobIds |> List.exactlyOne
 
-                    (fixture.Scheduler :> IJobScheduler).TriggerOnce(container, jobId, "test")
+                    (fixture.Scheduler :> IJobScheduler).TriggerOnce(container, jobId, UserId "test")
                     |> Async.RunSynchronously
                     |> ignore
 

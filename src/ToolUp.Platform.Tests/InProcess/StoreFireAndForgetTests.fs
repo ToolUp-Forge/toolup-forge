@@ -256,7 +256,7 @@ let private conversationSites (kind: StoreKind) : Site list =
         })
         site "Erase" "ConversationErased event" (fun store id -> async {
             do! expectOk "Begin" (store.BeginConversation(scopeId, conversation id))
-            let! result = store.Erase(scopeId, "alice", ErasurePolicy.HardDelete, false)
+            let! result = store.Erase(scopeId, UserId "alice", ErasurePolicy.HardDelete, false)
             return sprintf "%A" result
         })
     ]

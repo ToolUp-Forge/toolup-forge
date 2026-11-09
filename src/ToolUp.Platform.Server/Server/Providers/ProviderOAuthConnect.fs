@@ -203,7 +203,7 @@ let internal completeConnectObserved
                                 log.Record(
                                     scope.ScopeId,
                                     OAuthConnected {
-                                        UserId = userId
+                                        UserId = UserId userId
                                         ScopeId = scope.ScopeId
                                         FlowName = flow.Name
                                         DataSourceId = OAuthCorrelationKey.render correlation
@@ -309,7 +309,7 @@ let private markNeedsReauthorization
                 log.Record(
                     scope.ScopeId,
                     OAuthRefreshFailed {
-                        UserId = "system"
+                        UserId = UserId "system"
                         ScopeId = scope.ScopeId
                         FlowName = flow.Name
                         DataSourceId = OAuthCorrelationKey.render (OAuthCorrelationKey.providerEntry entry.Label)

@@ -122,7 +122,7 @@ let externalContactApi (ctx: HttpContext) : IExternalContactApi =
             | TeamMember(userId, teamId) ->
                 match ctx.RequestServices.GetService(typeof<ITeamStore>) with
                 | :? ITeamStore as teams ->
-                    let! role = teams.GetMemberRole(teamId, userId)
+                    let! role = teams.GetMemberRole(TeamId teamId, UserId userId)
 
                     match role with
                     | Some r when TeamRoles.canWriteTeamConfig r -> return! f s scopeId
@@ -172,21 +172,21 @@ let externalContactApi (ctx: HttpContext) : IExternalContactApi =
                     // subject, never taken from the request: a request
                     // that could name an owner could file a contact
                     // into someone else's address book.
-                    let! created = s.Create(scopeId, actor, ownerFor accessContext, request)
+                    let! created = s.Create(scopeId, UserId actor, ownerFor accessContext, request)
                     return toResult created
                 })
 
         UpdateContact =
             fun request ->
                 writable (fun s scopeId -> async {
-                    let! updated = s.Update(scopeId, actor, request)
+                    let! updated = s.Update(scopeId, UserId actor, request)
                     return toResult updated
                 })
 
         DeleteContact =
             fun contactId ->
                 writable (fun s scopeId -> async {
-                    let! deleted = s.Delete(scopeId, actor, contactId)
+                    let! deleted = s.Delete(scopeId, UserId actor, contactId)
                     return deleted |> Result.map ignore |> toResult
                 })
 
@@ -212,7 +212,7 @@ let externalContactApi (ctx: HttpContext) : IExternalContactApi =
                                 ExpiresAt = request.ExpiresAt
                             }
 
-                            let! updated = s.RecordOptIn(scopeId, actor, request.ContactId, channel, record)
+                            let! updated = s.RecordOptIn(scopeId, UserId actor, request.ContactId, channel, record)
                             return toResult updated
                 })
 
@@ -228,7 +228,7 @@ let externalContactApi (ctx: HttpContext) : IExternalContactApi =
                             else
                                 request.Reason.Trim()
 
-                        let! updated = s.WithdrawOptIn(scopeId, actor, request.ContactId, channel, reason)
+                        let! updated = s.WithdrawOptIn(scopeId, UserId actor, request.ContactId, channel, reason)
                         return toResult updated
                 })
 

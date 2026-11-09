@@ -8,6 +8,7 @@ open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Compose
+open ToolUp.Platform
 
 // ─── Phase 69f — idempotency-key residuals ────────────────────────────
 //
@@ -107,7 +108,7 @@ let tests =
                 Attempt = 1
                 Trigger = ToolUp.Platform.Trigger.Manual
                 Scope = ToolUp.Platform.ResolvedScope.anonymous
-                TriggerSource = ToolUp.Platform.TriggerSource.ScheduledManually "_system"
+                TriggerSource = ToolUp.Platform.TriggerSource.ScheduledManually(UserId "_system")
                 ScheduledAt = DateTime.UtcNow
                 RunningAt = DateTime.UtcNow
                 Payload = ""

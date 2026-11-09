@@ -92,19 +92,19 @@ module DigestRenderer =
         match channel with
         | PreferenceChannel.Email ->
             TransactionalEmail {
-                Recipients = [ RecipientId.User userId ]
+                Recipients = [ RecipientId.User(UserId userId) ]
                 Content = InlineEmail(subject settings.DigestEmailSubject count, body items, None)
                 CorrelationId = Some marker
             }
         | PreferenceChannel.Sms ->
             TransactionalSms {
-                Recipients = [ RecipientId.User userId ]
+                Recipients = [ RecipientId.User(UserId userId) ]
                 Body = body items
                 CorrelationId = Some marker
             }
         | PreferenceChannel.Push ->
             MobilePush {
-                Recipients = [ RecipientId.User userId ]
+                Recipients = [ RecipientId.User(UserId userId) ]
                 Title = subject settings.DigestEmailSubject count
                 Body = body items
                 DeepLink = None
@@ -128,7 +128,7 @@ type DigestJobHandler
     let release (scopeId: string) (item: PendingNotification) = async {
         do! channel.Publish(scopeId, item.Notification)
 
-        match! store.Remove(scopeId, item.UserId, [ item.Id ]) with
+        match! store.Remove(scopeId, UserId item.UserId.Value, [ item.Id ]) with
         | Ok() -> ()
         | Error e -> logger.Warn $"[NotificationDigest] released {item.Id} but could not remove it: {e}"
     }
@@ -149,12 +149,12 @@ type DigestJobHandler
             for channelFamily, group in batch |> List.groupBy _.Channel do
                 do! channel.Publish(scopeId, DigestRenderer.render settings channelFamily userId marker group)
 
-            match! store.Remove(scopeId, userId, batch |> List.map _.Id) with
+            match! store.Remove(scopeId, UserId userId, batch |> List.map _.Id) with
             | Ok() -> ()
             | Error e ->
                 logger.Warn $"[NotificationDigest] sent {marker} to {userId} but could not remove its items: {e}"
 
-            match! store.SetDigestWatermark(scopeId, userId, frequency, nowUtc) with
+            match! store.SetDigestWatermark(scopeId, UserId userId, frequency, nowUtc) with
             | Ok() -> ()
             | Error e ->
                 logger.Warn $"[NotificationDigest] sent {marker} to {userId} but could not record the watermark: {e}"
@@ -163,14 +163,14 @@ type DigestJobHandler
         }
 
     let drainUser (scopeId: string) (userId: string) (nowUtc: DateTime) = async {
-        let! items = store.ListPending(scopeId, userId)
+        let! items = store.ListPending(scopeId, UserId userId)
 
         for item in items do
             match item.Disposition with
             | PendingDisposition.DeferredUntil until when until <= nowUtc -> do! release scopeId item
             | _ -> ()
 
-        let! watermarks = store.GetDigestWatermarks(scopeId, userId)
+        let! watermarks = store.GetDigestWatermarks(scopeId, UserId userId)
 
         let buckets =
             items

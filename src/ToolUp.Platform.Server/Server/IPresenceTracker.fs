@@ -59,17 +59,17 @@ type IPresenceTracker =
     /// reconnect-re-acquire path (Phase 24): a client whose entry
     /// expired while offline calls `Join` again on reconnect.
     abstract Join:
-        scopeId: string * userId: string * displayName: string option * location: PresenceLocation -> Async<unit>
+        scopeId: string * userId: UserId * displayName: string option * location: PresenceLocation -> Async<unit>
 
     /// Refresh a principal's liveness at its current location. A no-op
     /// (no event) when the principal is not currently present — the
     /// client re-`Join`s to re-appear.
-    abstract Heartbeat: scopeId: string * userId: string -> Async<unit>
+    abstract Heartbeat: scopeId: string * userId: UserId -> Async<unit>
     /// Move a present principal to a new location (upserts + announces
     /// `Moved`).
-    abstract Move: scopeId: string * userId: string * location: PresenceLocation -> Async<unit>
+    abstract Move: scopeId: string * userId: UserId * location: PresenceLocation -> Async<unit>
     /// Remove a principal from a scope's roster (announces `Left`).
-    abstract Leave: scopeId: string * userId: string -> Async<unit>
+    abstract Leave: scopeId: string * userId: UserId -> Async<unit>
     /// The current non-expired roster for a scope. Scope-isolated:
     /// returns only this scope's peers, sorted by `UserId` for stable
     /// rendering.
@@ -114,21 +114,21 @@ type InMemoryPresenceTracker(channel: INotificationChannel, ?expiry: TimeSpan, ?
     interface IPresenceTracker with
         member _.Join(scopeId, userId, displayName, location) = async {
             let peer = {
-                UserId = userId
+                UserId = userId.Value
                 DisplayName = displayName
                 Location = location
                 LastSeen = clock ()
             }
 
-            (scopeMap scopeId)[userId] <- peer
+            (scopeMap scopeId)[userId.Value] <- peer
             do! publish scopeId PresenceChange.Joined peer
         }
 
         member _.Heartbeat(scopeId, userId) = async {
             match scopes.TryGetValue scopeId with
             | true, m ->
-                match m.TryGetValue userId with
-                | true, existing -> m[userId] <- { existing with LastSeen = clock () }
+                match m.TryGetValue userId.Value with
+                | true, existing -> m[userId.Value] <- { existing with LastSeen = clock () }
                 | _ -> () // not present — client re-Joins to re-appear
             | _ -> ()
         }
@@ -137,25 +137,25 @@ type InMemoryPresenceTracker(channel: INotificationChannel, ?expiry: TimeSpan, ?
             let m = scopeMap scopeId
 
             let displayName =
-                match m.TryGetValue userId with
+                match m.TryGetValue userId.Value with
                 | true, existing -> existing.DisplayName
                 | _ -> None
 
             let peer = {
-                UserId = userId
+                UserId = userId.Value
                 DisplayName = displayName
                 Location = location
                 LastSeen = clock ()
             }
 
-            m[userId] <- peer
+            m[userId.Value] <- peer
             do! publish scopeId PresenceChange.Moved peer
         }
 
         member _.Leave(scopeId, userId) = async {
             match scopes.TryGetValue scopeId with
             | true, m ->
-                match m.TryRemove userId with
+                match m.TryRemove userId.Value with
                 | true, peer -> do! publish scopeId PresenceChange.Left peer
                 | _ -> ()
             | _ -> ()

@@ -651,7 +651,7 @@ let tests =
 
                 Expect.hasLength refusals 1 "and audited — a guard that refuses silently covers half the requirement"
                 Expect.equal refusals.Head.ModuleName "Payroll" "naming the module"
-                Expect.equal refusals.Head.UserId "alice" "and the subject who reached for it"
+                Expect.equal refusals.Head.UserId (UserId "alice") "and the subject who reached for it"
 
             testCase "the dispatch guard admits a live grant, and audits nothing"
             <| fun _ ->

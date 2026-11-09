@@ -402,18 +402,18 @@ let private authProvider () : IAuthProvider =
     let userOf userId = {
         AuthenticatedUser.anonymous with
             UserId = userId
-            DisplayName = userId
+            DisplayName = userId.Value
     }
 
     { new IAuthProvider with
         member _.GetUser rc =
             match fromCookie rc with
-            | Some userId -> async { return userOf userId }
+            | Some userId -> async { return userOf (UserId userId) }
             | None -> jwt.GetUser rc
 
         member _.ValidateRequest rc =
             match fromCookie rc with
-            | Some userId -> async { return Ok(userOf userId) }
+            | Some userId -> async { return Ok(userOf (UserId userId)) }
             | None -> jwt.ValidateRequest rc
 
         member _.IsCryptographicallyVerified = true
@@ -471,15 +471,29 @@ let private startHostWithApi
 
         if hasTeams then
             let teams = teamStore :> TeamManagement.ITeamStore
-            let! _ = teams.CreateTeam("team-a", "Team A")
+            let! _ = teams.CreateTeam(TeamId "team-a", "Team A")
 
             for userId in [ "carol"; "dave"; "erin" ] do
-                let! _ = teams.AddMember("team-a", userId, TeamRole.Member)
-                let! _ = teams.SetActiveTeam(userId, "team-a")
+                let! _ = teams.AddMember(TeamId "team-a", UserId userId, TeamRole.Member)
+                let! _ = teams.SetActiveTeam(UserId userId, TeamId "team-a")
                 ()
 
-            let! _ = permissionStore.SetMemberPermissions("team-a", "carol", "editor", [ ModulePermission.Read ])
-            let! _ = permissionStore.SetMemberPermissions("team-a", "dave", "viewer", [ ModulePermission.Read ])
+            let! _ =
+                permissionStore.SetMemberPermissions(
+                    TeamId "team-a",
+                    UserId "carol",
+                    "editor",
+                    [ ModulePermission.Read ]
+                )
+
+            let! _ =
+                permissionStore.SetMemberPermissions(
+                    TeamId "team-a",
+                    UserId "dave",
+                    "viewer",
+                    [ ModulePermission.Read ]
+                )
+
             ()
 
         let host =
@@ -718,7 +732,7 @@ let private rawToken (payload: string) =
 let private mapWith (mapping: ClaimMapping) (payload: string) =
     let baseUser = {
         AuthenticatedUser.anonymous with
-            UserId = "u"
+            UserId = UserId "u"
             DisplayName = "u"
     }
 
@@ -820,7 +834,7 @@ let private claimMappingTests =
 
             let user = {
                 AuthenticatedUser.anonymous with
-                    UserId = "u"
+                    UserId = UserId "u"
                     TenantId = None
             }
 
@@ -2194,7 +2208,7 @@ let private readerConfinementTests =
                     | scopeId, UserLoggedIn p -> Some(scopeId, p.UserId)
                     | _ -> None)
 
-            Expect.equal logins [ "team-a", "carol" ] "only the member's login; none for the reader"
+            Expect.equal logins [ "team-a", UserId "carol" ] "only the member's login; none for the reader"
 
             Expect.isFalse
                 (snapshot |> List.exists (fun (scopeId, _) -> scopeId.Contains "rhea"))
@@ -2818,14 +2832,14 @@ let private inPlatformGrantTests =
             Expect.isOk r1 "granted"
             Expect.isOk r2 "idempotent"
 
-            let! grants = store.GrantsFor "gina@corp/x"
+            let! grants = store.GrantsFor(UserId "gina@corp/x")
 
             Expect.equal
                 (grants |> List.sortBy _.PublishingScope)
                 [ boardGrant; other ]
                 "every grant the principal holds, across scopes"
 
-            let! none = store.GrantsFor "gina@corp"
+            let! none = store.GrantsFor(UserId "gina@corp")
             Expect.isEmpty none "a prefix of the user id holds nothing"
 
             let! listed = store.ListScope "team-a"
@@ -2837,7 +2851,7 @@ let private inPlatformGrantTests =
             Expect.isError blank "a blank principal is refused"
 
             let! _ = store.Revoke("team-a", entry)
-            let! after = store.GrantsFor "gina@corp/x"
+            let! after = store.GrantsFor(UserId "gina@corp/x")
             Expect.equal after [ other ] "revoked in team-a only"
         }
 
@@ -2850,9 +2864,9 @@ let private inPlatformGrantTests =
             let teams =
                 TeamManagement.TeamStore(blob, notifications, silentLogger) :> TeamManagement.ITeamStore
 
-            let! _ = teams.CreateTeam("team-a", "Team A")
-            let! _ = teams.AddMember("team-a", "olive", TeamRole.Owner)
-            let! _ = teams.AddMember("team-a", "mo", TeamRole.Member)
+            let! _ = teams.CreateTeam(TeamId "team-a", "Team A")
+            let! _ = teams.AddMember(TeamId "team-a", UserId "olive", TeamRole.Owner)
+            let! _ = teams.AddMember(TeamId "team-a", UserId "mo", TeamRole.Member)
             let store = freshGrantStore ()
             let rows, auditLog = recordingAuditLog ()
 
@@ -2921,7 +2935,7 @@ let private inPlatformGrantTests =
 
             let! revoked = owner.RevokeReader entry
             Expect.isOk revoked "revoked"
-            let! held = store.GrantsFor "gina"
+            let! held = store.GrantsFor(UserId "gina")
             Expect.isEmpty held "the grant is gone"
 
             let audited =

@@ -112,7 +112,7 @@ type IVectorStore =
     /// boundary, failure as `ErasureError`, stateless, single-scope,
     /// precision declared above.
     abstract Erase:
-        scope: VectorScope * subjectUserId: string * policy: ToolUp.Platform.ErasurePolicy * dryRun: bool ->
+        scope: VectorScope * subjectUserId: UserId * policy: ToolUp.Platform.ErasurePolicy * dryRun: bool ->
             Async<Result<ToolUp.Platform.ErasureSummary, ToolUp.Platform.ErasureError>>
 
 /// Shared default for `IVectorStore.Erase`. Expressed purely in terms

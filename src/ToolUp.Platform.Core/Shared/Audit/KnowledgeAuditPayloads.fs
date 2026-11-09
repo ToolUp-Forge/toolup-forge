@@ -25,7 +25,7 @@ type PlatformAdminAssignedPayload = {
     /// userId for subsequent assignments via the API.
     Actor: string
     /// User who received the role.
-    TargetUserId: string
+    TargetUserId: UserId
 }
 
 /// `PlatformAdmin` role revoked from a user. Emitted by
@@ -37,7 +37,7 @@ type PlatformAdminRevokedPayload = {
     /// Admin (gated by `canModifyPlatformConfig`).
     Actor: string
     /// User whose role was revoked.
-    TargetUserId: string
+    TargetUserId: UserId
 }
 
 /// Platform Knowledge Base document uploaded. Emitted by
@@ -90,7 +90,7 @@ type PlatformDocumentDeletedPayload = {
 /// content, no bytes (same PII envelope as the KB upload events).
 type KnowledgeOriginalRetrievedPayload = {
     /// User who fetched the original.
-    UserId: string
+    UserId: UserId
     /// Id of the `KnowledgeDocument` whose original was fetched.
     DocumentId: string
     /// Scope the document lives in (the caller's resolved scope —
@@ -112,7 +112,7 @@ type KnowledgeOriginalRetrievedPayload = {
 /// boundary are material security signals (GP 4 + GP 6).
 type KnowledgeOriginalRetrievalDeniedPayload = {
     /// User whose fetch was refused.
-    UserId: string
+    UserId: UserId
     /// Document id the caller asked for. May not exist anywhere —
     /// recorded verbatim so enumeration attempts are visible.
     DocumentId: string
@@ -136,7 +136,7 @@ type KnowledgeOriginalRetrievalDeniedPayload = {
 /// document content (same PII envelope as the other KB audit events).
 type KnowledgeScopeErasedPayload = {
     /// User who triggered the scope reset (the caller's resolved `UserId`).
-    UserId: string
+    UserId: UserId
     /// Scope that was wiped (the caller's resolved scope — the structural
     /// gate guarantees they match, GP 4).
     ScopeId: string
@@ -223,7 +223,7 @@ type KnowledgeIngestionDroppedPayload = {
 /// through the audit trail (same PII envelope as the other KB events).
 type KnowledgeDocumentDeduplicatedPayload = {
     /// User whose upload was deduplicated.
-    UserId: string
+    UserId: UserId
     /// Scope the existing document lives in — the caller's resolved
     /// scope (the hash index is container-local, GP 4).
     ScopeId: string
@@ -285,7 +285,7 @@ type KnowledgeDocumentsPurgedPayload = {
 /// `KnowledgeDocumentDeduplicated`.
 type ContentScannedPayload = {
     /// Subject whose upload was scanned.
-    UserId: string
+    UserId: UserId
     /// Scope the upload was made under — the caller's resolved scope
     /// (GP 4: it comes from the resolver, never from the caller).
     ScopeId: string

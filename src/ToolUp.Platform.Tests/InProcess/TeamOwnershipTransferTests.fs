@@ -121,16 +121,17 @@ let private teamConfig = {
 /// writing straight through the store so the handler tests start from a
 /// known membership state.
 let private seedTeam (ts: ITeamStore) (teamId: string) (ownerId: string) (members: (string * TeamRole) list) = async {
-    let! _ = ts.CreateTeam(teamId, "Team")
-    let! _ = ts.AddMember(teamId, ownerId, Owner)
+    let! _ = ts.CreateTeam(TeamId teamId, "Team")
+    let! _ = ts.AddMember(TeamId teamId, UserId ownerId, Owner)
 
     for uid, role in members do
-        let! _ = ts.AddMember(teamId, uid, role)
+        let! _ = ts.AddMember(TeamId teamId, UserId uid, role)
         ()
 }
 
 /// Role a user holds on a team, read back through the store.
-let private roleOf (ts: ITeamStore) (teamId: string) (userId: string) = ts.GetMemberRole(teamId, userId)
+let private roleOf (ts: ITeamStore) (teamId: string) (userId: string) =
+    ts.GetMemberRole(TeamId teamId, UserId userId)
 
 // ─── Tests ───────────────────────────────────────────────────────────
 
@@ -151,7 +152,7 @@ let tests =
             let! result = api.TransferOwnership("t1", "bob")
             Expect.equal result (Ok()) "transfer succeeds"
 
-            let! members = ts.GetTeamMembers "t1"
+            let! members = ts.GetTeamMembers(TeamId "t1")
             let owners = members |> List.filter (fun m -> m.Role = Owner) |> List.map _.UserId
             Expect.equal owners [ "bob" ] "exactly one Owner after transfer — the target"
 
@@ -174,10 +175,10 @@ let tests =
 
             match ev with
             | AuditEvent.TeamOwnershipTransferred p ->
-                Expect.equal p.TeamId "t1" "audit records the team"
-                Expect.equal p.FromUserId "alice" "audit records the outgoing Owner"
-                Expect.equal p.ToUserId "bob" "audit records the incoming Owner"
-                Expect.equal p.ActorUserId "alice" "audit records the actor"
+                Expect.equal p.TeamId (TeamId "t1") "audit records the team"
+                Expect.equal p.FromUserId (UserId "alice") "audit records the outgoing Owner"
+                Expect.equal p.ToUserId (UserId "bob") "audit records the incoming Owner"
+                Expect.equal p.ActorUserId (UserId "alice") "audit records the actor"
             | other -> failtestf "expected TeamOwnershipTransferred, got %A" other
         }
 

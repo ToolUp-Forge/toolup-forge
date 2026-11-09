@@ -71,7 +71,7 @@ let private isWriteAllowed (ctx: HttpContext) (accessContext: AccessContext) : A
     | TeamMember(userId, teamId) ->
         match ctx.RequestServices.GetService(typeof<ITeamStore>) with
         | :? ITeamStore as ts ->
-            let! role = ts.GetMemberRole(teamId, userId)
+            let! role = ts.GetMemberRole(TeamId teamId, UserId userId)
 
             return
                 match role with
@@ -222,7 +222,7 @@ let formApi
                             let! _ = analyserCache.MarkStale(saved.FormId, Some saved.SchemaVersion)
 
                             let payload: FormSubmittedPayload = {
-                                UserId = userId
+                                UserId = UserId userId
                                 FormId = saved.FormId
                                 SubmissionId = saved.Id
                                 SchemaVersion = saved.SchemaVersion
@@ -266,7 +266,7 @@ let formApi
                                 | Error err -> return Error err
                                 | Ok saved ->
                                     let payload: FormSubmissionUpdatedPayload = {
-                                        UserId = userId
+                                        UserId = UserId userId
                                         FormId = saved.FormId
                                         SubmissionId = saved.Id
                                         FieldCount = saved.Values.Count
@@ -604,7 +604,7 @@ let formApi
                                 let mutable count = 0
 
                                 for claim in activeTokens do
-                                    match! store.Revoke(scopeId, claim.TokenId, userId) with
+                                    match! store.Revoke(scopeId, claim.TokenId, UserId userId) with
                                     | Ok() -> count <- count + 1
                                     | Error _ -> ()
 
@@ -720,7 +720,7 @@ let formApi
                                     // place for the token's lifetime so resends and
                                     // delivery-failure audits remain attributable.
                                     let contact: UserContact = {
-                                        UserId = respondentUserId
+                                        UserId = UserId respondentUserId
                                         Email =
                                             Some {
                                                 Address = invitation.Email
@@ -750,7 +750,7 @@ let formApi
                                                 .Replace("{{displayName}}", displayName)
 
                                         let envelope: EmailEnvelope = {
-                                            Recipients = [ RecipientId.User respondentUserId ]
+                                            Recipients = [ RecipientId.User(UserId respondentUserId) ]
                                             Content = InlineEmail(req.Subject, body, None)
                                             CorrelationId = Some token.Claim.TokenId
                                         }

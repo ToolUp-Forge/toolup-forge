@@ -80,7 +80,7 @@ type ITenantFleet =
     /// returns every tenant (scan; intended for Platform-Admin
     /// only — gated at the API layer, not here).
     /// Ordering: `CreatedAt` ascending.
-    abstract ListTenants: ownerUserId: string option -> Async<Tenant list>
+    abstract ListTenants: ownerUserId: UserId option -> Async<Tenant list>
 
     /// Deploy a built artefact to a provisioned tenant. Composes
     /// `IBuildOrchestrator` output with `IDeployPipeline.BeginDeploy`;
@@ -110,13 +110,13 @@ type ITenantFleet =
     /// (idempotent on the success path — a second call after a
     /// first succeeded returns `Ok ()`).
     abstract EvictTenant:
-        tenantId: TenantId * byUserId: string * reason: string -> Async<Result<unit, TenantFleetError>>
+        tenantId: TenantId * byUserId: UserId * reason: string -> Async<Result<unit, TenantFleetError>>
 
     /// Resume a `Suspended` tenant — transition `Status` back to
     /// `Active` and relaunch its containers. Returns
     /// `TenantEvicted` when the tenant is evicted (terminal).
     /// Idempotent: calling on an already-active tenant is `Ok`.
-    abstract RestartTenant: tenantId: TenantId * byUserId: string -> Async<Result<unit, TenantFleetError>>
+    abstract RestartTenant: tenantId: TenantId * byUserId: UserId -> Async<Result<unit, TenantFleetError>>
 
     /// Cheap pre-flight check for a tenant-creation UI. Returns
     /// `true` when no `Active` or `Suspended` tenant with this slug

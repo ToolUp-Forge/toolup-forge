@@ -360,7 +360,7 @@ module internal ApiSeams =
                     | Some(Subject.ClaimBearer claim) -> "claim:" + claim.ScopeId
                     | Some(PublicationReader uid) -> "publication-reader:" + uid
                     | None when isAnonymousUser -> "anonymous"
-                    | None -> "user:" + user.UserId
+                    | None -> "user:" + user.UserId.Value
             }
     }
 

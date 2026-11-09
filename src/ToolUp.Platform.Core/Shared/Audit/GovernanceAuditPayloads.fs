@@ -111,7 +111,7 @@ type SyntheticSampleGeneratedPayload = {
     /// Acting `AccessContext.UserId` at the moment of the call. Pinned
     /// to a real principal — anonymous callers should never reach this
     /// path (the gating layer refuses them earlier).
-    UserId: string
+    UserId: UserId
     /// `DataTypeId` the sample was generated for.
     TypeId: string
     /// Number of rows requested. May exceed the configured per-partner
@@ -143,7 +143,7 @@ type SchemaOnlyAccessAttemptedPayload = {
     /// Acting `AccessContext.UserId`. Required for forensics —
     /// anonymous callers do not reach this path (the surface refuses
     /// them earlier).
-    UserId: string
+    UserId: UserId
     /// Module name the caller was attempting to read. Mirrors the
     /// `IPermissionStore` key shape so admin queries can correlate
     /// refusals with team-permission grants.
@@ -195,7 +195,7 @@ type GrantPolicyRefusedPayload = {
 /// (substrate read) — this fires at the module-access gate.
 type UnconsentedGrantRefusedPayload = {
     /// Acting `AccessContext.UserId`.
-    UserId: string
+    UserId: UserId
     /// Module whose routes were refused.
     ModuleName: string
     /// The module's currently declared policy, as its stable wire token.
@@ -282,7 +282,7 @@ type AdminMutationProposedPayload = {
     /// names, and the join key to the decision row.
     RequestId: string
     /// The team whose permission document the mutation targets.
-    TeamId: string
+    TeamId: TeamId
     /// The administrator who proposed it. Never empty: an unattributable
     /// write is refused rather than parked, so no proposal row can be
     /// anonymous.
@@ -305,7 +305,7 @@ type AdminMutationProposedPayload = {
 /// a distinction an approver cannot see and an auditor must.
 type AdminMutationApprovedPayload = {
     RequestId: string
-    TeamId: string
+    TeamId: TeamId
     /// The administrator who proposed it.
     ProposerId: string
     /// The administrator who approved it. Structurally never equal to
@@ -325,7 +325,7 @@ type AdminMutationApprovedPayload = {
 /// decision, that is a refused attempt.
 type AdminMutationRejectedPayload = {
     RequestId: string
-    TeamId: string
+    TeamId: TeamId
     ProposerId: string
     /// The administrator who rejected it.
     ApproverId: string
@@ -342,7 +342,7 @@ type AdminMutationRejectedPayload = {
 /// because nothing changed.
 type AdminMutationApprovalRefusedPayload = {
     RequestId: string
-    TeamId: string
+    TeamId: TeamId
     /// The proposer, where the record was readable. Empty when the
     /// request was not found.
     ProposerId: string
@@ -362,7 +362,7 @@ type AdminMutationApprovalRefusedPayload = {
 /// shows a proposal ending rather than merely stopping.
 type AdminMutationExpiredPayload = {
     RequestId: string
-    TeamId: string
+    TeamId: TeamId
     ProposerId: string
     MutationKind: string
     Fingerprint: string
@@ -399,7 +399,7 @@ type GrantConsentProposedPayload = {
     /// The lodged record's opaque id — the join key to the approval or
     /// revocation that later supersedes it.
     ConsentId: string
-    TeamId: string
+    TeamId: TeamId
     /// The principal the grant would be for.
     SubjectId: string
     /// The module the grant targets. Mirrors the `IPermissionStore` /
@@ -427,7 +427,7 @@ type GrantConsentProposedPayload = {
 /// approved and the proposal it supersedes.
 type GrantConsentApprovedPayload = {
     ConsentId: string
-    TeamId: string
+    TeamId: TeamId
     SubjectId: string
     ModuleName: string
     Party: string
@@ -450,7 +450,7 @@ type GrantConsentApprovedPayload = {
 /// what makes this row reconcilable against access actually stopping.
 type GrantConsentRevokedPayload = {
     ConsentId: string
-    TeamId: string
+    TeamId: TeamId
     SubjectId: string
     ModuleName: string
     Party: string
@@ -474,7 +474,7 @@ type GrantConsentRevokedPayload = {
 type GrantConsentVerificationDeniedPayload = {
     /// The record's id, or `""` when nothing readable was presented.
     ConsentId: string
-    TeamId: string
+    TeamId: TeamId
     SubjectId: string
     ModuleName: string
     /// The party the MODULE requires approval from — the expectation,

@@ -23,7 +23,7 @@ open ToolUp.Platform.Config
 let private resolveScopeId (ctx: HttpContext) : string =
     match ctx.Items.TryGetValue "ToolUp.StorageScope" with
     | true, (:? StorageScope as s) -> s.Container
-    | _ -> ScopeKey.container (ScopeKey.User(FileManagement.getUserId ctx))
+    | _ -> ScopeKey.container (ScopeKey.User(UserId(FileManagement.getUserId ctx)))
 
 let columnMappingApi (ctx: HttpContext) : IConversionApi =
     let store =

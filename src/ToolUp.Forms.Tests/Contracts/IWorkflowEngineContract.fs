@@ -167,7 +167,7 @@ let tests (label: string) (factory: EnvFactory) =
 
             match transitionedEvent with
             | Some p ->
-                Expect.equal p.UserId "user-a" "actor"
+                Expect.equal p.UserId (UserId "user-a") "actor"
                 Expect.equal p.FromState "new" "from state"
                 Expect.equal p.ToState "submitted" "to state"
                 Expect.equal p.Event "submit" "event"

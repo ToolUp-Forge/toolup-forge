@@ -37,7 +37,7 @@ type IUserSchemaStore =
     /// `SchemaChanged` (+ `SchemaApproved` when `ProposedBy` is
     /// `AIWithApproval`) audit event attributed to `actorUserId`.
     abstract Save:
-        scopeId: string * schema: UserAuthoredSchema * actorUserId: string ->
+        scopeId: string * schema: UserAuthoredSchema * actorUserId: UserId ->
             Async<Result<UserAuthoredSchema, UserSchemaError>>
 
     /// Latest version of a schema in the scope. `SchemaNotFound` when it
@@ -57,7 +57,7 @@ type IUserSchemaStore =
 
     /// Delete a schema (all versions) in the scope. Idempotent — deleting
     /// an unknown schema returns `Ok`. Emits `SchemaChanged` (Deleted).
-    abstract Delete: scopeId: string * schemaId: SchemaId * actorUserId: string -> Async<Result<unit, UserSchemaError>>
+    abstract Delete: scopeId: string * schemaId: SchemaId * actorUserId: UserId -> Async<Result<unit, UserSchemaError>>
 
     /// Apply a typed `MigrationPlan` to a schema: evolve the schema to a
     /// new version (recording `EvolvedFrom` + the plan) and transform
@@ -68,5 +68,5 @@ type IUserSchemaStore =
     /// long-running migrations run through `IJobScheduler` and survive
     /// restarts.
     abstract ExecuteMigration:
-        scopeId: string * schemaId: SchemaId * migrations: SchemaMigration list * actorUserId: string ->
+        scopeId: string * schemaId: SchemaId * migrations: SchemaMigration list * actorUserId: UserId ->
             Async<Result<MigrationOutcome, UserSchemaError>>

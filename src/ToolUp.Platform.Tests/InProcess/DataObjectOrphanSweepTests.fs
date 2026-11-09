@@ -551,7 +551,7 @@ let inBandGraceTests =
 
             let content = saveComplete storage "obj-1" (bytesOf "personal")
 
-            store.Erase(scope, "user-1", ErasurePolicy.HardDelete, false)
+            store.Erase(scope, UserId "user-1", ErasurePolicy.HardDelete, false)
             |> Async.RunSynchronously
             |> fun r -> Expect.isOk r "the erasure succeeds"
 

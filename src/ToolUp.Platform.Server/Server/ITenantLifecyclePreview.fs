@@ -37,4 +37,4 @@ type ITenantLifecyclePreview =
     /// Project — without mutating anything — what this hook's
     /// `OnDeprovisioned(scopeId, actorUserId)` would affect. Returns a
     /// count-only `LifecyclePreviewItem`. Must be side-effect-free.
-    abstract OnDeprovisionPreview: scopeId: string * actorUserId: string -> Async<LifecyclePreviewItem>
+    abstract OnDeprovisionPreview: scopeId: string * actorUserId: UserId -> Async<LifecyclePreviewItem>

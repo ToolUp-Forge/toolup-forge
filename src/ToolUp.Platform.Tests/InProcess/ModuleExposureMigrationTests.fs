@@ -35,7 +35,7 @@ let tests =
             let! _ = blob.Upload(platformContainer, blobName team, Encoding.UTF8.GetBytes legacy)
 
             let store = PermissionStore(blob) :> IPermissionStore
-            let! exposure = store.GetModuleExposure team
+            let! exposure = store.GetModuleExposure(TeamId team)
 
             Expect.equal
                 exposure
@@ -49,10 +49,10 @@ let tests =
             let team = "team-new"
             let store = PermissionStore(blob) :> IPermissionStore
 
-            let! _ = store.SetModuleExposure(team, "Marketing", ModuleExposure.Hidden)
-            let! _ = store.SetModuleExposure(team, "Finance", ModuleExposure.Unavailable)
+            let! _ = store.SetModuleExposure(TeamId team, "Marketing", ModuleExposure.Hidden)
+            let! _ = store.SetModuleExposure(TeamId team, "Finance", ModuleExposure.Unavailable)
 
-            let! exposure = store.GetModuleExposure team
+            let! exposure = store.GetModuleExposure(TeamId team)
 
             Expect.equal
                 exposure
@@ -78,9 +78,9 @@ let tests =
             let team = "team-clear"
             let store = PermissionStore(blob) :> IPermissionStore
 
-            let! _ = store.SetModuleExposure(team, "Marketing", ModuleExposure.Unavailable)
-            let! _ = store.SetModuleExposure(team, "Marketing", ModuleExposure.Available)
-            let! exposure = store.GetModuleExposure team
+            let! _ = store.SetModuleExposure(TeamId team, "Marketing", ModuleExposure.Unavailable)
+            let! _ = store.SetModuleExposure(TeamId team, "Marketing", ModuleExposure.Available)
+            let! exposure = store.GetModuleExposure(TeamId team)
 
             Expect.isEmpty exposure "setting Available removes the entry (back to default)"
         }

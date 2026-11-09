@@ -329,7 +329,7 @@ type PendingNotification = {
     /// Unique per item; the blob name carries it.
     Id: Guid
     /// The recipient the item is held for.
-    UserId: string
+    UserId: UserId
     /// The category the publisher tagged the send with.
     Category: string
     /// The channel family the send was bound for.

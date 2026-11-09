@@ -183,7 +183,7 @@ let tests (name: string) (factory: unit -> IShareTokenStore * string * string) =
             let! issued = store.Issue req
             let token = okOrFail "Issue" issued
 
-            let! revoked = store.Revoke(scopeA, token.Claim.TokenId, "admin")
+            let! revoked = store.Revoke(scopeA, token.Claim.TokenId, UserId "admin")
             okOrFail "Revoke" revoked
 
             let! validated = store.Validate token.Token
@@ -200,10 +200,10 @@ let tests (name: string) (factory: unit -> IShareTokenStore * string * string) =
             let! issued = store.Issue req
             let token = okOrFail "Issue" issued
 
-            let! firstRevoke = store.Revoke(scopeA, token.Claim.TokenId, "admin")
+            let! firstRevoke = store.Revoke(scopeA, token.Claim.TokenId, UserId "admin")
             okOrFail "first Revoke" firstRevoke
 
-            let! secondRevoke = store.Revoke(scopeA, token.Claim.TokenId, "admin")
+            let! secondRevoke = store.Revoke(scopeA, token.Claim.TokenId, UserId "admin")
 
             match secondRevoke with
             | Ok() -> ()
@@ -257,7 +257,7 @@ let tests (name: string) (factory: unit -> IShareTokenStore * string * string) =
             let! _ = store.Issue(mkRequestBy scopeA "forms.publishable" "form-2" "alice")
             let! _ = store.Issue(mkRequestBy scopeA "forms.publishable" "form-3" "bob")
 
-            let! aliceClaims = store.ListByIssuer(scopeA, "alice")
+            let! aliceClaims = store.ListByIssuer(scopeA, UserId "alice")
             Expect.equal aliceClaims.Length 2 "alice issued two tokens"
 
             Expect.all aliceClaims (fun c -> c.IssuedBy = "alice") "every returned claim is alice's"
@@ -265,7 +265,7 @@ let tests (name: string) (factory: unit -> IShareTokenStore * string * string) =
             let resourceIds = aliceClaims |> List.map _.ResourceId |> List.sort
             Expect.equal resourceIds [ "form-1"; "form-2" ] "both of alice's resources present"
 
-            let! bobClaims = store.ListByIssuer(scopeA, "bob")
+            let! bobClaims = store.ListByIssuer(scopeA, UserId "bob")
             Expect.equal bobClaims.Length 1 "bob issued one token"
         }
 
@@ -275,10 +275,10 @@ let tests (name: string) (factory: unit -> IShareTokenStore * string * string) =
             let! issued = store.Issue(mkRequestBy scopeA "forms.publishable" "form-rev" "carol")
             let token = okOrFail "Issue" issued
 
-            let! revoked = store.Revoke(scopeA, token.Claim.TokenId, "admin")
+            let! revoked = store.Revoke(scopeA, token.Claim.TokenId, UserId "admin")
             okOrFail "Revoke" revoked
 
-            let! claims = store.ListByIssuer(scopeA, "carol")
+            let! claims = store.ListByIssuer(scopeA, UserId "carol")
             Expect.equal claims.Length 1 "revoked claim still enumerated"
             Expect.isTrue (claims |> List.forall _.Revoked) "the listed claim is revoked"
         }
@@ -288,7 +288,7 @@ let tests (name: string) (factory: unit -> IShareTokenStore * string * string) =
             let store, scopeA, scopeB = factory ()
             let! _ = store.Issue(mkRequestBy scopeA "forms.publishable" "form-iso-issuer" "dave")
 
-            let! fromB = store.ListByIssuer(scopeB, "dave")
+            let! fromB = store.ListByIssuer(scopeB, UserId "dave")
             Expect.equal fromB.Length 0 "scopeB sees none of scopeA's issuer tokens"
         }
 
@@ -297,7 +297,7 @@ let tests (name: string) (factory: unit -> IShareTokenStore * string * string) =
             let store, scopeA, _ = factory ()
             let! _ = store.Issue(mkRequestBy scopeA "forms.publishable" "form-known" "erin")
 
-            let! claims = store.ListByIssuer(scopeA, "nobody")
+            let! claims = store.ListByIssuer(scopeA, UserId "nobody")
             Expect.equal claims.Length 0 "unknown issuer has no claims"
         }
 

@@ -23,7 +23,7 @@ type FeatureFlagStoreErasureHandler(flagStore: IFeatureFlagStore) =
             flagStore.Erase(scopeId, subjectUserId, policy, false)
 
         member _.Preview(scopeId, subjectUserId, policy) = async {
-            let! result = flagStore.Erase(scopeId, subjectUserId, policy, true)
+            let! result = flagStore.Erase(scopeId, UserId subjectUserId.Value, policy, true)
 
             return
                 match result with

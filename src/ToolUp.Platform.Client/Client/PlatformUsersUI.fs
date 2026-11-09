@@ -326,7 +326,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Offboard =
                     Some {
                         UserId = userId
-                        ScopeId = ScopeKey.container (ScopeKey.User userId)
+                        ScopeId = ScopeKey.container (ScopeKey.User(UserId userId))
                         Kind = kind
                         Reason = ""
                         Token = ""

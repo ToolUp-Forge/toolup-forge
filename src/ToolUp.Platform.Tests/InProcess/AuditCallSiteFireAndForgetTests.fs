@@ -370,7 +370,7 @@ let private oauth: Site = {
 }
 
 let private emailEnvelope () : EmailEnvelope = {
-    Recipients = [ RecipientId.User "user-1026" ]
+    Recipients = [ RecipientId.User(UserId "user-1026") ]
     Content = InlineEmail("Subject", "Body", None)
     CorrelationId = None
 }

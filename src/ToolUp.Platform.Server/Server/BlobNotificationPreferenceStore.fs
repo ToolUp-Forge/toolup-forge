@@ -66,7 +66,7 @@ let private scopePendingPrefix (scopeId: string) = $"{root}/{seg scopeId}/pendin
 
 let private pendingBlob (scopeId: string) (item: PendingNotification) =
     let ticks = item.QueuedAt.ToUniversalTime().Ticks.ToString("D19")
-    $"{pendingPrefix scopeId item.UserId}{ticks}-{item.Id:N}.json"
+    $"{pendingPrefix scopeId item.UserId.Value}{ticks}-{item.Id:N}.json"
 
 /// Split a `root/{scope}/pending/{user}/{file}` name into its decoded
 /// scope and user; `None` for any other shape.
@@ -87,7 +87,7 @@ type BlobNotificationPreferenceStore(storage: IBlobStorage, logger: ILogger opti
 
     interface INotificationPreferenceStore with
         member _.GetPreferences(scopeId, userId) = async {
-            let name = prefsBlob scopeId userId
+            let name = prefsBlob scopeId userId.Value
             let! exists = storage.Exists(platformContainer, name)
 
             if not exists then
@@ -107,7 +107,7 @@ type BlobNotificationPreferenceStore(storage: IBlobStorage, logger: ILogger opti
         }
 
         member _.SavePreferences(scopeId, userId, preferences) = async {
-            match! storage.Upload(platformContainer, prefsBlob scopeId userId, serialise preferences) with
+            match! storage.Upload(platformContainer, prefsBlob scopeId userId.Value, serialise preferences) with
             | Ok _ -> return Ok()
             | Error e -> return Error $"Could not save notification preferences for {userId}: {e}"
         }
@@ -119,7 +119,7 @@ type BlobNotificationPreferenceStore(storage: IBlobStorage, logger: ILogger opti
         }
 
         member _.ListPending(scopeId, userId) = async {
-            let! names = listNames (pendingPrefix scopeId userId)
+            let! names = listNames (pendingPrefix scopeId userId.Value)
             let items = ResizeArray<PendingNotification>()
 
             for name in names do
@@ -138,7 +138,7 @@ type BlobNotificationPreferenceStore(storage: IBlobStorage, logger: ILogger opti
                 return Ok()
             else
                 let wanted = ids |> List.map (fun id -> id.ToString "N") |> Set.ofList
-                let! names = listNames (pendingPrefix scopeId userId)
+                let! names = listNames (pendingPrefix scopeId userId.Value)
 
                 let targets =
                     names
@@ -179,7 +179,7 @@ type BlobNotificationPreferenceStore(storage: IBlobStorage, logger: ILogger opti
         }
 
         member _.GetDigestWatermarks(scopeId, userId) = async {
-            let name = digestBlob scopeId userId
+            let name = digestBlob scopeId userId.Value
             let! exists = storage.Exists(platformContainer, name)
 
             if not exists then
@@ -193,13 +193,13 @@ type BlobNotificationPreferenceStore(storage: IBlobStorage, logger: ILogger opti
         }
 
         member this.SetDigestWatermark(scopeId, userId, frequency, sentAt) = async {
-            let! current = (this :> INotificationPreferenceStore).GetDigestWatermarks(scopeId, userId)
+            let! current = (this :> INotificationPreferenceStore).GetDigestWatermarks(scopeId, UserId userId.Value)
 
             let updated =
                 current
                 |> Map.add (DigestFrequency.toWireString frequency) (sentAt.ToUniversalTime())
 
-            match! storage.Upload(platformContainer, digestBlob scopeId userId, serialise updated) with
+            match! storage.Upload(platformContainer, digestBlob scopeId userId.Value, serialise updated) with
             | Ok _ -> return Ok()
             | Error e -> return Error $"Could not record digest watermark for {userId}: {e}"
         }

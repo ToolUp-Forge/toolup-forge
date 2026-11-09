@@ -173,7 +173,7 @@ let tests =
                 Expect.equal scopeId "user-ok" "audit attributed to the stashed StorageScope.ScopeId"
                 Expect.equal p.Outcome "Ok" "outcome recorded"
                 Expect.equal p.AnonymousSessionId aSession "anonymous session id carried"
-                Expect.equal p.TargetUserId "user-ok" "target user id carried"
+                Expect.equal p.TargetUserId (UserId "user-ok") "target user id carried"
                 Expect.equal p.ItemsMigrated 3 "item count from the summary"
                 Expect.equal p.Modules [ "Forms" ] "contributing modules carried"
                 Expect.isNone p.Error "Ok carries no error"
@@ -253,7 +253,7 @@ let tests =
                 Expect.equal p.ItemsMigrated 2 "migrated count from the partial summary"
                 Expect.equal p.FailedItems 1 "failed-item count carried"
                 Expect.equal p.Error (Some "row 4 rejected") "last error carried"
-                Expect.equal p.TargetUserId "user-pf" "team member's user id is the target"
+                Expect.equal p.TargetUserId (UserId "user-pf") "team member's user id is the target"
             | other -> failtestf "expected one PartialFailure audit, got %A" other
         }
 

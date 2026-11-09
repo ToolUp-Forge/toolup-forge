@@ -215,7 +215,7 @@ module RecomputeJobHandler =
                         // its own, so it is reported as not started (and the
                         // next invalidation of the fact coalesces onto the
                         // same job and triggers it again).
-                        match! scheduler.TriggerOnce(scopeId, jobId, Actor) with
+                        match! scheduler.TriggerOnce(scopeId, jobId, UserId Actor) with
                         | Ok() -> outcomes <- Enqueued(fact.FactId, jobId) :: outcomes
                         | Error refusal ->
                             let error =

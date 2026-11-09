@@ -28,7 +28,7 @@ type DeclaredPrincipal = {
     Name: string
     /// The identity the scope resolver resolves — the user id a request
     /// signed in as this principal would carry.
-    UserId: string
+    UserId: UserId
     /// Label the audit trail and an admin surface show for it.
     DisplayName: string
 }

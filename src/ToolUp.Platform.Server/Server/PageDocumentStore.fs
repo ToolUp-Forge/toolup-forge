@@ -512,13 +512,13 @@ type BlobPageDocumentStore
                 )
             | PageLayer.Team ->
                 match scope.Key, caller.TeamId with
-                | Some(ScopeKey.Team teamId), Some callerTeam when teamId = callerTeam ->
+                | Some(ScopeKey.Team teamId), Some callerTeam when teamId = TeamId callerTeam ->
                     Ok(
                         scope.ScopeId,
                         {
                             PageLayerKey.Page = page
                             Layer = layer
-                            Principal = teamId
+                            Principal = teamId.Value
                         }
                     )
                 | Some(ScopeKey.Team _), _ ->
@@ -619,7 +619,7 @@ type BlobPageDocumentStore
 
     let grantsOf (teamId: string) (userId: string) : Async<Result<PageGrant list, PageStoreError>> = async {
         try
-            let! doc = permissions.GetTeamPermissions teamId
+            let! doc = permissions.GetTeamPermissions(TeamId teamId)
             return Ok(TeamPermissions.pageGrantsFor userId doc)
         with
         | PermissionStoreUnavailableException reason -> return Error(PageStoreError.PermissionsUnavailable reason)

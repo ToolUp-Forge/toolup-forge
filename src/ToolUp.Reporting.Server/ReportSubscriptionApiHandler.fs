@@ -372,7 +372,7 @@ let private build
                                     "this subscription has no registered job — save it again to re-register"
                             )
                     | Some definition ->
-                        let! fired = deps.Scheduler.TriggerOnce(scopeId, definition.JobId, principal)
+                        let! fired = deps.Scheduler.TriggerOnce(scopeId, definition.JobId, UserId principal)
 
                         return
                             match fired with

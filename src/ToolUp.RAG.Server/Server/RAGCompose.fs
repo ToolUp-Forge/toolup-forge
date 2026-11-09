@@ -400,7 +400,7 @@ let internal makeVectorisationHook
                 // to `Deployment` served one caller's file to every other.
                 let vectorScope =
                     match StorageScope.tryTeamId scope with
-                    | Some teamId -> Team teamId
+                    | Some teamId -> Team teamId.Value
                     | None when scope.Container = ScopeEnumeration.DeploymentContainer -> Deployment
                     | None -> VectorScope.User scope.ScopeId
 

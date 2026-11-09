@@ -109,7 +109,7 @@ type ISessionRegistry =
     /// revoked alike, in unspecified order. Scoped rather than global:
     /// the same user id in two tenants has two independent session sets,
     /// and no caller can enumerate across the boundary (GP 4).
-    abstract ListForUser: scopeId: string * userId: string -> Async<Result<SessionRecord list, SessionError>>
+    abstract ListForUser: scopeId: string * userId: UserId -> Async<Result<SessionRecord list, SessionError>>
 
     /// Revoke one session. Idempotent — revoking an already-revoked
     /// session returns `Ok ()` and leaves the original revocation's
@@ -120,14 +120,14 @@ type ISessionRegistry =
     /// revoke this session; that is the caller's authorisation decision
     /// (`SessionApiHandler` makes it). The parameter exists so the
     /// decision is *attributable* in the stored record and the audit row.
-    abstract Revoke: scopeId: string * sessionId: string * actorUserId: string -> Async<Result<unit, SessionError>>
+    abstract Revoke: scopeId: string * sessionId: string * actorUserId: UserId -> Async<Result<unit, SessionError>>
 
     /// Revoke every active session belonging to `userId` within
     /// `scopeId`. Returns how many records moved from active to revoked
     /// — a repeat call returns `0`, which is what lets a caller report
     /// something truthful rather than "done" twice.
     abstract RevokeAllForUser:
-        scopeId: string * userId: string * actorUserId: string -> Async<Result<int, SessionError>>
+        scopeId: string * userId: UserId * actorUserId: UserId -> Async<Result<int, SessionError>>
 
     /// Is this session revoked? The hot-path question, asked once per
     /// authenticated request by `SessionRevocationMiddleware` (through

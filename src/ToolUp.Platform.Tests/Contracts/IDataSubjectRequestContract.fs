@@ -295,7 +295,7 @@ let tests =
             do! store.Write(Events.create "team-2" "m" "E" """{"userId":"u1","tag":"T2ONLY"}""")
 
             let exp = ToolUp.Platform.Audit.EventStoreErasureHandler.exporter store
-            let! segments = exp.Export("team-1", "u1")
+            let! segments = exp.Export("team-1", UserId "u1")
 
             Expect.equal segments.Length 1 "one segment for the matched scope"
             let body = System.Text.Encoding.UTF8.GetString segments.Head.Body
@@ -315,7 +315,7 @@ let tests =
 
             let h = ToolUp.Platform.Audit.EventStoreErasureHandler.erasureHandler store
 
-            let! preview = h.Preview("team-1", "u1", ErasurePolicy.Tombstone)
+            let! preview = h.Preview("team-1", UserId "u1", ErasurePolicy.Tombstone)
             Expect.equal preview.RecordsAffected 1 "preview counts the one in-scope match"
 
             let! eventsBeforeConfirm = store.ReadAll "team-1"
@@ -325,7 +325,7 @@ let tests =
                  |> List.forall (fun e -> e.Payload <> Erasure.TombstoneMarker))
                 "preview does not mutate"
 
-            let! result = h.Erase("team-1", "u1", ErasurePolicy.Tombstone)
+            let! result = h.Erase("team-1", UserId "u1", ErasurePolicy.Tombstone)
 
             match result with
             | Result.Ok s -> Expect.equal s.RecordsAffected 1 "one event redacted"
@@ -357,7 +357,7 @@ let tests =
             do! store.Write(Events.create "team-1" "m" "E" """{"userId":"u2"}""")
 
             let h = ToolUp.Platform.Audit.EventStoreErasureHandler.erasureHandler store
-            let! result = h.Erase("team-1", "u1", ErasurePolicy.HardDelete)
+            let! result = h.Erase("team-1", UserId "u1", ErasurePolicy.HardDelete)
 
             match result with
             | Result.Ok s -> Expect.equal s.RecordsAffected 1 "one event removed"
@@ -376,7 +376,7 @@ let tests =
             do! store.Write(Events.create "team-1" "m" "E" """{"userId":"u1"}""")
 
             let h = ToolUp.Platform.Audit.EventStoreErasureHandler.erasureHandler store
-            let! result = h.Erase("team-1", "u1", ErasurePolicy.RetainPerCompliance)
+            let! result = h.Erase("team-1", UserId "u1", ErasurePolicy.RetainPerCompliance)
 
             match result with
             | Result.Error(HandlerRefused("events", _)) -> ()
@@ -394,7 +394,7 @@ let tests =
             do! store.Write(Events.create "team-1" "m" "E" """{"userId":"u1"}""")
 
             let h = ToolUp.Platform.Audit.EventStoreErasureHandler.erasureHandler store
-            let! result = h.Erase("team-1", "  ", ErasurePolicy.HardDelete)
+            let! result = h.Erase("team-1", UserId "  ", ErasurePolicy.HardDelete)
 
             match result with
             | Result.Ok s -> Expect.equal s.RecordsAffected 0 "blank subject affects nothing"
@@ -422,7 +422,7 @@ let tests =
             let! _ = store.Save("team-2", "o3", bytes "c", "dt", "u1", Map.empty, Versioned)
 
             let exp = ToolUp.Platform.Audit.DataObjectStoreErasureHandler.exporter store
-            let! segments = exp.Export("team-1", "u1")
+            let! segments = exp.Export("team-1", UserId "u1")
 
             Expect.equal segments.Length 1 "one segment for the scope"
             let body = System.Text.Encoding.UTF8.GetString segments.Head.Body
@@ -447,10 +447,10 @@ let tests =
 
             let h = ToolUp.Platform.Audit.DataObjectStoreErasureHandler.erasureHandler store
 
-            let! preview = h.Preview("team-1", "u1", ErasurePolicy.Tombstone)
+            let! preview = h.Preview("team-1", UserId "u1", ErasurePolicy.Tombstone)
             Expect.equal preview.RecordsAffected 1 "one in-scope object matched"
 
-            let! result = h.Erase("team-1", "u1", ErasurePolicy.Tombstone)
+            let! result = h.Erase("team-1", UserId "u1", ErasurePolicy.Tombstone)
 
             match result with
             | Result.Ok s -> Expect.equal s.RecordsAffected 1 "one object tombstoned"
@@ -494,7 +494,7 @@ let tests =
             let! _ = store.Save("team-1", "o2", bytes "b", "dt", "u2", Map.empty, Versioned)
 
             let h = ToolUp.Platform.Audit.DataObjectStoreErasureHandler.erasureHandler store
-            let! result = h.Erase("team-1", "u1", ErasurePolicy.HardDelete)
+            let! result = h.Erase("team-1", UserId "u1", ErasurePolicy.HardDelete)
 
             match result with
             | Result.Ok s -> Expect.equal s.RecordsAffected 1 "one object removed"
@@ -523,7 +523,7 @@ let tests =
             let! _ = store.Save("team-1", "o1", bytes "keepcontent", "dt", "u1", Map.empty, Versioned)
 
             let h = ToolUp.Platform.Audit.DataObjectStoreErasureHandler.erasureHandler store
-            let! result = h.Erase("team-1", "u1", ErasurePolicy.RetainPerCompliance)
+            let! result = h.Erase("team-1", UserId "u1", ErasurePolicy.RetainPerCompliance)
 
             match result with
             | Result.Ok s -> Expect.equal s.RecordsAffected 1 "one object redacted"
@@ -563,7 +563,7 @@ let tests =
             let! _ = ls.Record("team-2", mkLink "u1-src" "d3")
 
             let h = ToolUp.Platform.Audit.LineageStoreErasureHandler.erasureHandler ls
-            let! result = h.Erase("team-1", "u1", ErasurePolicy.HardDelete)
+            let! result = h.Erase("team-1", UserId "u1", ErasurePolicy.HardDelete)
 
             match result with
             | Result.Ok s ->
@@ -580,7 +580,7 @@ let tests =
                 ToolUp.Platform.Infra.LineageStore.EventStoreLineageStore(es) :> _
 
             let h = ToolUp.Platform.Audit.LineageStoreErasureHandler.erasureHandler ls
-            let! result = h.Erase("team-1", "u1", ErasurePolicy.RetainPerCompliance)
+            let! result = h.Erase("team-1", UserId "u1", ErasurePolicy.RetainPerCompliance)
 
             match result with
             | Result.Error(HandlerRefused("lineage", _)) -> ()
@@ -596,7 +596,7 @@ let tests =
                 ToolUp.Platform.Infra.LineageStore.EventStoreLineageStore(es) :> _
 
             let h = ToolUp.Platform.Audit.LineageStoreErasureHandler.erasureHandler ls
-            let! result = h.Erase("team-1", "   ", ErasurePolicy.HardDelete)
+            let! result = h.Erase("team-1", UserId "   ", ErasurePolicy.HardDelete)
 
             match result with
             | Result.Ok s -> Expect.equal s.RecordsAffected 0 "blank subject affects nothing"
@@ -623,10 +623,10 @@ let tests =
 
             let h = ToolUp.Platform.Audit.ConfigStoreErasureHandler.erasureHandler store
 
-            let! preview = h.Preview("team-1", "u1", ErasurePolicy.Tombstone)
+            let! preview = h.Preview("team-1", UserId "u1", ErasurePolicy.Tombstone)
             Expect.equal preview.RecordsAffected 1 "one in-scope document matched"
 
-            let! result = h.Erase("team-1", "u1", ErasurePolicy.Tombstone)
+            let! result = h.Erase("team-1", UserId "u1", ErasurePolicy.Tombstone)
 
             match result with
             | Result.Ok s -> Expect.equal s.RecordsAffected 1 "one document redacted"
@@ -665,7 +665,7 @@ let tests =
             let! _ = blob.Upload("_platform", "config/team-1/modB.json", bytes """{"owner":"\"u2@x\""}""")
 
             let h = ToolUp.Platform.Audit.ConfigStoreErasureHandler.erasureHandler store
-            let! result = h.Erase("team-1", "u1", ErasurePolicy.HardDelete)
+            let! result = h.Erase("team-1", UserId "u1", ErasurePolicy.HardDelete)
 
             match result with
             | Result.Ok s -> Expect.equal s.RecordsAffected 1 "one document removed"
@@ -687,7 +687,7 @@ let tests =
             let! _ = blob.Upload("_platform", "config/team-1/modA.json", bytes """{"owner":"\"u1@x\""}""")
 
             let h = ToolUp.Platform.Audit.ConfigStoreErasureHandler.erasureHandler store
-            let! result = h.Erase("team-1", "  ", ErasurePolicy.HardDelete)
+            let! result = h.Erase("team-1", UserId "  ", ErasurePolicy.HardDelete)
 
             match result with
             | Result.Ok s -> Expect.equal s.RecordsAffected 0 "blank subject affects nothing"
@@ -714,10 +714,10 @@ let tests =
 
             let h = ToolUp.Platform.Audit.FeatureFlagStoreErasureHandler.erasureHandler store
 
-            let! preview = h.Preview("team-1", "u1", ErasurePolicy.Tombstone)
+            let! preview = h.Preview("team-1", UserId "u1", ErasurePolicy.Tombstone)
             Expect.equal preview.RecordsAffected 1 "only the targeting flag names the subject"
 
-            let! result = h.Erase("team-1", "u1", ErasurePolicy.Tombstone)
+            let! result = h.Erase("team-1", UserId "u1", ErasurePolicy.Tombstone)
 
             match result with
             | Result.Ok s -> Expect.equal s.RecordsAffected 1 "one flag redacted"
@@ -753,7 +753,7 @@ let tests =
             let! _ = store.SetFlag(FlagScope.Team "1", "keep", FlagValue.Bool false)
 
             let h = ToolUp.Platform.Audit.FeatureFlagStoreErasureHandler.erasureHandler store
-            let! result = h.Erase("team-1", "u1", ErasurePolicy.HardDelete)
+            let! result = h.Erase("team-1", UserId "u1", ErasurePolicy.HardDelete)
 
             match result with
             | Result.Ok s -> Expect.equal s.RecordsAffected 1 "one flag removed"
@@ -773,7 +773,7 @@ let tests =
             let! _ = store.SetFlag(FlagScope.Team "1", "targeting", FlagValue.Variant([], "for:u1"))
 
             let h = ToolUp.Platform.Audit.FeatureFlagStoreErasureHandler.erasureHandler store
-            let! result = h.Erase("team-1", "  ", ErasurePolicy.HardDelete)
+            let! result = h.Erase("team-1", UserId "  ", ErasurePolicy.HardDelete)
 
             match result with
             | Result.Ok s -> Expect.equal s.RecordsAffected 0 "blank subject affects nothing"
@@ -800,10 +800,10 @@ let tests =
 
             let h = ToolUp.Platform.Audit.BlobStorageErasureHandler.erasureHandler store
 
-            let! preview = h.Preview("team-1", "u1", ErasurePolicy.Tombstone)
+            let! preview = h.Preview("team-1", UserId "u1", ErasurePolicy.Tombstone)
             Expect.equal preview.RecordsAffected 2 "two subject-prefixed blobs in scope"
 
-            let! result = h.Erase("team-1", "u1", ErasurePolicy.Tombstone)
+            let! result = h.Erase("team-1", UserId "u1", ErasurePolicy.Tombstone)
 
             match result with
             | Result.Ok s -> Expect.equal s.RecordsAffected 2 "two blobs tombstoned"
@@ -839,7 +839,7 @@ let tests =
             let! _ = store.Upload("team-1", "u2/c.txt", bytes "y")
 
             let h = ToolUp.Platform.Audit.BlobStorageErasureHandler.erasureHandler store
-            let! result = h.Erase("team-1", "u1", ErasurePolicy.HardDelete)
+            let! result = h.Erase("team-1", UserId "u1", ErasurePolicy.HardDelete)
 
             match result with
             | Result.Ok s -> Expect.equal s.RecordsAffected 1 "one blob deleted"
@@ -860,7 +860,7 @@ let tests =
             let! _ = store.Upload("team-1", "u1/a.txt", bytes "x")
 
             let h = ToolUp.Platform.Audit.BlobStorageErasureHandler.erasureHandler store
-            let! result = h.Erase("team-1", "   ", ErasurePolicy.HardDelete)
+            let! result = h.Erase("team-1", UserId "   ", ErasurePolicy.HardDelete)
 
             match result with
             | Result.Ok s -> Expect.equal s.RecordsAffected 0 "blank subject affects nothing"
@@ -888,13 +888,13 @@ let tests =
             do! store.Upsert (Team "1") "c2" vec (chunk "unrelated content")
             do! store.Upsert (Team "2") "c3" vec (chunk "u1 in another team")
 
-            let! preview = store.Erase(Team "1", "u1", ErasurePolicy.Tombstone, true)
+            let! preview = store.Erase(Team "1", UserId "u1", ErasurePolicy.Tombstone, true)
 
             match preview with
             | Result.Ok s -> Expect.equal s.RecordsAffected 1 "one chunk names the subject in scope"
             | Result.Error e -> failtestf "Expected Ok; got %A" e
 
-            let! result = store.Erase(Team "1", "u1", ErasurePolicy.Tombstone, false)
+            let! result = store.Erase(Team "1", UserId "u1", ErasurePolicy.Tombstone, false)
 
             match result with
             | Result.Ok s -> Expect.equal s.RecordsAffected 1 "one chunk tombstoned"
@@ -923,7 +923,7 @@ let tests =
             do! store.Upsert (Team "1") "c1" vec (chunk "secret about u1")
             do! store.Upsert (Team "1") "c2" vec (chunk "keep me")
 
-            let! result = store.Erase(Team "1", "u1", ErasurePolicy.HardDelete, false)
+            let! result = store.Erase(Team "1", UserId "u1", ErasurePolicy.HardDelete, false)
 
             match result with
             | Result.Ok s -> Expect.equal s.RecordsAffected 1 "one chunk purged"
@@ -960,7 +960,7 @@ let tests =
                 }
 
             let h = ToolUp.Platform.Audit.VectorStoreErasureHandler.erasureHandler store cache
-            let! result = h.Erase("team-1", "u1", ErasurePolicy.HardDelete)
+            let! result = h.Erase("team-1", UserId "u1", ErasurePolicy.HardDelete)
 
             match result with
             | Result.Ok s -> Expect.equal s.RecordsAffected 1 "subject chunk erased via adapter"
@@ -983,7 +983,7 @@ let tests =
                     Metadata = Map.empty
                 }
 
-            let! result = store.Erase(Team "1", "  ", ErasurePolicy.HardDelete, false)
+            let! result = store.Erase(Team "1", UserId "  ", ErasurePolicy.HardDelete, false)
 
             match result with
             | Result.Ok s -> Expect.equal s.RecordsAffected 0 "blank subject affects nothing"

@@ -172,18 +172,18 @@ let diagnose (reads: MembershipReads) : Async<MembershipDiagnosis list> = async 
                         |> List.map (fun r -> {
                             Kind = kind
                             UserId = userId
-                            TeamId = Some r.TeamId
+                            TeamId = Some r.TeamId.Value
                             Evidence = evidence
                             ProposedRepair = ReAddUnderResolvedId
                         })
             | None ->
                 let orphanFindings =
                     rows
-                    |> List.filter (fun r -> not (teamIds.Contains r.TeamId))
+                    |> List.filter (fun r -> not (teamIds.Contains r.TeamId.Value))
                     |> List.map (fun r -> {
                         Kind = OrphanTeamRow
                         UserId = userId
-                        TeamId = Some r.TeamId
+                        TeamId = Some r.TeamId.Value
                         Evidence = "membership row names a team with no team record"
                         ProposedRepair = DeleteMembershipRow
                     })
@@ -193,10 +193,14 @@ let diagnose (reads: MembershipReads) : Async<MembershipDiagnosis list> = async 
                 let pointerFindings =
                     match pointer with
                     | None -> []
-                    | Some teamId when rows |> List.exists (fun r -> r.TeamId = teamId && teamIds.Contains teamId) -> []
+                    | Some teamId when
+                        rows
+                        |> List.exists (fun r -> r.TeamId = (TeamId teamId) && teamIds.Contains teamId)
+                          ->
+                          []
                     | Some teamId ->
                         let evidence =
-                            if rows |> List.exists (fun r -> r.TeamId = teamId) then
+                            if rows |> List.exists (fun r -> r.TeamId = TeamId teamId) then
                                 "active-team pointer names a team whose membership row is itself orphaned"
                             elif List.isEmpty rows then
                                 "active-team pointer exists but the user has no membership rows"
@@ -244,7 +248,7 @@ let repair (reads: MembershipReads) (writes: MembershipWrites) : Async<Membershi
     for (userId, findings) in rowDeletions do
         let orphanTeams = findings |> List.choose _.TeamId |> Set.ofList
         let! rows = reads.LoadMemberships userId
-        let kept = rows |> List.filter (fun r -> not (orphanTeams.Contains r.TeamId))
+        let kept = rows |> List.filter (fun r -> not (orphanTeams.Contains r.TeamId.Value))
         do! writes.SaveMemberships userId kept
 
         for teamId in orphanTeams do
@@ -293,7 +297,7 @@ module MembershipDoctorStorage =
             }
         LoadMemberships =
             fun userId -> async {
-                let! result = storage.Download(platformContainer, membershipBlobName userId)
+                let! result = storage.Download(platformContainer, membershipBlobName (UserId userId))
 
                 return
                     match result with
@@ -312,7 +316,7 @@ module MembershipDoctorStorage =
             }
         GetActiveTeam =
             fun userId -> async {
-                let! result = storage.Download(platformContainer, activeTeamBlobName userId)
+                let! result = storage.Download(platformContainer, activeTeamBlobName (UserId userId))
 
                 return
                     match result with
@@ -339,8 +343,8 @@ module MembershipDoctorStorage =
             match notifications with
             | Some channel ->
                 let payload: MembershipChangedPayload = {
-                    TeamId = teamId
-                    AffectedUserId = affectedUserId
+                    TeamId = TeamId teamId
+                    AffectedUserId = UserId affectedUserId
                     ChangeKind = kind
                     PublishedAt = System.DateTime.UtcNow
                 }
@@ -355,7 +359,11 @@ module MembershipDoctorStorage =
                     // Phase 863 — a refused save raises, so `repair` stops
                     // before it audits a removal that did not happen.
                     match!
-                        storage.Upload(platformContainer, membershipBlobName userId, Json.serializeMemberships rows)
+                        storage.Upload(
+                            platformContainer,
+                            membershipBlobName (UserId userId),
+                            Json.serializeMemberships rows
+                        )
                     with
                     | Ok _ -> return ()
                     | Error storageError ->
@@ -370,13 +378,13 @@ module MembershipDoctorStorage =
                     // Phase 971 — a refused delete raises, as a refused save
                     // does above, so `repair` stops before it reports a
                     // pointer Repaired that is still there.
-                    match! storage.Delete(platformContainer, activeTeamBlobName userId) with
+                    match! storage.Delete(platformContainer, activeTeamBlobName (UserId userId)) with
                     | Ok() -> do! publish teamId userId MembershipChangeKind.ActiveTeamSet
                     | Error storageError ->
                         return
                             failwithf
                                 "MembershipDoctor: active-team pointer %s could not be cleared: %s"
-                                (activeTeamBlobName userId)
+                                (activeTeamBlobName (UserId userId))
                                 storageError
                 }
             EmitMemberRemoved =
@@ -387,9 +395,9 @@ module MembershipDoctorStorage =
                             log.Record(
                                 teamId,
                                 MemberRemoved {
-                                    UserId = actorUserId
-                                    TeamId = teamId
-                                    AffectedUserId = affectedUserId
+                                    UserId = UserId actorUserId
+                                    TeamId = TeamId teamId
+                                    AffectedUserId = UserId affectedUserId
                                 }
                             )
                     | None -> ()

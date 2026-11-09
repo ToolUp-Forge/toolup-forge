@@ -235,7 +235,7 @@ let private providerTests =
             match! (provider ()).ValidateRequest(basicCtx "alice" "s3cret") with
             | Error e -> failtestf "expected Ok, got Error: %s" e
             | Ok u ->
-                Expect.equal u.UserId "alice-guid-0001" "stable id from objectGUID"
+                Expect.equal u.UserId (UserId "alice-guid-0001") "stable id from objectGUID"
                 Expect.equal u.DisplayName "Alice Example" "display name"
                 Expect.equal u.Email (Some "alice@example.test") "email"
                 Expect.equal (List.sort u.Roles) [ "admin"; "member"; "staff" ] "direct + nested + default roles"
@@ -278,7 +278,7 @@ let private providerTests =
             let composite = LdapAuthProvider.withFallback deadPrimary (provider ())
 
             match! composite.ValidateRequest(basicCtx "alice" "s3cret") with
-            | Ok u -> Expect.equal u.UserId "alice-guid-0001" "fell back to LDAP"
+            | Ok u -> Expect.equal u.UserId (UserId "alice-guid-0001") "fell back to LDAP"
             | Error e -> failtestf "expected fallback to LDAP, got Error: %s" e
         }
     ]

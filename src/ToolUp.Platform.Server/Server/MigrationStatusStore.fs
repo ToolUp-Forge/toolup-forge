@@ -40,12 +40,12 @@ open ToolUp.Platform.BlobStorage
 type IMigrationStatusStore =
     /// Status for one (team, data type). `None` when no pass has ever
     /// been recorded for the pair.
-    abstract Read: teamId: string * dataTypeId: string -> Async<MigrationStatus option>
+    abstract Read: teamId: TeamId * dataTypeId: string -> Async<MigrationStatus option>
     /// Persist a status record, overwriting any prior one for the same
     /// pair.
     abstract Write: status: MigrationStatus -> Async<Result<unit, string>>
     /// Every recorded status for one team.
-    abstract ListForTeam: teamId: string -> Async<MigrationStatus list>
+    abstract ListForTeam: teamId: TeamId -> Async<MigrationStatus list>
     /// Every recorded status across every team — the platform-operator
     /// view. Expensive on a large deployment (one blob read per
     /// recorded pair); not for a per-request path.
@@ -117,10 +117,10 @@ module MigrationStatusStore =
         interface IMigrationStatusStore with
 
             member _.Read(teamId, dataTypeId) =
-                if not (isSafeSegment teamId && isSafeSegment dataTypeId) then
+                if not (isSafeSegment teamId.Value && isSafeSegment dataTypeId) then
                     async.Return None
                 else
-                    readBlob (statusBlob teamId dataTypeId)
+                    readBlob (statusBlob teamId.Value dataTypeId)
 
             member _.Write(status) = async {
                 if not (isSafeSegment status.TeamId && isSafeSegment status.DataTypeId) then
@@ -139,10 +139,10 @@ module MigrationStatusStore =
             }
 
             member _.ListForTeam(teamId) = async {
-                if not (isSafeSegment teamId) then
+                if not (isSafeSegment teamId.Value) then
                     return []
                 else
-                    let! names = storage.List(platformContainer, teamPrefix teamId)
+                    let! names = storage.List(platformContainer, teamPrefix teamId.Value)
                     return! readMany names
             }
 

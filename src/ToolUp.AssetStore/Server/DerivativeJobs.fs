@@ -361,7 +361,7 @@ type DerivativeJobCoordinator
                                     storageError
                             )
 
-                        match! scheduler.TriggerOnce(scopeContainer, jobId, "_assetstore") with
+                        match! scheduler.TriggerOnce(scopeContainer, jobId, UserId "_assetstore") with
                         | Ok() -> ()
                         | Error refusal ->
                             logger.Warn(

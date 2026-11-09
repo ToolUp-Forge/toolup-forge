@@ -206,9 +206,9 @@ let tests =
             Expect.equal
                 (Set.ofList removed)
                 (Set.ofList [
-                    "purged-x", "purged-x", "user-1", "doctor-actor"
-                    "purged-y", "purged-y", "user-1", "doctor-actor"
-                    "purged-x", "purged-x", "user-2", "doctor-actor"
+                    "purged-x", TeamId "purged-x", UserId "user-1", UserId "doctor-actor"
+                    "purged-y", TeamId "purged-y", UserId "user-1", UserId "doctor-actor"
+                    "purged-x", TeamId "purged-x", UserId "user-2", UserId "doctor-actor"
                 ])
                 "one MemberRemoved per stripped row, recorded against the team scope"
 
@@ -226,7 +226,7 @@ let tests =
                 NotificationKind.PlatformReservedScope,
                 fun envelope ->
                     match envelope.Notification with
-                    | MembershipChanged p -> published.Add(p.ChangeKind, p.TeamId, p.AffectedUserId)
+                    | MembershipChanged p -> published.Add(p.ChangeKind, p.TeamId.Value, p.AffectedUserId.Value)
                     | _ -> ()
             )
             |> Async.RunSynchronously

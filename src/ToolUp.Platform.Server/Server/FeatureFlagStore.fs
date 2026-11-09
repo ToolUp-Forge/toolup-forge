@@ -84,7 +84,7 @@ type BlobFeatureFlagStore(storage: IBlobStorage) =
         }
 
         member _.Erase(scopeId, subjectUserId, policy, dryRun) = async {
-            if Erasure.isBlankSubject subjectUserId then
+            if Erasure.isBlankSubject subjectUserId.Value then
                 return
                     Result.Ok {
                         HandlerName = "feature-flags"
@@ -104,8 +104,8 @@ type BlobFeatureFlagStore(storage: IBlobStorage) =
                     match v with
                     | FlagValue.Bool _ -> false
                     | FlagValue.Variant(options, value) ->
-                        value.Contains subjectUserId
-                        || (options |> List.exists (fun o -> o.Contains subjectUserId))
+                        value.Contains subjectUserId.Value
+                        || (options |> List.exists (fun o -> o.Contains subjectUserId.Value))
 
                 let matchedKeys =
                     flags

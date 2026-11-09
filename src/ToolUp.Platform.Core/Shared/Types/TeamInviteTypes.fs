@@ -43,7 +43,7 @@ open System
 type TeamInviteClaim = {
     /// Team the invitee will join on successful acceptance. Echoed as
     /// the share-token's `ResourceId`.
-    TeamId: string
+    TeamId: TeamId
     /// Role assigned to the invitee at acceptance time. Owner cannot
     /// be granted via an invitation — the handler refuses
     /// `Owner` at issue time. Member and Admin are both valid.
@@ -51,7 +51,7 @@ type TeamInviteClaim = {
     /// `UserId` of the inviter (the caller's authenticated user at
     /// issue time). Used for audit attribution and for permission
     /// checks when listing or revoking pending invites.
-    InviterUserId: string
+    InviterUserId: UserId
     /// Absolute expiry timestamp. Mirrors the share-token's
     /// `ExpiresAt` (the store enforces it independently); echoed here
     /// for UI rendering convenience without a second store round-trip.

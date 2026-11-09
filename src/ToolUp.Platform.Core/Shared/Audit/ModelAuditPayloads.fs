@@ -131,7 +131,7 @@ type ModelArtifactTransitionedPayload = {
     /// Status the artifact entered.
     ToStatus: string
     /// Actor who performed the transition.
-    ActorUserId: string
+    ActorUserId: UserId
     ScopeId: string
 }
 
@@ -145,7 +145,7 @@ type ModelArtifactTransitionDeniedPayload = {
     /// Status the caller attempted to move the artifact into.
     AttemptedStatus: string
     /// Actor whose transition was refused.
-    ActorUserId: string
+    ActorUserId: UserId
     /// Why the transition was refused (`"requires Owner/Admin"` /
     /// `"illegal transition Fitted → Approved"` / …).
     Reason: string

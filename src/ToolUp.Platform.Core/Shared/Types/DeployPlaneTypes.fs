@@ -145,7 +145,7 @@ type BuildStatus =
     /// `Reason` to the user-facing log.
     | Failed of completedAt: DateTime * reason: string
     /// Operator cancelled the build before it completed. Terminal.
-    | Cancelled of cancelledAt: DateTime * byUserId: string
+    | Cancelled of cancelledAt: DateTime * byUserId: UserId
 
 /// Lightweight projection over a build. The orchestrator emits these
 /// from list / get methods; `BuildRequest` lives behind a separate

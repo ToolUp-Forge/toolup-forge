@@ -1863,7 +1863,7 @@ let startupTests =
                 |> FactsCompose.withCoherenceChecksConfig CoherenceConfig.defaults (Trigger.CronTrigger "0 3 * * *") [
                     {
                         Name = north
-                        UserId = "svc-" + north
+                        UserId = UserId("svc-" + north)
                         DisplayName = "the north sweep principal"
                     }
                 ]

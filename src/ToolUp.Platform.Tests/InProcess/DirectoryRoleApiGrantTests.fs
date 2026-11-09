@@ -68,7 +68,7 @@ let private rawToken (payload: string) =
 let private mapWith (mapping: ClaimMapping) (payload: string) =
     let baseUser = {
         AuthenticatedUser.anonymous with
-            UserId = "u"
+            UserId = UserId "u"
             DisplayName = "u"
     }
 
@@ -147,7 +147,7 @@ let private mappingTests =
         <| fun _ ->
             let u = {
                 AuthenticatedUser.anonymous with
-                    UserId = "u"
+                    UserId = UserId "u"
                     Roles = [ "Publisher" ]
                     DirectoryRoles = [ "Publisher"; "Reader" ]
             }

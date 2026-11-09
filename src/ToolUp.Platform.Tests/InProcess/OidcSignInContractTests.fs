@@ -438,7 +438,7 @@ module private FailurePage =
 
     let signedIn: AuthenticatedUser = {
         AuthenticatedUser.anonymous with
-            UserId = "zoe"
+            UserId = UserId "zoe"
             DisplayName = "Zoe"
     }
 
@@ -811,7 +811,7 @@ let tests: Test =
                     | Ok user ->
                         Expect.equal
                             user.UserId
-                            MockOidcConfig.defaults.Subject
+                            (UserId MockOidcConfig.defaults.Subject)
                             "validated UserId mirrors mock issuer's sub claim"
 
                         Expect.isFalse (AuthenticatedUser.isAnonymous user) "validated user is non-anonymous"

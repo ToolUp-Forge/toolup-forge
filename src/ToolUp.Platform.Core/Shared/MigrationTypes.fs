@@ -234,7 +234,7 @@ module MigrationStatus =
 /// reading stdout, the event is for anything that queries the event
 /// store after the fact.
 type MigrationFailedEvent = {
-    TeamId: string
+    TeamId: TeamId
     DataTypeId: string
     ObjectId: string
     /// Version the object remains at.

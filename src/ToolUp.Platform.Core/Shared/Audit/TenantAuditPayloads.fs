@@ -214,7 +214,7 @@ type RemotingMethodAuditedPayload = {
 /// id is truncated so the trail correlates without persisting the full
 /// authenticator handle. Source-module label `_platform.auth.passkey`.
 type PasskeyCredentialRegisteredPayload = {
-    UserId: string
+    UserId: UserId
     /// First 12 chars of the base64url credential id — correlatable,
     /// non-reversible to the raw authenticator handle.
     CredentialIdPrefix: string
@@ -227,7 +227,7 @@ type PasskeyCredentialRegisteredPayload = {
 /// deregistration or admin revocation). Source-module label
 /// `_platform.auth.passkey`.
 type PasskeyCredentialRemovedPayload = {
-    UserId: string
+    UserId: UserId
     /// First 12 chars of the base64url credential id.
     CredentialIdPrefix: string
 }

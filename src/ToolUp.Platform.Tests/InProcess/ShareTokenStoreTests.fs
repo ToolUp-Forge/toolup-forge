@@ -205,7 +205,7 @@ let readPathTests =
         testCaseAsync "Revoke reports StorageFailed, not NotFound, on an unreadable claim blob"
         <| async {
             let! token, store = issueThenFaultRead "team-revoke-fail"
-            let! result = store.Revoke(token.Claim.ScopeId, token.Claim.TokenId, "alice")
+            let! result = store.Revoke(token.Claim.ScopeId, token.Claim.TokenId, UserId "alice")
 
             match result with
             | Error(ShareTokenError.StorageFailed msg) ->

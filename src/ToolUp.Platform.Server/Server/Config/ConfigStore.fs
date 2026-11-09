@@ -416,7 +416,7 @@ type BlobConfigStore(storage: IBlobStorage, ?logger: ILogger) =
         }
 
         member _.Erase(scopeId, subjectUserId, policy, dryRun) = async {
-            if Erasure.isBlankSubject subjectUserId then
+            if Erasure.isBlankSubject subjectUserId.Value then
                 return
                     Result.Ok {
                         HandlerName = "config"
@@ -439,7 +439,7 @@ type BlobConfigStore(storage: IBlobStorage, ?logger: ILogger) =
                     |> Async.Parallel
 
                 let valueNamesSubject (m: Map<string, string>) =
-                    m |> Map.exists (fun _ v -> v.Contains subjectUserId)
+                    m |> Map.exists (fun _ v -> v.Contains subjectUserId.Value)
 
                 let matched =
                     docs
@@ -526,7 +526,8 @@ type BlobConfigStore(storage: IBlobStorage, ?logger: ILogger) =
                             matched
                             |> List.map (fun (name, m) -> async {
                                 let redacted =
-                                    m |> Map.map (fun _ v -> if v.Contains subjectUserId then markerJson else v)
+                                    m
+                                    |> Map.map (fun _ v -> if v.Contains subjectUserId.Value then markerJson else v)
 
                                 let! result = storage.Upload(platformContainer, name, Json.serializeMap redacted)
                                 return name, result

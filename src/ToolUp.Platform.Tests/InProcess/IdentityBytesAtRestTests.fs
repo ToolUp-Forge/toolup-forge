@@ -99,10 +99,18 @@ let tests =
             let storage = InMemoryBlobStorage() :> IBlobStorage
             let store = TeamStore(storage, InMemoryNotificationChannel(None)) :> ITeamStore
 
-            store.CreateTeam("acme", "Acme") |> run |> Result.defaultWith failtest |> ignore
-            store.AddMember("acme", "alice", Owner) |> run |> Result.defaultWith failtest
+            store.CreateTeam(TeamId "acme", "Acme")
+            |> run
+            |> Result.defaultWith failtest
+            |> ignore
 
-            store.SetActiveTeam("alice", "acme") |> run |> Result.defaultWith failtest
+            store.AddMember(TeamId "acme", UserId "alice", Owner)
+            |> run
+            |> Result.defaultWith failtest
+
+            store.SetActiveTeam(UserId "alice", TeamId "acme")
+            |> run
+            |> Result.defaultWith failtest
 
             let names = storage.List(ScopeKey.PlatformContainer, "") |> run |> List.sort
 
@@ -123,6 +131,6 @@ let tests =
 
             Expect.equal (blobText storage "active-team/alice.txt") "acme" "the active-team pointer"
 
-            let members = store.GetTeamMembers("acme") |> run
+            let members = store.GetTeamMembers(TeamId "acme") |> run
             Expect.equal (members |> List.map _.UserId) [ "alice" ] "read back as the id"
     ]

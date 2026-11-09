@@ -290,7 +290,7 @@ type WorkflowEngine
                                             | Ok savedSubmission ->
                                                 // 7. Emit transition audit.
                                                 let payload: WorkflowTransitionedPayload = {
-                                                    UserId = accessContext.UserId
+                                                    UserId = UserId accessContext.UserId
                                                     FormId = savedSubmission.FormId
                                                     SubmissionId = savedSubmission.Id
                                                     WorkflowId = wfId

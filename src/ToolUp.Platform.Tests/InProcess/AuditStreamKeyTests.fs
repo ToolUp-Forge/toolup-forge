@@ -31,7 +31,8 @@ let private teamId = "acme"
 /// `PlatformApiHandler` (`teamId`) record this team's rows under —
 /// Phase 1060: the typed rendering, `AuditScope.streamKey`, of the team's
 /// `ScopeKey`. Its bytes are pinned below against the literal at rest.
-let private bareKey = AuditScope.streamKey (AuditScope.Scoped(ScopeKey.Team teamId))
+let private bareKey =
+    AuditScope.streamKey (AuditScope.Scoped(ScopeKey.Team(TeamId teamId)))
 
 type private RecordingAuditLog() =
     let recorded = ConcurrentQueue<string * AuditEvent>()
@@ -69,7 +70,7 @@ let private grantGuardKey () = async {
         GrantPolicyGuard.GrantPolicyPermissionStore(PermissionStore(InMemoryBlobStorage()), registry, audit, "admin")
         :> IPermissionStore
 
-    let! _ = store.SetMemberPermissions(teamId, "alice", "Partner", [ ModulePermission.Read ])
+    let! _ = store.SetMemberPermissions(TeamId teamId, UserId "alice", "Partner", [ ModulePermission.Read ])
     do! settle audit 1
     return audit.Keys
 }
@@ -156,9 +157,9 @@ let tests =
             Expect.equal (AuditStreamKey.ofTeam teamId) bareKey "the 1059 helper renders through AuditScope"
 
             Expect.equal
-                (AuditStreamKey.ofScope (StorageScope.ofKey true (ScopeKey.Team teamId)))
+                (AuditStreamKey.ofScope (StorageScope.ofKey true (ScopeKey.Team(TeamId teamId))))
                 bareKey
                 "a team's StorageScope keys the same stream"
 
-            Expect.notEqual bareKey (ScopeKey.container (ScopeKey.Team teamId)) "never the container"
+            Expect.notEqual bareKey (ScopeKey.container (ScopeKey.Team(TeamId teamId))) "never the container"
     ]

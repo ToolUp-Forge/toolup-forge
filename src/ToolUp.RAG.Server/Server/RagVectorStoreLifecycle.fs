@@ -42,7 +42,7 @@ open ToolUp.Platform.Compose
 /// either the bare team id or the `team-{id}` container form.
 let private teamIdOf (scopeId: string) =
     match ScopeKey.tryParseContainer scopeId with
-    | Some(ScopeKey.Team teamId) -> teamId
+    | Some(ScopeKey.Team teamId) -> teamId.Value
     | _ -> scopeId
 
 type RagVectorStoreLifecycle(services: IServiceProvider) =

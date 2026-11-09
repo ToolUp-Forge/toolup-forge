@@ -142,7 +142,7 @@ let private auditEvent (offset: float) : AuditEnvelope =
         scope
         (DateTime(2026, 8, 22, 9, 0, 0, DateTimeKind.Utc).AddSeconds offset)
         (UserLoggedIn {
-            UserId = sprintf "user-%d" (int offset)
+            UserId = UserId(sprintf "user-%d" (int offset))
             AuthProvider = "Header"
         })
 

@@ -39,7 +39,7 @@ type ResolverFactory = SurfaceProfile list -> ITeamStore option -> ISubjectResol
 // ─── Fixtures ────────────────────────────────────────────────────────
 
 let private aUser: AuthenticatedUser = {
-    UserId = "user-1"
+    UserId = UserId "user-1"
     DisplayName = "User One"
     Email = Some "user-1@example.com"
     TenantId = None
@@ -83,7 +83,7 @@ let private emptyRequest: SubjectResolutionRequest = {
 /// step 2. Every mutating method is a no-op `Error` since resolution
 /// never writes. Constant answers make the impl's caching irrelevant
 /// to the assertion (a warmed cache returns the same value).
-let private teamStoreStub (activeTeam: string option) (role: TeamRole option) : ITeamStore =
+let private teamStoreStub (activeTeam: TeamId option) (role: TeamRole option) : ITeamStore =
     { new ITeamStore with
         member _.CreateTeam(_, _) = async { return Error "unused" }
         member _.DeleteTeam _ = async { return Error "unused" }
@@ -274,7 +274,7 @@ let tests (name: string) (factory: ResolverFactory) =
 
         testList "authenticated user — team surface (step 2a)" [
             test "Team surface + active team + still a member → TeamMember" {
-                let store = teamStoreStub (Some "acme") (Some Owner)
+                let store = teamStoreStub (Some(TeamId "acme")) (Some Owner)
                 let resolver = factory Surfaces.team (Some store)
 
                 match run resolver { emptyRequest with User = Some aUser } with
@@ -312,12 +312,12 @@ let tests (name: string) (factory: ResolverFactory) =
                 // membership probe returns no role (removed between the
                 // pointer write and this request). Must deny, naming
                 // the team — never grant on a stale pointer.
-                let store = teamStoreStub (Some "acme") None
+                let store = teamStoreStub (Some(TeamId "acme")) None
                 let resolver = factory Surfaces.team (Some store)
 
                 match run resolver { emptyRequest with User = Some aUser } with
                 | Error(SubjectResolutionError.NotTeamMember tid) ->
-                    Expect.equal tid "acme" "names the team that denied"
+                    Expect.equal tid (TeamId "acme") "names the team that denied"
                 | other -> failtestf "expected NotTeamMember, got %A" other
             }
 
@@ -337,7 +337,7 @@ let tests (name: string) (factory: ResolverFactory) =
             test "a reader resolves to PublicationReader under every named Surfaces list" {
                 // A team pointer AND a role are answered, so a resolver that
                 // consulted the team surface first would mint a TeamMember.
-                let store = teamStoreStub (Some "acme") (Some TeamRole.Owner)
+                let store = teamStoreStub (Some(TeamId "acme")) (Some TeamRole.Owner)
 
                 for surfaces in
                     [

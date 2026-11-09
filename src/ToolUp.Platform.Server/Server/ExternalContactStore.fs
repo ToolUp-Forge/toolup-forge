@@ -254,14 +254,14 @@ type EntityBackedExternalContactStore(entities: IEntityStore.IEntityStore, audit
                 match duplicate with
                 | Some existingId -> return Error(ExternalContactError.Duplicate existingId)
                 | None ->
-                    match! save scopeId actorUserId validated with
+                    match! save scopeId actorUserId.Value validated with
                     | Error error -> return Error error
                     | Ok stored ->
                         do!
                             audit
                                 scopeId
                                 (ContactCreated {
-                                    UserId = actorUserId
+                                    UserId = UserId actorUserId.Value
                                     ScopeId = scopeId
                                     ContactId = stored.Id
                                     Owner = ContactOwner.toWireString stored.Owner
@@ -325,14 +325,14 @@ type EntityBackedExternalContactStore(entities: IEntityStore.IEntityStore, audit
                                 "Notes"
                         ]
 
-                        match! save scopeId actorUserId validated with
+                        match! save scopeId actorUserId.Value validated with
                         | Error error -> return Error error
                         | Ok stored ->
                             do!
                                 audit
                                     scopeId
                                     (ContactUpdated {
-                                        UserId = actorUserId
+                                        UserId = UserId actorUserId.Value
                                         ScopeId = scopeId
                                         ContactId = stored.Id
                                         ChangedFields = changed
@@ -351,7 +351,7 @@ type EntityBackedExternalContactStore(entities: IEntityStore.IEntityStore, audit
             | Ok existing ->
                 let discarded = existing.OptIns |> Map.toList |> List.map fst
 
-                let actor = EntityPrincipal.ofPrincipal actorUserId
+                let actor = EntityPrincipal.ofPrincipal actorUserId.Value
                 let! deleted = entities.Delete(scopeId, actor, ExternalContact.EntityType, contactId)
 
                 match deleted with
@@ -361,7 +361,7 @@ type EntityBackedExternalContactStore(entities: IEntityStore.IEntityStore, audit
                         audit
                             scopeId
                             (ContactDeleted {
-                                UserId = actorUserId
+                                UserId = UserId actorUserId.Value
                                 ScopeId = scopeId
                                 ContactId = contactId
                                 WithdrawnChannels = discarded |> List.map NotificationKind.SinkKind.toWireString
@@ -371,14 +371,14 @@ type EntityBackedExternalContactStore(entities: IEntityStore.IEntityStore, audit
         }
 
         member _.RecordOptIn(scopeId, actorUserId, contactId, channel, record) = async {
-            match! mutate scopeId actorUserId contactId (ExternalContact.withOptIn channel record >> Ok) with
+            match! mutate scopeId actorUserId.Value contactId (ExternalContact.withOptIn channel record >> Ok) with
             | Error error -> return Error error
             | Ok stored ->
                 do!
                     audit
                         scopeId
                         (ContactOptInRecorded {
-                            UserId = actorUserId
+                            UserId = UserId actorUserId.Value
                             ScopeId = scopeId
                             ContactId = contactId
                             Channel = NotificationKind.SinkKind.toWireString channel
@@ -390,7 +390,7 @@ type EntityBackedExternalContactStore(entities: IEntityStore.IEntityStore, audit
         }
 
         member _.WithdrawOptIn(scopeId, actorUserId, contactId, channel, reason) = async {
-            match! mutate scopeId actorUserId contactId (ExternalContact.withoutOptIn channel >> Ok) with
+            match! mutate scopeId actorUserId.Value contactId (ExternalContact.withoutOptIn channel >> Ok) with
             | Error error -> return Error error
             | Ok stored ->
                 // Audited even when there was nothing to withdraw: the
@@ -400,7 +400,7 @@ type EntityBackedExternalContactStore(entities: IEntityStore.IEntityStore, audit
                     audit
                         scopeId
                         (ContactOptInWithdrawn {
-                            UserId = actorUserId
+                            UserId = UserId actorUserId.Value
                             ScopeId = scopeId
                             ContactId = contactId
                             Channel = NotificationKind.SinkKind.toWireString channel

@@ -416,7 +416,7 @@ let unreadableSnapshotTests (name: string) (isRefusal: exn -> bool) (factory: IB
             "Erase on a scope whose snapshot exists but cannot be read reports the store unreachable and writes nothing" {
             do!
                 eraseOnUnreadable (seedDense factory) factory (fun s scope ->
-                    s.Erase(scope, "restart", ErasurePolicy.HardDelete, false))
+                    s.Erase(scope, UserId "restart", ErasurePolicy.HardDelete, false))
         }
     ]
 
@@ -547,6 +547,6 @@ let sparseIndexTests (name: string) (isRefusal: exn -> bool) (factory: IBlobStor
             "Erase on a scope whose snapshot exists but cannot be read reports the store unreachable and writes nothing" {
             do!
                 eraseOnUnreadable (seedSparse factory) factory (fun i scope ->
-                    i.Erase(scope, "restart", ErasurePolicy.HardDelete, false))
+                    i.Erase(scope, UserId "restart", ErasurePolicy.HardDelete, false))
         }
     ]

@@ -178,7 +178,7 @@ let private seedContactIn
             Notes = None
         }
 
-        let! created = store.Create(scopeId, actor, ContactOwner.Team "team-1", request)
+        let! created = store.Create(scopeId, UserId actor, ContactOwner.Team "team-1", request)
 
         let contact =
             match created with
@@ -192,7 +192,8 @@ let private seedContactIn
                 ExpiresAt = None
             }
 
-            let! updated = store.RecordOptIn(scopeId, actor, contact.Id, NotificationKind.SinkKind.WhatsApp, consent)
+            let! updated =
+                store.RecordOptIn(scopeId, UserId actor, contact.Id, NotificationKind.SinkKind.WhatsApp, consent)
 
             return
                 match updated with

@@ -48,7 +48,7 @@ type IShareTokenStore =
     /// `Error RevokedToken`. Idempotent — revoking an already-revoked
     /// token returns `Ok ()`. `actorUserId` identifies who revoked
     /// for audit purposes.
-    abstract Revoke: scopeId: string * tokenId: string * actorUserId: string -> Async<Result<unit, ShareTokenError>>
+    abstract Revoke: scopeId: string * tokenId: string * actorUserId: UserId -> Async<Result<unit, ShareTokenError>>
 
     /// Enumerate every claim for a `(resourceKind, resourceId)` pair
     /// within `scopeId`. Returns both active and revoked tokens —
@@ -66,4 +66,4 @@ type IShareTokenStore =
     /// per-issuer index blob — the default impl scans the scope's
     /// token blobs and filters in memory, which is acceptable for the
     /// membership-change cadence this method serves.
-    abstract ListByIssuer: scopeId: string * issuerUserId: string -> Async<ShareTokenClaim list>
+    abstract ListByIssuer: scopeId: string * issuerUserId: UserId -> Async<ShareTokenClaim list>

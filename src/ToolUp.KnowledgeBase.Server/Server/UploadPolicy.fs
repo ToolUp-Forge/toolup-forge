@@ -224,8 +224,8 @@ let private devUsageContainer (ctx: HttpContext) : string =
     | true, (:? StorageScope as s) -> s.Container
     | _ ->
         match ctx.Items.TryGetValue "ToolUp.UserId" with
-        | true, (:? string as id) -> ScopeKey.container (ScopeKey.User id)
-        | _ -> ScopeKey.container (ScopeKey.User "anonymous")
+        | true, (:? string as id) -> ScopeKey.container (ScopeKey.User(UserId id))
+        | _ -> ScopeKey.container (ScopeKey.User(UserId "anonymous"))
 
 let private devUsageHandler: HttpHandler =
     fun next (ctx: HttpContext) -> task {

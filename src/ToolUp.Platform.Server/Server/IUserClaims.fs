@@ -87,7 +87,7 @@ type IUserClaims =
     /// Read the premium status for a user. Anonymous users always
     /// return `NotPremium`. Logged-in users return whatever the
     /// active auth provider's metadata reports.
-    abstract GetPremiumStatus: userId: string -> Async<PremiumStatus>
+    abstract GetPremiumStatus: userId: UserId -> Async<PremiumStatus>
 
     /// List every user currently holding `Premium` status. Used by
     /// Phase 61's PremiumUserList admin widget. The Result wraps
@@ -101,11 +101,11 @@ type IUserClaims =
     /// Returns `Error` on provider failure (the caller emits the
     /// audit event for both success and failure paths).
     abstract GrantPremium:
-        userId: string * grantor: string * reason: string option -> Async<Result<PremiumStatus, string>>
+        userId: UserId * grantor: string * reason: string option -> Async<Result<PremiumStatus, string>>
 
     /// Revoke premium status. Same shape as `GrantPremium` — auth-
     /// provider write + operator-driven reason.
-    abstract RevokePremium: userId: string * grantor: string * reason: string option -> Async<Result<unit, string>>
+    abstract RevokePremium: userId: UserId * grantor: string * reason: string option -> Async<Result<unit, string>>
 
 /// Default no-op `IUserClaims` implementation. Returns `NotPremium`
 /// for every user; grant / revoke succeed without writing to any
@@ -114,7 +114,7 @@ type IUserClaims =
 /// provider-specific implementation.
 type NoOpUserClaims() =
     interface IUserClaims with
-        member _.GetPremiumStatus(_userId: string) = async { return NotPremium }
+        member _.GetPremiumStatus(_userId: UserId) = async { return NotPremium }
 
         member _.ListPremiumUsers() = async { return Ok [] }
 

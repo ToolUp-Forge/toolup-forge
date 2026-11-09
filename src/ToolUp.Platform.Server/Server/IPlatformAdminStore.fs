@@ -43,7 +43,7 @@ type IPlatformAdminStore =
     /// default re-reads the single admin-list blob on every call.
     /// Returns `false` for an empty list (a fresh deployment with no
     /// admins yet).
-    abstract IsPlatformAdmin: userId: string -> Async<bool>
+    abstract IsPlatformAdmin: userId: UserId -> Async<bool>
 
     /// Assign `PlatformRole.PlatformAdmin` to `targetUserId`. Records a
     /// `PlatformAdminAssigned` audit event with `Actor = actorUserId`
@@ -53,7 +53,7 @@ type IPlatformAdminStore =
     /// `canModifyPlatformConfig`; the bootstrap path passes
     /// `"_bootstrap"` as the actor, gated only by the empty-list
     /// precondition (callers verify this before invoking).
-    abstract AssignPlatformAdmin: actorUserId: string * targetUserId: string -> Async<Result<unit, string>>
+    abstract AssignPlatformAdmin: actorUserId: UserId * targetUserId: UserId -> Async<Result<unit, string>>
 
     /// Revoke `PlatformRole.PlatformAdmin` from `targetUserId`. Records
     /// a `PlatformAdminRevoked` audit event with `Actor = actorUserId`
@@ -62,7 +62,7 @@ type IPlatformAdminStore =
     /// returns `Error "cannot revoke the last remaining Platform Admin"`
     /// in that case. Idempotent — revoking a user who doesn't hold the
     /// role returns `Ok` without emitting an audit event.
-    abstract RevokePlatformAdmin: actorUserId: string * targetUserId: string -> Async<Result<unit, string>>
+    abstract RevokePlatformAdmin: actorUserId: UserId * targetUserId: UserId -> Async<Result<unit, string>>
 
     /// List every user holding `PlatformRole.PlatformAdmin`. Visible to
     /// all authenticated users via `PlatformAdminApi.ListPlatformAdmins`

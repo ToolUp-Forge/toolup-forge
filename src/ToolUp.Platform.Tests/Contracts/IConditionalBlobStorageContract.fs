@@ -429,20 +429,20 @@ let tests (name: string) (factory: unit -> IBlobStorage) =
             let teamB = freshId "team-b"
             let teamC = freshId "team-c"
 
-            let! a = teams.AddMember(teamA, user, Owner)
+            let! a = teams.AddMember(TeamId teamA, UserId user, Owner)
             Expect.isOk a "seed membership A"
-            let! b = teams.AddMember(teamB, user, Member)
+            let! b = teams.AddMember(TeamId teamB, UserId user, Member)
             Expect.isOk b "seed membership B"
 
             // One transient read failure on the user's membership blob.
-            storage.FailNextReads("_platform", membershipBlobName user, 1)
+            storage.FailNextReads("_platform", membershipBlobName (UserId user), 1)
 
-            let! c = teams.AddMember(teamC, user, Member)
+            let! c = teams.AddMember(TeamId teamC, UserId user, Member)
             Expect.isError c "AddMember over an unreadable membership blob must fail, not write"
 
-            let! roleA = teams.GetMemberRole(teamA, user)
-            let! roleB = teams.GetMemberRole(teamB, user)
-            let! roleC = teams.GetMemberRole(teamC, user)
+            let! roleA = teams.GetMemberRole(TeamId teamA, UserId user)
+            let! roleB = teams.GetMemberRole(TeamId teamB, UserId user)
+            let! roleC = teams.GetMemberRole(TeamId teamC, UserId user)
             Expect.equal roleA (Some Owner) "membership A survives the failed read"
             Expect.equal roleB (Some Member) "membership B survives the failed read"
             Expect.equal roleC None "nothing was written for C"
@@ -461,19 +461,19 @@ let tests (name: string) (factory: unit -> IBlobStorage) =
 
             // Both replicas provably read the same (absent) membership blob
             // before either writes.
-            storage.Rendezvous("_platform", membershipBlobName user, 2)
+            storage.Rendezvous("_platform", membershipBlobName (UserId user), 2)
 
             let! results =
                 [
-                    replica1.AddMember(teamA, user, Member)
-                    replica2.AddMember(teamB, user, Member)
+                    replica1.AddMember(TeamId teamA, UserId user, Member)
+                    replica2.AddMember(TeamId teamB, UserId user, Member)
                 ]
                 |> Async.Parallel
 
             Expect.all results Result.isOk "both concurrent AddMember calls report success"
 
-            let! roleA = replica1.GetMemberRole(teamA, user)
-            let! roleB = replica1.GetMemberRole(teamB, user)
+            let! roleA = replica1.GetMemberRole(TeamId teamA, UserId user)
+            let! roleB = replica1.GetMemberRole(TeamId teamB, UserId user)
             Expect.equal roleA (Some Member) "replica 1's membership landed"
             Expect.equal roleB (Some Member) "replica 2's membership landed"
         }
@@ -529,12 +529,12 @@ let tests (name: string) (factory: unit -> IBlobStorage) =
             let raw = storage :> IBlobStorage
             let teams = TeamStore(storage, freshChannel (), silentLogger)
             let user = freshId "user"
-            let blob = membershipBlobName user
+            let blob = membershipBlobName (UserId user)
             let corrupt = bytes "{ this is not a membership list"
             let! seeded = raw.Upload("_platform", blob, corrupt)
             Expect.isOk seeded "seed a corrupt membership blob"
 
-            let! added = teams.AddMember(freshId "team", user, Member)
+            let! added = teams.AddMember(TeamId(freshId "team"), UserId user, Member)
             Expect.isError added "AddMember over an undecodable membership blob must fail"
 
             let! after = raw.Download("_platform", blob)
@@ -561,16 +561,19 @@ let tests (name: string) (factory: unit -> IBlobStorage) =
             let replica1 = TeamStore(storage, freshChannel (), silentLogger)
             let replica2 = TeamStore(storage, freshChannel (), silentLogger)
             let teamId = freshId "team"
-            storage.Rendezvous("_platform", teamBlobName teamId, 2)
+            storage.Rendezvous("_platform", teamBlobName (TeamId teamId), 2)
 
             let! results =
-                [ replica1.CreateTeam(teamId, "first"); replica2.CreateTeam(teamId, "second") ]
+                [
+                    replica1.CreateTeam(TeamId teamId, "first")
+                    replica2.CreateTeam(TeamId teamId, "second")
+                ]
                 |> Async.Parallel
 
             let created = results |> Array.filter Result.isOk
             Expect.hasLength created 1 "exactly one create of one team id is admitted"
 
-            let! stored = replica1.GetTeam teamId
+            let! stored = replica1.GetTeam(TeamId teamId)
             let winner = Expect.wantOk created[0] "the admitted create"
             Expect.equal (stored |> Option.map _.Name) (Some winner.Name) "the stored team is the winner's"
         }

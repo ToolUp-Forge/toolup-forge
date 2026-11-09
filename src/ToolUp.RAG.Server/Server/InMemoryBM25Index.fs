@@ -621,7 +621,7 @@ type InMemoryBM25Index(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs
             // collapses to a hard delete (noted in the summary); the
             // persisted `bm25.json` follows on the next flush via
             // `markDirty`, so the erased text also leaves blob storage.
-            if Erasure.isBlankSubject subjectUserId then
+            if Erasure.isBlankSubject subjectUserId.Value then
                 return
                     Result.Ok {
                         HandlerName = "sparse-index"
@@ -651,8 +651,8 @@ type InMemoryBM25Index(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs
                     let matched =
                         idx.Snapshot()
                         |> Array.filter (fun entry ->
-                            entry.Content.Contains subjectUserId
-                            || entry.Metadata |> Map.exists (fun _ v -> v.Contains subjectUserId))
+                            entry.Content.Contains subjectUserId.Value
+                            || entry.Metadata |> Map.exists (fun _ v -> v.Contains subjectUserId.Value))
                         |> Array.map _.ChunkId
 
                     if dryRun || Array.isEmpty matched then

@@ -41,7 +41,7 @@ type EvidencePackRequest = {
     /// When `Some`, the pack includes the DSR (Article-15-shape) export
     /// segments for this subject, gathered from the registered
     /// `IDataExporter`s. `None` ⇒ no DSR segment.
-    SubjectUserId: string option
+    SubjectUserId: UserId option
     /// Admin actor who requested the pack. Audit attribution; stamped into
     /// the manifest.
     RequestedBy: string

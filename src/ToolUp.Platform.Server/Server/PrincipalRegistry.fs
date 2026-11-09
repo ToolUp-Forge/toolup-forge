@@ -119,7 +119,7 @@ let listPrincipalsWith
             scopes
             |> List.choose (fun s ->
                 match ScopeKey.tryParseContainer s with
-                | Some(ScopeKey.User userId) -> Some userId
+                | Some(ScopeKey.User userId) -> Some userId.Value
                 | _ -> None)
             |> Set.ofList
 
@@ -158,7 +158,7 @@ let listPrincipalsWith
             Set.unionMany [
                 memberships |> Map.keys |> Set.ofSeq
                 userScopeIds
-                lastSeen |> Map.keys |> Set.ofSeq
+                lastSeen |> Map.keys |> Seq.map UserId.value |> Set.ofSeq
             ]
 
         // Blob-side probe for candidates not already evidenced by
@@ -171,7 +171,7 @@ let listPrincipalsWith
                 if Set.contains userId userScopeIds then
                     return userId, true
                 else
-                    let! blobs = storage.List(ScopeKey.container (ScopeKey.User userId), "")
+                    let! blobs = storage.List(ScopeKey.container (ScopeKey.User(UserId userId)), "")
                     return userId, not (List.isEmpty blobs)
             })
             |> bounded
@@ -185,7 +185,7 @@ let listPrincipalsWith
             |> List.map (fun userId -> {
                 UserId = userId
                 Memberships = memberships |> Map.tryFind userId |> Option.defaultValue []
-                LastSeenAt = lastSeen |> Map.tryFind userId
+                LastSeenAt = lastSeen |> Map.tryFind (UserId userId)
                 HasUserScopeData = hasScopeData |> Map.tryFind userId |> Option.defaultValue false
             })
     }

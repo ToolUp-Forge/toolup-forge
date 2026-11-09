@@ -646,7 +646,7 @@ let private scheduleAndHandOff (fixture: Fixture) (handler: IJobHandler) : strin
         | Ok(Scheduled id | Coalesced id) -> id
         | Error e -> failtestf "schedule failed: %A" e
 
-    match scheduler.TriggerOnce(scope, jobId, "test") |> Async.RunSynchronously with
+    match scheduler.TriggerOnce(scope, jobId, UserId "test") |> Async.RunSynchronously with
     | Ok() -> ()
     | Error e -> failtestf "TriggerOnce failed: %A" e
 

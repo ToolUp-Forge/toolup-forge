@@ -488,7 +488,7 @@ let private jobScheduler =
                 | Ok(Scheduled id | Coalesced id) -> id
                 | Error e -> failtestf "schedule failed: %A" e
 
-            match! api.TriggerOnce("scope-869", jobId, "test") with
+            match! api.TriggerOnce("scope-869", jobId, UserId "test") with
             | Ok() -> ()
             | Error e -> failtestf "TriggerOnce failed: %A" e
 

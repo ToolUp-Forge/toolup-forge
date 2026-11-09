@@ -32,28 +32,28 @@ let tests (name: string) (factory: unit -> INotificationAddressBook) (populate: 
         testCaseAsync "ResolveEmail returns None for an unknown user"
         <| async {
             let book = factory ()
-            let! result = book.ResolveEmail(RecipientId.User "user-does-not-exist", uniqueScope ())
+            let! result = book.ResolveEmail(RecipientId.User(UserId "user-does-not-exist"), uniqueScope ())
             Expect.isNone result "no contact = no email"
         }
 
         testCaseAsync "ResolvePhone returns None for an unknown user"
         <| async {
             let book = factory ()
-            let! result = book.ResolvePhone(RecipientId.User "user-does-not-exist", uniqueScope ())
+            let! result = book.ResolvePhone(RecipientId.User(UserId "user-does-not-exist"), uniqueScope ())
             Expect.isNone result "no contact = no phone"
         }
 
         testCaseAsync "ResolvePushTokens returns [] for an unknown user"
         <| async {
             let book = factory ()
-            let! result = book.ResolvePushTokens(RecipientId.User "user-does-not-exist", uniqueScope ())
+            let! result = book.ResolvePushTokens(RecipientId.User(UserId "user-does-not-exist"), uniqueScope ())
             Expect.isEmpty result "no contact = no tokens"
         }
 
         testCaseAsync "ResolveWhatsApp returns None for an unknown user"
         <| async {
             let book = factory ()
-            let! result = book.ResolveWhatsApp(RecipientId.User "user-does-not-exist", uniqueScope ())
+            let! result = book.ResolveWhatsApp(RecipientId.User(UserId "user-does-not-exist"), uniqueScope ())
             Expect.isNone result "no contact = no WhatsApp number"
         }
 
@@ -63,7 +63,7 @@ let tests (name: string) (factory: unit -> INotificationAddressBook) (populate: 
             let scope = uniqueScope ()
 
             let contact = {
-                UserId = "user-A"
+                UserId = UserId "user-A"
                 Email =
                     Some {
                         Address = "alice@example.com"
@@ -75,7 +75,7 @@ let tests (name: string) (factory: unit -> INotificationAddressBook) (populate: 
 
             do! populate scope contact
 
-            let! result = book.ResolveEmail(RecipientId.User "user-A", scope)
+            let! result = book.ResolveEmail(RecipientId.User(UserId "user-A"), scope)
 
             match result with
             | Some addr ->
@@ -90,7 +90,7 @@ let tests (name: string) (factory: unit -> INotificationAddressBook) (populate: 
             let scope = uniqueScope ()
 
             let contact = {
-                UserId = "user-A"
+                UserId = UserId "user-A"
                 Email = None
                 Phone = None
                 PushTokens = [
@@ -107,7 +107,7 @@ let tests (name: string) (factory: unit -> INotificationAddressBook) (populate: 
 
             do! populate scope contact
 
-            let! tokens = book.ResolvePushTokens(RecipientId.User "user-A", scope)
+            let! tokens = book.ResolvePushTokens(RecipientId.User(UserId "user-A"), scope)
             Expect.equal tokens.Length 2 "both tokens round-trip"
         }
 
@@ -118,7 +118,7 @@ let tests (name: string) (factory: unit -> INotificationAddressBook) (populate: 
             let scopeB = uniqueScope ()
 
             let contact = {
-                UserId = "user-A"
+                UserId = UserId "user-A"
                 Email =
                     Some {
                         Address = "alice@a.example.com"
@@ -130,10 +130,10 @@ let tests (name: string) (factory: unit -> INotificationAddressBook) (populate: 
 
             do! populate scopeA contact
 
-            let! crossScope = book.ResolveEmail(RecipientId.User "user-A", scopeB)
+            let! crossScope = book.ResolveEmail(RecipientId.User(UserId "user-A"), scopeB)
             Expect.isNone crossScope "scope-isolated lookup must not leak across scopes"
 
-            let! sameScope = book.ResolveEmail(RecipientId.User "user-A", scopeA)
+            let! sameScope = book.ResolveEmail(RecipientId.User(UserId "user-A"), scopeA)
             Expect.isSome sameScope "lookup in the populated scope still works"
         }
     ]

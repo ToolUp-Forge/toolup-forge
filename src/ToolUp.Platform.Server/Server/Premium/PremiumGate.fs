@@ -31,7 +31,7 @@ let private resolveUserId (ctx: HttpContext) : string =
 let requirePremium (ctx: HttpContext) : Async<Result<unit, string>> = async {
     let claims = resolveUserClaims ctx
     let userId = resolveUserId ctx
-    let! status = claims.GetPremiumStatus userId
+    let! status = claims.GetPremiumStatus(UserId userId)
 
     match status with
     | Premium _ -> return Ok()

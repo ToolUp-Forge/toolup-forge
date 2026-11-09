@@ -41,7 +41,7 @@ type ScopeResolutionError =
     /// Team surface, authenticated user has no active team selected.
     | NoActiveTeam
     /// Team surface, user is not a member of the active team.
-    | NotTeamMember of teamId: string
+    | NotTeamMember of teamId: TeamId
     /// Infrastructure failure — storage backend unreachable, cache corruption,
     /// etc. Message is diagnostic only; do not leak to clients verbatim.
     | ScopeResolutionFailed of message: string

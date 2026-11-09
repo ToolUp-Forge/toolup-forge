@@ -123,7 +123,8 @@ let tests =
                 :> IAuditLog
 
             // Must not throw.
-            auditLog.Record("team-acme", sampleAudit "alice") |> Async.RunSynchronously
+            auditLog.Record("team-acme", sampleAudit (UserId "alice"))
+            |> Async.RunSynchronously
         }
 
         test "RefuseAction raises AuditWriteRefusedException so the action fails visibly" {
@@ -132,7 +133,9 @@ let tests =
                 :> IAuditLog
 
             Expect.throwsT<AuditLog.AuditWriteRefusedException>
-                (fun () -> auditLog.Record("team-acme", sampleAudit "alice") |> Async.RunSynchronously)
+                (fun () ->
+                    auditLog.Record("team-acme", sampleAudit (UserId "alice"))
+                    |> Async.RunSynchronously)
                 "the failed audit write must refuse the action"
         }
 
@@ -152,7 +155,9 @@ let tests =
                 :> IAuditLog
 
             // The action completes; the record spills.
-            auditLog.Record("team-acme", sampleAudit "alice") |> Async.RunSynchronously
+            auditLog.Record("team-acme", sampleAudit (UserId "alice"))
+            |> Async.RunSynchronously
+
             Expect.equal (fallback.PendingCount()) 1 "one spilled record awaiting replay"
 
             // The store recovers — replay drains the spill into it.
@@ -184,7 +189,9 @@ let tests =
                 :> IAuditLog
 
             // Must not throw; the record is lost (loudly, via the logger).
-            auditLog.Record("team-acme", sampleAudit "alice") |> Async.RunSynchronously
+            auditLog.Record("team-acme", sampleAudit (UserId "alice"))
+            |> Async.RunSynchronously
+
             Expect.equal (fallback.PendingCount()) 0 "nothing spilled at capacity"
         }
 
@@ -204,7 +211,8 @@ let tests =
                 )
                 :> IAuditLog
 
-            auditLog.Record("team-acme", sampleAudit "alice") |> Async.RunSynchronously
+            auditLog.Record("team-acme", sampleAudit (UserId "alice"))
+            |> Async.RunSynchronously
 
             // ...plus a hand-planted corrupt file that sorts FIRST
             // (all-zero ticks), so a non-quarantining drain would wedge
@@ -243,7 +251,9 @@ let tests =
                 :> IAuditLog
 
             Expect.throwsT<AuditLog.AuditWriteRefusedException>
-                (fun () -> auditLog.Record("team-acme", sampleAudit "alice") |> Async.RunSynchronously)
+                (fun () ->
+                    auditLog.Record("team-acme", sampleAudit (UserId "alice"))
+                    |> Async.RunSynchronously)
                 "an Upload that returned Error must refuse the action, exactly as a throwing store does"
 
             Expect.equal
@@ -264,7 +274,8 @@ let tests =
                 )
                 :> IAuditLog
 
-            auditLog.Record("team-acme", sampleAudit "alice") |> Async.RunSynchronously
+            auditLog.Record("team-acme", sampleAudit (UserId "alice"))
+            |> Async.RunSynchronously
 
             Expect.equal
                 (sink.Count AuditLog.AuditMetrics.WriteFailuresTotal)

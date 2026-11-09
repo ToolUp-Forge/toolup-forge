@@ -114,9 +114,9 @@ let private seededTeam (proof: DirectAddIdentityProof) (owner: string) (director
     let auditLog = SilentAuditLog() :> IAuditLog
     let teamStore = freshTeamStore ()
     let adminStore = freshAdminStore auditLog
-    let! created = teamStore.CreateTeam("t1", "Engineering")
+    let! created = teamStore.CreateTeam(TeamId "t1", "Engineering")
     Expect.isOk created "fixture team is created"
-    let! added = teamStore.AddMember("t1", owner, Owner)
+    let! added = teamStore.AddMember(TeamId "t1", UserId owner, Owner)
     Expect.isOk added "fixture owner is seeded"
 
     let ctx = ctxFor owner teamStore adminStore auditLog directory
@@ -142,7 +142,7 @@ let tests =
 
             Expect.isOk result "the default mode writes the row without consulting the directory"
 
-            let! role = store.GetMemberRole("t1", "typo-bob")
+            let! role = store.GetMemberRole(TeamId "t1", UserId "typo-bob")
             Expect.equal role (Some Member) "the unverified membership row exists"
         }
 
@@ -154,7 +154,7 @@ let tests =
 
             Expect.isOk result "a deployment with no IUserDirectory pays nothing (GP 13)"
 
-            let! role = store.GetMemberRole("t1", "bob")
+            let! role = store.GetMemberRole(TeamId "t1", UserId "bob")
             Expect.equal role (Some Member) "row written"
         }
 
@@ -168,7 +168,7 @@ let tests =
 
             Expect.isOk result "an id the directory resolves passes the proof"
 
-            let! role = store.GetMemberRole("t1", "bob")
+            let! role = store.GetMemberRole(TeamId "t1", UserId "bob")
             Expect.equal role (Some Member) "the membership row is written"
         }
 
@@ -184,7 +184,7 @@ let tests =
                 Expect.stringContains msg "RequireDirectoryProof" "the refusal names the proof requirement"
             | Ok() -> failtest "expected the unknown id to be refused"
 
-            let! role = store.GetMemberRole("t1", "typo-bob")
+            let! role = store.GetMemberRole(TeamId "t1", UserId "typo-bob")
             Expect.isNone role "no ghost row was minted"
         }
 
@@ -200,7 +200,7 @@ let tests =
                 Expect.stringContains msg "directory unavailable" "the substrate failure is surfaced verbatim"
             | Ok() -> failtest "a substrate failure must not admit an unproven id"
 
-            let! role = store.GetMemberRole("t1", "bob")
+            let! role = store.GetMemberRole(TeamId "t1", UserId "bob")
             Expect.isNone role "no row written when the proof could not be obtained"
         }
 
@@ -217,7 +217,7 @@ let tests =
             | Error msg -> Expect.stringContains msg "IUserDirectory" "the refusal names the missing companion"
             | Ok() -> failtest "expected a fail-closed refusal with no directory composed"
 
-            let! role = store.GetMemberRole("t1", "bob")
+            let! role = store.GetMemberRole(TeamId "t1", UserId "bob")
             Expect.isNone role "no row written"
         }
 

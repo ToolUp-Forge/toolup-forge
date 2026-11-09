@@ -148,7 +148,7 @@ type SubjectResolutionError =
     /// through to step 2b (`AuthenticatedUser`) when User is in
     /// `Surfaces` or step 2c (`UnsupportedSubject UserKind`)
     /// otherwise.
-    | NotTeamMember of teamId: string
+    | NotTeamMember of teamId: TeamId
     /// Infrastructure failure — storage backend unreachable, cache
     /// corruption, etc. Message is operator-visible (logs); must
     /// not leak to clients verbatim.
@@ -170,7 +170,7 @@ module SubjectResolution =
             not (AuthenticatedUser.isAnonymous user)
             && user.Admission = PrincipalAdmission.PublicationReader
             ->
-            Some(Subject.PublicationReader user.UserId)
+            Some(Subject.PublicationReader user.UserId.Value)
         | _ -> None
 
 /// Per-request subject resolver. The single seam between request

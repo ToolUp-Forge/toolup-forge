@@ -23,8 +23,8 @@ type private InMemoryUserClaims() =
     let store = ConcurrentDictionary<string, PremiumStatus>()
 
     interface IUserClaims with
-        member _.GetPremiumStatus(userId: string) = async {
-            match store.TryGetValue userId with
+        member _.GetPremiumStatus(userId: UserId) = async {
+            match store.TryGetValue userId.Value with
             | true, status -> return status
             | false, _ -> return NotPremium
         }
@@ -43,12 +43,12 @@ type private InMemoryUserClaims() =
 
         member _.GrantPremium(userId, grantor, reason) = async {
             let status = Premium(System.DateTimeOffset.UtcNow, grantor, reason)
-            store[userId] <- status
+            store[userId.Value] <- status
             return Ok status
         }
 
         member _.RevokePremium(userId, _grantor, _reason) = async {
-            store.TryRemove userId |> ignore
+            store.TryRemove userId.Value |> ignore
             return Ok()
         }
 

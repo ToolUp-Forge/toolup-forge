@@ -52,9 +52,9 @@ type ScopeKey =
     /// A reserved platform shard.
     | Platform of PlatformShard
     /// A team's scope, by its bare team id.
-    | Team of teamId: string
+    | Team of teamId: TeamId
     /// An individual user's scope, by its bare user id.
-    | User of userId: string
+    | User of userId: UserId
     /// An anonymous session's scope, by its bare session id.
     | Session of sessionId: string
     /// A share-token claim's scope. The claim's `ScopeId` is both its
@@ -103,8 +103,8 @@ module ScopeKey =
     let container (key: ScopeKey) : string =
         match key with
         | ScopeKey.Platform shard -> shardContainer shard
-        | ScopeKey.Team teamId -> TeamPrefix + teamId
-        | ScopeKey.User userId -> UserPrefix + userId
+        | ScopeKey.Team teamId -> TeamPrefix + teamId.Value
+        | ScopeKey.User userId -> UserPrefix + userId.Value
         | ScopeKey.Session sessionId -> SessionPrefix + sessionId
         | ScopeKey.Claim claimScopeId -> claimScopeId
 
@@ -114,15 +114,15 @@ module ScopeKey =
     let scopeId (key: ScopeKey) : string =
         match key with
         | ScopeKey.Platform shard -> shardContainer shard
-        | ScopeKey.Team teamId -> teamId
-        | ScopeKey.User userId -> userId
+        | ScopeKey.Team teamId -> teamId.Value
+        | ScopeKey.User userId -> userId.Value
         | ScopeKey.Session sessionId -> sessionId
         | ScopeKey.Claim claimScopeId -> claimScopeId
 
     /// The prefixed cases of the grammar, each with the case it builds.
     let private prefixed: (string * (string -> ScopeKey)) list = [
-        TeamPrefix, ScopeKey.Team
-        UserPrefix, ScopeKey.User
+        TeamPrefix, (fun id -> ScopeKey.Team(TeamId id))
+        UserPrefix, (fun id -> ScopeKey.User(UserId id))
         SessionPrefix, ScopeKey.Session
     ]
 

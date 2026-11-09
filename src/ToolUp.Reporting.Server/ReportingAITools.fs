@@ -1052,7 +1052,7 @@ let private enqueue
         | Error err -> return errorPayload "RenderQueueFailed" $"The background render could not be queued: %A{err}"
         | Ok(Scheduled jobId | Coalesced jobId) ->
             // A `Manual` job runs on `TriggerOnce`, not on a tick.
-            match! scheduler.TriggerOnce(caller.ScopeId, jobId, caller.UserId) with
+            match! scheduler.TriggerOnce(caller.ScopeId, jobId, UserId caller.UserId) with
             | Error refusal ->
                 return
                     errorPayload

@@ -137,7 +137,7 @@ type private RecordingScheduler() =
                 let ctx: JobContext = {
                     JobId = jobId
                     ScopeId = registration.ScopeId
-                    AccessContext = AccessContext.unrestricted (AuthenticatedUser byUserId)
+                    AccessContext = AccessContext.unrestricted (AuthenticatedUser byUserId.Value)
                     Attempt = 1
                     Trigger = registration.Trigger
                     Scope = scope |> Option.defaultValue ResolvedScope.anonymous
@@ -568,7 +568,7 @@ let private jobTests =
                 | Error e -> return failtestf "scheduling failed: %A" e
             }
 
-            let! fired = scheduler.TriggerOnce(scopeId, jobId, "cron")
+            let! fired = scheduler.TriggerOnce(scopeId, jobId, UserId "cron")
             Expect.isOk fired "the tick ran the job"
             Expect.equal r.Scheduler.Results [ JobResult.Success ] "the job's result is the handler's own"
 
@@ -615,7 +615,7 @@ let private jobTests =
                 | Error e -> return failtestf "scheduling failed: %A" e
             }
 
-            let! _ = scheduler.TriggerOnce(scopeId, jobId, "someone")
+            let! _ = scheduler.TriggerOnce(scopeId, jobId, UserId "someone")
             Expect.equal r.Scheduler.Results [ JobResult.Success ] "the ingestion itself still ran"
             let! all = seen.Settled
             Expect.isEmpty all "no scope was minted for it"

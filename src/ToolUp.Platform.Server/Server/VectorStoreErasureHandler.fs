@@ -41,8 +41,8 @@ let scopeOf (scopeId: string) : VectorScope =
         Deployment
     else
         match ScopeKey.tryParseContainer scopeId with
-        | Some(ScopeKey.Team teamId) -> Team teamId
-        | Some(ScopeKey.User userId) -> User userId
+        | Some(ScopeKey.Team teamId) -> Team teamId.Value
+        | Some(ScopeKey.User userId) -> User userId.Value
         | _ -> Team scopeId
 
 type VectorStoreErasureHandler
@@ -101,7 +101,7 @@ type VectorStoreErasureHandler
         }
 
         member _.Preview(scopeId, subjectUserId, policy) = async {
-            let! result = eraseOnce scopeId subjectUserId policy true
+            let! result = eraseOnce scopeId (UserId subjectUserId.Value) policy true
 
             return
                 match result with

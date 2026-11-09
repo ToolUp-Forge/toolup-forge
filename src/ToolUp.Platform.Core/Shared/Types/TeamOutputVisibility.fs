@@ -197,7 +197,7 @@ module TeamConversationPolicyRecord =
     /// The container a team's record lives in — the team's own container,
     /// read in the team's scope.
     let containerOf (teamId: string) =
-        ScopeKey.container (ScopeKey.Team teamId)
+        ScopeKey.container (ScopeKey.Team(TeamId teamId))
 
     /// Whether the team has ever chosen a level.
     let isUnset (record: TeamConversationPolicyRecord) = List.isEmpty record.Changes
@@ -257,7 +257,7 @@ type ITeamOutputVisibilitySource =
     /// The level in force for `teamId`: the team's own choice, else the
     /// deployment default. `Error` when the team's record exists but cannot
     /// be read — the caller fails closed.
-    abstract Current: teamId: string -> Async<Result<TeamVisibilityLevel, string>>
+    abstract Current: teamId: TeamId -> Async<Result<TeamVisibilityLevel, string>>
 
 /// The output-visibility rule (Phase 896). `canSee` is the single place it
 /// lives; the disclosure gate applies it to every egress door.

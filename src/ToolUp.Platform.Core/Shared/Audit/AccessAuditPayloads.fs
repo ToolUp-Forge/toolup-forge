@@ -42,7 +42,7 @@ module AssetSourceModule =
 type AssetUploadedPayload = {
     /// Actor who performed the upload. Resolved server-side from
     /// `AccessContext.UserId`.
-    UserId: string
+    UserId: UserId
     /// Asset id minted by the store.
     AssetId: string
     /// SHA-256 of the original bytes (hex, lowercase). Two uploads
@@ -63,7 +63,7 @@ type AssetUploadedPayload = {
 /// Idempotent deletes of unknown ids do NOT emit (the delete
 /// returned `Ok` after a no-op — there's no state change to record).
 type AssetDeletedPayload = {
-    UserId: string
+    UserId: UserId
     AssetId: string
     ContentHash: string
 }
@@ -78,9 +78,9 @@ type AssetDeletedPayload = {
 /// `ITeamInviteApi.IssueInvite` succeeded. Recorded under
 /// the team audit stream with `SourceModule = "_platform.team_invites"`.
 type TeamInviteIssuedPayload = {
-    TeamId: string
+    TeamId: TeamId
     TokenId: string
-    InviterUserId: string
+    InviterUserId: UserId
     Role: TeamRole
     EmailHint: string option
     ExpiresAt: System.DateTime
@@ -90,10 +90,10 @@ type TeamInviteIssuedPayload = {
 /// `ITeamInviteApi.AcceptInvite` succeeded — an authenticated visitor
 /// was added to the team via a link-redemption flow.
 type TeamInviteAcceptedPayload = {
-    TeamId: string
+    TeamId: TeamId
     TokenId: string
-    InviteeUserId: string
-    InviterUserId: string
+    InviteeUserId: UserId
+    InviterUserId: UserId
     Role: TeamRole
 }
 
@@ -102,10 +102,10 @@ type TeamInviteAcceptedPayload = {
 /// involved. The pending entry is removed atomically with the
 /// `AddMember` call.
 type TeamInviteAcceptedFromPendingPayload = {
-    TeamId: string
-    InviteeUserId: string
+    TeamId: TeamId
+    InviteeUserId: UserId
     InviteeEmail: string
-    InviterUserId: string
+    InviterUserId: UserId
     Role: TeamRole
 }
 
@@ -118,10 +118,10 @@ type TeamInviteAcceptedFromPendingPayload = {
 /// (single-shot semantics) so this event is the only signal something
 /// went wrong.
 type TeamInviteAcceptedFromPendingFailedPayload = {
-    TeamId: string
-    InviteeUserId: string
+    TeamId: TeamId
+    InviteeUserId: UserId
     InviteeEmail: string
-    InviterUserId: string
+    InviterUserId: UserId
     Role: TeamRole
     Reason: string
 }
@@ -129,9 +129,9 @@ type TeamInviteAcceptedFromPendingFailedPayload = {
 /// `ITeamInviteApi.RevokeInvite` succeeded. Subsequent acceptance
 /// attempts against the same token return `RevokedToken`.
 type TeamInviteRevokedPayload = {
-    TeamId: string
+    TeamId: TeamId
     TokenId: string
-    ActorUserId: string
+    ActorUserId: UserId
 }
 
 /// `IShareTokenStore.MarkUsed` succeeded on a team-invite token —
@@ -141,7 +141,7 @@ type TeamInviteRevokedPayload = {
 /// (`TeamInviteAccepted`) from "the token's use-count was bumped"
 /// (`TeamInviteRedeemed`).
 type TeamInviteRedeemedPayload = {
-    TeamId: string
+    TeamId: TeamId
     TokenId: string
     RemainingUses: int
 }
@@ -193,7 +193,7 @@ type TeamInviteExpiredPayload = {
 /// `UserLoggedInPayload`. Reserved `SourceModule = "_platform.subject"`.
 type AnonymousSessionMigratedPayload = {
     AnonymousSessionId: string
-    TargetUserId: string
+    TargetUserId: UserId
     Outcome: string
     ItemsMigrated: int
     BytesMigrated: int64

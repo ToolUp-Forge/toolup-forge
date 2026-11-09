@@ -425,7 +425,7 @@ let private userFromPayload (preferOid: bool) (payload: JwtPayload) : Authentica
             | _ -> None
 
     {
-        UserId = resolvedId
+        UserId = UserId resolvedId
         DisplayName = payload.Name |> Option.defaultValue resolvedId
         Email = resolvedEmail
         TenantId = None
@@ -618,7 +618,7 @@ let applyValidatedClaimMapping
             let alias (group: string) =
                 mapping.GroupAliases |> Map.tryFind group |> Option.defaultValue group
 
-            applyOne mapping.UserIdClaim "UserId" (fun value u -> { u with UserId = value }) user
+            applyOne mapping.UserIdClaim "UserId" (fun value u -> { u with UserId = UserId value }) user
             |> Result.bind (applyOne mapping.TenantIdClaim "TenantId" (fun value u -> { u with TenantId = Some value }))
             |> Result.bind (fun u ->
                 readRoles mapping.RolesClaim "Roles" id
@@ -729,7 +729,7 @@ let private holdsReaderGrant (ctx: HttpContext) (userId: string) : Async<bool> =
     match store with
     | :? IPublicationReaderGrantStore as grants ->
         try
-            let! held = grants.GrantsFor userId
+            let! held = grants.GrantsFor(UserId userId)
             return not (List.isEmpty held)
         with _ ->
             return false
@@ -747,7 +747,7 @@ let private holdsAppMembership (ctx: HttpContext) (user: AuthenticatedUser) : As
             let! inTeam = async {
                 match ctx.RequestServices.GetService(typeof<ToolUp.Platform.Config.TeamManagement.ITeamStore>) with
                 | :? ToolUp.Platform.Config.TeamManagement.ITeamStore as teams ->
-                    let! held = teams.GetTeamsForUser user.UserId
+                    let! held = teams.GetTeamsForUser(UserId user.UserId.Value)
                     return not (List.isEmpty held)
                 | _ -> return false
             }
@@ -934,7 +934,7 @@ let private validate
                                                         let! byDirectory = async {
                                                             match applyAdmission mapping mapped with
                                                             | Result.Error reason ->
-                                                                let! granted = holdsReaderGrant ctx mapped.UserId
+                                                                let! granted = holdsReaderGrant ctx mapped.UserId.Value
 
                                                                 if granted then
                                                                     return applyAdmissionWithGrant true mapping mapped

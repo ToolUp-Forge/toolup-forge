@@ -259,7 +259,7 @@ let private moodArgs = """{"moduleName":"MoodJournal"}"""
 
 let private syntheticRow (target: string option) (tool: string) (latencyMs: float) (outcome: string) = {
     ConversationId = Some(Guid.Parse "11111111-1111-1111-1111-111111111111")
-    UserId = "alice"
+    UserId = UserId "alice"
     SourceConvActiveModule = Some "Dashboard"
     TargetModule = target
     TargetModules = Option.toList target
@@ -410,7 +410,7 @@ let tests =
                 let row = soleRow h
                 Expect.equal row.ConversationId (Some h.ConversationId) "the conversation it belonged to"
                 Expect.equal row.SourceConvActiveModule (Some "Dashboard") "the 'from' half of cross-module"
-                Expect.equal row.UserId "alice" "the caller"
+                Expect.equal row.UserId (UserId "alice") "the caller"
 
             testCase "no active module stamped reads as None, not as a guess"
             <| fun _ ->

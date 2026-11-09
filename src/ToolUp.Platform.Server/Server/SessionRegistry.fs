@@ -323,7 +323,7 @@ type BlobBackedSessionRegistry
 
                 return
                     records
-                    |> List.filter (fun r -> r.UserId = userId && not (isExpired at r))
+                    |> List.filter (fun r -> r.UserId = userId.Value && not (isExpired at r))
                     |> Ok
         }
 
@@ -341,7 +341,7 @@ type BlobBackedSessionRegistry
                         // original revocation's timestamp and actor, so a
                         // repeat call is a no-op write rather than a
                         // rewriting of history.
-                        let revoked = SessionRecord.revoke (now ()) actorUserId record
+                        let revoked = SessionRecord.revoke (now ()) actorUserId.Value record
                         return! write revoked scope
         }
 
@@ -352,13 +352,14 @@ type BlobBackedSessionRegistry
                 let! records = readScope scope
 
                 let active =
-                    records |> List.filter (fun r -> r.UserId = userId && SessionRecord.isActive r)
+                    records
+                    |> List.filter (fun r -> r.UserId = userId.Value && SessionRecord.isActive r)
 
                 let at = now ()
 
                 let! results =
                     active
-                    |> List.map (fun r -> write (SessionRecord.revoke at actorUserId r) scope)
+                    |> List.map (fun r -> write (SessionRecord.revoke at actorUserId.Value r) scope)
                     |> fun xs -> Async.Parallel(xs, 16)
 
                 // Count what actually landed, not what was attempted: the

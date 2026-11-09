@@ -1143,7 +1143,7 @@ let uploadDocumentCore
                         audit.Record(
                             deps.Scope.ScopeId,
                             ContentScanned {
-                                UserId = deps.UserId
+                                UserId = UserId deps.UserId
                                 ScopeId = deps.Scope.ScopeId
                                 ScannerName = scanner.Name
                                 FileName = safeName
@@ -1202,7 +1202,7 @@ let uploadDocumentCore
                             audit.Record(
                                 deps.Scope.ScopeId,
                                 KnowledgeDocumentDeduplicated {
-                                    UserId = deps.UserId
+                                    UserId = UserId deps.UserId
                                     ScopeId = deps.Scope.ScopeId
                                     ExistingDocumentId = existing.Id
                                     FileName = safeName
@@ -1934,7 +1934,7 @@ let private getOriginalDocumentCore
             recordOriginalAccessAudit
                 deps
                 (KnowledgeOriginalRetrievalDenied {
-                    UserId = deps.UserId
+                    UserId = UserId deps.UserId
                     DocumentId = docId
                     ScopeId = deps.Scope.ScopeId
                     Reason = reason
@@ -1991,7 +1991,7 @@ let private getOriginalDocumentCore
                             recordOriginalAccessAudit
                                 deps
                                 (KnowledgeOriginalRetrieved {
-                                    UserId = deps.UserId
+                                    UserId = UserId deps.UserId
                                     DocumentId = doc.Id
                                     ScopeId = deps.Scope.ScopeId
                                     SourceKind = sourceKindName doc.Source
@@ -2085,7 +2085,7 @@ let getOriginalDelivery
                 recordOriginalAccessAudit
                     deps
                     (KnowledgeOriginalRetrievalDenied {
-                        UserId = deps.UserId
+                        UserId = UserId deps.UserId
                         DocumentId = docId
                         ScopeId = deps.Scope.ScopeId
                         Reason = reason
@@ -2143,7 +2143,7 @@ let getOriginalDelivery
                                 recordOriginalAccessAudit
                                     deps
                                     (KnowledgeOriginalRetrieved {
-                                        UserId = deps.UserId
+                                        UserId = UserId deps.UserId
                                         DocumentId = doc.Id
                                         ScopeId = deps.Scope.ScopeId
                                         SourceKind = sourceKindName doc.Source

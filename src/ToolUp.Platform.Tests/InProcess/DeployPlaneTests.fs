@@ -231,7 +231,7 @@ type InMemoryDeployPipeline() =
                 State = DeployQueued
                 StartedAt = DateTime.UtcNow
                 StateChangedAt = DateTime.UtcNow
-                SubmittedBy = byUserId
+                SubmittedBy = byUserId.Value
             }
 
             deploys[id] <- summary
@@ -356,7 +356,7 @@ type DeployPlaneJobScheduler(dispatchOnTrigger: bool) =
                         let ctx: JobContext = {
                             JobId = jobId
                             ScopeId = registration.ScopeId
-                            AccessContext = AccessContext.unrestricted (AuthenticatedUser byUserId)
+                            AccessContext = AccessContext.unrestricted (AuthenticatedUser byUserId.Value)
                             Attempt = 1
                             Trigger = registration.Trigger
                             Scope = ToolUp.Platform.ResolvedScope.anonymous
@@ -978,7 +978,7 @@ let defaultPipelineRollbackTests =
         =
         async {
             let! buildId1 = enqueueBuild orchestrator slug (sprintf "registry/%s:v1" slug)
-            let! begun1 = pipeline.BeginDeploy(tenant, buildId1, mkBuildManifest slug, "alice")
+            let! begun1 = pipeline.BeginDeploy(tenant, buildId1, mkBuildManifest slug, UserId "alice")
 
             match begun1 with
             | Error e -> return failtestf "BeginDeploy v1: %A" e
@@ -994,7 +994,7 @@ let defaultPipelineRollbackTests =
                 do! Async.Sleep 15
 
                 let! buildId2 = enqueueBuild orchestrator slug (sprintf "registry/%s:v2" slug)
-                let! begun2 = pipeline.BeginDeploy(tenant, buildId2, mkBuildManifest slug, "alice")
+                let! begun2 = pipeline.BeginDeploy(tenant, buildId2, mkBuildManifest slug, UserId "alice")
 
                 match begun2 with
                 | Error e -> return failtestf "BeginDeploy v2: %A" e
@@ -1034,7 +1034,7 @@ let defaultPipelineRollbackTests =
 
             do! seedTwoDeploys pipeline orchestrator tenant slug
 
-            let! rolled = pipeline.Rollback(tenant, "operator-1")
+            let! rolled = pipeline.Rollback(tenant, UserId "operator-1")
 
             match rolled with
             | Error e -> failtestf "Rollback: expected Ok, got %A" e
@@ -1069,7 +1069,7 @@ let defaultPipelineRollbackTests =
             let! before = (flaky :> IContainerScheduler).ListContainers(Some tenant)
 
             flaky.FailLaunches <- true
-            let! rolled = pipeline.Rollback(tenant, "operator-1")
+            let! rolled = pipeline.Rollback(tenant, UserId "operator-1")
 
             match rolled with
             | Ok id -> failtestf "expected the failed relaunch to surface as Error, got Ok %s" id

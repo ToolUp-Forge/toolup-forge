@@ -108,7 +108,7 @@ let private headerAuthTests =
             let provider = HeaderAuthProvider.HeaderAuthProvider() :> IAuthProvider
             let! user = provider.GetUser(mkContext () |> toReq)
 
-            Expect.equal user.UserId "anonymous" "no header → anonymous"
+            Expect.equal user.UserId (UserId "anonymous") "no header → anonymous"
         }
 
         testCaseAsync "GetUser populates UserId from X-User-Id header"
@@ -117,7 +117,7 @@ let private headerAuthTests =
             let ctx = mkContext () |> withHeader "X-User-Id" "alice" |> toReq
             let! user = provider.GetUser ctx
 
-            Expect.equal user.UserId "alice" "UserId comes from header"
+            Expect.equal user.UserId (UserId "alice") "UserId comes from header"
             Expect.equal user.DisplayName "alice" "DisplayName defaults to UserId"
         }
 
@@ -183,7 +183,7 @@ let private staticJwtTests =
             match! p.ValidateRequest(bearerCtx token) with
             | Error e -> failtestf "Expected Ok; got Error: %s" e
             | Ok user ->
-                Expect.equal user.UserId "alice" "UserId from sub"
+                Expect.equal user.UserId (UserId "alice") "UserId from sub"
                 Expect.equal user.DisplayName "Alice" "DisplayName from name"
                 Expect.equal user.Email (Some "alice@example.com") "Email from email"
         }
@@ -194,7 +194,7 @@ let private staticJwtTests =
             let token = JwtMinter.mint testSecret [ "sub", box "bob"; "exp", futureExp () ]
             let! user = p.GetUser(bearerCtx token)
 
-            Expect.equal user.UserId "bob" "UserId from valid token"
+            Expect.equal user.UserId (UserId "bob") "UserId from valid token"
         }
 
         testCaseAsync "GetUser lenient: missing token returns anonymous"
@@ -202,7 +202,7 @@ let private staticJwtTests =
             let p = provider defaultConfig
             let! user = p.GetUser(mkContext () |> toReq)
 
-            Expect.equal user.UserId "anonymous" "no token → anonymous"
+            Expect.equal user.UserId (UserId "anonymous") "no token → anonymous"
         }
 
         testCaseAsync "Rejects expired tokens"
@@ -253,7 +253,7 @@ let private staticJwtTests =
 
             match! p.ValidateRequest(bearerCtx token) with
             | Error e -> failtestf "Expected Ok for past nbf; got Error: %s" e
-            | Ok user -> Expect.equal user.UserId "alice" "valid nbf accepted"
+            | Ok user -> Expect.equal user.UserId (UserId "alice") "valid nbf accepted"
         }
 
         testCaseAsync "Rejects tokens signed with a different secret"
@@ -323,7 +323,7 @@ let private staticJwtTests =
 
             match! p.ValidateRequest(bearerCtx token) with
             | Error e -> failtestf "Expected Ok with matching claims; got Error: %s" e
-            | Ok user -> Expect.equal user.UserId "alice" "claims matched"
+            | Ok user -> Expect.equal user.UserId (UserId "alice") "claims matched"
         }
 
         testCaseAsync "Rejects malformed token"
@@ -596,7 +596,7 @@ let private oidcTests =
             match! p.ValidateRequest(bearerCtx token) with
             | Error e -> failtestf "Expected Ok; got Error: %s" e
             | Ok user ->
-                Expect.equal user.UserId "alice" "UserId from sub"
+                Expect.equal user.UserId (UserId "alice") "UserId from sub"
                 Expect.equal user.DisplayName "Alice" "DisplayName from name"
                 Expect.equal user.Email (Some "alice@example.com") "Email from email"
         }
@@ -613,7 +613,7 @@ let private oidcTests =
 
             match! p.ValidateRequest(bearerCtx token) with
             | Error e -> failtestf "Expected Ok; got Error: %s" e
-            | Ok user -> Expect.equal user.UserId "bob" "UserId from sub via discovery flow"
+            | Ok user -> Expect.equal user.UserId (UserId "bob") "UserId from sub via discovery flow"
         }
 
         testCaseAsync "Phase 134: refuses a cleartext (http) discovered jwks_uri"
@@ -685,7 +685,7 @@ let private oidcTests =
 
             match! p.ValidateRequest(bearerCtx token) with
             | Error e -> failtestf "loopback-http discovered jwks_uri should be permitted; got Error: %s" e
-            | Ok user -> Expect.equal user.UserId "devuser" "loopback dev IdP validates"
+            | Ok user -> Expect.equal user.UserId (UserId "devuser") "loopback dev IdP validates"
         }
 
         testCaseAsync "GetUser lenient: valid token returns the user"
@@ -695,7 +695,7 @@ let private oidcTests =
             let token = OidcFixture.mintRs256 key [ "sub", box "carol"; "exp", futureExp () ]
             let! user = p.GetUser(bearerCtx token)
 
-            Expect.equal user.UserId "carol" "UserId from valid token"
+            Expect.equal user.UserId (UserId "carol") "UserId from valid token"
         }
 
         testCaseAsync "GetUser lenient: missing token returns anonymous"
@@ -704,7 +704,7 @@ let private oidcTests =
             let p = mkProviderExplicit key None None
             let! user = p.GetUser(mkContext () |> toReq)
 
-            Expect.equal user.UserId "anonymous" "no token → anonymous"
+            Expect.equal user.UserId (UserId "anonymous") "no token → anonymous"
         }
 
         testCaseAsync "Rejects expired tokens"
@@ -783,7 +783,7 @@ let private oidcTests =
 
             match! p.ValidateRequest(bearerCtx token) with
             | Error e -> failtestf "Expected Ok with matching claims; got Error: %s" e
-            | Ok user -> Expect.equal user.UserId "alice" "claims matched"
+            | Ok user -> Expect.equal user.UserId (UserId "alice") "claims matched"
         }
 
         testCaseAsync "Rejects tokens with unknown kid"
@@ -916,7 +916,7 @@ let private oidcTests =
 
             match! p.ValidateRequest(bearerCtx token) with
             | Error e -> failtestf "Expected Ok for RS384; got Error: %s" e
-            | Ok user -> Expect.equal user.UserId "alice" "RS384-signed token validated"
+            | Ok user -> Expect.equal user.UserId (UserId "alice") "RS384-signed token validated"
         }
 
         testCaseAsync "RS512 token validates when whitelist includes RS512"
@@ -944,7 +944,7 @@ let private oidcTests =
 
             match! p.ValidateRequest(bearerCtx token) with
             | Error e -> failtestf "Expected Ok for RS512; got Error: %s" e
-            | Ok user -> Expect.equal user.UserId "alice" "RS512-signed token validated"
+            | Ok user -> Expect.equal user.UserId (UserId "alice") "RS512-signed token validated"
         }
 
         testCaseAsync "PS256 token validates when whitelist includes PS256"
@@ -975,7 +975,7 @@ let private oidcTests =
 
             match! p.ValidateRequest(bearerCtx token) with
             | Error e -> failtestf "Expected Ok for PS256; got Error: %s" e
-            | Ok user -> Expect.equal user.UserId "alice" "PS256-signed token validated"
+            | Ok user -> Expect.equal user.UserId (UserId "alice") "PS256-signed token validated"
         }
 
         testCaseAsync "ES256 token validates when whitelist includes ES256 (EC JWKS)"
@@ -1004,7 +1004,7 @@ let private oidcTests =
 
             match! p.ValidateRequest(bearerCtx token) with
             | Error e -> failtestf "Expected Ok for ES256; got Error: %s" e
-            | Ok user -> Expect.equal user.UserId "alice" "ES256-signed token validated"
+            | Ok user -> Expect.equal user.UserId (UserId "alice") "ES256-signed token validated"
         }
 
         testCaseAsync "ES256 token rejected when whitelist is [RS256] (operator trust set wins)"
@@ -1081,7 +1081,7 @@ let private oidcTests =
 
             match! p.ValidateRequest(bearerCtx token) with
             | Error e -> failtestf "matching azp should validate; got Error: %s" e
-            | Ok user -> Expect.equal user.UserId "alice" "multi-aud + matching azp accepted"
+            | Ok user -> Expect.equal user.UserId (UserId "alice") "multi-aud + matching azp accepted"
         }
 
         testCaseAsync "Rejects a multi-audience token whose azp names a different party"
@@ -1115,7 +1115,7 @@ let private oidcTests =
 
             match! p.ValidateRequest(bearerCtx token) with
             | Error e -> failtestf "single-audience token should validate without azp; got Error: %s" e
-            | Ok user -> Expect.equal user.UserId "alice" "single-aud unchanged"
+            | Ok user -> Expect.equal user.UserId (UserId "alice") "single-aud unchanged"
         }
 
         // ─── Phase 341 — iat-based maximum token age ─────────────────
@@ -1188,7 +1188,7 @@ let private oidcTests =
 
             match! p.ValidateRequest(bearerCtx token) with
             | Error e -> failtestf "fresh token within max age should validate; got Error: %s" e
-            | Ok user -> Expect.equal user.UserId "alice" "fresh token accepted"
+            | Ok user -> Expect.equal user.UserId (UserId "alice") "fresh token accepted"
         }
 
         testCaseAsync "Rejects a token with no iat when a max age is configured"
@@ -1236,7 +1236,7 @@ let private oidcTests =
 
             match! p.ValidateRequest(bearerCtx token) with
             | Error e -> failtestf "old iat with no max age should validate; got Error: %s" e
-            | Ok user -> Expect.equal user.UserId "alice" "iat ignored without a max-age bound"
+            | Ok user -> Expect.equal user.UserId (UserId "alice") "iat ignored without a max-age bound"
         }
     ]
 
@@ -1340,7 +1340,7 @@ let private oidcMetricsTests =
 
             match! provider.ValidateRequest(bearerCtx token) with
             | Error e -> failtestf "Expected Ok; got Error: %s" e
-            | Ok user -> Expect.equal user.UserId "alice" "validation succeeds without a sink"
+            | Ok user -> Expect.equal user.UserId (UserId "alice") "validation succeeds without a sink"
         }
 
         testCaseAsync "Two provider instances bind independent sinks (no cross-instance pollution)"
@@ -1845,7 +1845,7 @@ module private ClaimMappingFixture =
     /// The inner provider's already-sanitised output — the value the
     /// removed companion fell back to and the seam does not.
     let innerUser: AuthenticatedUser = {
-        UserId = "inner-sanitised-subject"
+        UserId = UserId "inner-sanitised-subject"
         DisplayName = "Inner Display Name"
         Email = Some "inner@example.com"
         TenantId = Some "inner-tenant"
@@ -1939,7 +1939,7 @@ let private oidcClaimMappingTests =
             match! p.ValidateRequest(bearerCtx token) with
             | Error e -> failtestf "Expected Ok; got Error: %s" e
             | Ok user ->
-                Expect.equal user.UserId "alice" "UserId still comes from `sub`"
+                Expect.equal user.UserId (UserId "alice") "UserId still comes from `sub`"
 
                 Expect.equal
                     user.TenantId
@@ -1995,7 +1995,7 @@ let private oidcClaimMappingTests =
             match! p.ValidateRequest(bearerCtx token) with
             | Error e -> failtestf "Expected Ok; got Error: %s" e
             | Ok user ->
-                Expect.equal user.UserId "stable-object-id" "UserId comes from the mapped `oid`, not `sub`"
+                Expect.equal user.UserId (UserId "stable-object-id") "UserId comes from the mapped `oid`, not `sub`"
                 Expect.equal user.TenantId (Some "home-tenant") "TenantId comes from the mapped `tid`"
                 Expect.equal user.DisplayName "Alice" "unmapped claims are resolved exactly as before"
         }
@@ -2027,7 +2027,8 @@ let private oidcClaimMappingTests =
 
             match! p.ValidateRequest(bearerCtx token) with
             | Error e -> failtestf "Expected Ok; got Error: %s" e
-            | Ok user -> Expect.equal user.UserId "alice" "mapping `sub` onto UserId is the identity projection"
+            | Ok user ->
+                Expect.equal user.UserId (UserId "alice") "mapping `sub` onto UserId is the identity projection"
         }
 
         // ─── Fail-closed: every way a named claim can be unusable ────
@@ -2059,7 +2060,7 @@ let private oidcClaimMappingTests =
             let token = OidcFixture.mintRs256 key [ "sub", box "alice"; "exp", futureExp () ]
 
             match! p.ValidateRequest(bearerCtx token) with
-            | Ok user -> failtestf "expected a fail-closed rejection; got Ok with UserId '%s'" user.UserId
+            | Ok user -> failtestf "expected a fail-closed rejection; got Ok with UserId '%s'" user.UserId.Value
             | Error message ->
                 Expect.stringContains message "oid" "the rejection names the claim that could not be honoured"
 
@@ -2132,7 +2133,8 @@ let private oidcClaimMappingTests =
                         (ClaimMappingFixture.tokenRawJson payload)
                         ClaimMappingFixture.innerUser
                 with
-                | Ok user -> failtestf "expected rejection for a %s claim; got UserId '%s'" expectedKind user.UserId
+                | Ok user ->
+                    failtestf "expected rejection for a %s claim; got UserId '%s'" expectedKind user.UserId.Value
                 | Error(claim, reason) ->
                     Expect.equal claim "oid" "the failure is attributed to the mapped claim"
 
@@ -2159,7 +2161,7 @@ let private oidcClaimMappingTests =
                     }
                     [ "oid", "" ]
             with
-            | Ok user -> failtestf "expected rejection for an empty claim; got UserId '%s'" user.UserId
+            | Ok user -> failtestf "expected rejection for an empty claim; got UserId '%s'" user.UserId.Value
             | Error(claim, reason) ->
                 Expect.equal claim "oid" "the failure is attributed to the mapped claim"
                 Expect.stringContains reason "empty" "the reason distinguishes empty from absent"
@@ -2191,7 +2193,7 @@ let private oidcClaimMappingTests =
                         }
                         [ "oid", value ]
                 with
-                | Ok user -> failtestf "expected rejection for a %s; got UserId '%s'" description user.UserId
+                | Ok user -> failtestf "expected rejection for a %s; got UserId '%s'" description user.UserId.Value
                 | Error(claim, _) -> Expect.equal claim "oid" $"the {description} rejection names the mapped claim"
 
         testCase "a well-formed mapped claim survives byte-for-byte"
@@ -2218,7 +2220,7 @@ let private oidcClaimMappingTests =
                 with
                 | Error(claim, reason) -> failtestf "a %s was refused on '%s': %s" description claim reason
                 | Ok user ->
-                    Expect.equal user.UserId value $"a well-formed {description} reaches UserId unchanged"
+                    Expect.equal user.UserId (UserId value) $"a well-formed {description} reaches UserId unchanged"
                     Expect.equal user.TenantId (Some value) $"a well-formed {description} reaches TenantId unchanged"
 
         testCase "a failing TenantId mapping rejects even when the UserId mapping succeeded"
@@ -2228,7 +2230,7 @@ let private oidcClaimMappingTests =
             // exactly the half-configured identity fail-closed exists to
             // refuse.
             match ClaimMappingFixture.seamMapped ClaimMappingFixture.entraShaped [ "oid", "stable-object-id" ] with
-            | Ok user -> failtestf "expected rejection; got a partially-mapped user (UserId '%s')" user.UserId
+            | Ok user -> failtestf "expected rejection; got a partially-mapped user (UserId '%s')" user.UserId.Value
             | Error(claim, _) -> Expect.equal claim "tid" "the failure is attributed to the claim that was missing"
 
         // ─── The removed companion's recorded behaviour (Phase 749) ──
@@ -2260,7 +2262,7 @@ let private oidcClaimMappingTests =
                 | Error(claim, reason) ->
                     failtestf "seam refused the parity vector (%s) on '%s': %s" description claim reason
                 | Ok seam ->
-                    Expect.equal seam.UserId expectedUserId $"UserId parity on {description}"
+                    Expect.equal seam.UserId (UserId expectedUserId) $"UserId parity on {description}"
                     Expect.equal seam.TenantId (Some expectedTenantId) $"TenantId parity on {description}"
 
         testCase "PARITY — the control vector is genuinely mapped, not merely agreed on"
@@ -2280,7 +2282,7 @@ let private oidcClaimMappingTests =
                     ClaimMappingFixture.innerUser.UserId
                     "the seam genuinely overrides the inner UserId, as the companion did"
 
-                Expect.equal seam.UserId "entra-object-id" "the seam projects the claim, not the inner subject"
+                Expect.equal seam.UserId (UserId "entra-object-id") "the seam projects the claim, not the inner subject"
                 Expect.equal seam.TenantId (Some "entra-tenant") "the seam genuinely overrides the inner TenantId"
 
         testCase "DIVERGENCE — the seam is fail-closed exactly where the companion fell back"
@@ -2320,7 +2322,7 @@ let private oidcClaimMappingTests =
                     failtestf
                         "the seam must reject where the companion fell back (%s); got UserId '%s'"
                         description
-                        user.UserId
+                        user.UserId.Value
                 | Error(claim, _) -> Expect.equal claim "oid" $"the rejection names `oid` ({description})"
 
         testCase "the seam never resolves an identity the companion would have refused"
@@ -2347,7 +2349,7 @@ let private oidcClaimMappingTests =
                         }
                         [ "oid", value ]
                 with
-                | Ok user -> failtestf "the seam accepted a %s as UserId '%s'" description user.UserId
+                | Ok user -> failtestf "the seam accepted a %s as UserId '%s'" description user.UserId.Value
                 | Error _ -> ()
     ]
 

@@ -308,7 +308,7 @@ let tests (name: string) (factory: unit -> SparseIndexHarness) =
                 do! index.Upsert a "c3" (chunk "billing ticket closed")
                 do! index.Upsert b "c1" (chunk "ticket raised by subject-x7 about billing")
 
-                let! dry = index.Erase(a, "subject-x7", ErasurePolicy.HardDelete, true)
+                let! dry = index.Erase(a, UserId "subject-x7", ErasurePolicy.HardDelete, true)
 
                 match dry with
                 | Ok summary -> Expect.equal summary.RecordsAffected 2 "dry run counts content and metadata matches"
@@ -317,7 +317,7 @@ let tests (name: string) (factory: unit -> SparseIndexHarness) =
                 let! beforeErase = index.Search [ a ] "billing" 10
                 Expect.equal beforeErase.Length 3 "a dry run deletes nothing"
 
-                let! erased = index.Erase(a, "subject-x7", ErasurePolicy.HardDelete, false)
+                let! erased = index.Erase(a, UserId "subject-x7", ErasurePolicy.HardDelete, false)
 
                 match erased with
                 | Ok summary -> Expect.equal summary.RecordsAffected 2 "both matches erased"
@@ -333,7 +333,7 @@ let tests (name: string) (factory: unit -> SparseIndexHarness) =
             <| fun _ index -> async {
                 let a, _, _ = freshScopes ()
                 do! index.Upsert a "c1" (chunk "anything at all")
-                let! result = index.Erase(a, "  ", ErasurePolicy.HardDelete, false)
+                let! result = index.Erase(a, UserId "  ", ErasurePolicy.HardDelete, false)
 
                 match result with
                 | Ok summary -> Expect.equal summary.RecordsAffected 0 "nothing affected"

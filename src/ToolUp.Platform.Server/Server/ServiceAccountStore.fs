@@ -262,7 +262,7 @@ type BlobServiceAccountStore(storage: IBlobStorage, audit: IAuditLog option, log
                     recordAudit
                         account.ScopeId
                         (AuditEvent.ServiceAccountCreated {
-                            UserId = request.CreatedBy
+                            UserId = UserId request.CreatedBy
                             AccountId = account.AccountId
                             DisplayName = account.DisplayName
                             Modules = moduleNames account.Permissions
@@ -293,7 +293,7 @@ type BlobServiceAccountStore(storage: IBlobStorage, audit: IAuditLog option, log
                     recordAudit
                         scopeId
                         (AuditEvent.ServiceAccountStatusChanged {
-                            UserId = actorUserId
+                            UserId = UserId actorUserId.Value
                             AccountId = accountId
                             Disabled = (status = ServiceAccountStatus.Disabled)
                         })
@@ -319,7 +319,7 @@ type BlobServiceAccountStore(storage: IBlobStorage, audit: IAuditLog option, log
                         recordAudit
                             scopeId
                             (AuditEvent.ServiceAccountPermissionsChanged {
-                                UserId = actorUserId
+                                UserId = UserId actorUserId.Value
                                 AccountId = accountId
                                 PreviousModules = moduleNames account.Permissions
                                 Modules = moduleNames permissions
@@ -385,7 +385,7 @@ type BlobServiceAccountStore(storage: IBlobStorage, audit: IAuditLog option, log
                         recordAudit
                             account.ScopeId
                             (AuditEvent.ServiceAccountTokenMinted {
-                                UserId = request.IssuedBy
+                                UserId = UserId request.IssuedBy
                                 AccountId = account.AccountId
                                 TokenId = tokenId
                                 DisplayName = request.DisplayName
@@ -420,7 +420,7 @@ type BlobServiceAccountStore(storage: IBlobStorage, audit: IAuditLog option, log
                     recordAudit
                         scopeId
                         (AuditEvent.ServiceAccountTokenRevoked {
-                            UserId = actorUserId
+                            UserId = UserId actorUserId.Value
                             AccountId = token.AccountId
                             TokenId = tokenId
                         })

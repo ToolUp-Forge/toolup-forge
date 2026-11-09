@@ -1308,7 +1308,7 @@ let getStoreForUser
     (runtime: FileManagementRuntime)
     (userId: string)
     =
-    let scope = StorageScope.ofKey true (ScopeKey.User userId)
+    let scope = StorageScope.ofKey true (ScopeKey.User(UserId userId))
 
     getStore dataTypes dataObjectStore runtime scope
 
@@ -1480,7 +1480,7 @@ let fileManagementApi (ctx: HttpContext) : FileManagementApi =
             | TeamMember(userId, teamId) ->
                 match ctx.RequestServices.GetService(typeof<ITeamStore>) with
                 | :? ITeamStore as ts ->
-                    let! role = ts.GetMemberRole(teamId, userId)
+                    let! role = ts.GetMemberRole(TeamId teamId, UserId userId)
 
                     match role with
                     | Some r when TeamRoles.canWriteTeamConfig r -> return Ok()
@@ -1503,7 +1503,7 @@ let fileManagementApi (ctx: HttpContext) : FileManagementApi =
                 | Ok response ->
                     recordAudit (
                         FileUploaded {
-                            UserId = userId
+                            UserId = UserId userId
                             FileName = response.FileInfo.FileName
                             DataType = response.FileInfo.DataType
                             SizeBytes = response.FileInfo.SizeBytes
@@ -1532,7 +1532,13 @@ let fileManagementApi (ctx: HttpContext) : FileManagementApi =
                 let! result = store.DeleteFile(fileName)
 
                 match result with
-                | Ok() -> recordAudit (FileDeleted { UserId = userId; FileName = fileName })
+                | Ok() ->
+                    recordAudit (
+                        FileDeleted {
+                            UserId = UserId userId
+                            FileName = fileName
+                        }
+                    )
                 | Error _ -> ()
 
                 return result
@@ -1546,7 +1552,7 @@ let fileManagementApi (ctx: HttpContext) : FileManagementApi =
                 | Ok entry ->
                     recordAudit (
                         FileReprocessed {
-                            UserId = userId
+                            UserId = UserId userId
                             FileName = entry.FileName
                             DataType = entry.DataType
                             HadError = entry.Error.IsSome
@@ -1585,7 +1591,7 @@ let fileManagementApi (ctx: HttpContext) : FileManagementApi =
 
                     recordAudit (
                         DataStoreReset {
-                            UserId = userId
+                            UserId = UserId userId
                             FileCount = fileCount
                         }
                     )

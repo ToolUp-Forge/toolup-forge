@@ -388,15 +388,15 @@ ToolUp.Platform.Jobs.IEntityLockStore.GetHolder(System.String, ToolUp.Platform.E
 ToolUp.Platform.Jobs.IEntityLockStore.Release(System.String, ToolUp.Platform.EntityLockRef, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.Jobs.IEntityLockStore.Renew(System.String, ToolUp.Platform.EntityLockRef, System.String, System.TimeSpan) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.LockOutcome]
 ToolUp.Platform.Jobs.IExternalContactStore (interface)
-ToolUp.Platform.Jobs.IExternalContactStore.Create(System.String, System.String, ToolUp.Platform.ContactOwner, ToolUp.Platform.CreateExternalContactRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ExternalContact, ToolUp.Platform.ExternalContactError]]
-ToolUp.Platform.Jobs.IExternalContactStore.Delete(System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.NotificationKind+SinkKind], ToolUp.Platform.ExternalContactError]]
+ToolUp.Platform.Jobs.IExternalContactStore.Create(System.String, ToolUp.Platform.UserId, ToolUp.Platform.ContactOwner, ToolUp.Platform.CreateExternalContactRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ExternalContact, ToolUp.Platform.ExternalContactError]]
+ToolUp.Platform.Jobs.IExternalContactStore.Delete(System.String, ToolUp.Platform.UserId, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.NotificationKind+SinkKind], ToolUp.Platform.ExternalContactError]]
 ToolUp.Platform.Jobs.IExternalContactStore.Get(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ExternalContact, ToolUp.Platform.ExternalContactError]]
 ToolUp.Platform.Jobs.IExternalContactStore.List(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ExternalContact]]
 ToolUp.Platform.Jobs.IExternalContactStore.ListByOwner(System.String, ToolUp.Platform.ContactOwner) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ExternalContact]]
 ToolUp.Platform.Jobs.IExternalContactStore.RecordInbound(System.String, System.String, System.DateTime) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ExternalContact, ToolUp.Platform.ExternalContactError]]
-ToolUp.Platform.Jobs.IExternalContactStore.RecordOptIn(System.String, System.String, System.String, ToolUp.Platform.NotificationKind+SinkKind, ToolUp.Platform.OptInRecord) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ExternalContact, ToolUp.Platform.ExternalContactError]]
-ToolUp.Platform.Jobs.IExternalContactStore.Update(System.String, System.String, ToolUp.Platform.UpdateExternalContactRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ExternalContact, ToolUp.Platform.ExternalContactError]]
-ToolUp.Platform.Jobs.IExternalContactStore.WithdrawOptIn(System.String, System.String, System.String, ToolUp.Platform.NotificationKind+SinkKind, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ExternalContact, ToolUp.Platform.ExternalContactError]]
+ToolUp.Platform.Jobs.IExternalContactStore.RecordOptIn(System.String, ToolUp.Platform.UserId, System.String, ToolUp.Platform.NotificationKind+SinkKind, ToolUp.Platform.OptInRecord) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ExternalContact, ToolUp.Platform.ExternalContactError]]
+ToolUp.Platform.Jobs.IExternalContactStore.Update(System.String, ToolUp.Platform.UserId, ToolUp.Platform.UpdateExternalContactRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ExternalContact, ToolUp.Platform.ExternalContactError]]
+ToolUp.Platform.Jobs.IExternalContactStore.WithdrawOptIn(System.String, ToolUp.Platform.UserId, System.String, ToolUp.Platform.NotificationKind+SinkKind, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ExternalContact, ToolUp.Platform.ExternalContactError]]
 ToolUp.Platform.Jobs.IJobHandler (interface)
 ToolUp.Platform.Jobs.IJobHandler.Execute(ToolUp.Platform.JobContext) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.JobResult]
 ToolUp.Platform.Jobs.IJobProgressSink (interface)
@@ -414,7 +414,7 @@ ToolUp.Platform.Jobs.IJobScheduler.RegisterHandler(System.String, ToolUp.Platfor
 ToolUp.Platform.Jobs.IJobScheduler.RegisterHandlerAsync(System.String, ToolUp.Platform.Jobs.IJobHandler) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.Jobs.IJobScheduler.Schedule(ToolUp.Platform.JobRegistration) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Jobs.ScheduleOutcome, ToolUp.Platform.ScheduleError]]
 ToolUp.Platform.Jobs.IJobScheduler.Schedule(ToolUp.Platform.ResolvedScope, ToolUp.Platform.JobRegistration) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Jobs.ScheduleOutcome, ToolUp.Platform.ScheduleError]]
-ToolUp.Platform.Jobs.IJobScheduler.TriggerOnce(System.String, System.Guid, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.Jobs.TriggerError]]
+ToolUp.Platform.Jobs.IJobScheduler.TriggerOnce(System.String, System.Guid, ToolUp.Platform.UserId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.Jobs.TriggerError]]
 ToolUp.Platform.Jobs.IJobScopeReissue (interface)
 ToolUp.Platform.Jobs.IJobScopeReissue.ReissueScope(ToolUp.Platform.ResolvedScope, System.String, System.Guid) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.Jobs.ScopeReissueError]]
 ToolUp.Platform.Jobs.IJobStore (interface)
@@ -452,23 +452,23 @@ ToolUp.Platform.Jobs.INotificationAddressBook.ResolvePushTokens(ToolUp.Platform.
 ToolUp.Platform.Jobs.INotificationAddressBook.ResolveWhatsApp(ToolUp.Platform.RecipientId, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[System.String]]
 ToolUp.Platform.Jobs.INotificationPreferenceStore (interface)
 ToolUp.Platform.Jobs.INotificationPreferenceStore.Enqueue(System.String, ToolUp.Platform.PendingNotification) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
-ToolUp.Platform.Jobs.INotificationPreferenceStore.GetDigestWatermarks(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.DateTime]]
-ToolUp.Platform.Jobs.INotificationPreferenceStore.GetPreferences(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.UserNotificationPreferences, System.String]]
-ToolUp.Platform.Jobs.INotificationPreferenceStore.ListPending(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PendingNotification]]
+ToolUp.Platform.Jobs.INotificationPreferenceStore.GetDigestWatermarks(System.String, ToolUp.Platform.UserId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.DateTime]]
+ToolUp.Platform.Jobs.INotificationPreferenceStore.GetPreferences(System.String, ToolUp.Platform.UserId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.UserNotificationPreferences, System.String]]
+ToolUp.Platform.Jobs.INotificationPreferenceStore.ListPending(System.String, ToolUp.Platform.UserId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PendingNotification]]
 ToolUp.Platform.Jobs.INotificationPreferenceStore.ListPendingUsers(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]
 ToolUp.Platform.Jobs.INotificationPreferenceStore.ListScopesWithPending() : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]
-ToolUp.Platform.Jobs.INotificationPreferenceStore.Remove(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Guid]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
-ToolUp.Platform.Jobs.INotificationPreferenceStore.SavePreferences(System.String, System.String, ToolUp.Platform.UserNotificationPreferences) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
-ToolUp.Platform.Jobs.INotificationPreferenceStore.SetDigestWatermark(System.String, System.String, ToolUp.Platform.DigestFrequency, System.DateTime) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.Platform.Jobs.INotificationPreferenceStore.Remove(System.String, ToolUp.Platform.UserId, Microsoft.FSharp.Collections.FSharpList`1[System.Guid]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.Platform.Jobs.INotificationPreferenceStore.SavePreferences(System.String, ToolUp.Platform.UserId, ToolUp.Platform.UserNotificationPreferences) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.Platform.Jobs.INotificationPreferenceStore.SetDigestWatermark(System.String, ToolUp.Platform.UserId, ToolUp.Platform.DigestFrequency, System.DateTime) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.Jobs.INotificationSink (interface)
 ToolUp.Platform.Jobs.INotificationSink.Kind : ToolUp.Platform.NotificationKind+SinkKind { get }
 ToolUp.Platform.Jobs.INotificationSink.Provider : System.String { get }
 ToolUp.Platform.Jobs.INotificationSink.Send(System.String, ToolUp.Platform.NotificationEnvelope) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.Jobs.SinkResult]
 ToolUp.Platform.Jobs.IPresenceTracker (interface)
-ToolUp.Platform.Jobs.IPresenceTracker.Heartbeat(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
-ToolUp.Platform.Jobs.IPresenceTracker.Join(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.PresenceLocation) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
-ToolUp.Platform.Jobs.IPresenceTracker.Leave(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
-ToolUp.Platform.Jobs.IPresenceTracker.Move(System.String, System.String, ToolUp.Platform.PresenceLocation) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.Jobs.IPresenceTracker.Heartbeat(System.String, ToolUp.Platform.UserId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.Jobs.IPresenceTracker.Join(System.String, ToolUp.Platform.UserId, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.PresenceLocation) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.Jobs.IPresenceTracker.Leave(System.String, ToolUp.Platform.UserId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.Jobs.IPresenceTracker.Move(System.String, ToolUp.Platform.UserId, ToolUp.Platform.PresenceLocation) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.Jobs.IPresenceTracker.Roster(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PresencePeer]]
 ToolUp.Platform.Jobs.IScopeCarrierBinding (interface)
 ToolUp.Platform.Jobs.IScopeCarrierBinding.BindScopeCarrier(ToolUp.Platform.Jobs.ScopeCarrier) : System.Void

@@ -479,7 +479,7 @@ type BlobEntityStore
         (version: int)
         : EntityLifecycleEventPayload =
         {
-            UserId = actor.Principal
+            UserId = UserId actor.Principal
             OnBehalfOf = actor.OnBehalfOf
             EntityType = entityType
             EntityId = entityId

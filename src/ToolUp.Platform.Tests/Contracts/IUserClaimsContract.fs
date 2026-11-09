@@ -51,15 +51,15 @@ let private baseCases (factory: unit -> IUserClaims) = [
     testCaseAsync "GetPremiumStatus — unknown user returns NotPremium"
     <| async {
         let claims = factory ()
-        let! status = claims.GetPremiumStatus unknownUser
+        let! status = claims.GetPremiumStatus(UserId unknownUser)
         Expect.equal status NotPremium "an unknown user must not be reported as Premium"
     }
 
     testCaseAsync "GetPremiumStatus — idempotent across adjacent calls"
     <| async {
         let claims = factory ()
-        let! first = claims.GetPremiumStatus knownUser
-        let! second = claims.GetPremiumStatus knownUser
+        let! first = claims.GetPremiumStatus(UserId knownUser)
+        let! second = claims.GetPremiumStatus(UserId knownUser)
         Expect.equal first second "two adjacent reads must return the same status"
     }
 
@@ -76,7 +76,7 @@ let private baseCases (factory: unit -> IUserClaims) = [
     testCaseAsync "GrantPremium — returns Ok carrying Premium with grantor + reason"
     <| async {
         let claims = factory ()
-        let! result = claims.GrantPremium(knownUser, grantor, reason)
+        let! result = claims.GrantPremium(UserId knownUser, grantor, reason)
 
         match result with
         | Ok(Premium(_, capturedGrantor, capturedReason)) ->
@@ -92,7 +92,7 @@ let private baseCases (factory: unit -> IUserClaims) = [
         // Revoke applied to a never-granted user must still return
         // Ok — revocation is idempotent so callers can invoke it
         // without first checking the current status.
-        let! result = claims.RevokePremium(knownUser, grantor, reason)
+        let! result = claims.RevokePremium(UserId knownUser, grantor, reason)
 
         match result with
         | Ok() -> ()
@@ -102,7 +102,7 @@ let private baseCases (factory: unit -> IUserClaims) = [
     testCaseAsync "Empty-string userId returns NotPremium (anonymous defensive default)"
     <| async {
         let claims = factory ()
-        let! status = claims.GetPremiumStatus ""
+        let! status = claims.GetPremiumStatus(UserId "")
         Expect.equal status NotPremium "blank userId must never surface as Premium"
     }
 ]
@@ -111,8 +111,8 @@ let private persistingCases (factory: unit -> IUserClaims) = [
     testCaseAsync "Grant + GetPremiumStatus round-trip — surfaces Premium"
     <| async {
         let claims = factory ()
-        let! _ = claims.GrantPremium(knownUser, grantor, reason)
-        let! status = claims.GetPremiumStatus knownUser
+        let! _ = claims.GrantPremium(UserId knownUser, grantor, reason)
+        let! status = claims.GetPremiumStatus(UserId knownUser)
 
         match status with
         | Premium(_, capturedGrantor, capturedReason) ->
@@ -125,16 +125,16 @@ let private persistingCases (factory: unit -> IUserClaims) = [
     testCaseAsync "Grant + Revoke + GetPremiumStatus round-trip — surfaces NotPremium"
     <| async {
         let claims = factory ()
-        let! _ = claims.GrantPremium(knownUser, grantor, reason)
-        let! _ = claims.RevokePremium(knownUser, grantor, reason)
-        let! status = claims.GetPremiumStatus knownUser
+        let! _ = claims.GrantPremium(UserId knownUser, grantor, reason)
+        let! _ = claims.RevokePremium(UserId knownUser, grantor, reason)
+        let! status = claims.GetPremiumStatus(UserId knownUser)
         Expect.equal status NotPremium "revoked user reads as NotPremium"
     }
 
     testCaseAsync "Grant + ListPremiumUsers — granted user surfaces in the listing"
     <| async {
         let claims = factory ()
-        let! _ = claims.GrantPremium(knownUser, grantor, reason)
+        let! _ = claims.GrantPremium(UserId knownUser, grantor, reason)
         let! listed = claims.ListPremiumUsers()
 
         match listed with

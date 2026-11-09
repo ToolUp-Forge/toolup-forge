@@ -66,7 +66,7 @@ type ISparseIndex =
     /// serving (and persisting at rest) content the vector store had
     /// already erased.
     abstract Erase:
-        scope: VectorScope * subjectUserId: string * policy: ToolUp.Platform.ErasurePolicy * dryRun: bool ->
+        scope: VectorScope * subjectUserId: UserId * policy: ToolUp.Platform.ErasurePolicy * dryRun: bool ->
             Async<Result<ToolUp.Platform.ErasureSummary, ToolUp.Platform.ErasureError>>
 
 /// Phase 964 — the keyword index's twin of `IVectorStoreLocality`: where

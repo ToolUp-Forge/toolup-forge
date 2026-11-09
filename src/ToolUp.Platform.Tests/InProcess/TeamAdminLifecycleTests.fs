@@ -60,10 +60,10 @@ let private teamConfig = {
 /// store, returning the minted team id.
 let private seedTeam (ts: ITeamStore) (name: string) (members: (string * TeamRole) list) = async {
     let teamId = Guid.NewGuid().ToString("N")
-    let! _ = ts.CreateTeam(teamId, name)
+    let! _ = ts.CreateTeam(TeamId teamId, name)
 
     for (userId, role) in members do
-        let! _ = ts.AddMember(teamId, userId, role)
+        let! _ = ts.AddMember(TeamId teamId, UserId userId, role)
         ()
 
     return teamId
@@ -94,7 +94,7 @@ let tests =
             let storage = freshStorage ()
             let ts = teamStoreOver storage
             let adminStore = adminStoreOver storage
-            let! _ = adminStore.AssignPlatformAdmin("_bootstrap", "alice")
+            let! _ = adminStore.AssignPlatformAdmin(UserId "_bootstrap", UserId "alice")
 
             let! teamId = seedTeam ts "Engineering" [ "owner1", Owner; "admin1", Admin; "member1", Member ]
 
@@ -118,13 +118,13 @@ let tests =
             let storage = freshStorage ()
             let ts = teamStoreOver storage
             let adminStore = adminStoreOver storage
-            let! _ = adminStore.AssignPlatformAdmin("_bootstrap", "alice")
+            let! _ = adminStore.AssignPlatformAdmin(UserId "_bootstrap", UserId "alice")
 
             let! teamId = seedTeam ts "Marketing" [ "member1", Owner ]
             // member1 has it as their active team (CreateTeam path would do
             // this for the owner; seedTeam adds the membership only, so set
             // it explicitly).
-            let! _ = ts.SetActiveTeam("member1", teamId)
+            let! _ = ts.SetActiveTeam(UserId "member1", TeamId teamId)
 
             let adminApi = PlatformApiHandler.teamApi teamConfig (ctxFor "alice" ts adminStore)
 
@@ -140,7 +140,7 @@ let tests =
             Expect.isEmpty myTeams "archived team filtered from GetMyTeams"
 
             // Active-team pointer was bumped.
-            let! active = ts.GetActiveTeam "member1"
+            let! active = ts.GetActiveTeam(UserId "member1")
             Expect.isNone active "member is bumped to the no-active-team state on archive"
 
             // Re-select is rejected.
@@ -166,7 +166,7 @@ let tests =
             let storage = freshStorage ()
             let ts = teamStoreOver storage
             let adminStore = adminStoreOver storage
-            let! _ = adminStore.AssignPlatformAdmin("_bootstrap", "alice")
+            let! _ = adminStore.AssignPlatformAdmin(UserId "_bootstrap", UserId "alice")
 
             let! teamId = seedTeam ts "Doomed" [ "owner1", Owner; "member1", Member ]
 
@@ -174,13 +174,13 @@ let tests =
             let! deleteResult = adminApi.DeleteTeamHard teamId
             Expect.isOk deleteResult "delete succeeds for admin"
 
-            let! gone = ts.GetTeam teamId
+            let! gone = ts.GetTeam(TeamId teamId)
             Expect.isNone gone "team record is purged"
 
-            let! ownerTeams = ts.GetTeamsForUser "owner1"
+            let! ownerTeams = ts.GetTeamsForUser(UserId "owner1")
             Expect.isEmpty ownerTeams "owner's membership row is purged"
 
-            let! memberTeams = ts.GetTeamsForUser "member1"
+            let! memberTeams = ts.GetTeamsForUser(UserId "member1")
             Expect.isEmpty memberTeams "member's membership row is purged"
         }
 
@@ -198,7 +198,7 @@ let tests =
             | Error msg -> Expect.equal msg "Platform Admin required" "specific deny message"
             | Ok() -> failtest "expected Error from non-admin caller"
 
-            let! stillThere = ts.GetTeam teamId
+            let! stillThere = ts.GetTeam(TeamId teamId)
             Expect.isSome stillThere "team is untouched on the deny path"
         }
 
@@ -212,7 +212,7 @@ let tests =
             let! _ = storage.Upload(platformContainer, "teams/legacy1.json", Encoding.UTF8.GetBytes legacyJson)
 
             let ts = teamStoreOver storage
-            let! team = ts.GetTeam "legacy1"
+            let! team = ts.GetTeam(TeamId "legacy1")
 
             match team with
             | Some t ->

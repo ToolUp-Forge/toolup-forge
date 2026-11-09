@@ -289,7 +289,7 @@ type CrossModuleReadPayload = {
     /// same condition under which Phase 36.D's consent gate abstains.
     ConversationId: Guid option
     /// The caller the agent loop resolved.
-    UserId: string
+    UserId: UserId
     /// The module the conversation was active in when the read was made
     /// — the "from" half of "cross-module". `None` when the user was on
     /// no module's page, which is an ordinary state and not a defect.

@@ -49,16 +49,16 @@ let create (secretStore: ISecretStore) : IPlatformAIKeyStore =
         }
 
         member _.GetTeamKey(teamId, providerId) =
-            secretStore.GetSecret(teamContainer teamId, providerId)
+            secretStore.GetSecret(teamContainer teamId.Value, providerId)
 
         member _.SetTeamKey(teamId, providerId, apiKey) =
-            secretStore.SetSecret(teamContainer teamId, providerId, apiKey)
+            secretStore.SetSecret(teamContainer teamId.Value, providerId, apiKey)
 
         member _.DeleteTeamKey(teamId, providerId) =
-            secretStore.DeleteSecret(teamContainer teamId, providerId)
+            secretStore.DeleteSecret(teamContainer teamId.Value, providerId)
 
         member _.HasTeamKey(teamId, providerId) = async {
-            let! v = secretStore.GetSecret(teamContainer teamId, providerId)
+            let! v = secretStore.GetSecret(teamContainer teamId.Value, providerId)
             return v.IsSome
         }
     }

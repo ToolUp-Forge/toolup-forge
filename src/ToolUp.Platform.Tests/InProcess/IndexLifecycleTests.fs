@@ -286,7 +286,7 @@ let tests =
 
                 // Dry-run: counts but mutates nothing — not the indexes, not the cache.
                 let dryRun =
-                    lifecycle.Erase(Deployment, subject, ErasurePolicy.HardDelete, true)
+                    lifecycle.Erase(Deployment, UserId subject, ErasurePolicy.HardDelete, true)
                     |> Async.RunSynchronously
 
                 match dryRun with
@@ -306,7 +306,7 @@ let tests =
 
                 // Real erase (HardDelete: physical purge on the vector store).
                 let erased =
-                    lifecycle.Erase(Deployment, subject, ErasurePolicy.HardDelete, false)
+                    lifecycle.Erase(Deployment, UserId subject, ErasurePolicy.HardDelete, false)
                     |> Async.RunSynchronously
 
                 match erased with

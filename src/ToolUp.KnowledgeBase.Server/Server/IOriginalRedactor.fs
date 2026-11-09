@@ -204,7 +204,7 @@ let redactionAuditEvents (userId: string) (documentId: string) (redactedLevels: 
     redactedLevels
     |> List.map (fun level ->
         AuditEvent.ClassifiedFieldRead {
-            UserId = userId
+            UserId = UserId userId
             EntityName = KnowledgeOriginalEntityName
             FieldPath = documentId
             Level = level

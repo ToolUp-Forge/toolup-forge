@@ -477,13 +477,13 @@ ToolUp.AI.IClientToolAuthorizer (interface)
 ToolUp.AI.IClientToolAuthorizer.Authorize(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String]) : ToolUp.AI.ClientToolAuthDecision
 ToolUp.AI.IPlatformAIKeyStore (interface)
 ToolUp.AI.IPlatformAIKeyStore.DeletePlatformKey(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
-ToolUp.AI.IPlatformAIKeyStore.DeleteTeamKey(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.AI.IPlatformAIKeyStore.DeleteTeamKey(ToolUp.Platform.TeamId, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.AI.IPlatformAIKeyStore.GetPlatformKey(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[System.String]]
-ToolUp.AI.IPlatformAIKeyStore.GetTeamKey(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[System.String]]
+ToolUp.AI.IPlatformAIKeyStore.GetTeamKey(ToolUp.Platform.TeamId, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[System.String]]
 ToolUp.AI.IPlatformAIKeyStore.HasPlatformKey(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.Boolean]
-ToolUp.AI.IPlatformAIKeyStore.HasTeamKey(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.Boolean]
+ToolUp.AI.IPlatformAIKeyStore.HasTeamKey(ToolUp.Platform.TeamId, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.Boolean]
 ToolUp.AI.IPlatformAIKeyStore.SetPlatformKey(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
-ToolUp.AI.IPlatformAIKeyStore.SetTeamKey(System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.AI.IPlatformAIKeyStore.SetTeamKey(ToolUp.Platform.TeamId, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.AI.IToolApprovalPolicy (interface)
 ToolUp.AI.IToolApprovalPolicy.Requires(System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String]) : ToolUp.AI.ToolApprovalRequirement
 ToolUp.AI.ModelInput (class)

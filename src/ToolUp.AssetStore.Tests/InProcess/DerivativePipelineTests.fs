@@ -285,7 +285,7 @@ let tests =
             // run: trigger the same persisted job again.
             let jobId = fixture.Scheduler.ScheduledJobIds |> List.exactlyOne
 
-            (fixture.Scheduler :> IJobScheduler).TriggerOnce(container, jobId, "test")
+            (fixture.Scheduler :> IJobScheduler).TriggerOnce(container, jobId, UserId "test")
             |> Async.RunSynchronously
             |> ignore
 
@@ -354,7 +354,7 @@ let tests =
             // Final attempt: failure recorded; requests see it typed.
             let jobId = fixture.Scheduler.ScheduledJobIds |> List.exactlyOne
 
-            (fixture.Scheduler :> IJobScheduler).TriggerOnce(container, jobId, "test")
+            (fixture.Scheduler :> IJobScheduler).TriggerOnce(container, jobId, UserId "test")
             |> Async.RunSynchronously
             |> ignore
 

@@ -92,8 +92,8 @@ let private newWorld (settings: TeamConversationVisibilitySettings option) = asy
         TeamStore(InMemoryBlobStorage() :> IBlobStorage, InMemoryNotificationChannel(None) :> INotificationChannel)
         :> ITeamStore
 
-    let! _ = teams.CreateTeam("alpha", "Alpha")
-    let! _ = teams.CreateTeam("beta", "Beta")
+    let! _ = teams.CreateTeam(TeamId "alpha", "Alpha")
+    let! _ = teams.CreateTeam(TeamId "beta", "Beta")
 
     for userId, role in
         [
@@ -105,11 +105,11 @@ let private newWorld (settings: TeamConversationVisibilitySettings option) = asy
             "rhea", TeamRole.Owner
             "mia", TeamRole.Member
         ] do
-        let! _ = teams.AddMember("alpha", userId, role)
+        let! _ = teams.AddMember(TeamId "alpha", UserId userId, role)
         ()
 
     for userId, role in [ "xavier", TeamRole.Owner; "mia", TeamRole.Member; "ben", TeamRole.Member ] do
-        let! _ = teams.AddMember("beta", userId, role)
+        let! _ = teams.AddMember(TeamId "beta", UserId userId, role)
         ()
 
     return {

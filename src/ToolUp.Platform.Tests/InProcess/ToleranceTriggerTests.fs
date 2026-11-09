@@ -318,7 +318,7 @@ let private jobContext (scope: ResolvedScope) (payload: string) (trigger: Trigge
     Attempt = 1
     Trigger = trigger
     Scope = scope
-    TriggerSource = ScheduledManually "worker"
+    TriggerSource = ScheduledManually(UserId "worker")
     ScheduledAt = DateTime.UtcNow
     RunningAt = DateTime.UtcNow
     Payload = payload

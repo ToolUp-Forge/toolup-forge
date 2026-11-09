@@ -110,7 +110,7 @@ let private base64UrlRaw (bytes: byte[]) =
 /// The inner OIDC provider's output: already sanitised by `6l.H`, and
 /// the value the seam leaves in place for every field it does not map.
 let private innerUser: AuthenticatedUser = {
-    UserId = "inner-sanitised-subject"
+    UserId = UserId "inner-sanitised-subject"
     DisplayName = "Inner Display Name"
     Email = Some "inner@example.com"
     TenantId = Some "inner-tenant"
@@ -189,7 +189,7 @@ let private claimBoundaryAccepts (claimName: string) (id: string) =
         if claimName = "tid" then
             user.TenantId = Some id
         else
-            user.UserId = id
+            user.UserId = UserId id
 
 // ─── Boundary 2 — the peer `iss` claim ───────────────────────────────
 
@@ -336,7 +336,7 @@ let parityTests =
                             }
                             [ "oid", id ]
                     with
-                    | Result.Ok user -> failtestf "the seam accepted a %s as UserId '%s'" description user.UserId
+                    | Result.Ok user -> failtestf "the seam accepted a %s as UserId '%s'" description user.UserId.Value
                     | Result.Error(claim, _) ->
                         Expect.equal claim "oid" $"the refusal of a {description} names the claim it refused"
 
@@ -469,7 +469,10 @@ let negativeControlTests =
             match claimMapped mapping [ "oid", "entra-object-id"; "tid", "entra-tenant" ] with
             | Result.Error(claim, reason) -> failtestf "the seam refused a well-formed vector on '%s': %s" claim reason
             | Result.Ok mapped ->
-                Expect.equal mapped.UserId "entra-object-id" "a well-formed `oid` genuinely overrides the inner UserId"
+                Expect.equal
+                    mapped.UserId
+                    (UserId "entra-object-id")
+                    "a well-formed `oid` genuinely overrides the inner UserId"
 
                 Expect.equal
                     mapped.TenantId
@@ -534,7 +537,7 @@ let boundaryDetailTests =
                     }
                     [ "oid", "../../etc"; "sub", "well-formed-subject" ]
             with
-            | Result.Ok user -> failtestf "expected a rejection; the seam fell through to UserId '%s'" user.UserId
+            | Result.Ok user -> failtestf "expected a rejection; the seam fell through to UserId '%s'" user.UserId.Value
             | Result.Error(claim, _) -> Expect.equal claim "oid" "the refusal names the claim the operator mapped"
         }
 

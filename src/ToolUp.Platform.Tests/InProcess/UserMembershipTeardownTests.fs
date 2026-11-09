@@ -42,10 +42,10 @@ let private freshTeamStore () =
 /// the store, returning the minted team id.
 let private seedTeam (ts: TeamStore) (name: string) (members: (string * TeamRole) list) = async {
     let teamId = Guid.NewGuid().ToString("N")
-    let! _ = ts.CreateTeam(teamId, name)
+    let! _ = ts.CreateTeam(TeamId teamId, name)
 
     for (userId, role) in members do
-        let! _ = ts.AddMember(teamId, userId, role)
+        let! _ = ts.AddMember(TeamId teamId, UserId userId, role)
         ()
 
     return teamId
@@ -144,7 +144,7 @@ let tests =
             let ts = freshTeamStore ()
             let! teamId = seedTeam ts "Solo-Owned" [ "alice", Owner; "bob", Member ]
 
-            let! result = ts.PurgeUser "alice"
+            let! result = ts.PurgeUser(UserId "alice")
 
             match result with
             | Error msg ->
@@ -153,7 +153,7 @@ let tests =
             | Ok() -> failtest "expected Error purging the last Owner"
 
             // The refusal must leave the user's state untouched.
-            let! teams = ts.GetTeamsForUser "alice"
+            let! teams = ts.GetTeamsForUser(UserId "alice")
             Expect.equal (teams |> List.map _.TeamId) [ teamId ] "membership row survives a refused purge"
         }
 
@@ -163,16 +163,16 @@ let tests =
             let! team1 = seedTeam ts "One" [ "owner1", Owner; "victim", Member ]
             let! team2 = seedTeam ts "Two" [ "owner2", Owner; "victim", Admin ]
 
-            let! result = ts.PurgeUser "victim"
+            let! result = ts.PurgeUser(UserId "victim")
             Expect.isOk result "purge succeeds for a non-last-Owner user"
 
-            let! victimTeams = ts.GetTeamsForUser "victim"
+            let! victimTeams = ts.GetTeamsForUser(UserId "victim")
             Expect.isEmpty victimTeams "every membership row is stripped"
 
-            let! members1 = ts.GetTeamMembers team1
+            let! members1 = ts.GetTeamMembers(TeamId team1)
             Expect.equal (members1 |> List.map _.UserId) [ "owner1" ] "team 1 keeps its other members"
 
-            let! members2 = ts.GetTeamMembers team2
+            let! members2 = ts.GetTeamMembers(TeamId team2)
             Expect.equal (members2 |> List.map _.UserId) [ "owner2" ] "team 2 keeps its other members"
         }
 
@@ -180,12 +180,12 @@ let tests =
         <| async {
             let ts = freshTeamStore ()
             let! teamId = seedTeam ts "Pointed" [ "owner1", Owner; "victim", Member ]
-            let! _ = ts.SetActiveTeam("victim", teamId)
+            let! _ = ts.SetActiveTeam(UserId "victim", TeamId teamId)
 
-            let! result = ts.PurgeUser "victim"
+            let! result = ts.PurgeUser(UserId "victim")
             Expect.isOk result "purge succeeds"
 
-            let! active = ts.GetActiveTeam "victim"
+            let! active = ts.GetActiveTeam(UserId "victim")
             Expect.isNone active "active-team pointer is deleted"
         }
 
@@ -205,11 +205,11 @@ let tests =
                     fun envelope ->
                         match envelope.Notification with
                         | MembershipChanged p when p.ChangeKind = MembershipChangeKind.Removed ->
-                            removed.Add(p.TeamId, p.AffectedUserId)
+                            removed.Add(p.TeamId.Value, p.AffectedUserId.Value)
                         | _ -> ()
                 )
 
-            let! result = ts.PurgeUser "victim"
+            let! result = ts.PurgeUser(UserId "victim")
             Expect.isOk result "purge succeeds"
 
             let published = removed |> Set.ofSeq
@@ -225,14 +225,14 @@ let tests =
             let ts = freshTeamStore ()
             let! _ = seedTeam ts "Once" [ "owner1", Owner; "victim", Member ]
 
-            let! first = ts.PurgeUser "victim"
+            let! first = ts.PurgeUser(UserId "victim")
             Expect.isOk first "first purge succeeds"
 
-            let! second = ts.PurgeUser "victim"
+            let! second = ts.PurgeUser(UserId "victim")
             Expect.isOk second "re-purge is an Ok no-op"
 
             // A never-seen user also purges clean.
-            let! ghost = ts.PurgeUser "never-existed"
+            let! ghost = ts.PurgeUser(UserId "never-existed")
             Expect.isOk ghost "purging a user with no state returns Ok"
         }
 
@@ -244,7 +244,7 @@ let tests =
             let sp = providerWith (Some(ts :> ITeamStore)) None None None
             let hook = UserMembershipTeardownLifecycle.create sp
 
-            let! result = hook.OnDeprovisioned("team-abc", "admin-1")
+            let! result = hook.OnDeprovisioned("team-abc", UserId "admin-1")
 
             match result with
             | LifecycleHookResult.Skipped reason -> Expect.stringContains reason "not a user scope" "skip names why"
@@ -256,7 +256,7 @@ let tests =
             let sp = providerWith None None None None
             let hook = UserMembershipTeardownLifecycle.create sp
 
-            let! result = hook.OnDeprovisioned("user-u1", "admin-1")
+            let! result = hook.OnDeprovisioned("user-u1", UserId "admin-1")
 
             match result with
             | LifecycleHookResult.Skipped reason -> Expect.stringContains reason "ITeamStore" "skip names the substrate"
@@ -270,7 +270,7 @@ let tests =
             let sp = providerWith (Some(ts :> ITeamStore)) None None None
             let hook = UserMembershipTeardownLifecycle.create sp
 
-            let! result = hook.OnDeprovisioned("user-victim", "admin-1")
+            let! result = hook.OnDeprovisioned("user-victim", UserId "admin-1")
 
             match result with
             | LifecycleHookResult.Failed msg -> Expect.stringContains msg teamId "the failure names the blocking team"
@@ -295,11 +295,11 @@ let tests =
                     (Some(invites :> IPendingInviteStore))
 
             let hook = UserMembershipTeardownLifecycle.create sp
-            let! result = hook.OnDeprovisioned("user-victim", "admin-1")
+            let! result = hook.OnDeprovisioned("user-victim", UserId "admin-1")
 
             Expect.equal result LifecycleHookResult.Completed "hook completes"
 
-            let! victimTeams = ts.GetTeamsForUser "victim"
+            let! victimTeams = ts.GetTeamsForUser(UserId "victim")
             Expect.isEmpty victimTeams "membership rows stripped"
 
             let removedAudits =
@@ -312,7 +312,10 @@ let tests =
 
             Expect.equal
                 removedAudits
-                (Set.ofList [ team1, team1, "victim", "admin-1"; team2, team2, "victim", "admin-1" ])
+                (Set.ofList [
+                    team1, TeamId team1, UserId "victim", UserId "admin-1"
+                    team2, TeamId team2, UserId "victim", UserId "admin-1"
+                ])
                 "one MemberRemoved per stripped team, actor-attributed, recorded against the team scope"
 
             Expect.isFalse (invites.Contains "victim@example.com") "pending invite swept via the directory email"
@@ -328,7 +331,7 @@ let tests =
                 providerWith (Some(ts :> ITeamStore)) None None (Some(invites :> IPendingInviteStore))
 
             let hook = UserMembershipTeardownLifecycle.create sp
-            let! result = hook.OnDeprovisioned("user-victim", "admin-1")
+            let! result = hook.OnDeprovisioned("user-victim", UserId "admin-1")
 
             Expect.equal result LifecycleHookResult.Completed "no directory → sweep not applicable, purge stands"
             Expect.isTrue (invites.Contains "victim@example.com") "invite untouched — no email was resolvable"
@@ -341,7 +344,7 @@ let tests =
             let ts = freshTeamStore ()
             let! team1 = seedTeam ts "E2E-One" [ "owner1", Owner; "victim", Member ]
             let! _ = seedTeam ts "E2E-Two" [ "owner2", Owner; "victim", Admin ]
-            let! _ = ts.SetActiveTeam("victim", team1)
+            let! _ = ts.SetActiveTeam(UserId "victim", TeamId team1)
 
             let directory = MapUserDirectory(Map [ "victim", "victim@example.com" ])
             let invites = EmailSetInviteStore [ "victim@example.com" ]
@@ -389,17 +392,17 @@ let tests =
 
                 Expect.equal outcome.Result LifecycleHookResult.Completed "the teardown hook completed"
 
-            let! victimTeams = ts.GetTeamsForUser "victim"
+            let! victimTeams = ts.GetTeamsForUser(UserId "victim")
             Expect.isEmpty victimTeams "no membership row survives"
 
-            let! active = ts.GetActiveTeam "victim"
+            let! active = ts.GetActiveTeam(UserId "victim")
             Expect.isNone active "no active-team pointer survives"
 
             Expect.isFalse (invites.Contains "victim@example.com") "no matching pending invite survives"
 
             // A fresh sign-in resolves team-less: the store now reports no
             // teams and no role anywhere for the purged id.
-            let! role = ts.GetMemberRole(team1, "victim")
+            let! role = ts.GetMemberRole(TeamId team1, UserId "victim")
             Expect.isNone role "signing in again yields no team access"
         }
     ]

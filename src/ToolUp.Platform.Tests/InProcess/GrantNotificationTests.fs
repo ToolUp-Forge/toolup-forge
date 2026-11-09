@@ -373,7 +373,7 @@ let tests =
 
                 let! result =
                     observed.SetTeamPermissions(
-                        "t1",
+                        (TeamId "t1"),
                         docWith "alice" "Partner" [ Read; Write ] (Some(activeRecord policy "approved by acme"))
                     )
 
@@ -417,7 +417,7 @@ let tests =
                         GrantNotificationSettings.defaults
                         logger
 
-                let! result = observed.SetTeamPermissions("t1", docWith "alice" "Partner" [ Read; Write ] None)
+                let! result = observed.SetTeamPermissions(TeamId "t1", docWith "alice" "Partner" [ Read; Write ] None)
 
                 Expect.isOk result "the write still lands"
                 Expect.isEmpty channel.Published "and notifies nobody (GP 13 — an undeclared module costs nothing)"
@@ -435,7 +435,7 @@ let tests =
 
                 let! second =
                     policied.SetTeamPermissions(
-                        "t1",
+                        (TeamId "t1"),
                         docWith
                             "alice"
                             "Partner"
@@ -463,7 +463,7 @@ let tests =
 
                 let! result =
                     observed.SetTeamPermissions(
-                        "t1",
+                        (TeamId "t1"),
                         docWith
                             "alice"
                             "Partner"
@@ -473,7 +473,7 @@ let tests =
 
                 Expect.isOk result "the caller sees success — a notification outage is not a grant failure"
 
-                let! persisted = store.GetTeamPermissions "t1"
+                let! persisted = store.GetTeamPermissions(TeamId "t1")
 
                 Expect.equal
                     (TeamPermissions.grantsFor "alice" persisted
@@ -515,7 +515,7 @@ let tests =
                         GrantNotificationSettings.defaults
                         logger
 
-                let! result = observed.SetTeamPermissions("t1", docWith "alice" "Partner" [ Read ] None)
+                let! result = observed.SetTeamPermissions(TeamId "t1", docWith "alice" "Partner" [ Read ] None)
 
                 Expect.isError result "the guard's refusal survives the observer"
                 Expect.isEmpty channel.Published "and a refused grant notifies nobody"
@@ -535,10 +535,10 @@ let tests =
                         GrantNotificationSettings.defaults
                         logger
 
-                let! defaults = observed.SetTeamDefaults("t1", Map.ofList [ "Partner", [ Read ] ])
+                let! defaults = observed.SetTeamDefaults(TeamId "t1", Map.ofList [ "Partner", [ Read ] ])
                 Expect.isOk defaults "the defaults write lands"
 
-                let! exposure = observed.SetModuleExposure("t1", "Partner", ModuleExposure.Hidden)
+                let! exposure = observed.SetModuleExposure(TeamId "t1", "Partner", ModuleExposure.Hidden)
                 Expect.isOk exposure "the exposure write lands"
 
                 Expect.isEmpty
@@ -654,7 +654,7 @@ let tests =
 
                     let! result =
                         observed.SetTeamPermissions(
-                            "t1",
+                            (TeamId "t1"),
                             docWith
                                 "alice"
                                 "Partner"
@@ -694,7 +694,7 @@ let tests =
 
                 let! _ =
                     observed.SetTeamPermissions(
-                        "t1",
+                        (TeamId "t1"),
                         docWith
                             "alice"
                             "Partner"

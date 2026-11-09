@@ -53,8 +53,8 @@ module FlagScope =
     /// layouts stay consistent across stores.
     let slug =
         function
-        | FlagScope.User id -> ScopeKey.container (ScopeKey.User id)
-        | FlagScope.Team id -> ScopeKey.container (ScopeKey.Team id)
+        | FlagScope.User id -> ScopeKey.container (ScopeKey.User(UserId id))
+        | FlagScope.Team id -> ScopeKey.container (ScopeKey.Team(TeamId id))
         | FlagScope.Platform -> ScopeKey.container ScopeKey.platform
 
 /// Discriminates between a flag being set and a flag being cleared in

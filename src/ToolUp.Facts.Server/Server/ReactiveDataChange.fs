@@ -513,7 +513,7 @@ module GroundedNarrativeTrigger =
         async {
             match! scheduler.Schedule(resolved, registrationFor resolved.ScopeId runKey change) with
             | Ok(Scheduled jobId) ->
-                match! scheduler.TriggerOnce(resolved.ScopeId, jobId, Actor) with
+                match! scheduler.TriggerOnce(resolved.ScopeId, jobId, UserId Actor) with
                 | Ok() -> return EnqueueOutcome.Started
                 | Error refusal -> return EnqueueOutcome.TriggerRefused(jobId, TriggerError.message refusal)
             | Ok(Coalesced _) -> return EnqueueOutcome.Coalesced

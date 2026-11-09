@@ -383,7 +383,7 @@ let private checkOne
                             deps.Api.Producers
                             scope.ScopeId
                             (StandingReportSubscription.subscriptionId d.Key)
-                            principal.UserId
+                            principal.UserId.Value
                             DateTimeOffset.UtcNow
                             NeverRun
                             (StandingReportSubscription.toRequest d)
@@ -463,7 +463,7 @@ let seedStandingSubscriptions
                         let! result =
                             ReportSubscriptionApiHandler.seedStanding
                                 deps.Api
-                                c.Principal.UserId
+                                c.Principal.UserId.Value
                                 c.Scope
                                 (StandingReportSubscription.subscriptionId key)
                                 (StandingReportSubscription.toRequest c.Declaration)

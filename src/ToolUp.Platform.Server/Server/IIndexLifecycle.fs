@@ -126,7 +126,7 @@ type IIndexLifecycle =
     /// target yields `Error` so the DSR orchestration records the
     /// incomplete run.
     abstract Erase:
-        scope: VectorScope * subjectUserId: string * policy: ErasurePolicy * dryRun: bool ->
+        scope: VectorScope * subjectUserId: UserId * policy: ErasurePolicy * dryRun: bool ->
             Async<Result<ErasureSummary, ErasureError>>
 
 // ─── Default implementation ──────────────────────────────────────────

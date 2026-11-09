@@ -121,8 +121,8 @@ let containerOf (scopeId: string) : string =
 /// a per-user purge at it would delete another caller's chunks.
 let vectorScopeOf (container: string) : VectorScope =
     match ScopeKey.tryParseContainer container with
-    | Some(ScopeKey.Team teamId) -> Team teamId
-    | Some(ScopeKey.User userId) -> User userId
+    | Some(ScopeKey.Team teamId) -> Team teamId.Value
+    | Some(ScopeKey.User userId) -> User userId.Value
     | _ -> User container
 
 /// Per-scope content-hash dedup index (Phase 14x), rebuilt here so a

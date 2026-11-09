@@ -54,7 +54,7 @@ let publicationReaderApi (ctx: HttpContext) : IPublicationReaderApi =
             | TeamMember(userId, teamId) when not (AccessContext.isPublicationReader accessContext) ->
                 match service<ITeamStore> ctx with
                 | Some teams ->
-                    match! teams.GetMemberRole(teamId, userId) with
+                    match! teams.GetMemberRole(TeamId teamId, UserId userId) with
                     | Some r when TeamRoles.canWriteTeamConfig r -> return! f store teamId
                     | Some r ->
                         return

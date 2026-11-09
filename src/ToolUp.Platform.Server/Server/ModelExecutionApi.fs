@@ -254,7 +254,7 @@ let modelExecutionApi (ctx: HttpContext) : ModelExecutionApi =
         | TeamMember(userId, teamId) ->
             match service<ITeamStore> ctx with
             | Some ts ->
-                let! role = ts.GetMemberRole(teamId, userId)
+                let! role = ts.GetMemberRole(TeamId teamId, UserId userId)
 
                 match role with
                 | Some r when TeamRoles.canWriteTeamConfig r -> return Ok()

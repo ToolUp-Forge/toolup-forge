@@ -295,7 +295,7 @@ let private validate
                                         |> Option.filter (fun s -> not (String.IsNullOrWhiteSpace s))
 
                                     let user = {
-                                        UserId = userId
+                                        UserId = UserId userId
                                         DisplayName = displayName
                                         Email = email
                                         TenantId = None

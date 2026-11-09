@@ -177,7 +177,7 @@ let private jobCtxCarrying (scopeId: string) (scope: ResolvedScope) : JobContext
     Attempt = 1
     Trigger = Trigger.Manual
     Scope = scope
-    TriggerSource = ScheduledManually "system"
+    TriggerSource = ScheduledManually(UserId "system")
     ScheduledAt = DateTime.UtcNow
     RunningAt = DateTime.UtcNow
     Payload = ""
@@ -191,7 +191,7 @@ let private jobCtx (scopeId: string) : JobContext =
 /// The declared principal a coherence sweep is composed for.
 let private sweepPrincipal: DeclaredPrincipal = {
     Name = "coherence"
-    UserId = "svc-coherence"
+    UserId = UserId "svc-coherence"
     DisplayName = "coherence sweep principal"
 }
 

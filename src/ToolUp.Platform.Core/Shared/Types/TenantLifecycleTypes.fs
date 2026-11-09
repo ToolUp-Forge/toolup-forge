@@ -157,10 +157,10 @@ module LifecycleSummary =
 [<RequireQualifiedAccess>]
 type TenantLifecycleEvent =
     /// Provisioning completed for `scopeId`, triggered by `actorUserId`.
-    | Provisioned of scopeId: string * actorUserId: string
+    | Provisioned of scopeId: string * actorUserId: UserId
     /// Deprovisioning began for `scopeId`, triggered by `actorUserId`,
     /// with an operator-supplied `reason`.
-    | Deprovisioning of scopeId: string * actorUserId: string * reason: string
+    | Deprovisioning of scopeId: string * actorUserId: UserId * reason: string
     /// Deprovisioning completed for `scopeId`; `summary` carries the
     /// per-hook disposition.
     | Deprovisioned of scopeId: string * summary: LifecycleSummary

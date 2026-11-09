@@ -95,7 +95,7 @@ type IConversationReader =
     /// Every conversation header in `scopeId` whose `CreatedBy`
     /// matches `userId`. Same ordering as `ListByScope`. Empty list
     /// when the user has no conversations in this scope.
-    abstract ListByUser: scopeId: string * userId: string -> Async<Conversation list>
+    abstract ListByUser: scopeId: string * userId: UserId -> Async<Conversation list>
 
     /// Predicate-shaped query over conversation headers. The query's
     /// `EntityType` field is ignored (the substrate knows it's
@@ -179,7 +179,7 @@ type IConversationEraser =
     /// catastrophic-over-erasure guard as the other
     /// `IErasureHandler` participants).
     abstract Erase:
-        scopeId: string * subjectUserId: string * policy: ErasurePolicy * dryRun: bool ->
+        scopeId: string * subjectUserId: UserId * policy: ErasurePolicy * dryRun: bool ->
             Async<Result<ErasureSummary, ErasureError>>
 
 /// Aggregate interface — the default implementation

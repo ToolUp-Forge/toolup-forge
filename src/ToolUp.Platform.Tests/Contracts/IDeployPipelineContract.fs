@@ -51,7 +51,7 @@ let tests (name: string) (factory: unit -> IDeployPipeline) =
         <| async {
             let pipeline = factory ()
 
-            let! result = pipeline.BeginDeploy("tenant-1", "build-1", mkManifest "app", "alice")
+            let! result = pipeline.BeginDeploy("tenant-1", "build-1", mkManifest "app", UserId "alice")
             let deployId = okOrFail "BeginDeploy" result
             Expect.isFalse (String.IsNullOrEmpty deployId) "DeployId is a non-empty string"
         }
@@ -72,7 +72,7 @@ let tests (name: string) (factory: unit -> IDeployPipeline) =
         <| async {
             let pipeline = factory ()
             let manifest = mkManifest "rtrip"
-            let! begun = pipeline.BeginDeploy("tenant-rtrip", "build-rtrip", manifest, "alice")
+            let! begun = pipeline.BeginDeploy("tenant-rtrip", "build-rtrip", manifest, UserId "alice")
             let deployId = okOrFail "BeginDeploy" begun
 
             let! state = pipeline.GetDeployState deployId
@@ -89,7 +89,7 @@ let tests (name: string) (factory: unit -> IDeployPipeline) =
         testCaseAsync "Rollback on a tenant with no prior deploy returns NothingToRollbackTo"
         <| async {
             let pipeline = factory ()
-            let! result = pipeline.Rollback("tenant-no-history", "operator-1")
+            let! result = pipeline.Rollback("tenant-no-history", UserId "operator-1")
 
             match result with
             | Error(NothingToRollbackTo tid) -> Expect.equal tid "tenant-no-history" "tenant id preserved"
@@ -111,7 +111,7 @@ let tests (name: string) (factory: unit -> IDeployPipeline) =
             let manifest = mkManifest "bounded"
 
             for i in 1..3 do
-                let! _ = pipeline.BeginDeploy("tenant-bounded", sprintf "build-%d" i, manifest, "alice")
+                let! _ = pipeline.BeginDeploy("tenant-bounded", sprintf "build-%d" i, manifest, UserId "alice")
                 ()
 
             let! history = pipeline.GetDeployHistory("tenant-bounded", 2)
@@ -126,7 +126,7 @@ let tests (name: string) (factory: unit -> IDeployPipeline) =
             let mutable deployIds = []
 
             for i in 1..3 do
-                let! begun = pipeline.BeginDeploy("tenant-ordered", sprintf "build-%d" i, manifest, "alice")
+                let! begun = pipeline.BeginDeploy("tenant-ordered", sprintf "build-%d" i, manifest, UserId "alice")
                 deployIds <- (okOrFail "BeginDeploy" begun) :: deployIds
                 // Small delay so StateChangedAt differs across deploys.
                 do! Async.Sleep 5
@@ -156,9 +156,9 @@ let tests (name: string) (factory: unit -> IDeployPipeline) =
         testCaseAsync "Rule 2 — async at every boundary: every method returns Async<_>"
         <| async {
             let pipeline = factory ()
-            let! _ = pipeline.BeginDeploy("rule-2-tenant", "rule-2-build", mkManifest "rule-2", "alice")
+            let! _ = pipeline.BeginDeploy("rule-2-tenant", "rule-2-build", mkManifest "rule-2", UserId "alice")
             let! _ = pipeline.GetDeployState "rule-2-deploy"
-            let! _ = pipeline.Rollback("rule-2-tenant", "alice")
+            let! _ = pipeline.Rollback("rule-2-tenant", UserId "alice")
             let! _ = pipeline.GetDeployHistory("rule-2-tenant", 1)
             ()
         }

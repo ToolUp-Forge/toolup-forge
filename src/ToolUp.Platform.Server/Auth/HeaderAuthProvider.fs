@@ -27,7 +27,7 @@ let private extractUser (httpCtx: HttpContext) =
         | _ -> "anonymous"
 
     {
-        UserId = userId
+        UserId = UserId userId
         DisplayName = userId
         Email = None
         TenantId = None

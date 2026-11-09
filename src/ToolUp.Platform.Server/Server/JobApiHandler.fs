@@ -86,7 +86,7 @@ let jobApi (ctx: HttpContext) : JobApi =
         | TeamMember(userId, teamId) ->
             match ctx.RequestServices.GetService(typeof<ITeamStore>) with
             | :? ITeamStore as ts ->
-                let! role = ts.GetMemberRole(teamId, userId)
+                let! role = ts.GetMemberRole(TeamId teamId, UserId userId)
 
                 match role with
                 | Some r when TeamRoles.canWriteTeamConfig r -> return Ok()
@@ -219,7 +219,7 @@ let jobApi (ctx: HttpContext) : JobApi =
                     match rbac with
                     | Error msg -> return Error msg
                     | Ok() ->
-                        let! triggered = s.TriggerOnce(scopeId, jobId, accessContext.UserId)
+                        let! triggered = s.TriggerOnce(scopeId, jobId, UserId accessContext.UserId)
                         return triggered |> Result.mapError TriggerError.message
                 })
     }

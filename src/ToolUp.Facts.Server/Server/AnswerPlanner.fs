@@ -1052,7 +1052,7 @@ module AnswerPlanner =
     /// the subject; module permissions play no part in it.
     let compilerAccessContext (scope: StorageScope option) (principal: string) : AccessContext =
         match scope |> Option.bind StorageScope.tryKey with
-        | Some(ScopeKey.Team teamId) -> AccessContext.unrestricted (TeamMember(principal, teamId))
+        | Some(ScopeKey.Team teamId) -> AccessContext.unrestricted (TeamMember(principal, teamId.Value))
         | Some(ScopeKey.User _) -> AccessContext.unrestricted (AuthenticatedUser principal)
         | _ -> AccessContext.unrestricted (AnonymousSession principal)
 

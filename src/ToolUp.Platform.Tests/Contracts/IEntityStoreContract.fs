@@ -595,10 +595,10 @@ let auditTests (name: string) (factory: IAuditLog -> IEntityStore * EntityStore.
             Expect.equal
                 rows
                 [
-                    "created", 1, "alice", None, None
-                    "updated", 2, "bob", Some "carol", None
-                    "updated", 3, "alice", None, Some provenance
-                    "deleted", 3, "dave", None, None
+                    "created", 1, UserId "alice", None, None
+                    "updated", 2, UserId "bob", Some "carol", None
+                    "updated", 3, UserId "alice", None, Some provenance
+                    "deleted", 3, UserId "dave", None, None
                 ]
                 "each row carries exactly the actor its call passed, and one row per version"
 
@@ -613,7 +613,7 @@ let auditTests (name: string) (factory: IAuditLog -> IEntityStore * EntityStore.
 
             Expect.equal
                 a2
-                [ "created", "erin"; "deleted", "frank" ]
+                [ "created", UserId "erin"; "deleted", UserId "frank" ]
                 "the unconditional delete is stamped from its actor too"
         }
 
@@ -634,10 +634,14 @@ let auditTests (name: string) (factory: IAuditLog -> IEntityStore * EntityStore.
             let! _ = store.Delete(scope, EntityPrincipal.ofPrincipal "alice", TestEntityType, "s-1")
 
             let principals = log.Lifecycle scope |> List.map (fun (_, p) -> p.UserId)
-            Expect.equal principals [ "alice"; "alice"; "alice" ] "three rows, none of them the host's"
+
+            Expect.equal
+                principals
+                [ UserId "alice"; UserId "alice"; UserId "alice" ]
+                "three rows, none of them the host's"
 
             Expect.isFalse
-                (principals |> List.contains EntityPrincipal.SystemPrincipal)
+                (principals |> List.contains (UserId EntityPrincipal.SystemPrincipal))
                 "no row carries the system principal when no caller passed it"
 
             // The one legitimate way the value appears.
@@ -650,7 +654,7 @@ let auditTests (name: string) (factory: IAuditLog -> IEntityStore * EntityStore.
 
             Expect.equal
                 (seeded |> List.map _.UserId)
-                [ EntityPrincipal.SystemPrincipal ]
+                [ UserId EntityPrincipal.SystemPrincipal ]
                 "passed explicitly, recorded as passed"
         }
 
@@ -674,7 +678,7 @@ let auditTests (name: string) (factory: IAuditLog -> IEntityStore * EntityStore.
 
             match forVersion2 with
             | [ ("updated", p) ] ->
-                Expect.equal p.UserId "alice" "the real user, not a placeholder"
+                Expect.equal p.UserId (UserId "alice") "the real user, not a placeholder"
 
                 Expect.equal
                     p.Replay

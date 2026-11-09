@@ -336,7 +336,7 @@ let private resolveCaller (ctx: HttpContext) : Async<string * string option> = a
             if AuthenticatedUser.isAnonymous user then
                 anonymousSentinel
             else
-                user.UserId
+                user.UserId.Value
 
         let! scopeResult = resolver.Resolve request
 
@@ -566,7 +566,7 @@ let private bundleHandler (config: ServerConfig) (capture: DevDiagnosticsHandler
                 log.Record(
                     platformScopeId,
                     DiagnosticBundleAccessed {
-                        UserId = callerUserId
+                        UserId = UserId callerUserId
                         ScopeId = callerScopeId
                         BundleSizeBytes = int64 tarBytes.Length
                         Truncated = auditTruncated

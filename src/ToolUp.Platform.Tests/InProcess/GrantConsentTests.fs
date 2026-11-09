@@ -696,7 +696,7 @@ let tests =
 
                     Expect.equal result (Error ConsentDenial.NoConsentRecord) "no consent, no grant"
 
-                    let! doc = inner.GetTeamPermissions teamId
+                    let! doc = inner.GetTeamPermissions(TeamId teamId)
                     Expect.isEmpty (Map.toList doc.Members) "and nothing was persisted"
                 })
 
@@ -727,7 +727,7 @@ let tests =
 
                     Expect.equal result (Ok GrantWriteOutcome.Granted) "the arm Phase 551 could not reach now completes"
 
-                    let! doc = inner.GetTeamPermissions teamId
+                    let! doc = inner.GetTeamPermissions(TeamId teamId)
 
                     let record =
                         doc.Grants |> Map.tryFind subjectId |> Option.bind (Map.tryFind moduleName)
@@ -762,7 +762,7 @@ let tests =
 
                     let! written =
                         guarded.SetTeamPermissions(
-                            teamId,
+                            (TeamId teamId),
                             {
                                 TeamPermissions.empty with
                                     Members = Map.ofList [ subjectId, Map.ofList [ moduleName, [ Read ] ] ]
@@ -794,7 +794,7 @@ let tests =
 
                     let! written =
                         guarded.SetTeamPermissions(
-                            teamId,
+                            (TeamId teamId),
                             {
                                 TeamPermissions.empty with
                                     Members = Map.ofList [ subjectId, Map.ofList [ moduleName, [ Read ] ] ]

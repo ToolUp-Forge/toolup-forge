@@ -454,7 +454,7 @@ let tests =
         test "wire format stable — record case round-trips with structural equality" {
             let original =
                 UserLoggedIn {
-                    UserId = "alice"
+                    UserId = UserId "alice"
                     AuthProvider = "Header"
                 }
 
@@ -464,7 +464,7 @@ let tests =
 
         test "wire format stable — tuple case (PremiumGranted) round-trips with structural equality" {
             let original =
-                PremiumGranted("u1", "admin", Some "vip", DateTimeOffset(2020, 1, 1, 0, 0, 0, TimeSpan.Zero))
+                PremiumGranted(UserId "u1", "admin", Some "vip", DateTimeOffset(2020, 1, 1, 0, 0, 0, TimeSpan.Zero))
 
             let json = AuditLog.serialiseAuditEvent original
             Expect.equal (AuditLog.tryDecodeAuditEvent "PremiumGranted" json) (Ok original) "tuple case round-trip"

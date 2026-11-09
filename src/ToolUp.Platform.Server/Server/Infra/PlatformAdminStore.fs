@@ -130,17 +130,17 @@ type BlobBackedPlatformAdminStore(storage: IBlobStorage, auditLog: IAuditLog, ?d
     interface IPlatformAdminStore with
         member _.IsPlatformAdmin userId = async {
             let! admins = load ()
-            return List.contains userId admins
+            return List.contains userId (List.map UserId admins)
         }
 
         member _.AssignPlatformAdmin(actorUserId, targetUserId) =
             withWriteLock (fun () -> async {
                 let! existing = load ()
 
-                if List.contains targetUserId existing then
+                if List.contains targetUserId.Value existing then
                     return Ok() // idempotent — no audit re-emission
                 else
-                    let updated = targetUserId :: existing
+                    let updated = targetUserId.Value :: existing
                     let! result = save updated
 
                     match result with
@@ -149,8 +149,8 @@ type BlobBackedPlatformAdminStore(storage: IBlobStorage, auditLog: IAuditLog, ?d
                             auditLog.Record(
                                 platformContainer,
                                 PlatformAdminAssigned {
-                                    Actor = actorUserId
-                                    TargetUserId = targetUserId
+                                    Actor = actorUserId.Value
+                                    TargetUserId = UserId targetUserId.Value
                                 }
                             )
 
@@ -162,12 +162,12 @@ type BlobBackedPlatformAdminStore(storage: IBlobStorage, auditLog: IAuditLog, ?d
             withWriteLock (fun () -> async {
                 let! existing = load ()
 
-                if not (List.contains targetUserId existing) then
+                if not (List.contains targetUserId (List.map UserId existing)) then
                     return Ok() // idempotent — no audit re-emission
                 elif existing.Length <= 1 then
                     return Error "cannot revoke the last remaining Platform Admin"
                 else
-                    let updated = existing |> List.filter (fun id -> id <> targetUserId)
+                    let updated = existing |> List.filter (fun id -> id <> targetUserId.Value)
                     let! result = save updated
 
                     match result with
@@ -176,8 +176,8 @@ type BlobBackedPlatformAdminStore(storage: IBlobStorage, auditLog: IAuditLog, ?d
                             auditLog.Record(
                                 platformContainer,
                                 PlatformAdminRevoked {
-                                    Actor = actorUserId
-                                    TargetUserId = targetUserId
+                                    Actor = actorUserId.Value
+                                    TargetUserId = UserId targetUserId.Value
                                 }
                             )
 
@@ -281,7 +281,7 @@ let bootstrap
                 // Already-populated — bootstrap is one-shot. No-op.
                 ()
             else
-                let! result = store.AssignPlatformAdmin(bootstrapActor, trimmed)
+                let! result = store.AssignPlatformAdmin(UserId bootstrapActor, UserId trimmed)
 
                 match result with
                 | Ok() ->

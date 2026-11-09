@@ -311,7 +311,13 @@ let tests =
 
             // Approve o1 (Owner).
             let! _ =
-                registry.TransitionStatus("team-1", o1.CompositeKey.Hash, ModelArtifactStatus.Approved, Owner, "alice")
+                registry.TransitionStatus(
+                    "team-1",
+                    o1.CompositeKey.Hash,
+                    ModelArtifactStatus.Approved,
+                    Owner,
+                    UserId "alice"
+                )
 
             let! fitted = registry.QueryByStatus("team-1", ModelArtifactStatus.Fitted)
             let! approved = registry.QueryByStatus("team-1", ModelArtifactStatus.Approved)
@@ -328,7 +334,13 @@ let tests =
             let! _ = registry.Register("team-1", o, "alice", Map.empty, "")
 
             let! result =
-                registry.TransitionStatus("team-1", o.CompositeKey.Hash, ModelArtifactStatus.Approved, Admin, "carol")
+                registry.TransitionStatus(
+                    "team-1",
+                    o.CompositeKey.Hash,
+                    ModelArtifactStatus.Approved,
+                    Admin,
+                    UserId "carol"
+                )
 
             let updated = okv result
             Expect.equal updated.Status ModelArtifactStatus.Approved "the status advanced to Approved"
@@ -343,7 +355,7 @@ let tests =
             Expect.equal transitioned.Length 1 "exactly one ModelArtifactTransitioned row"
             Expect.equal transitioned.[0].FromStatus "Fitted" "the from-status is audited"
             Expect.equal transitioned.[0].ToStatus "Approved" "the to-status is audited"
-            Expect.equal transitioned.[0].ActorUserId "carol" "the actor is audited"
+            Expect.equal transitioned.[0].ActorUserId (UserId "carol") "the actor is audited"
         }
 
         testCaseAsync "a non-admin cannot Approve — refused as Forbidden and audited"
@@ -358,7 +370,7 @@ let tests =
                     o.CompositeKey.Hash,
                     ModelArtifactStatus.Approved,
                     Member,
-                    "mallory"
+                    (UserId "mallory")
                 )
 
             match result with
@@ -391,7 +403,13 @@ let tests =
 
             // Fitted → Draft is not a legal edge; even as an Owner.
             let! result =
-                registry.TransitionStatus("team-1", o.CompositeKey.Hash, ModelArtifactStatus.Draft, Owner, "alice")
+                registry.TransitionStatus(
+                    "team-1",
+                    o.CompositeKey.Hash,
+                    ModelArtifactStatus.Draft,
+                    Owner,
+                    UserId "alice"
+                )
 
             match result with
             | Error(ModelRegistryError.IllegalTransition(ModelArtifactStatus.Fitted, ModelArtifactStatus.Draft)) -> ()
@@ -405,7 +423,13 @@ let tests =
             let! _ = registry.Register("team-1", o, "alice", Map.empty, "")
 
             let! result =
-                registry.TransitionStatus("team-1", o.CompositeKey.Hash, ModelArtifactStatus.Retired, Member, "dan")
+                registry.TransitionStatus(
+                    "team-1",
+                    o.CompositeKey.Hash,
+                    ModelArtifactStatus.Retired,
+                    Member,
+                    UserId "dan"
+                )
 
             Expect.equal (okv result).Status ModelArtifactStatus.Retired "Retire is a legal non-elevated transition"
         }

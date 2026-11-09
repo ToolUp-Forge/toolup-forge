@@ -623,7 +623,7 @@ ToolUp.Platform.AdminMutation.Tag : System.Int32 { get }
 ToolUp.Platform.AdminMutation+SetMemberPermissions (class)
 ToolUp.Platform.AdminMutation+SetMemberPermissions.moduleName : System.String { get }
 ToolUp.Platform.AdminMutation+SetMemberPermissions.permissions : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission] { get }
-ToolUp.Platform.AdminMutation+SetMemberPermissions.userId : System.String { get }
+ToolUp.Platform.AdminMutation+SetMemberPermissions.userId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.AdminMutation+SetModuleExposure (class)
 ToolUp.Platform.AdminMutation+SetModuleExposure.moduleName : System.String { get }
 ToolUp.Platform.AdminMutation+SetModuleExposure.state : ToolUp.Platform.ModuleExposure { get }
@@ -637,22 +637,22 @@ ToolUp.Platform.AdminMutation+Tags.SetModuleExposure : System.Int32 (literal)
 ToolUp.Platform.AdminMutation+Tags.SetTeamDefaults : System.Int32 (literal)
 ToolUp.Platform.AdminMutation+Tags.SetTeamPermissions : System.Int32 (literal)
 ToolUp.Platform.AdminMutationApprovalRefusedPayload (class)
-ToolUp.Platform.AdminMutationApprovalRefusedPayload..ctor(System.String, System.String, System.String, System.String, System.String, System.String)
+ToolUp.Platform.AdminMutationApprovalRefusedPayload..ctor(System.String, ToolUp.Platform.TeamId, System.String, System.String, System.String, System.String)
 ToolUp.Platform.AdminMutationApprovalRefusedPayload.AttemptedApproverId : System.String { get }
 ToolUp.Platform.AdminMutationApprovalRefusedPayload.MutationKind : System.String { get }
 ToolUp.Platform.AdminMutationApprovalRefusedPayload.ProposerId : System.String { get }
 ToolUp.Platform.AdminMutationApprovalRefusedPayload.RefusalCode : System.String { get }
 ToolUp.Platform.AdminMutationApprovalRefusedPayload.RequestId : System.String { get }
-ToolUp.Platform.AdminMutationApprovalRefusedPayload.TeamId : System.String { get }
+ToolUp.Platform.AdminMutationApprovalRefusedPayload.TeamId : ToolUp.Platform.TeamId { get }
 ToolUp.Platform.AdminMutationApprovedPayload (class)
-ToolUp.Platform.AdminMutationApprovedPayload..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.Boolean)
+ToolUp.Platform.AdminMutationApprovedPayload..ctor(System.String, ToolUp.Platform.TeamId, System.String, System.String, System.String, System.String, System.Boolean)
 ToolUp.Platform.AdminMutationApprovedPayload.Applied : System.Boolean { get }
 ToolUp.Platform.AdminMutationApprovedPayload.ApproverId : System.String { get }
 ToolUp.Platform.AdminMutationApprovedPayload.Fingerprint : System.String { get }
 ToolUp.Platform.AdminMutationApprovedPayload.MutationKind : System.String { get }
 ToolUp.Platform.AdminMutationApprovedPayload.ProposerId : System.String { get }
 ToolUp.Platform.AdminMutationApprovedPayload.RequestId : System.String { get }
-ToolUp.Platform.AdminMutationApprovedPayload.TeamId : System.String { get }
+ToolUp.Platform.AdminMutationApprovedPayload.TeamId : ToolUp.Platform.TeamId { get }
 ToolUp.Platform.AdminMutationDecision (class)
 ToolUp.Platform.AdminMutationDecision.IsApplied : System.Boolean { get }
 ToolUp.Platform.AdminMutationDecision.IsRejected : System.Boolean { get }
@@ -665,13 +665,13 @@ ToolUp.Platform.AdminMutationDecision+Tags (class)
 ToolUp.Platform.AdminMutationDecision+Tags.Applied : System.Int32 (literal)
 ToolUp.Platform.AdminMutationDecision+Tags.Rejected : System.Int32 (literal)
 ToolUp.Platform.AdminMutationExpiredPayload (class)
-ToolUp.Platform.AdminMutationExpiredPayload..ctor(System.String, System.String, System.String, System.String, System.String, System.DateTimeOffset)
+ToolUp.Platform.AdminMutationExpiredPayload..ctor(System.String, ToolUp.Platform.TeamId, System.String, System.String, System.String, System.DateTimeOffset)
 ToolUp.Platform.AdminMutationExpiredPayload.ExpiredAtUtc : System.DateTimeOffset { get }
 ToolUp.Platform.AdminMutationExpiredPayload.Fingerprint : System.String { get }
 ToolUp.Platform.AdminMutationExpiredPayload.MutationKind : System.String { get }
 ToolUp.Platform.AdminMutationExpiredPayload.ProposerId : System.String { get }
 ToolUp.Platform.AdminMutationExpiredPayload.RequestId : System.String { get }
-ToolUp.Platform.AdminMutationExpiredPayload.TeamId : System.String { get }
+ToolUp.Platform.AdminMutationExpiredPayload.TeamId : ToolUp.Platform.TeamId { get }
 ToolUp.Platform.AdminMutationKind (class)
 ToolUp.Platform.AdminMutationKind.IsMemberPermissions : System.Boolean { get }
 ToolUp.Platform.AdminMutationKind.IsModuleExposure : System.Boolean { get }
@@ -703,14 +703,14 @@ ToolUp.Platform.AdminMutationPolicy+Tags (class)
 ToolUp.Platform.AdminMutationPolicy+Tags.DualControl : System.Int32 (literal)
 ToolUp.Platform.AdminMutationPolicy+Tags.SingleAdmin : System.Int32 (literal)
 ToolUp.Platform.AdminMutationProposedPayload (class)
-ToolUp.Platform.AdminMutationProposedPayload..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.DateTimeOffset)
+ToolUp.Platform.AdminMutationProposedPayload..ctor(System.String, ToolUp.Platform.TeamId, System.String, System.String, System.String, System.String, System.DateTimeOffset)
 ToolUp.Platform.AdminMutationProposedPayload.ExpiresAtUtc : System.DateTimeOffset { get }
 ToolUp.Platform.AdminMutationProposedPayload.Fingerprint : System.String { get }
 ToolUp.Platform.AdminMutationProposedPayload.MutationKind : System.String { get }
 ToolUp.Platform.AdminMutationProposedPayload.ProposerId : System.String { get }
 ToolUp.Platform.AdminMutationProposedPayload.RequestId : System.String { get }
 ToolUp.Platform.AdminMutationProposedPayload.Summary : System.String { get }
-ToolUp.Platform.AdminMutationProposedPayload.TeamId : System.String { get }
+ToolUp.Platform.AdminMutationProposedPayload.TeamId : ToolUp.Platform.TeamId { get }
 ToolUp.Platform.AdminMutationQueued (class)
 ToolUp.Platform.AdminMutationQueued..ctor(System.String, System.String, System.DateTimeOffset)
 ToolUp.Platform.AdminMutationQueued.ExpiresAtUtc : System.DateTimeOffset { get }
@@ -752,14 +752,14 @@ ToolUp.Platform.AdminMutationRefusalModule (class)
 ToolUp.Platform.AdminMutationRefusalModule.code(ToolUp.Platform.AdminMutationRefusal) : System.String
 ToolUp.Platform.AdminMutationRefusalModule.describe(ToolUp.Platform.AdminMutationRefusal) : System.String
 ToolUp.Platform.AdminMutationRejectedPayload (class)
-ToolUp.Platform.AdminMutationRejectedPayload..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String)
+ToolUp.Platform.AdminMutationRejectedPayload..ctor(System.String, ToolUp.Platform.TeamId, System.String, System.String, System.String, System.String, System.String)
 ToolUp.Platform.AdminMutationRejectedPayload.ApproverId : System.String { get }
 ToolUp.Platform.AdminMutationRejectedPayload.Fingerprint : System.String { get }
 ToolUp.Platform.AdminMutationRejectedPayload.MutationKind : System.String { get }
 ToolUp.Platform.AdminMutationRejectedPayload.ProposerId : System.String { get }
 ToolUp.Platform.AdminMutationRejectedPayload.Reason : System.String { get }
 ToolUp.Platform.AdminMutationRejectedPayload.RequestId : System.String { get }
-ToolUp.Platform.AdminMutationRejectedPayload.TeamId : System.String { get }
+ToolUp.Platform.AdminMutationRejectedPayload.TeamId : ToolUp.Platform.TeamId { get }
 ToolUp.Platform.AdminMutationScope (class)
 ToolUp.Platform.AdminMutationScope.AllPermissionWrites : ToolUp.Platform.AdminMutationScope { get }
 ToolUp.Platform.AdminMutationScope.IsAllPermissionWrites : System.Boolean { get }
@@ -852,26 +852,26 @@ ToolUp.Platform.AlertSource+Tags (class)
 ToolUp.Platform.AlertSource+Tags.HealthProbe : System.Int32 (literal)
 ToolUp.Platform.AlertSource+Tags.Metric : System.Int32 (literal)
 ToolUp.Platform.AllSessionsRevokedPayload (class)
-ToolUp.Platform.AllSessionsRevokedPayload..ctor(System.String, System.String, System.Int32, System.Boolean)
-ToolUp.Platform.AllSessionsRevokedPayload.ActorUserId : System.String { get }
+ToolUp.Platform.AllSessionsRevokedPayload..ctor(ToolUp.Platform.UserId, ToolUp.Platform.UserId, System.Int32, System.Boolean)
+ToolUp.Platform.AllSessionsRevokedPayload.ActorUserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.AllSessionsRevokedPayload.ByAdministrator : System.Boolean { get }
 ToolUp.Platform.AllSessionsRevokedPayload.RevokedCount : System.Int32 { get }
-ToolUp.Platform.AllSessionsRevokedPayload.SubjectUserId : System.String { get }
+ToolUp.Platform.AllSessionsRevokedPayload.SubjectUserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.AllowAllContentScanner (class)
 ToolUp.Platform.AllowAllContentScanner..ctor()
 ToolUp.Platform.AllowAnonymousAttribute (class)
 ToolUp.Platform.AllowAnonymousAttribute..ctor()
 ToolUp.Platform.AnalysisRunPayload (class)
-ToolUp.Platform.AnalysisRunPayload..ctor(System.String, System.String, System.String)
+ToolUp.Platform.AnalysisRunPayload..ctor(ToolUp.Platform.UserId, System.String, System.String)
 ToolUp.Platform.AnalysisRunPayload.ModuleName : System.String { get }
 ToolUp.Platform.AnalysisRunPayload.Summary : System.String { get }
-ToolUp.Platform.AnalysisRunPayload.UserId : System.String { get }
+ToolUp.Platform.AnalysisRunPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.AnonymousConfig (class)
 ToolUp.Platform.AnonymousConfig..ctor(ToolUp.Platform.Persistence, Microsoft.FSharp.Core.FSharpOption`1[System.Int32])
 ToolUp.Platform.AnonymousConfig.Persistence : ToolUp.Platform.Persistence { get }
 ToolUp.Platform.AnonymousConfig.SessionEvictionMinutes : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
 ToolUp.Platform.AnonymousSessionMigratedPayload (class)
-ToolUp.Platform.AnonymousSessionMigratedPayload..ctor(System.String, System.String, System.String, System.Int32, System.Int64, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.DateTimeOffset)
+ToolUp.Platform.AnonymousSessionMigratedPayload..ctor(System.String, ToolUp.Platform.UserId, System.String, System.Int32, System.Int64, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.DateTimeOffset)
 ToolUp.Platform.AnonymousSessionMigratedPayload.AnonymousSessionId : System.String { get }
 ToolUp.Platform.AnonymousSessionMigratedPayload.BytesMigrated : System.Int64 { get }
 ToolUp.Platform.AnonymousSessionMigratedPayload.Error : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
@@ -880,7 +880,7 @@ ToolUp.Platform.AnonymousSessionMigratedPayload.ItemsMigrated : System.Int32 { g
 ToolUp.Platform.AnonymousSessionMigratedPayload.Modules : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.AnonymousSessionMigratedPayload.OccurredAt : System.DateTimeOffset { get }
 ToolUp.Platform.AnonymousSessionMigratedPayload.Outcome : System.String { get }
-ToolUp.Platform.AnonymousSessionMigratedPayload.TargetUserId : System.String { get }
+ToolUp.Platform.AnonymousSessionMigratedPayload.TargetUserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.AnswerVerificationPayload (class)
 ToolUp.Platform.AnswerVerificationPayload..ctor(System.Guid, System.Guid, System.String, System.Int32, System.Int32, System.Int32, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AnswerVerificationTokenAudit], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, System.String, System.DateTimeOffset)
 ToolUp.Platform.AnswerVerificationPayload.CertificateRef : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
@@ -957,21 +957,21 @@ ToolUp.Platform.ArtifactValidation+Tags.Ok : System.Int32 (literal)
 ToolUp.Platform.ArtifactsSourceModule (class)
 ToolUp.Platform.ArtifactsSourceModule.value : System.String (literal)
 ToolUp.Platform.AssetDeletedPayload (class)
-ToolUp.Platform.AssetDeletedPayload..ctor(System.String, System.String, System.String)
+ToolUp.Platform.AssetDeletedPayload..ctor(ToolUp.Platform.UserId, System.String, System.String)
 ToolUp.Platform.AssetDeletedPayload.AssetId : System.String { get }
 ToolUp.Platform.AssetDeletedPayload.ContentHash : System.String { get }
-ToolUp.Platform.AssetDeletedPayload.UserId : System.String { get }
+ToolUp.Platform.AssetDeletedPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.AssetSourceModule (class)
 ToolUp.Platform.AssetSourceModule.value : System.String (literal)
 ToolUp.Platform.AssetUploadedPayload (class)
-ToolUp.Platform.AssetUploadedPayload..ctor(System.String, System.String, System.String, System.String, System.String, System.Int64, System.String)
+ToolUp.Platform.AssetUploadedPayload..ctor(ToolUp.Platform.UserId, System.String, System.String, System.String, System.String, System.Int64, System.String)
 ToolUp.Platform.AssetUploadedPayload.AssetId : System.String { get }
 ToolUp.Platform.AssetUploadedPayload.ContentHash : System.String { get }
 ToolUp.Platform.AssetUploadedPayload.MimeType : System.String { get }
 ToolUp.Platform.AssetUploadedPayload.OriginalFilename : System.String { get }
 ToolUp.Platform.AssetUploadedPayload.Profile : System.String { get }
 ToolUp.Platform.AssetUploadedPayload.SizeBytes : System.Int64 { get }
-ToolUp.Platform.AssetUploadedPayload.UserId : System.String { get }
+ToolUp.Platform.AssetUploadedPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.AuditAttribute (class)
 ToolUp.Platform.AuditAttribute..ctor(System.String)
 ToolUp.Platform.AuditAttribute.KindName : System.String { get }
@@ -1510,12 +1510,12 @@ ToolUp.Platform.AuditEvent+PremiumGranted (class)
 ToolUp.Platform.AuditEvent+PremiumGranted.grantor : System.String { get }
 ToolUp.Platform.AuditEvent+PremiumGranted.occurredAt : System.DateTimeOffset { get }
 ToolUp.Platform.AuditEvent+PremiumGranted.reason : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AuditEvent+PremiumGranted.subjectUserId : System.String { get }
+ToolUp.Platform.AuditEvent+PremiumGranted.subjectUserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.AuditEvent+PremiumRevoked (class)
 ToolUp.Platform.AuditEvent+PremiumRevoked.grantor : System.String { get }
 ToolUp.Platform.AuditEvent+PremiumRevoked.occurredAt : System.DateTimeOffset { get }
 ToolUp.Platform.AuditEvent+PremiumRevoked.reason : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.AuditEvent+PremiumRevoked.subjectUserId : System.String { get }
+ToolUp.Platform.AuditEvent+PremiumRevoked.subjectUserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.AuditEvent+PublicationReaderGranted (class)
 ToolUp.Platform.AuditEvent+PublicationReaderGranted.Item : ToolUp.Platform.PublicationReaderGrantChangedPayload { get }
 ToolUp.Platform.AuditEvent+PublicationReaderRevoked (class)
@@ -1929,7 +1929,7 @@ ToolUp.Platform.AuditSubject+ClaimAudit.resourceId : System.String { get }
 ToolUp.Platform.AuditSubject+ClaimAudit.resourceKind : System.String { get }
 ToolUp.Platform.AuditSubject+ClaimAudit.tokenId : System.String { get }
 ToolUp.Platform.AuditSubject+ReaderAudit (class)
-ToolUp.Platform.AuditSubject+ReaderAudit.userId : System.String { get }
+ToolUp.Platform.AuditSubject+ReaderAudit.userId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.AuditSubject+Tags (class)
 ToolUp.Platform.AuditSubject+Tags.AnonymousAudit : System.Int32 (literal)
 ToolUp.Platform.AuditSubject+Tags.ClaimAudit : System.Int32 (literal)
@@ -1937,10 +1937,10 @@ ToolUp.Platform.AuditSubject+Tags.ReaderAudit : System.Int32 (literal)
 ToolUp.Platform.AuditSubject+Tags.TeamAudit : System.Int32 (literal)
 ToolUp.Platform.AuditSubject+Tags.UserAudit : System.Int32 (literal)
 ToolUp.Platform.AuditSubject+TeamAudit (class)
-ToolUp.Platform.AuditSubject+TeamAudit.teamId : System.String { get }
-ToolUp.Platform.AuditSubject+TeamAudit.userId : System.String { get }
+ToolUp.Platform.AuditSubject+TeamAudit.teamId : ToolUp.Platform.TeamId { get }
+ToolUp.Platform.AuditSubject+TeamAudit.userId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.AuditSubject+UserAudit (class)
-ToolUp.Platform.AuditSubject+UserAudit.userId : System.String { get }
+ToolUp.Platform.AuditSubject+UserAudit.userId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.AuditSubjectKind (class)
 ToolUp.Platform.AuditSubjectKind.AnonymousAuditKind : ToolUp.Platform.AuditSubjectKind { get }
 ToolUp.Platform.AuditSubjectKind.ClaimAuditKind : ToolUp.Platform.AuditSubjectKind { get }
@@ -1987,14 +1987,14 @@ ToolUp.Platform.AuditViewProjection.SummaryMaxLength : System.Int32 (literal)
 ToolUp.Platform.AuditViewProjection.actorFieldNames : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.Auth (class)
 ToolUp.Platform.Auth+AuthenticatedUser (class)
-ToolUp.Platform.Auth+AuthenticatedUser..ctor(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.Auth+PrincipalAdmission)
+ToolUp.Platform.Auth+AuthenticatedUser..ctor(ToolUp.Platform.UserId, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.Auth+PrincipalAdmission)
 ToolUp.Platform.Auth+AuthenticatedUser.Admission : ToolUp.Platform.Auth+PrincipalAdmission { get }
 ToolUp.Platform.Auth+AuthenticatedUser.DirectoryRoles : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.Auth+AuthenticatedUser.DisplayName : System.String { get }
 ToolUp.Platform.Auth+AuthenticatedUser.Email : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.Auth+AuthenticatedUser.Roles : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.Auth+AuthenticatedUser.TenantId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.Auth+AuthenticatedUser.UserId : System.String { get }
+ToolUp.Platform.Auth+AuthenticatedUser.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.Auth+AuthenticatedUserModule (class)
 ToolUp.Platform.Auth+AuthenticatedUserModule.anonymous : ToolUp.Platform.Auth+AuthenticatedUser { get }
 ToolUp.Platform.Auth+AuthenticatedUserModule.isAnonymous(ToolUp.Platform.Auth+AuthenticatedUser) : System.Boolean
@@ -2519,7 +2519,7 @@ ToolUp.Platform.BuildStatus+Building (class)
 ToolUp.Platform.BuildStatus+Building.attempt : System.Int32 { get }
 ToolUp.Platform.BuildStatus+Building.startedAt : System.DateTime { get }
 ToolUp.Platform.BuildStatus+Cancelled (class)
-ToolUp.Platform.BuildStatus+Cancelled.byUserId : System.String { get }
+ToolUp.Platform.BuildStatus+Cancelled.byUserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.BuildStatus+Cancelled.cancelledAt : System.DateTime { get }
 ToolUp.Platform.BuildStatus+Failed (class)
 ToolUp.Platform.BuildStatus+Failed.completedAt : System.DateTime { get }
@@ -2663,28 +2663,28 @@ ToolUp.Platform.ClassificationLevelModule.tryParse(System.String) : Microsoft.FS
 ToolUp.Platform.ClassificationSourceModule (class)
 ToolUp.Platform.ClassificationSourceModule.value : System.String (literal)
 ToolUp.Platform.ClassifiedFieldReadPayload (class)
-ToolUp.Platform.ClassifiedFieldReadPayload..ctor(System.String, System.String, System.String, System.String, System.Boolean)
+ToolUp.Platform.ClassifiedFieldReadPayload..ctor(ToolUp.Platform.UserId, System.String, System.String, System.String, System.Boolean)
 ToolUp.Platform.ClassifiedFieldReadPayload.EntityName : System.String { get }
 ToolUp.Platform.ClassifiedFieldReadPayload.FieldPath : System.String { get }
 ToolUp.Platform.ClassifiedFieldReadPayload.Level : System.String { get }
 ToolUp.Platform.ClassifiedFieldReadPayload.Redacted : System.Boolean { get }
-ToolUp.Platform.ClassifiedFieldReadPayload.UserId : System.String { get }
+ToolUp.Platform.ClassifiedFieldReadPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.ClassifiedFieldWrittenPayload (class)
-ToolUp.Platform.ClassifiedFieldWrittenPayload..ctor(System.String, System.String, System.String, System.String)
+ToolUp.Platform.ClassifiedFieldWrittenPayload..ctor(ToolUp.Platform.UserId, System.String, System.String, System.String)
 ToolUp.Platform.ClassifiedFieldWrittenPayload.EntityName : System.String { get }
 ToolUp.Platform.ClassifiedFieldWrittenPayload.FieldPath : System.String { get }
 ToolUp.Platform.ClassifiedFieldWrittenPayload.Level : System.String { get }
-ToolUp.Platform.ClassifiedFieldWrittenPayload.UserId : System.String { get }
+ToolUp.Platform.ClassifiedFieldWrittenPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.ClientModuleContext (class)
-ToolUp.Platform.ClientModuleContext..ctor(Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.FlagValue], System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.IModuleQueryBus, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]])
+ToolUp.Platform.ClientModuleContext..ctor(Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.FlagValue], ToolUp.Platform.UserId, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamId], ToolUp.Platform.IModuleQueryBus, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]])
 ToolUp.Platform.ClientModuleContext.Config : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
 ToolUp.Platform.ClientModuleContext.Flags : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.FlagValue] { get }
 ToolUp.Platform.ClientModuleContext.OnAccessibleModulesChanged : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]] { get }
 ToolUp.Platform.ClientModuleContext.OnTeamSwitched : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit]] { get }
 ToolUp.Platform.ClientModuleContext.PlatformConfig : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
 ToolUp.Platform.ClientModuleContext.QueryBus : ToolUp.Platform.IModuleQueryBus { get }
-ToolUp.Platform.ClientModuleContext.TeamId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.ClientModuleContext.UserId : System.String { get }
+ToolUp.Platform.ClientModuleContext.TeamId : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamId] { get }
+ToolUp.Platform.ClientModuleContext.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.ClientModuleContextModule (class)
 ToolUp.Platform.ClientModuleContextModule.empty : ToolUp.Platform.ClientModuleContext { get }
 ToolUp.Platform.ClosureAttestation (class)
@@ -3603,8 +3603,8 @@ ToolUp.Platform.ConsentDenialModule.code(ToolUp.Platform.ConsentDenial) : System
 ToolUp.Platform.ConsentDenialModule.describe(ToolUp.Platform.ConsentDenial) : System.String
 ToolUp.Platform.ConsentDenialModule.isTrustFailure(ToolUp.Platform.ConsentDenial) : System.Boolean
 ToolUp.Platform.ConsentEvent (class)
-ToolUp.Platform.ConsentEvent..ctor(System.String, ToolUp.Platform.ConsentCategory, ToolUp.Platform.ConsentDecision, System.DateTimeOffset, System.String)
-ToolUp.Platform.ConsentEvent.AnonymousUserId : System.String { get }
+ToolUp.Platform.ConsentEvent..ctor(ToolUp.Platform.UserId, ToolUp.Platform.ConsentCategory, ToolUp.Platform.ConsentDecision, System.DateTimeOffset, System.String)
+ToolUp.Platform.ConsentEvent.AnonymousUserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.ConsentEvent.Category : ToolUp.Platform.ConsentCategory { get }
 ToolUp.Platform.ConsentEvent.CmpProvider : System.String { get }
 ToolUp.Platform.ConsentEvent.Decision : ToolUp.Platform.ConsentDecision { get }
@@ -3667,41 +3667,41 @@ ToolUp.Platform.ConsentStatusModule (class)
 ToolUp.Platform.ConsentStatusModule.ofToken(System.String) : ToolUp.Platform.ConsentStatus
 ToolUp.Platform.ConsentStatusModule.toToken(ToolUp.Platform.ConsentStatus) : System.String
 ToolUp.Platform.ConsentSubject (class)
-ToolUp.Platform.ConsentSubject..ctor(System.String, System.String, System.String)
+ToolUp.Platform.ConsentSubject..ctor(ToolUp.Platform.TeamId, System.String, System.String)
 ToolUp.Platform.ConsentSubject.ModuleName : System.String { get }
 ToolUp.Platform.ConsentSubject.SubjectId : System.String { get }
-ToolUp.Platform.ConsentSubject.TeamId : System.String { get }
+ToolUp.Platform.ConsentSubject.TeamId : ToolUp.Platform.TeamId { get }
 ToolUp.Platform.ConsentSubjectModule (class)
 ToolUp.Platform.ConsentSubjectModule.create(System.String, System.String, System.String) : ToolUp.Platform.ConsentSubject
 ToolUp.Platform.ConsentSubjectModule.isIncomplete(ToolUp.Platform.ConsentSubject) : System.Boolean
 ToolUp.Platform.ContactCreatedPayload (class)
-ToolUp.Platform.ContactCreatedPayload..ctor(System.String, System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Platform.ContactCreatedPayload..ctor(ToolUp.Platform.UserId, System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String])
 ToolUp.Platform.ContactCreatedPayload.ContactId : System.String { get }
 ToolUp.Platform.ContactCreatedPayload.Owner : System.String { get }
 ToolUp.Platform.ContactCreatedPayload.ScopeId : System.String { get }
 ToolUp.Platform.ContactCreatedPayload.Tags : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
-ToolUp.Platform.ContactCreatedPayload.UserId : System.String { get }
+ToolUp.Platform.ContactCreatedPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.ContactDeletedPayload (class)
-ToolUp.Platform.ContactDeletedPayload..ctor(System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Platform.ContactDeletedPayload..ctor(ToolUp.Platform.UserId, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String])
 ToolUp.Platform.ContactDeletedPayload.ContactId : System.String { get }
 ToolUp.Platform.ContactDeletedPayload.ScopeId : System.String { get }
-ToolUp.Platform.ContactDeletedPayload.UserId : System.String { get }
+ToolUp.Platform.ContactDeletedPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.ContactDeletedPayload.WithdrawnChannels : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.ContactOptInRecordedPayload (class)
-ToolUp.Platform.ContactOptInRecordedPayload..ctor(System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.DateTime])
+ToolUp.Platform.ContactOptInRecordedPayload..ctor(ToolUp.Platform.UserId, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.DateTime])
 ToolUp.Platform.ContactOptInRecordedPayload.Channel : System.String { get }
 ToolUp.Platform.ContactOptInRecordedPayload.ContactId : System.String { get }
 ToolUp.Platform.ContactOptInRecordedPayload.ExpiresAt : Microsoft.FSharp.Core.FSharpOption`1[System.DateTime] { get }
 ToolUp.Platform.ContactOptInRecordedPayload.ScopeId : System.String { get }
 ToolUp.Platform.ContactOptInRecordedPayload.Source : System.String { get }
-ToolUp.Platform.ContactOptInRecordedPayload.UserId : System.String { get }
+ToolUp.Platform.ContactOptInRecordedPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.ContactOptInWithdrawnPayload (class)
-ToolUp.Platform.ContactOptInWithdrawnPayload..ctor(System.String, System.String, System.String, System.String, System.String)
+ToolUp.Platform.ContactOptInWithdrawnPayload..ctor(ToolUp.Platform.UserId, System.String, System.String, System.String, System.String)
 ToolUp.Platform.ContactOptInWithdrawnPayload.Channel : System.String { get }
 ToolUp.Platform.ContactOptInWithdrawnPayload.ContactId : System.String { get }
 ToolUp.Platform.ContactOptInWithdrawnPayload.Reason : System.String { get }
 ToolUp.Platform.ContactOptInWithdrawnPayload.ScopeId : System.String { get }
-ToolUp.Platform.ContactOptInWithdrawnPayload.UserId : System.String { get }
+ToolUp.Platform.ContactOptInWithdrawnPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.ContactOwner (class)
 ToolUp.Platform.ContactOwner.IsTeam : System.Boolean { get }
 ToolUp.Platform.ContactOwner.IsUser : System.Boolean { get }
@@ -3717,11 +3717,11 @@ ToolUp.Platform.ContactOwnerModule (class)
 ToolUp.Platform.ContactOwnerModule.toWireString(ToolUp.Platform.ContactOwner) : System.String
 ToolUp.Platform.ContactOwnerModule.tryParse(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ContactOwner]
 ToolUp.Platform.ContactUpdatedPayload (class)
-ToolUp.Platform.ContactUpdatedPayload..ctor(System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Platform.ContactUpdatedPayload..ctor(ToolUp.Platform.UserId, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String])
 ToolUp.Platform.ContactUpdatedPayload.ChangedFields : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.ContactUpdatedPayload.ContactId : System.String { get }
 ToolUp.Platform.ContactUpdatedPayload.ScopeId : System.String { get }
-ToolUp.Platform.ContactUpdatedPayload.UserId : System.String { get }
+ToolUp.Platform.ContactUpdatedPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.ContainerInfo (class)
 ToolUp.Platform.ContainerInfo..ctor(System.String, System.String, System.String, ToolUp.Platform.ContainerStatus, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String])
 ToolUp.Platform.ContainerInfo.ContainerId : System.String { get }
@@ -3811,7 +3811,7 @@ ToolUp.Platform.ContentScanPolicyModule.defaults : ToolUp.Platform.ContentScanPo
 ToolUp.Platform.ContentScanPolicyModule.failClosed : ToolUp.Platform.ContentScanPolicy { get }
 ToolUp.Platform.ContentScanPolicyModule.failOpen : ToolUp.Platform.ContentScanPolicy { get }
 ToolUp.Platform.ContentScannedPayload (class)
-ToolUp.Platform.ContentScannedPayload..ctor(System.String, System.String, System.String, System.String, System.String, System.Int64, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean, System.DateTimeOffset)
+ToolUp.Platform.ContentScannedPayload..ctor(ToolUp.Platform.UserId, System.String, System.String, System.String, System.String, System.Int64, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean, System.DateTimeOffset)
 ToolUp.Platform.ContentScannedPayload.ContentHash : System.String { get }
 ToolUp.Platform.ContentScannedPayload.FileName : System.String { get }
 ToolUp.Platform.ContentScannedPayload.OccurredAt : System.DateTimeOffset { get }
@@ -3820,7 +3820,7 @@ ToolUp.Platform.ContentScannedPayload.Refused : System.Boolean { get }
 ToolUp.Platform.ContentScannedPayload.ScannerName : System.String { get }
 ToolUp.Platform.ContentScannedPayload.ScopeId : System.String { get }
 ToolUp.Platform.ContentScannedPayload.SizeBytes : System.Int64 { get }
-ToolUp.Platform.ContentScannedPayload.UserId : System.String { get }
+ToolUp.Platform.ContentScannedPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.ContentScannedPayload.Verdict : System.String { get }
 ToolUp.Platform.Conversation (class)
 ToolUp.Platform.Conversation..ctor(System.String, System.Int32, System.DateTime, System.String, System.String, System.String, System.String, System.String, System.String)
@@ -3840,10 +3840,10 @@ ToolUp.Platform.ConversationCompletedPayload.ErrorReason : System.String { get }
 ToolUp.Platform.ConversationCompletedPayload.FinalStatus : System.String { get }
 ToolUp.Platform.ConversationCompletedPayload.TurnCount : System.Int32 { get }
 ToolUp.Platform.ConversationErasedPayload (class)
-ToolUp.Platform.ConversationErasedPayload..ctor(System.String, System.String, System.Int32)
+ToolUp.Platform.ConversationErasedPayload..ctor(ToolUp.Platform.UserId, System.String, System.Int32)
 ToolUp.Platform.ConversationErasedPayload.ConversationCount : System.Int32 { get }
 ToolUp.Platform.ConversationErasedPayload.Policy : System.String { get }
-ToolUp.Platform.ConversationErasedPayload.SubjectUserId : System.String { get }
+ToolUp.Platform.ConversationErasedPayload.SubjectUserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.ConversationError (class)
 ToolUp.Platform.ConversationError.IsNotFound : System.Boolean { get }
 ToolUp.Platform.ConversationError.IsScopeMismatch : System.Boolean { get }
@@ -3927,14 +3927,14 @@ ToolUp.Platform.ConversationReplayedPayload.OriginalConversationId : System.Stri
 ToolUp.Platform.ConversationReplayedPayload.ReplayConversationId : System.String { get }
 ToolUp.Platform.ConversationReplayedPayload.SdkAnnotation : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.ConversationStartedPayload (class)
-ToolUp.Platform.ConversationStartedPayload..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String)
+ToolUp.Platform.ConversationStartedPayload..ctor(System.String, ToolUp.Platform.UserId, System.String, System.String, System.String, System.String, System.String)
 ToolUp.Platform.ConversationStartedPayload.ConversationId : System.String { get }
 ToolUp.Platform.ConversationStartedPayload.ModelName : System.String { get }
 ToolUp.Platform.ConversationStartedPayload.Provider : System.String { get }
 ToolUp.Platform.ConversationStartedPayload.ScopeId : System.String { get }
 ToolUp.Platform.ConversationStartedPayload.SdkVersion : System.String { get }
 ToolUp.Platform.ConversationStartedPayload.SystemPromptDigest : System.String { get }
-ToolUp.Platform.ConversationStartedPayload.UserId : System.String { get }
+ToolUp.Platform.ConversationStartedPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.ConversationStatus (class)
 ToolUp.Platform.ConversationStatus.Active : ToolUp.Platform.ConversationStatus { get }
 ToolUp.Platform.ConversationStatus.Cancelled : ToolUp.Platform.ConversationStatus { get }
@@ -4104,7 +4104,7 @@ ToolUp.Platform.CredentialStatus+Tags.NeedsAuthorization : System.Int32 (literal
 ToolUp.Platform.CredentialStatus+Tags.NeedsReauthorization : System.Int32 (literal)
 ToolUp.Platform.CredentialStatus+Tags.NotConfigured : System.Int32 (literal)
 ToolUp.Platform.CrossModuleReadPayload (class)
-ToolUp.Platform.CrossModuleReadPayload..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.Guid], System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Double, System.Int32, System.Boolean, System.String)
+ToolUp.Platform.CrossModuleReadPayload..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.Guid], ToolUp.Platform.UserId, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Double, System.Int32, System.Boolean, System.String)
 ToolUp.Platform.CrossModuleReadPayload.Allowed : System.Boolean { get }
 ToolUp.Platform.CrossModuleReadPayload.ComponentId : System.String { get }
 ToolUp.Platform.CrossModuleReadPayload.ConversationId : Microsoft.FSharp.Core.FSharpOption`1[System.Guid] { get }
@@ -4116,7 +4116,7 @@ ToolUp.Platform.CrossModuleReadPayload.SourceConvActiveModule : Microsoft.FSharp
 ToolUp.Platform.CrossModuleReadPayload.TargetModule : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.CrossModuleReadPayload.TargetModules : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.CrossModuleReadPayload.ToolName : System.String { get }
-ToolUp.Platform.CrossModuleReadPayload.UserId : System.String { get }
+ToolUp.Platform.CrossModuleReadPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.DataAccessMode (class)
 ToolUp.Platform.DataAccessMode.IsPersistAccess : System.Boolean { get }
 ToolUp.Platform.DataAccessMode.IsReadAccess : System.Boolean { get }
@@ -4300,9 +4300,9 @@ ToolUp.Platform.DataSourceConfig.Name : System.String { get }
 ToolUp.Platform.DataSourceConfig.Tables : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]] { get }
 ToolUp.Platform.DataSourceConfig.Tags : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
 ToolUp.Platform.DataStoreResetPayload (class)
-ToolUp.Platform.DataStoreResetPayload..ctor(System.String, System.Int32)
+ToolUp.Platform.DataStoreResetPayload..ctor(ToolUp.Platform.UserId, System.Int32)
 ToolUp.Platform.DataStoreResetPayload.FileCount : System.Int32 { get }
-ToolUp.Platform.DataStoreResetPayload.UserId : System.String { get }
+ToolUp.Platform.DataStoreResetPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.DataStoreSeam (class)
 ToolUp.Platform.DataStoreSeam.AuditSinkSeam : ToolUp.Platform.DataStoreSeam { get }
 ToolUp.Platform.DataStoreSeam.BlobStorageSeam : ToolUp.Platform.DataStoreSeam { get }
@@ -4389,13 +4389,13 @@ ToolUp.Platform.DataSubjectRequestApi+IDataSubjectRequestApi.PreviewErasure : Mi
 ToolUp.Platform.DataSubjectRequestApi+IDataSubjectRequestApi.RequestExport : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.DataSubjectRequestApi+ExportRequestInput, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Byte[], System.String]]] { get }
 ToolUp.Platform.DataSubjectRequestApi+IDataSubjectRequestApi.RequestExportAsync : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.DataSubjectRequestApi+ExportRequestInput, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.String, System.String]]] { get }
 ToolUp.Platform.DataSubjectRequestAuditPayload (class)
-ToolUp.Platform.DataSubjectRequestAuditPayload..ctor(System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String])
+ToolUp.Platform.DataSubjectRequestAuditPayload..ctor(System.String, System.String, ToolUp.Platform.UserId, System.String, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String])
 ToolUp.Platform.DataSubjectRequestAuditPayload.Actor : System.String { get }
 ToolUp.Platform.DataSubjectRequestAuditPayload.Kind : System.String { get }
 ToolUp.Platform.DataSubjectRequestAuditPayload.Properties : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
 ToolUp.Platform.DataSubjectRequestAuditPayload.Reason : System.String { get }
 ToolUp.Platform.DataSubjectRequestAuditPayload.RequestId : System.String { get }
-ToolUp.Platform.DataSubjectRequestAuditPayload.SubjectUserId : System.String { get }
+ToolUp.Platform.DataSubjectRequestAuditPayload.SubjectUserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.DataSubjectRequestConfig (class)
 ToolUp.Platform.DataSubjectRequestConfig..ctor(ToolUp.Platform.ErasurePolicy, System.Boolean, System.Boolean)
 ToolUp.Platform.DataSubjectRequestConfig.Async : System.Boolean { get }
@@ -4801,10 +4801,10 @@ ToolUp.Platform.DatasetVersion.Schema : ToolUp.Platform.DatasetSchema { get }
 ToolUp.Platform.DatasetVersion.ScopeId : System.String { get }
 ToolUp.Platform.DatasetVersion.Version : System.Int32 { get }
 ToolUp.Platform.DeclaredPrincipal (class)
-ToolUp.Platform.DeclaredPrincipal..ctor(System.String, System.String, System.String)
+ToolUp.Platform.DeclaredPrincipal..ctor(System.String, ToolUp.Platform.UserId, System.String)
 ToolUp.Platform.DeclaredPrincipal.DisplayName : System.String { get }
 ToolUp.Platform.DeclaredPrincipal.Name : System.String { get }
-ToolUp.Platform.DeclaredPrincipal.UserId : System.String { get }
+ToolUp.Platform.DeclaredPrincipal.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.DegradedCapability (class)
 ToolUp.Platform.DegradedCapability..ctor(System.String, System.DateTimeOffset, System.String, System.String, System.String)
 ToolUp.Platform.DegradedCapability.Capability : System.String { get }
@@ -5223,11 +5223,11 @@ ToolUp.Platform.DeterminismSourceModule.ofFactor(ToolUp.Platform.DeterminismFact
 ToolUp.Platform.DeterminismSourceModule.ofFactors(Microsoft.FSharp.Collections.FSharpSet`1[ToolUp.Platform.DeterminismFactor]) : ToolUp.Platform.DeterminismSource
 ToolUp.Platform.DeterminismSourceModule.random : ToolUp.Platform.DeterminismSource { get }
 ToolUp.Platform.DiagnosticBundleAccessedPayload (class)
-ToolUp.Platform.DiagnosticBundleAccessedPayload..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Int64, System.Boolean)
+ToolUp.Platform.DiagnosticBundleAccessedPayload..ctor(ToolUp.Platform.UserId, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Int64, System.Boolean)
 ToolUp.Platform.DiagnosticBundleAccessedPayload.BundleSizeBytes : System.Int64 { get }
 ToolUp.Platform.DiagnosticBundleAccessedPayload.ScopeId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.DiagnosticBundleAccessedPayload.Truncated : System.Boolean { get }
-ToolUp.Platform.DiagnosticBundleAccessedPayload.UserId : System.String { get }
+ToolUp.Platform.DiagnosticBundleAccessedPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.DigestFrequency (class)
 ToolUp.Platform.DigestFrequency.Daily : ToolUp.Platform.DigestFrequency { get }
 ToolUp.Platform.DigestFrequency.Hourly : ToolUp.Platform.DigestFrequency { get }
@@ -5464,7 +5464,7 @@ ToolUp.Platform.EmailEnvelope.Content : ToolUp.Platform.EmailContent { get }
 ToolUp.Platform.EmailEnvelope.CorrelationId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.EmailEnvelope.Recipients : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RecipientId] { get }
 ToolUp.Platform.EncryptionKeyDestroyAckPayload (class)
-ToolUp.Platform.EncryptionKeyDestroyAckPayload..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.DateTimeOffset, System.DateTimeOffset)
+ToolUp.Platform.EncryptionKeyDestroyAckPayload..ctor(ToolUp.Platform.UserId, System.String, System.String, System.String, System.String, System.String, System.DateTimeOffset, System.DateTimeOffset)
 ToolUp.Platform.EncryptionKeyDestroyAckPayload.AcknowledgedAt : System.DateTimeOffset { get }
 ToolUp.Platform.EncryptionKeyDestroyAckPayload.AcknowledgedBy : System.String { get }
 ToolUp.Platform.EncryptionKeyDestroyAckPayload.KeyId : System.String { get }
@@ -5472,13 +5472,13 @@ ToolUp.Platform.EncryptionKeyDestroyAckPayload.OriginReplicaId : System.String {
 ToolUp.Platform.EncryptionKeyDestroyAckPayload.RequestedAt : System.DateTimeOffset { get }
 ToolUp.Platform.EncryptionKeyDestroyAckPayload.Resolver : System.String { get }
 ToolUp.Platform.EncryptionKeyDestroyAckPayload.ScopeId : System.String { get }
-ToolUp.Platform.EncryptionKeyDestroyAckPayload.UserId : System.String { get }
+ToolUp.Platform.EncryptionKeyDestroyAckPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.EncryptionKeyEventPayload (class)
-ToolUp.Platform.EncryptionKeyEventPayload..ctor(System.String, System.String, System.String, System.String)
+ToolUp.Platform.EncryptionKeyEventPayload..ctor(ToolUp.Platform.UserId, System.String, System.String, System.String)
 ToolUp.Platform.EncryptionKeyEventPayload.KeyId : System.String { get }
 ToolUp.Platform.EncryptionKeyEventPayload.Resolver : System.String { get }
 ToolUp.Platform.EncryptionKeyEventPayload.ScopeId : System.String { get }
-ToolUp.Platform.EncryptionKeyEventPayload.UserId : System.String { get }
+ToolUp.Platform.EncryptionKeyEventPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.EncryptionKeyUnreadablePayload (class)
 ToolUp.Platform.EncryptionKeyUnreadablePayload..ctor(System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], System.String)
 ToolUp.Platform.EncryptionKeyUnreadablePayload.KeyId : System.String { get }
@@ -5527,12 +5527,12 @@ ToolUp.Platform.EncryptionTypes+KeyResolutionErrorModule (class)
 ToolUp.Platform.EncryptionTypes+KeyResolutionErrorModule.message(ToolUp.Platform.EncryptionTypes+KeyResolutionError) : System.String
 ToolUp.Platform.EncryptionTypes+KeyResolutionErrorModule.tag(ToolUp.Platform.EncryptionTypes+KeyResolutionError) : System.String
 ToolUp.Platform.EntityLifecycleEventPayload (class)
-ToolUp.Platform.EntityLifecycleEventPayload..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, System.String, System.Int32, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.EntityTypes+EntityReplayProvenance])
+ToolUp.Platform.EntityLifecycleEventPayload..ctor(ToolUp.Platform.UserId, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, System.String, System.Int32, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.EntityTypes+EntityReplayProvenance])
 ToolUp.Platform.EntityLifecycleEventPayload.EntityId : System.String { get }
 ToolUp.Platform.EntityLifecycleEventPayload.EntityType : System.String { get }
 ToolUp.Platform.EntityLifecycleEventPayload.OnBehalfOf : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.EntityLifecycleEventPayload.Replay : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.EntityTypes+EntityReplayProvenance] { get }
-ToolUp.Platform.EntityLifecycleEventPayload.UserId : System.String { get }
+ToolUp.Platform.EntityLifecycleEventPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.EntityLifecycleEventPayload.Version : System.Int32 { get }
 ToolUp.Platform.EntityLock (class)
 ToolUp.Platform.EntityLock.isExpired(System.DateTime, ToolUp.Platform.LockLease) : System.Boolean
@@ -6172,13 +6172,13 @@ ToolUp.Platform.EvidencePackReading+Tags.PackSigned : System.Int32 (literal)
 ToolUp.Platform.EvidencePackReading+Tags.PackUnsigned : System.Int32 (literal)
 ToolUp.Platform.EvidencePackReading+Tags.PackWithheld : System.Int32 (literal)
 ToolUp.Platform.EvidencePackRequest (class)
-ToolUp.Platform.EvidencePackRequest..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, System.String)
+ToolUp.Platform.EvidencePackRequest..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.UserId], System.String, System.String)
 ToolUp.Platform.EvidencePackRequest.AuditSourceModules : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.EvidencePackRequest.EntityNames : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.EvidencePackRequest.Reason : System.String { get }
 ToolUp.Platform.EvidencePackRequest.RequestedBy : System.String { get }
 ToolUp.Platform.EvidencePackRequest.ScopeId : System.String { get }
-ToolUp.Platform.EvidencePackRequest.SubjectUserId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.EvidencePackRequest.SubjectUserId : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.UserId] { get }
 ToolUp.Platform.EvidencePackResult (class)
 ToolUp.Platform.EvidencePackResult..ctor(ToolUp.Platform.EvidencePackManifest, System.Byte[], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ExportSegment], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ExportSignature])
 ToolUp.Platform.EvidencePackResult.Manifest : ToolUp.Platform.EvidencePackManifest { get }
@@ -6503,9 +6503,9 @@ ToolUp.Platform.FieldSensitivity+Tags.PII : System.Int32 (literal)
 ToolUp.Platform.FieldSensitivity+Tags.Public : System.Int32 (literal)
 ToolUp.Platform.FieldSensitivity+Tags.Secret : System.Int32 (literal)
 ToolUp.Platform.FileDeletedPayload (class)
-ToolUp.Platform.FileDeletedPayload..ctor(System.String, System.String)
+ToolUp.Platform.FileDeletedPayload..ctor(ToolUp.Platform.UserId, System.String)
 ToolUp.Platform.FileDeletedPayload.FileName : System.String { get }
-ToolUp.Platform.FileDeletedPayload.UserId : System.String { get }
+ToolUp.Platform.FileDeletedPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.FileProcessor (class)
 ToolUp.Platform.FileProcessor+CsvHeaders (class)
 ToolUp.Platform.FileProcessor+CsvHeaders.columnCount(System.String) : System.Int32
@@ -6525,17 +6525,17 @@ ToolUp.Platform.FileProcessor+DataTypes.initialSchemaVersion : System.Int32 (lit
 ToolUp.Platform.FileProcessor+DataTypes.withMigrations(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IDataMigrator], ToolUp.Platform.FileProcessor+DataType) : ToolUp.Platform.FileProcessor+DataType
 ToolUp.Platform.FileProcessor+DataTypes.withSchemaVersion(System.Int32, ToolUp.Platform.FileProcessor+DataType) : ToolUp.Platform.FileProcessor+DataType
 ToolUp.Platform.FileReprocessedPayload (class)
-ToolUp.Platform.FileReprocessedPayload..ctor(System.String, System.String, System.String, System.Boolean)
+ToolUp.Platform.FileReprocessedPayload..ctor(ToolUp.Platform.UserId, System.String, System.String, System.Boolean)
 ToolUp.Platform.FileReprocessedPayload.DataType : System.String { get }
 ToolUp.Platform.FileReprocessedPayload.FileName : System.String { get }
 ToolUp.Platform.FileReprocessedPayload.HadError : System.Boolean { get }
-ToolUp.Platform.FileReprocessedPayload.UserId : System.String { get }
+ToolUp.Platform.FileReprocessedPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.FileUploadedPayload (class)
-ToolUp.Platform.FileUploadedPayload..ctor(System.String, System.String, System.String, System.Int64)
+ToolUp.Platform.FileUploadedPayload..ctor(ToolUp.Platform.UserId, System.String, System.String, System.Int64)
 ToolUp.Platform.FileUploadedPayload.DataType : System.String { get }
 ToolUp.Platform.FileUploadedPayload.FileName : System.String { get }
 ToolUp.Platform.FileUploadedPayload.SizeBytes : System.Int64 { get }
-ToolUp.Platform.FileUploadedPayload.UserId : System.String { get }
+ToolUp.Platform.FileUploadedPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.FlagChangeAction (class)
 ToolUp.Platform.FlagChangeAction.Cleared : ToolUp.Platform.FlagChangeAction { get }
 ToolUp.Platform.FlagChangeAction.IsCleared : System.Boolean { get }
@@ -6587,26 +6587,26 @@ ToolUp.Platform.FleetDeployRequest.Manifest : ToolUp.Platform.DeployManifest { g
 ToolUp.Platform.FleetDeployRequest.SubmittedBy : System.String { get }
 ToolUp.Platform.FleetDeployRequest.TenantId : System.String { get }
 ToolUp.Platform.FormSubmissionUpdatedPayload (class)
-ToolUp.Platform.FormSubmissionUpdatedPayload..ctor(System.String, System.String, System.String, System.Int32, System.Int32)
+ToolUp.Platform.FormSubmissionUpdatedPayload..ctor(ToolUp.Platform.UserId, System.String, System.String, System.Int32, System.Int32)
 ToolUp.Platform.FormSubmissionUpdatedPayload.FieldCount : System.Int32 { get }
 ToolUp.Platform.FormSubmissionUpdatedPayload.FormId : System.String { get }
 ToolUp.Platform.FormSubmissionUpdatedPayload.SubmissionId : System.String { get }
-ToolUp.Platform.FormSubmissionUpdatedPayload.UserId : System.String { get }
+ToolUp.Platform.FormSubmissionUpdatedPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.FormSubmissionUpdatedPayload.Version : System.Int32 { get }
 ToolUp.Platform.FormSubmittedPayload (class)
-ToolUp.Platform.FormSubmittedPayload..ctor(System.String, System.String, System.String, System.Int32, System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String)
+ToolUp.Platform.FormSubmittedPayload..ctor(ToolUp.Platform.UserId, System.String, System.String, System.Int32, System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String)
 ToolUp.Platform.FormSubmittedPayload.FieldCount : System.Int32 { get }
 ToolUp.Platform.FormSubmittedPayload.FormId : System.String { get }
 ToolUp.Platform.FormSubmittedPayload.InitialState : System.String { get }
 ToolUp.Platform.FormSubmittedPayload.SchemaVersion : System.Int32 { get }
 ToolUp.Platform.FormSubmittedPayload.SubmissionId : System.String { get }
-ToolUp.Platform.FormSubmittedPayload.UserId : System.String { get }
+ToolUp.Platform.FormSubmittedPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.FormSubmittedPayload.WorkflowId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.GrantConsent (class)
 ToolUp.Platform.GrantConsent.addressesGrant(ToolUp.Platform.ConsentSubject, ToolUp.Platform.PartyRef, ToolUp.Platform.GrantConsentRecord) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.ConsentDenial]
 ToolUp.Platform.GrantConsent.current(System.DateTimeOffset, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GrantConsentRecord]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.GrantConsentRecord, ToolUp.Platform.ConsentDenial]
 ToolUp.Platform.GrantConsentApprovedPayload (class)
-ToolUp.Platform.GrantConsentApprovedPayload..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset])
+ToolUp.Platform.GrantConsentApprovedPayload..ctor(System.String, ToolUp.Platform.TeamId, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset])
 ToolUp.Platform.GrantConsentApprovedPayload.ConsentId : System.String { get }
 ToolUp.Platform.GrantConsentApprovedPayload.ExpiresAtUtc : Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset] { get }
 ToolUp.Platform.GrantConsentApprovedPayload.KeyId : System.String { get }
@@ -6615,7 +6615,7 @@ ToolUp.Platform.GrantConsentApprovedPayload.Party : System.String { get }
 ToolUp.Platform.GrantConsentApprovedPayload.RecordedBy : System.String { get }
 ToolUp.Platform.GrantConsentApprovedPayload.SubjectId : System.String { get }
 ToolUp.Platform.GrantConsentApprovedPayload.Supersedes : System.String { get }
-ToolUp.Platform.GrantConsentApprovedPayload.TeamId : System.String { get }
+ToolUp.Platform.GrantConsentApprovedPayload.TeamId : ToolUp.Platform.TeamId { get }
 ToolUp.Platform.GrantConsentMode (class)
 ToolUp.Platform.GrantConsentMode.BlobGrantConsent : ToolUp.Platform.GrantConsentMode { get }
 ToolUp.Platform.GrantConsentMode.CustomGrantConsentStore : ToolUp.Platform.GrantConsentMode { get }
@@ -6634,7 +6634,7 @@ ToolUp.Platform.GrantConsentMode+Tags.NoGrantConsentStore : System.Int32 (litera
 ToolUp.Platform.GrantConsentModeModule (class)
 ToolUp.Platform.GrantConsentModeModule.isComposed(ToolUp.Platform.GrantConsentMode) : System.Boolean
 ToolUp.Platform.GrantConsentProposedPayload (class)
-ToolUp.Platform.GrantConsentProposedPayload..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset])
+ToolUp.Platform.GrantConsentProposedPayload..ctor(System.String, ToolUp.Platform.TeamId, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset])
 ToolUp.Platform.GrantConsentProposedPayload.ConsentId : System.String { get }
 ToolUp.Platform.GrantConsentProposedPayload.ExpiresAtUtc : Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset] { get }
 ToolUp.Platform.GrantConsentProposedPayload.KeyId : System.String { get }
@@ -6642,7 +6642,7 @@ ToolUp.Platform.GrantConsentProposedPayload.ModuleName : System.String { get }
 ToolUp.Platform.GrantConsentProposedPayload.Party : System.String { get }
 ToolUp.Platform.GrantConsentProposedPayload.RecordedBy : System.String { get }
 ToolUp.Platform.GrantConsentProposedPayload.SubjectId : System.String { get }
-ToolUp.Platform.GrantConsentProposedPayload.TeamId : System.String { get }
+ToolUp.Platform.GrantConsentProposedPayload.TeamId : ToolUp.Platform.TeamId { get }
 ToolUp.Platform.GrantConsentRecord (class)
 ToolUp.Platform.GrantConsentRecord..ctor(System.String, ToolUp.Platform.ConsentSubject, ToolUp.Platform.PartyRef, ToolUp.Platform.ConsentStatus, System.DateTimeOffset, Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset], ToolUp.Platform.ConsentSignature, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String)
 ToolUp.Platform.GrantConsentRecord.ConsentId : System.String { get }
@@ -6659,7 +6659,7 @@ ToolUp.Platform.GrantConsentRecordModule.canonicalPayload(ToolUp.Platform.GrantC
 ToolUp.Platform.GrantConsentRecordModule.isExpiredAt(System.DateTimeOffset, ToolUp.Platform.GrantConsentRecord) : System.Boolean
 ToolUp.Platform.GrantConsentRecordModule.isSafeId(System.String) : System.Boolean
 ToolUp.Platform.GrantConsentRevokedPayload (class)
-ToolUp.Platform.GrantConsentRevokedPayload..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String)
+ToolUp.Platform.GrantConsentRevokedPayload..ctor(System.String, ToolUp.Platform.TeamId, System.String, System.String, System.String, System.String, System.String, System.String)
 ToolUp.Platform.GrantConsentRevokedPayload.ConsentId : System.String { get }
 ToolUp.Platform.GrantConsentRevokedPayload.KeyId : System.String { get }
 ToolUp.Platform.GrantConsentRevokedPayload.ModuleName : System.String { get }
@@ -6667,9 +6667,9 @@ ToolUp.Platform.GrantConsentRevokedPayload.Party : System.String { get }
 ToolUp.Platform.GrantConsentRevokedPayload.RecordedBy : System.String { get }
 ToolUp.Platform.GrantConsentRevokedPayload.SubjectId : System.String { get }
 ToolUp.Platform.GrantConsentRevokedPayload.Supersedes : System.String { get }
-ToolUp.Platform.GrantConsentRevokedPayload.TeamId : System.String { get }
+ToolUp.Platform.GrantConsentRevokedPayload.TeamId : ToolUp.Platform.TeamId { get }
 ToolUp.Platform.GrantConsentVerificationDeniedPayload (class)
-ToolUp.Platform.GrantConsentVerificationDeniedPayload..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String)
+ToolUp.Platform.GrantConsentVerificationDeniedPayload..ctor(System.String, ToolUp.Platform.TeamId, System.String, System.String, System.String, System.String, System.String, System.String)
 ToolUp.Platform.GrantConsentVerificationDeniedPayload.ConsentId : System.String { get }
 ToolUp.Platform.GrantConsentVerificationDeniedPayload.DeclaredAlgorithm : System.String { get }
 ToolUp.Platform.GrantConsentVerificationDeniedPayload.DenialCode : System.String { get }
@@ -6677,7 +6677,7 @@ ToolUp.Platform.GrantConsentVerificationDeniedPayload.KeyId : System.String { ge
 ToolUp.Platform.GrantConsentVerificationDeniedPayload.ModuleName : System.String { get }
 ToolUp.Platform.GrantConsentVerificationDeniedPayload.Party : System.String { get }
 ToolUp.Platform.GrantConsentVerificationDeniedPayload.SubjectId : System.String { get }
-ToolUp.Platform.GrantConsentVerificationDeniedPayload.TeamId : System.String { get }
+ToolUp.Platform.GrantConsentVerificationDeniedPayload.TeamId : ToolUp.Platform.TeamId { get }
 ToolUp.Platform.GrantPolicy (class)
 ToolUp.Platform.GrantPolicy.AdminDiscretion : ToolUp.Platform.GrantPolicy { get }
 ToolUp.Platform.GrantPolicy.IsAdminDiscretion : System.Boolean { get }
@@ -7474,7 +7474,7 @@ ToolUp.Platform.IDevDiagnosticsContributor.Contribute() : Microsoft.FSharp.Contr
 ToolUp.Platform.IEgressPolicy (interface)
 ToolUp.Platform.IEgressPolicy.Decide(ToolUp.Platform.ComponentId, ToolUp.Platform.EgressDestination, ToolUp.Platform.EgressSurface, ToolUp.Platform.EgressLabel) : ToolUp.Platform.EgressVerdict
 ToolUp.Platform.IEventStore (interface)
-ToolUp.Platform.IEventStore.Erase(System.String, System.String, ToolUp.Platform.ErasurePolicy, System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ErasureSummary, ToolUp.Platform.ErasureError]]
+ToolUp.Platform.IEventStore.Erase(System.String, ToolUp.Platform.UserId, ToolUp.Platform.ErasurePolicy, System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ErasureSummary, ToolUp.Platform.ErasureError]]
 ToolUp.Platform.IEventStore.ListScopes() : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]
 ToolUp.Platform.IEventStore.ReadAll(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleEvent]]
 ToolUp.Platform.IEventStore.ReadBySource(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleEvent]]
@@ -7669,7 +7669,7 @@ ToolUp.Platform.ITeamInviteApi.ListRecentlyExpiredInvites : Microsoft.FSharp.Cor
 ToolUp.Platform.ITeamInviteApi.RevokeInvite : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
 ToolUp.Platform.ITeamInviteApi.RevokePendingInviteByEmail : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
 ToolUp.Platform.ITeamOutputVisibilitySource (interface)
-ToolUp.Platform.ITeamOutputVisibilitySource.Current(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TeamVisibilityLevel, System.String]]
+ToolUp.Platform.ITeamOutputVisibilitySource.Current(ToolUp.Platform.TeamId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TeamVisibilityLevel, System.String]]
 ToolUp.Platform.ITeamProviderResolver (interface)
 ToolUp.Platform.ITeamProviderResolver.CanWrite(ToolUp.Platform.Subject, ToolUp.Platform.ProviderProfileOwner) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ProviderScope, System.String]]
 ToolUp.Platform.ITeamProviderResolver.Resolve(ToolUp.Platform.Subject, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.ProviderResolution]
@@ -8113,12 +8113,12 @@ ToolUp.Platform.KeySource+Tags.JwksDiscovery : System.Int32 (literal)
 ToolUp.Platform.KeySource+Tags.JwksExplicit : System.Int32 (literal)
 ToolUp.Platform.KeySource+Tags.StaticSecret : System.Int32 (literal)
 ToolUp.Platform.KnowledgeDocumentDeduplicatedPayload (class)
-ToolUp.Platform.KnowledgeDocumentDeduplicatedPayload..ctor(System.String, System.String, System.String, System.String, System.String)
+ToolUp.Platform.KnowledgeDocumentDeduplicatedPayload..ctor(ToolUp.Platform.UserId, System.String, System.String, System.String, System.String)
 ToolUp.Platform.KnowledgeDocumentDeduplicatedPayload.ContentHash : System.String { get }
 ToolUp.Platform.KnowledgeDocumentDeduplicatedPayload.ExistingDocumentId : System.String { get }
 ToolUp.Platform.KnowledgeDocumentDeduplicatedPayload.FileName : System.String { get }
 ToolUp.Platform.KnowledgeDocumentDeduplicatedPayload.ScopeId : System.String { get }
-ToolUp.Platform.KnowledgeDocumentDeduplicatedPayload.UserId : System.String { get }
+ToolUp.Platform.KnowledgeDocumentDeduplicatedPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.KnowledgeDocumentsPurgedPayload (class)
 ToolUp.Platform.KnowledgeDocumentsPurgedPayload..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Int32, System.Int64, System.Int64, System.Int32)
 ToolUp.Platform.KnowledgeDocumentsPurgedPayload.DocumentIds : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
@@ -8141,24 +8141,24 @@ ToolUp.Platform.KnowledgeIngestionDroppedPayload.QueueCapacity : System.Int32 { 
 ToolUp.Platform.KnowledgeIngestionDroppedPayload.Reason : System.String { get }
 ToolUp.Platform.KnowledgeIngestionDroppedPayload.ScopeKey : System.String { get }
 ToolUp.Platform.KnowledgeOriginalRetrievalDeniedPayload (class)
-ToolUp.Platform.KnowledgeOriginalRetrievalDeniedPayload..ctor(System.String, System.String, System.String, System.String)
+ToolUp.Platform.KnowledgeOriginalRetrievalDeniedPayload..ctor(ToolUp.Platform.UserId, System.String, System.String, System.String)
 ToolUp.Platform.KnowledgeOriginalRetrievalDeniedPayload.DocumentId : System.String { get }
 ToolUp.Platform.KnowledgeOriginalRetrievalDeniedPayload.Reason : System.String { get }
 ToolUp.Platform.KnowledgeOriginalRetrievalDeniedPayload.ScopeId : System.String { get }
-ToolUp.Platform.KnowledgeOriginalRetrievalDeniedPayload.UserId : System.String { get }
+ToolUp.Platform.KnowledgeOriginalRetrievalDeniedPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.KnowledgeOriginalRetrievedPayload (class)
-ToolUp.Platform.KnowledgeOriginalRetrievedPayload..ctor(System.String, System.String, System.String, System.String, System.String)
+ToolUp.Platform.KnowledgeOriginalRetrievedPayload..ctor(ToolUp.Platform.UserId, System.String, System.String, System.String, System.String)
 ToolUp.Platform.KnowledgeOriginalRetrievedPayload.DocumentId : System.String { get }
 ToolUp.Platform.KnowledgeOriginalRetrievedPayload.FileName : System.String { get }
 ToolUp.Platform.KnowledgeOriginalRetrievedPayload.ScopeId : System.String { get }
 ToolUp.Platform.KnowledgeOriginalRetrievedPayload.SourceKind : System.String { get }
-ToolUp.Platform.KnowledgeOriginalRetrievedPayload.UserId : System.String { get }
+ToolUp.Platform.KnowledgeOriginalRetrievedPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.KnowledgeScopeErasedPayload (class)
-ToolUp.Platform.KnowledgeScopeErasedPayload..ctor(System.String, System.String, System.Int32, System.Int32)
+ToolUp.Platform.KnowledgeScopeErasedPayload..ctor(ToolUp.Platform.UserId, System.String, System.Int32, System.Int32)
 ToolUp.Platform.KnowledgeScopeErasedPayload.DocumentCount : System.Int32 { get }
 ToolUp.Platform.KnowledgeScopeErasedPayload.OrphanChunkCount : System.Int32 { get }
 ToolUp.Platform.KnowledgeScopeErasedPayload.ScopeId : System.String { get }
-ToolUp.Platform.KnowledgeScopeErasedPayload.UserId : System.String { get }
+ToolUp.Platform.KnowledgeScopeErasedPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.KnowledgeSourceModule (class)
 ToolUp.Platform.KnowledgeSourceModule.value : System.String (literal)
 ToolUp.Platform.LedgerPositionReading (class)
@@ -8460,23 +8460,23 @@ ToolUp.Platform.MediaKeyDeliveredPayload.ScopeContainer : System.String { get }
 ToolUp.Platform.MediaKeyDeliveredPayload.SubjectId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.MediaKeyDeliveredPayload.SubjectKind : System.String { get }
 ToolUp.Platform.MemberAddedPayload (class)
-ToolUp.Platform.MemberAddedPayload..ctor(System.String, System.String, System.String, System.String)
-ToolUp.Platform.MemberAddedPayload.AffectedUserId : System.String { get }
+ToolUp.Platform.MemberAddedPayload..ctor(ToolUp.Platform.UserId, ToolUp.Platform.TeamId, ToolUp.Platform.UserId, System.String)
+ToolUp.Platform.MemberAddedPayload.AffectedUserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.MemberAddedPayload.Role : System.String { get }
-ToolUp.Platform.MemberAddedPayload.TeamId : System.String { get }
-ToolUp.Platform.MemberAddedPayload.UserId : System.String { get }
+ToolUp.Platform.MemberAddedPayload.TeamId : ToolUp.Platform.TeamId { get }
+ToolUp.Platform.MemberAddedPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.MemberRemovedPayload (class)
-ToolUp.Platform.MemberRemovedPayload..ctor(System.String, System.String, System.String)
-ToolUp.Platform.MemberRemovedPayload.AffectedUserId : System.String { get }
-ToolUp.Platform.MemberRemovedPayload.TeamId : System.String { get }
-ToolUp.Platform.MemberRemovedPayload.UserId : System.String { get }
+ToolUp.Platform.MemberRemovedPayload..ctor(ToolUp.Platform.UserId, ToolUp.Platform.TeamId, ToolUp.Platform.UserId)
+ToolUp.Platform.MemberRemovedPayload.AffectedUserId : ToolUp.Platform.UserId { get }
+ToolUp.Platform.MemberRemovedPayload.TeamId : ToolUp.Platform.TeamId { get }
+ToolUp.Platform.MemberRemovedPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.MemberRoleChangedPayload (class)
-ToolUp.Platform.MemberRoleChangedPayload..ctor(System.String, System.String, System.String, System.String, System.String)
-ToolUp.Platform.MemberRoleChangedPayload.AffectedUserId : System.String { get }
+ToolUp.Platform.MemberRoleChangedPayload..ctor(ToolUp.Platform.UserId, ToolUp.Platform.TeamId, ToolUp.Platform.UserId, System.String, System.String)
+ToolUp.Platform.MemberRoleChangedPayload.AffectedUserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.MemberRoleChangedPayload.NewRole : System.String { get }
 ToolUp.Platform.MemberRoleChangedPayload.OldRole : System.String { get }
-ToolUp.Platform.MemberRoleChangedPayload.TeamId : System.String { get }
-ToolUp.Platform.MemberRoleChangedPayload.UserId : System.String { get }
+ToolUp.Platform.MemberRoleChangedPayload.TeamId : ToolUp.Platform.TeamId { get }
+ToolUp.Platform.MemberRoleChangedPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.MembershipChangeKind (class)
 ToolUp.Platform.MembershipChangeKind.ActiveTeamSet : ToolUp.Platform.MembershipChangeKind { get }
 ToolUp.Platform.MembershipChangeKind.Added : ToolUp.Platform.MembershipChangeKind { get }
@@ -8493,11 +8493,11 @@ ToolUp.Platform.MembershipChangeKind+Tags.Added : System.Int32 (literal)
 ToolUp.Platform.MembershipChangeKind+Tags.Removed : System.Int32 (literal)
 ToolUp.Platform.MembershipChangeKind+Tags.RoleChanged : System.Int32 (literal)
 ToolUp.Platform.MembershipChangedPayload (class)
-ToolUp.Platform.MembershipChangedPayload..ctor(System.String, System.String, ToolUp.Platform.MembershipChangeKind, System.DateTime)
-ToolUp.Platform.MembershipChangedPayload.AffectedUserId : System.String { get }
+ToolUp.Platform.MembershipChangedPayload..ctor(ToolUp.Platform.TeamId, ToolUp.Platform.UserId, ToolUp.Platform.MembershipChangeKind, System.DateTime)
+ToolUp.Platform.MembershipChangedPayload.AffectedUserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.MembershipChangedPayload.ChangeKind : ToolUp.Platform.MembershipChangeKind { get }
 ToolUp.Platform.MembershipChangedPayload.PublishedAt : System.DateTime { get }
-ToolUp.Platform.MembershipChangedPayload.TeamId : System.String { get }
+ToolUp.Platform.MembershipChangedPayload.TeamId : ToolUp.Platform.TeamId { get }
 ToolUp.Platform.Metrics.MetricDefinition (class)
 ToolUp.Platform.Metrics.MetricDefinition..ctor(System.String, ToolUp.Platform.Metrics.MetricKind, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String])
 ToolUp.Platform.Metrics.MetricDefinition.Description : System.String { get }
@@ -8605,13 +8605,13 @@ ToolUp.Platform.MigrationEvents (class)
 ToolUp.Platform.MigrationEvents.MigrationFailedEventType : System.String (literal)
 ToolUp.Platform.MigrationEvents.SourceModule : System.String (literal)
 ToolUp.Platform.MigrationFailedEvent (class)
-ToolUp.Platform.MigrationFailedEvent..ctor(System.String, System.String, System.String, System.Int32, System.Int32, System.String)
+ToolUp.Platform.MigrationFailedEvent..ctor(ToolUp.Platform.TeamId, System.String, System.String, System.Int32, System.Int32, System.String)
 ToolUp.Platform.MigrationFailedEvent.AtVersion : System.Int32 { get }
 ToolUp.Platform.MigrationFailedEvent.DataTypeId : System.String { get }
 ToolUp.Platform.MigrationFailedEvent.Error : System.String { get }
 ToolUp.Platform.MigrationFailedEvent.ObjectId : System.String { get }
 ToolUp.Platform.MigrationFailedEvent.TargetVersion : System.Int32 { get }
-ToolUp.Platform.MigrationFailedEvent.TeamId : System.String { get }
+ToolUp.Platform.MigrationFailedEvent.TeamId : ToolUp.Platform.TeamId { get }
 ToolUp.Platform.MigrationFailure (class)
 ToolUp.Platform.MigrationFailure..ctor(System.String, System.Int32, System.String, System.DateTime)
 ToolUp.Platform.MigrationFailure.AtVersion : System.Int32 { get }
@@ -8747,15 +8747,15 @@ ToolUp.Platform.ModelArtifactTransitionAttributedPayload.Refusal : System.String
 ToolUp.Platform.ModelArtifactTransitionAttributedPayload.ScopeId : System.String { get }
 ToolUp.Platform.ModelArtifactTransitionAttributedPayload.ToStatus : System.String { get }
 ToolUp.Platform.ModelArtifactTransitionDeniedPayload (class)
-ToolUp.Platform.ModelArtifactTransitionDeniedPayload..ctor(System.String, System.String, System.String, System.String, System.String)
-ToolUp.Platform.ModelArtifactTransitionDeniedPayload.ActorUserId : System.String { get }
+ToolUp.Platform.ModelArtifactTransitionDeniedPayload..ctor(System.String, System.String, ToolUp.Platform.UserId, System.String, System.String)
+ToolUp.Platform.ModelArtifactTransitionDeniedPayload.ActorUserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.ModelArtifactTransitionDeniedPayload.AttemptedStatus : System.String { get }
 ToolUp.Platform.ModelArtifactTransitionDeniedPayload.CompositeKeyHash : System.String { get }
 ToolUp.Platform.ModelArtifactTransitionDeniedPayload.Reason : System.String { get }
 ToolUp.Platform.ModelArtifactTransitionDeniedPayload.ScopeId : System.String { get }
 ToolUp.Platform.ModelArtifactTransitionedPayload (class)
-ToolUp.Platform.ModelArtifactTransitionedPayload..ctor(System.String, System.String, System.String, System.String, System.String)
-ToolUp.Platform.ModelArtifactTransitionedPayload.ActorUserId : System.String { get }
+ToolUp.Platform.ModelArtifactTransitionedPayload..ctor(System.String, System.String, System.String, ToolUp.Platform.UserId, System.String)
+ToolUp.Platform.ModelArtifactTransitionedPayload.ActorUserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.ModelArtifactTransitionedPayload.CompositeKeyHash : System.String { get }
 ToolUp.Platform.ModelArtifactTransitionedPayload.FromStatus : System.String { get }
 ToolUp.Platform.ModelArtifactTransitionedPayload.ScopeId : System.String { get }
@@ -9862,7 +9862,7 @@ ToolUp.Platform.NotificationCategoryModule.isValidId(System.String) : System.Boo
 ToolUp.Platform.NotificationCategoryModule.nonSuppressible(System.String, System.String) : ToolUp.Platform.NotificationCategory
 ToolUp.Platform.NotificationCategoryModule.withDescription(System.String, ToolUp.Platform.NotificationCategory) : ToolUp.Platform.NotificationCategory
 ToolUp.Platform.NotificationDeliveryFailedPayload (class)
-ToolUp.Platform.NotificationDeliveryFailedPayload..ctor(System.String, System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String, System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.NotificationDeliveryFailedPayload..ctor(ToolUp.Platform.UserId, System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String, System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Platform.NotificationDeliveryFailedPayload.Attempts : System.Int32 { get }
 ToolUp.Platform.NotificationDeliveryFailedPayload.CorrelationId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.NotificationDeliveryFailedPayload.Error : System.String { get }
@@ -9870,7 +9870,7 @@ ToolUp.Platform.NotificationDeliveryFailedPayload.NotificationKind : System.Stri
 ToolUp.Platform.NotificationDeliveryFailedPayload.Provider : System.String { get }
 ToolUp.Platform.NotificationDeliveryFailedPayload.RecipientUserIds : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.NotificationDeliveryFailedPayload.ScopeId : System.String { get }
-ToolUp.Platform.NotificationDeliveryFailedPayload.UserId : System.String { get }
+ToolUp.Platform.NotificationDeliveryFailedPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.NotificationDeliveryRefusedPayload (class)
 ToolUp.Platform.NotificationDeliveryRefusedPayload..ctor(System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Platform.NotificationDeliveryRefusedPayload.ContactIds : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
@@ -9985,13 +9985,13 @@ ToolUp.Platform.NotificationPreferenceView.Categories : Microsoft.FSharp.Collect
 ToolUp.Platform.NotificationPreferenceView.Channels : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PreferenceChannel] { get }
 ToolUp.Platform.NotificationPreferenceView.Preferences : ToolUp.Platform.UserNotificationPreferences { get }
 ToolUp.Platform.NotificationSentPayload (class)
-ToolUp.Platform.NotificationSentPayload..ctor(System.String, System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.NotificationSentPayload..ctor(ToolUp.Platform.UserId, System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Platform.NotificationSentPayload.CorrelationId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.NotificationSentPayload.NotificationKind : System.String { get }
 ToolUp.Platform.NotificationSentPayload.Provider : System.String { get }
 ToolUp.Platform.NotificationSentPayload.RecipientUserIds : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.NotificationSentPayload.ScopeId : System.String { get }
-ToolUp.Platform.NotificationSentPayload.UserId : System.String { get }
+ToolUp.Platform.NotificationSentPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.NotificationSentPayload.VendorMessageId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.NotificationSilentlySkippedPayload (class)
 ToolUp.Platform.NotificationSilentlySkippedPayload..ctor(System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
@@ -10001,22 +10001,22 @@ ToolUp.Platform.NotificationSilentlySkippedPayload.Reason : System.String { get 
 ToolUp.Platform.NotificationSilentlySkippedPayload.RecipientHashes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.NotificationSilentlySkippedPayload.ScopeId : System.String { get }
 ToolUp.Platform.OAuth1aConnectedPayload (class)
-ToolUp.Platform.OAuth1aConnectedPayload..ctor(System.String, System.String, System.String, System.String, System.DateTime)
+ToolUp.Platform.OAuth1aConnectedPayload..ctor(ToolUp.Platform.UserId, System.String, System.String, System.String, System.DateTime)
 ToolUp.Platform.OAuth1aConnectedPayload.ConnectedAt : System.DateTime { get }
 ToolUp.Platform.OAuth1aConnectedPayload.FlowName : System.String { get }
 ToolUp.Platform.OAuth1aConnectedPayload.ResourceId : System.String { get }
 ToolUp.Platform.OAuth1aConnectedPayload.ScopeId : System.String { get }
-ToolUp.Platform.OAuth1aConnectedPayload.UserId : System.String { get }
+ToolUp.Platform.OAuth1aConnectedPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.OAuth1aConsumerCredentials (class)
 ToolUp.Platform.OAuth1aConsumerCredentials..ctor(System.String, System.String)
 ToolUp.Platform.OAuth1aConsumerCredentials.ConsumerKey : System.String { get }
 ToolUp.Platform.OAuth1aConsumerCredentials.ConsumerSecret : System.String { get }
 ToolUp.Platform.OAuth1aDisconnectedPayload (class)
-ToolUp.Platform.OAuth1aDisconnectedPayload..ctor(System.String, System.String, System.String, System.String)
+ToolUp.Platform.OAuth1aDisconnectedPayload..ctor(ToolUp.Platform.UserId, System.String, System.String, System.String)
 ToolUp.Platform.OAuth1aDisconnectedPayload.FlowName : System.String { get }
 ToolUp.Platform.OAuth1aDisconnectedPayload.ResourceId : System.String { get }
 ToolUp.Platform.OAuth1aDisconnectedPayload.ScopeId : System.String { get }
-ToolUp.Platform.OAuth1aDisconnectedPayload.UserId : System.String { get }
+ToolUp.Platform.OAuth1aDisconnectedPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.OAuth1aError (class)
 ToolUp.Platform.OAuth1aError.IsAccessTokenRejected : System.Boolean { get }
 ToolUp.Platform.OAuth1aError.IsConsumerCredentialMissing : System.Boolean { get }
@@ -10051,14 +10051,14 @@ ToolUp.Platform.OAuth1aError+Tags.StateTokenMismatch : System.Int32 (literal)
 ToolUp.Platform.OAuth1aErrorModule (class)
 ToolUp.Platform.OAuth1aErrorModule.toMessage(ToolUp.Platform.OAuth1aError) : System.String
 ToolUp.Platform.OAuth1aRequestState (class)
-ToolUp.Platform.OAuth1aRequestState..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.DateTime)
+ToolUp.Platform.OAuth1aRequestState..ctor(System.String, System.String, System.String, ToolUp.Platform.UserId, System.String, System.String, System.DateTime)
 ToolUp.Platform.OAuth1aRequestState.Container : System.String { get }
 ToolUp.Platform.OAuth1aRequestState.CreatedAt : System.DateTime { get }
 ToolUp.Platform.OAuth1aRequestState.FlowName : System.String { get }
 ToolUp.Platform.OAuth1aRequestState.RequestTokenSecret : System.String { get }
 ToolUp.Platform.OAuth1aRequestState.ResourceId : System.String { get }
 ToolUp.Platform.OAuth1aRequestState.ScopeId : System.String { get }
-ToolUp.Platform.OAuth1aRequestState.UserId : System.String { get }
+ToolUp.Platform.OAuth1aRequestState.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.OAuth1aSignatureMethod (class)
 ToolUp.Platform.OAuth1aSignatureMethod.HmacSha1 : ToolUp.Platform.OAuth1aSignatureMethod { get }
 ToolUp.Platform.OAuth1aSignatureMethod.Tag : System.Int32 { get }
@@ -10077,12 +10077,12 @@ ToolUp.Platform.OAuth1aTokenPair..ctor(System.String, System.String)
 ToolUp.Platform.OAuth1aTokenPair.Token : System.String { get }
 ToolUp.Platform.OAuth1aTokenPair.TokenSecret : System.String { get }
 ToolUp.Platform.OAuthConnectedPayload (class)
-ToolUp.Platform.OAuthConnectedPayload..ctor(System.String, System.String, System.String, System.String, System.DateTime)
+ToolUp.Platform.OAuthConnectedPayload..ctor(ToolUp.Platform.UserId, System.String, System.String, System.String, System.DateTime)
 ToolUp.Platform.OAuthConnectedPayload.ConnectedAt : System.DateTime { get }
 ToolUp.Platform.OAuthConnectedPayload.DataSourceId : System.String { get }
 ToolUp.Platform.OAuthConnectedPayload.FlowName : System.String { get }
 ToolUp.Platform.OAuthConnectedPayload.ScopeId : System.String { get }
-ToolUp.Platform.OAuthConnectedPayload.UserId : System.String { get }
+ToolUp.Platform.OAuthConnectedPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.OAuthCorrelationKey (class)
 ToolUp.Platform.OAuthCorrelationKey..ctor(System.String, System.String)
 ToolUp.Platform.OAuthCorrelationKey.Id : System.String { get }
@@ -10098,12 +10098,12 @@ ToolUp.Platform.OAuthCorrelationKeyModule.providerEntry(System.String) : ToolUp.
 ToolUp.Platform.OAuthCorrelationKeyModule.render(ToolUp.Platform.OAuthCorrelationKey) : System.String
 ToolUp.Platform.OAuthCorrelationKeyModule.tryParse(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.OAuthCorrelationKey]
 ToolUp.Platform.OAuthDisconnectedPayload (class)
-ToolUp.Platform.OAuthDisconnectedPayload..ctor(System.String, System.String, System.String, System.String, System.Boolean)
+ToolUp.Platform.OAuthDisconnectedPayload..ctor(ToolUp.Platform.UserId, System.String, System.String, System.String, System.Boolean)
 ToolUp.Platform.OAuthDisconnectedPayload.DataSourceId : System.String { get }
 ToolUp.Platform.OAuthDisconnectedPayload.FlowName : System.String { get }
 ToolUp.Platform.OAuthDisconnectedPayload.ScopeId : System.String { get }
 ToolUp.Platform.OAuthDisconnectedPayload.UpstreamRevoked : System.Boolean { get }
-ToolUp.Platform.OAuthDisconnectedPayload.UserId : System.String { get }
+ToolUp.Platform.OAuthDisconnectedPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.OAuthRefreshDeadLetteredPayload (class)
 ToolUp.Platform.OAuthRefreshDeadLetteredPayload..ctor(System.String, System.String, System.String, System.Int32, System.String)
 ToolUp.Platform.OAuthRefreshDeadLetteredPayload.Attempts : System.Int32 { get }
@@ -10128,12 +10128,12 @@ ToolUp.Platform.OAuthRefreshDescriptorModule.accessTokenKey(ToolUp.Platform.OAut
 ToolUp.Platform.OAuthRefreshDescriptorModule.key(ToolUp.Platform.OAuthRefreshDescriptor) : System.String
 ToolUp.Platform.OAuthRefreshDescriptorModule.withDefaults(System.String, System.String, System.String, System.String, System.String, System.String, System.String) : ToolUp.Platform.OAuthRefreshDescriptor
 ToolUp.Platform.OAuthRefreshFailedPayload (class)
-ToolUp.Platform.OAuthRefreshFailedPayload..ctor(System.String, System.String, System.String, System.String, System.String)
+ToolUp.Platform.OAuthRefreshFailedPayload..ctor(ToolUp.Platform.UserId, System.String, System.String, System.String, System.String)
 ToolUp.Platform.OAuthRefreshFailedPayload.DataSourceId : System.String { get }
 ToolUp.Platform.OAuthRefreshFailedPayload.FlowName : System.String { get }
 ToolUp.Platform.OAuthRefreshFailedPayload.Reason : System.String { get }
 ToolUp.Platform.OAuthRefreshFailedPayload.ScopeId : System.String { get }
-ToolUp.Platform.OAuthRefreshFailedPayload.UserId : System.String { get }
+ToolUp.Platform.OAuthRefreshFailedPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.OAuthRefreshOutcome (class)
 ToolUp.Platform.OAuthRefreshOutcome.IsDeadLetteredOutcome : System.Boolean { get }
 ToolUp.Platform.OAuthRefreshOutcome.IsRefreshedOutcome : System.Boolean { get }
@@ -10369,14 +10369,14 @@ ToolUp.Platform.PartyRefModule.create(System.String) : ToolUp.Platform.PartyRef
 ToolUp.Platform.PartyRefModule.isEmpty(ToolUp.Platform.PartyRef) : System.Boolean
 ToolUp.Platform.PartyRefModule.value(ToolUp.Platform.PartyRef) : System.String
 ToolUp.Platform.PasskeyCredentialRegisteredPayload (class)
-ToolUp.Platform.PasskeyCredentialRegisteredPayload..ctor(System.String, System.String, System.String)
+ToolUp.Platform.PasskeyCredentialRegisteredPayload..ctor(ToolUp.Platform.UserId, System.String, System.String)
 ToolUp.Platform.PasskeyCredentialRegisteredPayload.CredentialIdPrefix : System.String { get }
 ToolUp.Platform.PasskeyCredentialRegisteredPayload.Grant : System.String { get }
-ToolUp.Platform.PasskeyCredentialRegisteredPayload.UserId : System.String { get }
+ToolUp.Platform.PasskeyCredentialRegisteredPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.PasskeyCredentialRemovedPayload (class)
-ToolUp.Platform.PasskeyCredentialRemovedPayload..ctor(System.String, System.String)
+ToolUp.Platform.PasskeyCredentialRemovedPayload..ctor(ToolUp.Platform.UserId, System.String)
 ToolUp.Platform.PasskeyCredentialRemovedPayload.CredentialIdPrefix : System.String { get }
-ToolUp.Platform.PasskeyCredentialRemovedPayload.UserId : System.String { get }
+ToolUp.Platform.PasskeyCredentialRemovedPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.Payments.CheckoutSession (class)
 ToolUp.Platform.Payments.CheckoutSession..ctor(System.String)
 ToolUp.Platform.Payments.CheckoutSession.Url : System.String { get }
@@ -10453,7 +10453,7 @@ ToolUp.Platform.PeerJobCompletedPayload.Outcome : System.String { get }
 ToolUp.Platform.PeerJobCompletedPayload.RootRequestId : System.String { get }
 ToolUp.Platform.PeerJobCompletedPayload.Succeeded : System.Boolean { get }
 ToolUp.Platform.PendingAdminMutation (class)
-ToolUp.Platform.PendingAdminMutation..ctor(System.String, System.String, ToolUp.Platform.AdminMutation, System.String, System.String, System.String, System.DateTimeOffset, System.DateTimeOffset)
+ToolUp.Platform.PendingAdminMutation..ctor(System.String, ToolUp.Platform.TeamId, ToolUp.Platform.AdminMutation, System.String, System.String, System.String, System.DateTimeOffset, System.DateTimeOffset)
 ToolUp.Platform.PendingAdminMutation.ExpiresAtUtc : System.DateTimeOffset { get }
 ToolUp.Platform.PendingAdminMutation.Fingerprint : System.String { get }
 ToolUp.Platform.PendingAdminMutation.Mutation : ToolUp.Platform.AdminMutation { get }
@@ -10461,7 +10461,7 @@ ToolUp.Platform.PendingAdminMutation.ProposedAtUtc : System.DateTimeOffset { get
 ToolUp.Platform.PendingAdminMutation.ProposedBy : System.String { get }
 ToolUp.Platform.PendingAdminMutation.RequestId : System.String { get }
 ToolUp.Platform.PendingAdminMutation.Summary : System.String { get }
-ToolUp.Platform.PendingAdminMutation.TeamId : System.String { get }
+ToolUp.Platform.PendingAdminMutation.TeamId : ToolUp.Platform.TeamId { get }
 ToolUp.Platform.PendingAdminMutationModule (class)
 ToolUp.Platform.PendingAdminMutationModule.isExpired(System.DateTimeOffset, ToolUp.Platform.PendingAdminMutation) : System.Boolean
 ToolUp.Platform.PendingDisposition (class)
@@ -10502,14 +10502,14 @@ ToolUp.Platform.PendingInviteStoreError+Tags.Conflict : System.Int32 (literal)
 ToolUp.Platform.PendingInviteStoreError+Tags.NotFound : System.Int32 (literal)
 ToolUp.Platform.PendingInviteStoreError+Tags.StorageFailed : System.Int32 (literal)
 ToolUp.Platform.PendingNotification (class)
-ToolUp.Platform.PendingNotification..ctor(System.Guid, System.String, System.String, ToolUp.Platform.PreferenceChannel, ToolUp.Platform.Notification, System.DateTime, ToolUp.Platform.PendingDisposition)
+ToolUp.Platform.PendingNotification..ctor(System.Guid, ToolUp.Platform.UserId, System.String, ToolUp.Platform.PreferenceChannel, ToolUp.Platform.Notification, System.DateTime, ToolUp.Platform.PendingDisposition)
 ToolUp.Platform.PendingNotification.Category : System.String { get }
 ToolUp.Platform.PendingNotification.Channel : ToolUp.Platform.PreferenceChannel { get }
 ToolUp.Platform.PendingNotification.Disposition : ToolUp.Platform.PendingDisposition { get }
 ToolUp.Platform.PendingNotification.Id : System.Guid { get }
 ToolUp.Platform.PendingNotification.Notification : ToolUp.Platform.Notification { get }
 ToolUp.Platform.PendingNotification.QueuedAt : System.DateTime { get }
-ToolUp.Platform.PendingNotification.UserId : System.String { get }
+ToolUp.Platform.PendingNotification.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.PermissionApi (class)
 ToolUp.Platform.PermissionApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TeamPermissions, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`4[System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]]], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`3[System.String, System.String, ToolUp.Platform.ModuleExposure], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]])
 ToolUp.Platform.PermissionApi.GetTeamPermissions : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TeamPermissions, System.String]]] { get }
@@ -10521,13 +10521,13 @@ ToolUp.Platform.PermissionAuditChainLink..ctor(System.String, System.String)
 ToolUp.Platform.PermissionAuditChainLink.ContentHash : System.String { get }
 ToolUp.Platform.PermissionAuditChainLink.PrevHash : System.String { get }
 ToolUp.Platform.PermissionChangedPayload (class)
-ToolUp.Platform.PermissionChangedPayload..ctor(System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PermissionAuditChainLink])
-ToolUp.Platform.PermissionChangedPayload.AffectedUserId : System.String { get }
+ToolUp.Platform.PermissionChangedPayload..ctor(ToolUp.Platform.UserId, ToolUp.Platform.TeamId, ToolUp.Platform.UserId, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PermissionAuditChainLink])
+ToolUp.Platform.PermissionChangedPayload.AffectedUserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.PermissionChangedPayload.Chain : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PermissionAuditChainLink] { get }
 ToolUp.Platform.PermissionChangedPayload.ModuleName : System.String { get }
 ToolUp.Platform.PermissionChangedPayload.Permissions : System.String { get }
-ToolUp.Platform.PermissionChangedPayload.TeamId : System.String { get }
-ToolUp.Platform.PermissionChangedPayload.UserId : System.String { get }
+ToolUp.Platform.PermissionChangedPayload.TeamId : ToolUp.Platform.TeamId { get }
+ToolUp.Platform.PermissionChangedPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.Persistence (class)
 ToolUp.Platform.Persistence.Ephemeral : ToolUp.Platform.Persistence { get }
 ToolUp.Platform.Persistence.IsEphemeral : System.Boolean { get }
@@ -10579,9 +10579,9 @@ ToolUp.Platform.PlatformAdminApi.ListPlatformAdmins : Microsoft.FSharp.Core.FSha
 ToolUp.Platform.PlatformAdminApi.RevokePlatformAdmin : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
 ToolUp.Platform.PlatformAdminApi.SetPlatformKnowledgeBase : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.FeatureMode, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
 ToolUp.Platform.PlatformAdminAssignedPayload (class)
-ToolUp.Platform.PlatformAdminAssignedPayload..ctor(System.String, System.String)
+ToolUp.Platform.PlatformAdminAssignedPayload..ctor(System.String, ToolUp.Platform.UserId)
 ToolUp.Platform.PlatformAdminAssignedPayload.Actor : System.String { get }
-ToolUp.Platform.PlatformAdminAssignedPayload.TargetUserId : System.String { get }
+ToolUp.Platform.PlatformAdminAssignedPayload.TargetUserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.PlatformAdminProfile (class)
 ToolUp.Platform.PlatformAdminProfile.IsPublicUtilityPlatformAdminProfile : System.Boolean { get }
 ToolUp.Platform.PlatformAdminProfile.IsStandardPlatformAdminProfile : System.Boolean { get }
@@ -10592,9 +10592,9 @@ ToolUp.Platform.PlatformAdminProfile+Tags (class)
 ToolUp.Platform.PlatformAdminProfile+Tags.PublicUtilityPlatformAdminProfile : System.Int32 (literal)
 ToolUp.Platform.PlatformAdminProfile+Tags.StandardPlatformAdminProfile : System.Int32 (literal)
 ToolUp.Platform.PlatformAdminRevokedPayload (class)
-ToolUp.Platform.PlatformAdminRevokedPayload..ctor(System.String, System.String)
+ToolUp.Platform.PlatformAdminRevokedPayload..ctor(System.String, ToolUp.Platform.UserId)
 ToolUp.Platform.PlatformAdminRevokedPayload.Actor : System.String { get }
-ToolUp.Platform.PlatformAdminRevokedPayload.TargetUserId : System.String { get }
+ToolUp.Platform.PlatformAdminRevokedPayload.TargetUserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.PlatformDocumentDeletedPayload (class)
 ToolUp.Platform.PlatformDocumentDeletedPayload..ctor(System.String, System.String, System.String)
 ToolUp.Platform.PlatformDocumentDeletedPayload.Actor : System.String { get }
@@ -10911,9 +10911,9 @@ ToolUp.Platform.ProviderProfileOwner+Tags.PlatformDefault : System.Int32 (litera
 ToolUp.Platform.ProviderProfileOwner+Tags.TeamOwned : System.Int32 (literal)
 ToolUp.Platform.ProviderProfileOwner+Tags.UserOwned : System.Int32 (literal)
 ToolUp.Platform.ProviderProfileOwner+TeamOwned (class)
-ToolUp.Platform.ProviderProfileOwner+TeamOwned.teamId : System.String { get }
+ToolUp.Platform.ProviderProfileOwner+TeamOwned.teamId : ToolUp.Platform.TeamId { get }
 ToolUp.Platform.ProviderProfileOwner+UserOwned (class)
-ToolUp.Platform.ProviderProfileOwner+UserOwned.userId : System.String { get }
+ToolUp.Platform.ProviderProfileOwner+UserOwned.userId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.ProviderProfileView (class)
 ToolUp.Platform.ProviderProfileView..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ProviderEntryView], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RoutingRule], ToolUp.Platform.FallbackChain)
 ToolUp.Platform.ProviderProfileView.Entries : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ProviderEntryView] { get }
@@ -11232,7 +11232,7 @@ ToolUp.Platform.RecipientId+Tags (class)
 ToolUp.Platform.RecipientId+Tags.External : System.Int32 (literal)
 ToolUp.Platform.RecipientId+Tags.User : System.Int32 (literal)
 ToolUp.Platform.RecipientId+User (class)
-ToolUp.Platform.RecipientId+User.userId : System.String { get }
+ToolUp.Platform.RecipientId+User.userId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.RecipientIdModule (class)
 ToolUp.Platform.RecipientIdModule.contactIds(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RecipientId]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Platform.RecipientIdModule.ofUserId(System.String) : ToolUp.Platform.RecipientId
@@ -11619,23 +11619,23 @@ ToolUp.Platform.ScheduledDeprovision.Reason : System.String { get }
 ToolUp.Platform.ScheduledDeprovision.RequestedBy : System.String { get }
 ToolUp.Platform.ScheduledDeprovision.ScopeId : System.String { get }
 ToolUp.Platform.SchemaApprovedPayload (class)
-ToolUp.Platform.SchemaApprovedPayload..ctor(System.String, System.String, System.String, System.Int32, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.SchemaApprovedPayload..ctor(ToolUp.Platform.UserId, System.String, System.String, System.Int32, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Platform.SchemaApprovedPayload.ConversationId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.SchemaApprovedPayload.ProposedBy : System.String { get }
 ToolUp.Platform.SchemaApprovedPayload.SchemaId : System.String { get }
 ToolUp.Platform.SchemaApprovedPayload.ScopeId : System.String { get }
-ToolUp.Platform.SchemaApprovedPayload.UserId : System.String { get }
+ToolUp.Platform.SchemaApprovedPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.SchemaApprovedPayload.Version : System.Int32 { get }
 ToolUp.Platform.SchemaApprovedPayload.VersionLabel : System.String { get }
 ToolUp.Platform.SchemaChangedPayload (class)
-ToolUp.Platform.SchemaChangedPayload..ctor(System.String, System.String, System.String, System.Int32, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Int32, System.Int32)
+ToolUp.Platform.SchemaChangedPayload..ctor(ToolUp.Platform.UserId, System.String, System.String, System.Int32, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Int32, System.Int32)
 ToolUp.Platform.SchemaChangedPayload.ChangeKind : System.String { get }
 ToolUp.Platform.SchemaChangedPayload.EvolvedFrom : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.SchemaChangedPayload.InstancesMigrated : System.Int32 { get }
 ToolUp.Platform.SchemaChangedPayload.MigrationsApplied : System.Int32 { get }
 ToolUp.Platform.SchemaChangedPayload.SchemaId : System.String { get }
 ToolUp.Platform.SchemaChangedPayload.ScopeId : System.String { get }
-ToolUp.Platform.SchemaChangedPayload.UserId : System.String { get }
+ToolUp.Platform.SchemaChangedPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.SchemaChangedPayload.Version : System.Int32 { get }
 ToolUp.Platform.SchemaChangedPayload.VersionLabel : System.String { get }
 ToolUp.Platform.SchemaMigration (class)
@@ -11674,18 +11674,18 @@ ToolUp.Platform.SchemaMigration+TightenType.fieldName : System.String { get }
 ToolUp.Platform.SchemaMigration+TightenType.fromType : ToolUp.Platform.BIFriendlyType { get }
 ToolUp.Platform.SchemaMigration+TightenType.toType : ToolUp.Platform.BIFriendlyType { get }
 ToolUp.Platform.SchemaOnlyAccessAttemptedPayload (class)
-ToolUp.Platform.SchemaOnlyAccessAttemptedPayload..ctor(System.String, System.String, System.String, System.String)
+ToolUp.Platform.SchemaOnlyAccessAttemptedPayload..ctor(ToolUp.Platform.UserId, System.String, System.String, System.String)
 ToolUp.Platform.SchemaOnlyAccessAttemptedPayload.AttemptedPath : System.String { get }
 ToolUp.Platform.SchemaOnlyAccessAttemptedPayload.AttemptedResource : System.String { get }
 ToolUp.Platform.SchemaOnlyAccessAttemptedPayload.ModuleName : System.String { get }
-ToolUp.Platform.SchemaOnlyAccessAttemptedPayload.UserId : System.String { get }
+ToolUp.Platform.SchemaOnlyAccessAttemptedPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.SchemaProposedPayload (class)
-ToolUp.Platform.SchemaProposedPayload..ctor(System.String, System.String, System.String, System.String, System.String, System.Int32)
+ToolUp.Platform.SchemaProposedPayload..ctor(ToolUp.Platform.UserId, System.String, System.String, System.String, System.String, System.Int32)
 ToolUp.Platform.SchemaProposedPayload.ConversationId : System.String { get }
 ToolUp.Platform.SchemaProposedPayload.FieldCount : System.Int32 { get }
 ToolUp.Platform.SchemaProposedPayload.SchemaId : System.String { get }
 ToolUp.Platform.SchemaProposedPayload.ScopeId : System.String { get }
-ToolUp.Platform.SchemaProposedPayload.UserId : System.String { get }
+ToolUp.Platform.SchemaProposedPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.SchemaProposedPayload.VersionLabel : System.String { get }
 ToolUp.Platform.ScopeKey (class)
 ToolUp.Platform.ScopeKey.IsClaim : System.Boolean { get }
@@ -11707,9 +11707,9 @@ ToolUp.Platform.ScopeKey+Tags.Session : System.Int32 (literal)
 ToolUp.Platform.ScopeKey+Tags.Team : System.Int32 (literal)
 ToolUp.Platform.ScopeKey+Tags.User : System.Int32 (literal)
 ToolUp.Platform.ScopeKey+Team (class)
-ToolUp.Platform.ScopeKey+Team.teamId : System.String { get }
+ToolUp.Platform.ScopeKey+Team.teamId : ToolUp.Platform.TeamId { get }
 ToolUp.Platform.ScopeKey+User (class)
-ToolUp.Platform.ScopeKey+User.userId : System.String { get }
+ToolUp.Platform.ScopeKey+User.userId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.ScopeKeyModule (class)
 ToolUp.Platform.ScopeKeyModule.PlatformContainer : System.String (literal)
 ToolUp.Platform.ScopeKeyModule.container(ToolUp.Platform.ScopeKey) : System.String
@@ -11731,7 +11731,7 @@ ToolUp.Platform.ScopeResolutionError.NoActiveTeam : ToolUp.Platform.ScopeResolut
 ToolUp.Platform.ScopeResolutionError.NotAuthenticated : ToolUp.Platform.ScopeResolutionError { get }
 ToolUp.Platform.ScopeResolutionError.Tag : System.Int32 { get }
 ToolUp.Platform.ScopeResolutionError+NotTeamMember (class)
-ToolUp.Platform.ScopeResolutionError+NotTeamMember.teamId : System.String { get }
+ToolUp.Platform.ScopeResolutionError+NotTeamMember.teamId : ToolUp.Platform.TeamId { get }
 ToolUp.Platform.ScopeResolutionError+ScopeResolutionFailed (class)
 ToolUp.Platform.ScopeResolutionError+ScopeResolutionFailed.message : System.String { get }
 ToolUp.Platform.ScopeResolutionError+Tags (class)
@@ -12038,11 +12038,11 @@ ToolUp.Platform.ServiceAccountCreateRequest.DisplayName : System.String { get }
 ToolUp.Platform.ServiceAccountCreateRequest.Permissions : Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]] { get }
 ToolUp.Platform.ServiceAccountCreateRequest.ScopeId : System.String { get }
 ToolUp.Platform.ServiceAccountCreatedPayload (class)
-ToolUp.Platform.ServiceAccountCreatedPayload..ctor(System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Platform.ServiceAccountCreatedPayload..ctor(ToolUp.Platform.UserId, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String])
 ToolUp.Platform.ServiceAccountCreatedPayload.AccountId : System.String { get }
 ToolUp.Platform.ServiceAccountCreatedPayload.DisplayName : System.String { get }
 ToolUp.Platform.ServiceAccountCreatedPayload.Modules : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
-ToolUp.Platform.ServiceAccountCreatedPayload.UserId : System.String { get }
+ToolUp.Platform.ServiceAccountCreatedPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.ServiceAccountError (class)
 ToolUp.Platform.ServiceAccountError.AccountDisabled : ToolUp.Platform.ServiceAccountError { get }
 ToolUp.Platform.ServiceAccountError.AccountNotFound : ToolUp.Platform.ServiceAccountError { get }
@@ -12078,11 +12078,11 @@ ToolUp.Platform.ServiceAccountError+Tags.RevokedToken : System.Int32 (literal)
 ToolUp.Platform.ServiceAccountError+Tags.ScopeMismatch : System.Int32 (literal)
 ToolUp.Platform.ServiceAccountError+Tags.StorageFailed : System.Int32 (literal)
 ToolUp.Platform.ServiceAccountPermissionsChangedPayload (class)
-ToolUp.Platform.ServiceAccountPermissionsChangedPayload..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Platform.ServiceAccountPermissionsChangedPayload..ctor(ToolUp.Platform.UserId, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String])
 ToolUp.Platform.ServiceAccountPermissionsChangedPayload.AccountId : System.String { get }
 ToolUp.Platform.ServiceAccountPermissionsChangedPayload.Modules : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.ServiceAccountPermissionsChangedPayload.PreviousModules : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
-ToolUp.Platform.ServiceAccountPermissionsChangedPayload.UserId : System.String { get }
+ToolUp.Platform.ServiceAccountPermissionsChangedPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.ServiceAccountPrincipal (class)
 ToolUp.Platform.ServiceAccountPrincipal..ctor(System.String, System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]], System.DateTimeOffset)
 ToolUp.Platform.ServiceAccountPrincipal.AccountId : System.String { get }
@@ -12101,10 +12101,10 @@ ToolUp.Platform.ServiceAccountStatus+Tags (class)
 ToolUp.Platform.ServiceAccountStatus+Tags.Active : System.Int32 (literal)
 ToolUp.Platform.ServiceAccountStatus+Tags.Disabled : System.Int32 (literal)
 ToolUp.Platform.ServiceAccountStatusChangedPayload (class)
-ToolUp.Platform.ServiceAccountStatusChangedPayload..ctor(System.String, System.String, System.Boolean)
+ToolUp.Platform.ServiceAccountStatusChangedPayload..ctor(ToolUp.Platform.UserId, System.String, System.Boolean)
 ToolUp.Platform.ServiceAccountStatusChangedPayload.AccountId : System.String { get }
 ToolUp.Platform.ServiceAccountStatusChangedPayload.Disabled : System.Boolean { get }
-ToolUp.Platform.ServiceAccountStatusChangedPayload.UserId : System.String { get }
+ToolUp.Platform.ServiceAccountStatusChangedPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.ServiceAccountStoreMode (class)
 ToolUp.Platform.ServiceAccountStoreMode.CustomServiceAccountStore : ToolUp.Platform.ServiceAccountStoreMode { get }
 ToolUp.Platform.ServiceAccountStoreMode.EnabledServiceAccounts : ToolUp.Platform.ServiceAccountStoreMode { get }
@@ -12138,17 +12138,17 @@ ToolUp.Platform.ServiceAccountTokenMintRequest.ExpiresAt : Microsoft.FSharp.Core
 ToolUp.Platform.ServiceAccountTokenMintRequest.IssuedBy : System.String { get }
 ToolUp.Platform.ServiceAccountTokenMintRequest.ScopeId : System.String { get }
 ToolUp.Platform.ServiceAccountTokenMintedPayload (class)
-ToolUp.Platform.ServiceAccountTokenMintedPayload..ctor(System.String, System.String, System.String, System.String, System.DateTimeOffset)
+ToolUp.Platform.ServiceAccountTokenMintedPayload..ctor(ToolUp.Platform.UserId, System.String, System.String, System.String, System.DateTimeOffset)
 ToolUp.Platform.ServiceAccountTokenMintedPayload.AccountId : System.String { get }
 ToolUp.Platform.ServiceAccountTokenMintedPayload.DisplayName : System.String { get }
 ToolUp.Platform.ServiceAccountTokenMintedPayload.ExpiresAt : System.DateTimeOffset { get }
 ToolUp.Platform.ServiceAccountTokenMintedPayload.TokenId : System.String { get }
-ToolUp.Platform.ServiceAccountTokenMintedPayload.UserId : System.String { get }
+ToolUp.Platform.ServiceAccountTokenMintedPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.ServiceAccountTokenRevokedPayload (class)
-ToolUp.Platform.ServiceAccountTokenRevokedPayload..ctor(System.String, System.String, System.String)
+ToolUp.Platform.ServiceAccountTokenRevokedPayload..ctor(ToolUp.Platform.UserId, System.String, System.String)
 ToolUp.Platform.ServiceAccountTokenRevokedPayload.AccountId : System.String { get }
 ToolUp.Platform.ServiceAccountTokenRevokedPayload.TokenId : System.String { get }
-ToolUp.Platform.ServiceAccountTokenRevokedPayload.UserId : System.String { get }
+ToolUp.Platform.ServiceAccountTokenRevokedPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.ServiceAccountTokenView (class)
 ToolUp.Platform.ServiceAccountTokenView..ctor(System.String, System.String, System.String, System.String, System.DateTimeOffset, System.DateTimeOffset, System.Boolean)
 ToolUp.Platform.ServiceAccountTokenView.AccountId : System.String { get }
@@ -12249,12 +12249,12 @@ ToolUp.Platform.SessionRegistryOptions.RevocationCacheSeconds : System.Int32 { g
 ToolUp.Platform.SessionRegistryOptionsModule (class)
 ToolUp.Platform.SessionRegistryOptionsModule.defaults : ToolUp.Platform.SessionRegistryOptions { get }
 ToolUp.Platform.SessionRevokedPayload (class)
-ToolUp.Platform.SessionRevokedPayload..ctor(System.String, System.String, System.String, System.String, System.Boolean)
-ToolUp.Platform.SessionRevokedPayload.ActorUserId : System.String { get }
+ToolUp.Platform.SessionRevokedPayload..ctor(ToolUp.Platform.UserId, ToolUp.Platform.UserId, System.String, System.String, System.Boolean)
+ToolUp.Platform.SessionRevokedPayload.ActorUserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.SessionRevokedPayload.ByAdministrator : System.Boolean { get }
 ToolUp.Platform.SessionRevokedPayload.DeviceDescriptor : System.String { get }
 ToolUp.Platform.SessionRevokedPayload.SessionId : System.String { get }
-ToolUp.Platform.SessionRevokedPayload.SubjectUserId : System.String { get }
+ToolUp.Platform.SessionRevokedPayload.SubjectUserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.SessionStatus (class)
 ToolUp.Platform.SessionStatus.ActiveSession : ToolUp.Platform.SessionStatus { get }
 ToolUp.Platform.SessionStatus.IsActiveSession : System.Boolean { get }
@@ -12335,23 +12335,23 @@ ToolUp.Platform.ShareTokenIssueRequest.ResourceKind : System.String { get }
 ToolUp.Platform.ShareTokenIssueRequest.ScopeId : System.String { get }
 ToolUp.Platform.ShareTokenIssueRequest.UseLimit : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpOption`1[System.Int32]] { get }
 ToolUp.Platform.ShareTokenIssuedPayload (class)
-ToolUp.Platform.ShareTokenIssuedPayload..ctor(System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.DateTimeOffset)
+ToolUp.Platform.ShareTokenIssuedPayload..ctor(ToolUp.Platform.UserId, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.DateTimeOffset)
 ToolUp.Platform.ShareTokenIssuedPayload.AttributedHandle : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.ShareTokenIssuedPayload.ExpiresAt : System.DateTimeOffset { get }
 ToolUp.Platform.ShareTokenIssuedPayload.ResourceId : System.String { get }
 ToolUp.Platform.ShareTokenIssuedPayload.ResourceKind : System.String { get }
 ToolUp.Platform.ShareTokenIssuedPayload.TokenId : System.String { get }
-ToolUp.Platform.ShareTokenIssuedPayload.UserId : System.String { get }
+ToolUp.Platform.ShareTokenIssuedPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.ShareTokenRateLimit (class)
 ToolUp.Platform.ShareTokenRateLimit..ctor(System.Int32, System.TimeSpan)
 ToolUp.Platform.ShareTokenRateLimit.MaxUses : System.Int32 { get }
 ToolUp.Platform.ShareTokenRateLimit.Window : System.TimeSpan { get }
 ToolUp.Platform.ShareTokenRevokedPayload (class)
-ToolUp.Platform.ShareTokenRevokedPayload..ctor(System.String, System.String, System.String, System.String)
+ToolUp.Platform.ShareTokenRevokedPayload..ctor(ToolUp.Platform.UserId, System.String, System.String, System.String)
 ToolUp.Platform.ShareTokenRevokedPayload.ResourceId : System.String { get }
 ToolUp.Platform.ShareTokenRevokedPayload.ResourceKind : System.String { get }
 ToolUp.Platform.ShareTokenRevokedPayload.TokenId : System.String { get }
-ToolUp.Platform.ShareTokenRevokedPayload.UserId : System.String { get }
+ToolUp.Platform.ShareTokenRevokedPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.ShareTokenTypes (class)
 ToolUp.Platform.ShareTokenTypes.AuditSourceModule : System.String (literal)
 ToolUp.Platform.ShareTokenTypes.DefaultLifetime : System.TimeSpan { get }
@@ -12519,7 +12519,7 @@ ToolUp.Platform.StorageScope.ScopeId : System.String { get }
 ToolUp.Platform.StorageScopeModule (class)
 ToolUp.Platform.StorageScopeModule.ofKey(System.Boolean, ToolUp.Platform.ScopeKey) : ToolUp.Platform.StorageScope
 ToolUp.Platform.StorageScopeModule.tryKey(ToolUp.Platform.StorageScope) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ScopeKey]
-ToolUp.Platform.StorageScopeModule.tryTeamId(ToolUp.Platform.StorageScope) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.Platform.StorageScopeModule.tryTeamId(ToolUp.Platform.StorageScope) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamId]
 ToolUp.Platform.Stores (class)
 ToolUp.Platform.Stores..ctor(ToolUp.Platform.EventStoreMode, ToolUp.Platform.ResultStoreMode, ToolUp.Platform.FeatureMode, ToolUp.Platform.ServiceAccountStoreMode, ToolUp.Platform.FeatureMode, ToolUp.Platform.FeatureMode, ToolUp.Platform.GraphStoreMode, ToolUp.Platform.TimeSeriesStoreMode, ToolUp.Platform.DatasetStoreMode, ToolUp.Platform.SessionRegistryMode, ToolUp.Platform.FeatureMode, ToolUp.Platform.ConversationStoreMode, ToolUp.Platform.FeatureMode, ToolUp.Platform.RateLimitStoreMode, ToolUp.Platform.ConsentStateStoreMode, ToolUp.Platform.FeatureMode)
 ToolUp.Platform.Stores.AssetStore : ToolUp.Platform.FeatureMode { get }
@@ -12592,7 +12592,7 @@ ToolUp.Platform.SubjectResolutionError.IsSubjectResolutionFailed : System.Boolea
 ToolUp.Platform.SubjectResolutionError.IsUnsupportedSubject : System.Boolean { get }
 ToolUp.Platform.SubjectResolutionError.Tag : System.Int32 { get }
 ToolUp.Platform.SubjectResolutionError+NotTeamMember (class)
-ToolUp.Platform.SubjectResolutionError+NotTeamMember.teamId : System.String { get }
+ToolUp.Platform.SubjectResolutionError+NotTeamMember.teamId : ToolUp.Platform.TeamId { get }
 ToolUp.Platform.SubjectResolutionError+SubjectResolutionFailed (class)
 ToolUp.Platform.SubjectResolutionError+SubjectResolutionFailed.message : System.String { get }
 ToolUp.Platform.SubjectResolutionError+Tags (class)
@@ -12689,13 +12689,13 @@ ToolUp.Platform.SurfacesView..ctor(Microsoft.FSharp.Collections.FSharpList`1[Too
 ToolUp.Platform.SurfacesView.Descriptors : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.InspectedSurface] { get }
 ToolUp.Platform.SurfacesView.Note : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.SyntheticSampleGeneratedPayload (class)
-ToolUp.Platform.SyntheticSampleGeneratedPayload..ctor(System.String, System.String, System.Int32, System.Int32, System.Int32, System.Int32)
+ToolUp.Platform.SyntheticSampleGeneratedPayload..ctor(ToolUp.Platform.UserId, System.String, System.Int32, System.Int32, System.Int32, System.Int32)
 ToolUp.Platform.SyntheticSampleGeneratedPayload.AppliedMaxRows : System.Int32 { get }
 ToolUp.Platform.SyntheticSampleGeneratedPayload.EmittedCount : System.Int32 { get }
 ToolUp.Platform.SyntheticSampleGeneratedPayload.RequestedCount : System.Int32 { get }
 ToolUp.Platform.SyntheticSampleGeneratedPayload.Seed : System.Int32 { get }
 ToolUp.Platform.SyntheticSampleGeneratedPayload.TypeId : System.String { get }
-ToolUp.Platform.SyntheticSampleGeneratedPayload.UserId : System.String { get }
+ToolUp.Platform.SyntheticSampleGeneratedPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.SystemMessageLevel (class)
 ToolUp.Platform.SystemMessageLevel.Error : ToolUp.Platform.SystemMessageLevel { get }
 ToolUp.Platform.SystemMessageLevel.Info : ToolUp.Platform.SystemMessageLevel { get }
@@ -12730,10 +12730,10 @@ ToolUp.Platform.TeamApi.RestoreTeam : Microsoft.FSharp.Core.FSharpFunc`2[System.
 ToolUp.Platform.TeamApi.SetActiveTeam : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
 ToolUp.Platform.TeamApi.TransferOwnership : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
 ToolUp.Platform.TeamArchivedPayload (class)
-ToolUp.Platform.TeamArchivedPayload..ctor(System.String, System.String, System.String)
-ToolUp.Platform.TeamArchivedPayload.TeamId : System.String { get }
+ToolUp.Platform.TeamArchivedPayload..ctor(ToolUp.Platform.UserId, ToolUp.Platform.TeamId, System.String)
+ToolUp.Platform.TeamArchivedPayload.TeamId : ToolUp.Platform.TeamId { get }
 ToolUp.Platform.TeamArchivedPayload.TeamName : System.String { get }
-ToolUp.Platform.TeamArchivedPayload.UserId : System.String { get }
+ToolUp.Platform.TeamArchivedPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.TeamConfig (class)
 ToolUp.Platform.TeamConfig..ctor(ToolUp.Platform.Persistence, ToolUp.Platform.TeamSwitchingUX)
 ToolUp.Platform.TeamConfig.Persistence : ToolUp.Platform.Persistence { get }
@@ -12757,14 +12757,14 @@ ToolUp.Platform.TeamConversationVisibilitySettingsModule.create(ToolUp.Platform.
 ToolUp.Platform.TeamConversationVisibilitySettingsModule.describeAllowed(ToolUp.Platform.TeamConversationVisibilitySettings) : System.String
 ToolUp.Platform.TeamConversationVisibilitySettingsModule.unrestricted : ToolUp.Platform.TeamConversationVisibilitySettings { get }
 ToolUp.Platform.TeamCreatedPayload (class)
-ToolUp.Platform.TeamCreatedPayload..ctor(System.String, System.String, System.String)
-ToolUp.Platform.TeamCreatedPayload.TeamId : System.String { get }
+ToolUp.Platform.TeamCreatedPayload..ctor(ToolUp.Platform.UserId, ToolUp.Platform.TeamId, System.String)
+ToolUp.Platform.TeamCreatedPayload.TeamId : ToolUp.Platform.TeamId { get }
 ToolUp.Platform.TeamCreatedPayload.TeamName : System.String { get }
-ToolUp.Platform.TeamCreatedPayload.UserId : System.String { get }
+ToolUp.Platform.TeamCreatedPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.TeamCreationDeniedPayload (class)
-ToolUp.Platform.TeamCreationDeniedPayload..ctor(System.String, System.String)
+ToolUp.Platform.TeamCreationDeniedPayload..ctor(ToolUp.Platform.UserId, System.String)
 ToolUp.Platform.TeamCreationDeniedPayload.AttemptedName : System.String { get }
-ToolUp.Platform.TeamCreationDeniedPayload.UserId : System.String { get }
+ToolUp.Platform.TeamCreationDeniedPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.TeamCreationPolicy (class)
 ToolUp.Platform.TeamCreationPolicy.AnyAuthenticatedUser : ToolUp.Platform.TeamCreationPolicy { get }
 ToolUp.Platform.TeamCreationPolicy.IsAnyAuthenticatedUser : System.Boolean { get }
@@ -12775,15 +12775,21 @@ ToolUp.Platform.TeamCreationPolicy+Tags (class)
 ToolUp.Platform.TeamCreationPolicy+Tags.AnyAuthenticatedUser : System.Int32 (literal)
 ToolUp.Platform.TeamCreationPolicy+Tags.PlatformAdminOnly : System.Int32 (literal)
 ToolUp.Platform.TeamDeletedPayload (class)
-ToolUp.Platform.TeamDeletedPayload..ctor(System.String, System.String, System.String)
-ToolUp.Platform.TeamDeletedPayload.TeamId : System.String { get }
+ToolUp.Platform.TeamDeletedPayload..ctor(ToolUp.Platform.UserId, ToolUp.Platform.TeamId, System.String)
+ToolUp.Platform.TeamDeletedPayload.TeamId : ToolUp.Platform.TeamId { get }
 ToolUp.Platform.TeamDeletedPayload.TeamName : System.String { get }
-ToolUp.Platform.TeamDeletedPayload.UserId : System.String { get }
+ToolUp.Platform.TeamDeletedPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.TeamId (class)
 ToolUp.Platform.TeamId.Item : System.String { get }
 ToolUp.Platform.TeamId.Tag : System.Int32 { get }
 ToolUp.Platform.TeamId.ToString() : System.String
 ToolUp.Platform.TeamId.Value : System.String { get }
+ToolUp.Platform.TeamIdJsonConverter (class)
+ToolUp.Platform.TeamIdJsonConverter..ctor()
+ToolUp.Platform.TeamIdJsonConverter.Read(System.Text.Json.Utf8JsonReader&, System.Type, System.Text.Json.JsonSerializerOptions) : ToolUp.Platform.TeamId
+ToolUp.Platform.TeamIdJsonConverter.ReadAsPropertyName(System.Text.Json.Utf8JsonReader&, System.Type, System.Text.Json.JsonSerializerOptions) : ToolUp.Platform.TeamId
+ToolUp.Platform.TeamIdJsonConverter.Write(System.Text.Json.Utf8JsonWriter, ToolUp.Platform.TeamId, System.Text.Json.JsonSerializerOptions) : System.Void
+ToolUp.Platform.TeamIdJsonConverter.WriteAsPropertyName(System.Text.Json.Utf8JsonWriter, ToolUp.Platform.TeamId, System.Text.Json.JsonSerializerOptions) : System.Void
 ToolUp.Platform.TeamIdModule (class)
 ToolUp.Platform.TeamIdModule.tryCreate(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TeamId, System.String]
 ToolUp.Platform.TeamIdModule.tryParse(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamId]
@@ -12800,37 +12806,37 @@ ToolUp.Platform.TeamInviteAcceptResult.Role : ToolUp.Platform.TeamRole { get }
 ToolUp.Platform.TeamInviteAcceptResult.TeamId : System.String { get }
 ToolUp.Platform.TeamInviteAcceptResult.TeamName : System.String { get }
 ToolUp.Platform.TeamInviteAcceptedFromPendingFailedPayload (class)
-ToolUp.Platform.TeamInviteAcceptedFromPendingFailedPayload..ctor(System.String, System.String, System.String, System.String, ToolUp.Platform.TeamRole, System.String)
+ToolUp.Platform.TeamInviteAcceptedFromPendingFailedPayload..ctor(ToolUp.Platform.TeamId, ToolUp.Platform.UserId, System.String, ToolUp.Platform.UserId, ToolUp.Platform.TeamRole, System.String)
 ToolUp.Platform.TeamInviteAcceptedFromPendingFailedPayload.InviteeEmail : System.String { get }
-ToolUp.Platform.TeamInviteAcceptedFromPendingFailedPayload.InviteeUserId : System.String { get }
-ToolUp.Platform.TeamInviteAcceptedFromPendingFailedPayload.InviterUserId : System.String { get }
+ToolUp.Platform.TeamInviteAcceptedFromPendingFailedPayload.InviteeUserId : ToolUp.Platform.UserId { get }
+ToolUp.Platform.TeamInviteAcceptedFromPendingFailedPayload.InviterUserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.TeamInviteAcceptedFromPendingFailedPayload.Reason : System.String { get }
 ToolUp.Platform.TeamInviteAcceptedFromPendingFailedPayload.Role : ToolUp.Platform.TeamRole { get }
-ToolUp.Platform.TeamInviteAcceptedFromPendingFailedPayload.TeamId : System.String { get }
+ToolUp.Platform.TeamInviteAcceptedFromPendingFailedPayload.TeamId : ToolUp.Platform.TeamId { get }
 ToolUp.Platform.TeamInviteAcceptedFromPendingPayload (class)
-ToolUp.Platform.TeamInviteAcceptedFromPendingPayload..ctor(System.String, System.String, System.String, System.String, ToolUp.Platform.TeamRole)
+ToolUp.Platform.TeamInviteAcceptedFromPendingPayload..ctor(ToolUp.Platform.TeamId, ToolUp.Platform.UserId, System.String, ToolUp.Platform.UserId, ToolUp.Platform.TeamRole)
 ToolUp.Platform.TeamInviteAcceptedFromPendingPayload.InviteeEmail : System.String { get }
-ToolUp.Platform.TeamInviteAcceptedFromPendingPayload.InviteeUserId : System.String { get }
-ToolUp.Platform.TeamInviteAcceptedFromPendingPayload.InviterUserId : System.String { get }
+ToolUp.Platform.TeamInviteAcceptedFromPendingPayload.InviteeUserId : ToolUp.Platform.UserId { get }
+ToolUp.Platform.TeamInviteAcceptedFromPendingPayload.InviterUserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.TeamInviteAcceptedFromPendingPayload.Role : ToolUp.Platform.TeamRole { get }
-ToolUp.Platform.TeamInviteAcceptedFromPendingPayload.TeamId : System.String { get }
+ToolUp.Platform.TeamInviteAcceptedFromPendingPayload.TeamId : ToolUp.Platform.TeamId { get }
 ToolUp.Platform.TeamInviteAcceptedPayload (class)
-ToolUp.Platform.TeamInviteAcceptedPayload..ctor(System.String, System.String, System.String, System.String, ToolUp.Platform.TeamRole)
-ToolUp.Platform.TeamInviteAcceptedPayload.InviteeUserId : System.String { get }
-ToolUp.Platform.TeamInviteAcceptedPayload.InviterUserId : System.String { get }
+ToolUp.Platform.TeamInviteAcceptedPayload..ctor(ToolUp.Platform.TeamId, System.String, ToolUp.Platform.UserId, ToolUp.Platform.UserId, ToolUp.Platform.TeamRole)
+ToolUp.Platform.TeamInviteAcceptedPayload.InviteeUserId : ToolUp.Platform.UserId { get }
+ToolUp.Platform.TeamInviteAcceptedPayload.InviterUserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.TeamInviteAcceptedPayload.Role : ToolUp.Platform.TeamRole { get }
-ToolUp.Platform.TeamInviteAcceptedPayload.TeamId : System.String { get }
+ToolUp.Platform.TeamInviteAcceptedPayload.TeamId : ToolUp.Platform.TeamId { get }
 ToolUp.Platform.TeamInviteAcceptedPayload.TokenId : System.String { get }
 ToolUp.Platform.TeamInviteApi (class)
 ToolUp.Platform.TeamInviteApi.routeBuilder(System.String, System.String) : System.String
 ToolUp.Platform.TeamInviteClaim (class)
-ToolUp.Platform.TeamInviteClaim..ctor(System.String, ToolUp.Platform.TeamRole, System.String, System.DateTime, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Int32)
+ToolUp.Platform.TeamInviteClaim..ctor(ToolUp.Platform.TeamId, ToolUp.Platform.TeamRole, ToolUp.Platform.UserId, System.DateTime, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Int32)
 ToolUp.Platform.TeamInviteClaim.EmailHint : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.TeamInviteClaim.ExpiresAt : System.DateTime { get }
-ToolUp.Platform.TeamInviteClaim.InviterUserId : System.String { get }
+ToolUp.Platform.TeamInviteClaim.InviterUserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.TeamInviteClaim.MaxUses : System.Int32 { get }
 ToolUp.Platform.TeamInviteClaim.Role : ToolUp.Platform.TeamRole { get }
-ToolUp.Platform.TeamInviteClaim.TeamId : System.String { get }
+ToolUp.Platform.TeamInviteClaim.TeamId : ToolUp.Platform.TeamId { get }
 ToolUp.Platform.TeamInviteExpiredPayload (class)
 ToolUp.Platform.TeamInviteExpiredPayload..ctor(System.String, System.String, System.String, ToolUp.Platform.TeamRole, System.DateTime, System.DateTime)
 ToolUp.Platform.TeamInviteExpiredPayload.ExpiredAt : System.DateTime { get }
@@ -12851,23 +12857,23 @@ ToolUp.Platform.TeamInviteIssueResult..ctor(System.String, System.String)
 ToolUp.Platform.TeamInviteIssueResult.InviteUrl : System.String { get }
 ToolUp.Platform.TeamInviteIssueResult.TokenId : System.String { get }
 ToolUp.Platform.TeamInviteIssuedPayload (class)
-ToolUp.Platform.TeamInviteIssuedPayload..ctor(System.String, System.String, System.String, ToolUp.Platform.TeamRole, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.DateTime, System.Int32)
+ToolUp.Platform.TeamInviteIssuedPayload..ctor(ToolUp.Platform.TeamId, System.String, ToolUp.Platform.UserId, ToolUp.Platform.TeamRole, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.DateTime, System.Int32)
 ToolUp.Platform.TeamInviteIssuedPayload.EmailHint : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.TeamInviteIssuedPayload.ExpiresAt : System.DateTime { get }
-ToolUp.Platform.TeamInviteIssuedPayload.InviterUserId : System.String { get }
+ToolUp.Platform.TeamInviteIssuedPayload.InviterUserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.TeamInviteIssuedPayload.MaxUses : System.Int32 { get }
 ToolUp.Platform.TeamInviteIssuedPayload.Role : ToolUp.Platform.TeamRole { get }
-ToolUp.Platform.TeamInviteIssuedPayload.TeamId : System.String { get }
+ToolUp.Platform.TeamInviteIssuedPayload.TeamId : ToolUp.Platform.TeamId { get }
 ToolUp.Platform.TeamInviteIssuedPayload.TokenId : System.String { get }
 ToolUp.Platform.TeamInviteRedeemedPayload (class)
-ToolUp.Platform.TeamInviteRedeemedPayload..ctor(System.String, System.String, System.Int32)
+ToolUp.Platform.TeamInviteRedeemedPayload..ctor(ToolUp.Platform.TeamId, System.String, System.Int32)
 ToolUp.Platform.TeamInviteRedeemedPayload.RemainingUses : System.Int32 { get }
-ToolUp.Platform.TeamInviteRedeemedPayload.TeamId : System.String { get }
+ToolUp.Platform.TeamInviteRedeemedPayload.TeamId : ToolUp.Platform.TeamId { get }
 ToolUp.Platform.TeamInviteRedeemedPayload.TokenId : System.String { get }
 ToolUp.Platform.TeamInviteRevokedPayload (class)
-ToolUp.Platform.TeamInviteRevokedPayload..ctor(System.String, System.String, System.String)
-ToolUp.Platform.TeamInviteRevokedPayload.ActorUserId : System.String { get }
-ToolUp.Platform.TeamInviteRevokedPayload.TeamId : System.String { get }
+ToolUp.Platform.TeamInviteRevokedPayload..ctor(ToolUp.Platform.TeamId, System.String, ToolUp.Platform.UserId)
+ToolUp.Platform.TeamInviteRevokedPayload.ActorUserId : ToolUp.Platform.UserId { get }
+ToolUp.Platform.TeamInviteRevokedPayload.TeamId : ToolUp.Platform.TeamId { get }
 ToolUp.Platform.TeamInviteRevokedPayload.TokenId : System.String { get }
 ToolUp.Platform.TeamInviteSummary (class)
 ToolUp.Platform.TeamInviteSummary..ctor(System.String, System.String, ToolUp.Platform.TeamRole, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.DateTime, System.Int32, System.Boolean)
@@ -12926,11 +12932,11 @@ ToolUp.Platform.TeamOutputVisibilityView.InTeamScope : System.Boolean { get }
 ToolUp.Platform.TeamOutputVisibilityView.Level : ToolUp.Platform.TeamVisibilityLevel { get }
 ToolUp.Platform.TeamOutputVisibilityView.Selectable : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamVisibilityLevel] { get }
 ToolUp.Platform.TeamOwnershipTransferredPayload (class)
-ToolUp.Platform.TeamOwnershipTransferredPayload..ctor(System.String, System.String, System.String, System.String)
-ToolUp.Platform.TeamOwnershipTransferredPayload.ActorUserId : System.String { get }
-ToolUp.Platform.TeamOwnershipTransferredPayload.FromUserId : System.String { get }
-ToolUp.Platform.TeamOwnershipTransferredPayload.TeamId : System.String { get }
-ToolUp.Platform.TeamOwnershipTransferredPayload.ToUserId : System.String { get }
+ToolUp.Platform.TeamOwnershipTransferredPayload..ctor(ToolUp.Platform.TeamId, ToolUp.Platform.UserId, ToolUp.Platform.UserId, ToolUp.Platform.UserId)
+ToolUp.Platform.TeamOwnershipTransferredPayload.ActorUserId : ToolUp.Platform.UserId { get }
+ToolUp.Platform.TeamOwnershipTransferredPayload.FromUserId : ToolUp.Platform.UserId { get }
+ToolUp.Platform.TeamOwnershipTransferredPayload.TeamId : ToolUp.Platform.TeamId { get }
+ToolUp.Platform.TeamOwnershipTransferredPayload.ToUserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.TeamPermissions (class)
 ToolUp.Platform.TeamPermissions..ctor(Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]]], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleExposure], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleGrantRecord]], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PageGrant]])
 ToolUp.Platform.TeamPermissions.Defaults : Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]] { get }
@@ -12943,10 +12949,10 @@ ToolUp.Platform.TeamPermissionsModule.empty : ToolUp.Platform.TeamPermissions { 
 ToolUp.Platform.TeamPermissionsModule.grantsFor(System.String, ToolUp.Platform.TeamPermissions) : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleGrantRecord]
 ToolUp.Platform.TeamPermissionsModule.pageGrantsFor(System.String, ToolUp.Platform.TeamPermissions) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PageGrant]
 ToolUp.Platform.TeamRestoredPayload (class)
-ToolUp.Platform.TeamRestoredPayload..ctor(System.String, System.String, System.String)
-ToolUp.Platform.TeamRestoredPayload.TeamId : System.String { get }
+ToolUp.Platform.TeamRestoredPayload..ctor(ToolUp.Platform.UserId, ToolUp.Platform.TeamId, System.String)
+ToolUp.Platform.TeamRestoredPayload.TeamId : ToolUp.Platform.TeamId { get }
 ToolUp.Platform.TeamRestoredPayload.TeamName : System.String { get }
-ToolUp.Platform.TeamRestoredPayload.UserId : System.String { get }
+ToolUp.Platform.TeamRestoredPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.TeamRole (class)
 ToolUp.Platform.TeamRole.Admin : ToolUp.Platform.TeamRole { get }
 ToolUp.Platform.TeamRole.IsAdmin : System.Boolean { get }
@@ -13088,11 +13094,11 @@ ToolUp.Platform.TenantLifecycleEvent+Deprovisioned (class)
 ToolUp.Platform.TenantLifecycleEvent+Deprovisioned.scopeId : System.String { get }
 ToolUp.Platform.TenantLifecycleEvent+Deprovisioned.summary : ToolUp.Platform.LifecycleSummary { get }
 ToolUp.Platform.TenantLifecycleEvent+Deprovisioning (class)
-ToolUp.Platform.TenantLifecycleEvent+Deprovisioning.actorUserId : System.String { get }
+ToolUp.Platform.TenantLifecycleEvent+Deprovisioning.actorUserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.TenantLifecycleEvent+Deprovisioning.reason : System.String { get }
 ToolUp.Platform.TenantLifecycleEvent+Deprovisioning.scopeId : System.String { get }
 ToolUp.Platform.TenantLifecycleEvent+Provisioned (class)
-ToolUp.Platform.TenantLifecycleEvent+Provisioned.actorUserId : System.String { get }
+ToolUp.Platform.TenantLifecycleEvent+Provisioned.actorUserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.TenantLifecycleEvent+Provisioned.scopeId : System.String { get }
 ToolUp.Platform.TenantLifecycleEvent+Tags (class)
 ToolUp.Platform.TenantLifecycleEvent+Tags.Deprovisioned : System.Int32 (literal)
@@ -13433,7 +13439,7 @@ ToolUp.Platform.TriggerSource+ScheduledByEvent (class)
 ToolUp.Platform.TriggerSource+ScheduledByEvent.eventId : System.Guid { get }
 ToolUp.Platform.TriggerSource+ScheduledByEvent.eventType : System.String { get }
 ToolUp.Platform.TriggerSource+ScheduledManually (class)
-ToolUp.Platform.TriggerSource+ScheduledManually.byUserId : System.String { get }
+ToolUp.Platform.TriggerSource+ScheduledManually.byUserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.TriggerSource+Tags (class)
 ToolUp.Platform.TriggerSource+Tags.ScheduledByCron : System.Int32 (literal)
 ToolUp.Platform.TriggerSource+Tags.ScheduledByEvent : System.Int32 (literal)
@@ -13549,11 +13555,11 @@ ToolUp.Platform.UnattestedReason+Tags.ResolutionFailed : System.Int32 (literal)
 ToolUp.Platform.UnattestedReasonModule (class)
 ToolUp.Platform.UnattestedReasonModule.describe(ToolUp.Platform.UnattestedReason) : System.String
 ToolUp.Platform.UnconsentedGrantRefusedPayload (class)
-ToolUp.Platform.UnconsentedGrantRefusedPayload..ctor(System.String, System.String, System.String, System.String)
+ToolUp.Platform.UnconsentedGrantRefusedPayload..ctor(ToolUp.Platform.UserId, System.String, System.String, System.String)
 ToolUp.Platform.UnconsentedGrantRefusedPayload.DeclaredPolicy : System.String { get }
 ToolUp.Platform.UnconsentedGrantRefusedPayload.InertReason : System.String { get }
 ToolUp.Platform.UnconsentedGrantRefusedPayload.ModuleName : System.String { get }
-ToolUp.Platform.UnconsentedGrantRefusedPayload.UserId : System.String { get }
+ToolUp.Platform.UnconsentedGrantRefusedPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.UpdateExternalContactRequest (class)
 ToolUp.Platform.UpdateExternalContactRequest..ctor(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Platform.UpdateExternalContactRequest.ContactId : System.String { get }
@@ -13671,11 +13677,11 @@ ToolUp.Platform.UserAuthoredSchemaModule.toDataTypeInfo(ToolUp.Platform.UserAuth
 ToolUp.Platform.UserAuthoredSchemaModule.toDataTypeSchema(ToolUp.Platform.UserAuthoredSchema) : DataManagementTypes+DataTypeSchema
 ToolUp.Platform.UserAuthoredSchemaModule.tryFindField(System.String, ToolUp.Platform.UserAuthoredSchema) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.UserSchemaField]
 ToolUp.Platform.UserContact (class)
-ToolUp.Platform.UserContact..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.EmailAddress], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PhoneNumber], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PushToken])
+ToolUp.Platform.UserContact..ctor(ToolUp.Platform.UserId, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.EmailAddress], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PhoneNumber], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PushToken])
 ToolUp.Platform.UserContact.Email : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.EmailAddress] { get }
 ToolUp.Platform.UserContact.Phone : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PhoneNumber] { get }
 ToolUp.Platform.UserContact.PushTokens : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PushToken] { get }
-ToolUp.Platform.UserContact.UserId : System.String { get }
+ToolUp.Platform.UserContact.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.UserContactModule (class)
 ToolUp.Platform.UserContactModule.empty(System.String) : ToolUp.Platform.UserContact
 ToolUp.Platform.UserId (class)
@@ -13683,14 +13689,20 @@ ToolUp.Platform.UserId.Item : System.String { get }
 ToolUp.Platform.UserId.Tag : System.Int32 { get }
 ToolUp.Platform.UserId.ToString() : System.String
 ToolUp.Platform.UserId.Value : System.String { get }
+ToolUp.Platform.UserIdJsonConverter (class)
+ToolUp.Platform.UserIdJsonConverter..ctor()
+ToolUp.Platform.UserIdJsonConverter.Read(System.Text.Json.Utf8JsonReader&, System.Type, System.Text.Json.JsonSerializerOptions) : ToolUp.Platform.UserId
+ToolUp.Platform.UserIdJsonConverter.ReadAsPropertyName(System.Text.Json.Utf8JsonReader&, System.Type, System.Text.Json.JsonSerializerOptions) : ToolUp.Platform.UserId
+ToolUp.Platform.UserIdJsonConverter.Write(System.Text.Json.Utf8JsonWriter, ToolUp.Platform.UserId, System.Text.Json.JsonSerializerOptions) : System.Void
+ToolUp.Platform.UserIdJsonConverter.WriteAsPropertyName(System.Text.Json.Utf8JsonWriter, ToolUp.Platform.UserId, System.Text.Json.JsonSerializerOptions) : System.Void
 ToolUp.Platform.UserIdModule (class)
 ToolUp.Platform.UserIdModule.tryCreate(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.UserId, System.String]
 ToolUp.Platform.UserIdModule.tryParse(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.UserId]
 ToolUp.Platform.UserIdModule.value(ToolUp.Platform.UserId) : System.String
 ToolUp.Platform.UserLoggedInPayload (class)
-ToolUp.Platform.UserLoggedInPayload..ctor(System.String, System.String)
+ToolUp.Platform.UserLoggedInPayload..ctor(ToolUp.Platform.UserId, System.String)
 ToolUp.Platform.UserLoggedInPayload.AuthProvider : System.String { get }
-ToolUp.Platform.UserLoggedInPayload.UserId : System.String { get }
+ToolUp.Platform.UserLoggedInPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.UserNotificationPreferences (class)
 ToolUp.Platform.UserNotificationPreferences..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CategoryChannelPreference], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.QuietHours])
 ToolUp.Platform.UserNotificationPreferences.Channels : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CategoryChannelPreference] { get }
@@ -14624,13 +14636,13 @@ ToolUp.Platform.WorkflowActionExecutedPayload.Status : System.String { get }
 ToolUp.Platform.WorkflowActionExecutedPayload.SubmissionId : System.String { get }
 ToolUp.Platform.WorkflowActionExecutedPayload.TransitionId : System.String { get }
 ToolUp.Platform.WorkflowTransitionedPayload (class)
-ToolUp.Platform.WorkflowTransitionedPayload..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String)
+ToolUp.Platform.WorkflowTransitionedPayload..ctor(ToolUp.Platform.UserId, System.String, System.String, System.String, System.String, System.String, System.String)
 ToolUp.Platform.WorkflowTransitionedPayload.Event : System.String { get }
 ToolUp.Platform.WorkflowTransitionedPayload.FormId : System.String { get }
 ToolUp.Platform.WorkflowTransitionedPayload.FromState : System.String { get }
 ToolUp.Platform.WorkflowTransitionedPayload.SubmissionId : System.String { get }
 ToolUp.Platform.WorkflowTransitionedPayload.ToState : System.String { get }
-ToolUp.Platform.WorkflowTransitionedPayload.UserId : System.String { get }
+ToolUp.Platform.WorkflowTransitionedPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.WorkflowTransitionedPayload.WorkflowId : System.String { get }
 ToolUp.Remoting.Decode (class)
 ToolUp.Remoting.Decode.apply`2(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[A, ToolUp.Remoting.DecodeError]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpFunc`2[A, B], ToolUp.Remoting.DecodeError]], ToolUp.Remoting.MsgPack.Value) : Microsoft.FSharp.Core.FSharpResult`2[B, ToolUp.Remoting.DecodeError]

@@ -138,7 +138,7 @@ let tests
             let! resolved = resolver.Resolve(TeamMember("alice", "t1"), "ai.assistant", None)
 
             expectEntry "team-primary" resolved
-            Expect.equal resolved.Owner (ProviderProfileOwner.TeamOwned "t1") "the team rung answered"
+            Expect.equal resolved.Owner (ProviderProfileOwner.TeamOwned(TeamId "t1")) "the team rung answered"
         }
 
         testCaseAsync "a team-owned profile resolves for EVERY member of that team"
@@ -166,10 +166,10 @@ let tests
             let! forBob = resolver.Resolve(TeamMember("bob", "t1"), "ai.assistant", None)
 
             expectEntry "alice-own" forAlice
-            Expect.equal forAlice.Owner (ProviderProfileOwner.UserOwned "alice") "alice's own rung answered"
+            Expect.equal forAlice.Owner (ProviderProfileOwner.UserOwned(UserId "alice")) "alice's own rung answered"
 
             expectEntry "team-primary" forBob
-            Expect.equal forBob.Owner (ProviderProfileOwner.TeamOwned "t1") "bob still gets the team's"
+            Expect.equal forBob.Owner (ProviderProfileOwner.TeamOwned(TeamId "t1")) "bob still gets the team's"
         }
 
         testCaseAsync "fall-through is per SURFACE — an override of one leaves the other inherited"
@@ -205,7 +205,7 @@ let tests
 
             Expect.equal
                 gateway.Owner
-                (ProviderProfileOwner.TeamOwned "t1")
+                (ProviderProfileOwner.TeamOwned(TeamId "t1"))
                 "the un-overridden surface stays the team's"
         }
 
@@ -354,7 +354,7 @@ let tests
             let resolver =
                 factory store (rolesOf [ "t1", "olive", Owner; "t1", "adam", Admin; "t1", "mary", Member ])
 
-            let team = ProviderProfileOwner.TeamOwned "t1"
+            let team = ProviderProfileOwner.TeamOwned(TeamId "t1")
 
             let! asOwner = resolver.CanWrite(TeamMember("olive", "t1"), team)
             let! asAdmin = resolver.CanWrite(TeamMember("adam", "t1"), team)
@@ -373,7 +373,7 @@ let tests
             let store = profileStore ()
             let resolver = factory store (rolesOf [ "t1", "olive", Owner ])
 
-            let! result = resolver.CanWrite(TeamMember("stranger", "t1"), ProviderProfileOwner.TeamOwned "t1")
+            let! result = resolver.CanWrite(TeamMember("stranger", "t1"), ProviderProfileOwner.TeamOwned(TeamId "t1"))
 
             Expect.isError (result |> Result.map ignore) "no membership, no write"
         }
@@ -385,8 +385,10 @@ let tests
             // this case would fail — which is the point of using it here.
             let resolver = factory store noRoles
 
-            let! asTeamMember = resolver.CanWrite(TeamMember("mary", "t1"), ProviderProfileOwner.UserOwned "mary")
-            let! asIndividual = resolver.CanWrite(AuthenticatedUser "ida", ProviderProfileOwner.UserOwned "ida")
+            let! asTeamMember =
+                resolver.CanWrite(TeamMember("mary", "t1"), ProviderProfileOwner.UserOwned(UserId "mary"))
+
+            let! asIndividual = resolver.CanWrite(AuthenticatedUser "ida", ProviderProfileOwner.UserOwned(UserId "ida"))
 
             match asTeamMember with
             | Ok rung -> Expect.equal rung.Storage.Container "user-mary" "a Member still owns their own override"
@@ -402,9 +404,9 @@ let tests
             let store = profileStore ()
             let resolver = factory store (rolesOf [ "t1", "olive", Owner ])
 
-            let! crossUser = resolver.CanWrite(TeamMember("mary", "t1"), ProviderProfileOwner.UserOwned "olive")
-            let! crossTeam = resolver.CanWrite(TeamMember("olive", "t1"), ProviderProfileOwner.TeamOwned "t2")
-            let! noTeamAtAll = resolver.CanWrite(AuthenticatedUser "ida", ProviderProfileOwner.TeamOwned "t1")
+            let! crossUser = resolver.CanWrite(TeamMember("mary", "t1"), ProviderProfileOwner.UserOwned(UserId "olive"))
+            let! crossTeam = resolver.CanWrite(TeamMember("olive", "t1"), ProviderProfileOwner.TeamOwned(TeamId "t2"))
+            let! noTeamAtAll = resolver.CanWrite(AuthenticatedUser "ida", ProviderProfileOwner.TeamOwned(TeamId "t1"))
 
             Expect.isError (crossUser |> Result.map ignore) "not your user scope"
             Expect.isError (crossTeam |> Result.map ignore) "not your team"
@@ -428,8 +430,8 @@ let tests
             let store = profileStore ()
             let resolver = factory store (rolesOf [ "t1", "olive", Owner ])
 
-            let! ownRung = resolver.CanWrite(AnonymousSession "sess-1", ProviderProfileOwner.UserOwned "sess-1")
-            let! teamRung = resolver.CanWrite(AnonymousSession "sess-1", ProviderProfileOwner.TeamOwned "t1")
+            let! ownRung = resolver.CanWrite(AnonymousSession "sess-1", ProviderProfileOwner.UserOwned(UserId "sess-1"))
+            let! teamRung = resolver.CanWrite(AnonymousSession "sess-1", ProviderProfileOwner.TeamOwned(TeamId "t1"))
 
             Expect.isError (ownRung |> Result.map ignore) "an anonymous session owns no persistent scope"
             Expect.isError (teamRung |> Result.map ignore) "and reaches no team"

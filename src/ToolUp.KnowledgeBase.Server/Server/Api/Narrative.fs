@@ -569,7 +569,7 @@ let private performReset (deps: KnowledgeApiDeps) : Async<Result<unit, string>> 
                 auditLog.Record(
                     deps.Scope.ScopeId,
                     KnowledgeScopeErased {
-                        UserId = deps.UserId
+                        UserId = UserId deps.UserId
                         ScopeId = deps.Scope.ScopeId
                         DocumentCount = documentCount
                         OrphanChunkCount = orphanChunkCount

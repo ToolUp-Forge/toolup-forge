@@ -53,7 +53,7 @@ let tests =
         <| async {
             let ch = RecordingChannel()
             let t = InMemoryPresenceTracker(ch) :> IPresenceTracker
-            do! t.Join("team-a", "user-1", Some "Ada", loc "reports")
+            do! t.Join("team-a", UserId "user-1", Some "Ada", loc "reports")
             let! roster = t.Roster "team-a"
             Expect.equal roster.Length 1 "one peer"
             Expect.equal roster[0].UserId "user-1" "userId"
@@ -65,8 +65,8 @@ let tests =
         <| async {
             let ch = RecordingChannel()
             let t = InMemoryPresenceTracker(ch) :> IPresenceTracker
-            do! t.Join("team-a", "user-1", None, loc "reports")
-            do! t.Join("team-b", "user-2", None, loc "reports")
+            do! t.Join("team-a", UserId "user-1", None, loc "reports")
+            do! t.Join("team-b", UserId "user-2", None, loc "reports")
             let! a = t.Roster "team-a"
             Expect.equal (a |> List.map _.UserId) [ "user-1" ] "only team-a peers"
         }
@@ -75,9 +75,9 @@ let tests =
         <| async {
             let ch = RecordingChannel()
             let t = InMemoryPresenceTracker(ch) :> IPresenceTracker
-            do! t.Join("team-a", "user-1", None, loc "reports")
-            do! t.Move("team-a", "user-1", loc "settings")
-            do! t.Leave("team-a", "user-1")
+            do! t.Join("team-a", UserId "user-1", None, loc "reports")
+            do! t.Move("team-a", UserId "user-1", loc "settings")
+            do! t.Leave("team-a", UserId "user-1")
 
             let evs = ch.Presence
             Expect.equal (evs |> List.map (fst)) [ "team-a"; "team-a"; "team-a" ] "all on team-a scope, not _platform"
@@ -95,8 +95,8 @@ let tests =
         <| async {
             let ch = RecordingChannel()
             let t = InMemoryPresenceTracker(ch) :> IPresenceTracker
-            do! t.Join("team-a", "user-1", Some "Ada", loc "reports")
-            do! t.Move("team-a", "user-1", loc "settings")
+            do! t.Join("team-a", UserId "user-1", Some "Ada", loc "reports")
+            do! t.Move("team-a", UserId "user-1", loc "settings")
             let! roster = t.Roster "team-a"
             Expect.equal roster.Length 1 "still one peer"
             Expect.equal roster[0].Location.Module "settings" "moved location"
@@ -111,7 +111,7 @@ let tests =
                 InMemoryPresenceTracker(RecordingChannel(), expiry = TimeSpan.FromSeconds 90.0, now = clock.Now)
                 :> IPresenceTracker
 
-            do! t.Join("team-a", "user-1", None, loc "reports")
+            do! t.Join("team-a", UserId "user-1", None, loc "reports")
             clock.Advance(TimeSpan.FromSeconds 120.0)
             let! roster = t.Roster "team-a"
             Expect.isEmpty roster "expired out after the heartbeat window"
@@ -125,14 +125,14 @@ let tests =
                 InMemoryPresenceTracker(RecordingChannel(), expiry = TimeSpan.FromSeconds 90.0, now = clock.Now)
                 :> IPresenceTracker
 
-            do! t.Join("team-a", "user-1", None, loc "reports")
+            do! t.Join("team-a", UserId "user-1", None, loc "reports")
             clock.Advance(TimeSpan.FromSeconds 60.0)
-            do! t.Heartbeat("team-a", "user-1")
+            do! t.Heartbeat("team-a", UserId "user-1")
             clock.Advance(TimeSpan.FromSeconds 60.0) // 120s since join, only 60s since heartbeat
             let! stillHere = t.Roster "team-a"
             Expect.equal stillHere.Length 1 "kept alive by the heartbeat"
 
-            do! t.Leave("team-a", "user-1")
+            do! t.Leave("team-a", UserId "user-1")
             let! gone = t.Roster "team-a"
             Expect.isEmpty gone "removed by leave"
         }

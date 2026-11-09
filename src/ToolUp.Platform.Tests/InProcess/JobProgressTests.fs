@@ -104,7 +104,7 @@ type private RecordingEventStore() =
 
         member _.ListScopes() = (inner :> IEventStore).ListScopes()
 
-        member _.Erase(scopeId: string, subjectUserId: string, policy: ErasurePolicy, dryRun: bool) =
+        member _.Erase(scopeId: string, subjectUserId: UserId, policy: ErasurePolicy, dryRun: bool) =
             (inner :> IEventStore).Erase(scopeId, subjectUserId, policy, dryRun)
 
 let private checkpointAt (fraction: float option) (message: string) (at: DateTime) =

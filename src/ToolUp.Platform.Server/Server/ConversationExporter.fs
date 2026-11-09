@@ -109,7 +109,7 @@ type ConversationExporter(reader: IConversationReader) =
         member _.Name = HandlerName
 
         member _.Export(scopeId, subjectUserId) = async {
-            if Erasure.isBlankSubject subjectUserId then
+            if Erasure.isBlankSubject subjectUserId.Value then
                 return []
             else
                 let! headers = reader.ListByUser(scopeId, subjectUserId)

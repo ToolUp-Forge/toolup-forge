@@ -134,16 +134,16 @@ type private World(?connectorStorage: IBlobStorage) =
         let team = "team" + Guid.NewGuid().ToString "N"
 
         async {
-            let! _ = teams.CreateTeam(team, team + "-name")
-            let! _ = teams.AddMember(team, userId, TeamRole.Owner)
-            let! _ = teams.SetActiveTeam(userId, team)
+            let! _ = teams.CreateTeam(TeamId team, team + "-name")
+            let! _ = teams.AddMember(TeamId team, UserId userId, TeamRole.Owner)
+            let! _ = teams.SetActiveTeam(UserId userId, TeamId team)
             return ()
         }
         |> Async.RunSynchronously
 
         {
             Name = name
-            UserId = userId
+            UserId = UserId userId
             DisplayName = $"{name} service principal"
         }
 
@@ -288,7 +288,7 @@ let private legacyPullJob (world: World) (principal: DeclaredPrincipal) (sourceI
         RetryPolicy = JobRetryPolicy.defaults
         ShardKey = Some sourceId
         Precision = JobPrecision.Minute
-        CreatedBy = principal.UserId
+        CreatedBy = principal.UserId.Value
         Tags =
             Map [
                 DeclaredDelivery.SourceTag, sourceId
@@ -430,7 +430,7 @@ let tests =
 
             let stranger: DeclaredPrincipal = {
                 Name = "stranger"
-                UserId = "no-team-" + Guid.NewGuid().ToString "N"
+                UserId = UserId("no-team-" + Guid.NewGuid().ToString "N")
                 DisplayName = "Stranger"
             }
 

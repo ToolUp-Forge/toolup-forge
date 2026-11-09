@@ -46,7 +46,7 @@ open System
 /// that has never seen this process.
 type ConsentSubject = {
     /// The team whose permission document carries the grant.
-    TeamId: string
+    TeamId: TeamId
     /// The principal being granted access — the `TeamPermissions.Members`
     /// key, so there is no second naming axis to drift (the Phase 551
     /// argument, restated because it is the property that keeps the two
@@ -64,7 +64,7 @@ module ConsentSubject =
     /// identifiers and the SDK is not entitled to decide their equality
     /// relation (the `PartyRef.create` rule, for the same reason).
     let create (teamId: string) (subjectId: string) (moduleName: string) = {
-        TeamId = (if isNull (box teamId) then "" else teamId.Trim())
+        TeamId = TeamId(if isNull (box teamId) then "" else teamId.Trim())
         SubjectId = (if isNull (box subjectId) then "" else subjectId.Trim())
         ModuleName = (if isNull (box moduleName) then "" else moduleName.Trim())
     }
@@ -72,7 +72,7 @@ module ConsentSubject =
     /// True when any part names nobody. An unnameable subject is a
     /// fail-closed state — never a wildcard.
     let isIncomplete (s: ConsentSubject) =
-        s.TeamId = "" || s.SubjectId = "" || s.ModuleName = ""
+        s.TeamId = (TeamId "") || s.SubjectId = "" || s.ModuleName = ""
 
 /// The lifecycle state of one consent record. Deliberately a *record*
 /// state rather than a mutable field: a transition writes a NEW record
@@ -233,7 +233,7 @@ module GrantConsentRecord =
             [|
                 "toolup.grant-consent.v1"
                 "consent=" + escape record.ConsentId
-                "team=" + escape record.Subject.TeamId
+                "team=" + escape record.Subject.TeamId.Value
                 "subject=" + escape record.Subject.SubjectId
                 "module=" + escape record.Subject.ModuleName
                 "party=" + escape (PartyRef.value record.Party)

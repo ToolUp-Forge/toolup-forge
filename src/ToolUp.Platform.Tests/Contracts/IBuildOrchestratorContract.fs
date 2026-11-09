@@ -213,7 +213,7 @@ let tests (name: string) (factory: unit -> IBuildOrchestrator) =
             let buildId =
                 okOrFail "EnqueueBuild" (Async.RunSynchronously(orch.EnqueueBuild(mkRequest "cancel-me")))
 
-            let! cancelled = orch.CancelBuild(buildId, "operator-1")
+            let! cancelled = orch.CancelBuild(buildId, UserId "operator-1")
             Expect.isOk cancelled "cancellation succeeds"
         }
 
@@ -224,9 +224,9 @@ let tests (name: string) (factory: unit -> IBuildOrchestrator) =
             let buildId =
                 okOrFail "EnqueueBuild" (Async.RunSynchronously(orch.EnqueueBuild(mkRequest "double-cancel")))
 
-            let! first = orch.CancelBuild(buildId, "operator-1")
+            let! first = orch.CancelBuild(buildId, UserId "operator-1")
             Expect.isOk first "first cancel succeeds"
-            let! second = orch.CancelBuild(buildId, "operator-1")
+            let! second = orch.CancelBuild(buildId, UserId "operator-1")
             // Idempotency contract: a re-cancel after a successful
             // cancel returns Ok; only a real terminal state from a
             // different terminating cause (Succeeded / Failed) would
@@ -237,7 +237,7 @@ let tests (name: string) (factory: unit -> IBuildOrchestrator) =
         testCaseAsync "CancelBuild on unknown id returns UnknownBuild"
         <| async {
             let orch = factory ()
-            let! result = orch.CancelBuild("ghost", "operator-1")
+            let! result = orch.CancelBuild("ghost", UserId "operator-1")
 
             match result with
             | Error(UnknownBuild bid) -> Expect.equal bid "ghost" "id preserved"
@@ -277,7 +277,7 @@ let tests (name: string) (factory: unit -> IBuildOrchestrator) =
             let! _ = orch.GetBuild "rule-2"
             let! _ = orch.ListActiveBuilds None
             let! _ = orch.GetQueueDepth()
-            let! _ = orch.CancelBuild("rule-2", "alice")
+            let! _ = orch.CancelBuild("rule-2", UserId "alice")
             let! _ = orch.GetBuildHistory("rule-2", 1)
             ()
         }

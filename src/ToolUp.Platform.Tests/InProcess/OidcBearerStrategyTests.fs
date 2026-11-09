@@ -593,7 +593,10 @@ let private fullLoop =
                 // ── the authenticated call ──
                 match validate provider bearer |> Async.RunSynchronously with
                 | Ok user ->
-                    Expect.equal user.UserId MockOidcConfig.defaults.Subject "the id_token carries the same subject"
+                    Expect.equal
+                        user.UserId
+                        (UserId MockOidcConfig.defaults.Subject)
+                        "the id_token carries the same subject"
                 | Error e -> failtestf "the id_token bearer must validate against an unchanged provider: %A" e
 
                 // ── refresh ──
@@ -621,7 +624,7 @@ let private fullLoop =
 
                 // ── the authenticated call after refresh ──
                 match validate provider refreshedBearer |> Async.RunSynchronously with
-                | Ok user -> Expect.equal user.UserId MockOidcConfig.defaults.Subject ""
+                | Ok user -> Expect.equal user.UserId (UserId MockOidcConfig.defaults.Subject) ""
                 | Error e -> failtestf "the reissued id_token must validate too: %A" e
 
             testCase "an issuer that does not reissue an id_token on refresh fails the refresh, loudly"

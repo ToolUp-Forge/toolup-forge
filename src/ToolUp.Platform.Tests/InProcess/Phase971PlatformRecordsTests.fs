@@ -202,7 +202,7 @@ let tests =
             let convId = "conv-" + suffix ()
             do! seedConversation store scopeId convId "alice"
 
-            match! (store :> IConversationEraser).Erase(scopeId, "alice", ErasurePolicy.HardDelete, false) with
+            match! (store :> IConversationEraser).Erase(scopeId, UserId "alice", ErasurePolicy.HardDelete, false) with
             | Ok summary -> failtestf "expected the erasure to fail, it answered %A" summary
             | Error(ErasureError.HandlerPartialFailure(_, _, detail)) ->
                 Expect.stringContains detail convId "the failure names the conversation not deleted"
@@ -233,7 +233,7 @@ let tests =
             // Only a matching flag, so the erasure deletes the whole document.
             let! _ = store.SetFlag(FlagScope.Team "971", "targeting", FlagValue.Variant([], "for:u1"))
 
-            match! store.Erase("team-971", "u1", ErasurePolicy.HardDelete, false) with
+            match! store.Erase("team-971", UserId "u1", ErasurePolicy.HardDelete, false) with
             | Ok summary -> failtestf "expected the erasure to fail, it answered %A" summary
             | Error(ErasureError.StoreUnreachable(handler, _)) -> Expect.equal handler "feature-flags" "handler named"
             | Error other -> failtestf "expected StoreUnreachable, got %A" other

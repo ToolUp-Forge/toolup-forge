@@ -45,7 +45,7 @@ let private run (a: Async<'T>) : 'T = Async.RunSynchronously a
 let private teamId = "t1"
 
 let private teamScope =
-    ScopeResolution.ofStorageScope (StorageScope.ofKey true (ScopeKey.Team teamId))
+    ScopeResolution.ofStorageScope (StorageScope.ofKey true (ScopeKey.Team(TeamId teamId)))
 
 let private roles =
     Map.ofList [ "owner", TeamRole.Owner; "member", TeamRole.Member ]

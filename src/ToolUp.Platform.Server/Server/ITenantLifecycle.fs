@@ -67,14 +67,14 @@ type ITenantLifecycle =
     /// whose substrate is inactive returns `Skipped reason` (not a
     /// failure). A hook that attempts work and fails returns
     /// `Failed error` — the aggregator records it and continues.
-    abstract OnProvisioned: scopeId: string * actorUserId: string -> Async<LifecycleHookResult>
+    abstract OnProvisioned: scopeId: string * actorUserId: UserId -> Async<LifecycleHookResult>
 
     /// Run this hook's offboarding work for `scopeId`, attributed to
     /// `actorUserId`. Same outcome contract as `OnProvisioned`. The
     /// aggregator never aborts the offboard on a `Failed` — a single
     /// misbehaving hook must not block the crypto-shred / erasure of the
     /// rest.
-    abstract OnDeprovisioned: scopeId: string * actorUserId: string -> Async<LifecycleHookResult>
+    abstract OnDeprovisioned: scopeId: string * actorUserId: UserId -> Async<LifecycleHookResult>
 
 // ─── Phase 305 — request-aware provisioning surface ──────────────────
 //

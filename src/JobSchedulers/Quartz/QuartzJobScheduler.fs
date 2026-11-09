@@ -182,10 +182,10 @@ type QuartzJobScheduler
 
                     data.Add(
                         QuartzDataKeys.UserId,
-                        (if String.IsNullOrWhiteSpace byUserId then
+                        (if String.IsNullOrWhiteSpace byUserId.Value then
                              SchedulerUserId
                          else
-                             byUserId)
+                             byUserId.Value)
                     )
 
                     do! fireNow job data

@@ -51,7 +51,7 @@ let tests (name: string) (binding: ExternalContactBinding) =
     let newStore () = binding.Factory()
 
     let created (store: IExternalContactStore) (scopeId: string) (req: CreateExternalContactRequest) = async {
-        let! result = store.Create(scopeId, actor, req.Owner, req)
+        let! result = store.Create(scopeId, UserId actor, req.Owner, req)
 
         return
             match result with
@@ -120,7 +120,7 @@ let tests (name: string) (binding: ExternalContactBinding) =
             let! updated =
                 store.RecordOptIn(
                     scope,
-                    actor,
+                    (UserId actor),
                     contact.Id,
                     NotificationKind.SinkKind.Email,
                     consent "form-submission:abc123"
@@ -151,7 +151,8 @@ let tests (name: string) (binding: ExternalContactBinding) =
 
             let! contact = created store scope (request "Partial" (Some "partial@example.com") (Some "+447700900002"))
 
-            let! _ = store.RecordOptIn(scope, actor, contact.Id, NotificationKind.SinkKind.Email, consent "manual")
+            let! _ =
+                store.RecordOptIn(scope, UserId actor, contact.Id, NotificationKind.SinkKind.Email, consent "manual")
 
             let! read = store.Get(scope, contact.Id)
 
@@ -181,8 +182,8 @@ let tests (name: string) (binding: ExternalContactBinding) =
             let vendor =
                 NotificationKind.SinkKind.Push(NotificationKind.PushVariant.Other "vendor-x")
 
-            let! _ = store.RecordOptIn(scope, actor, contact.Id, fcm, consent "manual")
-            let! _ = store.RecordOptIn(scope, actor, contact.Id, vendor, consent "manual")
+            let! _ = store.RecordOptIn(scope, UserId actor, contact.Id, fcm, consent "manual")
+            let! _ = store.RecordOptIn(scope, UserId actor, contact.Id, vendor, consent "manual")
 
             let! read = store.Get(scope, contact.Id)
 
@@ -214,7 +215,7 @@ let tests (name: string) (binding: ExternalContactBinding) =
             let! _ =
                 store.RecordOptIn(
                     scope,
-                    actor,
+                    (UserId actor),
                     contact.Id,
                     NotificationKind.SinkKind.Email,
                     {
@@ -247,10 +248,17 @@ let tests (name: string) (binding: ExternalContactBinding) =
             let scope, _ = binding.Scopes()
             let! contact = created store scope (request "Withdrawn" (Some "withdrawn@example.com") None)
 
-            let! _ = store.RecordOptIn(scope, actor, contact.Id, NotificationKind.SinkKind.Email, consent "manual")
+            let! _ =
+                store.RecordOptIn(scope, UserId actor, contact.Id, NotificationKind.SinkKind.Email, consent "manual")
 
             let! withdrawn =
-                store.WithdrawOptIn(scope, actor, contact.Id, NotificationKind.SinkKind.Email, "recipient-request")
+                store.WithdrawOptIn(
+                    scope,
+                    UserId actor,
+                    contact.Id,
+                    NotificationKind.SinkKind.Email,
+                    "recipient-request"
+                )
 
             Expect.isOk withdrawn "the withdrawal succeeds"
 
@@ -268,7 +276,13 @@ let tests (name: string) (binding: ExternalContactBinding) =
 
             // Honouring the same request twice is still honouring it.
             let! again =
-                store.WithdrawOptIn(scope, actor, contact.Id, NotificationKind.SinkKind.Email, "recipient-request")
+                store.WithdrawOptIn(
+                    scope,
+                    UserId actor,
+                    contact.Id,
+                    NotificationKind.SinkKind.Email,
+                    "recipient-request"
+                )
 
             Expect.isOk again "withdrawing an absent consent still succeeds"
         }
@@ -279,7 +293,7 @@ let tests (name: string) (binding: ExternalContactBinding) =
             let scope, _ = binding.Scopes()
             let! first = created store scope (request "Alice" (Some "dupe@example.com") None)
 
-            let! second = store.Create(scope, actor, owner, request "Alice Again" (Some "dupe@example.com") None)
+            let! second = store.Create(scope, UserId actor, owner, request "Alice Again" (Some "dupe@example.com") None)
 
             match second with
             | Error(ExternalContactError.Duplicate existingId) ->
@@ -296,14 +310,15 @@ let tests (name: string) (binding: ExternalContactBinding) =
             let scope, _ = binding.Scopes()
             let! _ = created store scope (request "Alice" (Some "Mixed.Case@Example.COM") None)
 
-            let! second = store.Create(scope, actor, owner, request "Alice Again" (Some "mixed.case@example.com") None)
+            let! second =
+                store.Create(scope, UserId actor, owner, request "Alice Again" (Some "mixed.case@example.com") None)
 
             Expect.isError second "a case-different email is the same address book entry"
 
-            let! third = store.Create(scope, actor, owner, request "Bob" None (Some "+44 7700 900 123"))
+            let! third = store.Create(scope, UserId actor, owner, request "Bob" None (Some "+44 7700 900 123"))
             Expect.isOk third "a first phone-only contact is fine"
 
-            let! fourth = store.Create(scope, actor, owner, request "Bob Again" None (Some "+447700900123"))
+            let! fourth = store.Create(scope, UserId actor, owner, request "Bob Again" None (Some "+447700900123"))
             Expect.isError fourth "a space-different phone number is the same entry"
         }
 
@@ -315,7 +330,7 @@ let tests (name: string) (binding: ExternalContactBinding) =
             let store = newStore ()
             let scope, _ = binding.Scopes()
             let! _ = created store scope (request "Phone only A" None (Some "+447700900201"))
-            let! second = store.Create(scope, actor, owner, request "Phone only B" None (Some "+447700900202"))
+            let! second = store.Create(scope, UserId actor, owner, request "Phone only B" None (Some "+447700900202"))
             Expect.isOk second "two email-less contacts are not duplicates of one another"
         }
 
@@ -323,7 +338,7 @@ let tests (name: string) (binding: ExternalContactBinding) =
         <| async {
             let store = newStore ()
             let scope, _ = binding.Scopes()
-            let! result = store.Create(scope, actor, owner, request "Nowhere" None None)
+            let! result = store.Create(scope, UserId actor, owner, request "Nowhere" None None)
 
             match result with
             | Error(ExternalContactError.InvalidShape _) -> ()
@@ -359,7 +374,7 @@ let tests (name: string) (binding: ExternalContactBinding) =
             let! _ =
                 store.Create(
                     scope,
-                    actor,
+                    (UserId actor),
                     personal,
                     {
                         request "Personal" (Some "personal@example.com") None with
@@ -383,12 +398,13 @@ let tests (name: string) (binding: ExternalContactBinding) =
             let scope, _ = binding.Scopes()
             let! contact = created store scope (request "Before" (Some "before@example.com") None)
 
-            let! _ = store.RecordOptIn(scope, actor, contact.Id, NotificationKind.SinkKind.Email, consent "manual")
+            let! _ =
+                store.RecordOptIn(scope, UserId actor, contact.Id, NotificationKind.SinkKind.Email, consent "manual")
 
             let! updated =
                 store.Update(
                     scope,
-                    actor,
+                    (UserId actor),
                     {
                         ContactId = contact.Id
                         DisplayName = "After"
@@ -423,9 +439,10 @@ let tests (name: string) (binding: ExternalContactBinding) =
             let scope, _ = binding.Scopes()
             let! contact = created store scope (request "Doomed" (Some "doomed@example.com") None)
 
-            let! _ = store.RecordOptIn(scope, actor, contact.Id, NotificationKind.SinkKind.Email, consent "manual")
+            let! _ =
+                store.RecordOptIn(scope, UserId actor, contact.Id, NotificationKind.SinkKind.Email, consent "manual")
 
-            let! deleted = store.Delete(scope, actor, contact.Id)
+            let! deleted = store.Delete(scope, UserId actor, contact.Id)
 
             match deleted with
             | Error e -> failtestf "expected the delete to land, got %s" (ExternalContactError.describe e)
@@ -435,7 +452,7 @@ let tests (name: string) (binding: ExternalContactBinding) =
             let! read = store.Get(scope, contact.Id)
             Expect.equal read (Error ExternalContactError.NotFound) "and the contact is gone"
 
-            let! again = store.Delete(scope, actor, contact.Id)
+            let! again = store.Delete(scope, UserId actor, contact.Id)
             Expect.equal again (Ok []) "a second delete is idempotent with nothing left to discard"
         }
 
@@ -492,10 +509,10 @@ let tests (name: string) (binding: ExternalContactBinding) =
             let! _ = store.Get(scope, contact.Id)
             let! _ = store.List scope
             let! _ = store.ListByOwner(scope, owner)
-            let! _ = store.RecordOptIn(scope, actor, contact.Id, NotificationKind.SinkKind.Sms, consent "manual")
-            let! _ = store.WithdrawOptIn(scope, actor, contact.Id, NotificationKind.SinkKind.Sms, "admin")
+            let! _ = store.RecordOptIn(scope, UserId actor, contact.Id, NotificationKind.SinkKind.Sms, consent "manual")
+            let! _ = store.WithdrawOptIn(scope, UserId actor, contact.Id, NotificationKind.SinkKind.Sms, "admin")
             let! _ = store.RecordInbound(scope, contact.Id, DateTime.UtcNow)
-            let! _ = store.Delete(scope, actor, contact.Id)
+            let! _ = store.Delete(scope, UserId actor, contact.Id)
             ()
         }
 
@@ -507,10 +524,12 @@ let tests (name: string) (binding: ExternalContactBinding) =
             let! missing = store.Get(scope, "absent")
             Expect.isError missing "an absent contact is an Error value"
 
-            let! badShape = store.Create(scope, actor, owner, request "" None None)
+            let! badShape = store.Create(scope, UserId actor, owner, request "" None None)
             Expect.isError badShape "an unstorable shape is an Error value"
 
-            let! badChannel = store.RecordOptIn(scope, actor, "absent", NotificationKind.SinkKind.Email, consent "x")
+            let! badChannel =
+                store.RecordOptIn(scope, UserId actor, "absent", NotificationKind.SinkKind.Email, consent "x")
+
             Expect.isError badChannel "a consent on an absent contact is an Error value"
         }
 
@@ -524,7 +543,8 @@ let tests (name: string) (binding: ExternalContactBinding) =
             let scope, _ = binding.Scopes()
             let! contact = created store scope (request "Persisted" (Some "persisted@example.com") None)
 
-            let! _ = store.RecordOptIn(scope, actor, contact.Id, NotificationKind.SinkKind.Email, consent "manual")
+            let! _ =
+                store.RecordOptIn(scope, UserId actor, contact.Id, NotificationKind.SinkKind.Email, consent "manual")
 
             let! read = store.Get(scope, contact.Id)
 
@@ -562,7 +582,7 @@ let tests (name: string) (binding: ExternalContactBinding) =
             let! _ =
                 store.RecordOptIn(
                     scope,
-                    actor,
+                    (UserId actor),
                     contact.Id,
                     NotificationKind.SinkKind.Email,
                     {

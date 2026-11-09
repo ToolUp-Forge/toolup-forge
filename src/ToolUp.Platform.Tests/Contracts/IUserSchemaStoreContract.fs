@@ -112,7 +112,7 @@ let tests =
         <| async {
             let store, _, _ = mkStore ()
             let scope = "team-a"
-            let! saved = store.Save(scope, sampleSchema "expense" scope, "author-1")
+            let! saved = store.Save(scope, sampleSchema "expense" scope, UserId "author-1")
 
             match saved with
             | Ok s ->
@@ -132,7 +132,7 @@ let tests =
         <| async {
             let store, _, _ = mkStore ()
             let scope = "team-a"
-            let! _ = store.Save(scope, sampleSchema "expense" scope, "author-1")
+            let! _ = store.Save(scope, sampleSchema "expense" scope, UserId "author-1")
 
             let v2 = {
                 sampleSchema "expense" scope with
@@ -140,7 +140,7 @@ let tests =
                     Fields = [ field "Region" BIFriendlyType.String FieldSensitivity.Public ]
             }
 
-            let! saved2 = store.Save(scope, v2, "author-1")
+            let! saved2 = store.Save(scope, v2, UserId "author-1")
 
             match saved2 with
             | Ok s -> Expect.equal s.Version 2 "second save is v2"
@@ -160,8 +160,8 @@ let tests =
         <| async {
             let store, _, _ = mkStore ()
             let scope = "team-a"
-            let! _ = store.Save(scope, sampleSchema "expense" scope, "u")
-            let! _ = store.Save(scope, sampleSchema "invoice" scope, "u")
+            let! _ = store.Save(scope, sampleSchema "expense" scope, UserId "u")
+            let! _ = store.Save(scope, sampleSchema "invoice" scope, UserId "u")
             let! listed = store.List scope
             let ids = listed |> List.map _.SchemaId |> Set.ofList
             Expect.equal ids (Set.ofList [ "expense"; "invoice" ]) "both schemas listed"
@@ -170,7 +170,7 @@ let tests =
         testCaseAsync "scope isolation — Team B cannot see Team A's schemas"
         <| async {
             let store, _, _ = mkStore ()
-            let! _ = store.Save("team-a", sampleSchema "expense" "team-a", "u")
+            let! _ = store.Save("team-a", sampleSchema "expense" "team-a", UserId "u")
 
             let! inB = store.List "team-b"
             Expect.equal inB [] "team-b sees nothing"
@@ -195,7 +195,7 @@ let tests =
         testCaseAsync "invalid schema id rejected"
         <| async {
             let store, _, _ = mkStore ()
-            let! r = store.Save("team-a", sampleSchema "bad/id" "team-a", "u")
+            let! r = store.Save("team-a", sampleSchema "bad/id" "team-a", UserId "u")
 
             match r with
             | Error(InvalidSchema _) -> ()
@@ -206,10 +206,10 @@ let tests =
         <| async {
             let store, _, audit = mkStore ()
             let scope = "team-a"
-            let! _ = store.Save(scope, sampleSchema "expense" scope, "u")
+            let! _ = store.Save(scope, sampleSchema "expense" scope, UserId "u")
             Expect.contains (audit.KindsFor scope) "SchemaChanged" "Save emits SchemaChanged"
 
-            let! _ = store.Delete(scope, "expense", "u")
+            let! _ = store.Delete(scope, "expense", UserId "u")
 
             let changedCount =
                 audit.KindsFor scope |> List.filter ((=) "SchemaChanged") |> List.length
@@ -227,7 +227,7 @@ let tests =
                     ProposedBy = AIWithApproval "conv-42"
             }
 
-            let! _ = store.Save(scope, aiSchema, "approver-1")
+            let! _ = store.Save(scope, aiSchema, UserId "approver-1")
             Expect.contains (audit.KindsFor scope) "SchemaApproved" "AIWithApproval commit emits SchemaApproved"
         }
 
@@ -235,14 +235,14 @@ let tests =
         <| async {
             let store, dos, audit = mkStore ()
             let scope = "team-a"
-            let! _ = store.Save(scope, sampleSchema "expense" scope, "u")
+            let! _ = store.Save(scope, sampleSchema "expense" scope, UserId "u")
 
             saveInstance dos scope "expense" "inst-1" """{"Region":"EU"}"""
             saveInstance dos scope "expense" "inst-2" """{"Region":"US"}"""
 
             let newField = field "Approved" BIFriendlyType.Boolean FieldSensitivity.Internal
             let migrations = [ AddField(newField, "false") ]
-            let! outcome = store.ExecuteMigration(scope, "expense", migrations, "u")
+            let! outcome = store.ExecuteMigration(scope, "expense", migrations, UserId "u")
 
             match outcome with
             | Ok o ->
@@ -271,11 +271,11 @@ let tests =
         <| async {
             let store, dos, _ = mkStore ()
             let scope = "team-a"
-            let! _ = store.Save(scope, sampleSchema "expense" scope, "u")
+            let! _ = store.Save(scope, sampleSchema "expense" scope, UserId "u")
             saveInstance dos scope "expense" "inst-1" """{"Region":"EU","Amount":"10"}"""
 
             let migrations = [ RemoveField "Amount"; RenameField("Region", "Market") ]
-            let! _ = store.ExecuteMigration(scope, "expense", migrations, "u")
+            let! _ = store.ExecuteMigration(scope, "expense", migrations, UserId "u")
 
             let inst = readInstanceJson dos scope "inst-1"
             Expect.isFalse (jsonHasKey inst "Amount") "Amount removed"
@@ -287,7 +287,7 @@ let tests =
         <| async {
             let store, dos, _ = mkStore ()
             let scope = "team-a"
-            let! _ = store.Save(scope, sampleSchema "expense" scope, "u")
+            let! _ = store.Save(scope, sampleSchema "expense" scope, UserId "u")
             saveInstance dos scope "expense" "inst-1" """{"Region":"EU"}"""
 
             let handler = SchemaMigrationJobHandler.create store
@@ -307,7 +307,7 @@ let tests =
                 Attempt = 1
                 Trigger = Trigger.Manual
                 Scope = ToolUp.Platform.ResolvedScope.anonymous
-                TriggerSource = ScheduledManually "admin"
+                TriggerSource = ScheduledManually(UserId "admin")
                 ScheduledAt = DateTime.UtcNow
                 RunningAt = DateTime.UtcNow
                 Payload = SchemaMigrationJobHandler.serialisePayload payload
@@ -333,7 +333,7 @@ let tests =
                 Attempt = 1
                 Trigger = Trigger.Manual
                 Scope = ToolUp.Platform.ResolvedScope.anonymous
-                TriggerSource = ScheduledManually "admin"
+                TriggerSource = ScheduledManually(UserId "admin")
                 ScheduledAt = DateTime.UtcNow
                 RunningAt = DateTime.UtcNow
                 Payload = "{ not json"
@@ -351,10 +351,10 @@ let tests =
         <| async {
             let store, _, _ = mkStore ()
             let scope = "team-a"
-            let! _ = store.Save(scope, sampleSchema "expense" scope, "u")
-            let! d1 = store.Delete(scope, "expense", "u")
+            let! _ = store.Save(scope, sampleSchema "expense" scope, UserId "u")
+            let! d1 = store.Delete(scope, "expense", UserId "u")
             Expect.isOk d1 "first delete ok"
-            let! d2 = store.Delete(scope, "expense", "u")
+            let! d2 = store.Delete(scope, "expense", UserId "u")
             Expect.isOk d2 "second delete idempotent"
             let! got = store.Get(scope, "expense")
 

@@ -81,35 +81,35 @@ let private guard
 type SanitisingTeamStore(inner: ITeamStore) =
     interface ITeamStore with
         member _.CreateTeam(teamId, name) =
-            guard (validate "teamId" teamId) (fun () -> inner.CreateTeam(teamId, name))
+            guard (validate "teamId" teamId.Value) (fun () -> inner.CreateTeam(teamId, name))
 
         member _.DeleteTeam(teamId) =
-            guard (validate "teamId" teamId) (fun () -> inner.DeleteTeam(teamId))
+            guard (validate "teamId" teamId.Value) (fun () -> inner.DeleteTeam(teamId))
 
         member _.AddMember(teamId, userId, role) =
-            guard (both (validate "teamId" teamId) (validate "userId" userId)) (fun () ->
+            guard (both (validate "teamId" teamId.Value) (validate "userId" userId.Value)) (fun () ->
                 inner.AddMember(teamId, userId, role))
 
         member _.RemoveMember(teamId, userId) =
-            guard (both (validate "teamId" teamId) (validate "userId" userId)) (fun () ->
+            guard (both (validate "teamId" teamId.Value) (validate "userId" userId.Value)) (fun () ->
                 inner.RemoveMember(teamId, userId))
 
         member _.ChangeMemberRole(teamId, userId, newRole) =
-            guard (both (validate "teamId" teamId) (validate "userId" userId)) (fun () ->
+            guard (both (validate "teamId" teamId.Value) (validate "userId" userId.Value)) (fun () ->
                 inner.ChangeMemberRole(teamId, userId, newRole))
 
         member _.SetActiveTeam(userId, teamId) =
-            guard (both (validate "userId" userId) (validate "teamId" teamId)) (fun () ->
+            guard (both (validate "userId" userId.Value) (validate "teamId" teamId.Value)) (fun () ->
                 inner.SetActiveTeam(userId, teamId))
 
         member _.SetArchived(teamId, archived) =
-            guard (validate "teamId" teamId) (fun () -> inner.SetArchived(teamId, archived))
+            guard (validate "teamId" teamId.Value) (fun () -> inner.SetArchived(teamId, archived))
 
         member _.PurgeTeam(teamId) =
-            guard (validate "teamId" teamId) (fun () -> inner.PurgeTeam(teamId))
+            guard (validate "teamId" teamId.Value) (fun () -> inner.PurgeTeam(teamId))
 
         member _.PurgeUser(userId) =
-            guard (validate "userId" userId) (fun () -> inner.PurgeUser(userId))
+            guard (validate "userId" userId.Value) (fun () -> inner.PurgeUser(userId))
 
         // Reads delegate unchanged.
         member _.GetTeam(teamId) = inner.GetTeam(teamId)
@@ -124,17 +124,17 @@ type SanitisingTeamStore(inner: ITeamStore) =
 type SanitisingPermissionStore(inner: IPermissionStore) =
     interface IPermissionStore with
         member _.SetTeamPermissions(teamId, permissions) =
-            guard (validate "teamId" teamId) (fun () -> inner.SetTeamPermissions(teamId, permissions))
+            guard (validate "teamId" teamId.Value) (fun () -> inner.SetTeamPermissions(teamId, permissions))
 
         member _.SetMemberPermissions(teamId, userId, moduleName, permissions) =
-            guard (both (validate "teamId" teamId) (validate "userId" userId)) (fun () ->
+            guard (both (validate "teamId" teamId.Value) (validate "userId" userId.Value)) (fun () ->
                 inner.SetMemberPermissions(teamId, userId, moduleName, permissions))
 
         member _.SetTeamDefaults(teamId, defaults) =
-            guard (validate "teamId" teamId) (fun () -> inner.SetTeamDefaults(teamId, defaults))
+            guard (validate "teamId" teamId.Value) (fun () -> inner.SetTeamDefaults(teamId, defaults))
 
         member _.SetModuleExposure(teamId, moduleName, state) =
-            guard (validate "teamId" teamId) (fun () -> inner.SetModuleExposure(teamId, moduleName, state))
+            guard (validate "teamId" teamId.Value) (fun () -> inner.SetModuleExposure(teamId, moduleName, state))
 
         // Reads delegate unchanged.
         member _.GetTeamPermissions(teamId) = inner.GetTeamPermissions(teamId)

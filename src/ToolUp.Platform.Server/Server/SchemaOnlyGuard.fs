@@ -108,7 +108,7 @@ let assertReadAllowed
     async {
         if isSchemaOnlyCaller ctx moduleName then
             let payload: SchemaOnlyAccessAttemptedPayload = {
-                UserId = ctx.UserId
+                UserId = UserId ctx.UserId
                 ModuleName = moduleName
                 AttemptedPath = path
                 AttemptedResource = resource

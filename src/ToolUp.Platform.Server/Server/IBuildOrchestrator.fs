@@ -99,7 +99,7 @@ type IBuildOrchestrator =
     /// caller's mental model is stale — refresh and decide).
     /// Idempotent on the success path (cancelling an already-
     /// cancelled build returns `Ok`).
-    abstract CancelBuild: buildId: BuildId * byUserId: string -> Async<Result<unit, BuildOrchestratorError>>
+    abstract CancelBuild: buildId: BuildId * byUserId: UserId -> Async<Result<unit, BuildOrchestratorError>>
 
     /// Read the most recent `count` builds for `appSlug`, newest
     /// first. Powers the admin UI's per-app build history panel.

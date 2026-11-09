@@ -493,7 +493,7 @@ let tests =
 
             // A dry run counts without mutating — the shape a DSR
             // preview uses.
-            match! store.Erase(container, "user-1", ErasurePolicy.HardDelete, true) with
+            match! store.Erase(container, UserId "user-1", ErasurePolicy.HardDelete, true) with
             | Ok summary ->
                 Expect.isGreaterThan
                     summary.RecordsAffected
@@ -505,7 +505,7 @@ let tests =
             | Ok _ -> ()
             | Error e -> failtest (sprintf "the dry run must not have removed anything, but the object is gone: %A" e)
 
-            match! store.Erase(container, "user-1", ErasurePolicy.HardDelete, false) with
+            match! store.Erase(container, UserId "user-1", ErasurePolicy.HardDelete, false) with
             | Ok summary ->
                 Expect.isGreaterThan summary.RecordsAffected 0 "the erasure removed the subject's KB original"
             | Error e -> failtest (sprintf "the erasure failed: %A" e)
@@ -519,7 +519,7 @@ let tests =
 
             // The control: nothing was erasable in the un-retained scope,
             // and its bytes are still sitting at the convention path.
-            match! store.Erase(legacyContainer, "user-1", ErasurePolicy.HardDelete, true) with
+            match! store.Erase(legacyContainer, UserId "user-1", ErasurePolicy.HardDelete, true) with
             | Ok summary ->
                 Expect.equal
                     summary.RecordsAffected

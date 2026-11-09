@@ -42,23 +42,23 @@ type INotificationPreferenceStore =
     /// The user's stored record, or `UserNotificationPreferences.empty`
     /// when nothing has been saved. `Error` only on a storage failure —
     /// an absent record is the common case and is not an error.
-    abstract GetPreferences: scopeId: string * userId: string -> Async<Result<UserNotificationPreferences, string>>
+    abstract GetPreferences: scopeId: string * userId: UserId -> Async<Result<UserNotificationPreferences, string>>
 
     /// Replace the user's record wholesale. The caller validates
     /// (`UserNotificationPreferences.validate`) before saving.
     abstract SavePreferences:
-        scopeId: string * userId: string * preferences: UserNotificationPreferences -> Async<Result<unit, string>>
+        scopeId: string * userId: UserId * preferences: UserNotificationPreferences -> Async<Result<unit, string>>
 
     /// Hold one send for `item.UserId`. Idempotent on `item.Id`: a
     /// second enqueue of the same id overwrites, never duplicates.
     abstract Enqueue: scopeId: string * item: PendingNotification -> Async<Result<unit, string>>
 
     /// Every held item for the user, oldest first. Empty when none.
-    abstract ListPending: scopeId: string * userId: string -> Async<PendingNotification list>
+    abstract ListPending: scopeId: string * userId: UserId -> Async<PendingNotification list>
 
     /// Drop held items by id after they have been sent. Idempotent —
     /// an id that is already gone is not an error.
-    abstract Remove: scopeId: string * userId: string * ids: Guid list -> Async<Result<unit, string>>
+    abstract Remove: scopeId: string * userId: UserId * ids: Guid list -> Async<Result<unit, string>>
 
     /// Users in the scope with at least one held item.
     abstract ListPendingUsers: scopeId: string -> Async<string list>
@@ -70,9 +70,9 @@ type INotificationPreferenceStore =
 
     /// UTC instant each digest frequency was last sent to the user,
     /// keyed by `DigestFrequency.toWireString`. Empty when never sent.
-    abstract GetDigestWatermarks: scopeId: string * userId: string -> Async<Map<string, DateTime>>
+    abstract GetDigestWatermarks: scopeId: string * userId: UserId -> Async<Map<string, DateTime>>
 
     /// Record that a digest of `frequency` was sent to the user at
     /// `sentAt` (UTC). Replaces the prior watermark for that frequency.
     abstract SetDigestWatermark:
-        scopeId: string * userId: string * frequency: DigestFrequency * sentAt: DateTime -> Async<Result<unit, string>>
+        scopeId: string * userId: UserId * frequency: DigestFrequency * sentAt: DateTime -> Async<Result<unit, string>>

@@ -213,7 +213,7 @@ type AnonymousSessionMigrationMiddleware(next: RequestDelegate) =
                                 let scopeId =
                                     match ctx.Items.TryGetValue StorageScopeItemsKey with
                                     | true, (:? StorageScope as scope) -> scope.ScopeId
-                                    | _ -> ScopeKey.container (ScopeKey.User uid)
+                                    | _ -> ScopeKey.container (ScopeKey.User(UserId uid))
 
                                 let emitAudit
                                     (outcome: string)
@@ -234,7 +234,7 @@ type AnonymousSessionMigrationMiddleware(next: RequestDelegate) =
                                                 scopeId,
                                                 AnonymousSessionMigrated {
                                                     AnonymousSessionId = sid
-                                                    TargetUserId = uid
+                                                    TargetUserId = UserId uid
                                                     Outcome = outcome
                                                     ItemsMigrated = summary.ItemsMigrated
                                                     BytesMigrated = summary.BytesMigrated

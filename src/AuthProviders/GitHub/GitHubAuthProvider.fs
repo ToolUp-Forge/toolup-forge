@@ -137,7 +137,7 @@ let private userFromGitHub (ghUser: GitHubUser) (resolvedEmail: string option) :
         | _ -> userId
 
     {
-        UserId = userId
+        UserId = UserId userId
         DisplayName = displayName
         Email = resolvedEmail
         TenantId = None

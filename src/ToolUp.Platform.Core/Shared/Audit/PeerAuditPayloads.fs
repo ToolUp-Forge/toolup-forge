@@ -308,7 +308,7 @@ module ClassificationSourceModule =
 /// `AuditOnRead` is set). Value-free by design.
 type ClassifiedFieldReadPayload = {
     /// Acting `AccessContext.UserId`.
-    UserId: string
+    UserId: UserId
     /// Entity type the field belongs to.
     EntityName: string
     /// Dotted field path that was read.
@@ -323,7 +323,7 @@ type ClassifiedFieldReadPayload = {
 
 /// A classified field was written by a caller. Value-free by design.
 type ClassifiedFieldWrittenPayload = {
-    UserId: string
+    UserId: UserId
     EntityName: string
     FieldPath: string
     Level: string

@@ -165,7 +165,10 @@ let private liveGrant = {
 type private FixedPermissionStore(documents: Map<string, TeamPermissions>) =
     interface IPermissionStore with
         member _.GetTeamPermissions(teamId) = async {
-            return documents |> Map.tryFind teamId |> Option.defaultValue TeamPermissions.empty
+            return
+                documents
+                |> Map.tryFind teamId.Value
+                |> Option.defaultValue TeamPermissions.empty
         }
 
         member _.SetTeamPermissions(_, _) = async { return Error "read-only fixture" }

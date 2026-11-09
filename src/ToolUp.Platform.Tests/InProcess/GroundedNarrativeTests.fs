@@ -767,7 +767,7 @@ type private DispatchingScheduler() =
                         handler.Execute {
                             JobId = jobId
                             ScopeId = scopeId
-                            AccessContext = AccessContext.unrestricted (AuthenticatedUser byUserId)
+                            AccessContext = AccessContext.unrestricted (AuthenticatedUser byUserId.Value)
                             Attempt = 1
                             Trigger = registration.Trigger
                             Scope = scope
@@ -1439,7 +1439,7 @@ let triggerTests =
                 Attempt = attempt
                 Trigger = Trigger.Manual
                 Scope = jobScope
-                TriggerSource = ScheduledManually "_platform"
+                TriggerSource = ScheduledManually(UserId "_platform")
                 ScheduledAt = DateTime.UtcNow
                 RunningAt = DateTime.UtcNow
                 Payload = GroundedNarrativeTrigger.payloadFor summaryRun.Key (set [ "sales.rollup" ])
@@ -1607,7 +1607,7 @@ let private narrativeJob (deployment: Deployment) : JobResult =
         Attempt = 1
         Trigger = Trigger.Manual
         Scope = deployment.Scope
-        TriggerSource = ScheduledManually "_platform"
+        TriggerSource = ScheduledManually(UserId "_platform")
         ScheduledAt = DateTime.UtcNow
         RunningAt = DateTime.UtcNow
         Payload = GroundedNarrativeTrigger.payloadFor summaryRun.Key Set.empty
@@ -2088,7 +2088,7 @@ let budgetTests =
                 | Error e -> failtestf "schedule refused: %A" e
 
             match
-                jobs.TriggerOnce(deployment.TeamId, jobId, "_platform")
+                jobs.TriggerOnce(deployment.TeamId, jobId, UserId "_platform")
                 |> Async.RunSynchronously
             with
             | Ok() -> ()
@@ -2174,9 +2174,9 @@ let private deployRecording () =
         :> TeamManagement.ITeamStore
 
     async {
-        let! _ = teams.CreateTeam(deployment.TeamId, "Team")
-        let! _ = teams.AddMember(deployment.TeamId, "olive", TeamRole.Owner)
-        let! _ = teams.AddMember(deployment.TeamId, "mo", TeamRole.Member)
+        let! _ = teams.CreateTeam(TeamId deployment.TeamId, "Team")
+        let! _ = teams.AddMember(TeamId deployment.TeamId, UserId "olive", TeamRole.Owner)
+        let! _ = teams.AddMember(TeamId deployment.TeamId, UserId "mo", TeamRole.Member)
         return ()
     }
     |> Async.RunSynchronously
@@ -3303,7 +3303,7 @@ let triggerNameTests =
 
         test "a data-arrival job (Manual) records data-arrival, as it always did" {
             Expect.equal
-                (recordedTrigger Trigger.Manual (ScheduledManually GroundedNarrativeTrigger.Actor) 1)
+                (recordedTrigger Trigger.Manual (ScheduledManually(UserId GroundedNarrativeTrigger.Actor)) 1)
                 GroundedNarrativeTrigger.TriggerName
                 "the data-arrival name is unchanged"
 
@@ -3318,7 +3318,7 @@ let triggerNameTests =
             Expect.equal (recordedTrigger (CronTrigger "0 6 * * *") ScheduledByCron 3) "cadence" "a retry"
 
             Expect.equal
-                (recordedTrigger (CronTrigger "0 6 * * *") (ScheduledManually "operator") 1)
+                (recordedTrigger (CronTrigger "0 6 * * *") (ScheduledManually(UserId "operator")) 1)
                 "cadence"
                 "a run-now from the jobs admin is still the cadence's job"
         }
@@ -3411,7 +3411,7 @@ let triggerNameTests =
 
             match! jobs.Schedule(scope, cadence) with
             | Ok(Scheduled jobId) ->
-                match! jobs.TriggerOnce(teamId, jobId, "operator") with
+                match! jobs.TriggerOnce(teamId, jobId, UserId "operator") with
                 | Ok() -> ()
                 | Error e -> failtestf "the cadence job was not fired: %s" (TriggerError.message e)
             | other -> failtestf "the cadence job was not scheduled: %A" other

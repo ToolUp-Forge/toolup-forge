@@ -34,7 +34,7 @@ let tests =
 
     let sampleEnvelope (scopeId: string) : NotificationEnvelope =
         let payload: SmsEnvelope = {
-            Recipients = [ RecipientId.User "user-x" ]
+            Recipients = [ RecipientId.User(UserId "user-x") ]
             Body = "Test SMS"
             CorrelationId = None
         }

@@ -466,7 +466,7 @@ let dispatchTests =
                     | Ok(Scheduled id | Coalesced id) -> id
                     | Error e -> failtestf "Schedule: %A" e
 
-                match! scheduler.TriggerOnce(scope, jobId, "alice") with
+                match! scheduler.TriggerOnce(scope, jobId, UserId "alice") with
                 | Ok() -> ()
                 | Error e -> failtestf "TriggerOnce: %A" e
 
@@ -497,7 +497,7 @@ let dispatchTests =
                     "the payload was re-read from the definition, not from Quartz state"
 
                 match ctx.TriggerSource with
-                | ScheduledManually user -> Expect.equal user "alice" "the manual fire carried its user"
+                | ScheduledManually user -> Expect.equal user (UserId "alice") "the manual fire carried its user"
                 | other -> failtestf "expected ScheduledManually, got %A" other
             finally
                 host.StopAsync CancellationToken.None
@@ -545,7 +545,7 @@ let dispatchTests =
                     | Ok(Scheduled id | Coalesced id) -> id
                     | Error e -> failtestf "Schedule: %A" e
 
-                match! scheduler.TriggerOnce(scope, jobId, "alice") with
+                match! scheduler.TriggerOnce(scope, jobId, UserId "alice") with
                 | Ok() -> ()
                 | Error e -> failtestf "TriggerOnce: %A" e
 

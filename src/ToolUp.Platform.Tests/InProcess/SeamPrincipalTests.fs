@@ -97,7 +97,10 @@ let private narrativeTests =
                 log.Lifecycle PublicPageEntity.PublicScope
                 |> List.map (fun (case, p) -> case, p.UserId, p.OnBehalfOf)
 
-            Expect.equal rows [ "created", "author-814", None ] "one lifecycle row, naming the caller — never the host"
+            Expect.equal
+                rows
+                [ "created", UserId "author-814", None ]
+                "one lifecycle row, naming the caller — never the host"
         }
 
         testCaseAsync "a delegated publish records the on-behalf-of subject on the row"
@@ -122,7 +125,10 @@ let private narrativeTests =
                 log.Lifecycle PublicPageEntity.PublicScope
                 |> List.map (fun (case, p) -> case, p.UserId, p.OnBehalfOf)
 
-            Expect.equal rows [ "created", "editor", Some "author" ] "principal and delegation both reach the row"
+            Expect.equal
+                rows
+                [ "created", UserId "editor", Some "author" ]
+                "principal and delegation both reach the row"
         }
     ]
 

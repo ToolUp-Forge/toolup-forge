@@ -315,7 +315,7 @@ ToolUp.Platform.Config.HeaderAuthProvider+HeaderAuthProvider (class)
 ToolUp.Platform.Config.HeaderAuthProvider+HeaderAuthProvider..ctor()
 ToolUp.Platform.Config.IConfigStore (interface)
 ToolUp.Platform.Config.IConfigStore.Clear(ToolUp.Platform.StorageScope, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
-ToolUp.Platform.Config.IConfigStore.Erase(System.String, System.String, ToolUp.Platform.ErasurePolicy, System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ErasureSummary, ToolUp.Platform.ErasureError]]
+ToolUp.Platform.Config.IConfigStore.Erase(System.String, ToolUp.Platform.UserId, ToolUp.Platform.ErasurePolicy, System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ErasureSummary, ToolUp.Platform.ErasureError]]
 ToolUp.Platform.Config.IConfigStore.GetEffective`1(ToolUp.Platform.StorageScope, System.String, ToolUp.Platform.ModuleConfigSchema) : Microsoft.FSharp.Control.FSharpAsync`1[T]
 ToolUp.Platform.Config.IConfigStore.GetRaw(ToolUp.Platform.StorageScope, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]]
 ToolUp.Platform.Config.IConfigStore.Get`1(ToolUp.Platform.StorageScope, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[T]]
@@ -323,7 +323,7 @@ ToolUp.Platform.Config.IConfigStore.SetRaw(ToolUp.Platform.StorageScope, System.
 ToolUp.Platform.Config.IConfigStore.Set`1(ToolUp.Platform.StorageScope, System.String, T, ToolUp.Platform.ModuleConfigSchema) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.Config.IFeatureFlagStore (interface)
 ToolUp.Platform.Config.IFeatureFlagStore.ClearFlag(ToolUp.Platform.FlagScope, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
-ToolUp.Platform.Config.IFeatureFlagStore.Erase(System.String, System.String, ToolUp.Platform.ErasurePolicy, System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ErasureSummary, ToolUp.Platform.ErasureError]]
+ToolUp.Platform.Config.IFeatureFlagStore.Erase(System.String, ToolUp.Platform.UserId, ToolUp.Platform.ErasurePolicy, System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ErasureSummary, ToolUp.Platform.ErasureError]]
 ToolUp.Platform.Config.IFeatureFlagStore.GetFlag(ToolUp.Platform.FlagScope, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.FlagValue]]
 ToolUp.Platform.Config.IFeatureFlagStore.ListFlags(ToolUp.Platform.FlagScope) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.FlagValue]]
 ToolUp.Platform.Config.IFeatureFlagStore.SetFlag(ToolUp.Platform.FlagScope, System.String, ToolUp.Platform.FlagValue) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
@@ -333,14 +333,14 @@ ToolUp.Platform.Config.IMappingDryRunValidator (interface)
 ToolUp.Platform.Config.IMappingDryRunValidator.Validate(DataManagementTypes+DataTypeSchema, System.String) : ColumnMappingTypes+DryRunReport
 ToolUp.Platform.Config.IMigrationStatusStore (interface)
 ToolUp.Platform.Config.IMigrationStatusStore.ListAll() : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.MigrationStatus]]
-ToolUp.Platform.Config.IMigrationStatusStore.ListForTeam(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.MigrationStatus]]
-ToolUp.Platform.Config.IMigrationStatusStore.Read(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.MigrationStatus]]
+ToolUp.Platform.Config.IMigrationStatusStore.ListForTeam(ToolUp.Platform.TeamId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.MigrationStatus]]
+ToolUp.Platform.Config.IMigrationStatusStore.Read(ToolUp.Platform.TeamId, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.MigrationStatus]]
 ToolUp.Platform.Config.IMigrationStatusStore.Write(ToolUp.Platform.MigrationStatus) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.Config.IUserClaims (interface)
-ToolUp.Platform.Config.IUserClaims.GetPremiumStatus(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.PremiumStatus]
-ToolUp.Platform.Config.IUserClaims.GrantPremium(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.PremiumStatus, System.String]]
+ToolUp.Platform.Config.IUserClaims.GetPremiumStatus(ToolUp.Platform.UserId) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.PremiumStatus]
+ToolUp.Platform.Config.IUserClaims.GrantPremium(ToolUp.Platform.UserId, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.PremiumStatus, System.String]]
 ToolUp.Platform.Config.IUserClaims.ListPremiumUsers() : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.PremiumStatus]], System.String]]
-ToolUp.Platform.Config.IUserClaims.RevokePremium(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.Platform.Config.IUserClaims.RevokePremium(ToolUp.Platform.UserId, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.Config.IdempotencyStoreInstanceValidator (class)
 ToolUp.Platform.Config.IdempotencyStoreInstanceValidator+IdempotencyStoreInstanceValidator (class)
 ToolUp.Platform.Config.IdempotencyStoreInstanceValidator+IdempotencyStoreInstanceValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.Extensions.DependencyInjection.IServiceCollection, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
@@ -596,47 +596,47 @@ ToolUp.Platform.Config.SurfaceCoherenceValidator+SurfaceCoherenceValidator (clas
 ToolUp.Platform.Config.SurfaceCoherenceValidator+SurfaceCoherenceValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Auth+IAuthProvider], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.SurfaceRequirement]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.Tuple`2[System.String, System.String], ToolUp.Platform.SurfaceRequirement]], System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
 ToolUp.Platform.Config.TeamManagement (class)
 ToolUp.Platform.Config.TeamManagement+ActiveTeamPolicy (class)
-ToolUp.Platform.Config.TeamManagement+ActiveTeamPolicy.ensureActiveTeam(ToolUp.Platform.Config.TeamManagement+ITeamStore, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.Config.TeamManagement+ActiveTeamPolicy.ensureActiveTeam(ToolUp.Platform.Config.TeamManagement+ITeamStore, ToolUp.Platform.UserId, ToolUp.Platform.TeamId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.Config.TeamManagement+ActiveTeamPolicy.errorReporter : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Exception, Microsoft.FSharp.Core.Unit]] { get; set }
 ToolUp.Platform.Config.TeamManagement+ITeamStore (interface)
-ToolUp.Platform.Config.TeamManagement+ITeamStore.AddMember(System.String, System.String, ToolUp.Platform.TeamRole) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
-ToolUp.Platform.Config.TeamManagement+ITeamStore.ChangeMemberRole(System.String, System.String, ToolUp.Platform.TeamRole) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
-ToolUp.Platform.Config.TeamManagement+ITeamStore.CreateTeam(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TeamInfo, System.String]]
-ToolUp.Platform.Config.TeamManagement+ITeamStore.DeleteTeam(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
-ToolUp.Platform.Config.TeamManagement+ITeamStore.GetActiveTeam(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[System.String]]
-ToolUp.Platform.Config.TeamManagement+ITeamStore.GetMemberRole(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamRole]]
-ToolUp.Platform.Config.TeamManagement+ITeamStore.GetTeam(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamInfo]]
-ToolUp.Platform.Config.TeamManagement+ITeamStore.GetTeamMembers(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamMembership]]
-ToolUp.Platform.Config.TeamManagement+ITeamStore.GetTeamsForUser(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamInfo]]
+ToolUp.Platform.Config.TeamManagement+ITeamStore.AddMember(ToolUp.Platform.TeamId, ToolUp.Platform.UserId, ToolUp.Platform.TeamRole) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.Platform.Config.TeamManagement+ITeamStore.ChangeMemberRole(ToolUp.Platform.TeamId, ToolUp.Platform.UserId, ToolUp.Platform.TeamRole) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.Platform.Config.TeamManagement+ITeamStore.CreateTeam(ToolUp.Platform.TeamId, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TeamInfo, System.String]]
+ToolUp.Platform.Config.TeamManagement+ITeamStore.DeleteTeam(ToolUp.Platform.TeamId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.Platform.Config.TeamManagement+ITeamStore.GetActiveTeam(ToolUp.Platform.UserId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamId]]
+ToolUp.Platform.Config.TeamManagement+ITeamStore.GetMemberRole(ToolUp.Platform.TeamId, ToolUp.Platform.UserId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamRole]]
+ToolUp.Platform.Config.TeamManagement+ITeamStore.GetTeam(ToolUp.Platform.TeamId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamInfo]]
+ToolUp.Platform.Config.TeamManagement+ITeamStore.GetTeamMembers(ToolUp.Platform.TeamId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamMembership]]
+ToolUp.Platform.Config.TeamManagement+ITeamStore.GetTeamsForUser(ToolUp.Platform.UserId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamInfo]]
 ToolUp.Platform.Config.TeamManagement+ITeamStore.ListTeams() : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamInfo]]
-ToolUp.Platform.Config.TeamManagement+ITeamStore.PurgeTeam(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
-ToolUp.Platform.Config.TeamManagement+ITeamStore.PurgeUser(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
-ToolUp.Platform.Config.TeamManagement+ITeamStore.RemoveMember(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
-ToolUp.Platform.Config.TeamManagement+ITeamStore.SetActiveTeam(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
-ToolUp.Platform.Config.TeamManagement+ITeamStore.SetArchived(System.String, System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.Platform.Config.TeamManagement+ITeamStore.PurgeTeam(ToolUp.Platform.TeamId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.Platform.Config.TeamManagement+ITeamStore.PurgeUser(ToolUp.Platform.UserId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.Platform.Config.TeamManagement+ITeamStore.RemoveMember(ToolUp.Platform.TeamId, ToolUp.Platform.UserId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.Platform.Config.TeamManagement+ITeamStore.SetActiveTeam(ToolUp.Platform.UserId, ToolUp.Platform.TeamId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.Platform.Config.TeamManagement+ITeamStore.SetArchived(ToolUp.Platform.TeamId, System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.Config.TeamManagement+StoredMembership (class)
-ToolUp.Platform.Config.TeamManagement+StoredMembership..ctor(System.String, ToolUp.Platform.TeamRole, System.DateTime)
+ToolUp.Platform.Config.TeamManagement+StoredMembership..ctor(ToolUp.Platform.TeamId, ToolUp.Platform.TeamRole, System.DateTime)
 ToolUp.Platform.Config.TeamManagement+StoredMembership.JoinedAt : System.DateTime { get }
 ToolUp.Platform.Config.TeamManagement+StoredMembership.Role : ToolUp.Platform.TeamRole { get }
-ToolUp.Platform.Config.TeamManagement+StoredMembership.TeamId : System.String { get }
+ToolUp.Platform.Config.TeamManagement+StoredMembership.TeamId : ToolUp.Platform.TeamId { get }
 ToolUp.Platform.Config.TeamManagement+TeamStore (class)
 ToolUp.Platform.Config.TeamManagement+TeamStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.INotificationChannel)
 ToolUp.Platform.Config.TeamManagement+TeamStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.INotificationChannel, ToolUp.Platform.ILogger)
-ToolUp.Platform.Config.TeamManagement+TeamStore.AddMember(System.String, System.String, ToolUp.Platform.TeamRole) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
-ToolUp.Platform.Config.TeamManagement+TeamStore.ChangeMemberRole(System.String, System.String, ToolUp.Platform.TeamRole) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
-ToolUp.Platform.Config.TeamManagement+TeamStore.CreateTeam(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TeamInfo, System.String]]
-ToolUp.Platform.Config.TeamManagement+TeamStore.DeleteTeam(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
-ToolUp.Platform.Config.TeamManagement+TeamStore.GetActiveTeam(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[System.String]]
-ToolUp.Platform.Config.TeamManagement+TeamStore.GetMemberRole(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamRole]]
-ToolUp.Platform.Config.TeamManagement+TeamStore.GetTeam(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamInfo]]
-ToolUp.Platform.Config.TeamManagement+TeamStore.GetTeamMembers(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamMembership]]
-ToolUp.Platform.Config.TeamManagement+TeamStore.GetTeamsForUser(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamInfo]]
+ToolUp.Platform.Config.TeamManagement+TeamStore.AddMember(ToolUp.Platform.TeamId, ToolUp.Platform.UserId, ToolUp.Platform.TeamRole) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.Platform.Config.TeamManagement+TeamStore.ChangeMemberRole(ToolUp.Platform.TeamId, ToolUp.Platform.UserId, ToolUp.Platform.TeamRole) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.Platform.Config.TeamManagement+TeamStore.CreateTeam(ToolUp.Platform.TeamId, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TeamInfo, System.String]]
+ToolUp.Platform.Config.TeamManagement+TeamStore.DeleteTeam(ToolUp.Platform.TeamId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.Platform.Config.TeamManagement+TeamStore.GetActiveTeam(ToolUp.Platform.UserId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamId]]
+ToolUp.Platform.Config.TeamManagement+TeamStore.GetMemberRole(ToolUp.Platform.TeamId, ToolUp.Platform.UserId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamRole]]
+ToolUp.Platform.Config.TeamManagement+TeamStore.GetTeam(ToolUp.Platform.TeamId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamInfo]]
+ToolUp.Platform.Config.TeamManagement+TeamStore.GetTeamMembers(ToolUp.Platform.TeamId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamMembership]]
+ToolUp.Platform.Config.TeamManagement+TeamStore.GetTeamsForUser(ToolUp.Platform.UserId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamInfo]]
 ToolUp.Platform.Config.TeamManagement+TeamStore.ListTeams() : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamInfo]]
-ToolUp.Platform.Config.TeamManagement+TeamStore.PurgeTeam(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
-ToolUp.Platform.Config.TeamManagement+TeamStore.PurgeUser(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
-ToolUp.Platform.Config.TeamManagement+TeamStore.RemoveMember(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
-ToolUp.Platform.Config.TeamManagement+TeamStore.SetActiveTeam(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
-ToolUp.Platform.Config.TeamManagement+TeamStore.SetArchived(System.String, System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.Platform.Config.TeamManagement+TeamStore.PurgeTeam(ToolUp.Platform.TeamId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.Platform.Config.TeamManagement+TeamStore.PurgeUser(ToolUp.Platform.UserId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.Platform.Config.TeamManagement+TeamStore.RemoveMember(ToolUp.Platform.TeamId, ToolUp.Platform.UserId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.Platform.Config.TeamManagement+TeamStore.SetActiveTeam(ToolUp.Platform.UserId, ToolUp.Platform.TeamId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.Platform.Config.TeamManagement+TeamStore.SetArchived(ToolUp.Platform.TeamId, System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.Config.TraceCategoriesValidator (class)
 ToolUp.Platform.Config.TraceCategoriesValidator.contributor(ToolUp.Platform.ServerConfig) : ToolUp.Platform.IDevDiagnosticsContributor
 ToolUp.Platform.Config.TraceCategoriesValidator.evaluate(Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpSet`1[System.String]) : ToolUp.Platform.ConfigValidation+ValidationResult

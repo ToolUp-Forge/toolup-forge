@@ -180,7 +180,7 @@ let private registerVia (registry: IModelRegistry) (outcome: FitOutcome) = async
 }
 
 let private approve (stack: Stack) (keyHash: string) = async {
-    match! stack.Registry.TransitionStatus(scope, keyHash, ModelArtifactStatus.Approved, Owner, "u1") with
+    match! stack.Registry.TransitionStatus(scope, keyHash, ModelArtifactStatus.Approved, Owner, UserId "u1") with
     | Ok artifact -> return artifact
     | Error e -> return failwithf "approve failed: %s" (ModelRegistryError.describe e)
 }

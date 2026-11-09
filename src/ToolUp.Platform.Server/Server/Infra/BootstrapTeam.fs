@@ -123,7 +123,7 @@ let bootstrap (logger: ILogger) (auditLog: IAuditLog) (teamStore: ITeamStore) : 
                     |> Option.bind trimOrNone
                     |> Option.defaultWith (fun () -> Guid.NewGuid().ToString("N")[..7])
 
-                let! createResult = teamStore.CreateTeam(teamId, teamName)
+                let! createResult = teamStore.CreateTeam(TeamId teamId, teamName)
 
                 match createResult with
                 | Error msg ->
@@ -138,13 +138,13 @@ let bootstrap (logger: ILogger) (auditLog: IAuditLog) (teamStore: ITeamStore) : 
                         auditLog.Record(
                             teamId,
                             TeamCreated {
-                                UserId = bootstrapActor
-                                TeamId = teamId
+                                UserId = UserId bootstrapActor
+                                TeamId = TeamId teamId
                                 TeamName = teamName
                             }
                         )
 
-                    let! addResult = teamStore.AddMember(teamId, adminUserId, Owner)
+                    let! addResult = teamStore.AddMember(TeamId teamId, UserId adminUserId, Owner)
 
                     match addResult with
                     | Error msg ->
@@ -171,14 +171,14 @@ let bootstrap (logger: ILogger) (auditLog: IAuditLog) (teamStore: ITeamStore) : 
                             auditLog.Record(
                                 teamId,
                                 MemberAdded {
-                                    UserId = bootstrapActor
-                                    TeamId = teamId
-                                    AffectedUserId = adminUserId
+                                    UserId = UserId bootstrapActor
+                                    TeamId = TeamId teamId
+                                    AffectedUserId = UserId adminUserId
                                     Role = TeamRoles.displayName Owner
                                 }
                             )
 
-                        let! activeResult = teamStore.SetActiveTeam(adminUserId, teamId)
+                        let! activeResult = teamStore.SetActiveTeam(UserId adminUserId, TeamId teamId)
 
                         match activeResult with
                         | Ok() ->

@@ -138,7 +138,7 @@ let private harnessAt (now: DateTime) (store: INotificationPreferenceStore optio
 let private harness () = harnessAt t0 None
 
 let private savePrefs (h: Harness) (userId: string) (prefs: UserNotificationPreferences) =
-    h.Store.SavePreferences(scope, userId, prefs)
+    h.Store.SavePreferences(scope, UserId userId, prefs)
     |> Async.RunSynchronously
     |> ignore
 
@@ -166,7 +166,7 @@ let private jobContext (now: DateTime) : JobContext = {
     Attempt = 1
     Trigger = Manual
     Scope = ToolUp.Platform.ResolvedScope.anonymous
-    TriggerSource = TriggerSource.ScheduledManually "_system"
+    TriggerSource = TriggerSource.ScheduledManually(UserId "_system")
     ScheduledAt = now
     RunningAt = now
     Payload = ""
@@ -251,7 +251,7 @@ let tests =
 
                 let sms =
                     TransactionalSms {
-                        Recipients = [ RecipientId.User "alice" ]
+                        Recipients = [ RecipientId.User(UserId "alice") ]
                         Body = "b"
                         CorrelationId = None
                     }
@@ -265,7 +265,7 @@ let tests =
                 savePrefs h "alice" (cell "reports.summary" PreferenceChannel.Email (Digest Daily))
                 publishAs h "reports.summary" (email [ "alice" ]) |> Async.RunSynchronously
                 Expect.isEmpty h.Inner.Published "held"
-                let held = h.Store.ListPending(scope, "alice") |> Async.RunSynchronously
+                let held = h.Store.ListPending(scope, UserId "alice") |> Async.RunSynchronously
                 let item = Expect.wantSome (List.tryHead held) "one pending item"
                 Expect.equal item.Disposition (PendingDisposition.ForDigest Daily) "digest bucket"
                 Expect.equal item.Category "reports.summary" "category"
@@ -293,9 +293,9 @@ let tests =
                     Expect.equal (recipientsOf n) [ "carol" ] "only carol"
                 | other -> failtestf "expected one narrowed publish, got %A" other
 
-                let bobHeld = h.Store.ListPending(scope, "bob") |> Async.RunSynchronously
+                let bobHeld = h.Store.ListPending(scope, UserId "bob") |> Async.RunSynchronously
                 Expect.equal (List.length bobHeld) 1 "bob held"
-                let aliceHeld = h.Store.ListPending(scope, "alice") |> Async.RunSynchronously
+                let aliceHeld = h.Store.ListPending(scope, UserId "alice") |> Async.RunSynchronously
                 Expect.isEmpty aliceHeld "alice dropped, not held"
 
                 Expect.equal
@@ -313,7 +313,7 @@ let tests =
                 savePrefs h "alice" (quiet 1320 420 "UTC")
                 publishAs h "reports.summary" (email [ "alice" ]) |> Async.RunSynchronously
                 Expect.isEmpty h.Inner.Published "held"
-                let held = h.Store.ListPending(scope, "alice") |> Async.RunSynchronously
+                let held = h.Store.ListPending(scope, UserId "alice") |> Async.RunSynchronously
                 let item = Expect.wantSome (List.tryHead held) "one pending item"
 
                 Expect.equal
@@ -461,13 +461,13 @@ let tests =
                     h
                     "reports.summary"
                     (TransactionalEmail {
-                        Recipients = [ RecipientId.User "alice" ]
+                        Recipients = [ RecipientId.User(UserId "alice") ]
                         Content = InlineEmail("Second", "More", None)
                         CorrelationId = None
                     })
                 |> Async.RunSynchronously
 
-                let held = h.Store.ListPending(scope, "alice") |> Async.RunSynchronously
+                let held = h.Store.ListPending(scope, UserId "alice") |> Async.RunSynchronously
                 let expectedMarker = DigestRenderer.marker Daily held
 
                 let first = runDigest h (t0.AddMinutes 15.0)
@@ -476,7 +476,7 @@ let tests =
                 match h.Inner.Published with
                 | [ s, TransactionalEmail e ] ->
                     Expect.equal s scope "published in the user's scope"
-                    Expect.equal e.Recipients [ RecipientId.User "alice" ] "to alice"
+                    Expect.equal e.Recipients [ RecipientId.User(UserId "alice") ] "to alice"
                     Expect.equal e.CorrelationId (Some expectedMarker) "digest marker"
                     Expect.isTrue (expectedMarker.StartsWith "digest:daily:") "marker shape"
 
@@ -487,9 +487,12 @@ let tests =
                     | other -> failtestf "expected inline email, got %A" other
                 | other -> failtestf "expected exactly one digest email, got %A" other
 
-                let after = h.Store.ListPending(scope, "alice") |> Async.RunSynchronously
+                let after = h.Store.ListPending(scope, UserId "alice") |> Async.RunSynchronously
                 Expect.isEmpty after "items removed"
-                let marks = h.Store.GetDigestWatermarks(scope, "alice") |> Async.RunSynchronously
+
+                let marks =
+                    h.Store.GetDigestWatermarks(scope, UserId "alice") |> Async.RunSynchronously
+
                 Expect.equal (Map.tryFind "daily" marks) (Some(t0.AddMinutes 15.0)) "watermark"
 
                 let second = runDigest h (t0.AddMinutes 30.0)
@@ -501,7 +504,7 @@ let tests =
                 let h = harness ()
                 savePrefs h "alice" (cell "reports.summary" PreferenceChannel.Email (Digest Daily))
 
-                h.Store.SetDigestWatermark(scope, "alice", Daily, t0)
+                h.Store.SetDigestWatermark(scope, UserId "alice", Daily, t0)
                 |> Async.RunSynchronously
                 |> ignore
 
@@ -548,7 +551,7 @@ let tests =
 
                 runDigest h (DateTime(2026, 9, 17, 7, 0, 0, DateTimeKind.Utc)) |> ignore
                 Expect.equal h.Inner.Published [ scope, email [ "alice" ] ] "07:00: released as itself, not as a digest"
-                let after = h.Store.ListPending(scope, "alice") |> Async.RunSynchronously
+                let after = h.Store.ListPending(scope, UserId "alice") |> Async.RunSynchronously
                 Expect.isEmpty after "removed"
             }
 
@@ -556,7 +559,7 @@ let tests =
                 let items = [
                     {
                         Id = Guid("11111111-1111-1111-1111-111111111111")
-                        UserId = "u"
+                        UserId = UserId "u"
                         Category = "c"
                         Channel = PreferenceChannel.Email
                         Notification = email [ "u" ]
@@ -565,7 +568,7 @@ let tests =
                     }
                     {
                         Id = Guid("22222222-2222-2222-2222-222222222222")
-                        UserId = "u"
+                        UserId = UserId "u"
                         Category = "c"
                         Channel = PreferenceChannel.Email
                         Notification = email [ "u" ]

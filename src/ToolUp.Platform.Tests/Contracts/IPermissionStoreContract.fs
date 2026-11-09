@@ -31,7 +31,7 @@ let tests (name: string) (factory: unit -> IPermissionStore) =
         testCaseAsync "GetTeamPermissions on untouched team returns empty"
         <| async {
             let store = factory ()
-            let! perms = store.GetTeamPermissions(uniqueTeam ())
+            let! perms = store.GetTeamPermissions(TeamId(uniqueTeam ()))
             Expect.isEmpty perms.Defaults "no defaults configured"
             Expect.isEmpty perms.Members "no members configured"
         }
@@ -39,7 +39,7 @@ let tests (name: string) (factory: unit -> IPermissionStore) =
         testCaseAsync "GetEffectivePermissions on untouched team returns empty (unrestricted)"
         <| async {
             let store = factory ()
-            let! perms = store.GetEffectivePermissions("alice", uniqueTeam ())
+            let! perms = store.GetEffectivePermissions(UserId "alice", TeamId(uniqueTeam ()))
             // Empty map = unrestricted via AccessContext.canAccessModule.
             Expect.isEmpty perms "no perms configured"
         }
@@ -49,11 +49,11 @@ let tests (name: string) (factory: unit -> IPermissionStore) =
             let store = factory ()
             let team = uniqueTeam ()
 
-            match! store.SetMemberPermissions(team, "alice", "SkuAnalysis", [ Read; Write ]) with
+            match! store.SetMemberPermissions(TeamId team, UserId "alice", "SkuAnalysis", [ Read; Write ]) with
             | Error e -> failtestf "SetMemberPermissions failed: %s" e
             | Ok() -> ()
 
-            let! perms = store.GetEffectivePermissions("alice", team)
+            let! perms = store.GetEffectivePermissions(UserId "alice", TeamId team)
             // Use `Expect.equal` — pattern-matching on `[ Read; Write ]`
             // would treat Read / Write as variable bindings (they're
             // module-level `let`s, not DU cases under RequireQualifiedAccess)
@@ -68,11 +68,11 @@ let tests (name: string) (factory: unit -> IPermissionStore) =
 
             let defaults = Map.ofList [ "SkuAnalysis", [ Read ] ]
 
-            match! store.SetTeamDefaults(team, defaults) with
+            match! store.SetTeamDefaults(TeamId team, defaults) with
             | Error e -> failtestf "SetTeamDefaults failed: %s" e
             | Ok() -> ()
 
-            let! perms = store.GetEffectivePermissions("bob", team)
+            let! perms = store.GetEffectivePermissions(UserId "bob", TeamId team)
             Expect.equal (perms.TryFind "SkuAnalysis") (Some [ Read ]) "bob inherits default"
         }
 
@@ -81,14 +81,14 @@ let tests (name: string) (factory: unit -> IPermissionStore) =
             let store = factory ()
             let team = uniqueTeam ()
 
-            let! _ = store.SetTeamDefaults(team, Map.ofList [ "SkuAnalysis", [ Read ] ])
+            let! _ = store.SetTeamDefaults(TeamId team, Map.ofList [ "SkuAnalysis", [ Read ] ])
 
-            let! _ = store.SetMemberPermissions(team, "alice", "SkuAnalysis", [ Admin ])
+            let! _ = store.SetMemberPermissions(TeamId team, UserId "alice", "SkuAnalysis", [ Admin ])
 
-            let! alicePerms = store.GetEffectivePermissions("alice", team)
+            let! alicePerms = store.GetEffectivePermissions(UserId "alice", TeamId team)
             Expect.equal (alicePerms.TryFind "SkuAnalysis") (Some [ Admin ]) "alice's explicit entry wins"
 
-            let! bobPerms = store.GetEffectivePermissions("bob", team)
+            let! bobPerms = store.GetEffectivePermissions(UserId "bob", TeamId team)
             Expect.equal (bobPerms.TryFind "SkuAnalysis") (Some [ Read ]) "bob still gets default"
         }
 
@@ -97,14 +97,14 @@ let tests (name: string) (factory: unit -> IPermissionStore) =
             let store = factory ()
             let team = uniqueTeam ()
 
-            let! _ = store.SetTeamDefaults(team, Map.ofList [ "SkuAnalysis", [ Read ] ])
-            let! _ = store.SetMemberPermissions(team, "alice", "SkuAnalysis", [ Admin ])
+            let! _ = store.SetTeamDefaults(TeamId team, Map.ofList [ "SkuAnalysis", [ Read ] ])
+            let! _ = store.SetMemberPermissions(TeamId team, UserId "alice", "SkuAnalysis", [ Admin ])
 
             // Revoke alice's explicit override — she should fall back
             // to the team default.
-            let! _ = store.SetMemberPermissions(team, "alice", "SkuAnalysis", [])
+            let! _ = store.SetMemberPermissions(TeamId team, UserId "alice", "SkuAnalysis", [])
 
-            let! perms = store.GetEffectivePermissions("alice", team)
+            let! perms = store.GetEffectivePermissions(UserId "alice", TeamId team)
             Expect.equal (perms.TryFind "SkuAnalysis") (Some [ Read ]) "alice falls back to default"
         }
 
@@ -114,8 +114,8 @@ let tests (name: string) (factory: unit -> IPermissionStore) =
             let team = uniqueTeam ()
 
             // Populate via individual ops.
-            let! _ = store.SetMemberPermissions(team, "alice", "M1", [ Read ])
-            let! _ = store.SetTeamDefaults(team, Map.ofList [ "M2", [ Write ] ])
+            let! _ = store.SetMemberPermissions(TeamId team, UserId "alice", "M1", [ Read ])
+            let! _ = store.SetTeamDefaults(TeamId team, Map.ofList [ "M2", [ Write ] ])
 
             // Replace wholesale.
             let replacement = {
@@ -129,8 +129,8 @@ let tests (name: string) (factory: unit -> IPermissionStore) =
                 Pages = Map.empty
             }
 
-            let! _ = store.SetTeamPermissions(team, replacement)
-            let! perms = store.GetTeamPermissions team
+            let! _ = store.SetTeamPermissions(TeamId team, replacement)
+            let! perms = store.GetTeamPermissions(TeamId team)
 
             Expect.equal perms replacement "document replaced exactly"
         }
@@ -141,9 +141,9 @@ let tests (name: string) (factory: unit -> IPermissionStore) =
             let teamA = uniqueTeam ()
             let teamB = uniqueTeam ()
 
-            let! _ = store.SetMemberPermissions(teamA, "alice", "SkuAnalysis", [ Admin ])
+            let! _ = store.SetMemberPermissions(TeamId teamA, UserId "alice", "SkuAnalysis", [ Admin ])
 
-            let! fromB = store.GetEffectivePermissions("alice", teamB)
+            let! fromB = store.GetEffectivePermissions(UserId "alice", TeamId teamB)
             Expect.isEmpty fromB "alice has no perms in team B"
         }
 
@@ -192,8 +192,8 @@ let tests (name: string) (factory: unit -> IPermissionStore) =
                     ]
             }
 
-            let! _ = store.SetTeamPermissions(team, original)
-            let! roundTripped = store.GetTeamPermissions team
+            let! _ = store.SetTeamPermissions(TeamId team, original)
+            let! roundTripped = store.GetTeamPermissions(TeamId team)
 
             Expect.equal roundTripped original "round-trip preserves the document"
         }
@@ -204,13 +204,13 @@ let tests (name: string) (factory: unit -> IPermissionStore) =
             let team = uniqueTeam ()
 
             // A fresh team has no exposure overrides — everything Available.
-            let! initial = store.GetModuleExposure team
+            let! initial = store.GetModuleExposure(TeamId team)
             Expect.isEmpty initial "fresh team has no exposure overrides (default Available)"
 
             // Mark one Hidden and one Unavailable.
-            let! _ = store.SetModuleExposure(team, "Marketing", ModuleExposure.Hidden)
-            let! _ = store.SetModuleExposure(team, "Finance", ModuleExposure.Unavailable)
-            let! afterSet = store.GetModuleExposure team
+            let! _ = store.SetModuleExposure(TeamId team, "Marketing", ModuleExposure.Hidden)
+            let! _ = store.SetModuleExposure(TeamId team, "Finance", ModuleExposure.Unavailable)
+            let! afterSet = store.GetModuleExposure(TeamId team)
 
             Expect.equal
                 afterSet
@@ -218,8 +218,8 @@ let tests (name: string) (factory: unit -> IPermissionStore) =
                 "both states recorded"
 
             // Setting a module back to Available clears its entry.
-            let! _ = store.SetModuleExposure(team, "Marketing", ModuleExposure.Available)
-            let! afterClear = store.GetModuleExposure team
+            let! _ = store.SetModuleExposure(TeamId team, "Marketing", ModuleExposure.Available)
+            let! afterClear = store.GetModuleExposure(TeamId team)
 
             Expect.equal
                 afterClear
@@ -227,8 +227,8 @@ let tests (name: string) (factory: unit -> IPermissionStore) =
                 "Available clears only that module's entry"
 
             // Exposure is orthogonal to the permission maps.
-            let! _ = store.SetTeamDefaults(team, Map.ofList [ "Finance", [ Read ] ])
-            let! stillSet = store.GetModuleExposure team
+            let! _ = store.SetTeamDefaults(TeamId team, Map.ofList [ "Finance", [ Read ] ])
+            let! stillSet = store.GetModuleExposure(TeamId team)
 
             Expect.equal
                 stillSet

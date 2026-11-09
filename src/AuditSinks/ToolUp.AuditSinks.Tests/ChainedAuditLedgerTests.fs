@@ -59,7 +59,7 @@ let private makeEnvelope (offset: float) : AuditEnvelope =
         "team-ledger"
         (baseTime.AddSeconds offset)
         (UserLoggedIn {
-            UserId = sprintf "user-%d" (int offset)
+            UserId = UserId(sprintf "user-%d" (int offset))
             AuthProvider = "Header"
         })
 
@@ -500,7 +500,7 @@ let private ledgerTests =
                             "team-other"
                             (baseTime.AddSeconds(float i))
                             (UserLoggedIn {
-                                UserId = sprintf "other-%d" i
+                                UserId = UserId(sprintf "other-%d" i)
                                 AuthProvider = "Header"
                             })
                 ]
@@ -755,7 +755,7 @@ let private partyEnvelope (scopeId: string) (offset: float) : AuditEnvelope =
         scopeId
         (baseTime.AddSeconds offset)
         (UserLoggedIn {
-            UserId = sprintf "%s-user-%d" scopeId (int offset)
+            UserId = UserId(sprintf "%s-user-%d" scopeId (int offset))
             AuthProvider = "Header"
         })
 

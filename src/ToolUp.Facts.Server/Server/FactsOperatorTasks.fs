@@ -252,8 +252,8 @@ module FactJobReissue =
         | [| kind; id |] when not (String.IsNullOrWhiteSpace id) ->
             let key =
                 match kind with
-                | "team" -> Some(ScopeKey.Team id)
-                | "user" -> Some(ScopeKey.User id)
+                | "team" -> Some(ScopeKey.Team(TeamId id))
+                | "user" -> Some(ScopeKey.User(UserId id))
                 | "session" -> Some(ScopeKey.Session id)
                 | _ -> None
 

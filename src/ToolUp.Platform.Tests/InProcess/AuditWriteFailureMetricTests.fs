@@ -65,7 +65,7 @@ let tests =
             auditLog.Record(
                 "team-acme",
                 UserLoggedIn {
-                    UserId = "alice"
+                    UserId = UserId "alice"
                     AuthProvider = "Header"
                 }
             )
@@ -91,7 +91,7 @@ let tests =
             auditLog.Record(
                 "team-acme",
                 UserLoggedIn {
-                    UserId = "bob"
+                    UserId = UserId "bob"
                     AuthProvider = "Header"
                 }
             )

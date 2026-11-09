@@ -75,7 +75,7 @@ type IDeployPipeline =
     /// `PrebuiltImage` source skips `DeployBuilding`; a build that
     /// is still in-flight transitions to `DeployBuilding buildId`.
     abstract BeginDeploy:
-        tenantId: TenantId * buildId: BuildId * manifest: DeployManifest * byUserId: string ->
+        tenantId: TenantId * buildId: BuildId * manifest: DeployManifest * byUserId: UserId ->
             Async<Result<DeployId, DeployPipelineError>>
 
     /// Read the current state of a deploy. The returned summary
@@ -93,7 +93,7 @@ type IDeployPipeline =
     /// is mid-flight (the caller cancels it first or waits for it
     /// to settle); `NothingToRollbackTo` when no prior successful
     /// deploy exists for the tenant.
-    abstract Rollback: tenantId: TenantId * byUserId: string -> Async<Result<DeployId, DeployPipelineError>>
+    abstract Rollback: tenantId: TenantId * byUserId: UserId -> Async<Result<DeployId, DeployPipelineError>>
 
     /// Read the most recent `count` deploys for a tenant, newest
     /// first. Includes every terminal state (`DeploySucceeded`,

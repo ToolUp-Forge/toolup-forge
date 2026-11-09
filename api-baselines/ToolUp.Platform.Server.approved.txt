@@ -3470,10 +3470,10 @@ ToolUp.Platform.Compose.IServerHost.Invoke(Microsoft.AspNetCore.Http.HttpContext
 ToolUp.Platform.Compose.IServerHost.RunBlocking() : System.Int32
 ToolUp.Platform.Compose.ITenantLifecycle (interface)
 ToolUp.Platform.Compose.ITenantLifecycle.Name : System.String { get }
-ToolUp.Platform.Compose.ITenantLifecycle.OnDeprovisioned(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.LifecycleHookResult]
-ToolUp.Platform.Compose.ITenantLifecycle.OnProvisioned(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.LifecycleHookResult]
+ToolUp.Platform.Compose.ITenantLifecycle.OnDeprovisioned(System.String, ToolUp.Platform.UserId) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.LifecycleHookResult]
+ToolUp.Platform.Compose.ITenantLifecycle.OnProvisioned(System.String, ToolUp.Platform.UserId) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.LifecycleHookResult]
 ToolUp.Platform.Compose.ITenantLifecyclePreview (interface)
-ToolUp.Platform.Compose.ITenantLifecyclePreview.OnDeprovisionPreview(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.LifecyclePreviewItem]
+ToolUp.Platform.Compose.ITenantLifecyclePreview.OnDeprovisionPreview(System.String, ToolUp.Platform.UserId) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.LifecyclePreviewItem]
 ToolUp.Platform.Compose.ITenantLifecycleProvisionContext (interface)
 ToolUp.Platform.Compose.ITenantLifecycleProvisionContext.OnProvisionedWith(ToolUp.Platform.Compose.TenantProvisioningContext) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.LifecycleHookResult]
 ToolUp.Platform.Compose.InHandlerGateDeclaration (class)

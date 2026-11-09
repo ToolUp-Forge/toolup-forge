@@ -25,10 +25,10 @@ ToolUp.Platform.Scope.AdminMutationApproval+DualControlPermissionStore.Reject(Sy
 ToolUp.Platform.Scope.AdminMutationApproval+DualControlPermissionStore.Settings : ToolUp.Platform.DualControlSettings { get }
 ToolUp.Platform.Scope.AdminMutationApproval+DualControlPermissionStore.Write(System.String, System.String, ToolUp.Platform.AdminMutation) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.AdminMutationWriteOutcome, ToolUp.Platform.AdminMutationRefusal]]
 ToolUp.Platform.Scope.AdminMutationApproval+IAdminMutationApprovalStore (interface)
-ToolUp.Platform.Scope.AdminMutationApproval+IAdminMutationApprovalStore.List(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PendingAdminMutation], System.String]]
+ToolUp.Platform.Scope.AdminMutationApproval+IAdminMutationApprovalStore.List(ToolUp.Platform.TeamId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PendingAdminMutation], System.String]]
 ToolUp.Platform.Scope.AdminMutationApproval+IAdminMutationApprovalStore.Propose(ToolUp.Platform.PendingAdminMutation) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
-ToolUp.Platform.Scope.AdminMutationApproval+IAdminMutationApprovalStore.Remove(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
-ToolUp.Platform.Scope.AdminMutationApproval+IAdminMutationApprovalStore.TryGet(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PendingAdminMutation], System.String]]
+ToolUp.Platform.Scope.AdminMutationApproval+IAdminMutationApprovalStore.Remove(ToolUp.Platform.TeamId, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.Platform.Scope.AdminMutationApproval+IAdminMutationApprovalStore.TryGet(ToolUp.Platform.TeamId, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PendingAdminMutation], System.String]]
 ToolUp.Platform.Scope.AdminTokenValidator (class)
 ToolUp.Platform.Scope.AdminTokenValidator+AdminTokenValidator (class)
 ToolUp.Platform.Scope.AdminTokenValidator+AdminTokenValidator..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.BlobEncryption+IBlobEncryptionKeyResolver], Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
@@ -192,7 +192,7 @@ ToolUp.Platform.Scope.GrantConsentStore+GrantConsents.revoke(ToolUp.Platform.Sco
 ToolUp.Platform.Scope.GrantConsentStore+IGrantConsentStore (interface)
 ToolUp.Platform.Scope.GrantConsentStore+IGrantConsentStore.ListForSubject(ToolUp.Platform.ConsentSubject) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GrantConsentRecord], System.String]]
 ToolUp.Platform.Scope.GrantConsentStore+IGrantConsentStore.Put(ToolUp.Platform.GrantConsentRecord) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
-ToolUp.Platform.Scope.GrantConsentStore+IGrantConsentStore.TryGet(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.GrantConsentRecord], System.String]]
+ToolUp.Platform.Scope.GrantConsentStore+IGrantConsentStore.TryGet(ToolUp.Platform.TeamId, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.GrantConsentRecord], System.String]]
 ToolUp.Platform.Scope.GrantConsentStore+IGrantConsentVerifier (interface)
 ToolUp.Platform.Scope.GrantConsentStore+IGrantConsentVerifier.Verify(ToolUp.Platform.GrantConsentRecord) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.ConsentDenial]
 ToolUp.Platform.Scope.GrantConsentStore+InMemoryGrantConsentStore (class)
@@ -207,7 +207,7 @@ ToolUp.Platform.Scope.GrantPolicyGuard.guardDispatch(ToolUp.Platform.Scope.Grant
 ToolUp.Platform.Scope.GrantPolicyGuard.isDispatchGrantLive(ToolUp.Platform.Scope.GrantPolicyGuard+ModuleGrantPolicyRegistry, Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleGrantRecord], System.String) : System.Boolean
 ToolUp.Platform.Scope.GrantPolicyGuard.refusalPayload(ToolUp.Platform.Scope.GrantPolicyGuard+ModuleGrantPolicyRegistry, Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleGrantRecord], System.String, System.String) : ToolUp.Platform.UnconsentedGrantRefusedPayload
 ToolUp.Platform.Scope.GrantPolicyGuard+CounterpartyConsentOracle (interface)
-ToolUp.Platform.Scope.GrantPolicyGuard+CounterpartyConsentOracle.IsConsentLive(System.String, System.String, System.String, ToolUp.Platform.PartyRef) : Microsoft.FSharp.Control.FSharpAsync`1[System.Boolean]
+ToolUp.Platform.Scope.GrantPolicyGuard+CounterpartyConsentOracle.IsConsentLive(ToolUp.Platform.TeamId, System.String, System.String, ToolUp.Platform.PartyRef) : Microsoft.FSharp.Control.FSharpAsync`1[System.Boolean]
 ToolUp.Platform.Scope.GrantPolicyGuard+CounterpartyConsentOracleModule (class)
 ToolUp.Platform.Scope.GrantPolicyGuard+CounterpartyConsentOracleModule.denyAll : ToolUp.Platform.Scope.GrantPolicyGuard+CounterpartyConsentOracle { get }
 ToolUp.Platform.Scope.GrantPolicyGuard+GrantEvidence (class)
@@ -249,7 +249,7 @@ ToolUp.Platform.Scope.ICspContributor (interface)
 ToolUp.Platform.Scope.ICspContributor.RequiredSources : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Scope.CspSourceDirective] { get }
 ToolUp.Platform.Scope.IPublicationReaderGrantStore (interface)
 ToolUp.Platform.Scope.IPublicationReaderGrantStore.Grant(System.String, ToolUp.Platform.PublicationReaderEntry, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
-ToolUp.Platform.Scope.IPublicationReaderGrantStore.GrantsFor(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PublicationReaderGrant]]
+ToolUp.Platform.Scope.IPublicationReaderGrantStore.GrantsFor(ToolUp.Platform.UserId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PublicationReaderGrant]]
 ToolUp.Platform.Scope.IPublicationReaderGrantStore.ListScope(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PublicationReaderEntry]]
 ToolUp.Platform.Scope.IPublicationReaderGrantStore.Revoke(System.String, ToolUp.Platform.PublicationReaderEntry) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.Scope.IPublicationReaderRoleSource (interface)
@@ -260,23 +260,23 @@ ToolUp.Platform.Scope.IServiceAccountStore.Get(System.String, System.String) : M
 ToolUp.Platform.Scope.IServiceAccountStore.List(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ServiceAccount]]
 ToolUp.Platform.Scope.IServiceAccountStore.ListTokens(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ServiceAccountToken]]
 ToolUp.Platform.Scope.IServiceAccountStore.MintToken(ToolUp.Platform.ServiceAccountTokenMintRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.MintedServiceAccountToken, ToolUp.Platform.ServiceAccountError]]
-ToolUp.Platform.Scope.IServiceAccountStore.RevokeToken(System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.ServiceAccountError]]
-ToolUp.Platform.Scope.IServiceAccountStore.SetPermissions(System.String, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]], System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ServiceAccount, ToolUp.Platform.ServiceAccountError]]
-ToolUp.Platform.Scope.IServiceAccountStore.SetStatus(System.String, System.String, ToolUp.Platform.ServiceAccountStatus, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ServiceAccount, ToolUp.Platform.ServiceAccountError]]
+ToolUp.Platform.Scope.IServiceAccountStore.RevokeToken(System.String, System.String, ToolUp.Platform.UserId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.ServiceAccountError]]
+ToolUp.Platform.Scope.IServiceAccountStore.SetPermissions(System.String, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]], ToolUp.Platform.UserId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ServiceAccount, ToolUp.Platform.ServiceAccountError]]
+ToolUp.Platform.Scope.IServiceAccountStore.SetStatus(System.String, System.String, ToolUp.Platform.ServiceAccountStatus, ToolUp.Platform.UserId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ServiceAccount, ToolUp.Platform.ServiceAccountError]]
 ToolUp.Platform.Scope.IServiceAccountStore.ValidateToken(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ServiceAccountPrincipal, ToolUp.Platform.ServiceAccountError]]
 ToolUp.Platform.Scope.ISessionRegistry (interface)
 ToolUp.Platform.Scope.ISessionRegistry.IsRevoked(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.Boolean]
-ToolUp.Platform.Scope.ISessionRegistry.ListForUser(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SessionRecord], ToolUp.Platform.SessionError]]
+ToolUp.Platform.Scope.ISessionRegistry.ListForUser(System.String, ToolUp.Platform.UserId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SessionRecord], ToolUp.Platform.SessionError]]
 ToolUp.Platform.Scope.ISessionRegistry.Record(ToolUp.Platform.SessionRecord) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.SessionRecord, ToolUp.Platform.SessionError]]
-ToolUp.Platform.Scope.ISessionRegistry.Revoke(System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.SessionError]]
-ToolUp.Platform.Scope.ISessionRegistry.RevokeAllForUser(System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Int32, ToolUp.Platform.SessionError]]
+ToolUp.Platform.Scope.ISessionRegistry.Revoke(System.String, System.String, ToolUp.Platform.UserId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.SessionError]]
+ToolUp.Platform.Scope.ISessionRegistry.RevokeAllForUser(System.String, ToolUp.Platform.UserId, ToolUp.Platform.UserId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Int32, ToolUp.Platform.SessionError]]
 ToolUp.Platform.Scope.ISessionRegistry.Touch(System.String, System.String, System.DateTimeOffset) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.SessionError]]
 ToolUp.Platform.Scope.IShareTokenStore (interface)
 ToolUp.Platform.Scope.IShareTokenStore.Issue(ToolUp.Platform.ShareTokenIssueRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ShareToken, ToolUp.Platform.ShareTokenError]]
-ToolUp.Platform.Scope.IShareTokenStore.ListByIssuer(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ShareTokenClaim]]
+ToolUp.Platform.Scope.IShareTokenStore.ListByIssuer(System.String, ToolUp.Platform.UserId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ShareTokenClaim]]
 ToolUp.Platform.Scope.IShareTokenStore.ListByResource(System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ShareTokenClaim]]
 ToolUp.Platform.Scope.IShareTokenStore.MarkUsed(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.ShareTokenError]]
-ToolUp.Platform.Scope.IShareTokenStore.Revoke(System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.ShareTokenError]]
+ToolUp.Platform.Scope.IShareTokenStore.Revoke(System.String, System.String, ToolUp.Platform.UserId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.ShareTokenError]]
 ToolUp.Platform.Scope.IShareTokenStore.Validate(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ShareTokenClaim, ToolUp.Platform.ShareTokenError]]
 ToolUp.Platform.Scope.InviteEmailCapabilityValidator (class)
 ToolUp.Platform.Scope.InviteEmailCapabilityValidator+InviteEmailCapabilityValidator (class)
@@ -460,13 +460,13 @@ ToolUp.Platform.Scope.PeerRouteRegistry.PeerNameItemsKey : System.String (litera
 ToolUp.Platform.Scope.PeerRouteRegistry.isPeerRoute(Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.AspNetCore.Http.PathString) : System.Boolean
 ToolUp.Platform.Scope.PermissionStore (class)
 ToolUp.Platform.Scope.PermissionStore+IPermissionStore (interface)
-ToolUp.Platform.Scope.PermissionStore+IPermissionStore.GetEffectivePermissions(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]]]
-ToolUp.Platform.Scope.PermissionStore+IPermissionStore.GetModuleExposure(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleExposure]]
-ToolUp.Platform.Scope.PermissionStore+IPermissionStore.GetTeamPermissions(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.TeamPermissions]
-ToolUp.Platform.Scope.PermissionStore+IPermissionStore.SetMemberPermissions(System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
-ToolUp.Platform.Scope.PermissionStore+IPermissionStore.SetModuleExposure(System.String, System.String, ToolUp.Platform.ModuleExposure) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
-ToolUp.Platform.Scope.PermissionStore+IPermissionStore.SetTeamDefaults(System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
-ToolUp.Platform.Scope.PermissionStore+IPermissionStore.SetTeamPermissions(System.String, ToolUp.Platform.TeamPermissions) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.Platform.Scope.PermissionStore+IPermissionStore.GetEffectivePermissions(ToolUp.Platform.UserId, ToolUp.Platform.TeamId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]]]
+ToolUp.Platform.Scope.PermissionStore+IPermissionStore.GetModuleExposure(ToolUp.Platform.TeamId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleExposure]]
+ToolUp.Platform.Scope.PermissionStore+IPermissionStore.GetTeamPermissions(ToolUp.Platform.TeamId) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.TeamPermissions]
+ToolUp.Platform.Scope.PermissionStore+IPermissionStore.SetMemberPermissions(ToolUp.Platform.TeamId, ToolUp.Platform.UserId, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.Platform.Scope.PermissionStore+IPermissionStore.SetModuleExposure(ToolUp.Platform.TeamId, System.String, ToolUp.Platform.ModuleExposure) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.Platform.Scope.PermissionStore+IPermissionStore.SetTeamDefaults(ToolUp.Platform.TeamId, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.Platform.Scope.PermissionStore+IPermissionStore.SetTeamPermissions(ToolUp.Platform.TeamId, ToolUp.Platform.TeamPermissions) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.Scope.PermissionStore+PermissionStore (class)
 ToolUp.Platform.Scope.PermissionStore+PermissionStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger])
 ToolUp.Platform.Scope.PermissionStore+PermissionStoreUnavailableException (class)
@@ -628,7 +628,7 @@ ToolUp.Platform.Scope.StorageScopeResolver+IStorageScopeResolver.Resolve(ToolUp.
 ToolUp.Platform.Scope.StorageScopeResolver+ScopeRequestExtractor (class)
 ToolUp.Platform.Scope.StorageScopeResolver+ScopeRequestExtractor.fromHttpContext(Microsoft.AspNetCore.Http.HttpContext, ToolUp.Platform.Auth+IAuthProvider) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.ScopeResolutionRequest]
 ToolUp.Platform.Scope.StorageScopeResolver+ScopeRequestExtractor.resolveForContext(Microsoft.AspNetCore.Http.HttpContext) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.StorageScope, ToolUp.Platform.ScopeResolutionError]]
-ToolUp.Platform.Scope.StorageScopeResolver+ScopeRequestExtractor.userId(Microsoft.AspNetCore.Http.HttpContext) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
+ToolUp.Platform.Scope.StorageScopeResolver+ScopeRequestExtractor.userId(Microsoft.AspNetCore.Http.HttpContext) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.UserId]
 ToolUp.Platform.Scope.StorageScopeResolver+ScopeResolution (class)
 ToolUp.Platform.Scope.StorageScopeResolver+ScopeResolution.carry(Microsoft.AspNetCore.Http.HttpContext, ToolUp.Platform.ResolvedScope) : System.Void
 ToolUp.Platform.Scope.StorageScopeResolver+ScopeResolution.forRequest(Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.ResolvedScope

@@ -491,7 +491,7 @@ let private rig (options: PageStoreOptions) : Rig =
     }
 
 let private teamScope (teamId: string) =
-    StorageScopeResolver.ScopeResolution.ofStorageScope (StorageScope.ofKey true (ScopeKey.Team teamId))
+    StorageScopeResolver.ScopeResolution.ofStorageScope (StorageScope.ofKey true (ScopeKey.Team(TeamId teamId)))
 
 let private member' (userId: string) (teamId: string) =
     AccessContext.unrestricted (TeamMember(userId, teamId))
@@ -636,7 +636,7 @@ let private storeTests =
             let rig = seeded PageStoreOptions.defaults
 
             rig.Permissions.SetTeamPermissions(
-                "t1",
+                (TeamId "t1"),
                 {
                     TeamPermissions.empty with
                         Pages = Map.ofList [ "member", [ PageGrant.SaveTeam; PageGrant.SavePlatform ] ]
@@ -668,7 +668,7 @@ let private storeTests =
                 }
 
             rig.Permissions.SetTeamPermissions(
-                "ops",
+                (TeamId "ops"),
                 {
                     TeamPermissions.empty with
                         Pages = Map.ofList [ "member", [ PageGrant.SavePlatform ] ]
@@ -1051,8 +1051,8 @@ let private documentTests =
             |> run
             |> ignore
 
-            let doc = store.GetTeamPermissions "t1" |> run
-            store.SetTeamPermissions("t1", doc) |> run |> ignore
+            let doc = store.GetTeamPermissions(TeamId "t1") |> run
+            store.SetTeamPermissions(TeamId "t1", doc) |> run |> ignore
 
             match blobs.Download(ScopeKey.PlatformContainer, blobName) |> run with
             | Ok bytes -> doc, Encoding.UTF8.GetString bytes
@@ -1076,8 +1076,8 @@ let private documentTests =
                     Pages = Map.ofList [ "u1", [ PageGrant.SaveTeam; PageGrant.SaveOwn ] ]
             }
 
-            store.SetTeamPermissions("t1", doc) |> run |> ignore
-            Expect.equal (store.GetTeamPermissions "t1" |> run).Pages doc.Pages "round trip"
+            store.SetTeamPermissions(TeamId "t1", doc) |> run |> ignore
+            Expect.equal (store.GetTeamPermissions(TeamId "t1") |> run).Pages doc.Pages "round trip"
 
             let foreign, _ =
                 roundTrip

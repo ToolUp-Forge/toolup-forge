@@ -171,7 +171,7 @@ type IModelRegistry =
     /// transition — allowed or denied — is audited (GP 6). `actorUserId` is
     /// recorded on the audit trail.
     abstract TransitionStatus:
-        scopeId: string * keyHash: string * target: ModelArtifactStatus * callerRole: TeamRole * actorUserId: string ->
+        scopeId: string * keyHash: string * target: ModelArtifactStatus * callerRole: TeamRole * actorUserId: UserId ->
             Async<Result<ModelArtifact, ModelRegistryError>>
 
     /// Phase 646 — append opaque provenance attachments to an artifact, and

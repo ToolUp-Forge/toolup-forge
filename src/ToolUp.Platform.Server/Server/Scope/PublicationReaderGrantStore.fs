@@ -41,7 +41,7 @@ type IPublicationReaderRoleSource =
 type IPublicationReaderGrantStore =
     /// Every grant `userId` holds, across publishing scopes. A store that
     /// cannot be read answers no grants (fail closed: nothing is admitted).
-    abstract GrantsFor: userId: string -> Async<PublicationReaderGrant list>
+    abstract GrantsFor: userId: UserId -> Async<PublicationReaderGrant list>
     /// Every grant in `publishingScope`, ordered by role then user id.
     abstract ListScope: publishingScope: string -> Async<PublicationReaderEntry list>
 
@@ -105,14 +105,14 @@ type BlobPublicationReaderGrantStore(storage: IBlobStorage, logger: ILogger opti
 
     interface IPublicationReaderGrantStore with
         member _.GrantsFor userId = async {
-            if String.IsNullOrWhiteSpace userId then
+            if String.IsNullOrWhiteSpace userId.Value then
                 return []
             else
-                let! grants = listAll (userPrefix userId)
+                let! grants = listAll (userPrefix userId.Value)
 
                 return
                     grants
-                    |> List.filter (fun (user, _, _) -> user = userId)
+                    |> List.filter (fun (user, _, _) -> user = userId.Value)
                     |> List.map (fun (_, scope, role) -> { PublishingScope = scope; Role = role })
                     |> List.distinct
         }

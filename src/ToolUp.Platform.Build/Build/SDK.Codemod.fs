@@ -59,6 +59,9 @@ type CodemodMigration =
     /// only when named (`--phase 1198`), never under the default
     /// every-migration pass.
     | SubsystemNamespaces
+    /// `UserId` / `TeamId` are typed at every store and service seam, in
+    /// `ScopeKey`'s payloads and in the Core records off the wire.
+    | TypedIdentity
 
 /// Helpers over `CodemodMigration`.
 module CodemodMigration =
@@ -83,6 +86,7 @@ module CodemodMigration =
         | CodemodMigration.CompanionOptions -> "docs/migrations/876-composition-contributions.md"
         | CodemodMigration.NestedConfig -> "docs/migrations/877-nested-server-config.md"
         | CodemodMigration.SubsystemNamespaces -> "docs/migrations/1198-subsystem-namespaces.md"
+        | CodemodMigration.TypedIdentity -> "docs/migrations/878-typed-identity.md"
 
     /// The phase label the renderings print.
     let label migration =
@@ -102,6 +106,7 @@ module CodemodMigration =
         | CodemodMigration.CompanionOptions -> "Phase 876"
         | CodemodMigration.NestedConfig -> "Phase 877"
         | CodemodMigration.SubsystemNamespaces -> "Phase 1198"
+        | CodemodMigration.TypedIdentity -> "Phase 878"
 
 /// Which files a rule applies to. The Phase 11.C.5 Tier 2 renames are
 /// PACKAGE ids — they live in `.fsproj` / `Directory.Packages.props` —
@@ -904,6 +909,14 @@ module Codemod =
                         let field = m.Groups[1].Value
                         sprintf ".%s.%s" concernOf[field] field
         }
+        // A scope key built from a string literal wraps the literal.
+        rewrite
+            "878-scopekey-literal"
+            CodemodMigration.TypedIdentity
+            CodemodFileClass.Source
+            @"\bScopeKey\.(Team|User)\s*\(?\s*(""[^""\r\n]*"")\s*\)?"
+            "ScopeKey.${1}(${1}Id $2)"
+            "`ScopeKey.Team \"acme\"` / `ScopeKey.User \"alice\"` → `ScopeKey.Team(TeamId \"acme\")` / `ScopeKey.User(UserId \"alice\")`"
     ]
 
     // ── The review rules ──────────────────────────────────────────────
@@ -1302,6 +1315,25 @@ module Codemod =
                 (alternation concernNames)
                 (alternation (Set.toList sharedLabels)))
             "if this receiver is a `ServerConfig`, the field moved: `EventStore` / `EntityStore` / `ResultStore` / `Datasets` / `ShareTokenStore` / `RateLimitStore` read `.Stores.<Field>`, `MetricsSink` / `SlowRequestThresholdOverrides` / `DatadogReadback` / `LogLevel` read `.Observability.<Field>`, `SecurityHardening` / `Cors` read `.SecurityPosture.<Field>` and `ProcessProfile` reads `.MultiInstance.ProcessProfile`; a deps or options record of your own with the same label is unchanged"
+        // Phase 878 — a seam that takes a user or team id takes it typed.
+        review
+            "878-typed-seam-call"
+            CodemodMigration.TypedIdentity
+            CodemodFileClass.Source
+            @"\.(?:AddMember|RemoveMember|ChangeMemberRole|GetTeamsForUser|GetTeamMembers|GetMemberRole|GetActiveTeam|SetActiveTeam|CreateTeam|DeleteTeam|GetTeam|SetArchived|PurgeTeam|PurgeUser|GetTeamPermissions|SetTeamPermissions|GetEffectivePermissions|SetUserModulePermissions|IsPlatformAdmin|AssignPlatformAdmin|RevokePlatformAdmin|GetTeamKey|SetTeamKey|DeleteTeamKey|HasTeamKey|GetPremiumStatus|RevokePremium|GrantsFor|ListForTeam|Heartbeat|Join|Move|Leave|ListForUser|RevokeAllForUser|ListByIssuer|GetPreferences|SavePreferences|ListPending|GetDigestWatermarks|SetDigestWatermark|Erase|Export|Preview|OnProvisioned|OnDeprovisioned|OnDeprovisionPreview|TriggerOnce|Rollback|BeginDeploy|RestartTenant|EvictTenant|CancelBuild)\s*\("
+            "if this is a platform store or service seam, its user and team id parameters are `UserId` / `TeamId` now: wrap a string at the call (`UserId userId`, or `UserId.tryCreate raw` for an id from a request), and read `.Value` where a string is needed; `ITeamStore.GetActiveTeam` answers `TeamId option`"
+        review
+            "878-scopekey-payload"
+            CodemodMigration.TypedIdentity
+            CodemodFileClass.Source
+            @"\bScopeKey\.(?:Team|User)\b(?!\s*\(\s*(?:TeamId|UserId)\b)"
+            "`ScopeKey.Team` carries a `TeamId` and `ScopeKey.User` a `UserId`: wrap a string payload (`ScopeKey.Team(TeamId teamId)`), and a pattern `ScopeKey.Team teamId` binds the typed id (`teamId.Value` is the string)"
+        review
+            "878-team-id-reader"
+            CodemodMigration.TypedIdentity
+            CodemodFileClass.Source
+            @"\bStorageScope\.tryTeamId\b"
+            "`StorageScope.tryTeamId` answers `TeamId option`: map `TeamId.value` where a string is needed"
     ]
 
 

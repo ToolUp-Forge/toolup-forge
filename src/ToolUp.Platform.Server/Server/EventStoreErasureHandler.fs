@@ -33,12 +33,12 @@ type EventStoreExporter(eventStore: IEventStore) =
         member _.Name = HandlerName
 
         member _.Export(scopeId, subjectUserId) = async {
-            if Erasure.isBlankSubject subjectUserId then
+            if Erasure.isBlankSubject subjectUserId.Value then
                 return []
             else
                 let! all = eventStore.ReadAll scopeId
 
-                let matched = all |> List.filter (fun e -> e.Payload.Contains subjectUserId)
+                let matched = all |> List.filter (fun e -> e.Payload.Contains subjectUserId.Value)
 
                 if List.isEmpty matched then
                     return []
@@ -65,7 +65,7 @@ type EventStoreErasureHandler(eventStore: IEventStore) =
             eventStore.Erase(scopeId, subjectUserId, policy, false)
 
         member _.Preview(scopeId, subjectUserId, policy) = async {
-            let! result = eventStore.Erase(scopeId, subjectUserId, policy, true)
+            let! result = eventStore.Erase(scopeId, UserId subjectUserId.Value, policy, true)
 
             return
                 match result with

@@ -33,7 +33,7 @@ let private moduleName = "M"
 
 let private memberUser: AuthenticatedUser = {
     AuthenticatedUser.anonymous with
-        UserId = "u-1059"
+        UserId = UserId "u-1059"
         DisplayName = "Member"
 }
 
@@ -86,7 +86,7 @@ let private run (store: IPermissionStore) = async {
 
     services.AddSingleton<ISubjectResolver>(
         { new ISubjectResolver with
-            member _.Resolve _ = async { return Ok(TeamMember(memberUser.UserId, teamId)) }
+            member _.Resolve _ = async { return Ok(TeamMember(memberUser.UserId.Value, teamId)) }
         }
     )
     |> ignore

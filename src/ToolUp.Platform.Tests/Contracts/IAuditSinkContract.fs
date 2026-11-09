@@ -36,7 +36,7 @@ let tests
 
     let makeAuditEvent (offset: float) =
         UserLoggedIn {
-            UserId = sprintf "user-%d" (int (DateTime.UtcNow.AddSeconds offset).Ticks)
+            UserId = UserId(sprintf "user-%d" (int (DateTime.UtcNow.AddSeconds offset).Ticks))
             AuthProvider = "Header"
         }
 
@@ -137,7 +137,7 @@ let tests
 
             let replayed =
                 EntityUpdated {
-                    UserId = "user-offline"
+                    UserId = UserId "user-offline"
                     OnBehalfOf = None
                     EntityType = "Inspection"
                     EntityId = "e-759"

@@ -78,7 +78,7 @@ let private mkStore () : IPermissionStore =
 let private seededStore () : IPermissionStore =
     let store = mkStore ()
 
-    store.SetMemberPermissions("t1", "alice", "reports", [ ModulePermission.Write ])
+    store.SetMemberPermissions(TeamId "t1", UserId "alice", "reports", [ ModulePermission.Write ])
     |> run
     |> ignore
 

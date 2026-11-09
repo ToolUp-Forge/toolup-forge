@@ -110,9 +110,9 @@ type private CapturingMetricsSink() =
 let private scope = "team-acme"
 
 let private grant (affected: string) (permissions: string) = {
-    UserId = "admin"
-    TeamId = "acme"
-    AffectedUserId = affected
+    UserId = UserId "admin"
+    TeamId = TeamId "acme"
+    AffectedUserId = UserId affected
     ModuleName = "reports"
     Permissions = permissions
     Chain = None
@@ -233,12 +233,12 @@ let tests =
 
             // Escalate the SECOND record's grant while leaving its stored
             // hash alone — the edit an insider would actually make.
-            let victim = payloads |> List.find (fun p -> p.AffectedUserId = "bob")
+            let victim = payloads |> List.find (fun p -> p.AffectedUserId = UserId "bob")
 
             let tampered =
                 payloads
                 |> List.map (fun p ->
-                    if p.AffectedUserId = "bob" then
+                    if p.AffectedUserId = UserId "bob" then
                         { p with Permissions = "Admin" }
                     else
                         p)
@@ -255,7 +255,9 @@ let tests =
                 recordGrants [ grant "alice" "Read"; grant "bob" "Write"; grant "carol" "Admin" ]
 
             let payloads = readChain auditLog
-            let survivors = payloads |> List.filter (fun p -> p.AffectedUserId <> "bob")
+
+            let survivors =
+                payloads |> List.filter (fun p -> p.AffectedUserId <> (UserId "bob"))
 
             let broken = expectBreak (PermissionAuditChain.verify scope survivors)
             Expect.equal broken.Kind PermissionAuditChain.OrphanedRecords "the record after the gap joins to nothing"
@@ -265,7 +267,9 @@ let tests =
         test "deleting the FIRST record is reported as MissingGenesis, not as a generic gap" {
             let _, auditLog = recordGrants [ grant "alice" "Read"; grant "bob" "Write" ]
             let payloads = readChain auditLog
-            let survivors = payloads |> List.filter (fun p -> p.AffectedUserId <> "alice")
+
+            let survivors =
+                payloads |> List.filter (fun p -> p.AffectedUserId <> (UserId "alice"))
 
             let broken = expectBreak (PermissionAuditChain.verify scope survivors)
 
@@ -370,7 +374,7 @@ let tests =
 
             Expect.equal payloads.Length 1 "the legacy row decoded"
             Expect.isNone payloads.Head.Chain "the absent field reads as None"
-            Expect.equal payloads.Head.AffectedUserId "alice" "and the rest of the payload survived"
+            Expect.equal payloads.Head.AffectedUserId (UserId "alice") "and the rest of the payload survived"
         }
 
         test "a new record chains onto the head even when pre-chain records are present" {
@@ -481,7 +485,7 @@ let tests =
             auditLog.Record(
                 scope,
                 UserLoggedIn {
-                    UserId = "alice"
+                    UserId = UserId "alice"
                     AuthProvider = "Header"
                 }
             )

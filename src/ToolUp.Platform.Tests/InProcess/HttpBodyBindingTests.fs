@@ -223,7 +223,7 @@ let private post (client: HttpClient) (path: string) (body: string) =
 
 let private validConsentBody () =
     let ev: ConsentEvent = {
-        AnonymousUserId = "anon-763"
+        AnonymousUserId = UserId "anon-763"
         Category = Analytics
         Decision = Granted
         Timestamp = DateTimeOffset.UtcNow

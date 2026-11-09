@@ -194,7 +194,7 @@ let tests =
             let teamStore = freshTeamStore () :> ITeamStore
             let adminStore = freshAdminStore (auditLog :> IAuditLog)
             // Seed the caller as a Platform Admin.
-            let! _ = adminStore.AssignPlatformAdmin("_bootstrap", "alice")
+            let! _ = adminStore.AssignPlatformAdmin(UserId "_bootstrap", UserId "alice")
             let ctx = ctxFor "alice" teamStore adminStore (auditLog :> IAuditLog)
             let api = PlatformApiHandler.teamApi (teamConfig PlatformAdminOnly) ctx
 
@@ -257,7 +257,7 @@ let tests =
 
             match ev with
             | AuditEvent.TeamCreationDenied payload ->
-                Expect.equal payload.UserId "carol" "audit records the caller"
+                Expect.equal payload.UserId (UserId "carol") "audit records the caller"
                 Expect.equal payload.AttemptedName "Marketing" "audit records the attempted team name verbatim"
             | other -> failtestf "expected TeamCreationDenied, got %A" other
         }
@@ -312,11 +312,11 @@ let tests =
                     Expect.equal team.TeamId "boot0001" "team id honours TOOLUP_INITIAL_TEAM_ID"
                     Expect.equal team.Name "Bootstrap Co" "team name honours TOOLUP_INITIAL_TEAM_NAME"
 
-                    let! adminRole = teamStore.GetMemberRole(team.TeamId, "admin-1")
+                    let! adminRole = teamStore.GetMemberRole(TeamId team.TeamId, UserId "admin-1")
                     Expect.equal adminRole (Some Owner) "bootstrap admin lands as Owner"
 
-                    let! active = teamStore.GetActiveTeam("admin-1")
-                    Expect.equal active (Some "boot0001") "bootstrap sets the admin's active team"
+                    let! active = teamStore.GetActiveTeam(UserId "admin-1")
+                    Expect.equal active (Some(TeamId "boot0001")) "bootstrap sets the admin's active team"
                 })
         }
 
@@ -341,7 +341,7 @@ let tests =
                             | TeamCreated p -> Some p.UserId
                             | _ -> None)
 
-                    Expect.equal teamCreatedActor (Some "_bootstrap") "TeamCreated.Actor = '_bootstrap'"
+                    Expect.equal teamCreatedActor (Some(UserId "_bootstrap")) "TeamCreated.Actor = '_bootstrap'"
 
                     let memberAddedActor =
                         recorded
@@ -352,7 +352,7 @@ let tests =
 
                     Expect.equal
                         memberAddedActor
-                        (Some("_bootstrap", "admin-2", "Owner"))
+                        (Some(UserId "_bootstrap", UserId "admin-2", "Owner"))
                         "MemberAdded records actor=_bootstrap, affected=admin-2, role=Owner"
                 })
         }
@@ -391,7 +391,7 @@ let tests =
                     let auditLog = CapturingAuditLog() :> IAuditLog
                     let teamStore = freshTeamStore ()
                     // Pre-populate the store with an unrelated team.
-                    let! _ = teamStore.CreateTeam("preexisting", "Pre-existing")
+                    let! _ = teamStore.CreateTeam(TeamId "preexisting", "Pre-existing")
 
                     do! BootstrapTeam.bootstrap (SilentLogger()) auditLog (teamStore :> ITeamStore)
 
@@ -468,7 +468,7 @@ let tests =
                 withEnv None None None (fun () -> async {
                     let auditLog = CapturingAuditLog() :> IAuditLog
                     let adminStore = freshAdminStore auditLog
-                    let! _ = adminStore.AssignPlatformAdmin("_bootstrap", "preseeded-admin")
+                    let! _ = adminStore.AssignPlatformAdmin(UserId "_bootstrap", UserId "preseeded-admin")
 
                     let v =
                         TeamCreationPolicyValidator.TeamCreationPolicyValidator(
@@ -633,10 +633,10 @@ let integrityTests =
         <| async {
             let store = freshTeamStore ()
 
-            let! first = store.CreateTeam("dup-id", "Original")
+            let! first = store.CreateTeam(TeamId "dup-id", "Original")
             Expect.isOk first "first create with this id succeeds"
 
-            let! second = store.CreateTeam("dup-id", "Impostor")
+            let! second = store.CreateTeam(TeamId "dup-id", "Impostor")
 
             match second with
             | Error msg -> Expect.stringContains msg "already exists" "duplicate id is rejected"
@@ -644,19 +644,19 @@ let integrityTests =
 
             // The original team's metadata must be untouched — a silent
             // overwrite would co-tenant two teams onto one partition.
-            let! fetched = (store :> ITeamStore).GetTeam("dup-id")
+            let! fetched = (store :> ITeamStore).GetTeam(TeamId "dup-id")
             Expect.equal (fetched |> Option.map _.Name) (Some "Original") "original team metadata is preserved"
         }
 
         testCaseAsync "DeleteTeam removes the team record"
         <| async {
             let store = freshTeamStore ()
-            let! _ = store.CreateTeam("del-id", "Temp")
+            let! _ = store.CreateTeam(TeamId "del-id", "Temp")
 
-            let! deleted = store.DeleteTeam("del-id")
+            let! deleted = store.DeleteTeam(TeamId "del-id")
             Expect.isOk deleted "delete succeeds"
 
-            let! fetched = store.GetTeam("del-id")
+            let! fetched = store.GetTeam(TeamId "del-id")
             Expect.isNone fetched "team blob is gone after delete"
         }
 
@@ -666,7 +666,7 @@ let integrityTests =
             let realStore = freshTeamStore () :> ITeamStore
             let failing = AddMemberFailingStore(realStore) :> ITeamStore
             let adminStore = freshAdminStore (auditLog :> IAuditLog)
-            let! _ = adminStore.AssignPlatformAdmin("_bootstrap", "alice")
+            let! _ = adminStore.AssignPlatformAdmin(UserId "_bootstrap", UserId "alice")
             let ctx = ctxFor "alice" failing adminStore (auditLog :> IAuditLog)
             let api = PlatformApiHandler.teamApi (teamConfig PlatformAdminOnly) ctx
 
@@ -771,7 +771,7 @@ let quotaTests =
             | Error msg -> Expect.stringContains msg "limit reached" "third is rejected at quota"
             | Ok _ -> failtest "expected a quota rejection on the third create"
 
-            let! teams = teamStore.GetTeamsForUser "bob"
+            let! teams = teamStore.GetTeamsForUser(UserId "bob")
             Expect.hasLength teams 2 "no third team persisted"
         }
 
@@ -780,7 +780,7 @@ let quotaTests =
             let auditLog = CapturingAuditLog()
             let teamStore = freshTeamStore () :> ITeamStore
             let adminStore = freshAdminStore (auditLog :> IAuditLog)
-            let! _ = adminStore.AssignPlatformAdmin("_bootstrap", "alice")
+            let! _ = adminStore.AssignPlatformAdmin(UserId "_bootstrap", UserId "alice")
             let ctx = ctxFor "alice" teamStore adminStore (auditLog :> IAuditLog)
 
             let config = {
@@ -801,7 +801,7 @@ let quotaTests =
             let auditLog = CapturingAuditLog()
             let teamStore = freshTeamStore () :> ITeamStore
             let adminStore = freshAdminStore (auditLog :> IAuditLog)
-            let! _ = adminStore.AssignPlatformAdmin("_bootstrap", "alice")
+            let! _ = adminStore.AssignPlatformAdmin(UserId "_bootstrap", UserId "alice")
             let ctx = ctxFor "alice" teamStore adminStore (auditLog :> IAuditLog)
 
             let config = {

@@ -98,7 +98,7 @@ let private isPremium (userClaims: IUserClaims) (ctx: AccessContext) : Async<boo
     | PublicationReader _ -> return false
     | AuthenticatedUser userId
     | TeamMember(userId, _) ->
-        let! status = userClaims.GetPremiumStatus userId
+        let! status = userClaims.GetPremiumStatus(UserId userId)
 
         match status with
         | Premium _ -> return true

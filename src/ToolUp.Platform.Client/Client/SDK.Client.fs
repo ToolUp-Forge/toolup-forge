@@ -967,8 +967,8 @@ module Client =
             Config = model.ModuleConfigs |> Map.tryFind moduleId |> Option.defaultValue Map.empty
             PlatformConfig = model.PlatformConfig
             Flags = model.ResolvedFlags
-            UserId = UserSession.getUserId ()
-            TeamId = model.ActiveTeamId
+            UserId = UserId(UserSession.getUserId ())
+            TeamId = model.ActiveTeamId |> Option.map TeamId
             QueryBus = queryBus
             OnTeamSwitched = buildOnTeamSwitched config
             OnAccessibleModulesChanged = buildOnAccessibleModulesChanged config
@@ -1559,7 +1559,7 @@ module Client =
                     Config = Map.empty
                     PlatformConfig = Map.empty
                     Flags = Map.empty
-                    UserId = UserSession.getUserId ()
+                    UserId = UserId(UserSession.getUserId ())
                     TeamId = None
                     QueryBus = queryBus
                     OnTeamSwitched = buildOnTeamSwitched _config
@@ -4867,9 +4867,9 @@ module Client =
                         // against `model.ActiveTeamId` (this closure
                         // can't read the model directly).
                         match payload.ChangeKind with
-                        | MembershipChangeKind.Removed -> dispatch (MembershipRevoked payload.TeamId)
-                        | MembershipChangeKind.ActiveTeamSet -> dispatch (MembershipActiveTeamSet payload.TeamId)
-                        | MembershipChangeKind.Added -> dispatch (MembershipAdded payload.TeamId)
+                        | MembershipChangeKind.Removed -> dispatch (MembershipRevoked payload.TeamId.Value)
+                        | MembershipChangeKind.ActiveTeamSet -> dispatch (MembershipActiveTeamSet payload.TeamId.Value)
+                        | MembershipChangeKind.Added -> dispatch (MembershipAdded payload.TeamId.Value)
                         | MembershipChangeKind.RoleChanged -> ()
                     | _ -> ()
 

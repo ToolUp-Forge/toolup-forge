@@ -82,16 +82,16 @@ let forScope
                     // the tab was backgrounded. Re-join at the location
                     // the client just told us, which is why the location
                     // rides every beat rather than only the first.
-                    do! tracker.Join(scopeId, userId, displayName, location)
-                | Some existing when existing.Location <> location -> do! tracker.Move(scopeId, userId, location)
+                    do! tracker.Join(scopeId, UserId userId, displayName, location)
+                | Some existing when existing.Location <> location -> do! tracker.Move(scopeId, UserId userId, location)
                 | Some _ ->
                     // Present and unmoved — the cheap path, and the only
                     // one that emits no `_platform.presence` event.
-                    do! tracker.Heartbeat(scopeId, userId)
+                    do! tracker.Heartbeat(scopeId, UserId userId)
 
                 return! tracker.Roster scopeId
             }
-        Leave = fun () -> tracker.Leave(scopeId, userId)
+        Leave = fun () -> tracker.Leave(scopeId, UserId userId)
         Roster = fun () -> tracker.Roster scopeId
         AcquireLock = fun entityRef -> lockStore.Acquire(scopeId, entityRef, userId, PresenceApi.lockTtl)
         RenewLock = fun entityRef -> lockStore.Renew(scopeId, entityRef, userId, PresenceApi.lockTtl)

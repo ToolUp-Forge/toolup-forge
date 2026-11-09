@@ -445,10 +445,10 @@ let dedupKey (envelope: AuditEnvelope) : string =
 let private subjectFields (envelope: AuditEnvelope) =
     match envelope.Subject with
     | AnonymousAudit sessionId -> sessionId, None
-    | UserAudit userId -> userId, None
-    | TeamAudit(userId, teamId) -> userId, Some teamId
+    | UserAudit userId -> userId.Value, None
+    | TeamAudit(userId, teamId) -> userId.Value, Some teamId
     | ClaimAudit(tokenId, attributedHandle, _, _) -> attributedHandle |> Option.defaultValue tokenId, None
-    | ReaderAudit userId -> userId, None
+    | ReaderAudit userId -> userId.Value, None
 
 /// The ordered extension pairs for one envelope, before escaping and
 /// before the byte budget is applied. Order is load-bearing: the cheap,
@@ -463,7 +463,7 @@ let extensionPairs (envelope: AuditEnvelope) : (string * string) list =
 
     let teamPairs =
         match teamId with
-        | Some tid -> [ "cs3Label", "TeamId"; "cs3", tid ]
+        | Some tid -> [ "cs3Label", "TeamId"; "cs3", tid.Value ]
         | None -> []
 
     [

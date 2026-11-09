@@ -209,7 +209,7 @@ let private userPinningScope (accessContext: AccessContext) : StorageScope optio
     | _ ->
         Some {
             ScopeId = accessContext.UserId
-            Container = ScopeKey.container (ScopeKey.User accessContext.UserId)
+            Container = ScopeKey.container (ScopeKey.User(UserId accessContext.UserId))
             Persist = true
         }
 

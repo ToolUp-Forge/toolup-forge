@@ -88,7 +88,7 @@ let private request: EvidencePackRequest = {
     ScopeId = "team-1"
     AuditSourceModules = [ "_platform.audit" ]
     EntityNames = [ "Customer" ]
-    SubjectUserId = Some "user-9"
+    SubjectUserId = Some(UserId "user-9")
     RequestedBy = "admin-1"
     Reason = "model-validation evidence MRM-2026-04"
 }

@@ -1293,7 +1293,7 @@ ToolUp.Platform.Infra.IBudgetLedger.ReadUsage(ToolUp.Platform.Infra.BudgetLedger
 ToolUp.Platform.Infra.IBudgetLedger.Release(ToolUp.Platform.Infra.BudgetLedgerKey, System.Decimal) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.Infra.IBudgetLedger.Reserve(ToolUp.Platform.Infra.BudgetLedgerKey, System.Decimal, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.BudgetUsage, Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.BudgetDenial]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.BudgetUsage, ToolUp.Platform.BudgetDenial]]
 ToolUp.Platform.Infra.IBuildOrchestrator (interface)
-ToolUp.Platform.Infra.IBuildOrchestrator.CancelBuild(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.BuildOrchestratorError]]
+ToolUp.Platform.Infra.IBuildOrchestrator.CancelBuild(System.String, ToolUp.Platform.UserId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.BuildOrchestratorError]]
 ToolUp.Platform.Infra.IBuildOrchestrator.EnqueueBuild(ToolUp.Platform.BuildRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Platform.BuildOrchestratorError]]
 ToolUp.Platform.Infra.IBuildOrchestrator.GetBuild(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.BuildSummary, ToolUp.Platform.BuildOrchestratorError]]
 ToolUp.Platform.Infra.IBuildOrchestrator.GetBuildHistory(System.String, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.BuildSummary]]
@@ -1321,12 +1321,12 @@ ToolUp.Platform.Infra.IContentRangeReader (interface)
 ToolUp.Platform.Infra.IContentRangeReader.GetContentSize(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Int64, ToolUp.Platform.DataObjectError]]
 ToolUp.Platform.Infra.IContentRangeReader.ReadContentRange(System.String, System.String, System.Int64, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Byte[], ToolUp.Platform.DataObjectError]]
 ToolUp.Platform.Infra.IConversationEraser (interface)
-ToolUp.Platform.Infra.IConversationEraser.Erase(System.String, System.String, ToolUp.Platform.ErasurePolicy, System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ErasureSummary, ToolUp.Platform.ErasureError]]
+ToolUp.Platform.Infra.IConversationEraser.Erase(System.String, ToolUp.Platform.UserId, ToolUp.Platform.ErasurePolicy, System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ErasureSummary, ToolUp.Platform.ErasureError]]
 ToolUp.Platform.Infra.IConversationReader (interface)
 ToolUp.Platform.Infra.IConversationReader.GetConversation(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`3[ToolUp.Platform.Conversation, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConversationTurn], ToolUp.Platform.ConversationStatus], ToolUp.Platform.ConversationError]]
 ToolUp.Platform.Infra.IConversationReader.GetTurn(System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ConversationTurn, ToolUp.Platform.ConversationError]]
 ToolUp.Platform.Infra.IConversationReader.ListByScope(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Conversation]]
-ToolUp.Platform.Infra.IConversationReader.ListByUser(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Conversation]]
+ToolUp.Platform.Infra.IConversationReader.ListByUser(System.String, ToolUp.Platform.UserId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Conversation]]
 ToolUp.Platform.Infra.IConversationReader.Query(System.String, ToolUp.Platform.EntityQueryTypes+EntityQuery`1[ToolUp.Platform.Conversation]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Conversation]]
 ToolUp.Platform.Infra.IConversationStore (interface)
 ToolUp.Platform.Infra.IConversationWriter (interface)
@@ -1355,7 +1355,7 @@ ToolUp.Platform.Infra.IDataIngestorExtensions (class)
 ToolUp.Platform.Infra.IDataIngestorExtensions.IDataIngestor.RunIngestion(ToolUp.Platform.Infra.IDataIngestor, System.String, System.String, System.String, ToolUp.Platform.Infra.IngestionLabel) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.IngestionRun, ToolUp.Platform.IngestionError]]
 ToolUp.Platform.Infra.IDataObjectStore (interface)
 ToolUp.Platform.Infra.IDataObjectStore.Delete(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.DataObjectError]]
-ToolUp.Platform.Infra.IDataObjectStore.Erase(System.String, System.String, ToolUp.Platform.ErasurePolicy, System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ErasureSummary, ToolUp.Platform.ErasureError]]
+ToolUp.Platform.Infra.IDataObjectStore.Erase(System.String, ToolUp.Platform.UserId, ToolUp.Platform.ErasurePolicy, System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ErasureSummary, ToolUp.Platform.ErasureError]]
 ToolUp.Platform.Infra.IDataObjectStore.Evict(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.DataObjectError]]
 ToolUp.Platform.Infra.IDataObjectStore.Get(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`2[ToolUp.Platform.DataObject, System.Byte[]], ToolUp.Platform.DataObjectError]]
 ToolUp.Platform.Infra.IDataObjectStore.GetContent(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Byte[], ToolUp.Platform.DataObjectError]]
@@ -1402,10 +1402,10 @@ ToolUp.Platform.Infra.IDeclaresCredentialNeed.CredentialNeed : ToolUp.Platform.I
 ToolUp.Platform.Infra.IDeclaresPayloadFormat (interface)
 ToolUp.Platform.Infra.IDeclaresPayloadFormat.PayloadFormat : ToolUp.Platform.Infra.PayloadFormat { get }
 ToolUp.Platform.Infra.IDeployPipeline (interface)
-ToolUp.Platform.Infra.IDeployPipeline.BeginDeploy(System.String, System.String, ToolUp.Platform.DeployManifest, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Platform.DeployPipelineError]]
+ToolUp.Platform.Infra.IDeployPipeline.BeginDeploy(System.String, System.String, ToolUp.Platform.DeployManifest, ToolUp.Platform.UserId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Platform.DeployPipelineError]]
 ToolUp.Platform.Infra.IDeployPipeline.GetDeployHistory(System.String, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeploySummary]]
 ToolUp.Platform.Infra.IDeployPipeline.GetDeployState(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DeploySummary, ToolUp.Platform.DeployPipelineError]]
-ToolUp.Platform.Infra.IDeployPipeline.Rollback(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Platform.DeployPipelineError]]
+ToolUp.Platform.Infra.IDeployPipeline.Rollback(System.String, ToolUp.Platform.UserId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Platform.DeployPipelineError]]
 ToolUp.Platform.Infra.IDeployPlanner (interface)
 ToolUp.Platform.Infra.IDeployPlanner.PlanDeploy(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ContainerSpec]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DeployPlan, ToolUp.Platform.DeployPipelineError]]
 ToolUp.Platform.Infra.IEdgeCache (interface)
@@ -1613,7 +1613,7 @@ ToolUp.Platform.Infra.IIndexLifecycle+IIndexLifecycle (interface)
 ToolUp.Platform.Infra.IIndexLifecycle+IIndexLifecycle.DeleteByScope(ToolUp.Platform.VectorKnowledgeTypes+VectorScope) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.Infra.IIndexLifecycle+IndexLifecycleReport]
 ToolUp.Platform.Infra.IIndexLifecycle+IIndexLifecycle.DeleteChunk(ToolUp.Platform.VectorKnowledgeTypes+VectorScope, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.Infra.IIndexLifecycle+IndexLifecycleReport]
 ToolUp.Platform.Infra.IIndexLifecycle+IIndexLifecycle.DeleteDocument(ToolUp.Platform.VectorKnowledgeTypes+VectorScope, System.String, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.Infra.IIndexLifecycle+IndexLifecycleReport]
-ToolUp.Platform.Infra.IIndexLifecycle+IIndexLifecycle.Erase(ToolUp.Platform.VectorKnowledgeTypes+VectorScope, System.String, ToolUp.Platform.ErasurePolicy, System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ErasureSummary, ToolUp.Platform.ErasureError]]
+ToolUp.Platform.Infra.IIndexLifecycle+IIndexLifecycle.Erase(ToolUp.Platform.VectorKnowledgeTypes+VectorScope, ToolUp.Platform.UserId, ToolUp.Platform.ErasurePolicy, System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ErasureSummary, ToolUp.Platform.ErasureError]]
 ToolUp.Platform.Infra.IIndexLifecycle+IndexLifecycleReport (class)
 ToolUp.Platform.Infra.IIndexLifecycle+IndexLifecycleReport..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]])
 ToolUp.Platform.Infra.IIndexLifecycle+IndexLifecycleReport.Failures : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]] { get }
@@ -1630,7 +1630,7 @@ ToolUp.Platform.Infra.IIngestionStatusStore.List(System.String) : Microsoft.FSha
 ToolUp.Platform.Infra.IIngestionStatusStore.Set(System.String, System.String, DataManagementTypes+FileIngestionStatus) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.Infra.IIngestionStatusStore.SetPending(System.String, System.String, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.Infra.ILineageStore (interface)
-ToolUp.Platform.Infra.ILineageStore.Erase(System.String, System.String, ToolUp.Platform.ErasurePolicy, System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ErasureSummary, ToolUp.Platform.ErasureError]]
+ToolUp.Platform.Infra.ILineageStore.Erase(System.String, ToolUp.Platform.UserId, ToolUp.Platform.ErasurePolicy, System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ErasureSummary, ToolUp.Platform.ErasureError]]
 ToolUp.Platform.Infra.ILineageStore.GetAncestors(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.LineageGraph]
 ToolUp.Platform.Infra.ILineageStore.GetDescendants(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.LineageGraph]
 ToolUp.Platform.Infra.ILineageStore.GetPath(System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.LineageLink]]]
@@ -1661,7 +1661,7 @@ ToolUp.Platform.Infra.IModelRegistry.QueryBySpecHash(System.String, System.Strin
 ToolUp.Platform.Infra.IModelRegistry.QueryByStatus(System.String, ToolUp.Platform.Infra.ModelArtifactStatus) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Infra.ModelArtifact]]
 ToolUp.Platform.Infra.IModelRegistry.QueryPage(System.String, ToolUp.Platform.Infra.ModelRegistryQuery, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Infra.ModelArtifactPage, ToolUp.Platform.Infra.ModelRegistryError]]
 ToolUp.Platform.Infra.IModelRegistry.Register(System.String, ToolUp.Platform.Infra.FitOutcome, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Infra.ModelArtifact, ToolUp.Platform.Infra.ModelRegistryError]]
-ToolUp.Platform.Infra.IModelRegistry.TransitionStatus(System.String, System.String, ToolUp.Platform.Infra.ModelArtifactStatus, ToolUp.Platform.TeamRole, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Infra.ModelArtifact, ToolUp.Platform.Infra.ModelRegistryError]]
+ToolUp.Platform.Infra.IModelRegistry.TransitionStatus(System.String, System.String, ToolUp.Platform.Infra.ModelArtifactStatus, ToolUp.Platform.TeamRole, ToolUp.Platform.UserId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Infra.ModelArtifact, ToolUp.Platform.Infra.ModelRegistryError]]
 ToolUp.Platform.Infra.IModelScoreProvider (interface)
 ToolUp.Platform.Infra.IModelScoreProvider.Kind : System.String { get }
 ToolUp.Platform.Infra.IModelScoreProvider.Predict(ToolUp.Platform.Infra.ScoreContext, ToolUp.Platform.DatasetSchema, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DatasetRow]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Infra.ScorePrediction, ToolUp.Platform.Infra.ScoreError]]
@@ -1719,10 +1719,10 @@ ToolUp.Platform.Infra.IPayloadReader (interface)
 ToolUp.Platform.Infra.IPayloadReader.Format : ToolUp.Platform.Infra.PayloadFormat { get }
 ToolUp.Platform.Infra.IPayloadReader.Read(System.Byte[]) : Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`2[ToolUp.Platform.DatasetSchema, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DatasetRow]], System.String]
 ToolUp.Platform.Infra.IPlatformAdminStore (interface)
-ToolUp.Platform.Infra.IPlatformAdminStore.AssignPlatformAdmin(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
-ToolUp.Platform.Infra.IPlatformAdminStore.IsPlatformAdmin(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.Boolean]
+ToolUp.Platform.Infra.IPlatformAdminStore.AssignPlatformAdmin(ToolUp.Platform.UserId, ToolUp.Platform.UserId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.Platform.Infra.IPlatformAdminStore.IsPlatformAdmin(ToolUp.Platform.UserId) : Microsoft.FSharp.Control.FSharpAsync`1[System.Boolean]
 ToolUp.Platform.Infra.IPlatformAdminStore.ListPlatformAdmins() : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]
-ToolUp.Platform.Infra.IPlatformAdminStore.RevokePlatformAdmin(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.Platform.Infra.IPlatformAdminStore.RevokePlatformAdmin(ToolUp.Platform.UserId, ToolUp.Platform.UserId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.Infra.IPlatformRuntimeConfigStore (interface)
 ToolUp.Platform.Infra.IPlatformRuntimeConfigStore.GetPlatformKnowledgeBase() : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.FeatureMode]
 ToolUp.Platform.Infra.IPlatformRuntimeConfigStore.SetPlatformKnowledgeBase(ToolUp.Platform.FeatureMode) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
@@ -1860,7 +1860,7 @@ ToolUp.Platform.Infra.ISparseIndex (class)
 ToolUp.Platform.Infra.ISparseIndex+ISparseIndex (interface)
 ToolUp.Platform.Infra.ISparseIndex+ISparseIndex.DeleteByScope(ToolUp.Platform.VectorKnowledgeTypes+VectorScope) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.Infra.ISparseIndex+ISparseIndex.DeleteChunk(ToolUp.Platform.VectorKnowledgeTypes+VectorScope, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
-ToolUp.Platform.Infra.ISparseIndex+ISparseIndex.Erase(ToolUp.Platform.VectorKnowledgeTypes+VectorScope, System.String, ToolUp.Platform.ErasurePolicy, System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ErasureSummary, ToolUp.Platform.ErasureError]]
+ToolUp.Platform.Infra.ISparseIndex+ISparseIndex.Erase(ToolUp.Platform.VectorKnowledgeTypes+VectorScope, ToolUp.Platform.UserId, ToolUp.Platform.ErasurePolicy, System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ErasureSummary, ToolUp.Platform.ErasureError]]
 ToolUp.Platform.Infra.ISparseIndex+ISparseIndex.Search(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+VectorScope], System.String, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+VectorMatch]]
 ToolUp.Platform.Infra.ISparseIndex+ISparseIndex.Upsert(ToolUp.Platform.VectorKnowledgeTypes+VectorScope, System.String, ToolUp.Platform.VectorKnowledgeTypes+TextChunk) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.Infra.ISparseIndex+ISparseIndexLocality (interface)
@@ -1881,33 +1881,33 @@ ToolUp.Platform.Infra.ITableExtractor+ITableExtractor.ExtractTables(System.Byte[
 ToolUp.Platform.Infra.ITableExtractor+ITableExtractor.Name : System.String { get }
 ToolUp.Platform.Infra.ITenantFleet (interface)
 ToolUp.Platform.Infra.ITenantFleet.DeployToTenant(ToolUp.Platform.FleetDeployRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Platform.TenantFleetError]]
-ToolUp.Platform.Infra.ITenantFleet.EvictTenant(System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.TenantFleetError]]
+ToolUp.Platform.Infra.ITenantFleet.EvictTenant(System.String, ToolUp.Platform.UserId, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.TenantFleetError]]
 ToolUp.Platform.Infra.ITenantFleet.GetTenant(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Infra.TenantEntity+Tenant, ToolUp.Platform.TenantFleetError]]
 ToolUp.Platform.Infra.ITenantFleet.GetTenantHealth(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TenantHealth, ToolUp.Platform.TenantFleetError]]
 ToolUp.Platform.Infra.ITenantFleet.IsSlugAvailable(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.Boolean]
-ToolUp.Platform.Infra.ITenantFleet.ListTenants(Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Infra.TenantEntity+Tenant]]
+ToolUp.Platform.Infra.ITenantFleet.ListTenants(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.UserId]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Infra.TenantEntity+Tenant]]
 ToolUp.Platform.Infra.ITenantFleet.ProvisionTenant(ToolUp.Platform.ProvisioningRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Infra.TenantEntity+Tenant, ToolUp.Platform.TenantFleetError]]
-ToolUp.Platform.Infra.ITenantFleet.RestartTenant(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.TenantFleetError]]
+ToolUp.Platform.Infra.ITenantFleet.RestartTenant(System.String, ToolUp.Platform.UserId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.TenantFleetError]]
 ToolUp.Platform.Infra.ITenantFleet.SuggestSlugs(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]
 ToolUp.Platform.Infra.ITextSummariser (class)
 ToolUp.Platform.Infra.ITextSummariser+ITextSummariser (interface)
 ToolUp.Platform.Infra.ITextSummariser+ITextSummariser.Name : System.String { get }
 ToolUp.Platform.Infra.ITextSummariser+ITextSummariser.Summarise(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
 ToolUp.Platform.Infra.IUserSchemaStore (interface)
-ToolUp.Platform.Infra.IUserSchemaStore.Delete(System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.UserSchemaError]]
-ToolUp.Platform.Infra.IUserSchemaStore.ExecuteMigration(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SchemaMigration], System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.MigrationOutcome, ToolUp.Platform.UserSchemaError]]
+ToolUp.Platform.Infra.IUserSchemaStore.Delete(System.String, System.String, ToolUp.Platform.UserId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.UserSchemaError]]
+ToolUp.Platform.Infra.IUserSchemaStore.ExecuteMigration(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SchemaMigration], ToolUp.Platform.UserId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.MigrationOutcome, ToolUp.Platform.UserSchemaError]]
 ToolUp.Platform.Infra.IUserSchemaStore.Get(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.UserAuthoredSchema, ToolUp.Platform.UserSchemaError]]
 ToolUp.Platform.Infra.IUserSchemaStore.GetVersion(System.String, System.String, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.UserAuthoredSchema, ToolUp.Platform.UserSchemaError]]
 ToolUp.Platform.Infra.IUserSchemaStore.History(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.UserAuthoredSchema]]
 ToolUp.Platform.Infra.IUserSchemaStore.List(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.UserAuthoredSchema]]
-ToolUp.Platform.Infra.IUserSchemaStore.Save(System.String, ToolUp.Platform.UserAuthoredSchema, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.UserAuthoredSchema, ToolUp.Platform.UserSchemaError]]
+ToolUp.Platform.Infra.IUserSchemaStore.Save(System.String, ToolUp.Platform.UserAuthoredSchema, ToolUp.Platform.UserId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.UserAuthoredSchema, ToolUp.Platform.UserSchemaError]]
 ToolUp.Platform.Infra.IVectorStore (class)
 ToolUp.Platform.Infra.IVectorStore.eraseSubject(ToolUp.Platform.Infra.IVectorStore+IVectorStore, ToolUp.Platform.VectorKnowledgeTypes+VectorScope, System.String, ToolUp.Platform.ErasurePolicy, System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ErasureSummary, ToolUp.Platform.ErasureError]]
 ToolUp.Platform.Infra.IVectorStore.upsertBatch(ToolUp.Platform.Infra.IVectorStore+IVectorStore, ToolUp.Platform.VectorKnowledgeTypes+VectorScope, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`3[System.String, System.Single[], ToolUp.Platform.VectorKnowledgeTypes+TextChunk]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.Infra.IVectorStore+IVectorStore (interface)
 ToolUp.Platform.Infra.IVectorStore+IVectorStore.DeleteByScope(ToolUp.Platform.VectorKnowledgeTypes+VectorScope) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.Infra.IVectorStore+IVectorStore.DeleteChunk(ToolUp.Platform.VectorKnowledgeTypes+VectorScope, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
-ToolUp.Platform.Infra.IVectorStore+IVectorStore.Erase(ToolUp.Platform.VectorKnowledgeTypes+VectorScope, System.String, ToolUp.Platform.ErasurePolicy, System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ErasureSummary, ToolUp.Platform.ErasureError]]
+ToolUp.Platform.Infra.IVectorStore+IVectorStore.Erase(ToolUp.Platform.VectorKnowledgeTypes+VectorScope, ToolUp.Platform.UserId, ToolUp.Platform.ErasurePolicy, System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ErasureSummary, ToolUp.Platform.ErasureError]]
 ToolUp.Platform.Infra.IVectorStore+IVectorStore.ListChunks(ToolUp.Platform.VectorKnowledgeTypes+VectorScope, System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.VectorKnowledgeTypes+TextChunk]]]
 ToolUp.Platform.Infra.IVectorStore+IVectorStore.ListScopes() : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+VectorScope]]
 ToolUp.Platform.Infra.IVectorStore+IVectorStore.RestoreChunk(ToolUp.Platform.VectorKnowledgeTypes+VectorScope, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]

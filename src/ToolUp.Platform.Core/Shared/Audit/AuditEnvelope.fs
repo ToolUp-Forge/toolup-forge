@@ -172,7 +172,7 @@ type IAuditLog =
 module AuditStreamKey =
     /// The audit stream key for a team: its bare id.
     let ofTeam (teamId: string) : string =
-        AuditScope.streamKey (AuditScope.Scoped(ScopeKey.Team teamId))
+        AuditScope.streamKey (AuditScope.Scoped(ScopeKey.Team(TeamId teamId)))
 
     /// The audit stream key for a storage scope: its `ScopeId` (the bare
     /// user, team or session id), never its `Container` — what

@@ -137,7 +137,7 @@ type MigrationRunner
         =
         async {
             let payload: MigrationFailedEvent = {
-                TeamId = teamId
+                TeamId = TeamId teamId
                 DataTypeId = dataTypeId
                 ObjectId = failure.ObjectId
                 AtVersion = failure.AtVersion

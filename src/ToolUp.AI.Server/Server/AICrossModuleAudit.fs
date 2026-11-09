@@ -181,7 +181,7 @@ let payloadOf
     : CrossModuleReadPayload =
     {
         ConversationId = conversationId
-        UserId = userId
+        UserId = UserId userId
         SourceConvActiveModule = activeModule
         // `Some m` exactly when the read resolved to ONE module. See the
         // payload's own docstring: a grouping key that synthesised a

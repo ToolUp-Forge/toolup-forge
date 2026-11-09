@@ -168,7 +168,7 @@ module AdminMutationKind =
 [<RequireQualifiedAccess>]
 type AdminMutation =
     | SetTeamPermissions of permissions: TeamPermissions
-    | SetMemberPermissions of userId: string * moduleName: string * permissions: ModulePermission list
+    | SetMemberPermissions of userId: UserId * moduleName: string * permissions: ModulePermission list
     | SetTeamDefaults of defaults: Map<string, ModulePermission list>
     | SetModuleExposure of moduleName: string * state: ModuleExposure
 
@@ -204,7 +204,7 @@ type PendingAdminMutation = {
     /// (GP 12 rule 1) — an approver names this string, never a handle.
     RequestId: string
     /// The team whose permission document the mutation targets.
-    TeamId: string
+    TeamId: TeamId
     /// The captured mutation, replayed verbatim on approval.
     Mutation: AdminMutation
     /// SHA-256 over the canonical serialisation of `Mutation`. Binds the

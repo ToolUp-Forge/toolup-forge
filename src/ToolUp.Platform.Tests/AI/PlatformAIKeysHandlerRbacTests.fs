@@ -136,7 +136,7 @@ let private stubTeamStore (teams: TeamInfo list) : ITeamStore =
 
     { new ITeamStore with
         member _.ListTeams() = async { return teams }
-        member _.GetTeam teamId = async { return Map.tryFind teamId byId }
+        member _.GetTeam teamId = async { return Map.tryFind teamId.Value byId }
 
         member _.CreateTeam(_, _) =
             failwith "stubTeamStore.CreateTeam not used"
@@ -447,7 +447,7 @@ let tests =
         testCaseAsync "admin ListTeamKeyStatuses → one row per wired provider with hasKey reflecting store"
         <| async {
             let api, keyStore = buildHandler adminContext [ anthropic; openai ] None
-            let! _ = keyStore.SetTeamKey("team-alpha", openai.Id, "sk-team-openai")
+            let! _ = keyStore.SetTeamKey(TeamId "team-alpha", openai.Id, "sk-team-openai")
             let! statuses = api.ListTeamKeyStatuses "team-alpha"
 
             let byProvider =
@@ -509,7 +509,7 @@ let tests =
         testCaseAsync "admin TestTeamKey → Ok with seeded team key + passing provider mock"
         <| async {
             let api, keyStore = buildHandler adminContext [ anthropic ] None
-            let! _ = keyStore.SetTeamKey("team-alpha", anthropic.Id, "sk-team")
+            let! _ = keyStore.SetTeamKey(TeamId "team-alpha", anthropic.Id, "sk-team")
             let! result = api.TestTeamKey("team-alpha", anthropic.Id)
             expectOk "TestTeamKey admin happy path" result
         }

@@ -768,7 +768,7 @@ type FactDisclosureGate
           }
 
     let scopeTeamOf (scope: ResolvedScope) : string option option =
-        Some(scope.Storage |> Option.bind StorageScope.tryTeamId)
+        Some(scope.Storage |> Option.bind StorageScope.tryTeamId |> Option.map TeamId.value)
 
     // The one audit step, after the verdicts are composed: each read's rows
     // (`DisclosureStages.auditRows`), written best-effort under the same

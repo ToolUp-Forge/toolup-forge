@@ -161,7 +161,7 @@ let private jobCtxCarrying (scopeId: string) (scope: ResolvedScope) (payload: st
     Attempt = 1
     Trigger = Trigger.Manual
     Scope = scope
-    TriggerSource = ScheduledManually "system"
+    TriggerSource = ScheduledManually(UserId "system")
     ScheduledAt = DateTime.UtcNow
     RunningAt = DateTime.UtcNow
     Payload = payload

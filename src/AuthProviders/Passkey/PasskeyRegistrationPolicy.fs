@@ -106,12 +106,12 @@ let resolveIdentity
                 Ok(
                     ExistingSession,
                     {
-                        UserId = currentUser.UserId
+                        UserId = currentUser.UserId.Value
                         DisplayName =
                             if currentUser.DisplayName <> "" then
                                 currentUser.DisplayName
                             else
-                                currentUser.UserId
+                                currentUser.UserId.Value
                         Email = currentUser.Email |> Option.orElse req.Email
                     }
                 )

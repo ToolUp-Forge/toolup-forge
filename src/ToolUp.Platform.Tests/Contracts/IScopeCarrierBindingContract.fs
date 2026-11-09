@@ -97,7 +97,7 @@ let tests (name: string) (factory: unit -> RestartableScheduler) =
         let seen, handler = recorder ()
         scheduler.RegisterHandler("carried", handler)
 
-        match scheduler.TriggerOnce(scopeId, jobId, "alice") |> Async.RunSynchronously with
+        match scheduler.TriggerOnce(scopeId, jobId, UserId "alice") |> Async.RunSynchronously with
         | Ok() -> ()
         | Error e -> failtestf "TriggerOnce: %A" e
 

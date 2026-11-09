@@ -317,7 +317,7 @@ let private envelopeFor (scopeId: string) (event: AuditEvent) =
 
 let private loginEvent (userId: string) =
     UserLoggedIn {
-        UserId = userId
+        UserId = UserId userId
         AuthProvider = "Header"
     }
 
@@ -560,16 +560,16 @@ let private severityTests =
             Expect.equal (severityBandOf (loginEvent "u1")) CefInformational "a login is routine"
 
             Expect.equal
-                (severityBandOf (DataStoreReset { UserId = "u1"; FileCount = 12 }))
+                (severityBandOf (DataStoreReset { UserId = UserId "u1"; FileCount = 12 }))
                 CefCritical
                 "wiping a scope's data store is irreversible"
 
             Expect.equal
                 (severityBandOf (
                     PermissionChanged {
-                        UserId = "u1"
-                        TeamId = "t1"
-                        AffectedUserId = "u2"
+                        UserId = UserId "u1"
+                        TeamId = TeamId "t1"
+                        AffectedUserId = UserId "u2"
                         ModuleName = "m"
                         Permissions = "Admin"
                         Chain = None
@@ -579,7 +579,7 @@ let private severityTests =
                 "a permission change is security-relevant"
 
             Expect.equal
-                (severityBandOf (FileDeleted { UserId = "u1"; FileName = "f" }))
+                (severityBandOf (FileDeleted { UserId = UserId "u1"; FileName = "f" }))
                 CefMedium
                 "a deletion is notable"
 
@@ -608,8 +608,8 @@ let private severityTests =
             Expect.equal
                 (severityBandOf (
                     TeamCreated {
-                        UserId = "u1"
-                        TeamId = "t1"
+                        UserId = UserId "u1"
+                        TeamId = TeamId "t1"
                         TeamName = "T"
                     }
                 ))

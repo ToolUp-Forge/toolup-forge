@@ -54,7 +54,7 @@ let private resolveScope (ctx: HttpContext) : StorageScope =
 
         {
             ScopeId = userId
-            Container = ScopeKey.container (ScopeKey.User userId)
+            Container = ScopeKey.container (ScopeKey.User(UserId userId))
             Persist = true
         }
 

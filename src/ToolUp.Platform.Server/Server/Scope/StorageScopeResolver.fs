@@ -40,7 +40,7 @@ type AuthenticatedEphemeralScopeResolver() =
             return
                 match request.User with
                 | Some user when not (AuthenticatedUser.isAnonymous user) ->
-                    Ok(StorageScope.ofKey false (ScopeKey.User user.UserId))
+                    Ok(StorageScope.ofKey false (ScopeKey.User(UserId user.UserId.Value)))
                 | _ -> Error NotAuthenticated
         }
 
@@ -51,7 +51,7 @@ type AuthenticatedScopeResolver() =
             return
                 match request.User with
                 | Some user when not (AuthenticatedUser.isAnonymous user) ->
-                    Ok(StorageScope.ofKey true (ScopeKey.User user.UserId))
+                    Ok(StorageScope.ofKey true (ScopeKey.User(UserId user.UserId.Value)))
                 | _ -> Error NotAuthenticated
         }
 
@@ -105,8 +105,8 @@ type TeamScopeResolver
     /// and any future cross-instance companions) reacts uniformly.
     member _.InvalidateUser(userId: string) =
         let payload: MembershipChangedPayload = {
-            TeamId = ""
-            AffectedUserId = userId
+            TeamId = TeamId ""
+            AffectedUserId = UserId userId
             ChangeKind = MembershipChangeKind.ActiveTeamSet
             PublishedAt = DateTime.UtcNow
         }
@@ -139,11 +139,11 @@ type TeamScopeResolver
                 // `ScopeResolutionFailed` (matching Step 2's posture)
                 // and log at Error.
                 let! activeTeamResult = async {
-                    match cache.TryGetValue<string option> key with
+                    match cache.TryGetValue<TeamId option> key with
                     | true, cached -> return Ok cached
                     | false, _ ->
                         try
-                            let! activeTeam = teamStore.GetActiveTeam user.UserId
+                            let! activeTeam = teamStore.GetActiveTeam(UserId user.UserId.Value)
                             let entry = cache.CreateEntry key
                             entry.SlidingExpiration <- TimeSpan.FromMinutes 5.0
                             entry.Value <- activeTeam
@@ -167,11 +167,11 @@ type TeamScopeResolver
                     // next request. One blob read per team-scoped
                     // request; acceptable cost for the guarantee.
                     try
-                        let! role = teamStore.GetMemberRole(teamId, user.UserId)
+                        let! role = teamStore.GetMemberRole(teamId, UserId user.UserId.Value)
 
                         match role with
                         | Some _ -> return Ok(StorageScope.ofKey true (ScopeKey.Team teamId))
-                        | None -> return Error(NotTeamMember teamId)
+                        | None -> return Error(NotTeamMember(TeamId teamId.Value))
                     with ex ->
                         return Error(ScopeResolutionFailed ex.Message)
         }
@@ -236,8 +236,8 @@ module ScopeRequestExtractor =
         with _ ->
             return
                 match ctx.Request.Headers.TryGetValue "X-User-Id" with
-                | true, values when values.Count > 0 -> string values[0]
-                | _ -> "anonymous"
+                | true, values when values.Count > 0 -> UserId(string values[0])
+                | _ -> UserId "anonymous"
     }
 
 /// Phase 797 — the one place a request's storage scope becomes a

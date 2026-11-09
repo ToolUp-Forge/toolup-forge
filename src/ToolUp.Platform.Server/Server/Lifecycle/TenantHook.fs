@@ -36,8 +36,8 @@ module ScopeId =
     /// lifecycle hooks read, and it is `ScopeKey.tryParseContainer`'s.
     let parse (scopeId: string) : ScopeKind =
         match ScopeKey.tryParseContainer scopeId with
-        | Some(ScopeKey.Team teamId) -> ScopeKind.Team teamId
-        | Some(ScopeKey.User userId) -> ScopeKind.User userId
+        | Some(ScopeKey.Team teamId) -> ScopeKind.Team teamId.Value
+        | Some(ScopeKey.User userId) -> ScopeKind.User userId.Value
         | _ -> ScopeKind.Other scopeId
 
 /// A tenant-lifecycle hook as a value: a name, the substrate it acts on
@@ -102,23 +102,29 @@ module TenantHook =
         | None ->
             { new ITenantLifecycle with
                 member _.Name = hook.Name
-                member _.OnProvisioned(scopeId, actorUserId) = onProvisioned (scopeId, actorUserId)
-                member _.OnDeprovisioned(scopeId, actorUserId) = deprovision scopeId actorUserId
+
+                member _.OnProvisioned(scopeId, actorUserId) =
+                    onProvisioned (scopeId, actorUserId.Value)
+
+                member _.OnDeprovisioned(scopeId, actorUserId) = deprovision scopeId actorUserId.Value
               interface ITenantLifecycleProvisionContext with
                   member _.OnProvisionedWith(context) = provision context
             }
         | Some preview ->
             { new ITenantLifecycle with
                 member _.Name = hook.Name
-                member _.OnProvisioned(scopeId, actorUserId) = onProvisioned (scopeId, actorUserId)
-                member _.OnDeprovisioned(scopeId, actorUserId) = deprovision scopeId actorUserId
+
+                member _.OnProvisioned(scopeId, actorUserId) =
+                    onProvisioned (scopeId, actorUserId.Value)
+
+                member _.OnDeprovisioned(scopeId, actorUserId) = deprovision scopeId actorUserId.Value
               interface ITenantLifecycleProvisionContext with
                   member _.OnProvisionedWith(context) = provision context
               interface ITenantLifecyclePreview with
                   member _.OnDeprovisionPreview(scopeId, actorUserId) = async {
                       match hook.Resolve services with
                       | Some dep ->
-                          let! count, detail = preview dep scopeId actorUserId
+                          let! count, detail = preview dep scopeId actorUserId.Value
                           return LifecyclePreviewItem.affecting hook.Name count detail
                       | None -> return LifecyclePreviewItem.affecting hook.Name 0 (absent + " — nothing would change")
                   }

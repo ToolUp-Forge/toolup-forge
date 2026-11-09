@@ -322,7 +322,7 @@ module TeamPolicyViewer =
         async {
             let! role =
                 match services.GetService(typeof<ITeamStore>) with
-                | :? ITeamStore as teams -> teams.GetMemberRole(teamId, userId)
+                | :? ITeamStore as teams -> teams.GetMemberRole(TeamId teamId, UserId userId)
                 | _ -> async.Return None
 
             return {
@@ -345,14 +345,14 @@ module TeamPolicyViewer =
 /// AI companion registered it.
 type TeamPolicyOutputVisibilitySource(services: IServiceProvider) =
     interface ITeamOutputVisibilitySource with
-        member _.Current(teamId: string) = async {
+        member _.Current(teamId: TeamId) = async {
             let settings =
                 TeamPolicySettings.output services
                 |> Option.defaultValue TeamOutputVisibilitySettings.unrestricted
 
             match services.GetService(typeof<IBlobStorage>) with
             | :? IBlobStorage as storage ->
-                match! TeamPolicyStore(storage).ReadOutput(TeamConversationPolicyRecord.containerOf teamId) with
+                match! TeamPolicyStore(storage).ReadOutput(TeamConversationPolicyRecord.containerOf teamId.Value) with
                 | Ok record -> return Ok(TeamOutputPolicyRecord.current settings.Default record)
                 | Error message -> return Error message
             | _ -> return Ok settings.Default

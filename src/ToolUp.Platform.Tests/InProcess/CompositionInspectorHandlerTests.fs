@@ -138,8 +138,8 @@ let private buildApi accessContext teamStore snapshot =
 
 let private teamContextWith (teamId: string) (userId: string) (role: TeamRole) = async {
     let store = freshTeamStore ()
-    let! _ = store.CreateTeam(teamId, "Test Team")
-    let! _ = (store :> ITeamStore).AddMember(teamId, userId, role)
+    let! _ = store.CreateTeam(TeamId teamId, "Test Team")
+    let! _ = (store :> ITeamStore).AddMember(TeamId teamId, UserId userId, role)
     return AccessContext.unrestricted (TeamMember(userId, teamId)), (store :> ITeamStore)
 }
 

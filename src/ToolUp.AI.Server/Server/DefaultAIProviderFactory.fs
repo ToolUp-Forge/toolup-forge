@@ -154,7 +154,7 @@ let private resolvePlatformApiKey
         | Some store ->
             let! teamKey =
                 match ctx.TeamId with
-                | Some tid -> store.GetTeamKey(tid, providerId)
+                | Some tid -> store.GetTeamKey(TeamId tid, providerId)
                 | None -> async { return None }
 
             match teamKey with

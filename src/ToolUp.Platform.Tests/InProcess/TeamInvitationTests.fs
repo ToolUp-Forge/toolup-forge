@@ -91,9 +91,9 @@ let private mkApi (teamStore: ITeamStore) (tokenStore: IShareTokenStore) (audit:
 /// returns the team id.
 let private provisionTeam (ts: ITeamStore) (owner: string) (memberUserId: string) : Async<string> = async {
     let teamId = "t-" + Guid.NewGuid().ToString("N").Substring(0, 8)
-    let! _ = ts.CreateTeam(teamId, "Test Team")
-    let! _ = ts.AddMember(teamId, owner, Owner)
-    let! _ = ts.AddMember(teamId, memberUserId, Member)
+    let! _ = ts.CreateTeam(TeamId teamId, "Test Team")
+    let! _ = ts.AddMember(TeamId teamId, UserId owner, Owner)
+    let! _ = ts.AddMember(TeamId teamId, UserId memberUserId, Member)
     return teamId
 }
 
@@ -240,7 +240,7 @@ let tests =
                     Expect.equal accept.TeamId teamId "team id round-tripped"
                     Expect.equal accept.Role Member "role applied"
 
-                    let! role = ts.GetMemberRole(teamId, "carol@example.com")
+                    let! role = ts.GetMemberRole(TeamId teamId, UserId "carol@example.com")
                     Expect.equal role (Some Member) "membership persisted"
 
                     let names = audit.Recorded |> List.map (fun (_, e) -> AuditEvent.eventTypeName e)
@@ -343,7 +343,7 @@ let tests =
                 match accept with
                 | Ok r ->
                     Expect.equal r.TeamId teamId "team id reflected"
-                    let! role = ts.GetMemberRole(teamId, "bob@example.com")
+                    let! role = ts.GetMemberRole(TeamId teamId, UserId "bob@example.com")
                     // bob's role should remain Member (his prior role), not bumped
                     Expect.equal role (Some Member) "existing role preserved"
                 | Error msg -> failtestf "expected Ok for already-member, got %s" msg
@@ -394,7 +394,7 @@ let tests =
             // helper consumes the pending entry + adds her to the team.
             let carol = {
                 AuthenticatedUser.anonymous with
-                    UserId = "carol@example.com"
+                    UserId = UserId "carol@example.com"
                     Email = Some "carol@example.com"
             }
 
@@ -402,7 +402,7 @@ let tests =
 
             Expect.isSome consumed "pending entry was consumed on Carol's sign-in"
 
-            let! role = ts.GetMemberRole(teamId, "carol@example.com")
+            let! role = ts.GetMemberRole(TeamId teamId, UserId "carol@example.com")
             Expect.equal role (Some Member) "Carol joined the team with the baked-in role"
 
             let names = audit.Recorded |> List.map (fun (_, e) -> AuditEvent.eventTypeName e)
@@ -461,14 +461,14 @@ let tests =
 
             let recipient = {
                 AuthenticatedUser.anonymous with
-                    UserId = recipientEmail
+                    UserId = UserId recipientEmail
                     Email = Some recipientEmail
             }
 
             let! consumed = tryConsumePendingForUser (pendingStore storage) ts (audit :> IAuditLog) recipient
             Expect.isNone consumed "revoked entry doesn't auto-join"
 
-            let! role = ts.GetMemberRole(teamId, recipientEmail)
+            let! role = ts.GetMemberRole(TeamId teamId, UserId recipientEmail)
             Expect.isNone role "recipient did not become a member after revoke"
 
             let names = audit.Recorded |> List.map (fun (_, e) -> AuditEvent.eventTypeName e)
@@ -518,21 +518,21 @@ let tests =
             // match; entry for Carol stays in the blob.
             let dave = {
                 AuthenticatedUser.anonymous with
-                    UserId = "dave@example.com"
+                    UserId = UserId "dave@example.com"
                     Email = Some "dave@example.com"
             }
 
             let! daveConsumed = tryConsumePendingForUser (pendingStore storage) ts (audit :> IAuditLog) dave
             Expect.isNone daveConsumed "no pending entry matched Dave's email"
 
-            let! daveRole = ts.GetMemberRole(teamId, "dave@example.com")
+            let! daveRole = ts.GetMemberRole(TeamId teamId, UserId "dave@example.com")
             Expect.isNone daveRole "Dave did not become a member"
 
             // Carol's pending entry should still be there — proven by a
             // subsequent Carol sign-in succeeding.
             let carol = {
                 AuthenticatedUser.anonymous with
-                    UserId = "carol@example.com"
+                    UserId = UserId "carol@example.com"
                     Email = Some "carol@example.com"
             }
 
@@ -644,14 +644,14 @@ let tests =
 
             let carol = {
                 AuthenticatedUser.anonymous with
-                    UserId = "carol@example.com"
+                    UserId = UserId "carol@example.com"
                     Email = Some "carol@example.com"
             }
 
             let! consumed = tryConsumePendingForUser (pendingStore storage) ts (audit :> IAuditLog) carol
             Expect.isNone consumed "expired entry is treated as absent"
 
-            let! role = ts.GetMemberRole(teamId, "carol@example.com")
+            let! role = ts.GetMemberRole(TeamId teamId, UserId "carol@example.com")
             Expect.isNone role "Carol did not become a member"
 
             let names = audit.Recorded |> List.map (fun (_, e) -> AuditEvent.eventTypeName e)
@@ -1088,7 +1088,11 @@ let inviteExpiryNotificationTests =
             match published with
             | [ scope, TransactionalEmail envelope ] ->
                 Expect.equal scope "team-teamN" "published under the team scope"
-                Expect.equal envelope.Recipients [ RecipientId.User "alice@example.com" ] "addressed to the inviter"
+
+                Expect.equal
+                    envelope.Recipients
+                    [ RecipientId.User(UserId "alice@example.com") ]
+                    "addressed to the inviter"
 
                 match envelope.Content with
                 | InlineEmail(subject, body, _) ->
@@ -1131,13 +1135,13 @@ let activeTeamPolicyTests =
             let ts = freshTeamStore ()
             let! teamId = provisionTeam ts "alice@example.com" "bob@example.com"
 
-            let! before = ts.GetActiveTeam "bob@example.com"
+            let! before = ts.GetActiveTeam(UserId "bob@example.com")
             Expect.isNone before "AddMember alone does not set the pointer"
 
-            do! ActiveTeamPolicy.ensureActiveTeam ts "bob@example.com" teamId
+            do! ActiveTeamPolicy.ensureActiveTeam ts (UserId "bob@example.com") (TeamId teamId)
 
-            let! after = ts.GetActiveTeam "bob@example.com"
-            Expect.equal after (Some teamId) "pointer set to the joined team"
+            let! after = ts.GetActiveTeam(UserId "bob@example.com")
+            Expect.equal after (Some(TeamId teamId)) "pointer set to the joined team"
         }
 
         testCaseAsync "ensureActiveTeam never re-points an existing selection"
@@ -1146,11 +1150,11 @@ let activeTeamPolicyTests =
             let! firstTeam = provisionTeam ts "alice@example.com" "bob@example.com"
             let! secondTeam = provisionTeam ts "alice@example.com" "bob@example.com"
 
-            let! _ = ts.SetActiveTeam("bob@example.com", firstTeam)
-            do! ActiveTeamPolicy.ensureActiveTeam ts "bob@example.com" secondTeam
+            let! _ = ts.SetActiveTeam(UserId "bob@example.com", TeamId firstTeam)
+            do! ActiveTeamPolicy.ensureActiveTeam ts (UserId "bob@example.com") (TeamId secondTeam)
 
-            let! active = ts.GetActiveTeam "bob@example.com"
-            Expect.equal active (Some firstTeam) "deliberate selection preserved"
+            let! active = ts.GetActiveTeam(UserId "bob@example.com")
+            Expect.equal active (Some(TeamId firstTeam)) "deliberate selection preserved"
         }
 
         testCaseAsync "invite acceptance sets the invitee's active team when they had none"
@@ -1180,8 +1184,8 @@ let activeTeamPolicyTests =
                 match accepted with
                 | Error msg -> failtestf "accept failed: %s" msg
                 | Ok _ ->
-                    let! active = ts.GetActiveTeam "carol@example.com"
-                    Expect.equal active (Some teamId) "invitee's active team set on acceptance"
+                    let! active = ts.GetActiveTeam(UserId "carol@example.com")
+                    Expect.equal active (Some(TeamId teamId)) "invitee's active team set on acceptance"
         }
 
         testCaseAsync "pending-invite consumption sets the active team on auto-join"
@@ -1203,15 +1207,15 @@ let activeTeamPolicyTests =
 
             let carol = {
                 AuthenticatedUser.anonymous with
-                    UserId = "carol@example.com"
+                    UserId = UserId "carol@example.com"
                     Email = Some "carol@example.com"
             }
 
             let! consumed = tryConsumePendingForUser (pendingStore storage) ts (audit :> IAuditLog) carol
             Expect.isSome consumed "pending entry consumed"
 
-            let! active = ts.GetActiveTeam "carol@example.com"
-            Expect.equal active (Some teamId) "auto-joined member's active team set"
+            let! active = ts.GetActiveTeam(UserId "carol@example.com")
+            Expect.equal active (Some(TeamId teamId)) "auto-joined member's active team set"
         }
     ]
 // ─── Phase 548 — on-demand pending-invite consumption ──────────────────
@@ -1237,7 +1241,7 @@ let private ctxForAuthenticatedUser (store: IPendingInviteStore) (user: Authenti
 
 let private signedInAs (email: string) : AuthenticatedUser = {
     AuthenticatedUser.anonymous with
-        UserId = email
+        UserId = UserId email
         Email = Some email
 }
 
@@ -1271,7 +1275,7 @@ let checkMyInvitesTests =
             | Ok None -> failtest "expected the pending invite to be consumed"
             | Ok(Some team) -> Expect.equal team.TeamId teamId "the joined team is echoed back"
 
-            let! role = ts.GetMemberRole(teamId, email)
+            let! role = ts.GetMemberRole(TeamId teamId, UserId email)
             Expect.equal role (Some Member) "the caller joined with the baked-in role"
 
             let names = audit.Recorded |> List.map (fun (_, e) -> AuditEvent.eventTypeName e)
@@ -1326,7 +1330,7 @@ let checkMyInvitesTests =
             let! result = api.CheckMyInvites()
             Expect.equal result (Ok None) "an expired invite reads as nothing pending"
 
-            let! role = ts.GetMemberRole(teamId, email)
+            let! role = ts.GetMemberRole(TeamId teamId, UserId email)
             Expect.isNone role "an expired invite never joins the caller"
 
             let names = audit.Recorded |> List.map (fun (_, e) -> AuditEvent.eventTypeName e)
@@ -1368,7 +1372,7 @@ let checkMyInvitesTests =
             let! result = api.CheckMyInvites()
             Expect.isError result "an anonymous caller is refused"
 
-            let! role = ts.GetMemberRole(teamId, email)
+            let! role = ts.GetMemberRole(TeamId teamId, UserId email)
             Expect.isNone role "the refused call consumed nothing"
         }
 
@@ -1400,7 +1404,7 @@ let checkMyInvitesTests =
             let! second = api.CheckMyInvites()
             Expect.equal second (Ok None) "the second call finds nothing pending"
 
-            let! role = ts.GetMemberRole(teamId, email)
+            let! role = ts.GetMemberRole(TeamId teamId, UserId email)
             Expect.equal role (Some Member) "membership survives the repeat call"
 
             let joins =

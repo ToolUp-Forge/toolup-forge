@@ -99,7 +99,7 @@ type OAuth1aRequestState = {
     /// only `oauth_token` + `oauth_verifier`, so this is recovered here.
     ResourceId: string
     /// The actor who initiated the authorisation (audit trail).
-    UserId: string
+    UserId: UserId
     /// The flow name (provider) the request token belongs to.
     FlowName: string
     /// The request-token secret, needed to sign the access-token exchange.

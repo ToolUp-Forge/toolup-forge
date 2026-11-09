@@ -45,7 +45,7 @@ let private loginEvent (scopeId: string) (userId: string) (occurredAt: DateTime)
     Payload =
         JsonSerializer.Serialize(
             ({
-                UserId = userId
+                UserId = UserId userId
                 AuthProvider = "Test"
             }
             : UserLoggedInPayload),

@@ -95,7 +95,7 @@ type private RecordingScheduler() =
         member _.GetRecentRuns(_, _, _) = async.Return []
 
         member _.TriggerOnce(scopeId, id, byUser) =
-            triggered.Enqueue((scopeId, id, byUser))
+            triggered.Enqueue((scopeId, id, byUser.Value))
             async.Return(Ok())
 
         member _.NotifyEventWritten(_, _, _) = async.Return()
@@ -759,7 +759,7 @@ let longRenderTests =
                 Attempt = 1
                 Trigger = Manual
                 Scope = ToolUp.Platform.ResolvedScope.anonymous
-                TriggerSource = ScheduledManually "user-1"
+                TriggerSource = ScheduledManually(UserId "user-1")
                 ScheduledAt = DateTime.UtcNow
                 RunningAt = DateTime.UtcNow
                 Payload = registration.Payload
@@ -835,7 +835,7 @@ let longRenderTests =
                 Attempt = 1
                 Trigger = Manual
                 Scope = ToolUp.Platform.ResolvedScope.anonymous
-                TriggerSource = ScheduledManually "user-1"
+                TriggerSource = ScheduledManually(UserId "user-1")
                 ScheduledAt = DateTime.UtcNow
                 RunningAt = DateTime.UtcNow
                 Payload =

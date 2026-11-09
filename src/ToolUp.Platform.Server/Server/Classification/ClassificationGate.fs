@@ -82,7 +82,7 @@ module ClassificationGate =
                     audit.Record(
                         auditScope ctx,
                         AuditEvent.ClassifiedFieldRead {
-                            UserId = ctx.UserId
+                            UserId = UserId ctx.UserId
                             EntityName = c.EntityName
                             FieldPath = c.FieldPath
                             Level = ClassificationLevel.name c.Level
@@ -148,7 +148,7 @@ module ClassificationGate =
                             audit.Record(
                                 auditScope ctx,
                                 AuditEvent.ClassifiedFieldWritten {
-                                    UserId = ctx.UserId
+                                    UserId = UserId ctx.UserId
                                     EntityName = c.EntityName
                                     FieldPath = c.FieldPath
                                     Level = ClassificationLevel.name c.Level

@@ -134,7 +134,7 @@ let tests =
                     ))
 
             let exporter = ConversationExporter.exporter reader
-            let! segments = exporter.Export(scopeA, userId)
+            let! segments = exporter.Export(scopeA, UserId userId)
 
             Expect.equal segments.Length 1 "one segment per scope when conversations exist"
             let segment = segments[0]
@@ -172,10 +172,10 @@ let tests =
             let scopeA = "team-a-" + Guid.NewGuid().ToString("N").Substring(0, 8)
             let exporter = ConversationExporter.exporter (store :> IConversationReader)
 
-            let! emptyStringSegments = exporter.Export(scopeA, "")
+            let! emptyStringSegments = exporter.Export(scopeA, UserId "")
             Expect.isEmpty emptyStringSegments "empty subjectUserId must not enumerate conversations"
 
-            let! whitespaceSegments = exporter.Export(scopeA, "   ")
+            let! whitespaceSegments = exporter.Export(scopeA, UserId "   ")
             Expect.isEmpty whitespaceSegments "whitespace subjectUserId must not enumerate conversations"
         }
 
@@ -185,7 +185,7 @@ let tests =
             let scopeA = "team-a-" + Guid.NewGuid().ToString("N").Substring(0, 8)
             let exporter = ConversationExporter.exporter (store :> IConversationReader)
 
-            let! segments = exporter.Export(scopeA, "user-with-no-conversations")
+            let! segments = exporter.Export(scopeA, UserId "user-with-no-conversations")
             Expect.isEmpty segments "no conversations ⇒ zero segments (orchestrator skips silently)"
         }
 
@@ -207,10 +207,10 @@ let tests =
                     (writer.AppendTurn(scopeB, convInB, mkUserTurn convInB "scope-B-only-secret-token"))
 
             let exporter = ConversationExporter.exporter reader
-            let! aSegments = exporter.Export(scopeA, userId)
+            let! aSegments = exporter.Export(scopeA, UserId userId)
             Expect.isEmpty aSegments "scope A export must not include scope B conversations"
 
-            let! bSegments = exporter.Export(scopeB, userId)
+            let! bSegments = exporter.Export(scopeB, UserId userId)
             Expect.equal bSegments.Length 1 "scope B has the conversation"
 
             Expect.stringContains

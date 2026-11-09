@@ -530,7 +530,7 @@ type PostgresFullTextIndex
             // index has no tombstone tier, so every policy is a hard delete.
             ignore policy
 
-            if Erasure.isBlankSubject subjectUserId then
+            if Erasure.isBlankSubject subjectUserId.Value then
                 return
                     Result.Ok {
                         HandlerName = "sparse-index"

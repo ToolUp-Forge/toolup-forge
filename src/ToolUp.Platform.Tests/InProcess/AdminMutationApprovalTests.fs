@@ -145,7 +145,8 @@ let tests =
 
                 // Admin A grants. The write must NOT apply.
                 let written =
-                    store.SetMemberPermissions("acme", "bob", "reports", [ Read; Write ]) |> run
+                    store.SetMemberPermissions(TeamId "acme", UserId "bob", "reports", [ Read; Write ])
+                    |> run
 
                 match written with
                 | Ok() -> failtest "a gated write must not report success — it did not apply"
@@ -156,7 +157,7 @@ let tests =
                         "the refusal names the dual-control queue"
 
                 Expect.isEmpty
-                    (effectiveFor store "bob" "acme")
+                    (effectiveFor store (UserId "bob") (TeamId "acme"))
                     "the grantee's effective permissions must be unchanged while the proposal is pending"
 
                 // Exactly one proposal is queued.
@@ -174,7 +175,7 @@ let tests =
                 | other -> failtestf "a distinct approver must apply the mutation; got %A" other
 
                 Expect.equal
-                    (effectiveFor store "bob" "acme" |> Map.tryFind "reports")
+                    (effectiveFor store (UserId "bob") (TeamId "acme") |> Map.tryFind "reports")
                     (Some [ Read; Write ])
                     "the approved grant is live"
 
@@ -188,7 +189,7 @@ let tests =
                 let _, _, _, approvals = freshFixture ()
                 let audit = RecordingAuditLog()
 
-                let mutation = AdminMutation.SetMemberPermissions("bob", "reports", [ Read ])
+                let mutation = AdminMutation.SetMemberPermissions(UserId "bob", "reports", [ Read ])
 
                 let queued =
                     match
@@ -213,7 +214,7 @@ let tests =
                 let _, _, permissions, approvals = freshFixture ()
                 let audit = RecordingAuditLog()
 
-                let mutation = AdminMutation.SetMemberPermissions("bob", "reports", [ Read ])
+                let mutation = AdminMutation.SetMemberPermissions(UserId "bob", "reports", [ Read ])
 
                 let queued =
                     match propose approvals settingsAll None runNow t0 "acme" "admin-a" mutation |> run with
@@ -238,7 +239,9 @@ let tests =
                 | Ok(AdminMutationDecision.Rejected _) -> ()
                 | other -> failtestf "a proposer must be able to withdraw; got %A" other
 
-                Expect.isEmpty (effectiveFor permissions "bob" "acme") "a rejected proposal applies nothing"
+                Expect.isEmpty
+                    (effectiveFor permissions (UserId "bob") (TeamId "acme"))
+                    "a rejected proposal applies nothing"
 
                 match audit.Recorded |> List.map (snd >> AuditEvent.eventTypeName) with
                 | [ "AdminMutationRejected" ] -> ()
@@ -253,7 +256,8 @@ let tests =
                 let _, _, permissions, approvals = freshFixture ()
                 let audit = RecordingAuditLog()
 
-                let mutation = AdminMutation.SetMemberPermissions("bob", "reports", [ Read; Write ])
+                let mutation =
+                    AdminMutation.SetMemberPermissions(UserId "bob", "reports", [ Read; Write ])
 
                 let queued =
                     match propose approvals settingsAll None runNow t0 "acme" "admin-a" mutation |> run with
@@ -271,13 +275,15 @@ let tests =
                     Expect.equal actor "admin-a" "the refusal names the attempting actor"
                 | other -> failtestf "self-approval must be refused; got %A" other
 
-                Expect.isEmpty (effectiveFor permissions "bob" "acme") "a refused self-approval applies nothing"
+                Expect.isEmpty
+                    (effectiveFor permissions (UserId "bob") (TeamId "acme"))
+                    "a refused self-approval applies nothing"
 
                 // The record must SURVIVE: a refused attempt is not a
                 // decision, and consuming the proposal would let a
                 // proposer destroy their own pending grant by attempting
                 // to approve it.
-                match approvals.TryGet("acme", queued.RequestId) |> run with
+                match approvals.TryGet(TeamId "acme", queued.RequestId) |> run with
                 | Ok(Some _) -> ()
                 | other -> failtestf "the pending record must survive a refused approval; got %A" other
 
@@ -307,7 +313,7 @@ let tests =
                                 t0
                                 "acme"
                                 "admin-a"
-                                (AdminMutation.SetMemberPermissions("bob", "reports", [ Read ]))
+                                (AdminMutation.SetMemberPermissions(UserId "bob", "reports", [ Read ]))
                             |> run
                         with
                         | Ok q -> q
@@ -341,7 +347,7 @@ let tests =
                     )
 
                 match
-                    (gate :> IPermissionStore).SetMemberPermissions("acme", "bob", "reports", [ Read ])
+                    (gate :> IPermissionStore).SetMemberPermissions(TeamId "acme", UserId "bob", "reports", [ Read ])
                     |> run
                 with
                 | Error message ->
@@ -353,7 +359,7 @@ let tests =
                 | Ok queued -> failtestf "nothing may be queued for an unknown proposer; %d were" queued.Length
                 | Error e -> failtestf "listing the queue failed: %s" e
 
-                Expect.isEmpty (effectiveFor permissions "bob" "acme") "nothing applied"
+                Expect.isEmpty (effectiveFor permissions (UserId "bob") (TeamId "acme")) "nothing applied"
             }
         ]
 
@@ -374,7 +380,7 @@ let tests =
                             t0
                             "acme"
                             "admin-a"
-                            (AdminMutation.SetMemberPermissions("bob", "reports", [ Read ]))
+                            (AdminMutation.SetMemberPermissions(UserId "bob", "reports", [ Read ]))
                         |> run
                     with
                     | Ok q -> q
@@ -392,9 +398,11 @@ let tests =
                     Expect.equal at (t0.AddMinutes 60.0) "the refusal names the lapse instant"
                 | other -> failtestf "a lapsed proposal must be refused; got %A" other
 
-                Expect.isEmpty (effectiveFor permissions "bob" "acme") "a lapsed proposal applies nothing"
+                Expect.isEmpty
+                    (effectiveFor permissions (UserId "bob") (TeamId "acme"))
+                    "a lapsed proposal applies nothing"
 
-                match approvals.TryGet("acme", queued.RequestId) |> run with
+                match approvals.TryGet(TeamId "acme", queued.RequestId) |> run with
                 | Ok None -> ()
                 | other -> failtestf "a lapsed record must be swept as it is touched; got %A" other
 
@@ -420,7 +428,7 @@ let tests =
                         t0
                         "acme"
                         "admin-a"
-                        (AdminMutation.SetMemberPermissions(user, "reports", [ Read ]))
+                        (AdminMutation.SetMemberPermissions(UserId user, "reports", [ Read ]))
                     |> run
                     |> ignore
 
@@ -435,7 +443,7 @@ let tests =
                     live
                     "acme"
                     "admin-a"
-                    (AdminMutation.SetMemberPermissions("dave", "reports", [ Read ]))
+                    (AdminMutation.SetMemberPermissions(UserId "dave", "reports", [ Read ]))
                 |> run
                 |> ignore
 
@@ -498,7 +506,7 @@ let tests =
                 // proposing its removal and never approving it.
                 let _, _, permissions, approvals = freshFixture ()
 
-                permissions.SetMemberPermissions("acme", "bob", "reports", [ Read; Write ])
+                permissions.SetMemberPermissions(TeamId "acme", UserId "bob", "reports", [ Read; Write ])
                 |> run
                 |> ignore
 
@@ -513,13 +521,13 @@ let tests =
                     )
 
                 match
-                    (gate :> IPermissionStore).SetMemberPermissions("acme", "bob", "reports", [])
+                    (gate :> IPermissionStore).SetMemberPermissions(TeamId "acme", UserId "bob", "reports", [])
                     |> run
                 with
                 | Ok() -> ()
                 | Error e -> failtestf "a revocation must apply immediately; got %s" e
 
-                Expect.isEmpty (effectiveFor permissions "bob" "acme") "the revocation landed"
+                Expect.isEmpty (effectiveFor permissions (UserId "bob") (TeamId "acme")) "the revocation landed"
 
                 match listPending approvals None runNow t0 "acme" |> run with
                 | Ok [] -> ()
@@ -548,15 +556,17 @@ let tests =
                     )
 
                 let apply (store: IPermissionStore) =
-                    store.SetMemberPermissions("acme", "bob", "reports", [ Read; Write ])
+                    store.SetMemberPermissions(TeamId "acme", UserId "bob", "reports", [ Read; Write ])
                     |> run
                     |> ignore
 
-                    store.SetTeamDefaults("acme", Map.ofList [ "reports", [ Read ] ])
+                    store.SetTeamDefaults(TeamId "acme", Map.ofList [ "reports", [ Read ] ])
                     |> run
                     |> ignore
 
-                    store.SetModuleExposure("acme", "admin", ModuleExposure.Hidden) |> run |> ignore
+                    store.SetModuleExposure(TeamId "acme", "admin", ModuleExposure.Hidden)
+                    |> run
+                    |> ignore
 
                 apply plainStore
                 apply (gate :> IPermissionStore)
@@ -582,22 +592,28 @@ let tests =
 
                 let store = gate :> IPermissionStore
 
-                match store.SetMemberPermissions("acme", "bob", "reports", [ Read ]) |> run with
+                match
+                    store.SetMemberPermissions(TeamId "acme", UserId "bob", "reports", [ Read ])
+                    |> run
+                with
                 | Ok() -> ()
                 | Error e -> failtestf "a non-policy module must not be gated under the narrow scope; got %s" e
 
-                match store.SetMemberPermissions("acme", "bob", "payroll", [ Read ]) |> run with
+                match
+                    store.SetMemberPermissions(TeamId "acme", UserId "bob", "payroll", [ Read ])
+                    |> run
+                with
                 | Error message ->
                     Expect.stringContains message "DUAL-CONTROL-PENDING-APPROVAL" "the policy-bearing module IS gated"
                 | Ok() -> failtest "a policy-bearing module must be gated under the narrow scope"
 
                 Expect.equal
-                    (effectiveFor permissions "bob" "acme" |> Map.tryFind "reports")
+                    (effectiveFor permissions (UserId "bob") (TeamId "acme") |> Map.tryFind "reports")
                     (Some [ Read ])
                     "the ungated grant landed"
 
                 Expect.equal
-                    (effectiveFor permissions "bob" "acme" |> Map.tryFind "payroll")
+                    (effectiveFor permissions (UserId "bob") (TeamId "acme") |> Map.tryFind "payroll")
                     None
                     "the gated grant did not"
             }
@@ -612,11 +628,13 @@ let tests =
                 // Re-writing the identical entry widens nothing, so an
                 // operator repairing a document proposes nothing.
                 Expect.isEmpty
-                    (widenedModules previous (AdminMutation.SetMemberPermissions("bob", "reports", [ Read ])))
+                    (widenedModules previous (AdminMutation.SetMemberPermissions(UserId "bob", "reports", [ Read ])))
                     "an unchanged entry is not a widening"
 
                 Expect.equal
-                    (widenedModules previous (AdminMutation.SetMemberPermissions("bob", "reports", [ Read; Write ])))
+                    (widenedModules
+                        previous
+                        (AdminMutation.SetMemberPermissions(UserId "bob", "reports", [ Read; Write ])))
                     [ "reports" ]
                     "adding a permission is a widening"
 
@@ -677,7 +695,10 @@ let tests =
                 let composed =
                     GrantPolicyGuard.GrantPolicyPermissionStore(gate :> IPermissionStore, registry) :> IPermissionStore
 
-                match composed.SetMemberPermissions("acme", "bob", "payroll", [ Read ]) |> run with
+                match
+                    composed.SetMemberPermissions(TeamId "acme", UserId "bob", "payroll", [ Read ])
+                    |> run
+                with
                 | Error message ->
                     Expect.stringContains
                         message
@@ -754,7 +775,7 @@ let tests =
                         failtestf "an acknowledged grant is still parked by dual control, and must SAY so; got %A" other
 
                 Expect.isEmpty
-                    (effectiveFor permissions "bob" "acme")
+                    (effectiveFor permissions (UserId "bob") (TeamId "acme"))
                     "the grantee's access is unchanged while the proposal is pending"
 
                 let pending =
@@ -774,7 +795,7 @@ let tests =
                 | other -> failtestf "a distinct approver must apply it; got %A" other
 
                 Expect.equal
-                    (effectiveFor permissions "bob" "acme" |> Map.tryFind "payroll")
+                    (effectiveFor permissions (UserId "bob") (TeamId "acme") |> Map.tryFind "payroll")
                     (Some [ Read ])
                     "and the grant is live once both controls are satisfied"
             }
@@ -784,9 +805,9 @@ let tests =
         testList "the approval binds to the exact bytes proposed" [
 
             test "the fingerprint is stable across processes and distinguishes payloads" {
-                let a = AdminMutation.SetMemberPermissions("bob", "reports", [ Read ])
-                let b = AdminMutation.SetMemberPermissions("bob", "reports", [ Read; Write ])
-                let c = AdminMutation.SetMemberPermissions("carol", "reports", [ Read ])
+                let a = AdminMutation.SetMemberPermissions(UserId "bob", "reports", [ Read ])
+                let b = AdminMutation.SetMemberPermissions(UserId "bob", "reports", [ Read; Write ])
+                let c = AdminMutation.SetMemberPermissions(UserId "carol", "reports", [ Read ])
 
                 Expect.equal (fingerprint a) (fingerprint a) "the fingerprint is deterministic"
                 Expect.notEqual (fingerprint a) (fingerprint b) "a widened grant fingerprints differently"
@@ -813,7 +834,7 @@ let tests =
                             t0
                             "acme"
                             "admin-a"
-                            (AdminMutation.SetMemberPermissions("bob", "reports", [ Read ]))
+                            (AdminMutation.SetMemberPermissions(UserId "bob", "reports", [ Read ]))
                         |> run
                     with
                     | Ok q -> q
@@ -823,10 +844,10 @@ let tests =
                 // fingerprint — the shape a tampered or partially-written
                 // blob takes.
                 let tampered =
-                    match approvals.TryGet("acme", queued.RequestId) |> run with
+                    match approvals.TryGet(TeamId "acme", queued.RequestId) |> run with
                     | Ok(Some p) -> {
                         p with
-                            Mutation = AdminMutation.SetMemberPermissions("bob", "reports", [ Read; Write ])
+                            Mutation = AdminMutation.SetMemberPermissions(UserId "bob", "reports", [ Read; Write ])
                       }
                     | other -> failtestf "could not read the pending record back: %A" other
 
@@ -839,7 +860,7 @@ let tests =
                     Expect.equal id queued.RequestId "the refusal names the request"
                 | other -> failtestf "a tampered record must not be approved; got %A" other
 
-                Expect.isEmpty (effectiveFor permissions "bob" "acme") "nothing applied"
+                Expect.isEmpty (effectiveFor permissions (UserId "bob") (TeamId "acme")) "nothing applied"
             }
 
             test "the captured mutation survives a real round-trip through the blob store" {
@@ -851,7 +872,7 @@ let tests =
                 let _, _, _, approvals = freshFixture ()
 
                 let mutations = [
-                    AdminMutation.SetMemberPermissions("bob", "reports", [ Read; Write ])
+                    AdminMutation.SetMemberPermissions(UserId "bob", "reports", [ Read; Write ])
                     AdminMutation.SetTeamDefaults(Map.ofList [ "reports", [ Read ] ])
                     AdminMutation.SetModuleExposure("admin", ModuleExposure.Unavailable)
                     AdminMutation.SetTeamPermissions {
@@ -881,7 +902,7 @@ let tests =
                         | Ok q -> q
                         | Error r -> failtestf "propose refused: %s" (AdminMutationRefusal.describe r)
 
-                    match approvals.TryGet("acme", queued.RequestId) |> run with
+                    match approvals.TryGet(TeamId "acme", queued.RequestId) |> run with
                     | Ok(Some p) ->
                         Expect.equal p.Mutation mutation "the captured mutation round-trips unchanged"
                         Expect.equal p.Fingerprint (fingerprint mutation) "and still hashes to its fingerprint"
@@ -930,7 +951,8 @@ let tests =
                     member _.Remove(_, _) = async { return Error "remove refused" }
                 }
 
-            let mutation = AdminMutation.SetMemberPermissions("bob", "reports", [ Read; Write ])
+            let mutation =
+                AdminMutation.SetMemberPermissions(UserId "bob", "reports", [ Read; Write ])
 
             let queued =
                 match propose stuck settingsAll None runNow t0 "acme" "admin-a" mutation |> run with
