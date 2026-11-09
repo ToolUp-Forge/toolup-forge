@@ -131,6 +131,32 @@ module BlobMapStoreError =
         | BlobMapStoreError.Contended(blob, attempts) ->
             $"blob '{blob}' changed under every one of {attempts} attempts; nothing was written"
 
+/// Raised by a read whose signature has no error channel when the store
+/// could not establish the document (`Unreadable` or `Quarantined`): the
+/// operation is refused rather than answered as though the document were
+/// absent or empty. Carries the store's verdict.
+exception DocumentUnavailableException of error: BlobMapStoreError with
+    override this.Message = BlobMapStoreError.describe this.error
+
+/// Companion functions for `DocumentUnavailableException`.
+module DocumentUnavailable =
+
+    /// The value of a store read, or the refusal raised as
+    /// `DocumentUnavailableException` for a caller with no `Result` to carry it.
+    let orRaise (result: Result<'T, BlobMapStoreError>) : 'T =
+        match result with
+        | Ok value -> value
+        | Error error -> raise (DocumentUnavailableException error)
+
+    /// `work`'s outcome, with a raised `DocumentUnavailableException` folded
+    /// into its `Error` channel as the store's description.
+    let asError (work: Async<Result<'T, string>>) : Async<Result<'T, string>> = async {
+        try
+            return! work
+        with DocumentUnavailableException error ->
+            return Error(BlobMapStoreError.describe error)
+    }
+
 /// The name of one document inside its scope's container, rendered by the
 /// owning store's layout function (`DocPath.ofString`). Its representation
 /// is private, so a path is built in one place per store and never spliced
@@ -508,14 +534,22 @@ type BlobDocumentStore<'T>(storage: IBlobStorage, codec: BlobCodec<'T>, logger: 
     /// naming it, never a dropped row, so a caller that needs every document
     /// refuses the operation and one that can show partial results says which
     /// are missing. A blob that disappears between the listing and its read is
-    /// absent and is not reported. At most `degree` reads run at once, clamped
+    /// absent and is not reported, and so are the store's own quarantine and
+    /// probe siblings. At most `degree` reads run at once, clamped
     /// to 1..`BlobDocumentStoreLimits.MaxListDegree`.
     member _.List
         (scope: ScopeKey, prefix: string, degree: int)
         : Async<(DocPath * Result<'T, BlobMapStoreError>) list> =
         async {
             let container = ScopeKey.container scope
-            let! names = storage.List(container, prefix)
+            let! listed = storage.List(container, prefix)
+
+            // The store's own siblings (a quarantine copy, a capability probe
+            // left by a backend that ignored the precondition) are not
+            // documents.
+            let names =
+                listed
+                |> List.filter (fun name -> not (name.Contains ".corrupt-" || name.EndsWith ".etag-probe"))
 
             let! rows =
                 names

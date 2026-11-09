@@ -273,12 +273,6 @@ let repair (reads: MembershipReads) (writes: MembershipWrites) : Async<Membershi
 module MembershipDoctorStorage =
 
     let private idFromBlobName (prefix: string) (suffix: string) (name: string) : string option =
-        // `IBlobStorage.List` names are forward-slash separated on the
-        // in-memory / cloud backends, but `LocalFileStorage` returns
-        // OS-relative paths — backslashed on Windows. Normalise before
-        // matching so the doctor reads every backend identically.
-        let name = name.Replace('\\', '/')
-
         if
             name.StartsWith prefix
             && name.EndsWith suffix
@@ -288,44 +282,50 @@ module MembershipDoctorStorage =
         else
             None
 
-    /// Reads over the `_platform` membership layout of `storage`.
-    let reads (storage: IBlobStorage) : MembershipReads = {
-        ListMembershipUserIds =
-            fun () -> async {
-                let! names = storage.List(platformContainer, "memberships/")
-                return names |> List.choose (idFromBlobName "memberships/" ".json")
-            }
-        LoadMemberships =
-            fun userId -> async {
-                let! result = storage.Download(platformContainer, membershipBlobName (UserId userId))
+    /// Reads over the `_platform` membership layout of `storage`, through the
+    /// same document store and codecs `TeamStore` uses. A membership document
+    /// or active-team pointer that cannot be read or decoded raises
+    /// `DocumentUnavailableException`, refusing the diagnosis: read as empty,
+    /// a transient fault would look like a member with no teams.
+    let reads (storage: IBlobStorage) : MembershipReads =
+        let logger = Config.ConsoleLogger.ConsoleLogger() :> ILogger
 
-                return
-                    match result with
-                    | Ok bytes -> Json.deserializeMemberships bytes
-                    | Error _ -> []
-            }
-        ListTeamIds =
-            fun () -> async {
-                let! names = storage.List(platformContainer, "teams/")
-                return names |> List.choose (idFromBlobName "teams/" ".json") |> Set.ofList
-            }
-        ListActiveTeamUserIds =
-            fun () -> async {
-                let! names = storage.List(platformContainer, "active-team/")
-                return names |> List.choose (idFromBlobName "active-team/" ".txt")
-            }
-        GetActiveTeam =
-            fun userId -> async {
-                let! result = storage.Download(platformContainer, activeTeamBlobName (UserId userId))
+        let membershipDocs =
+            BlobDocumentStore<StoredMembership list>(storage, membershipCodec, logger)
 
-                return
-                    match result with
-                    | Ok bytes ->
-                        let teamId = Encoding.UTF8.GetString(bytes).Trim()
-                        if teamId = "" then None else Some teamId
-                    | Error _ -> None
-            }
-    }
+        let activeTeamDocs = BlobDocumentStore<string>(storage, activeTeamCodec, logger)
+
+        {
+            ListMembershipUserIds =
+                fun () -> async {
+                    let! names = storage.List(platformContainer, MembershipPrefix)
+                    return names |> List.choose (idFromBlobName MembershipPrefix ".json")
+                }
+            LoadMemberships =
+                fun userId -> async {
+                    let! read = membershipDocs.Read(platformScope, membershipPath (UserId userId))
+                    return read |> DocumentUnavailable.orRaise |> Option.defaultValue []
+                }
+            ListTeamIds =
+                fun () -> async {
+                    let! names = storage.List(platformContainer, "teams/")
+                    return names |> List.choose (idFromBlobName "teams/" ".json") |> Set.ofList
+                }
+            ListActiveTeamUserIds =
+                fun () -> async {
+                    let! names = storage.List(platformContainer, "active-team/")
+                    return names |> List.choose (idFromBlobName "active-team/" ".txt")
+                }
+            GetActiveTeam =
+                fun userId -> async {
+                    let! read = activeTeamDocs.Read(platformScope, activeTeamPath (UserId userId))
+
+                    return
+                        match DocumentUnavailable.orRaise read with
+                        | Some teamId when teamId <> "" -> Some teamId
+                        | _ -> None
+                }
+        }
 
     /// Writes over the same layout. `auditLog` records one
     /// `MemberRemoved` per stripped row, actor-attributed (GP 6);
