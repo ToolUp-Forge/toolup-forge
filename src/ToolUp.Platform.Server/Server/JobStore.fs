@@ -7,6 +7,7 @@ open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.Infra
 open ToolUp.Platform.Infra.SecondaryIndex
 
 // ─── Storage layout ──────────────────────────────────────────────
@@ -135,21 +136,19 @@ type AwaitingExternalEntry = {
 /// `WebhookRegistry.downloadAll` and `PersistentEventStore.downloadAll`.
 /// A partial result on the scheduler's hot path is preferable to a
 /// total failure if a single corrupt blob slipped in.
-let private downloadAll<'T> (storage: IBlobStorage) (blobNames: string list) : Async<'T list> = async {
-    let! results =
+let private logger =
+    lazy (ToolUp.Platform.Config.ConsoleLogger.ConsoleLogger() :> ILogger)
+
+/// A partial result on the scheduler's hot path is preferable to a total
+/// failure: a document that cannot be read is left out — logged, and
+/// quarantined by the document store when it does not decode.
+let private downloadAll<'T> (storage: IBlobStorage) (blobNames: string list) : Async<'T list> =
+    BlobDocuments.readAvailable
+        (BlobDocumentStore<'T>(storage, BlobCodec.json<'T>, logger.Value))
+        logger.Value
+        "JobStore"
+        ScopeKey.platform
         blobNames
-        |> List.map (fun name -> async {
-            let! result = storage.Download(platformContainer, name)
-
-            return
-                match result with
-                | Ok bytes -> Json.tryDeserialize<'T> bytes
-                | Error _ -> None
-        })
-        |> Async.Parallel
-
-    return results |> Array.choose id |> Array.toList
-}
 
 // ─── BlobJobStore ────────────────────────────────────────────────
 
@@ -170,6 +169,14 @@ let private downloadAll<'T> (storage: IBlobStorage) (blobNames: string list) : A
 /// of definitions. Drift surfaces in `IndexConsistencyCheck` and is
 /// recoverable via `Rebuild`.
 type BlobJobStore(storage: IBlobStorage, eventStore: IEventStore) =
+
+    let definitions =
+        BlobDocumentStore<JobDefinition>(storage, BlobCodec.json<JobDefinition>, logger.Value)
+
+    let runs = BlobDocumentStore<JobRun>(storage, BlobCodec.json<JobRun>, logger.Value)
+
+    let definitionPath (scopeId: string) (jobId: JobId) =
+        DocPath.ofString (definitionBlob scopeId jobId)
 
     let idempotencyIndexFor (scopeId: string) : BlobIndex<string, JobId> =
         BlobIndex.create
@@ -304,15 +311,13 @@ type BlobJobStore(storage: IBlobStorage, eventStore: IEventStore) =
         // next-run bucket entry to remove. This pre-read is the only
         // way to keep the index consistent under updates that change
         // either NextRunAt or Status.
-        let! prior = storage.Download(platformContainer, definitionBlob definition.ScopeId definition.JobId)
+        //
+        // A prior definition that cannot be read or decoded refuses the save
+        // rather than being read as absent: its next-run entry would be
+        // left behind in the index, scheduling a job the save replaced.
+        let! prior = definitions.Read(ScopeKey.platform, definitionPath definition.ScopeId definition.JobId)
 
-        let priorBucket =
-            match prior with
-            | Ok bytes ->
-                match Json.tryDeserialize<JobDefinition> bytes with
-                | Some d -> activeBucket d
-                | None -> None
-            | Error _ -> None
+        let priorBucket = prior |> DocumentUnavailable.orRaise |> Option.bind activeBucket
 
         let bytes = Json.serialize definition
 
@@ -470,12 +475,11 @@ type BlobJobStore(storage: IBlobStorage, eventStore: IEventStore) =
     interface IJobStore with
         member _.Save(definition) = saveDefinition definition
 
+        // A definition that cannot be read or decoded REFUSES the read
+        // (`DocumentUnavailableException`) rather than reading as absent.
         member _.Get(scopeId, jobId) = async {
-            let! result = storage.Download(platformContainer, definitionBlob scopeId jobId)
-
-            match result with
-            | Ok bytes -> return Json.tryDeserialize<JobDefinition> bytes
-            | Error _ -> return None
+            let! read = definitions.Read(ScopeKey.platform, definitionPath scopeId jobId)
+            return DocumentUnavailable.orRaise read
         }
 
         member _.ListJobs(scopeId) = async {
@@ -571,21 +575,15 @@ type BlobJobStore(storage: IBlobStorage, eventStore: IEventStore) =
             // Defensive — index drift could leave stale refs pointing
             // at jobs that have since been Cancelled or rescheduled.
             let! canonicals =
-                candidateIds
-                |> List.map (fun jobId -> async {
-                    let! result = storage.Download(platformContainer, definitionBlob scopeId jobId)
-
-                    return
-                        match result with
-                        | Ok bytes -> Json.tryDeserialize<JobDefinition> bytes
-                        | Error _ -> None
-                })
-                |> Async.Parallel
+                BlobDocuments.readAvailable
+                    definitions
+                    logger.Value
+                    "JobStore"
+                    ScopeKey.platform
+                    (candidateIds |> List.map (definitionBlob scopeId))
 
             return
                 canonicals
-                |> Array.choose id
-                |> Array.toList
                 |> List.filter (fun d ->
                     d.Status = Active
                     && (match d.NextRunAt with
@@ -634,12 +632,12 @@ type BlobJobStore(storage: IBlobStorage, eventStore: IEventStore) =
                                         Warning = None
                                     }
 
-                                let! blob = storage.Download(platformContainer, name)
+                                let! read = runs.Read(ScopeKey.platform, DocPath.ofString name)
 
                                 return
-                                    match blob with
-                                    | Ok bytes ->
-                                        Json.tryDeserialize<JobRun> bytes
+                                    match read with
+                                    | Ok run ->
+                                        run
                                         // Defensive: the index is
                                         // best-effort, so a stale entry
                                         // can point at a run that has
