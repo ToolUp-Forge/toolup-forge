@@ -895,6 +895,7 @@ module ConversationTitling =
         InitialBackoff = TimeSpan.Zero
         MaxBackoff = TimeSpan.Zero
         Timeout = Some policy.Timeout
+        RateLimitFloor = None
     }
 
     let private decoration = [| '"'; '\''; '*'; '#'; '`'; '“'; '”' |]

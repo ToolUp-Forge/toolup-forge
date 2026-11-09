@@ -3,46 +3,50 @@
 
 namespace ToolUp.Platform.AI
 
-open ToolUp.Platform.Transport // RetryPolicy, TransportRetry, RetryClass (Phase 128)
+open ToolUp.Platform.Transport
 
-// ─── Pure portable retry loop (Wave 32, Phase 251) ───────────────
+// ─── The AI taxonomy over the one retry loop ─────────────────────
 //
-// The `singleAttempt` / `retryLoop` recursion currently duplicated
-// verbatim in every provider's `SendMessage` / `SendStructuredMessage`,
-// lifted to one generic pure function. It is parameterised over a single
-// attempt (`unit -> Async<Result<'T, AIProviderError>>`) — the per-provider
-// mapper supplies the attempt; the runner owns the retry/backoff/exhaustion
-// policy. Generic in the success type `'T`, so it is host-agnostic and
-// blind to whether the attempt is a buffered or streamed response.
-//
-// Phase 128 — the loop itself is now the connector-neutral
-// `TransportRetry.runWith`; this module supplies the AI taxonomy's
-// classification and exhaustion wrapper. Behaviour is unchanged.
+// `TransportRetry.runPausing` owns attempts, backoff, the rate-limit floor
+// and exhaustion; this module says how an `AIProviderError` classifies and
+// how the last one is wrapped. Generic in the success type, so it is
+// blind to whether the attempt is a buffered or a streamed response.
 
 module RetryRunner =
 
-    /// Run `singleAttempt` under `policy`, retrying on retryable errors
-    /// with exponential backoff (`RetryPolicy.delayFor`, capped at
-    /// `MaxBackoff`). Semantics byte-identical to the inline provider loop:
+    /// How the loop treats one `AIProviderError`: a 429 is a rate limit
+    /// (the policy's `RateLimitFloor` applies), any other retryable error is
+    /// transient, and everything else is permanent.
+    let classify (err: AIProviderError) : RetryClass =
+        match err with
+        | TransientServer(429, _) -> RetryClass.RateLimited
+        | err when AIProviderError.isRetryable err -> RetryClass.Transient
+        | _ -> RetryClass.Permanent
+
+    /// Run `singleAttempt` under `policy`, pausing through `sleep`:
     ///   * `Ok` returns immediately;
-    ///   * a non-retryable error (`AIProviderError.isRetryable = false`)
-    ///     propagates immediately;
+    ///   * a non-retryable error propagates immediately;
     ///   * once `MaxAttempts` is reached, the last error wraps as
     ///     `RetriesExhausted(attempts, lastError)` — UNLESS `MaxAttempts = 1`
-    ///     (the post-11.C.5 fail-fast contract: `MaxAttempts` counts the
-    ///     first attempt itself, so 1 = no retries and the raw error
-    ///     surfaces, not a one-attempt `RetriesExhausted`);
-    ///   * otherwise it sleeps `delayFor policy (n+1)` and retries.
+    ///     (`MaxAttempts` counts the first attempt itself, so 1 = no retries
+    ///     and the raw error surfaces);
+    ///   * a 429 waits `RetryPolicy.rateLimitDelay`; any other retryable
+    ///     error waits `delayFor policy (n+1)`.
+    let runPausing
+        (sleep: System.TimeSpan -> Async<unit>)
+        (policy: RetryPolicy)
+        (singleAttempt: unit -> Async<Result<'T, AIProviderError>>)
+        : Async<Result<'T, AIProviderError>> =
+        TransportRetry.runPausing
+            sleep
+            classify
+            (fun attempts last -> RetriesExhausted(attempts, last))
+            policy
+            singleAttempt
+
+    /// `runPausing` over `Async.Sleep`.
     let run
         (policy: RetryPolicy)
         (singleAttempt: unit -> Async<Result<'T, AIProviderError>>)
         : Async<Result<'T, AIProviderError>> =
-        TransportRetry.runWith
-            (fun err ->
-                if AIProviderError.isRetryable err then
-                    RetryClass.Transient
-                else
-                    RetryClass.Permanent)
-            (fun attempts last -> RetriesExhausted(attempts, last))
-            policy
-            singleAttempt
+        runPausing (fun delay -> Async.Sleep(int delay.TotalMilliseconds)) policy singleAttempt

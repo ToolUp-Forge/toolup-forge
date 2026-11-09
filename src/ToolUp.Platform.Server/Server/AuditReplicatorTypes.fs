@@ -26,6 +26,7 @@ module AuditReplicatorRetryPolicy =
         InitialBackoff = TimeSpan.FromSeconds 1.0
         MaxBackoff = TimeSpan.FromSeconds 60.0
         Timeout = None
+        RateLimitFloor = None
     }
 
 /// Batching policy for `AuditReplicator`. Controls how many events the
