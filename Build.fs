@@ -4473,7 +4473,6 @@ let main args =
         "MigrationStatusStore.fs"
         "NotificationAddressBook.fs"
         "OAuthFlowHandler.fs"
-        "PrincipalRegistry.fs"
         "Providers/BlobProviderProfile.fs"
         "Remoting/Idempotency.fs"
         "ResultStore.fs"
