@@ -401,7 +401,7 @@ module FactStoreMigration =
     [<Literal>]
     let MigratedType = "FactStoreMigrated"
 
-    let private jsonOptions = FableConverters.create ()
+    let private jsonOptions = PlatformJson.options
 
     let private ordinal = StringComparer.Ordinal
 
