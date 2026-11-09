@@ -20,7 +20,7 @@ open ToolUp.Platform.Compose
 type private AssetRecordWire = AssetRecord
 
 module private AssetJson =
-    let private options = FableConverters.create ()
+    let private options = PlatformJson.options
 
     let toJson (v: 'T) = JsonSerializer.Serialize(v, options)
 

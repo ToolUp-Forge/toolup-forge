@@ -45,18 +45,12 @@ let private blobName (scopeId: string) (entry: NarrativeEntry) =
 
 // ─── JSON serialisation ──────────────────────────────────────────
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 let private serialize (entry: NarrativeEntry) : byte[] =
     let json = JsonSerializer.Serialize(entry, jsonOptions)
     Encoding.UTF8.GetBytes(json)
 
-let private deserialize (bytes: byte[]) : NarrativeEntry option =
-    try
-        let json = Encoding.UTF8.GetString(bytes)
-        Some(JsonSerializer.Deserialize<NarrativeEntry>(json, jsonOptions))
-    with _ ->
-        None
 
 // ─── Result helpers ──────────────────────────────────────────────
 
@@ -89,6 +83,14 @@ let private throwOnError (op: string) (result: Result<'a, string>) : 'a =
 /// the moment it switches its storage layer (no further wiring).
 type PersistentNarrativeStore(blobStorage: IBlobStorage, policy: NarrativeRetentionPolicy) =
 
+    let logger = ToolUp.Platform.Config.ConsoleLogger.ConsoleLogger() :> ILogger
+
+    // A listing leaves out (and logs) an entry it cannot read; `Get` of
+    // one refuses (`DocumentUnavailableException`) rather than reading it
+    // as absent.
+    let docs =
+        BlobDocumentStore<NarrativeEntry>(blobStorage, BlobCodec.json<NarrativeEntry>, logger)
+
     let toInfo (e: NarrativeEntry) : NarrativeEntryInfo = {
         Id = e.Id
         ModuleId = e.ModuleId
@@ -108,19 +110,7 @@ type PersistentNarrativeStore(blobStorage: IBlobStorage, policy: NarrativeRetent
         // Lexicographic descending sort = newest first by timestamp prefix.
         let ordered = names |> List.sortDescending
 
-        let! entries =
-            ordered
-            |> List.map (fun name -> async {
-                let! result = blobStorage.Download(platformContainer, name)
-
-                return
-                    match result with
-                    | Ok bytes -> deserialize bytes
-                    | Error _ -> None
-            })
-            |> Async.Parallel
-
-        return entries |> Array.choose id |> Array.toList
+        return! BlobDocuments.readAvailable docs logger "PersistentNarrativeStore" ScopeKey.platform ordered
     }
 
     let publishInternal (scopeId, moduleId, pageRoute, document, tags) = async {
@@ -248,12 +238,8 @@ type PersistentNarrativeStore(blobStorage: IBlobStorage, policy: NarrativeRetent
             match candidate with
             | None -> return None
             | Some name ->
-                let! result = blobStorage.Download(platformContainer, name)
-
-                return
-                    match result with
-                    | Ok bytes -> deserialize bytes
-                    | Error _ -> None
+                let! read = docs.Read(ScopeKey.platform, DocPath.ofString name)
+                return DocumentUnavailable.orRaise read
         }
 
         member this.GetSection(scopeId, id, sectionId) = async {

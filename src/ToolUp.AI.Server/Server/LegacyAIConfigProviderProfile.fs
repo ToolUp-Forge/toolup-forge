@@ -66,7 +66,7 @@ type private LegacyConfig = {
 }
 
 module private LegacyJson =
-    let private options = FableConverters.create ()
+    let private options = PlatformJson.options
 
     let deserialize (json: string) : LegacyConfig =
         JsonSerializer.Deserialize<LegacyConfig>(json, options)

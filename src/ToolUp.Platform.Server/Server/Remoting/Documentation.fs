@@ -63,7 +63,7 @@ module Docs =
     /// Pre-configured FableConverters options for argument serialisation.
     /// Reused across calls — STJ caches reflection state on the options
     /// instance, so a fresh instance per call would re-pay the cost.
-    let private serializeOptions = FableConverters.create ()
+    let private serializeOptions = PlatformJson.options
 
     let serialize result =
         JsonSerializer.Serialize(result, serializeOptions)

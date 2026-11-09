@@ -981,7 +981,7 @@ type internal TokenTally(inner: IAIProvider) =
 
 // ── The run ──────────────────────────────────────────────────────
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 let private tryService<'T> (sp: IServiceProvider) : 'T option =
     match sp.GetService(typeof<'T>) with

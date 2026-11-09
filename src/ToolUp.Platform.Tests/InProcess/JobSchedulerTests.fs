@@ -1247,7 +1247,7 @@ let private handoffTests =
             // on the client — so "F# None is null, therefore an absent
             // field reads as None" is exactly the kind of reasoning that
             // deserves a test rather than a comment.
-            let options = ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()
+            let options = ToolUp.Remoting.Json.SystemTextJson.PlatformJson.options
 
             let modern: JobRun = {
                 RunId = Guid.NewGuid()

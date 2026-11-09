@@ -76,7 +76,7 @@ type MediaSignedPayload = {
 }
 
 module private Json =
-    let private options = FableConverters.create ()
+    let private options = PlatformJson.options
 
     let serializeString (value: 'T) : string =
         JsonSerializer.Serialize(value, options)

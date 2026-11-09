@@ -127,7 +127,7 @@ type MigrationRunner
         logger: ILogger
     ) =
 
-    let eventJsonOptions = FableConverters.create ()
+    let eventJsonOptions = PlatformJson.options
 
     let emitFailedEvent
         (teamId: string)

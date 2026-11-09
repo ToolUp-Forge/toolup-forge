@@ -469,7 +469,7 @@ type GrantNotificationObserver
         schedule: Async<unit> -> unit
     ) =
 
-    let jsonOptions = FableConverters.create ()
+    let jsonOptions = PlatformJson.options
 
     let scopeOf (teamId: string) =
         ScopeKey.container (ScopeKey.Team(TeamId teamId))

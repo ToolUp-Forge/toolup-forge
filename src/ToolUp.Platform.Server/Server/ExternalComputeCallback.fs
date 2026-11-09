@@ -112,7 +112,7 @@ let private platformScope = ScopeKey.PlatformContainer
 let private refusals = ConcurrentDictionary<string, int * DateTime>()
 let private lastWarned = ConcurrentDictionary<string, DateTime>()
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 /// What the ingress decided, computed before anything is written to the
 /// response.

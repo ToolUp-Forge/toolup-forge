@@ -76,7 +76,7 @@ exception ToolFaulted of fault: ToolFault
 let refuseArguments (fields: (string * string) list) : 'T =
     raise (ToolFaulted(ToolFault.ArgumentsRefused fields))
 
-let private fableJsonOptions = FableConverters.create ()
+let private fableJsonOptions = PlatformJson.options
 
 /// Serialise a value to JSON using the FableConverters set so F#
 /// discriminated unions, options, and records round-trip cleanly.

@@ -125,7 +125,7 @@ type JobExternalHandleMissingPayload = {
     Attempt: int
 }
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 /// A lifecycle payload as the event store holds it.
 let internal serialize (value: 'T) : string =

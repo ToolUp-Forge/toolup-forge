@@ -36,7 +36,7 @@ let private switches = [
 /// Every valued option a forge target reads, with the target that reads it.
 let private valued = [
     "--module", "execute"
-    "--root", "VerifyUploadResults / VerifyScopeLiterals / VerifyServiceConfigFold"
+    "--root", "VerifyUploadResults / VerifyScopeLiterals / VerifyServiceConfigFold / VerifyBlobDownloads"
     "--assemblies", "MergeBaselines"
     "--base", "Select"
     "--head", "Select"

@@ -39,7 +39,7 @@ type ExportAuditRequest = {
     IncludeToolDetails: bool
 }
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 let private resolveScope (ctx: HttpContext) : StorageScope =
     match ctx.Items.TryGetValue "ToolUp.StorageScope" with

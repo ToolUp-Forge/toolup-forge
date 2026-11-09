@@ -127,7 +127,6 @@
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\AgChartExportTests.fs" Link="InProcess\AgChartExportTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\SubjectWildcardAnalyzerTests.fs" Link="InProcess\SubjectWildcardAnalyzerTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\ValidationTests.fs" Link="InProcess\ValidationTests.fs" />
-        <Compile Include="..\ToolUp.Platform.Tests\InProcess\IdempotencyReplayAuditTests.fs" Link="InProcess\IdempotencyReplayAuditTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\IdempotencyStoreEvictionTests.fs" Link="InProcess\IdempotencyStoreEvictionTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\InMemoryJobDispatcherTests.fs" Link="InProcess\InMemoryJobDispatcherTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\AuditBodyDisposalTests.fs" Link="InProcess\AuditBodyDisposalTests.fs" />

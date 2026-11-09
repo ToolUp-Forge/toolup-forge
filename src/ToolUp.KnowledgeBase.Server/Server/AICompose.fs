@@ -36,7 +36,7 @@ open ToolUp.Platform.Compose
 // ─── JSON helpers ────────────────────────────────────────────────
 
 let private fableJsonOptions =
-    ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()
+    ToolUp.Remoting.Json.SystemTextJson.PlatformJson.options
 
 let private fableSerialize (value: obj) : string =
     JsonSerializer.Serialize(value, fableJsonOptions)

@@ -37,7 +37,7 @@ let defaultDirectory () =
 [<Literal>]
 let DefaultMaxBytes = 67_108_864L
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 /// Directory-backed spill store. Stateless between calls (the
 /// directory is the state), so compose may construct more than one

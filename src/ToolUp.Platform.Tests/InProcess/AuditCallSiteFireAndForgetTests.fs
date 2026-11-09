@@ -150,7 +150,7 @@ type private Site = {
     Act: Sinks -> ILogger -> Async<string>
 }
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 let private adAnalytics: Site = {
     Family = "ad analytics (impression)"

@@ -48,7 +48,7 @@ module private ParquetMapping =
     [<Literal>]
     let SchemaMetadataKey = "toolup.dataset.schema"
 
-    let jsonOptions = FableConverters.create ()
+    let jsonOptions = PlatformJson.options
 
     /// The Parquet field for one declared dataset column.
     let toParquetField (col: DatasetColumn) : Field =

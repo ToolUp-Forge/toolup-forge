@@ -46,7 +46,7 @@ open ToolUp.Platform.Config
 //      can't be fired into the audit event store under invented
 //      slot ids.
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 let private PlatformScope = ScopeKey.PlatformContainer
 

@@ -357,7 +357,7 @@ module HostEnvelope =
 
     /// The canonical wire serialiser — the same converter set the rest of
     /// the SDK's non-Remoting JSON uses.
-    let private jsonOptions = FableConverters.create ()
+    let private jsonOptions = PlatformJson.options
 
     /// Project the envelope to canonical JSON so an external authoring
     /// tool can pin it without linking the server assembly.

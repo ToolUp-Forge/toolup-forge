@@ -57,8 +57,7 @@ module PasskeyRuntime =
 
 // The F#-aware STJ options for the request/response envelopes (Option /
 // list / record on the wire).
-let private jsonOptions =
-    ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()
+let private jsonOptions = ToolUp.Remoting.Json.SystemTextJson.PlatformJson.options
 
 let private getService<'T> (ctx: HttpContext) : 'T =
     ctx.RequestServices.GetService(typeof<'T>) :?> 'T

@@ -143,96 +143,82 @@ let private corruptClaimCase (label: string) (fault: BlobFault) =
 
 let tests =
     testList "BlobCorruptionChaos" [
-        // Pending-invites fail-closed decode shares the process-wide
-        // PendingInviteStore cache; sequence it (and reset the cache per test)
-        // so sibling cache-touching packs cannot interleave on it.
-        testSequenced (
-            testList "pending-invites fail-closed decode" [
-                testCaseAsync
-                    "torn write corrupts the map blob; next upsert fails closed + quarantines, never an empty-overwrite"
-                    (async {
-                        do! CacheReset.invalidateAll ()
-                        let inner = Fakes.TestBlobStorage() :> IBlobStorage
-                        let blob = FaultInjectingBlobStorage(inner, seed)
-                        let store = InMemoryPendingInviteStore(blob, silentLogger) :> IPendingInviteStore
+        testList "pending-invites fail-closed decode" [
+            testCaseAsync
+                "torn write corrupts the map blob; next upsert fails closed + quarantines, never an empty-overwrite"
+                (async {
+                    let inner = Fakes.TestBlobStorage() :> IBlobStorage
+                    let blob = FaultInjectingBlobStorage(inner, seed)
+                    let store = InMemoryPendingInviteStore(blob, silentLogger) :> IPendingInviteStore
 
-                        // Seed a valid entry with faults disarmed.
-                        let! seededA = store.Upsert("a@example.com", freshPending "team-a")
-                        Expect.isOk seededA "seed upsert A"
+                    // Seed a valid entry with faults disarmed.
+                    let! seededA = store.Upsert("a@example.com", freshPending "team-a")
+                    Expect.isOk seededA "seed upsert A"
 
-                        // Arm a torn write on the map blob, then upsert B: the store
-                        // reads [A] fine and writes [A;B], but only a 5-byte prefix
-                        // reaches disk. The store believes the write succeeded.
-                        do! CacheReset.invalidateAll ()
-                        blob.FaultBlob(platformContainer, pendingInvitesBlob, UploadPartial 5)
-                        let! tornB = store.Upsert("b@example.com", freshPending "team-a")
-                        Expect.isOk tornB "torn upsert B is Ok from the store's view (write believed to succeed)"
+                    // Arm a torn write on the map blob, then upsert B: the store
+                    // reads [A] fine and writes [A;B], but only a 5-byte prefix
+                    // reaches disk. The store believes the write succeeded.
+                    blob.FaultBlob(platformContainer, pendingInvitesBlob, UploadPartial 5)
+                    let! tornB = store.Upsert("b@example.com", freshPending "team-a")
+                    Expect.isOk tornB "torn upsert B is Ok from the store's view (write believed to succeed)"
 
-                        // Disarm, drop the cache, force a fresh read of the torn blob.
-                        blob.ClearFaults()
-                        do! CacheReset.invalidateAll ()
-                        let! cUpsert = store.Upsert("c@example.com", freshPending "team-a")
+                    // Disarm, then read the torn blob.
+                    blob.ClearFaults()
+                    let! cUpsert = store.Upsert("c@example.com", freshPending "team-a")
 
-                        match cUpsert with
-                        | Error(PendingInviteStoreError.StorageFailed msg) ->
-                            Expect.stringContains (msg.ToLowerInvariant()) "corrupt" "error names the corrupt blob"
-                        | other -> failtestf "expected StorageFailed on corrupt decode, got %A" other
+                    match cUpsert with
+                    | Error(PendingInviteStoreError.StorageFailed msg) ->
+                        Expect.stringContains (msg.ToLowerInvariant()) "corrupt" "error names the corrupt blob"
+                    | other -> failtestf "expected StorageFailed on corrupt decode, got %A" other
 
-                        // The corrupt canonical blob was quarantined aside and removed.
-                        let! quarantined = inner.List(platformContainer, pendingInvitesBlob + ".corrupt-")
-                        Expect.isNonEmpty quarantined "corrupt blob quarantined aside for recovery"
-                        let! canonicalExists = inner.Exists(platformContainer, pendingInvitesBlob)
-                        Expect.isFalse canonicalExists "canonical blob renamed-aside (self-heals to empty on next read)"
+                    // The corrupt bytes were copied aside AND left in place: the
+                    // heal-to-empty is retired (Phase 1061), so the store keeps
+                    // refusing until an operator repairs or removes the blob.
+                    let! quarantined = inner.List(platformContainer, pendingInvitesBlob + ".corrupt-")
+                    Expect.isNonEmpty quarantined "corrupt blob quarantined aside for recovery"
+                    let! canonicalExists = inner.Exists(platformContainer, pendingInvitesBlob)
+                    Expect.isTrue canonicalExists "canonical blob left in place, not healed to empty"
 
-                        // Critically: no map derived from a failed decode was ever
-                        // written — C is absent (never an empty-plus-C overwrite).
-                        do! CacheReset.invalidateAll ()
-                        let! listing = store.ListAll()
+                    // Critically: no map derived from a failed decode was ever
+                    // written, and the listing refuses rather than reading empty.
+                    let! listing = store.ListAll()
 
-                        match listing with
-                        | Ok entries ->
-                            Expect.isEmpty entries "no empty-plus-one overwrite: C absent, store self-healed to empty"
-                        | Error e -> failtestf "ListAll after self-heal should be Ok [], got %A" e
-                    })
+                    match listing with
+                    | Error(PendingInviteStoreError.StorageFailed _) -> ()
+                    | other -> failtestf "ListAll over the corrupt blob should refuse, got %A" other
+                })
 
-                testCaseAsync
-                    "dropped write preserves prior entries (single-instance lost-write boundary)"
-                    (async {
-                        do! CacheReset.invalidateAll ()
-                        let inner = Fakes.TestBlobStorage() :> IBlobStorage
-                        let blob = FaultInjectingBlobStorage(inner, seed)
-                        let store = InMemoryPendingInviteStore(blob, silentLogger) :> IPendingInviteStore
+            testCaseAsync
+                "dropped write preserves prior entries (single-instance lost-write boundary)"
+                (async {
+                    let inner = Fakes.TestBlobStorage() :> IBlobStorage
+                    let blob = FaultInjectingBlobStorage(inner, seed)
+                    let store = InMemoryPendingInviteStore(blob, silentLogger) :> IPendingInviteStore
 
-                        let! seededA = store.Upsert("a@example.com", freshPending "team-a")
-                        Expect.isOk seededA "seed upsert A"
+                    let! seededA = store.Upsert("a@example.com", freshPending "team-a")
+                    Expect.isOk seededA "seed upsert A"
 
-                        // A silently-lost write (the shape an ETag conditional-write
-                        // would reject). The store believes B landed...
-                        do! CacheReset.invalidateAll ()
-                        blob.FaultBlob(platformContainer, pendingInvitesBlob, UploadDrop)
-                        let! droppedB = store.Upsert("b@example.com", freshPending "team-a")
-                        Expect.isOk droppedB "dropped upsert B is Ok (interim store cannot detect a lost write)"
+                    // A silently-lost write (the shape an ETag conditional-write
+                    // would reject). The store believes B landed...
+                    blob.FaultBlob(platformContainer, pendingInvitesBlob, UploadDrop)
+                    let! droppedB = store.Upsert("b@example.com", freshPending "team-a")
+                    Expect.isOk droppedB "dropped upsert B is Ok (interim store cannot detect a lost write)"
 
-                        // ...but the durable state is still exactly [A]: the lost write
-                        // neither erased A nor corrupted the blob. Detecting the lost B
-                        // is the deferred ETag-CAS story (Phase 116).
-                        blob.ClearFaults()
-                        do! CacheReset.invalidateAll ()
-                        let! listing = store.ListAll()
+                    // ...but the durable state is still exactly [A]: the lost write
+                    // neither erased A nor corrupted the blob. Detecting the lost B
+                    // is the deferred ETag-CAS story (Phase 116).
+                    blob.ClearFaults()
+                    let! listing = store.ListAll()
 
-                        match listing with
-                        | Ok entries ->
-                            let emails = entries |> List.map fst |> Set.ofList
-                            Expect.isTrue (emails.Contains "a@example.com") "prior entry A survives a dropped write"
+                    match listing with
+                    | Ok entries ->
+                        let emails = entries |> List.map fst |> Set.ofList
+                        Expect.isTrue (emails.Contains "a@example.com") "prior entry A survives a dropped write"
 
-                            Expect.equal
-                                entries.Length
-                                1
-                                "only A is durable; the lost write fabricated and erased nothing"
-                        | Error e -> failtestf "ListAll should be Ok, got %A" e
-                    })
-            ]
-        )
+                        Expect.equal entries.Length 1 "only A is durable; the lost write fabricated and erased nothing"
+                    | Error e -> failtestf "ListAll should be Ok, got %A" e
+                })
+        ]
 
         testList "share-token single-instance" [
             corruptClaimCase "corrupt" DownloadCorrupt

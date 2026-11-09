@@ -22,10 +22,10 @@ open System
 open System.Security.Cryptography
 open System.Text
 open System.Text.Json
-open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Config
+open ToolUp.Platform.Infra
 
 /// The reserved platform container every `_platform/...` artefact lives
 /// in. Matches `AuditReplicator` / `ConfigValidator`.
@@ -34,8 +34,6 @@ let Container = ScopeKey.PlatformContainer
 
 [<Literal>]
 let private Prefix = "sessions/"
-
-let private jsonOptions = FableConverters.create ()
 
 // ─── Session-id derivation ───────────────────────────────────────────
 
@@ -200,55 +198,56 @@ type BlobBackedSessionRegistry
         | Some l -> l.Warn msg
         | None -> ()
 
-    let serialise (record: SessionRecord) =
-        Encoding.UTF8.GetBytes(JsonSerializer.Serialize(record, jsonOptions))
+    let docs =
+        BlobDocumentStore<SessionRecord>(
+            blobs,
+            BlobCodec.json<SessionRecord>,
+            defaultArg logger (ConsoleLogger.ConsoleLogger() :> ILogger)
+        )
 
-    let deserialise (bytes: byte[]) : SessionRecord option =
-        try
-            let value =
-                JsonSerializer.Deserialize<SessionRecord>(Encoding.UTF8.GetString bytes, jsonOptions)
+    let path (scopeId: string) (sessionId: string) =
+        DocPath.ofString (blobName scopeId sessionId)
 
-            if obj.ReferenceEquals(value, null) then
-                None
-            else
-                Some value
-        with ex ->
-            // A record that will not deserialise silently stops being
-            // listed AND stops being revocable, which is the worse half.
-            // Surface it rather than letting a session quietly become
-            // unmanageable.
-            warn (sprintf "SessionRegistry: a session record could not be deserialised; skipping it. %s" ex.Message)
-            None
+    let unavailable (e: BlobMapStoreError) =
+        SessionError.StoreUnavailable(BlobMapStoreError.describe e)
 
-    let read (scopeId: string) (sessionId: string) : Async<SessionRecord option> = async {
-        match! blobs.Download(Container, blobName scopeId sessionId) with
-        | Ok bytes -> return deserialise bytes
-        | Error _ -> return None
+    /// The stored record, `None` when there is none, `Error` when it cannot
+    /// be read or decoded — never `None` for that, because `Record` writes
+    /// over a `None`, and a revoked session read as absent would be
+    /// un-revoked by the next sign-in.
+    let read (scopeId: string) (sessionId: string) : Async<Result<SessionRecord option, SessionError>> = async {
+        let! loaded = docs.Read(ScopeKey.platform, path scopeId sessionId)
+        return loaded |> Result.mapError unavailable
     }
 
     let write (record: SessionRecord) (scopeId: string) : Async<Result<unit, SessionError>> = async {
-        match! blobs.Upload(Container, blobName scopeId record.SessionId, serialise record) with
-        | Ok _ -> return Ok()
-        | Error e -> return Error(SessionError.StoreUnavailable e)
+        let! written =
+            docs.Update(ScopeKey.platform, path scopeId record.SessionId, (fun _ -> BlobUpdate.Write(record, ())))
+
+        return written |> Result.mapError unavailable
     }
 
-    /// Every record under one scope's prefix. Bounded-parallel reads —
-    /// `ListForUser` runs on an interactive page load, and a session set
-    /// is small, but a remote blob store makes N serial round-trips
-    /// visible. 16 matches the estate's fan-out convention.
+    /// Every record under one scope's prefix, bounded-parallel — `ListForUser`
+    /// runs on an interactive page load. A record that will not read or
+    /// decode is skipped with a warning (quarantined by the store): the list
+    /// is a view, and the authority-bearing paths read the record itself.
     let readScope (scopeId: string) : Async<SessionRecord list> = async {
-        let! names = blobs.List(Container, scopePrefix scopeId)
+        let! rows = docs.List(ScopeKey.platform, scopePrefix scopeId, BlobDocumentStoreLimits.DefaultListDegree)
 
-        let! results =
-            names
-            |> List.map (fun name -> async {
-                match! blobs.Download(Container, name) with
-                | Ok bytes -> return deserialise bytes
-                | Error _ -> return None
-            })
-            |> fun xs -> Async.Parallel(xs, 16)
+        return
+            rows
+            |> List.choose (fun (docPath, row) ->
+                match row with
+                | Ok record -> Some record
+                | Error e ->
+                    warn (
+                        sprintf
+                            "SessionRegistry: session record %s skipped: %s"
+                            (DocPath.value docPath)
+                            (BlobMapStoreError.describe e)
+                    )
 
-        return results |> Array.toList |> List.choose id
+                    None)
     }
 
     let isExpired (at: DateTimeOffset) (record: SessionRecord) =
@@ -264,13 +263,14 @@ type BlobBackedSessionRegistry
                     return Error(SessionError.AccessDenied "sessionId is not a derived session identifier")
                 else
                     match! read scopeId record.SessionId with
+                    | Error e -> return Error e
                     // Already recorded. Return the STORED record, not the
                     // incoming one: `CreatedAt` and any revocation on the
                     // stored copy are the facts, and letting a returning
                     // credential overwrite them would both reset "signed
                     // in since" and un-revoke a revoked session.
-                    | Some existing -> return Ok existing
-                    | None ->
+                    | Ok(Some existing) -> return Ok existing
+                    | Ok None ->
                         match! write record scopeId with
                         | Ok() -> return Ok record
                         | Error e -> return Error e
@@ -288,9 +288,12 @@ type BlobBackedSessionRegistry
                     return Ok()
                 else
                     match! read scope sessionId with
-                    | None -> return Ok()
-                    | Some record when not (SessionRecord.isActive record) -> return Ok()
-                    | Some record ->
+                    | Error e ->
+                        warn (sprintf "SessionRegistry: touch skipped, the record could not be read. %A" e)
+                        return Ok()
+                    | Ok None -> return Ok()
+                    | Ok(Some record) when not (SessionRecord.isActive record) -> return Ok()
+                    | Ok(Some record) ->
                         // Minute-grain precision (GP 12 rule 6): a touch
                         // whose delta is under a minute is skipped, so a
                         // burst of requests on one session costs one blob
@@ -335,8 +338,9 @@ type BlobBackedSessionRegistry
                     return Error(SessionError.NotFound sessionId)
                 else
                     match! read scope sessionId with
-                    | None -> return Error(SessionError.NotFound sessionId)
-                    | Some record ->
+                    | Error e -> return Error e
+                    | Ok None -> return Error(SessionError.NotFound sessionId)
+                    | Ok(Some record) ->
                         // Idempotent: `SessionRecord.revoke` keeps the
                         // original revocation's timestamp and actor, so a
                         // repeat call is a no-op write rather than a
@@ -394,8 +398,9 @@ type BlobBackedSessionRegistry
                     return false
                 else
                     match! read scope sessionId with
-                    | Some record -> return not (SessionRecord.isActive record)
-                    | None -> return false
+                    | Ok(Some record) -> return not (SessionRecord.isActive record)
+                    | Ok None
+                    | Error _ -> return false
         }
 
 module BlobBackedSessionRegistry =

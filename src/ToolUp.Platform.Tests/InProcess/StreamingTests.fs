@@ -183,7 +183,7 @@ let tests =
         }
 
         test "a typed source encodes each element at its declared type, a None included" {
-            let options = ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()
+            let options = ToolUp.Remoting.Json.SystemTextJson.PlatformJson.options
 
             let values: IAsyncEnumerable<string option> =
                 { new IAsyncEnumerable<string option> with

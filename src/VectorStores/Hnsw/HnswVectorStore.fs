@@ -220,7 +220,7 @@ let private toDoubleArray (v: float32 array) =
 
 // ─── JSON helpers ─────────────────────────────────────────────────
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 let private toJson o =
     JsonSerializer.Serialize(o, jsonOptions)

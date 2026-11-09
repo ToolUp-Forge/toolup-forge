@@ -471,7 +471,7 @@ let batchAssertTests =
                 let payload =
                     JsonSerializer.Deserialize<FactBatchAssertedEvent>(
                         (List.head (batchRows rows)).Payload,
-                        FableConverters.create ()
+                        PlatformJson.options
                     )
 
                 Expect.equal payload.Receipt.Digest receipt.Digest "the audited digest is the receipt's digest"
@@ -1074,8 +1074,7 @@ let private surfaceBlobSize (storage: IBlobStorage) (scope: string) = async {
 
 let private writeRaw (storage: IBlobStorage) (scope: string) (fact: Fact) = async {
     let payload =
-        JsonSerializer.Serialize(fact, FableConverters.create ())
-        |> Encoding.UTF8.GetBytes
+        JsonSerializer.Serialize(fact, PlatformJson.options) |> Encoding.UTF8.GetBytes
 
     let! written = storage.Upload(scope, sprintf "_facts/%s.json" fact.FactId, payload)
 
@@ -1205,7 +1204,7 @@ let metricSurfaceTests =
             }
 
             let payload =
-                JsonSerializer.Serialize(smuggled, FableConverters.create ())
+                JsonSerializer.Serialize(smuggled, PlatformJson.options)
                 |> Encoding.UTF8.GetBytes
 
             let! written = storage.Upload(scope, sprintf "_facts/%s.json" smuggled.FactId, payload)
@@ -1269,8 +1268,7 @@ let metricSurfaceTests =
             }
 
             let payload =
-                JsonSerializer.Serialize(ahead, FableConverters.create ())
-                |> Encoding.UTF8.GetBytes
+                JsonSerializer.Serialize(ahead, PlatformJson.options) |> Encoding.UTF8.GetBytes
 
             let! written = storage.Upload(scope, sprintf "_facts/%s.json" ahead.FactId, payload)
 
@@ -1874,7 +1872,7 @@ let metricSurfaceScaleTests =
             let counting = CountingBlobStorage(InMemoryBlobStorage.InMemoryBlobStorage())
             let storage = counting :> IBlobStorage
             let scope = newScope ()
-            let json = FableConverters.create ()
+            let json = PlatformJson.options
             let seeding = Diagnostics.Stopwatch.StartNew()
 
             for i in 0 .. SurfaceScaleSize - 1 do
@@ -2153,7 +2151,7 @@ let private pointFact (index: int) : Fact = {
 }
 
 let private seedPoints (storage: IBlobStorage) (scope: string) (count: int) = async {
-    let json = FableConverters.create ()
+    let json = PlatformJson.options
 
     for i in 0 .. count - 1 do
         let fact = pointFact i
@@ -2711,7 +2709,7 @@ let private seriesFact (index: int) : Fact = {
 /// and every ninth original's lineage carries a revision that supersedes it
 /// — so the scope holds history the read must step over, not only heads.
 let private seedSeries (storage: IBlobStorage) (scope: string) (count: int) = async {
-    let json = FableConverters.create ()
+    let json = PlatformJson.options
 
     let upload (fact: Fact) = async {
         let payload = JsonSerializer.Serialize(fact, json) |> Encoding.UTF8.GetBytes
@@ -3533,7 +3531,7 @@ let pointReadIndexTests =
             }
 
             let payload =
-                JsonSerializer.Serialize(outOfBand, FableConverters.create ())
+                JsonSerializer.Serialize(outOfBand, PlatformJson.options)
                 |> Encoding.UTF8.GetBytes
 
             let! _ = storage.Upload(scope, sprintf "_facts/%s.json" outOfBand.FactId, payload)
@@ -3698,7 +3696,7 @@ let private storedFor (d: FactDraft) : Fact = {
     Disclosure = d.Disclosure
 }
 
-let private blobJson = FableConverters.create ()
+let private blobJson = PlatformJson.options
 
 let private migrationHarness (surfaces: FactSurfaceOptions) () : IFactStoreContract.FactIdMigrationHarness =
     let storage = InMemoryBlobStorage.InMemoryBlobStorage() :> IBlobStorage

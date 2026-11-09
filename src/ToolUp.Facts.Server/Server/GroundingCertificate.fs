@@ -510,7 +510,7 @@ module GroundingCertificate =
     /// sealed under the old one.
     let AttestationPurpose = FormatV1
 
-    let private jsonOptions = FableConverters.create ()
+    let private jsonOptions = PlatformJson.options
 
     /// Canonical node-kind string. Total over `ProvenanceNodeKind`.
     let private nodeKindString (k: ProvenanceNodeKind) : string =

@@ -23,7 +23,7 @@ open ToolUp.Platform.Config
 // touching any provider (the audit trail still captures the operator
 // intent).
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 let private PlatformScope = ScopeKey.PlatformContainer
 

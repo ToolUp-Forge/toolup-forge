@@ -22,7 +22,7 @@ open ToolUp.AI
 // Fable-free; primitives + lists only. Recent rewrites surface up
 // to a small per-bucket sample so operators can spot drift trends.
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 type private RewriteRow = {
     OccurredAt: DateTime

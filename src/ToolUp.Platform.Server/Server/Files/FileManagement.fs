@@ -165,7 +165,7 @@ module ProcessedEntryStore =
     [<Literal>]
     let DataType = "_processed_entry"
 
-    let private jsonOptions = FableConverters.create ()
+    let private jsonOptions = PlatformJson.options
 
     /// Build the `IDataObjectStore` ObjectId for a file's entry sidecar.
     let objectIdFor (fileName: string) : string = Prefix + fileName
@@ -1143,7 +1143,7 @@ let configureEvictionMinutes (minutes: float) =
 /// is the same options instance every other `CustomNotification`
 /// publisher uses (`DataManagerIngestionObserver`), so the JSON the
 /// client's `Json.parseAs` reads has the shape it expects.
-let private sessionStoreResetJsonOptions = FableConverters.create ()
+let private sessionStoreResetJsonOptions = PlatformJson.options
 
 let private evictedEpochs = ConcurrentDictionary<string, Guid>()
 

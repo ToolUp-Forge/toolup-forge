@@ -59,7 +59,7 @@ open ToolUp.Platform.Compose
 // that persisted conversations with F# DUs serialize in Fable-
 // compatible format.
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 let private toJson obj =
     JsonSerializer.Serialize(obj, jsonOptions)

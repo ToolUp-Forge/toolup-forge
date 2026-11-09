@@ -59,7 +59,7 @@ open ToolUp.Platform.Jobs
 // stored bytes, that folding reduces blob count without changing what is
 // delivered, and that a path-shaped `DocId` cannot escape its own prefix.
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 type private RecordingChannel() =
     let published = ConcurrentQueue<string * Notification>()

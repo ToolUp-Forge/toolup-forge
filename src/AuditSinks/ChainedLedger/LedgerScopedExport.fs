@@ -232,7 +232,7 @@ module ScopedExportVerification =
 [<Literal>]
 let SchemaVersion = 1
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 let private coerceFacetList (facets: string list) =
     if obj.ReferenceEquals(facets, null) then [] else facets

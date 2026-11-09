@@ -409,7 +409,7 @@ let private promptPathBehaviours =
 // pre-502.D wire shape by construction and cannot drift from it.
 
 let private wireBehaviours =
-    let jsonOptions = ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()
+    let jsonOptions = ToolUp.Remoting.Json.SystemTextJson.PlatformJson.options
 
     let current: ToolUp.AI.AIMessageRequest = {
         ConversationId = Guid("00000000-0000-0000-0000-0000000000aa")

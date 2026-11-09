@@ -33,7 +33,7 @@ open ToolUp.Platform.Compose
 // other" — a shared store is the condition under which a leak would
 // actually be possible.
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 /// Records every publish so the pack can assert the `_platform.*`
 /// fan-out shape without async subscription timing. Same shape as the

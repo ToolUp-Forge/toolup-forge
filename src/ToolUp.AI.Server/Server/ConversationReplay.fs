@@ -56,7 +56,7 @@ open ToolUp.Platform.Compose
 
 // ─── JSON + digest helpers (shared with ConversationStore) ────────
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 let private sha256Hex (bytes: byte[]) : string =
     let hash = SHA256.HashData(bytes)

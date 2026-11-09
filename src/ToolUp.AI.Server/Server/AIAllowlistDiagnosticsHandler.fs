@@ -80,7 +80,7 @@ let private ReasonMaxChars = 200
 [<Literal>]
 let NoModuleLabel = "(none)"
 
-let private payloadJsonOptions = FableConverters.create ()
+let private payloadJsonOptions = PlatformJson.options
 
 let private indentedJsonOptions =
     let o = FableConverters.create ()

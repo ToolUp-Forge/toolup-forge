@@ -96,7 +96,7 @@ let private sanitiseConversation (header: Conversation) (turns: ConversationTurn
 // FableConverters round-trips cleanly; bare-STJ defaults mangle
 // F# option types. Mirror the options shape established by
 // `DataObjectStoreExporter`.
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 /// `IDataExporter` for the conversation substrate. Emits the
 /// sanitised projection of every conversation in the caller's scope

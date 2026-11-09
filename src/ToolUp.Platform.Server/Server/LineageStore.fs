@@ -27,7 +27,7 @@ open ToolUp.Platform
 
 // ─── JSON serialisation ──────────────────────────────────────────
 
-let private options = FableConverters.create ()
+let private options = PlatformJson.options
 
 let private serialize (link: LineageLink) : string = JsonSerializer.Serialize(link, options)
 

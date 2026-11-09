@@ -62,7 +62,6 @@ open ToolUp.Platform.Infra
 // Ed25519 composes over `IGrantConsentVerifier` exactly as
 // `DefaultModuleBindingVerifier` composes over its seam.
 
-let private jsonOptions = FableConverters.create ()
 
 // ─── The store seam (552.B) ──────────────────────────────────────────
 
@@ -174,89 +173,72 @@ type BlobGrantConsentStore(storage: IBlobStorage, ?logger: ILogger) =
         | Some(l: ILogger) -> l.Error(msg, None)
         | None -> ()
 
-    let deserialise (bytes: byte[]) =
-        try
-            Some(JsonSerializer.Deserialize<GrantConsentRecord>(Encoding.UTF8.GetString bytes, jsonOptions))
-        with _ ->
-            None
+    let docs =
+        BlobDocumentStore<GrantConsentRecord>(
+            storage,
+            BlobCodec.json<GrantConsentRecord>,
+            defaultArg logger (Config.ConsoleLogger.ConsoleLogger() :> ILogger)
+        )
+
+    let consentPath (teamId: TeamId) (consentId: string) =
+        DocPath.ofString (consentBlobName teamId.Value consentId)
 
     interface IGrantConsentStore with
         member _.Put record = async {
             match validateForPut record with
             | Error e -> return Error e
             | Ok() ->
-                try
-                    let bytes = JsonSerializer.Serialize(record, jsonOptions) |> Encoding.UTF8.GetBytes
+                let! written =
+                    docs.Update(
+                        ScopeKey.platform,
+                        consentPath record.Subject.TeamId record.ConsentId,
+                        fun _ -> BlobUpdate.Write(record, ())
+                    )
 
-                    let! result =
-                        storage.Upload(
-                            PlatformContainer,
-                            consentBlobName record.Subject.TeamId.Value record.ConsentId,
-                            bytes
-                        )
-
-                    return
-                        match result with
-                        | Ok _ -> Ok()
-                        | Error e -> Error e
-                with ex ->
-                    logError $"GrantConsentStore: could not persist consent record '{record.ConsentId}': {ex.Message}"
-
-                    return Error ex.Message
-        }
-
-        member _.TryGet(teamId, consentId) = async {
-            let blobName = consentBlobName teamId.Value consentId
-            let! exists = storage.Exists(PlatformContainer, blobName)
-
-            if not exists then
-                return Ok None
-            else
-                let! result = storage.Download(PlatformContainer, blobName)
-
-                match result with
+                match written with
+                | Ok() -> return Ok()
                 | Error e ->
-                    // Present but unreadable. Reported as an error rather
-                    // than as absence: absence reads as "never consented",
-                    // which an operator responds to very differently from
-                    // "the store is broken" — and one of those responses is
-                    // to go and get consent that already exists.
-                    logError $"GrantConsentStore: consent '{consentId}' exists but could not be read ({e})."
-
-                    return Error e
-                | Ok bytes ->
-                    match deserialise bytes with
-                    | Some r -> return Ok(Some r)
-                    | None ->
-                        logError $"GrantConsentStore: consent '{consentId}' is present but unparseable."
-
-                        return Error "consent record is present but unparseable"
+                    let reason = BlobMapStoreError.describe e
+                    logError $"GrantConsentStore: could not persist consent record '{record.ConsentId}': {reason}"
+                    return Error reason
         }
 
+        /// A record that exists but cannot be read or decoded is `Error`, not
+        /// absence: absence reads as "never consented", which an operator
+        /// responds to very differently from "the store is broken" — and one
+        /// of those responses is to go and get consent that already exists.
+        member _.TryGet(teamId, consentId) = async {
+            match! docs.Read(ScopeKey.platform, consentPath teamId consentId) with
+            | Ok found -> return Ok found
+            | Error e ->
+                let reason = BlobMapStoreError.describe e
+                logError $"GrantConsentStore: consent '{consentId}': {reason}"
+                return Error reason
+        }
+
+        /// Every record for the subject. One that cannot be read or decoded
+        /// refuses the listing rather than dropping out of it, for the same
+        /// reason `TryGet` does.
         member _.ListForSubject subject = async {
-            try
-                let! names = storage.List(PlatformContainer, teamPrefix subject.TeamId.Value)
+            let! rows =
+                docs.List(ScopeKey.platform, teamPrefix subject.TeamId.Value, BlobDocumentStoreLimits.DefaultListDegree)
 
-                let! loaded =
-                    names
-                    |> List.map (fun name -> async {
-                        let! result = storage.Download(PlatformContainer, name)
-
-                        return
-                            match result with
-                            | Ok bytes -> deserialise bytes
-                            | Error _ -> None
-                    })
-                    |> Async.Sequential
-
+            match
+                rows
+                |> List.tryPick (fun (path, verdict) ->
+                    match verdict with
+                    | Error e -> Some(path, e)
+                    | Ok _ -> None)
+            with
+            | Some(path, e) ->
+                logError $"GrantConsentStore: {DocPath.value path}: {BlobMapStoreError.describe e}"
+                return Error(BlobMapStoreError.describe e)
+            | None ->
                 return
-                    loaded
-                    |> Array.toList
-                    |> List.choose id
+                    rows
+                    |> List.choose (fun (_, verdict) -> Result.toOption verdict)
                     |> List.filter (fun r -> r.Subject = subject)
                     |> Ok
-            with ex ->
-                return Error ex.Message
         }
 
 // ─── Key material + verification (552.C) ─────────────────────────────

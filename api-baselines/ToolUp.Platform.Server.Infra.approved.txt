@@ -172,6 +172,8 @@ ToolUp.Platform.Infra.BackendCapabilitiesModule (class)
 ToolUp.Platform.Infra.BackendCapabilitiesModule.none : ToolUp.Platform.Infra.BackendCapabilities { get }
 ToolUp.Platform.Infra.BlobBudgetLedger (class)
 ToolUp.Platform.Infra.BlobBudgetLedger..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.BudgetUsage, ToolUp.Platform.BudgetDenial]])
+ToolUp.Platform.Infra.BlobCodec (class)
+ToolUp.Platform.Infra.BlobCodec.json`1() : ToolUp.Platform.Infra.BlobCodec`1[T]
 ToolUp.Platform.Infra.BlobCodec`1 (class)
 ToolUp.Platform.Infra.BlobCodec`1..ctor(Microsoft.FSharp.Core.FSharpFunc`2[T, System.Byte[]], Microsoft.FSharp.Core.FSharpFunc`2[System.Byte[], Microsoft.FSharp.Core.FSharpResult`2[T, System.String]])
 ToolUp.Platform.Infra.BlobCodec`1.Decode : Microsoft.FSharp.Core.FSharpFunc`2[System.Byte[], Microsoft.FSharp.Core.FSharpResult`2[T, System.String]] { get }
@@ -183,6 +185,23 @@ ToolUp.Platform.Infra.BlobDatasetStore..ctor(ToolUp.Platform.Infra.IDataObjectSt
 ToolUp.Platform.Infra.BlobDatasetStoreModule (class)
 ToolUp.Platform.Infra.BlobDatasetStoreModule.create(ToolUp.Platform.Infra.IDataObjectStore) : ToolUp.Platform.Infra.IDatasetStore
 ToolUp.Platform.Infra.BlobDatasetStoreModule.createWithCodec(ToolUp.Platform.Infra.IDataObjectStore, ToolUp.Platform.Infra.IDatasetCodec) : ToolUp.Platform.Infra.IDatasetStore
+ToolUp.Platform.Infra.BlobDocumentStoreLimits (class)
+ToolUp.Platform.Infra.BlobDocumentStoreLimits.DefaultListDegree : System.Int32 (literal)
+ToolUp.Platform.Infra.BlobDocumentStoreLimits.MaxListDegree : System.Int32 (literal)
+ToolUp.Platform.Infra.BlobDocumentStoreLimits.clamp(System.Int32) : System.Int32
+ToolUp.Platform.Infra.BlobDocumentStore`1 (class)
+ToolUp.Platform.Infra.BlobDocumentStore`1..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.Infra.BlobCodec`1[T], ToolUp.Platform.ILogger)
+ToolUp.Platform.Infra.BlobDocumentStore`1..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.Infra.BlobCodec`1[T], ToolUp.Platform.ILogger, ToolUp.Platform.Infra.BlobMapStoreOptions)
+ToolUp.Platform.Infra.BlobDocumentStore`1.Delete(ToolUp.Platform.ScopeKey, ToolUp.Platform.Infra.DocPath) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.Infra.BlobMapStoreError]]
+ToolUp.Platform.Infra.BlobDocumentStore`1.List(ToolUp.Platform.ScopeKey, System.String, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.Infra.DocPath, Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Platform.Infra.BlobMapStoreError]]]]
+ToolUp.Platform.Infra.BlobDocumentStore`1.Read(ToolUp.Platform.ScopeKey, ToolUp.Platform.Infra.DocPath) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[T], ToolUp.Platform.Infra.BlobMapStoreError]]
+ToolUp.Platform.Infra.BlobDocumentStore`1.ReadMany(ToolUp.Platform.ScopeKey, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Infra.DocPath], System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.Infra.DocPath, Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Platform.Infra.BlobMapStoreError]]]]
+ToolUp.Platform.Infra.BlobDocumentStore`1.Replace(ToolUp.Platform.ScopeKey, ToolUp.Platform.Infra.DocPath, T) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.Infra.BlobMapStoreError]]
+ToolUp.Platform.Infra.BlobDocumentStore`1.SupportsConditionalWrites(ToolUp.Platform.ScopeKey, ToolUp.Platform.Infra.DocPath) : Microsoft.FSharp.Control.FSharpAsync`1[System.Boolean]
+ToolUp.Platform.Infra.BlobDocumentStore`1.UpdateOrRestart`1(ToolUp.Platform.ScopeKey, ToolUp.Platform.Infra.DocPath, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpOption`1[T], ToolUp.Platform.Infra.BlobUpdate`2[T, R]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[R, ToolUp.Platform.Infra.BlobMapStoreError]]
+ToolUp.Platform.Infra.BlobDocumentStore`1.Update`1(ToolUp.Platform.ScopeKey, ToolUp.Platform.Infra.DocPath, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpOption`1[T], ToolUp.Platform.Infra.BlobUpdate`2[T, R]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[R, ToolUp.Platform.Infra.BlobMapStoreError]]
+ToolUp.Platform.Infra.BlobDocuments (class)
+ToolUp.Platform.Infra.BlobDocuments.readAvailable`1(ToolUp.Platform.Infra.BlobDocumentStore`1[T], ToolUp.Platform.ILogger, System.String, ToolUp.Platform.ScopeKey, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[T]]
 ToolUp.Platform.Infra.BlobDpKeyRing (class)
 ToolUp.Platform.Infra.BlobDpKeyRing.Container : System.String (literal)
 ToolUp.Platform.Infra.BlobDpKeyRing.Prefix : System.String (literal)
@@ -194,6 +213,8 @@ ToolUp.Platform.Infra.BlobExternalHandleStore (class)
 ToolUp.Platform.Infra.BlobExternalHandleStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage)
 ToolUp.Platform.Infra.BlobExternalHandleStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime])
 ToolUp.Platform.Infra.BlobExternalHandleStore.TryCreate(ToolUp.Platform.BlobStorage+IBlobStorage) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.IExternalHandleStore]
+ToolUp.Platform.Infra.BlobIdempotencyStore (class)
+ToolUp.Platform.Infra.BlobIdempotencyStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Platform.Infra.BlobMapStoreError (class)
 ToolUp.Platform.Infra.BlobMapStoreError.IsContended : System.Boolean { get }
 ToolUp.Platform.Infra.BlobMapStoreError.IsQuarantined : System.Boolean { get }
@@ -766,6 +787,18 @@ ToolUp.Platform.Infra.DeployRecords+DeployRecordVerificationFailure+TranscriptDi
 ToolUp.Platform.Infra.DeployRecords+DeployRecordVerificationFailure+TranscriptDigestMismatch.recorded : System.String { get }
 ToolUp.Platform.Infra.DeployRecords+DeployRecordVerificationFailureModule (class)
 ToolUp.Platform.Infra.DeployRecords+DeployRecordVerificationFailureModule.describe(ToolUp.Platform.Infra.DeployRecords+DeployRecordVerificationFailure) : System.String
+ToolUp.Platform.Infra.DocPath (class)
+ToolUp.Platform.Infra.DocPathModule (class)
+ToolUp.Platform.Infra.DocPathModule.ofString(System.String) : ToolUp.Platform.Infra.DocPath
+ToolUp.Platform.Infra.DocPathModule.value(ToolUp.Platform.Infra.DocPath) : System.String
+ToolUp.Platform.Infra.DocumentUnavailable (class)
+ToolUp.Platform.Infra.DocumentUnavailable.asError`1(Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[T, System.String]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[T, System.String]]
+ToolUp.Platform.Infra.DocumentUnavailable.orRaise`1(Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Platform.Infra.BlobMapStoreError]) : T
+ToolUp.Platform.Infra.DocumentUnavailableException (class)
+ToolUp.Platform.Infra.DocumentUnavailableException..ctor()
+ToolUp.Platform.Infra.DocumentUnavailableException..ctor(ToolUp.Platform.Infra.BlobMapStoreError)
+ToolUp.Platform.Infra.DocumentUnavailableException.Message : System.String { get }
+ToolUp.Platform.Infra.DocumentUnavailableException.error : ToolUp.Platform.Infra.BlobMapStoreError { get }
 ToolUp.Platform.Infra.EdgeCache (class)
 ToolUp.Platform.Infra.EdgeCache.isNoop(ToolUp.Platform.Infra.IEdgeCache) : System.Boolean
 ToolUp.Platform.Infra.EdgeCache.purgeDetached(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.IEdgeCache], System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.Infra.IEdgeCache, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.Infra.EdgePurgeError]]]) : System.Void

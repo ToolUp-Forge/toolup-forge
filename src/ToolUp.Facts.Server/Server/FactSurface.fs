@@ -551,7 +551,7 @@ module internal FactSurfaceCodec =
     let Version = 3
 
     // The value column's JSON shape: the converters the fact blobs use.
-    let private jsonOptions = FableConverters.create ()
+    let private jsonOptions = PlatformJson.options
 
     /// Bytes per census cell on the wire: a 32-bit count, a 64-bit key sum
     /// and a 32-bit check sum, little-endian.

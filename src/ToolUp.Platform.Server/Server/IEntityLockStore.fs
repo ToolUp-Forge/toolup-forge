@@ -87,7 +87,7 @@ type IEntityLockStore =
 /// one winner; events publish best-effort outside the critical section.
 type InMemoryEntityLockStore(channel: INotificationChannel, ?now: unit -> DateTime) =
     let clock = defaultArg now (fun () -> DateTime.UtcNow)
-    let jsonOptions = FableConverters.create ()
+    let jsonOptions = PlatformJson.options
 
     // scopeId -> (ref -> lease). Per-scope shard; a holder read touches
     // only the requested scope's inner map (GP 4).

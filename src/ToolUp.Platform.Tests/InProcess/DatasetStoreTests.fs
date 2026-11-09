@@ -58,7 +58,7 @@ let private readLen (b: byte[]) (i: int) : int =
     ||| int b[i + 3]
 
 type private ChunkedJsonCodec(rowsPerChunk: int) =
-    static let jsonOptions = FableConverters.create ()
+    static let jsonOptions = PlatformJson.options
 
     let frame (payload: byte[]) =
         Array.append (writeLen payload.Length) payload

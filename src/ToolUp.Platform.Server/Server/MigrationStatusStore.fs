@@ -83,16 +83,11 @@ module MigrationStatusStore =
     // on the client. Same pattern as `DataSourceConfigStore`,
     // `WebhookRegistry`, `BlobJobStore`.
     module private Json =
-        let private options = FableConverters.create ()
+        let private options = PlatformJson.options
 
         let serialize (value: 'T) : byte[] =
             JsonSerializer.Serialize(value, options) |> Encoding.UTF8.GetBytes
 
-        let tryDeserialize<'T> (bytes: byte[]) : 'T option =
-            try
-                Some(JsonSerializer.Deserialize<'T>(Encoding.UTF8.GetString bytes, options))
-            with _ ->
-                None
 
     /// Blob-backed default. Every read is prefix-scoped to one team;
     /// the store never widens a prefix during a scoped operation, so a
@@ -100,19 +95,21 @@ module MigrationStatusStore =
     /// out afterwards (GP 4).
     type BlobMigrationStatusStore(storage: IBlobStorage) =
 
+        let logger = ConsoleLogger.ConsoleLogger() :> ILogger
+
+        let docs =
+            BlobDocumentStore<MigrationStatus>(storage, BlobCodec.json<MigrationStatus>, logger)
+
+        // A status that cannot be read or decoded REFUSES the read
+        // (`DocumentUnavailableException`): "no migration recorded" would
+        // send a data type back through a migration it already ran.
         let readBlob (name: string) = async {
-            let! result = storage.Download(platformContainer, name)
-
-            return
-                match result with
-                | Ok bytes -> Json.tryDeserialize<MigrationStatus> bytes
-                | Error _ -> None
+            let! read = docs.Read(ScopeKey.platform, DocPath.ofString name)
+            return DocumentUnavailable.orRaise read
         }
 
-        let readMany (names: string list) = async {
-            let! results = names |> List.map readBlob |> Async.Parallel
-            return results |> Array.choose id |> Array.toList
-        }
+        let readMany (names: string list) =
+            BlobDocuments.readAvailable docs logger "MigrationStatusStore" ScopeKey.platform names
 
         interface IMigrationStatusStore with
 

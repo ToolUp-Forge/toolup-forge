@@ -103,6 +103,14 @@
         <Compile Include="..\ToolUp.Platform.Server\Server\Infra\SqliteLogStore.fs" />
         <Compile Include="..\ToolUp.Platform.Server\Server\Infra\NoOpLogStore.fs" />
         <Compile Include="..\ToolUp.Platform.Server\Server\LogStoreLogger.fs" />
+        <!-- The durable document store (BlobDocumentStore, and BlobMapStore over it), on
+             IBlobStorage / IConditionalBlobStorage from Core alone. Before every store that
+             keeps documents in blobs: PersistentEventStore.fs and
+             PlatformRuntimeConfigStore.fs in this part, then the stores of the later parts.
+             BlobIdempotencyStore.fs is the remoting tier's distributed idempotency store: it
+             reads through the document store, so it compiles here rather than in Remoting. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\BlobMapStore.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\BlobIdempotencyStore.fs" />
         <Compile Include="..\ToolUp.Platform.Server\Server\SecondaryIndex.fs" />
         <Compile Include="..\ToolUp.Platform.Server\Server\Infra\PersistentEventStore.fs" />
         <Compile Include="..\ToolUp.Platform.Server\Server\IDataObjectStore.fs" />
@@ -397,10 +405,6 @@
         <Compile Include="..\ToolUp.Platform.Server\Server\IPlatformRuntimeConfigStore.fs" />
         <Compile Include="..\ToolUp.Platform.Server\Server\Infra\PlatformRuntimeConfigStore.fs" />
         <Compile Include="..\ToolUp.Platform.Server\Server\PlatformAdminDevDiagnostics.fs" />
-        <!-- The guarded read-modify-write helper over IBlobStorage /
-             IConditionalBlobStorage (BlobMapStore). Before its adopters:
-             ShareTokenStore.fs below, Teams/TeamManagement.fs, and the KB index. -->
-        <Compile Include="..\ToolUp.Platform.Server\Server\BlobMapStore.fs" />
         <Compile Include="..\ToolUp.Platform.Server\Server\IRateLimitStore.fs" />
         <Compile Include="..\ToolUp.Platform.Server\Server\InMemoryRateLimitStore.fs" />
         <Compile Include="..\ToolUp.Platform.Server\Server\Providers\BlobProviderProfile.fs" />

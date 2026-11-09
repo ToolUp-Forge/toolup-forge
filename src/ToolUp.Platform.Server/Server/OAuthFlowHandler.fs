@@ -10,6 +10,7 @@ open ToolUp.Remoting.Json.SystemTextJson
 open Giraffe
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.Infra
 open ToolUp.Platform.Secrets
 open ToolUp.Platform.Config.TeamManagement
 open ToolUp.Platform.Infra
@@ -189,17 +190,11 @@ type CredentialMetadata = {
 }
 
 module private MetadataJson =
-    let private options = FableConverters.create ()
+    let private options = PlatformJson.options
 
     let serialize (value: CredentialMetadata) : byte[] =
         JsonSerializer.Serialize(value, options) |> Encoding.UTF8.GetBytes
 
-    let tryDeserialize (bytes: byte[]) : CredentialMetadata option =
-        try
-            let json = Encoding.UTF8.GetString bytes
-            Some(JsonSerializer.Deserialize<CredentialMetadata>(json, options))
-        with _ ->
-            None
 
 let private credentialBlobName (scopeId: string) (dataSourceId: DataSourceId) =
     $"data-sources/{scopeId}/credentials/{dataSourceId}.json"
@@ -226,18 +221,25 @@ let saveCredentialMetadata
 
 /// Read the `CredentialMetadata` for a data source, or `None` when
 /// no metadata blob exists yet (e.g. credentials never minted, or
-/// `Disconnect` cleared the blob).
+/// `Disconnect` cleared the blob). Metadata that exists and cannot be
+/// read or decoded REFUSES the read (`DocumentUnavailableException`) —
+/// never "not connected", which would send the user back through an
+/// OAuth flow for a credential that is still minted.
 let loadCredentialMetadata
     (storage: IBlobStorage)
     (scopeId: string)
     (dataSourceId: DataSourceId)
     : Async<CredentialMetadata option> =
     async {
-        let! result = storage.Download(PlatformContainer, credentialBlobName scopeId dataSourceId)
+        let docs =
+            BlobDocumentStore<CredentialMetadata>(
+                storage,
+                BlobCodec.json<CredentialMetadata>,
+                ToolUp.Platform.Config.ConsoleLogger.ConsoleLogger() :> ILogger
+            )
 
-        match result with
-        | Ok bytes -> return MetadataJson.tryDeserialize bytes
-        | Error _ -> return None
+        let! read = docs.Read(ScopeKey.platform, DocPath.ofString (credentialBlobName scopeId dataSourceId))
+        return DocumentUnavailable.orRaise read
     }
 
 /// Remove the credential metadata blob for a data source. Idempotent

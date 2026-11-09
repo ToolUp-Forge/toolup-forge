@@ -31,7 +31,7 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Compose
 
-let private wire = FableConverters.create ()
+let private wire = PlatformJson.options
 
 let private scope: StorageScope = {
     ScopeId = "alice"

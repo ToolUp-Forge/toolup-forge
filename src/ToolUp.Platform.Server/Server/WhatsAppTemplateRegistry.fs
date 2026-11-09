@@ -4,11 +4,9 @@
 module ToolUp.Platform.Jobs.WhatsAppTemplateRegistry
 
 open System
-open System.Text
-open System.Text.Json
-open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.Infra
 
 // ─── SDK-default implementations (Phase 827) ─────────────────────────
 //
@@ -22,12 +20,6 @@ open ToolUp.Platform.BlobStorage
 //     `FableConverters`. An operator mirrors each vendor-approved
 //     template into that path; the SDK ships no write surface, because
 //     the source of truth is the vendor's approval, not this store.
-
-/// Reserved container for SDK-platform blobs.
-[<Literal>]
-let private PlatformContainer = ScopeKey.PlatformContainer
-
-let private jsonOptions = FableConverters.create ()
 
 /// `true` for a name that is safe to use as a blob-name segment: ASCII
 /// letters, digits, `_` and `-`, at most 512 characters. Both vendors'
@@ -61,15 +53,12 @@ type BlobWhatsAppTemplateRegistry(storage: IBlobStorage, logger: ILogger option)
         | Some l -> l.Warn message
         | None -> ()
 
-    let decode (name: string) (bytes: byte[]) : WhatsAppTemplateDescriptor option =
-        try
-            let decoded =
-                JsonSerializer.Deserialize<WhatsAppTemplateDescriptor>(Encoding.UTF8.GetString bytes, jsonOptions)
-
-            if isNull (box decoded) then None else Some decoded
-        with ex ->
-            warn $"[WhatsAppTemplateRegistry] decode failed template=%s{name}: %s{ex.GetType().Name}: %s{ex.Message}"
-            None
+    let docs =
+        BlobDocumentStore<WhatsAppTemplateDescriptor>(
+            storage,
+            BlobCodec.json<WhatsAppTemplateDescriptor>,
+            defaultArg logger (ToolUp.Platform.Config.ConsoleLogger.ConsoleLogger() :> ILogger)
+        )
 
     let validate (name: string) (descriptor: WhatsAppTemplateDescriptor option) =
         match descriptor with
@@ -88,12 +77,17 @@ type BlobWhatsAppTemplateRegistry(storage: IBlobStorage, logger: ILogger option)
                 return None
             else
                 try
-                    match! storage.Download(PlatformContainer, blobName name) with
-                    | Error _ ->
-                        // Not found and a failed read are one answer:
-                        // the registry cannot vouch for the template.
+                    match! docs.Read(ScopeKey.platform, DocPath.ofString (blobName name)) with
+                    | Error e ->
+                        // A failed read and a record that does not decode
+                        // (quarantined by the store) answer as a missing
+                        // one does: the registry cannot vouch for the
+                        // template. Logged, because each is a defect.
+                        warn
+                            $"[WhatsAppTemplateRegistry] template=%s{name} unavailable: %s{BlobMapStoreError.describe e}"
+
                         return None
-                    | Ok bytes -> return decode name bytes |> validate name
+                    | Ok descriptor -> return validate name descriptor
                 with ex ->
                     warn
                         $"[WhatsAppTemplateRegistry] storage read failed template=%s{name}: %s{ex.GetType().Name}: %s{ex.Message}"

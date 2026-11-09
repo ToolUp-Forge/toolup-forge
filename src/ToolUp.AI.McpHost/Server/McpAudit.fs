@@ -68,7 +68,7 @@ let ToolCompletedEvent = "McpToolCompleted"
 [<Literal>]
 let DeniedEvent = "McpDenied"
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 /// Identity fields every MCP audit payload carries. A record rather than
 /// four repeated fields so a reader grepping the stream finds the same

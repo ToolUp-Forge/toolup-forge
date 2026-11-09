@@ -215,7 +215,7 @@ module ReportingAIToolDeps =
 
 // ─── Serialisation ───────────────────────────────────────────────────
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 let private serialise (value: obj) : string =
     JsonSerializer.Serialize(value, jsonOptions)

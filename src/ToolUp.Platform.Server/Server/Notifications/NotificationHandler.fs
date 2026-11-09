@@ -19,7 +19,7 @@ open ToolUp.Platform
 // Fable client will read manually (SSE, persisted DU data) must go
 // through this converter.
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 let private serializeEnvelope (env: NotificationEnvelope) =
     JsonSerializer.Serialize(env, jsonOptions)

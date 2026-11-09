@@ -62,7 +62,7 @@ type ProviderStatusProbePayload = {
 }
 
 module ProviderStatusProbePayload =
-    let private options = FableConverters.create ()
+    let private options = PlatformJson.options
 
     let serialize (payload: ProviderStatusProbePayload) : string =
         JsonSerializer.Serialize(payload, options)

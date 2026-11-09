@@ -106,7 +106,7 @@ module SidecarStore =
     [<Literal>]
     let MaxClaimAttempts = 8
 
-    let private options = FableConverters.create ()
+    let private options = PlatformJson.options
 
     /// The SDK-standard JSON encoding of a record (`FableConverters`).
     let encode (record: 'T) : byte[] =

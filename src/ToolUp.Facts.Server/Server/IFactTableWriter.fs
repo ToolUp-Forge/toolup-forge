@@ -794,7 +794,7 @@ type FactTableRunEvent = {
 /// converter set).
 module internal FactTableBlobIo =
 
-    let private jsonOptions = FableConverters.create ()
+    let private jsonOptions = PlatformJson.options
 
     let serialize (value: 'T) : string =
         JsonSerializer.Serialize(value, jsonOptions)

@@ -99,7 +99,7 @@ let storeOf (blobName: string) : string =
 /// shapes outside Remoting — so the manifest an operator reads off the
 /// backup target has the same PascalCase, DU-friendly shape as the audit
 /// rows beside it.
-let private manifestJsonOptions = FableConverters.create ()
+let private manifestJsonOptions = PlatformJson.options
 
 /// Serialise a manifest to its blob bytes.
 let encodeManifest (manifest: BackupManifest) : byte[] =

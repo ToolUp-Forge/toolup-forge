@@ -102,7 +102,7 @@ type BlobModelRegistry
     [<Literal>]
     static let ProviderIdKey = "artifact.providerId"
 
-    static let jsonOptions = FableConverters.create ()
+    static let jsonOptions = PlatformJson.options
 
     /// The query-index sidecar for an artifact's data object. `Status` is the
     /// only field a transition changes, so a `QueryByStatus` read never

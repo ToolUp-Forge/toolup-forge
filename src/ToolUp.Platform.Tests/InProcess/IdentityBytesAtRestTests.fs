@@ -48,7 +48,7 @@ type private Untyped = {
     Members: string list
 }
 
-let private json = FableConverters.create ()
+let private json = PlatformJson.options
 
 let tests =
     testList "typed identity — the bytes at rest do not move" [

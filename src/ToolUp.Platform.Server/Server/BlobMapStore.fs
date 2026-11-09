@@ -7,9 +7,10 @@ open ToolUp.Platform
 
 open System
 open System.Security.Cryptography
+open System.Threading
 open ToolUp.Platform.BlobStorage
 
-// ─── Phase 864 — the guarded read-modify-write helper ───────────────
+// ─── The durable document store ─────────────────────────────────────
 //
 // Every blob-backed store that keeps one document per blob (a user's
 // membership list, a share-token claim, a knowledge-base index) mutates it
@@ -26,14 +27,17 @@ open ToolUp.Platform.BlobStorage
 //     write silently drops the first's change. An in-process lock fixes
 //     this on one node and on no other.
 //
-// `BlobMapStore<'T>` is the one place that gets all three right, over the
-// Phase 600 `IConditionalBlobStorage` seam (GP 12: interface-shaped over
+// `BlobDocumentStore<'T>` is the one place that gets all three right, over
+// the `IConditionalBlobStorage` seam (GP 12: interface-shaped over
 // `IBlobStorage`, identity by value, retry budget as data):
 //
 //   read-with-ETag -> decode -> transform -> conditional write
 //     -> bounded retry on a lost precondition (the transform is REPLAYED
 //        over the fresh read, never merged)
 //
+//   * A read that RAISES (rather than answering `Error`) is `Unreadable`
+//     whatever `Exists` said: an exception is a backend that could not be
+//     asked, not an answer, so it is never evidence of absence.
 //   * ABSENT is `None` — the empty state — and the first write carries
 //     `IfAbsent`, so two creators also resolve by precondition. Absence is
 //     established by `Exists`, probed BEFORE the read: a read that fails on
@@ -48,7 +52,11 @@ open ToolUp.Platform.BlobStorage
 //     bad bytes quarantines once) and the operation fails with
 //     `Quarantined`. The canonical blob is NEVER overwritten: its bytes stay
 //     where they are for an operator to repair, and the store keeps failing
-//     closed until they do.
+//     closed until they do. A document whose loss costs only redoable work
+//     (a cursor, a ledger of finished steps, a running tally) is written
+//     through `UpdateOrRestart` / `Replace` instead: the same copy aside, and
+//     then — only once the copy has landed — the document starts again from
+//     empty, CASing against the bytes it set aside.
 //   * A backend WITHOUT conditional writes falls back to an unconditional
 //     write, with one logged warning per store instance. The absent /
 //     unreadable / corrupt rules still hold there; only the lost-update
@@ -62,9 +70,6 @@ open ToolUp.Platform.BlobStorage
 // seam's contract answers exactly — `IfMatch` against a blob that does not
 // exist, which a conditional backend refuses with `ETagMismatch None`
 // without writing anything — and caches only a positive answer.
-//
-// The ETag seam's own precedent is `BlobPendingInviteStore` (Phase 5h),
-// which runs this loop by hand over one map blob; it is unchanged.
 
 /// How a value is carried as blob bytes. `Decode` returns `Error` rather
 /// than throwing for bytes it cannot read; a throwing decoder is treated
@@ -89,7 +94,7 @@ type BlobMapStoreOptions = {
 /// Companion functions for `BlobMapStoreOptions`.
 module BlobMapStoreOptions =
 
-    /// Three retries at 100 / 200 / 400 ms — the Phase 5h budget.
+    /// Three retries at 100 / 200 / 400 ms.
     let defaults: BlobMapStoreOptions = {
         MaxRetries = 3
         InitialBackoff = TimeSpan.FromMilliseconds 100.0
@@ -134,10 +139,96 @@ module BlobMapStoreError =
         | BlobMapStoreError.Contended(blob, attempts) ->
             $"blob '{blob}' changed under every one of {attempts} attempts; nothing was written"
 
-/// Guarded read-modify-write of one document per blob over `IBlobStorage`,
-/// conditional (ETag CAS) where the backend supports it. See the file
-/// header for the absent / unreadable / corrupt / fallback rules.
-type BlobMapStore<'T>(storage: IBlobStorage, codec: BlobCodec<'T>, logger: ILogger, options: BlobMapStoreOptions) =
+/// Raised by a read whose signature has no error channel when the store
+/// could not establish the document (`Unreadable` or `Quarantined`): the
+/// operation is refused rather than answered as though the document were
+/// absent or empty. Carries the store's verdict.
+exception DocumentUnavailableException of error: BlobMapStoreError with
+    override this.Message = BlobMapStoreError.describe this.error
+
+/// Companion functions for `DocumentUnavailableException`.
+module DocumentUnavailable =
+
+    /// The value of a store read, or the refusal raised as
+    /// `DocumentUnavailableException` for a caller with no `Result` to carry it.
+    let orRaise (result: Result<'T, BlobMapStoreError>) : 'T =
+        match result with
+        | Ok value -> value
+        | Error error -> raise (DocumentUnavailableException error)
+
+    /// `work`'s outcome, with a raised `DocumentUnavailableException` folded
+    /// into its `Error` channel as the store's description.
+    let asError (work: Async<Result<'T, string>>) : Async<Result<'T, string>> = async {
+        try
+            return! work
+        with DocumentUnavailableException error ->
+            return Error(BlobMapStoreError.describe error)
+    }
+
+/// The name of one document inside its scope's container, rendered by the
+/// owning store's layout function (`DocPath.ofString`). Its representation
+/// is private, so a path is built in one place per store and never spliced
+/// from a container string at a call site.
+type DocPath = private DocPath of string
+
+/// Companion functions for `DocPath`.
+module DocPath =
+
+    /// A document path: non-empty, `/`-delimited (the `IBlobStorage` blob-name
+    /// rule), never rooted and never carrying `..` or a backslash. Raises
+    /// `ArgumentException` otherwise: a path is a store's layout, so a bad one
+    /// is a programming error its first test catches.
+    let ofString (path: string) : DocPath =
+        if String.IsNullOrWhiteSpace path then
+            invalidArg (nameof path) "a document path is not empty"
+        elif
+            path.Contains '\\'
+            || path.StartsWith '/'
+            || path.Split('/') |> Array.contains ".."
+        then
+            invalidArg (nameof path) $"document path '{path}' is not a relative, '/'-delimited blob name"
+        else
+            DocPath path
+
+    /// A blob name a backend's `List` returned, taken as it is.
+    let internal ofBlobName (name: string) : DocPath = DocPath name
+
+    /// The blob name.
+    let value (DocPath path) : string = path
+
+/// The bound on `BlobDocumentStore.List`'s concurrent reads.
+module BlobDocumentStoreLimits =
+
+    /// The degree a store passes when it has no reason to choose another.
+    [<Literal>]
+    let DefaultListDegree = 16
+
+    /// The ceiling every requested degree is clamped to.
+    [<Literal>]
+    let MaxListDegree = 32
+
+    /// `degree` clamped to 1..`MaxListDegree`.
+    let clamp (degree: int) : int = degree |> max 1 |> min MaxListDegree
+
+/// Codecs over the platform's one JSON options instance.
+module BlobCodec =
+
+    /// `'T` as UTF-8 JSON through `PlatformJson`; bytes that do not decode are
+    /// `Error`, which the store quarantines.
+    let json<'T> : BlobCodec<'T> = {
+        Encode = ToolUp.Remoting.Json.SystemTextJson.PlatformJson.serialize<'T>
+        Decode = ToolUp.Remoting.Json.SystemTextJson.PlatformJson.deserialize<'T>
+    }
+
+/// The platform's one durable document store: one document per blob, keyed
+/// by the scope that owns it and a path inside that scope's container, read
+/// and written under the three invariants in the file header (absence
+/// established by `Exists` BEFORE the read, undecodable bytes quarantined and
+/// never overwritten, the ETag capability confirmed by probe) with a bounded
+/// retry on a lost precondition. A store that keeps documents in blobs is a
+/// codec and a layout function over this type; it decides none of the three
+/// for itself.
+type BlobDocumentStore<'T>(storage: IBlobStorage, codec: BlobCodec<'T>, logger: ILogger, options: BlobMapStoreOptions) =
 
     let maxRetries = max 0 options.MaxRetries
 
@@ -186,7 +277,7 @@ type BlobMapStore<'T>(storage: IBlobStorage, codec: BlobCodec<'T>, logger: ILogg
                 | Ok() -> ()
                 | Error e ->
                     logger.Warn(
-                        $"[BlobMapStore] {container}/{probe}: the capability-probe blob could not be deleted ({e}); a non-conditional answer is not cached, so the next Update re-probes and re-deletes it."
+                        $"[BlobDocumentStore] {container}/{probe}: the capability-probe blob could not be deleted ({e}); a non-conditional answer is not cached, so the next Update re-probes and re-deletes it."
                     )
 
                 return false
@@ -197,7 +288,7 @@ type BlobMapStore<'T>(storage: IBlobStorage, codec: BlobCodec<'T>, logger: ILogg
             fallbackWarned <- true
 
             logger.Warn(
-                $"[BlobMapStore] {container}/{blobName}: the blob storage does not support conditional writes, so read-modify-write falls back to unconditional writes — concurrent writers on other nodes can lose an update. Use a backend implementing IConditionalBlobStorage for multi-node deployments."
+                $"[BlobDocumentStore] {container}/{blobName}: the blob storage does not support conditional writes, so read-modify-write falls back to unconditional writes — concurrent writers on other nodes can lose an update. Use a backend implementing IConditionalBlobStorage for multi-node deployments."
             )
 
     let quarantineName (blobName: string) (content: byte[]) =
@@ -205,8 +296,10 @@ type BlobMapStore<'T>(storage: IBlobStorage, codec: BlobCodec<'T>, logger: ILogg
         $"{blobName}.corrupt-{digest.Substring(0, 16)}"
 
     /// Copy undecodable bytes aside — create-only where the backend can —
-    /// and report `Quarantined`. The canonical blob is not touched.
-    let quarantine (container: string) (blobName: string) (content: byte[]) (reason: string) = async {
+    /// and report `Quarantined`, with whether the copy landed. The canonical
+    /// blob is not touched. `restart` is the caller's intent (see `decoded`),
+    /// which decides what the log tells an operator to do.
+    let quarantine (container: string) (blobName: string) (content: byte[]) (reason: string) (restart: bool) = async {
         let target = quarantineName blobName content
 
         let! copied = async {
@@ -231,18 +324,23 @@ type BlobMapStore<'T>(storage: IBlobStorage, codec: BlobCodec<'T>, logger: ILogg
         }
 
         match copied with
+        | Ok() when restart ->
+            logger.Error(
+                $"[BlobDocumentStore] {container}/{blobName} did not decode ({reason}); its bytes were copied to {target} and the document starts again from empty.",
+                None
+            )
         | Ok() ->
             logger.Error(
-                $"[BlobMapStore] {container}/{blobName} did not decode ({reason}); its bytes were copied to {target}. The blob was NOT overwritten — repair or remove it to restore writes.",
+                $"[BlobDocumentStore] {container}/{blobName} did not decode ({reason}); its bytes were copied to {target}. The blob was NOT overwritten — repair or remove it to restore writes.",
                 None
             )
         | Error m ->
             logger.Error(
-                $"[BlobMapStore] {container}/{blobName} did not decode ({reason}) and the quarantine copy to {target} failed ({m}). The blob was NOT overwritten.",
+                $"[BlobDocumentStore] {container}/{blobName} did not decode ({reason}) and the quarantine copy to {target} failed ({m}). The blob was NOT overwritten.",
                 None
             )
 
-        return BlobMapStoreError.Quarantined(blobName, target, reason)
+        return copied.IsOk, BlobMapStoreError.Quarantined(blobName, target, reason)
     }
 
     /// Whether the blob exists, asked BEFORE it is read. The order is the
@@ -259,68 +357,90 @@ type BlobMapStore<'T>(storage: IBlobStorage, codec: BlobCodec<'T>, logger: ILogg
             return Error(BlobMapStoreError.Unreadable(blobName, $"existence probe failed: {ex.Message}"))
     }
 
-    let decoded (container: string) (blobName: string) (content: byte[]) = async {
+    /// The decoded value of `content`. Undecodable bytes are quarantined and
+    /// the read is `Quarantined` — unless `restart` is set AND the copy
+    /// landed, when the document reads as absent so a write starts it again:
+    /// the bytes are kept aside, never lost.
+    let decoded (restart: bool) (container: string) (blobName: string) (content: byte[]) = async {
         match decode content with
         | Ok value -> return Ok(Some value)
         | Error reason ->
-            let! error = quarantine container blobName content reason
-            return Error error
+            match! quarantine container blobName content reason restart with
+            | true, _ when restart -> return Ok None
+            | _, error -> return Error error
     }
 
     /// Read with the etag to CAS against (`None` etag = absent).
     /// `knownPresent` skips the existence probe on a retry that already
     /// learned the blob exists (a lost `IfAbsent` / stale `IfMatch`).
-    let readConditional (c: IConditionalBlobStorage) (container: string) (blobName: string) (knownPresent: bool) = async {
-        let! existed =
-            if knownPresent then
-                async { return Ok true }
-            else
-                probeExists container blobName
+    let readConditional
+        (c: IConditionalBlobStorage)
+        (container: string)
+        (blobName: string)
+        (knownPresent: bool)
+        (restart: bool)
+        =
+        async {
+            let! existed =
+                if knownPresent then
+                    async { return Ok true }
+                else
+                    probeExists container blobName
 
-        match existed with
-        | Error e -> return Error e
-        | Ok existedBefore ->
-            let! result = async {
-                try
-                    return! c.DownloadWithETag(container, blobName)
-                with ex ->
-                    return Error ex.Message
-            }
+            match existed with
+            | Error e -> return Error e
+            | Ok existedBefore ->
+                let! result = async {
+                    try
+                        let! answer = c.DownloadWithETag(container, blobName)
+                        return Choice1Of2 answer
+                    with ex ->
+                        return Choice2Of2 ex.Message
+                }
 
-            match result with
-            | Ok(content, etag) ->
-                match! decoded container blobName content with
-                | Ok value -> return Ok(value, Some etag)
-                | Error e -> return Error e
-            | Error reason when existedBefore -> return Error(BlobMapStoreError.Unreadable(blobName, reason))
-            | Error _ -> return Ok(None, None)
-    }
+                match result with
+                | Choice2Of2 raised ->
+                    return Error(BlobMapStoreError.Unreadable(blobName, $"the read raised: {raised}"))
+                | Choice1Of2(Ok(content, etag)) ->
+                    // A restarted document keeps the etag of the bytes it set
+                    // aside, so its first write still CASes against them.
+                    match! decoded restart container blobName content with
+                    | Ok value -> return Ok(value, Some etag)
+                    | Error e -> return Error e
+                | Choice1Of2(Error reason) when existedBefore ->
+                    return Error(BlobMapStoreError.Unreadable(blobName, reason))
+                | Choice1Of2(Error _) -> return Ok(None, None)
+        }
 
-    let readPlain (container: string) (blobName: string) = async {
+    let readPlain (restart: bool) (container: string) (blobName: string) = async {
         match! probeExists container blobName with
         | Error e -> return Error e
         | Ok existedBefore ->
             let! result = async {
                 try
-                    return! storage.Download(container, blobName)
+                    let! answer = storage.Download(container, blobName)
+                    return Choice1Of2 answer
                 with ex ->
-                    return Error ex.Message
+                    return Choice2Of2 ex.Message
             }
 
             match result with
-            | Ok content -> return! decoded container blobName content
-            | Error reason when existedBefore -> return Error(BlobMapStoreError.Unreadable(blobName, reason))
-            | Error _ -> return Ok None
+            | Choice2Of2 raised -> return Error(BlobMapStoreError.Unreadable(blobName, $"the read raised: {raised}"))
+            | Choice1Of2(Ok content) -> return! decoded restart container blobName content
+            | Choice1Of2(Error reason) when existedBefore ->
+                return Error(BlobMapStoreError.Unreadable(blobName, reason))
+            | Choice1Of2(Error _) -> return Ok None
     }
 
     let updateConditional
         (c: IConditionalBlobStorage)
         (container: string)
         (blobName: string)
+        (restart: bool)
         (transform: 'T option -> BlobUpdate<'T, 'R>)
         =
         let rec attempt (retry: int) (knownPresent: bool) = async {
-            match! readConditional c container blobName knownPresent with
+            match! readConditional c container blobName knownPresent restart with
             | Error e -> return Error e
             | Ok(current, etag) ->
                 match transform current with
@@ -345,7 +465,7 @@ type BlobMapStore<'T>(storage: IBlobStorage, codec: BlobCodec<'T>, logger: ILogg
                     | Error(ETagMismatch current) ->
                         if retry >= maxRetries then
                             logger.Warn(
-                                $"[BlobMapStore] {container}/{blobName} lost the write precondition {retry + 1} time(s) in a row; surfacing Contended."
+                                $"[BlobDocumentStore] {container}/{blobName} lost the write precondition {retry + 1} time(s) in a row; surfacing Contended."
                             )
 
                             return Error(BlobMapStoreError.Contended(blobName, retry + 1))
@@ -362,26 +482,201 @@ type BlobMapStore<'T>(storage: IBlobStorage, codec: BlobCodec<'T>, logger: ILogg
 
         attempt 0 false
 
-    let updatePlain (container: string) (blobName: string) (transform: 'T option -> BlobUpdate<'T, 'R>) = async {
-        match! readPlain container blobName with
-        | Error e -> return Error e
-        | Ok current ->
-            match transform current with
-            | BlobUpdate.Keep result -> return Ok result
-            | BlobUpdate.Write(value, result) ->
-                warnFallback container blobName
+    let updatePlain
+        (container: string)
+        (blobName: string)
+        (restart: bool)
+        (transform: 'T option -> BlobUpdate<'T, 'R>)
+        =
+        async {
+            match! readPlain restart container blobName with
+            | Error e -> return Error e
+            | Ok current ->
+                match transform current with
+                | BlobUpdate.Keep result -> return Ok result
+                | BlobUpdate.Write(value, result) ->
+                    warnFallback container blobName
 
-                let! written = async {
-                    try
-                        return! storage.Upload(container, blobName, codec.Encode value)
-                    with ex ->
-                        return Error ex.Message
-                }
+                    let! written = async {
+                        try
+                            return! storage.Upload(container, blobName, codec.Encode value)
+                        with ex ->
+                            return Error ex.Message
+                    }
 
-                match written with
-                | Ok _ -> return Ok result
-                | Error message -> return Error(BlobMapStoreError.WriteFailed(blobName, message))
+                    match written with
+                    | Ok _ -> return Ok result
+                    | Error message -> return Error(BlobMapStoreError.WriteFailed(blobName, message))
+        }
+
+    // Same-instance writers to one document take turns: a fixed set of
+    // stripes (bounded memory, nothing to prune) keyed by the document, held
+    // for the whole read-modify-write. Across nodes the guarantee is the
+    // conditional write; in one process the stripe keeps concurrent writers
+    // from spending the retry budget on each other, and it is the whole
+    // guarantee on a backend without conditional writes.
+    // Allocated on the first write, so a read-only instance costs nothing.
+    let stripes = lazy (Array.init 64 (fun _ -> new SemaphoreSlim(1, 1)))
+
+    let stripeFor (container: string) (blobName: string) =
+        let stripes = stripes.Value
+        stripes[(StringComparer.Ordinal.GetHashCode(container + "/" + blobName) &&& 0x7fffffff) % stripes.Length]
+
+    let update (container: string) (blobName: string) (restart: bool) (transform: 'T option -> BlobUpdate<'T, 'R>) = async {
+        let stripe = stripeFor container blobName
+        do! stripe.WaitAsync() |> Async.AwaitTask
+
+        try
+            match cas with
+            | Some c ->
+                let! conditional = confirmConditional c container blobName
+
+                if conditional then
+                    return! updateConditional c container blobName restart transform
+                else
+                    return! updatePlain container blobName restart transform
+            | None -> return! updatePlain container blobName restart transform
+        finally
+            stripe.Release() |> ignore
     }
+
+    /// Read `names` with at most `degree` at once, each with its own
+    /// verdict, absent ones left out, in the order given.
+    let readRows (container: string) (names: string list) (degree: int) = async {
+        let! rows =
+            names
+            |> List.map (fun name -> async {
+                match! readPlain false container name with
+                | Ok(Some value) -> return Some(DocPath.ofBlobName name, Ok value)
+                | Ok None -> return None
+                | Error e -> return Some(DocPath.ofBlobName name, Error e)
+            })
+            |> fun reads -> Async.Parallel(reads, maxDegreeOfParallelism = BlobDocumentStoreLimits.clamp degree)
+
+        return rows |> Array.choose id |> Array.toList
+    }
+
+    let supportsConditionalWrites (container: string) (blobName: string) =
+        match cas with
+        | Some c -> confirmConditional c container blobName
+        | None -> async.Return false
+
+    /// Store over `storage` with the default retry budget.
+    new(storage: IBlobStorage, codec: BlobCodec<'T>, logger: ILogger) =
+        BlobDocumentStore<'T>(storage, codec, logger, BlobMapStoreOptions.defaults)
+
+    // The container-string primitives `BlobMapStore` keeps for its existing
+    // callers. New code names the scope by value through the typed members.
+    member internal _.ReadAt(container: string, blobName: string) = readPlain false container blobName
+
+    member internal _.UpdateAt(container: string, blobName: string, transform: 'T option -> BlobUpdate<'T, 'R>) =
+        update container blobName false transform
+
+    member internal _.SupportsConditionalWritesAt(container: string, blobName: string) =
+        supportsConditionalWrites container blobName
+
+    /// Read and decode one document. `Ok None` = absent. A present blob that
+    /// cannot be read is `Unreadable`; one that does not decode is copied
+    /// aside and reported as `Quarantined`. Never an empty value for either.
+    member _.Read(scope: ScopeKey, path: DocPath) : Async<Result<'T option, BlobMapStoreError>> =
+        readPlain false (ScopeKey.container scope) (DocPath.value path)
+
+    /// Guarded read-modify-write. `transform` is pure over the decoded value
+    /// (`None` = absent) and may run more than once: on a lost precondition it
+    /// is replayed over the fresh read. Nothing is written unless the read
+    /// succeeded and the transform returned `Write`.
+    member _.Update
+        (scope: ScopeKey, path: DocPath, transform: 'T option -> BlobUpdate<'T, 'R>)
+        : Async<Result<'R, BlobMapStoreError>> =
+        update (ScopeKey.container scope) (DocPath.value path) false transform
+
+    /// `Update` for a document whose loss costs only work its owner can redo
+    /// — a cursor, a resumability ledger, a running tally, a last-value
+    /// cache — never authority. Bytes that do not decode are copied aside
+    /// exactly as `Read` copies them, and then, once the copy has landed,
+    /// `transform` runs over `None` and the document starts again: nothing
+    /// is lost, and the owner is not wedged behind a document only an
+    /// operator can repair. A document that cannot be READ is still
+    /// `Unreadable` and nothing is written; a copy that did not land is
+    /// still `Quarantined`.
+    member _.UpdateOrRestart
+        (scope: ScopeKey, path: DocPath, transform: 'T option -> BlobUpdate<'T, 'R>)
+        : Async<Result<'R, BlobMapStoreError>> =
+        update (ScopeKey.container scope) (DocPath.value path) true transform
+
+    /// Write `value` as the whole document, whatever it held: `UpdateOrRestart`
+    /// with a transform that ignores the current value. For a document whose
+    /// new value does not depend on its old one.
+    member this.Replace(scope: ScopeKey, path: DocPath, value: 'T) : Async<Result<unit, BlobMapStoreError>> =
+        this.UpdateOrRestart(scope, path, (fun _ -> BlobUpdate.Write(value, ())))
+
+    /// Remove one document. Deleting an absent document is `Ok` (the
+    /// `IBlobStorage.Delete` contract); a refused delete is `WriteFailed`.
+    member _.Delete(scope: ScopeKey, path: DocPath) : Async<Result<unit, BlobMapStoreError>> = async {
+        let blobName = DocPath.value path
+
+        let! deleted = async {
+            try
+                return! storage.Delete(ScopeKey.container scope, blobName)
+            with ex ->
+                return Error ex.Message
+        }
+
+        return
+            deleted
+            |> Result.mapError (fun reason -> BlobMapStoreError.WriteFailed(blobName, reason))
+    }
+
+    /// Every document under `prefix` in the scope's container, each with its
+    /// own verdict: a blob that cannot be read or decoded is an `Error` row
+    /// naming it, never a dropped row, so a caller that needs every document
+    /// refuses the operation and one that can show partial results says which
+    /// are missing. A blob that disappears between the listing and its read is
+    /// absent and is not reported, and so are the store's own quarantine and
+    /// probe siblings. At most `degree` reads run at once, clamped
+    /// to 1..`BlobDocumentStoreLimits.MaxListDegree`.
+    member _.List
+        (scope: ScopeKey, prefix: string, degree: int)
+        : Async<(DocPath * Result<'T, BlobMapStoreError>) list> =
+        async {
+            let container = ScopeKey.container scope
+            let! listed = storage.List(container, prefix)
+
+            // The store's own siblings (a quarantine copy, a capability probe
+            // left by a backend that ignored the precondition) are not
+            // documents.
+            let names =
+                listed
+                |> List.filter (fun name -> not (name.Contains ".corrupt-" || name.EndsWith ".etag-probe"))
+
+            return! readRows container names degree
+        }
+
+    /// The documents at `paths` (names a caller already listed, or an index
+    /// resolved), each with its own verdict as `List` gives them: a document
+    /// that cannot be read or decoded is an `Error` row naming it, one that
+    /// is absent is left out. At most `degree` reads run at once, clamped to
+    /// 1..`BlobDocumentStoreLimits.MaxListDegree`; rows keep the order of
+    /// `paths`.
+    member _.ReadMany
+        (scope: ScopeKey, paths: DocPath list, degree: int)
+        : Async<(DocPath * Result<'T, BlobMapStoreError>) list> =
+        readRows (ScopeKey.container scope) (paths |> List.map DocPath.value) degree
+
+    /// Whether `Update` on this document runs as a conditional write: the
+    /// backend implements `IConditionalBlobStorage` AND answers the
+    /// side-effect-free capability probe the way a conditional backend must.
+    /// `false` means `Update` falls back to an unconditional write.
+    member _.SupportsConditionalWrites(scope: ScopeKey, path: DocPath) : Async<bool> =
+        supportsConditionalWrites (ScopeKey.container scope) (DocPath.value path)
+
+/// Guarded read-modify-write of one document per blob, addressed by a
+/// container string: the shape the first adopters were written against, kept
+/// over `BlobDocumentStore<'T>` with the same members. New code uses the
+/// document store and names its scope by value.
+type BlobMapStore<'T>(storage: IBlobStorage, codec: BlobCodec<'T>, logger: ILogger, options: BlobMapStoreOptions) =
+
+    let docs = BlobDocumentStore<'T>(storage, codec, logger, options)
 
     /// Store over `storage` with the default retry budget.
     new(storage: IBlobStorage, codec: BlobCodec<'T>, logger: ILogger) =
@@ -391,23 +686,14 @@ type BlobMapStore<'T>(storage: IBlobStorage, codec: BlobCodec<'T>, logger: ILogg
     /// cannot be read is `Unreadable`; one that does not decode is
     /// quarantined and reported as `Quarantined`.
     member _.Read(container: string, blobName: string) : Async<Result<'T option, BlobMapStoreError>> =
-        readPlain container blobName
+        docs.ReadAt(container, blobName)
 
-    /// Whether `Update` on this blob runs as a conditional write: the
-    /// backend implements `IConditionalBlobStorage` AND answers the
-    /// side-effect-free capability probe (see the file header) the way a
-    /// conditional backend must. `false` means `Update` falls back to an
-    /// unconditional write, so writers on other nodes can lose an update.
-    /// Asks the same probe, with the same cached positive answer, that the
-    /// first `Update` asks.
+    /// Whether `Update` on this blob runs as a conditional write (see
+    /// `BlobDocumentStore.SupportsConditionalWrites`).
     member _.SupportsConditionalWrites(container: string, blobName: string) : Async<bool> =
-        match cas with
-        | Some c -> confirmConditional c container blobName
-        | None -> async.Return false
+        docs.SupportsConditionalWritesAt(container, blobName)
 
-    /// `Read` of one blob in a scope's container (`ScopeKey.container`): the
-    /// typed form, so a store keyed by a team or a user names the scope by
-    /// value and never spells its container.
+    /// `Read` of one blob in a scope's container (`ScopeKey.container`).
     member this.Read(scope: ScopeKey, blobName: string) : Async<Result<'T option, BlobMapStoreError>> =
         this.Read(ScopeKey.container scope, blobName)
 
@@ -424,14 +710,34 @@ type BlobMapStore<'T>(storage: IBlobStorage, codec: BlobCodec<'T>, logger: ILogg
     member _.Update
         (container: string, blobName: string, transform: 'T option -> BlobUpdate<'T, 'R>)
         : Async<Result<'R, BlobMapStoreError>> =
-        async {
-            match cas with
-            | Some c ->
-                let! conditional = confirmConditional c container blobName
+        docs.UpdateAt(container, blobName, transform)
 
-                if conditional then
-                    return! updateConditional c container blobName transform
-                else
-                    return! updatePlain container blobName transform
-            | None -> return! updatePlain container blobName transform
+/// Reads shared by the stores whose listings prefer a partial result to a
+/// total failure.
+module BlobDocuments =
+
+    /// The documents at `names` in `scope` through `docs`, at most
+    /// `BlobDocumentStoreLimits.DefaultListDegree` at once, in the order
+    /// given. One that cannot be read or decoded is left out — logged as
+    /// `who`, and quarantined by the store when its bytes do not decode —
+    /// never silently; an absent one is left out without a word.
+    let readAvailable
+        (docs: BlobDocumentStore<'T>)
+        (logger: ILogger)
+        (who: string)
+        (scope: ScopeKey)
+        (names: string list)
+        : Async<'T list> =
+        async {
+            let! rows =
+                docs.ReadMany(scope, names |> List.map DocPath.ofString, BlobDocumentStoreLimits.DefaultListDegree)
+
+            return
+                rows
+                |> List.choose (fun (_, row) ->
+                    match row with
+                    | Ok value -> Some value
+                    | Error e ->
+                        logger.Warn($"[{who}] left out of the read: {BlobMapStoreError.describe e}")
+                        None)
         }

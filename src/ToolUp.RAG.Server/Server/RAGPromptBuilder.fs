@@ -83,7 +83,7 @@ module ToolFraming =
 
 // ─── Source reference deserialisation ────────────────────────────
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 let private tryDeserialise<'T> (json: string) =
     try

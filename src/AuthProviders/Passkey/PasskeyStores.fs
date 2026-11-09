@@ -100,7 +100,7 @@ let private jsonOptions: JsonSerializerOptions =
     // wire-format serializer, shared with the audit-sink companions. A
     // plain `JsonSerializerOptions()` would mangle `Email: string option`
     // and `Transports: string list`.
-    ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()
+    ToolUp.Remoting.Json.SystemTextJson.PlatformJson.options
 
 /// SHA-256 of the platform UserId, base64url-encoded — the stable,
 /// non-PII WebAuthn user handle. Deterministic so every credential a

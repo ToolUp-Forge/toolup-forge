@@ -42,7 +42,7 @@ let ConsentGrantedEvent = "AIConsentGranted"
 [<Literal>]
 let ConsentDeniedEvent = "AIConsentDenied"
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 /// Record the decision on the event store, best-effort.
 ///

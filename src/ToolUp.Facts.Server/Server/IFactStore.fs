@@ -326,7 +326,7 @@ module FactStoreResult =
 [<RequireQualifiedAccess>]
 module FactAudit =
 
-    let private jsonOptions = FableConverters.create ()
+    let private jsonOptions = PlatformJson.options
 
     /// The row's JSON payload — the event record the plan built, as is.
     let payload (event: FactAuditEvent) : string =

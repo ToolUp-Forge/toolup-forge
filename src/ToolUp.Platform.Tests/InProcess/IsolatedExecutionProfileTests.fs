@@ -41,7 +41,7 @@ open ToolUp.Platform.Compose
 
 // ─── Fixtures ────────────────────────────────────────────────────────
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 let private roundTrip<'T> (value: 'T) : 'T =
     let json = JsonSerializer.Serialize(value, jsonOptions)

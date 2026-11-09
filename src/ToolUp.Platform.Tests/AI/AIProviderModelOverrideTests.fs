@@ -670,8 +670,7 @@ let private budgetConfigOver (values: Map<string, string>) =
 /// the suite runs.
 let private noon = DateTime(2026, 9, 16, 12, 30, 0, DateTimeKind.Utc)
 
-let private latencyJson =
-    ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()
+let private latencyJson = ToolUp.Remoting.Json.SystemTextJson.PlatformJson.options
 
 /// One recorded turn by `userId` on `(acme, model)` — what both budget
 /// windows sum.

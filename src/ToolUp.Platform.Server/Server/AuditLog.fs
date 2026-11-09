@@ -34,7 +34,7 @@ open ToolUp.Platform.Infra
 // today, so any future client-facing audit query surface (e.g. an
 // admin UI) can deserialise without re-deriving the wire shape.
 
-let private auditJsonOptions = FableConverters.create ()
+let private auditJsonOptions = PlatformJson.options
 
 let private toAuditJson (value: 'T) =
     JsonSerializer.Serialize(value, auditJsonOptions)

@@ -6,8 +6,6 @@ module ToolUp.Platform.Scope.ServiceAccountStore
 open System
 open System.Security.Cryptography
 open System.Text
-open System.Text.Json
-open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Infra
@@ -58,21 +56,6 @@ let private tokensPrefix (scopeId: string) = $"service-accounts/{scopeId}/tokens
 let private tokenScopePointer (tokenId: string) =
     $"service-accounts/_by-token/{tokenId}.ref"
 
-// ─── JSON ────────────────────────────────────────────────────────────
-
-module private Json =
-    let private options = FableConverters.create ()
-
-    let serialize (value: 'T) : byte[] =
-        JsonSerializer.Serialize(value, options) |> Encoding.UTF8.GetBytes
-
-    let tryDeserialize<'T> (bytes: byte[]) : 'T option =
-        try
-            let json = Encoding.UTF8.GetString bytes
-            Some(JsonSerializer.Deserialize<'T>(json, options))
-        with _ ->
-            None
-
 // ─── Secret generation + hashing ──────────────────────────────────────
 //
 // The secret is 32 CSPRNG bytes (256 bits), base64url-encoded. What
@@ -114,75 +97,39 @@ let private hashSecret (salt: string) (secret: string) : string =
 let private digestMatches (expected: string) (actual: string) =
     JwtCrypto.fixedTimeEquals (Encoding.UTF8.GetBytes expected) (Encoding.UTF8.GetBytes actual)
 
-// ─── Blob read / write helpers ────────────────────────────────────────
-//
-// Module-level rather than class-level because F# permits explicit type
-// parameters only on module or member bindings — a `let readJson<'T>`
-// inside the type body is FS0665.
+// ─── The documents ────────────────────────────────────────────────────
 
-/// Read a blob and decode it, distinguishing "absent" from "present but
-/// unreadable" via a one-sided `Exists` probe on the error path — the
-/// same discipline `ShareTokenStore.readClaim` documents at length. A
-/// failed `Download` is not evidence of absence, and reporting a storage
-/// fault as `NotFound` points an operator at the wrong subsystem.
-let private readJson<'T>
-    (storage: IBlobStorage)
-    (blob: string)
-    (onAbsent: ServiceAccountError)
-    : Async<Result<'T, ServiceAccountError>> =
-    async {
-        let! result = storage.Download(platformContainer, blob)
+let private platformScope = ScopeKey.platform
 
-        match result with
-        | Ok bytes ->
-            match Json.tryDeserialize<'T> bytes with
-            | Some value -> return Ok value
-            | None ->
-                return Error(ServiceAccountError.StorageFailed $"service-account blob deserialisation failed: {blob}")
-        | Error downloadError ->
-            let! present = storage.Exists(platformContainer, blob)
+/// The token-to-scope pointer is the scope id as plain text.
+let private pointerCodec: BlobCodec<string> = {
+    Encode = Encoding.UTF8.GetBytes
+    Decode = fun bytes -> Ok(Encoding.UTF8.GetString bytes)
+}
 
-            if present then
-                return Error(ServiceAccountError.StorageFailed downloadError)
-            else
-                return Error onAbsent
-    }
+let private storageFailed (error: BlobMapStoreError) =
+    ServiceAccountError.StorageFailed(BlobMapStoreError.describe error)
 
-let private writeJson<'T>
-    (storage: IBlobStorage)
-    (blob: string)
-    (value: 'T)
-    : Async<Result<unit, ServiceAccountError>> =
-    async {
-        let! result = storage.Upload(platformContainer, blob, Json.serialize value)
-
-        match result with
-        | Ok _ -> return Ok()
-        | Error e -> return Error(ServiceAccountError.StorageFailed e)
-    }
-
-/// Decode every `.json` blob under `prefix`. An individual unreadable
+/// Every document under `prefix`. An individual unreadable or undecodable
 /// blob is logged and skipped rather than failing the whole listing: an
-/// admin screen that shows nine of ten accounts is more useful than one
-/// that shows an error, and the skipped blob is named in the log.
-let private listUnder<'T> (storage: IBlobStorage) (logger: ILogger) (prefix: string) : Async<'T list> = async {
-    let! names = storage.List(platformContainer, prefix)
+/// admin screen that shows nine of ten accounts is more useful than one that
+/// shows an error, and the skipped blob is named in the log. (A listing that
+/// decides authority never takes this shape: `ValidateToken` reads one
+/// document and refuses on a fault.)
+let private listUnder<'T> (docs: BlobDocumentStore<'T>) (logger: ILogger) (prefix: string) : Async<'T list> = async {
+    let! rows = docs.List(platformScope, prefix, BlobDocumentStoreLimits.DefaultListDegree)
 
-    let! decoded =
-        names
-        |> List.filter (fun n -> n.EndsWith(".json", StringComparison.Ordinal))
-        |> List.map (fun name -> async {
-            let! bytes = storage.Download(platformContainer, name)
-
-            match bytes with
-            | Ok b -> return Json.tryDeserialize<'T> b
+    return
+        rows
+        |> List.choose (fun (path, verdict) ->
+            match verdict with
+            | Ok value when (DocPath.value path).EndsWith(".json", StringComparison.Ordinal) -> Some value
+            | Ok _ -> None
             | Error e ->
-                logger.Warn $"service-account listing skipped an unreadable blob '{name}': {e}"
-                return None
-        })
-        |> Async.Sequential
+                logger.Warn
+                    $"service-account listing skipped an unreadable blob '{DocPath.value path}': {BlobMapStoreError.describe e}"
 
-    return decoded |> Array.choose id |> List.ofArray
+                None)
 }
 
 // ─── BlobServiceAccountStore ─────────────────────────────────────────
@@ -194,17 +141,16 @@ let private listUnder<'T> (storage: IBlobStorage) (logger: ILogger) (prefix: str
 /// **Distributed-ready.** No state is held between calls: every
 /// operation reads what it needs from `IBlobStorage` and writes back.
 /// There is no signing key to cache and no authority memo, so two
-/// replicas cannot disagree about whether a token is live. The one
-/// concurrency caveat is shared with every blob-backed store in the SDK
-/// — a read-modify-write (`SetStatus`, `SetPermissions`, `RevokeToken`)
-/// is last-writer-wins across replicas until `IBlobStorage.UploadWithETag`
-/// CAS is threaded through. That is benign here in a way it is not for
-/// `ShareTokenStore.MarkUsed`: none of these writes carries a counter
-/// whose invariant a lost update would break, and the security-relevant
-/// direction is safe by shape — a concurrent revoke and a concurrent
-/// permission-widening cannot combine to un-revoke a token, because
-/// revocation lives on the token record and permissions live on the
-/// account record.
+/// replicas cannot disagree about whether a token is live. Every document
+/// goes through the platform's durable document store
+/// (`BlobDocumentStore`): a read-modify-write (`SetStatus`,
+/// `SetPermissions`, `RevokeToken`) is one guarded update, conditional where
+/// the backend has the ETag seam, so a concurrent writer on another replica
+/// is replayed rather than lost; an unreadable record is `StorageFailed`,
+/// never `NotFound`. The security-relevant direction is safe by shape as
+/// well: a concurrent revoke and a concurrent permission-widening cannot
+/// combine to un-revoke a token, because revocation lives on the token
+/// record and permissions live on the account record.
 type BlobServiceAccountStore(storage: IBlobStorage, audit: IAuditLog option, logger: ILogger) =
 
     // Phase 1026 — fire-and-forget, and observed: a failing sink loses that
@@ -212,6 +158,52 @@ type BlobServiceAccountStore(storage: IBlobStorage, audit: IAuditLog option, log
     // operation or crashing the host.
     let auditWarn =
         Background.writeFailureLogger "BlobServiceAccountStore" (Some logger) "" "the operation"
+
+    let accountDocs =
+        BlobDocumentStore<ServiceAccount>(storage, BlobCodec.json<ServiceAccount>, logger)
+
+    let tokenDocs =
+        BlobDocumentStore<ServiceAccountToken>(storage, BlobCodec.json<ServiceAccountToken>, logger)
+
+    let pointerDocs = BlobDocumentStore<string>(storage, pointerCodec, logger)
+
+    let accountPath scopeId accountId =
+        DocPath.ofString (accountBlob scopeId accountId)
+
+    let tokenPath scopeId tokenId =
+        DocPath.ofString (tokenBlob scopeId tokenId)
+
+    /// Write a fresh document (a new account, a new token record, a pointer).
+    let create (docs: BlobDocumentStore<'T>) (path: DocPath) (value: 'T) = async {
+        let! written = docs.Update(platformScope, path, fun _ -> BlobUpdate.Write(value, ()))
+        return written |> Result.mapError storageFailed
+    }
+
+    /// One guarded read-modify-write of an account in its scope. `change`
+    /// sees the stored account and returns the replacement, or `Error` to
+    /// refuse; nothing is written on a refusal.
+    let changeAccount
+        (scopeId: string)
+        (accountId: string)
+        (change: ServiceAccount -> Result<ServiceAccount, ServiceAccountError>)
+        =
+        async {
+            let! outcome =
+                accountDocs.Update(
+                    platformScope,
+                    accountPath scopeId accountId,
+                    function
+                    | None -> BlobUpdate.Keep(Error ServiceAccountError.AccountNotFound)
+                    | Some account when account.ScopeId <> scopeId ->
+                        BlobUpdate.Keep(Error ServiceAccountError.ScopeMismatch)
+                    | Some account ->
+                        match change account with
+                        | Error e -> BlobUpdate.Keep(Error e)
+                        | Ok updated -> BlobUpdate.Write(updated, Ok(account, updated))
+                )
+
+            return outcome |> Result.mapError storageFailed |> Result.bind id
+        }
 
     let recordAudit (scopeId: string) (event: AuditEvent) =
         match audit with
@@ -231,10 +223,11 @@ type BlobServiceAccountStore(storage: IBlobStorage, audit: IAuditLog option, log
     /// disagrees with its location is exactly the shape whose authority
     /// must not be honoured.
     let readAccount (scopeId: string) (accountId: string) = async {
-        match! readJson<ServiceAccount> storage (accountBlob scopeId accountId) ServiceAccountError.AccountNotFound with
-        | Error e -> return Error e
-        | Ok account when account.ScopeId <> scopeId -> return Error ServiceAccountError.ScopeMismatch
-        | Ok account -> return Ok account
+        match! accountDocs.Read(platformScope, accountPath scopeId accountId) with
+        | Error e -> return Error(storageFailed e)
+        | Ok None -> return Error ServiceAccountError.AccountNotFound
+        | Ok(Some account) when account.ScopeId <> scopeId -> return Error ServiceAccountError.ScopeMismatch
+        | Ok(Some account) -> return Ok account
     }
 
     let moduleNames (permissions: Map<string, ModulePermission list>) =
@@ -256,7 +249,7 @@ type BlobServiceAccountStore(storage: IBlobStorage, audit: IAuditLog option, log
                     Status = ServiceAccountStatus.Active
                 }
 
-                match! writeJson storage (accountBlob account.ScopeId account.AccountId) account with
+                match! create accountDocs (accountPath account.ScopeId account.AccountId) account with
                 | Error e -> return Error e
                 | Ok() ->
                     recordAudit
@@ -274,7 +267,7 @@ type BlobServiceAccountStore(storage: IBlobStorage, audit: IAuditLog option, log
         member _.Get(scopeId, accountId) = readAccount scopeId accountId
 
         member _.List(scopeId) = async {
-            let! accounts = listUnder<ServiceAccount> storage logger (accountsPrefix scopeId)
+            let! accounts = listUnder accountDocs logger (accountsPrefix scopeId)
             // Defence in depth: the prefix already isolates the scope,
             // so a record claiming another scope is a corrupted blob and
             // is dropped rather than returned.
@@ -282,50 +275,43 @@ type BlobServiceAccountStore(storage: IBlobStorage, audit: IAuditLog option, log
         }
 
         member _.SetStatus(scopeId, accountId, status, actorUserId) = async {
-            match! readAccount scopeId accountId with
+            match! changeAccount scopeId accountId (fun account -> Ok { account with Status = status }) with
             | Error e -> return Error e
-            | Ok account ->
-                let updated = { account with Status = status }
+            | Ok(_, updated) ->
+                recordAudit
+                    scopeId
+                    (AuditEvent.ServiceAccountStatusChanged {
+                        UserId = actorUserId
+                        AccountId = accountId
+                        Disabled = (status = ServiceAccountStatus.Disabled)
+                    })
 
-                match! writeJson storage (accountBlob scopeId accountId) updated with
-                | Error e -> return Error e
-                | Ok() ->
-                    recordAudit
-                        scopeId
-                        (AuditEvent.ServiceAccountStatusChanged {
-                            UserId = actorUserId
-                            AccountId = accountId
-                            Disabled = (status = ServiceAccountStatus.Disabled)
-                        })
-
-                    return Ok updated
+                return Ok updated
         }
 
         member _.SetPermissions(scopeId, accountId, permissions, actorUserId) = async {
             match ServiceAccountTypes.validatePermissions permissions with
             | Error e -> return Error e
             | Ok() ->
-                match! readAccount scopeId accountId with
+                match!
+                    changeAccount scopeId accountId (fun account ->
+                        Ok {
+                            account with
+                                Permissions = permissions
+                        })
+                with
                 | Error e -> return Error e
-                | Ok account ->
-                    let updated = {
-                        account with
-                            Permissions = permissions
-                    }
+                | Ok(before, updated) ->
+                    recordAudit
+                        scopeId
+                        (AuditEvent.ServiceAccountPermissionsChanged {
+                            UserId = actorUserId
+                            AccountId = accountId
+                            PreviousModules = moduleNames before.Permissions
+                            Modules = moduleNames permissions
+                        })
 
-                    match! writeJson storage (accountBlob scopeId accountId) updated with
-                    | Error e -> return Error e
-                    | Ok() ->
-                        recordAudit
-                            scopeId
-                            (AuditEvent.ServiceAccountPermissionsChanged {
-                                UserId = actorUserId
-                                AccountId = accountId
-                                PreviousModules = moduleNames account.Permissions
-                                Modules = moduleNames permissions
-                            })
-
-                        return Ok updated
+                    return Ok updated
         }
 
         member _.MintToken(request) = async {
@@ -362,7 +348,7 @@ type BlobServiceAccountStore(storage: IBlobStorage, audit: IAuditLog option, log
                     ScopeSnapshot = account.Permissions
                 }
 
-                match! writeJson storage (tokenBlob account.ScopeId tokenId) record with
+                match! create tokenDocs (tokenPath account.ScopeId tokenId) record with
                 | Error e -> return Error e
                 | Ok() ->
                     // Pointer written AFTER the record, so a crash
@@ -372,16 +358,9 @@ type BlobServiceAccountStore(storage: IBlobStorage, audit: IAuditLog option, log
                     // credential is handed out and cannot be revoked;
                     // this ordering cannot produce it, because the mint
                     // does not return until both writes land.
-                    let! pointer =
-                        storage.Upload(
-                            platformContainer,
-                            tokenScopePointer tokenId,
-                            Encoding.UTF8.GetBytes account.ScopeId
-                        )
-
-                    match pointer with
-                    | Error e -> return Error(ServiceAccountError.StorageFailed e)
-                    | Ok _ ->
+                    match! create pointerDocs (DocPath.ofString (tokenScopePointer tokenId)) account.ScopeId with
+                    | Error e -> return Error e
+                    | Ok() ->
                         recordAudit
                             account.ScopeId
                             (AuditEvent.ServiceAccountTokenMinted {
@@ -400,54 +379,57 @@ type BlobServiceAccountStore(storage: IBlobStorage, audit: IAuditLog option, log
         }
 
         member _.ListTokens(scopeId, accountId) = async {
-            let! tokens = listUnder<ServiceAccountToken> storage logger (tokensPrefix scopeId)
+            let! tokens = listUnder tokenDocs logger (tokensPrefix scopeId)
 
             return tokens |> List.filter (fun t -> t.ScopeId = scopeId && t.AccountId = accountId)
         }
 
         member _.RevokeToken(scopeId, tokenId, actorUserId) = async {
-            match! readJson<ServiceAccountToken> storage (tokenBlob scopeId tokenId) ServiceAccountError.NotFound with
-            | Error e -> return Error e
-            | Ok token when token.ScopeId <> scopeId -> return Error ServiceAccountError.ScopeMismatch
-            | Ok token when token.Revoked ->
-                // Idempotent — already revoked is a success, and emits no
-                // second audit row.
-                return Ok()
-            | Ok token ->
-                match! writeJson storage (tokenBlob scopeId tokenId) { token with Revoked = true } with
-                | Error e -> return Error e
-                | Ok() ->
-                    recordAudit
-                        scopeId
-                        (AuditEvent.ServiceAccountTokenRevoked {
-                            UserId = actorUserId
-                            AccountId = token.AccountId
-                            TokenId = tokenId
-                        })
+            let! outcome =
+                tokenDocs.Update(
+                    platformScope,
+                    tokenPath scopeId tokenId,
+                    function
+                    | None -> BlobUpdate.Keep(Error ServiceAccountError.NotFound)
+                    | Some token when token.ScopeId <> scopeId ->
+                        BlobUpdate.Keep(Error ServiceAccountError.ScopeMismatch)
+                    // Idempotent: already revoked is a success, and emits no
+                    // second audit row.
+                    | Some token when token.Revoked -> BlobUpdate.Keep(Ok None)
+                    | Some token -> BlobUpdate.Write({ token with Revoked = true }, Ok(Some token))
+                )
 
-                    return Ok()
+            match outcome |> Result.mapError storageFailed |> Result.bind id with
+            | Error e -> return Error e
+            | Ok None -> return Ok()
+            | Ok(Some token) ->
+                recordAudit
+                    scopeId
+                    (AuditEvent.ServiceAccountTokenRevoked {
+                        UserId = actorUserId
+                        AccountId = token.AccountId
+                        TokenId = tokenId
+                    })
+
+                return Ok()
         }
 
         member _.ValidateToken(token) = async {
             match ServiceAccountTypes.tryParseToken token with
             | Error e -> return Error e
             | Ok(tokenId, secret) ->
-                let! pointer = storage.Download(platformContainer, tokenScopePointer tokenId)
+                let! pointer = pointerDocs.Read(platformScope, DocPath.ofString (tokenScopePointer tokenId))
 
                 match pointer with
-                | Error _ ->
-                    // No pointer ⇒ no such token. The pointer carries no
-                    // authority, so there is nothing to distinguish here
-                    // beyond absence.
-                    return Error ServiceAccountError.NotFound
-                | Ok scopeBytes ->
-                    let scopeId = Encoding.UTF8.GetString scopeBytes
-
-                    match!
-                        readJson<ServiceAccountToken> storage (tokenBlob scopeId tokenId) ServiceAccountError.NotFound
-                    with
-                    | Error e -> return Error e
-                    | Ok record ->
+                // No pointer: no such token. A pointer that cannot be read
+                // is a storage fault, reported as one.
+                | Ok None -> return Error ServiceAccountError.NotFound
+                | Error e -> return Error(storageFailed e)
+                | Ok(Some scopeId) ->
+                    match! tokenDocs.Read(platformScope, tokenPath scopeId tokenId) with
+                    | Error e -> return Error(storageFailed e)
+                    | Ok None -> return Error ServiceAccountError.NotFound
+                    | Ok(Some record) ->
                         // Secret comparison FIRST, before revocation or
                         // expiry: a caller who does not hold the secret
                         // learns nothing about the token's state, so the

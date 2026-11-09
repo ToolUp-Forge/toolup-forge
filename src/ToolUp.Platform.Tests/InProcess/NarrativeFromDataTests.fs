@@ -43,7 +43,7 @@ let private docWith (elements: NarrativeElement list) : NarrativeDocument = {
     CanonicalUrl = None
 }
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 /// A module result type the registerTyped test round-trips through JSON.
 type private SalesSummary = {

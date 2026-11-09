@@ -601,7 +601,7 @@ module private Bounded =
     }
 
 module private Telemetry =
-    let private jsonOptions = FableConverters.create ()
+    let private jsonOptions = PlatformJson.options
 
     /// The storage scope latency rows and audits land in: the request's,
     /// or the caller's user container.

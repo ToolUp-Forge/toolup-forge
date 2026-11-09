@@ -150,7 +150,7 @@ module DecommissionVerification =
 [<Literal>]
 let SchemaVersion = 1
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 // ── Producing ───────────────────────────────────────────────────────────
 

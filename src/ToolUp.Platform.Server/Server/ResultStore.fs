@@ -136,7 +136,7 @@ module private Events =
     /// `ConfigStore` / `DataObjectStore`. `LineageLink` payloads
     /// round-trip the `LinkType` DU losslessly, which
     /// `System.Text.Json` does not.
-    let private options = FableConverters.create ()
+    let private options = PlatformJson.options
 
     let private serialize (value: 'T) : string =
         JsonSerializer.Serialize(value, options)
@@ -369,7 +369,7 @@ let private stagedPrefix = "lineage-outbox/"
 let private deadPrefix = "lineage-outbox-dead/"
 let private poisonPrefix = "lineage-outbox-poison/"
 
-let private outboxJson = FableConverters.create ()
+let private outboxJson = PlatformJson.options
 
 /// The cause behind an async boundary's wrapper (Phase 972).
 let private causeOf (ex: exn) = (ProviderExceptions.unwrap ex).Message

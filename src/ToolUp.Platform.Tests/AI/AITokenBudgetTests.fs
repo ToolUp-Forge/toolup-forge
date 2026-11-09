@@ -31,7 +31,7 @@ open ToolUp.Platform.Compose
 //     when their work stops and "quota exceeded" with no numbers tells
 //     them nothing about when to try again.
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 // ─── Fakes ───────────────────────────────────────────────────────
 

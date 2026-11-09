@@ -266,7 +266,7 @@ module AssemblyProvenance =
     [<Literal>]
     let SpecJsonKey = "assembly.spec"
 
-    let private jsonOptions = FableConverters.create ()
+    let private jsonOptions = PlatformJson.options
 
     /// The canonical serialised form of a spec — the bytes `specHash`
     /// hashes and `SpecJsonKey` records.

@@ -26,7 +26,7 @@ module DataProvenanceLabels =
     [<Literal>]
     let MetadataKey = "dataset.labels"
 
-    let private jsonOptions = FableConverters.create ()
+    let private jsonOptions = PlatformJson.options
 
     /// Serialise a label set to its JSON sidecar value.
     let encode (labels: DataProvenanceLabel list) : string =

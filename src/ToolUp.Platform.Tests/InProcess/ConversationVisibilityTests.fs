@@ -45,7 +45,7 @@ open ToolUp.Platform.Compose
 // ada (Admin), olga (Owner), pat (Member + platform admin) and rhea
 // (Owner + platform admin). xavier belongs only to team `beta`.
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 let private t0 = DateTime(2026, 9, 26, 12, 0, 0, DateTimeKind.Utc)
 
 let private containerOf (teamId: string) = $"team-{teamId}"

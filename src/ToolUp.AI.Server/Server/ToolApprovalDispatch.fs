@@ -80,7 +80,7 @@ let ApprovalRejectedEvent = "ToolApprovalRejected"
 [<Literal>]
 let ApprovalExpiredEvent = "ToolApprovalExpired"
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 // ─── The pending record ──────────────────────────────────────────
 

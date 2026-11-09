@@ -104,8 +104,7 @@ type private RecordingAuditLog() =
 let private scopeA = "team-issuer"
 let private scopeB = "team-other"
 
-let private jsonOptions =
-    ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()
+let private jsonOptions = ToolUp.Remoting.Json.SystemTextJson.PlatformJson.options
 
 let private q2: TemporalExtent = {
     From = DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc)

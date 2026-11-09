@@ -141,7 +141,7 @@ let private cacheSlidingTtl = TimeSpan.FromMinutes 5.0
 /// converter set is mandatory (records / `DateTimeOffset` / options all
 /// break on a bare `JsonSerializerOptions`); constructed once at module
 /// level per the SDK's SSE / non-Remoting JSON convention.
-let private envelopeJson = FableConverters.create ()
+let private envelopeJson = PlatformJson.options
 
 /// Phase 22b — this process's replica identity, stamped onto every
 /// published envelope and every acknowledgement so a shared audit trail

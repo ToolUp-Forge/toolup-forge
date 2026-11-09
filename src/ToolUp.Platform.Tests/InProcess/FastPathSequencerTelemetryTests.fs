@@ -26,7 +26,7 @@ open ToolUp.AI.FastPathTelemetryHandler
 // pattern for the conversation beacon; mirroring it here would
 // duplicate scaffolding without exercising new behaviour.
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 let private outcome (kind: string) (clauseCount: int) : SequenceOutcomeBeacon = {
     Outcome = kind

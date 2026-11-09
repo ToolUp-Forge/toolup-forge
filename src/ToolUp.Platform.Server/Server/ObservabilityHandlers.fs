@@ -47,7 +47,7 @@ open ToolUp.Platform
 // `ITimeSeriesStore`, is a composition defect, and an empty table would
 // hide it behind the same render as "nothing logged yet".
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 let private resolveAccessContext (ctx: HttpContext) : AccessContext =
     match ctx.RequestServices.GetService(typeof<AccessContext>) with

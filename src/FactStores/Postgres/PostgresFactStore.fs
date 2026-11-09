@@ -526,7 +526,7 @@ LIMIT @k"""
 /// and an asserted row are the same bytes for the same fact.
 module internal FactRow =
 
-    let private jsonOptions = FableConverters.create ()
+    let private jsonOptions = PlatformJson.options
 
     /// The fact exactly as `BlobFactStore` serialises it (the `payload`
     /// column).
@@ -1215,7 +1215,7 @@ type PostgresFactStore
     // schema provisioned without the table (`VerifyOnly`) is listed per
     // check instead, as before the index.
 
-    static let taintJson = FableConverters.create ()
+    static let taintJson = PlatformJson.options
 
     let taintIndexRebuilds: int64[] = Array.zeroCreate 1
 

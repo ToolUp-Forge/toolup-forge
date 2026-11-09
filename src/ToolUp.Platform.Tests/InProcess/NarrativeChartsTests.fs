@@ -51,7 +51,7 @@ let private docWith (elements: NarrativeElement list) : NarrativeDocument = {
 
 let private series = [ "Jan", 10.0; "Feb", 20.0; "Mar", 15.0 ]
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 let private binding: NarrativeFromData.ChartBinding = {
     ArtifactKey = Some "result-8f2c"

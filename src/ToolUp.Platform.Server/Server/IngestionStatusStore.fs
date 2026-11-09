@@ -73,7 +73,7 @@ module IngestionStatusStore =
     [<Literal>]
     let DataType = "_ingestionstatus"
 
-    let private jsonOptions = FableConverters.create ()
+    let private jsonOptions = PlatformJson.options
 
     /// Persisted shape — the status plus the expected chunk total so the
     /// observer can detect completion after a process restart (the

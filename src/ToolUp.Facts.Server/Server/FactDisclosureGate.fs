@@ -645,7 +645,7 @@ type FactDisclosureGate
         walkInert: bool
     ) =
 
-    static let jsonOptions = FableConverters.create ()
+    static let jsonOptions = PlatformJson.options
 
     let maxConcurrentReads = max 1 fanOut.MaxConcurrentReads
 

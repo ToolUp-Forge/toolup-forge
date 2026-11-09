@@ -30,7 +30,7 @@ open ToolUp.Platform
 // serialised default on every instance's JSON, `RemoveField` /
 // `RenameField` reshape it; the type-change cases are schema-only.
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 let private serialise (value: 'T) : byte[] =
     Encoding.UTF8.GetBytes(JsonSerializer.Serialize(value, jsonOptions))

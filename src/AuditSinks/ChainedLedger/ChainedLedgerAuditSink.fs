@@ -148,7 +148,7 @@ type LedgerVerification =
     /// The chain is broken. Carries the FIRST break, positioned.
     | LedgerBroken of LedgerBreak
 
-let private ledgerJsonOptions = FableConverters.create ()
+let private ledgerJsonOptions = PlatformJson.options
 
 /// Body carried in each record's `Payload`, canonicalised before it is
 /// framed into the digest.

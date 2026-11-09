@@ -129,7 +129,7 @@ let private jwksRefreshCooldown = TimeSpan.FromMinutes 1.0
 /// set is mandatory (records / `DateTimeOffset` all break on a bare
 /// `JsonSerializerOptions`); constructed once at module level per the
 /// SDK's SSE / non-Remoting JSON convention.
-let private envelopeJson = FableConverters.create ()
+let private envelopeJson = PlatformJson.options
 
 /// Phase 134 — a key-fetch URL is acceptable only over https, with http
 /// permitted for loopback hosts (the local mock-IdP dev escape hatch).

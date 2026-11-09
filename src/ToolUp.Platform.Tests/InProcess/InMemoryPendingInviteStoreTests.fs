@@ -6,22 +6,13 @@ open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Scope.Teams
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
-open ToolUp.Platform.Tests.Support
 
-// ─── Phase 5h — InMemoryPendingInviteStore contract binding ──────────
+// ─── InMemoryPendingInviteStore contract binding ─────────────────────
 //
-// Runs the `IPendingInviteStoreContract` pack against the in-process
-// single-instance default. The InMemory impl holds module-level
-// `writeLock` + `cache` state (the 30-second TTL read cache from Phase
-// 3d / Cluster A1); wrap the binding in `testSequenced` so sibling tests
-// don't interleave on the shared cache. Each test's `factory ()` call
-// resets the cache via `CacheReset.invalidateAll` and pairs the impl
-// with a fresh `InMemoryBlobStorage`, so on-disk state is per-test even
-// though the in-memory cache machinery is process-wide.
-//
-// The future `BlobPendingInviteStore` companion binds to the same pack
-// from its own binding file (against a unique blob path per test) once
-// Phase 9c half-2's `IBlobStorage.UploadWithETag` substrate ships.
+// Runs the `IPendingInviteStoreContract` pack — the interface's behaviour and
+// the document's (bytes at rest, read failure, quarantine) — against the
+// single-instance store, each case over a fresh `InMemoryBlobStorage`. The
+// store holds no process-wide state, so the cases run in parallel.
 
 let private silentLogger =
     { new ILogger with
@@ -33,11 +24,13 @@ let private silentLogger =
 
 let tests =
     let factory () =
-        // Drop the module-level cache so the previous test's reads
-        // can't bleed into this test's view of a fresh blob.
-        CacheReset.invalidateAll () |> Async.RunSynchronously
-
         let storage = InMemoryBlobStorage() :> IBlobStorage
         InMemoryPendingInviteStore(storage, silentLogger) :> IPendingInviteStore
 
-    testSequenced (IPendingInviteStoreContract.tests "InMemoryPendingInviteStore" factory)
+    testList "InMemoryPendingInviteStore" [
+        IPendingInviteStoreContract.tests "InMemoryPendingInviteStore" factory
+        IPendingInviteStoreContract.documentTests
+            "InMemoryPendingInviteStore"
+            (fun () -> InMemoryBlobStorage() :> IBlobStorage)
+            (fun storage -> InMemoryPendingInviteStore(storage, silentLogger) :> IPendingInviteStore)
+    ]

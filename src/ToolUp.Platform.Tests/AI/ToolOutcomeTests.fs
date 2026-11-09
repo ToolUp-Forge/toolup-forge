@@ -146,7 +146,7 @@ let private runLoop
             |> Async.Catch
 
         let! latency = eventStore.ReadBySource("anonymous", AILatencyRecord.SourceModule)
-        let options = FableConverters.create ()
+        let options = PlatformJson.options
 
         let timings =
             latency

@@ -9,6 +9,7 @@ open System
 open System.Text
 open System.Text.Json.Nodes
 open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.Infra
 
 // ─── Phase 54b — completed-step offboard ledger ──────────────────────
 //
@@ -79,12 +80,6 @@ type ILifecycleLedger =
 
 [<AutoOpen>]
 module private BlobBackedLifecycleLedgerInternal =
-    /// Reserved SDK-level container — the ledger is platform metadata, not
-    /// tenant data, so it lives under `_platform`, never a tenant scope
-    /// (and is therefore never swept by the offboard's own data-erasure
-    /// hook). Mirrors `ILifecycleSummaryStore`'s container choice.
-    let ledgerContainer = ScopeKey.PlatformContainer
-
     /// `scopeId` + phase form a blob name. Reject path separators (they
     /// would escape the container prefix); coerce other non-safe chars to
     /// `_`. Scope ids the resolver mints (`team-{guid}` / `user-{id}`)
@@ -105,63 +100,98 @@ module private BlobBackedLifecycleLedgerInternal =
         |> Seq.toArray
         |> String
 
-    let blobNameFor (scopeId: string) (phase: TenantLifecyclePhase) : string =
-        sprintf "_tenant-lifecycle-ledger/%s/%s.json" (sanitise scopeId) (TenantLifecyclePhase.name phase)
+    /// The ledger is platform metadata, not tenant data, so it lives in the
+    /// reserved `_platform` container, never a tenant scope (and is
+    /// therefore never swept by the offboard's own data-erasure hook).
+    /// Mirrors `ILifecycleSummaryStore`'s container choice.
+    let pathFor (scopeId: string) (phase: TenantLifecyclePhase) : DocPath =
+        DocPath.ofString (
+            sprintf "_tenant-lifecycle-ledger/%s/%s.json" (sanitise scopeId) (TenantLifecyclePhase.name phase)
+        )
+
+    /// A flat JSON array of hook names, the bytes the ledger has always
+    /// written (a thin codec: the shape predates `PlatformJson`).
+    let codec: BlobCodec<Set<string>> = {
+        Encode =
+            fun names ->
+                let arr = JsonArray()
+
+                for name in names do
+                    arr.Add(JsonValue.Create name)
+
+                Encoding.UTF8.GetBytes(arr.ToJsonString())
+        Decode =
+            fun bytes ->
+                try
+                    JsonNode.Parse(Encoding.UTF8.GetString bytes).AsArray()
+                    |> Seq.map (fun n -> n.GetValue<string>())
+                    |> Set.ofSeq
+                    |> Ok
+                with ex ->
+                    Error ex.Message
+    }
 
 /// Phase 54b — `ILifecycleLedger` backed by `IBlobStorage`. Each
 /// `(scope, phase)` run's recorded hook set lives at
 /// `_platform/_tenant-lifecycle-ledger/{scopeId}/{phase}.json` as a flat
 /// JSON array of hook names. Cluster-portable: any blob backend works and
 /// every node reads the same recorded set.
+///
+/// A ledger that cannot be read or decoded reads as "nothing recorded" —
+/// a full re-run, which is safe because the first-party hooks are
+/// idempotent — and says so in the log. `Record` is one guarded update:
+/// a read failure writes nothing and raises (it used to read as empty and
+/// write the one hook over everything recorded), and an undecodable
+/// ledger is set aside and started again rather than wedging the sweep.
 type BlobBackedLifecycleLedger(blobs: IBlobStorage) =
-    let blobName = blobNameFor
+    let logger = JsonConsoleLogger.JsonConsoleLogger() :> ILogger
+    let docs = BlobDocumentStore<Set<string>>(blobs, codec, logger)
 
     interface ILifecycleLedger with
         member _.GetCompleted(scopeId: string, phase: TenantLifecyclePhase) : Async<Set<string>> = async {
-            match! blobs.Download(ledgerContainer, blobName scopeId phase) with
-            | Error _ -> return Set.empty
-            | Ok bytes ->
-                try
-                    let arr = JsonNode.Parse(Encoding.UTF8.GetString bytes).AsArray()
-                    return arr |> Seq.map (fun n -> n.GetValue<string>()) |> Set.ofSeq
-                with _ ->
-                    // A corrupt ledger reads as "nothing recorded" — a full
-                    // re-run, which is safe because the first-party hooks
-                    // are idempotent.
-                    return Set.empty
+            match! docs.Read(ScopeKey.platform, pathFor scopeId phase) with
+            | Ok recorded -> return Option.defaultValue Set.empty recorded
+            | Error e ->
+                logger.Warn(
+                    $"[LifecycleLedger] {BlobMapStoreError.describe e}; the {TenantLifecyclePhase.name phase} run for {scopeId} re-runs every hook"
+                )
+
+                return Set.empty
         }
 
-        member this.Record
+        member _.Record
             (scopeId: string, phase: TenantLifecyclePhase, hookName: string, _disposition: LedgerDisposition)
             : Async<unit> =
             async {
-                // Read-modify-write. The resumable sweep records one hook at
-                // a time, sequentially, so this does not race itself within a
-                // run. Both dispositions are "done"; the disposition is kept
-                // in the contract for callers/telemetry but the stored shape
-                // is just the done-set (a re-run skips either disposition).
-                let! current = (this :> ILifecycleLedger).GetCompleted(scopeId, phase)
-                let updated = Set.add hookName current
-                let arr = JsonArray()
+                // Both dispositions are "done"; the disposition is kept in
+                // the contract for callers/telemetry but the stored shape is
+                // just the done-set (a re-run skips either disposition).
+                let! recorded =
+                    docs.UpdateOrRestart(
+                        ScopeKey.platform,
+                        pathFor scopeId phase,
+                        fun current ->
+                            let names = Option.defaultValue Set.empty current
 
-                for name in updated do
-                    arr.Add(JsonValue.Create name)
-
-                let bytes = Encoding.UTF8.GetBytes(arr.ToJsonString())
+                            if names.Contains hookName then
+                                BlobUpdate.Keep()
+                            else
+                                BlobUpdate.Write(Set.add hookName names, ())
+                    )
 
                 // Phase 863 — the ledger is what a resumed sweep trusts, so a
                 // refused write raises rather than reading as recorded; the
                 // lifecycle job turns it into a transient failure and the
                 // retry resumes from the last hook that WAS recorded.
-                match! blobs.Upload(ledgerContainer, blobName scopeId phase, bytes) with
-                | Ok _ -> return ()
-                | Error storageError ->
+                match recorded with
+                | Ok() -> return ()
+                | Error e ->
                     return
                         failwithf
                             "BlobBackedLifecycleLedger: recording hook %s for %s could not be written: %s"
                             hookName
                             scopeId
-                            storageError
+                            (BlobMapStoreError.describe e)
             }
 
         member _.Clear(scopeId: string, phase: TenantLifecyclePhase) : Async<unit> = async {
@@ -169,15 +199,15 @@ type BlobBackedLifecycleLedger(blobs: IBlobStorage) =
             // skip every hook it names, so a refused clear raises (as a
             // refused `Record` does) rather than reading as cleared. A
             // missing ledger still answers Ok: Clear stays idempotent.
-            match! blobs.Delete(ledgerContainer, blobName scopeId phase) with
+            match! docs.Delete(ScopeKey.platform, pathFor scopeId phase) with
             | Ok() -> return ()
-            | Error storageError ->
+            | Error e ->
                 return
                     failwithf
                         "BlobBackedLifecycleLedger: clearing the %s ledger for %s was refused, so its recorded hooks would be skipped by the next run: %s"
                         (TenantLifecyclePhase.name phase)
                         scopeId
-                        storageError
+                        (BlobMapStoreError.describe e)
         }
 
 module BlobBackedLifecycleLedger =

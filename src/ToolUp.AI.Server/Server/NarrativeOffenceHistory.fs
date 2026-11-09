@@ -392,7 +392,7 @@ module NarrativeLearning =
 
 // ─── The store ───────────────────────────────────────────────────
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 let private listOrEmpty (xs: 'a list) = if isNull (box xs) then [] else xs
 

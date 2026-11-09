@@ -47,7 +47,7 @@ open ToolUp.Platform.Jobs
 
 /// Serialiser option set — must match `BlobEntityStore` byte-for-byte.
 module private Json =
-    let options = FableConverters.create ()
+    let options = PlatformJson.options
 
     let serialise (value: 'T) : string =
         JsonSerializer.Serialize(value, options)

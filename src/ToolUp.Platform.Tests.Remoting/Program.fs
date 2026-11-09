@@ -27,7 +27,6 @@ let private registeredTests =
         CellProvenanceTests.tests
         AgChartExportTests.tests
         ValidationTests.tests
-        IdempotencyReplayAuditTests.tests
         IdempotencyStoreEvictionTests.tests
         InMemoryJobDispatcherTests.tests
         AuditBodyDisposalTests.tests

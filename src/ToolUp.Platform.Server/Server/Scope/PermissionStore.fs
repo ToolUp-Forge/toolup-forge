@@ -375,141 +375,122 @@ let private mergeEffective
 let private platformContainer = ScopeKey.PlatformContainer
 let private teamBlobName teamId = $"permissions/{teamId}.json"
 
-/// Blob-backed `IPermissionStore`. Reads and writes one JSON
-/// document per team under `_platform/permissions/{teamId}.json`.
-/// Thread-safe via the underlying `IBlobStorage` — no internal
-/// caching; callers that care about latency wrap this with a
-/// caching layer (or we add one here if production telemetry shows
-/// it's needed).
+/// Blob-backed `IPermissionStore`: one JSON document per team under
+/// `_platform/permissions/{teamId}.json`, a codec and a path over the
+/// platform's durable document store (`BlobDocumentStore`). An absent
+/// document is the bootstrap default (no restrictions); a document that
+/// exists but cannot be read, or does not decode (it is quarantined beside
+/// itself and never overwritten), raises `PermissionStoreUnavailableException`
+/// so the request fails closed rather than reading a corrupt RBAC document as
+/// unrestricted. Every write is one guarded read-modify-write, conditional
+/// where the backend has the ETag seam, so two concurrent permission edits on
+/// different nodes do not lose one another. No internal caching.
 type PermissionStore(storage: IBlobStorage, ?logger: ILogger) =
     let logError (msg: string) =
         match logger with
         | Some l -> l.Error(msg, None)
         | None -> ()
 
-    let load (teamId: string) = async {
-        let blobName = teamBlobName teamId
-        let! result = storage.Download(platformContainer, blobName)
-
-        match result with
-        | Ok bytes ->
-            match Json.tryDeserialize bytes with
-            | Some perms -> return perms
-            | None ->
-                // Present but unparseable. Failing OPEN here treats a
-                // corrupt RBAC document as unrestricted — fail closed.
-                logError
-                    $"PermissionStore: team '{teamId}' permission document is present but unparseable. Failing closed (request denied) rather than treating it as unrestricted access."
-
-                return
-                    raise (
-                        PermissionStoreUnavailableException
-                            $"Permission document for team '{teamId}' is corrupt and cannot be parsed."
-                    )
-        | Error downloadErr ->
-            // `Error` is ambiguous: blob genuinely absent (intended
-            // bootstrap fail-open — pre-Phase-4 unrestricted) vs a
-            // transient/permission read failure (must fail closed; a
-            // storage blip must not silently grant unrestricted access).
-            let! existence = async {
-                try
-                    let! e = storage.Exists(platformContainer, blobName)
-                    return Some e
-                with _ ->
-                    return None
-            }
-
-            match existence with
-            | Some false ->
-                // Genuinely no document — bootstrap default.
-                return TeamPermissions.empty
-            | Some true ->
-                logError
-                    $"PermissionStore: team '{teamId}' permission document exists but could not be read ({downloadErr}). Failing closed (request denied) rather than treating it as unrestricted access."
-
-                return
-                    raise (
-                        PermissionStoreUnavailableException
-                            $"Permission document for team '{teamId}' exists but could not be read: {downloadErr}"
-                    )
-            | None ->
-                // Could not even confirm existence — storage unreachable.
-                // Cannot prove the document is absent, so fail closed.
-                logError
-                    $"PermissionStore: storage unreachable while resolving permissions for team '{teamId}' (download error: {downloadErr}). Failing closed (request denied)."
-
-                return
-                    raise (
-                        PermissionStoreUnavailableException
-                            $"Storage unreachable while resolving permissions for team '{teamId}'."
-                    )
+    // The document's own codec: it keeps the `hidden` dual-write.
+    let codec: BlobCodec<TeamPermissions> = {
+        Encode = Json.serialize
+        Decode =
+            fun bytes ->
+                match Json.tryDeserialize bytes with
+                | Some perms -> Ok perms
+                | None -> Error "the permission document does not parse"
     }
 
-    let save (teamId: string) (perms: TeamPermissions) = async {
-        let bytes = Json.serialize perms
-        let! result = storage.Upload(platformContainer, teamBlobName teamId, bytes)
+    let docs =
+        BlobDocumentStore<TeamPermissions>(
+            storage,
+            codec,
+            defaultArg logger (Config.ConsoleLogger.ConsoleLogger() :> ILogger)
+        )
 
-        match result with
-        | Ok _ -> return Ok()
-        | Error e -> return Error e
+    let teamPath (teamId: string) = DocPath.ofString (teamBlobName teamId)
+
+    let unavailable (teamId: string) (error: BlobMapStoreError) =
+        logError
+            $"PermissionStore: team '{teamId}': {BlobMapStoreError.describe error}. Failing closed (request denied) rather than treating it as unrestricted access."
+
+        PermissionStoreUnavailableException
+            $"Permission document for team '{teamId}' is unavailable: {BlobMapStoreError.describe error}"
+
+    let load (teamId: string) = async {
+        match! docs.Read(ScopeKey.platform, teamPath teamId) with
+        | Ok(Some perms) -> return perms
+        | Ok None -> return TeamPermissions.empty
+        | Error e -> return raise (unavailable teamId e)
+    }
+
+    /// One guarded read-modify-write of the team's document. A document that
+    /// cannot be established refuses the write (`PermissionStoreUnavailableException`,
+    /// as a read does); a write the storage refuses is `Error`.
+    let change (teamId: string) (transform: TeamPermissions -> TeamPermissions) = async {
+        let! outcome =
+            docs.Update(
+                ScopeKey.platform,
+                teamPath teamId,
+                fun current -> BlobUpdate.Write(current |> Option.defaultValue TeamPermissions.empty |> transform, ())
+            )
+
+        match outcome with
+        | Ok() -> return Ok()
+        | Error(BlobMapStoreError.WriteFailed(_, reason)) -> return Error reason
+        | Error(BlobMapStoreError.Contended _ as e) -> return Error(BlobMapStoreError.describe e)
+        | Error e -> return raise (unavailable teamId e)
     }
 
     interface IPermissionStore with
         member _.GetTeamPermissions teamId = load teamId.Value
 
-        member _.SetTeamPermissions(teamId, permissions) = save teamId.Value permissions
+        member _.SetTeamPermissions(teamId, permissions) =
+            change teamId.Value (fun _ -> permissions)
 
         member _.GetEffectivePermissions(userId, teamId) = async {
             let! perms = load teamId.Value
             return mergeEffective perms.Defaults perms.Members userId.Value
         }
 
-        member _.SetMemberPermissions(teamId, userId, moduleName, permissions) = async {
-            let! existing = load teamId.Value
+        member _.SetMemberPermissions(teamId, userId, moduleName, permissions) =
+            change teamId.Value (fun existing ->
+                let userEntries =
+                    existing.Members |> Map.tryFind userId.Value |> Option.defaultValue Map.empty
 
-            let userEntries =
-                existing.Members |> Map.tryFind userId.Value |> Option.defaultValue Map.empty
+                let updatedUserEntries =
+                    if List.isEmpty permissions then
+                        userEntries |> Map.remove moduleName
+                    else
+                        userEntries |> Map.add moduleName permissions
 
-            let updatedUserEntries =
-                if List.isEmpty permissions then
-                    userEntries |> Map.remove moduleName
-                else
-                    userEntries |> Map.add moduleName permissions
+                let updatedMembers =
+                    if Map.isEmpty updatedUserEntries then
+                        existing.Members |> Map.remove userId.Value
+                    else
+                        existing.Members |> Map.add userId.Value updatedUserEntries
 
-            let updatedMembers =
-                if Map.isEmpty updatedUserEntries then
-                    existing.Members |> Map.remove userId.Value
-                else
-                    existing.Members |> Map.add userId.Value updatedUserEntries
-
-            return!
-                save teamId.Value {
+                {
                     existing with
                         Members = updatedMembers
-                }
-        }
+                })
 
-        member _.SetTeamDefaults(teamId, defaults) = async {
-            let! existing = load teamId.Value
-            return! save teamId.Value { existing with Defaults = defaults }
-        }
+        member _.SetTeamDefaults(teamId, defaults) =
+            change teamId.Value (fun existing -> { existing with Defaults = defaults })
 
         member _.GetModuleExposure teamId = async {
             let! perms = load teamId.Value
             return perms.Exposure
         }
 
-        member _.SetModuleExposure(teamId, moduleName, state) = async {
-            let! existing = load teamId.Value
+        member _.SetModuleExposure(teamId, moduleName, state) =
+            change teamId.Value (fun existing ->
+                let updatedExposure =
+                    match state with
+                    | ModuleExposure.Available -> existing.Exposure |> Map.remove moduleName
+                    | s -> existing.Exposure |> Map.add moduleName s
 
-            let updatedExposure =
-                match state with
-                | ModuleExposure.Available -> existing.Exposure |> Map.remove moduleName
-                | s -> existing.Exposure |> Map.add moduleName s
-
-            return!
-                save teamId.Value {
+                {
                     existing with
                         Exposure = updatedExposure
-                }
-        }
+                })

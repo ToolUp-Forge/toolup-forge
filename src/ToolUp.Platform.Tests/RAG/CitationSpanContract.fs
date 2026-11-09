@@ -45,7 +45,7 @@ open ToolUp.RAG.Chunking
 // depends on `String.GetHashCode()` (process-randomised, so any assertion
 // resting on it is a coin flip across runs).
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 // ── Fixtures ──
 //
