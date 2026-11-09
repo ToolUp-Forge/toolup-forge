@@ -4466,7 +4466,6 @@ let main args =
         "Infra/PersistentNarrativeStore.fs"
         "JobStore.fs"
         "JobTriggerWatermark.fs"
-        "MigrationStatusStore.fs"
         "NotificationAddressBook.fs"
         "Providers/BlobProviderProfile.fs"
         "Remoting/Idempotency.fs"
