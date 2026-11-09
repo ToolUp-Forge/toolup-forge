@@ -74,6 +74,8 @@ ToolUp.Remoting.Generator.Emit.compilationUnit(ToolUp.Remoting.Generator.EmitOpt
 ToolUp.Remoting.Generator.Emit.coveredSpellings(ToolUp.Remoting.Generator.GenerationPlan) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]]
 ToolUp.Remoting.Generator.Emit.jsonCompilationUnit(ToolUp.Remoting.Generator.JsonEmitOptions, ToolUp.Remoting.Generator.GenerationPlan) : System.String
 ToolUp.Remoting.Generator.Emit.jsonCoveredApiRecords(ToolUp.Remoting.Generator.JsonEmitOptions, ToolUp.Remoting.Generator.GenerationPlan) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Remoting.Generator.Emit.jsonEncoderCompilationUnit(ToolUp.Remoting.Generator.JsonEncoderEmitOptions, ToolUp.Remoting.Generator.GenerationPlan) : System.String
+ToolUp.Remoting.Generator.Emit.jsonEncoderCoveredApiRecords(ToolUp.Remoting.Generator.JsonEncoderEmitOptions, ToolUp.Remoting.Generator.GenerationPlan) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Remoting.Generator.Emit.jsonRegistrations(ToolUp.Remoting.Generator.JsonEmitOptions, ToolUp.Remoting.Generator.GenerationPlan) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`3[System.String, System.String, System.String]]
 ToolUp.Remoting.Generator.Emit.refusalReport(ToolUp.Remoting.Generator.GenerationPlan) : System.String
 ToolUp.Remoting.Generator.EmitOptions (class)
@@ -100,6 +102,12 @@ ToolUp.Remoting.Generator.JsonEmitOptions.ArgumentRecords : Microsoft.FSharp.Col
 ToolUp.Remoting.Generator.JsonEmitOptions.JsonModuleName : System.String { get }
 ToolUp.Remoting.Generator.JsonEmitOptions.JsonNamespace : System.String { get }
 ToolUp.Remoting.Generator.JsonEmitOptions.JsonOpens : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Remoting.Generator.JsonEncoderEmitOptions (class)
+ToolUp.Remoting.Generator.JsonEncoderEmitOptions..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]]])
+ToolUp.Remoting.Generator.JsonEncoderEmitOptions.EncoderModuleName : System.String { get }
+ToolUp.Remoting.Generator.JsonEncoderEmitOptions.EncoderNamespace : System.String { get }
+ToolUp.Remoting.Generator.JsonEncoderEmitOptions.EncoderOpens : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Remoting.Generator.JsonEncoderEmitOptions.ReturnRecords : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]]] { get }
 ToolUp.Remoting.Generator.Plan (class)
 ToolUp.Remoting.Generator.Plan.NotRemotingApiAttributeName : System.String (literal)
 ToolUp.Remoting.Generator.Plan.apiRecordsIn(System.Reflection.Assembly) : Microsoft.FSharp.Collections.FSharpList`1[System.Type]
@@ -113,6 +121,7 @@ ToolUp.Remoting.Generator.Plan.clientNamespaces(Microsoft.FSharp.Collections.FSh
 ToolUp.Remoting.Generator.Plan.forClientProxies(System.Collections.Generic.IEnumerable`1[System.Type]) : ToolUp.Remoting.Generator.ClientPlan
 ToolUp.Remoting.Generator.Plan.forJsonEncoders(System.Collections.Generic.IEnumerable`1[System.Type]) : ToolUp.Remoting.Generator.GenerationPlan
 ToolUp.Remoting.Generator.Plan.forJsonResponseDecoders(System.Collections.Generic.IEnumerable`1[System.Type]) : ToolUp.Remoting.Generator.GenerationPlan
+ToolUp.Remoting.Generator.Plan.forJsonResponseEncoders(System.Collections.Generic.IEnumerable`1[System.Type]) : ToolUp.Remoting.Generator.GenerationPlan
 ToolUp.Remoting.Generator.Plan.forJsonTypes(System.Collections.Generic.IEnumerable`1[System.Type]) : ToolUp.Remoting.Generator.GenerationPlan
 ToolUp.Remoting.Generator.Plan.forTypes(System.Collections.Generic.IEnumerable`1[System.Type]) : ToolUp.Remoting.Generator.GenerationPlan
 ToolUp.Remoting.Generator.Plan.isApiRecord(System.Type) : System.Boolean
