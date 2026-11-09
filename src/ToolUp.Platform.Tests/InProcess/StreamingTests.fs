@@ -2,11 +2,12 @@ module ToolUp.Platform.Tests.InProcess.StreamingTests
 
 open System.Collections.Generic
 open Expecto
+open ToolUp.Remoting
 open ToolUp.Remoting.Server
 
-// ─── Phase 69c.tail — streaming substrate hardening ───────────────────
+// ─── Streaming substrate hardening ───────────────────
 //
-// Contract tests pinning the shipped Phase 69c server-side streaming
+// Contract tests pinning the server-side streaming
 // substrate (`Server/Remoting/Streaming.fs`):
 //   * classification recognises `'arg -> IAsyncEnumerable<'T>` methods
 //     and reports the (arg, element) shape; non-streaming methods are
@@ -23,7 +24,7 @@ open ToolUp.Remoting.Server
 //
 // The wire-divergent live-path migration (AIAssistantHandler SSE →
 // typed stream) + the Fable Cmd.OfRemoting.callStreaming client helper
-// remain consumer-trigger-gated (Phase 69c.tail A/B/C/D/E); these tests
+// remain consumer-trigger-gated; these tests
 // harden the substrate those tasks build on.
 
 // ── Fixtures ────────────────────────────────────────────────────────
@@ -108,7 +109,7 @@ let tests =
 
         test "SSE frame formatting: chunk / complete / error" {
             Expect.equal
-                (utf8 (Streaming.formatChunk "{\"x\":1}"))
+                (Sse.encode (StreamFrame.Chunk(None, "{\"x\":1}")))
                 "event: chunk\ndata: {\"x\":1}\n\n"
                 "single-line chunk frame"
 
@@ -119,7 +120,7 @@ let tests =
             Expect.stringContains err "boom" "error frame carries the message"
         }
 
-        test "Phase 69c.C — formatChunkWithId stamps the id line before the data" {
+        test "formatChunkWithId stamps the id line before the data" {
             Expect.equal
                 (utf8 (Streaming.formatChunkWithId "abc-0" "{\"x\":1}"))
                 "event: chunk\nid: abc-0\ndata: {\"x\":1}\n\n"
@@ -132,117 +133,64 @@ let tests =
                 "id line composes with the spec's multiline data framing"
         }
 
-        test "Phase 69c.C — SseFrame.parse decodes exactly what Streaming encodes" {
+        test "Sse.parse decodes exactly what the server frames" {
             let wire =
                 utf8 (Streaming.formatChunkWithId "corr-0" "{\"x\":1}")
                 + utf8 (Streaming.formatChunkWithId "corr-1" "line-a\nline-b")
                 + ": keepalive\n\n"
-                + utf8 (Streaming.formatChunk "no-id")
+                + Sse.encode (StreamFrame.Chunk(None, "no-id"))
                 + utf8 (Streaming.formatComplete ())
 
-            let frames = SseFrame.parse wire
-
             Expect.equal
-                frames
+                (Sse.parse wire)
                 [
-                    {
-                        Event = "chunk"
-                        Id = Some "corr-0"
-                        Data = "{\"x\":1}"
-                    }
-                    {
-                        Event = "chunk"
-                        Id = Some "corr-1"
-                        Data = "line-a\nline-b"
-                    }
-                    {
-                        Event = "chunk"
-                        Id = None
-                        Data = "no-id"
-                    }
-                    {
-                        Event = "complete"
-                        Id = None
-                        Data = "{}"
-                    }
+                    StreamFrame.Chunk(Some "corr-0", "{\"x\":1}")
+                    StreamFrame.Chunk(Some "corr-1", "line-a\nline-b")
+                    StreamFrame.Chunk(None, "no-id")
+                    StreamFrame.Complete
                 ]
                 "chunk / multiline chunk / id-less chunk / complete decode in order; the comment is dropped"
 
-            let err = SseFrame.parse (utf8 (Streaming.formatError "boom"))
-
             Expect.equal
-                err
-                [
-                    {
-                        Event = "error"
-                        Id = None
-                        Data = "{\"message\":\"boom\"}"
-                    }
-                ]
+                (Sse.parse (utf8 (Streaming.formatError "boom")))
+                [ StreamFrame.Error "{\"message\":\"boom\"}" ]
                 "error frame decodes with its JSON payload intact"
         }
 
-        test "Phase 69c.C — SseFrame.parse is terminator-tolerant and holds a trailing partial event" {
-            let crlf = "event: chunk\r\nid: c-0\r\ndata: 1\r\n\r\n"
-
+        test "Sse.parse is terminator-tolerant and holds a trailing partial event" {
             Expect.equal
-                (SseFrame.parse crlf)
-                [
-                    {
-                        Event = "chunk"
-                        Id = Some "c-0"
-                        Data = "1"
-                    }
-                ]
+                (Sse.parse "event: chunk\r\nid: c-0\r\ndata: 1\r\n\r\n")
+                [ StreamFrame.Chunk(Some "c-0", "1") ]
                 "CRLF frames decode"
 
-            let cr = "event: chunk\rdata: 2\r\r"
-
             Expect.equal
-                (SseFrame.parse cr)
-                [
-                    {
-                        Event = "chunk"
-                        Id = None
-                        Data = "2"
-                    }
-                ]
+                (Sse.parse "event: chunk\rdata: 2\r\r")
+                [ StreamFrame.Chunk(None, "2") ]
                 "bare-CR frames decode"
 
-            // No event: field ⇒ the spec's default `message` type (the
+            // No event: field means the spec's default `message` type (the
             // legacy per-user AI channel is framed this way).
             Expect.equal
-                (SseFrame.parse "data: {\"a\":1}\n\n")
-                [
-                    {
-                        Event = "message"
-                        Id = None
-                        Data = "{\"a\":1}"
-                    }
-                ]
+                (Sse.parse "data: {\"a\":1}\n\n")
+                [ StreamFrame.Other("message", None, "{\"a\":1}") ]
                 "an event with no event: field is a `message`"
 
             // A partial trailing event (no closing blank line) is NOT
-            // emitted — a reader holds it for the next chunk, exactly as a
+            // emitted: a reader holds it for the next chunk, exactly as a
             // browser does.
-            Expect.equal
-                (SseFrame.parse "event: chunk\ndata: partial")
-                []
-                "a trailing partial event is held, not emitted"
+            Expect.equal (Sse.parse "event: chunk\ndata: partial") [] "a trailing partial event is held, not emitted"
 
             // An event with no data: line is dropped per the spec.
-            Expect.equal (SseFrame.parse "event: chunk\nid: x\n\n") [] "an event with no data is dropped"
+            Expect.equal (Sse.parse "event: chunk\nid: x\n\n") [] "an event with no data is dropped"
         }
 
         test "multiline payloads are framed one data: line each (SSE spec)" {
             // A payload containing a literal newline must NOT prematurely
-            // end the SSE event — every source line is its own data: line.
-            let frame = utf8 (Streaming.formatChunk "line-a\nline-b")
-
+            // end the SSE event: every source line is its own data: line.
             Expect.equal
-                frame
+                (Sse.encode (StreamFrame.Chunk(None, "line-a\nline-b")))
                 "event: chunk\ndata: line-a\ndata: line-b\n\n"
-                "each source line is a data: line; the event ends with \\n\\n"
+                "each source line is a data: line; the event ends with a blank line"
         }
 
         test "parseFirstArg deserialises the first body-array element" {

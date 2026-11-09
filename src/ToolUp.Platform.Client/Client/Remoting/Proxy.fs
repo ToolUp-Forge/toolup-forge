@@ -8,175 +8,7 @@ open Fable.Core.JsInterop
 open Fable.SimpleJson
 open ToolUp.Remoting
 
-/// Phase 783 — a minimal, total JSON scanner, used only to lift the
-/// `decodeError` detail out of an error envelope.
-///
-/// It exists because neither obvious tool works on both hosts.
-/// `Fable.SimpleJson.parse` is Fable-RUNTIME-only — its parser is built
-/// on `Fable.Parsimmon`, whose .NET assembly is binding stubs that throw
-/// "You've hit dummy code used for Fable bindings" — so a client
-/// classifier written on it cannot be exercised in the .NET test harness
-/// at all, and `SimpleJson.parseNative` is `JSON.parse` and does not
-/// exist off the browser. `System.Text.Json` is not Fable-compilable.
-/// A regex (the shape `ScopeDenial` reached for, and for this same
-/// reason) is host-agnostic but cannot read a value containing an escaped
-/// quote — and one of the two fields read here is a serialiser's own
-/// exception message, which is precisely the field most likely to carry
-/// one.
-///
-/// So: one implementation, string-escape-aware, running identically under
-/// Fable and under .NET, which is what makes the client half of this
-/// phase testable rather than merely written.
-module private DecodeErrorWire =
-
-    /// Decode the JSON string literal whose opening quote is at `start`.
-    /// Returns the value and the index just past the closing quote;
-    /// `None` if `start` is not a quote or the literal is unterminated.
-    let readString (source: string) (start: int) : (string * int) option =
-        if start >= source.Length || source[start] <> '"' then
-            None
-        else
-            let sb = System.Text.StringBuilder()
-            let mutable i = start + 1
-            let mutable closed = false
-
-            while not closed && i < source.Length do
-                let c = source[i]
-
-                if c = '\\' && i + 1 < source.Length then
-                    match source[i + 1] with
-                    | 'n' -> sb.Append '\n' |> ignore
-                    | 't' -> sb.Append '\t' |> ignore
-                    | 'r' -> sb.Append '\r' |> ignore
-                    | 'b' -> sb.Append '\b' |> ignore
-                    | 'f' -> sb.Append '\f' |> ignore
-                    | 'u' when i + 5 < source.Length ->
-                        let mutable code = 0
-                        let mutable valid = true
-
-                        for k in 2..5 do
-                            let d = source[i + k]
-
-                            let digit =
-                                if d >= '0' && d <= '9' then
-                                    int d - int '0'
-                                elif d >= 'a' && d <= 'f' then
-                                    int d - int 'a' + 10
-                                elif d >= 'A' && d <= 'F' then
-                                    int d - int 'A' + 10
-                                else
-                                    valid <- false
-                                    0
-
-                            code <- code * 16 + digit
-
-                        if valid then
-                            sb.Append(char code) |> ignore
-                    | other -> sb.Append other |> ignore
-
-                    i <-
-                        i
-                        + (if source[i + 1] = 'u' && i + 5 < source.Length then
-                               6
-                           else
-                               2)
-                elif c = '"' then
-                    closed <- true
-                    i <- i + 1
-                else
-                    sb.Append c |> ignore
-                    i <- i + 1
-
-            if closed then Some(sb.ToString(), i) else None
-
-    /// Index of the first character of the VALUE bound to `key`. Only
-    /// matches an occurrence that is actually in key position (followed
-    /// by a colon), so a key name appearing inside some other value does
-    /// not divert the scan.
-    let valueIndexOf (source: string) (key: string) : int option =
-        let needle = "\"" + key + "\""
-
-        let rec search (from: int) =
-            let idx = source.IndexOf(needle, from)
-
-            if idx < 0 then
-                None
-            else
-                let mutable k = idx + needle.Length
-
-                while k < source.Length && System.Char.IsWhiteSpace source[k] do
-                    k <- k + 1
-
-                if k < source.Length && source[k] = ':' then
-                    let mutable v = k + 1
-
-                    while v < source.Length && System.Char.IsWhiteSpace source[v] do
-                        v <- v + 1
-
-                    Some v
-                else
-                    search (idx + needle.Length)
-
-        search 0
-
-    /// The complete JSON object whose opening brace is at `start`, braces
-    /// included. Depth-counted and string-aware, so a brace inside a
-    /// string value does not close the object early.
-    let objectAt (source: string) (start: int) : string option =
-        if start >= source.Length || source[start] <> '{' then
-            None
-        else
-            let mutable depth = 0
-            let mutable i = start
-            let mutable inString = false
-            let mutable result = None
-
-            while result.IsNone && i < source.Length do
-                let c = source[i]
-
-                if inString then
-                    if c = '\\' then
-                        i <- i + 1
-                    elif c = '"' then
-                        inString <- false
-                elif c = '"' then
-                    inString <- true
-                elif c = '{' then
-                    depth <- depth + 1
-                elif c = '}' then
-                    depth <- depth - 1
-
-                    if depth = 0 then
-                        result <- Some(source.Substring(start, i - start + 1))
-
-                i <- i + 1
-
-            result
-
-    /// The array of JSON strings whose opening bracket is at `start`.
-    /// Stops at the first element that is not a string — the path is
-    /// always a string array, and a partial read is preferable to a throw.
-    let readStringArray (source: string) (start: int) : string list =
-        if start >= source.Length || source[start] <> '[' then
-            []
-        else
-            let items = ResizeArray<string>()
-            let mutable i = start + 1
-            let mutable go = true
-
-            while go && i < source.Length do
-                while i < source.Length && (System.Char.IsWhiteSpace source[i] || source[i] = ',') do
-                    i <- i + 1
-
-                match readString source i with
-                | Some(value, next) ->
-                    items.Add value
-                    i <- next
-                | None -> go <- false
-
-            List.ofSeq items
-
-/// Phase 854 — the client read policies: identical in-flight reads share
+/// The client read policies: identical in-flight reads share
 /// one request, and a `Cacheable` read may be served stale-while-
 /// revalidate.
 ///
@@ -618,7 +450,7 @@ module ReadPolicies =
     ]
 #endif
 
-/// Phase 855 — same-tick calls travel as one request.
+/// Same-tick calls travel as one request.
 ///
 /// Opt-in, page-wide (GP 11): `enable` names the route the server's
 /// `RemotingBatch` middleware serves (`ServerApp.withRemotingBatching`
@@ -638,7 +470,7 @@ module ReadPolicies =
 /// as before. Calls whose proxies send different headers, credentials or
 /// base URLs never share an envelope.
 ///
-/// **Composition with Phase 854.** The read-policy table sits ABOVE this
+/// **Composition with the read policies.** The read-policy table sits ABOVE this
 /// queue: identical in-flight reads are shared before anything is queued,
 /// so an envelope never carries a duplicate, and a stale-while-revalidate
 /// refresh is an ordinary queued call.
@@ -891,49 +723,46 @@ module RemoteBatching =
         }
 
 module Proxy =
-    /// Phase 783 — recover the server's decode refusal from an error
-    /// response body, so `ProxyRequestException.DecodeError` is populated
-    /// without any caller parsing message text.
+    /// The `decodeError` detail of a refusal envelope:
+    /// `{ expected, found, path }`, the path optional.
+    let private decodeErrorDetail: ToolUp.Remoting.Json.JsonDecoder<DecodeError> =
+        let asString = ToolUp.Remoting.Json.JsonDecode.asString
+
+        ToolUp.Remoting.Json.JsonDecode.succeed (fun expected found path ->
+            DecodeError.at (defaultArg path []) expected found)
+        |> ToolUp.Remoting.Json.JsonDecode.apply (ToolUp.Remoting.Json.JsonDecode.field "expected" asString)
+        |> ToolUp.Remoting.Json.JsonDecode.apply (ToolUp.Remoting.Json.JsonDecode.field "found" asString)
+        |> ToolUp.Remoting.Json.JsonDecode.apply (
+            ToolUp.Remoting.Json.JsonDecode.optionalField "path" (ToolUp.Remoting.Json.JsonDecode.list asString)
+        )
+
+    /// Recover the server's decode refusal from an error response body, so
+    /// `ProxyRequestException.DecodeError` is populated without any caller
+    /// parsing message text.
     ///
-    /// The shape is the Phase 69e categorised envelope carrying the Phase
-    /// 783 detail: `{ error: { methodName, decodeError: { expected,
-    /// found, path }, message }, category: "validation", … }`. Anything
-    /// else — a body that is not JSON, a `validation` envelope from the
-    /// 69e attribute validators (which carries `violations`, not
-    /// `decodeError`), a server that predates this phase — yields `None`,
-    /// which is the correct answer rather than a degraded one: absence of
-    /// the detail means the failure was not a decode refusal.
-    ///
-    /// Deliberately total. A client that threw while classifying a server
-    /// error would replace a legible failure with an illegible one.
+    /// The shape is the categorised error envelope carrying the refusal
+    /// detail: `{ error: { methodName, decodeError: { expected, found, path },
+    /// message }, category: "validation", … }`, read with the client's own
+    /// JSON reader (`JsonText`) and decoders (`JsonDecode`). Anything else (a
+    /// body that is not JSON, a `validation` envelope from the attribute
+    /// validators, which carries `violations` rather than `decodeError`, a
+    /// server that predates the detail) yields `None`, which is the correct
+    /// answer rather than a degraded one: absence of the detail means the
+    /// failure was not a decode refusal. Total: a client that threw while
+    /// classifying a server error would replace a legible failure with an
+    /// illegible one.
     let tryReadDecodeError (responseBody: string) : DecodeError option =
         if System.String.IsNullOrWhiteSpace responseBody then
             None
         else
-            try
-                DecodeErrorWire.valueIndexOf responseBody "decodeError"
-                |> Option.bind (DecodeErrorWire.objectAt responseBody)
-                |> Option.bind (fun detail ->
-                    let field key =
-                        DecodeErrorWire.valueIndexOf detail key
-                        |> Option.bind (DecodeErrorWire.readString detail)
-                        |> Option.map fst
-
-                    match field "expected", field "found" with
-                    | Some expected, Some found ->
-                        let path =
-                            DecodeErrorWire.valueIndexOf detail "path"
-                            |> Option.map (DecodeErrorWire.readStringArray detail)
-                            |> Option.defaultValue []
-
-                        Some {
-                            Path = path
-                            Expected = expected
-                            Found = found
-                        }
-                    | _ -> None)
-            with _ ->
-                None
+            match ToolUp.Remoting.Json.JsonText.tryParse responseBody with
+            | Ok envelope ->
+                envelope
+                |> ToolUp.Remoting.Json.JsonDecode.field
+                    "error"
+                    (ToolUp.Remoting.Json.JsonDecode.field "decodeError" decodeErrorDetail)
+                |> Result.toOption
+            | Error _ -> None
 
     let combineRouteWithBaseUrl route (baseUrl: string option) =
         match baseUrl with
@@ -983,7 +812,7 @@ module Proxy =
         | None -> ()
     ]
 
-    /// Phase 854 — the wire identity of a call, less its body: two calls
+    /// The wire identity of a call, less its body: two calls
     /// of one method whose bodies are also equal send identical bytes.
     let private readKeyPrefixOf (funcNeedParameters: bool) (url: string) (headers: (string * string) list) =
         (if funcNeedParameters then "POST " else "GET ")
@@ -994,9 +823,9 @@ module Proxy =
            |> String.concat "\n")
         + "\n\n"
 
-    /// Phase 853 — the JSON request both proxies send, the reflective one
+    /// The JSON request both proxies send, the reflective one
     /// and the generated one: a body-carrying call is a POST, a
-    /// parameterless one a GET, and with batching enabled (Phase 855) the
+    /// parameterless one a GET, and with batching enabled the
     /// call joins this tick's envelope instead; its element comes back as
     /// the response the caller reads, unchanged.
     let private sendJson
@@ -1027,7 +856,7 @@ module Proxy =
             |> Http.withCredentials options.WithCredentials
             |> Http.send
 
-    /// Phase 853 — a JSON response that is not a 200, raised as the
+    /// A JSON response that is not a 200, raised as the
     /// `ProxyRequestException` a caller has always received for it.
     let private raiseStatus (url: string) (response: HttpResponse) : 'T =
         match response.StatusCode with
@@ -1037,7 +866,7 @@ module Proxy =
                     response,
                     sprintf "Internal server error (500) while making request to %s" url,
                     response.ResponseBody,
-                    // Phase 783 — a 500 should no longer be able to carry
+                    // A 500 should no longer be able to carry
                     // one (a decode refusal is a 400 now), but the
                     // recovery is cheap and total, and a consumer pinned
                     // to an older server still reads whatever arrives.
@@ -1050,14 +879,14 @@ module Proxy =
                     response,
                     sprintf "Http error (%d) from server occured while making request to %s" n url,
                     response.ResponseBody,
-                    // Phase 783 — the decode-refusal path: the server
+                    // The decode-refusal path: the server
                     // answers 400 + a `validation` envelope carrying the
                     // structured refusal.
                     tryReadDecodeError response.ResponseBody
                 )
             )
 
-    /// Phase 843 — a 200 body through a JSON algebra decoder: read ONCE
+    /// A 200 body through a JSON algebra decoder: read ONCE
     /// into the lexical value model (`JsonText`, numbers kept as written)
     /// and decoded by total combinators; a malformed body is a named
     /// refusal on the same `ProxyRequestException` the binary path raises,
@@ -1082,7 +911,7 @@ module Proxy =
                 )
             )
 
-    /// Phase 854 — `proxyFetch` with the method's read policy applied:
+    /// `proxyFetch` with the method's read policy applied:
     /// `apiFullName` is the API record's `FullName`, the key
     /// `ReadPolicies` declarations are registered under (`None` never
     /// consults them). The policy is looked up per CALL, so a policy
@@ -1118,7 +947,7 @@ module Proxy =
 
         let headers = requestHeaders options isMultipart
 
-        // Phase 854 — the wire identity of a call, less its body.
+        // The wire identity of a call, less its body.
         let readKeyPrefix = readKeyPrefixOf funcNeedParameters url headers
 
         let executeRequest =
@@ -1147,7 +976,7 @@ module Proxy =
 
                     match statusCode with
                     | 200 ->
-                        // Phase 783 — this is the binary-response path, so
+                        // This is the binary-response path, so
                         // `onOk` runs the MsgPack reader. A malformed
                         // reply now refuses with a `DecodeError` instead
                         // of a `failwithf`, and it is reported through the
@@ -1212,13 +1041,13 @@ module Proxy =
                             failwithf "Expected field %s to have a return type of Async<'t> or Task<'t>" func.FieldName
                     | _ -> failwithf "Expected field %s to have a return type of Async<'t> or Task<'t>" func.FieldName
 
-                // Phase 843 — the key the JSON algebra's registry is read
+                // The key the JSON algebra's registry is read
                 // by: the same `System.Type` the binary branch above hands
                 // its serializer, so one registration identifies one type
                 // identically on both wires.
                 let returnClrType = getReturnType fieldType
 
-                // Phase 911 — decided once per field: whether the reflective
+                // Decided once per field: whether the reflective
                 // read below needs the int64 / uint64 rewrite pass at all.
                 let holdsWideIntegers = ReflectiveWideIntegers.holdsWide returnType
 
@@ -1228,7 +1057,7 @@ module Proxy =
 
                     match response.StatusCode with
                     | 200 ->
-                        // Phase 843 — the opt-in branch, the JSON twin of
+                        // The opt-in branch, the JSON twin of
                         // `withBinarySerialization`'s. A return type with a
                         // registered JSON algebra decoder is decoded through
                         // it (`decodeJsonResponse`). A MISS is the reflection
@@ -1245,7 +1074,7 @@ module Proxy =
                             if not holdsWideIntegers then
                                 return Convert.fromJsonAs parsedJson returnType
                             else
-                                // Phase 911 — an int64 / uint64 number is read
+                                // An int64 / uint64 number is read
                                 // exactly or refused by name, never wrapped.
                                 match ReflectiveWideIntegers.widen [] parsedJson returnType with
                                 | Ok widened -> return Convert.fromJsonAs widened returnType
@@ -1330,25 +1159,25 @@ module Proxy =
                 ReadPolicies.invoke apiFullName.Value func.FieldName policy key (fun () -> executeRequest requestBody)
 
     /// Build the request/response proxy function for one API method. Reads
-    /// no Phase 854 read policy; `Remoting.buildProxy` uses
+    /// no read policy; `Remoting.buildProxy` uses
     /// `proxyFetchWithPolicies`.
     let proxyFetch options typeName (func: RecordField) fieldType =
         proxyFetchWithPolicies None options typeName func fieldType
 
-    /// Phase 853 — one generated proxy's call context: the record's
+    /// One generated proxy's call context: the record's
     /// registry key (the key its read policies are registered under), its
     /// route type name, and the builder options. Built by a generated
     /// proxy builder (`ToolUp.Remoting.Generator`'s `client-proxies`) once
     /// per proxy.
     let generatedApi (apiKey: string) (typeName: string) (options: RemoteBuilderOptions) = apiKey, typeName, options
 
-    /// Phase 853 — one generated proxy method: a closure over the
+    /// One generated proxy method: a closure over the
     /// transport and the method's generated response decoder, taking the
     /// request body the generated ENCODERS wrote (`JsonEncode.arguments`)
     /// and returning the call. Route, URL, headers and the read-policy key
     /// prefix are computed here, once per proxy; a call does no reflection
     /// — no `createTypeInfo`, no `Convert.serialize`, no `Convert.fromJsonAs`
-    /// — and composes with the Phase 854 read table and the Phase 855
+    /// — and composes with the read-policy table and the batching
     /// transport and batching exactly as the reflective proxy's call does:
     /// both go through `sendJson`, `raiseStatus` and `ReadPolicies.invoke`.
     ///
@@ -1397,7 +1226,7 @@ module Proxy =
             }
 #endif
 
-    /// Phase 69c.D — `Some elementType` when `fieldType` is a streaming
+    /// `Some elementType` when `fieldType` is a streaming
     /// field (`'arg -> IAsyncEnumerable<'T>`), recognised at proxy-build time
     /// exactly as the server classifies it at startup. `IAsyncEnumerable<'T>`
     /// has no Fable runtime shape, so `createTypeInfo` renders it as
@@ -1418,7 +1247,7 @@ module Proxy =
             | _ -> None
         | _ -> None
 
-    /// Phase 69c.D — the proxy function for a streaming field. Takes the
+    /// The proxy function for a streaming field. Takes the
     /// method's single argument and returns a COLD `RemoteStream<'T>`: the
     /// same route, headers and JSON-array body `proxyFetch` would send, sent
     /// only when the consumer subscribes (`RemoteStream.subscribe`). The
@@ -1454,7 +1283,7 @@ module Proxy =
 
             box (RemoteStream.create url headers body options.WithCredentials tryReadDecodeError elementType)
 
-/// Phase 853 — the registry of GENERATED client proxy builders, by API
+/// The registry of GENERATED client proxy builders, by API
 /// record key (its `FullName`, a nested type's `+` written `.`).
 /// `Api.makeProxy` consults it before building a reflective proxy; a
 /// generated module's `registerAll` fills it. The platform's own records
