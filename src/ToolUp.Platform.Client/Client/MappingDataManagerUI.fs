@@ -121,6 +121,10 @@ type Model = {
     /// mapping target picker + the saved-mapping auto-reuse so a module
     /// the team has marked `Unavailable` is never offered.
     AllowedTypeIds: Set<DataTypeId> option
+    /// This module's section of `ClientModuleContext.Messages`,
+    /// kept from `init` so `update` authors reader-facing text in the
+    /// session's language (a locale switch re-initialises the module).
+    Messages: MappingDataManagerMessages
 }
 
 type Msg =
@@ -362,7 +366,7 @@ let private importedFileName (baseName: string) (typeId: DataTypeId) : string =
 
 /// Human-readable per-column remediation steps for a conversion's
 /// provenance record.
-let private remediationSteps (conversion: Conversion) : string list =
+let private remediationSteps (msgs: MappingDataManagerMessages) (conversion: Conversion) : string list =
     let remediation =
         conversion.Remediation
         |> Map.toList
@@ -370,8 +374,7 @@ let private remediationSteps (conversion: Conversion) : string list =
 
     let derived =
         conversion.Derived
-        |> List.map (fun d ->
-            MessageCatalog.english.MappingDataManager.DerivedRemediationStep(ColumnMapping.describeDerivedColumn d))
+        |> List.map (fun d -> msgs.DerivedRemediationStep(ColumnMapping.describeDerivedColumn d))
 
     remediation @ derived
 
@@ -380,6 +383,7 @@ let private remediationSteps (conversion: Conversion) : string list =
 /// imported, or the first error. Conversions whose target type is no
 /// longer registered are skipped.
 let private importConversions
+    (msgs: MappingDataManagerMessages)
     (displays: DataTypeDisplay list)
     (held: HeldFile)
     (conversions: Conversion list)
@@ -416,7 +420,7 @@ let private importConversions
                             Fingerprint = c.Fingerprint
                             TargetTypeId = c.TargetTypeId
                             Mapping = c.Mapping
-                            RemediationSteps = remediationSteps c
+                            RemediationSteps = remediationSteps msgs c
                             ConvertedBy = ""
                             ConvertedAt = System.DateTime.UtcNow
                         }
@@ -433,6 +437,7 @@ let private importConversions
 /// Persist a freshly-confirmed conversion recipe, then import it as its
 /// own data object (recording provenance).
 let private saveAndImport
+    (msgs: MappingDataManagerMessages)
     (displays: DataTypeDisplay list)
     (held: HeldFile)
     (conversion: Conversion)
@@ -440,7 +445,7 @@ let private saveAndImport
     async {
         match! conversionApi.SaveConversion conversion with
         | Error e -> return Error e
-        | Ok() -> return! importConversions displays held [ conversion ]
+        | Ok() -> return! importConversions msgs displays held [ conversion ]
     }
 
 /// Delete a set of files in sequence, stopping at the first failure. Used
@@ -463,7 +468,7 @@ let private deleteFiles (names: string list) : Async<Result<unit, string>> = asy
 
 // ─── Update ───────────────────────────────────────────────────────
 
-let init () =
+let init (ctx: ClientModuleContext) =
     {
         UploadedFiles = []
         ProcessedData = []
@@ -475,6 +480,7 @@ let init () =
         Busy = false
         Error = None
         AllowedTypeIds = None
+        Messages = ctx.Messages.MappingDataManager
     },
     Cmd.ofMsg LoadFiles
 
@@ -521,7 +527,7 @@ let update (displays: DataTypeDisplay list) (msg: Msg) (model: Model) =
     | RetryIngestionDone(Error msg) ->
         {
             model with
-                Error = Some(MessageCatalog.english.MappingDataManager.ReingestionFailed msg)
+                Error = Some(model.Messages.ReingestionFailed msg)
         },
         Cmd.none
 
@@ -566,8 +572,7 @@ let update (displays: DataTypeDisplay list) (msg: Msg) (model: Model) =
             let reader = Browser.Dom.FileReader.Create()
             reader.onload <- fun _ -> dispatch (FileChosen(file.name, reader.result :?> string))
 
-            reader.onerror <-
-                fun _ -> dispatch (ApiError(MessageCatalog.english.MappingDataManager.FileReadFailed file.name))
+            reader.onerror <- fun _ -> dispatch (ApiError(model.Messages.FileReadFailed file.name))
 
             reader.readAsText file)
 
@@ -612,7 +617,7 @@ let update (displays: DataTypeDisplay list) (msg: Msg) (model: Model) =
 
         if not importable.IsEmpty then
             model,
-            Cmd.OfAsync.either (importConversions displays held) importable ImportFinished (fun ex ->
+            Cmd.OfAsync.either (importConversions model.Messages displays held) importable ImportFinished (fun ex ->
                 ApiError ex.Message)
         else
             let upload = {
@@ -771,7 +776,7 @@ let update (displays: DataTypeDisplay list) (msg: Msg) (model: Model) =
             | None ->
                 {
                     model with
-                        Error = Some MessageCatalog.english.MappingDataManager.NoSchemaCannotMap
+                        Error = Some model.Messages.NoSchemaCannotMap
                 },
                 Cmd.none
         | None -> model, Cmd.none
@@ -874,7 +879,7 @@ let update (displays: DataTypeDisplay list) (msg: Msg) (model: Model) =
             | _ ->
                 {
                     model with
-                        Error = Some MessageCatalog.english.MappingDataManager.NoSchemaPublished
+                        Error = Some model.Messages.NoSchemaPublished
                 },
                 Cmd.none
         | _ -> model, Cmd.none
@@ -930,12 +935,12 @@ let update (displays: DataTypeDisplay list) (msg: Msg) (model: Model) =
                     model with
                         Wizard = Some { w with Saving = true }
                 },
-                Cmd.OfAsync.either (saveAndImport displays held) conversion ImportFinished (fun ex ->
+                Cmd.OfAsync.either (saveAndImport model.Messages displays held) conversion ImportFinished (fun ex ->
                     ApiError ex.Message)
             | _ ->
                 {
                     model with
-                        Error = Some MessageCatalog.english.MappingDataManager.NoSchemaPublished
+                        Error = Some model.Messages.NoSchemaPublished
                 },
                 Cmd.none
         | _ -> model, Cmd.none
@@ -975,7 +980,7 @@ let update (displays: DataTypeDisplay list) (msg: Msg) (model: Model) =
     | Reprocessed(Error msg) ->
         {
             model with
-                Error = Some(MessageCatalog.english.MappingDataManager.ReprocessFailed msg)
+                Error = Some(model.Messages.ReprocessFailed msg)
         },
         Cmd.none
 
@@ -994,7 +999,7 @@ let update (displays: DataTypeDisplay list) (msg: Msg) (model: Model) =
     | ResetDone(Error msg) ->
         {
             model with
-                Error = Some(MessageCatalog.english.MappingDataManager.ResetFailed msg)
+                Error = Some(model.Messages.ResetFailed msg)
         },
         Cmd.none
 
@@ -2203,11 +2208,12 @@ let create (displays: DataTypeDisplay list) (config: DataManagerConfig option) :
     let group = config |> Option.bind _.Group |> Option.defaultValue "Data Management"
 
     ToolUp.Platform.ClientModule.create {
-        Init = init
+        Init = fun () -> init ToolUp.Platform.ClientModuleContext.empty
         Update = update displays
         Name = name
         Icon = icon
     }
+    |> ToolUp.Platform.ClientModule.withContextInit init
     |> ToolUp.Platform.ClientModule.withId moduleId
     |> ToolUp.Platform.ClientModule.withView (view displays)
     |> ToolUp.Platform.ClientModule.withProcessedData _.ProcessedData
