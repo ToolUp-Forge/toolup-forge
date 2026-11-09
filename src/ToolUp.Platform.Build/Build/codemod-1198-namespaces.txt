@@ -709,6 +709,8 @@ type ToolUp.Platform BlobCrdtDocumentStore ToolUp.Platform.Jobs
 type ToolUp.Platform BlobCrdtErrors ToolUp.Platform.Jobs
 type ToolUp.Platform BlobCrdtLayout ToolUp.Platform.Jobs
 type ToolUp.Platform BlobDatasetStore ToolUp.Platform.Infra
+type ToolUp.Platform BlobDocumentStore ToolUp.Platform.Infra
+type ToolUp.Platform BlobDocumentStoreLimits ToolUp.Platform.Infra
 type ToolUp.Platform BlobDpKeyRing ToolUp.Platform.Infra
 type ToolUp.Platform BlobEncryption ToolUp.Platform.Infra
 type ToolUp.Platform BlobExternalHandleStore ToolUp.Platform.Infra
@@ -1009,6 +1011,9 @@ type ToolUp.Platform DirectAddIdentityProofValidator ToolUp.Platform.Scope
 type ToolUp.Platform DistributedLock ToolUp.Platform.Jobs
 type ToolUp.Platform DistributedLockResolver ToolUp.Platform.Jobs
 type ToolUp.Platform DistributedLockSelection ToolUp.Platform.Jobs
+type ToolUp.Platform DocPath ToolUp.Platform.Infra
+type ToolUp.Platform DocumentUnavailable ToolUp.Platform.Infra
+type ToolUp.Platform DocumentUnavailableException ToolUp.Platform.Infra
 type ToolUp.Platform DryRun ToolUp.Platform.Compose
 type ToolUp.Platform DsseEnvelope ToolUp.Platform.Audit
 type ToolUp.Platform DsseSignature ToolUp.Platform.Audit
