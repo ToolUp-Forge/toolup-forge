@@ -100,15 +100,13 @@ let jobApi (ctx: HttpContext) : JobApi =
     }
 
     /// Phase 1064 — run a status transition, rendering the scheduler's typed
-    /// busy refusal (an in-flight dispatch holds the job's lease, typically
-    /// asleep in its retry backoff) as a retryable `Error` rather than
-    /// letting the request wait the backoff out or fail as a 500.
-    let transition (work: Async<unit>) : Async<Result<unit, string>> = async {
-        try
-            do! work
-            return Ok()
-        with :? JobScheduler.JobStatusBusyException as busy ->
-            return Error busy.Message
+    /// refusal (an in-flight dispatch holds the job's lease, typically asleep
+    /// in its retry backoff, or the store did not persist it) as
+    /// a retryable `Error` rather than letting the request wait the backoff
+    /// out or fail as a 500.
+    let transition (work: Async<Result<unit, JobTransitionError>>) : Async<Result<unit, string>> = async {
+        let! answered = work
+        return Result.mapError JobTransitionError.message answered
     }
 
     let withSchedulerResult (f: IJobScheduler -> string -> Async<Result<'T, string>>) = async {

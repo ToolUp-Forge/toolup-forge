@@ -112,7 +112,7 @@ let private writeTurn
         CacheCreationTokens = None
     }
 
-    store.Write {
+    EventStore.writeOrRaise store {
         Id = Guid.NewGuid()
         OccurredAt = at
         ScopeId = scopeId
@@ -133,7 +133,7 @@ let private writePre9sTurn (store: IEventStore) (scopeId: string) (prompt: int) 
             prompt
             output
 
-    store.Write {
+    EventStore.writeOrRaise store {
         Id = Guid.NewGuid()
         OccurredAt = at
         ScopeId = scopeId

@@ -540,7 +540,15 @@ module InProcessOAuthTokenRefresher =
                         && (j.Idempotency |> Option.exists (fun i -> i.Key = descriptorKey)))
 
                 for job in matching do
-                    do! jobScheduler.Cancel(ScopeKey.PlatformContainer, job.JobId)
+                    match! jobScheduler.Cancel(ScopeKey.PlatformContainer, job.JobId) with
+                    | Ok() -> ()
+                    | Error error ->
+                        logger.Warn(
+                            sprintf
+                                "[OAuthTokenRefresher] cancel failed for %s: %s"
+                                descriptorKey
+                                (JobTransitionError.message error)
+                        )
             with ex ->
                 logger.Warn(sprintf "[OAuthTokenRefresher] cancel failed for %s: %s" descriptorKey ex.Message)
         }

@@ -259,7 +259,7 @@ let private emitEvent
                 let evt =
                     Events.create SecretStoreScope PeerBearerSourceModule eventType (serialize payload)
 
-                do! store.Write evt
+                do! EventStore.writeOrRaise store evt
             with ex ->
                 match logger with
                 | Some l -> l.Warn($"[PeerBearerAuthMiddleware] event=write_failed eventType={eventType}: {ex.Message}")

@@ -117,7 +117,7 @@ let tests (name: string) (factory: unit -> IJobStore * string * string) =
         <| async {
             let store, scopeA, _ = factory ()
             let job = mkRegistration scopeA "test"
-            do! store.Save job
+            do! JobStoreWrite.orRaise <| store.Save job
 
             match! store.Get(scopeA, job.JobId) with
             | Some retrieved ->
@@ -141,8 +141,8 @@ let tests (name: string) (factory: unit -> IJobStore * string * string) =
             let store, scopeA, _ = factory ()
             let j1 = mkRegistration scopeA "a"
             let j2 = mkRegistration scopeA "b"
-            do! store.Save j1
-            do! store.Save j2
+            do! JobStoreWrite.orRaise <| store.Save j1
+            do! JobStoreWrite.orRaise <| store.Save j2
 
             let! jobs = store.ListJobs scopeA
             let ids = jobs |> List.map _.JobId |> Set.ofList
@@ -153,7 +153,7 @@ let tests (name: string) (factory: unit -> IJobStore * string * string) =
         <| async {
             let store, scopeA, scopeB = factory ()
             let job = mkRegistration scopeA "test"
-            do! store.Save job
+            do! JobStoreWrite.orRaise <| store.Save job
 
             let! bJobs = store.ListJobs scopeB
             Expect.isEmpty bJobs "scope B sees no scope A jobs"
@@ -167,7 +167,7 @@ let tests (name: string) (factory: unit -> IJobStore * string * string) =
         <| async {
             let store, scopeA, _ = factory ()
             let job = mkRegistration scopeA "test"
-            do! store.Save job
+            do! JobStoreWrite.orRaise <| store.Save job
 
             let updated = {
                 job with
@@ -175,7 +175,7 @@ let tests (name: string) (factory: unit -> IJobStore * string * string) =
                     LastRunStatus = Some Succeeded
             }
 
-            do! store.Update updated
+            do! JobStoreWrite.orRaise <| store.Update updated
 
             match! store.Get(scopeA, job.JobId) with
             | Some r ->
@@ -197,7 +197,7 @@ let tests (name: string) (factory: unit -> IJobStore * string * string) =
                         }
             }
 
-            do! store.Save job
+            do! JobStoreWrite.orRaise <| store.Save job
 
             let! found = store.FindByIdempotencyKey(scopeA, "daily-rollup", 3600, DateTime.UtcNow)
             Expect.equal found (Some job.JobId) "live key match returns existing JobId"
@@ -213,7 +213,7 @@ let tests (name: string) (factory: unit -> IJobStore * string * string) =
                     Idempotency = Some { Key = "expired"; TtlSeconds = 60 }
             }
 
-            do! store.Save job
+            do! JobStoreWrite.orRaise <| store.Save job
 
             let! found = store.FindByIdempotencyKey(scopeA, "expired", 60, DateTime.UtcNow)
             Expect.equal found None "expired key returns None — even though job exists"
@@ -228,7 +228,7 @@ let tests (name: string) (factory: unit -> IJobStore * string * string) =
                     Idempotency = Some { Key = "shared"; TtlSeconds = 3600 }
             }
 
-            do! store.Save job
+            do! JobStoreWrite.orRaise <| store.Save job
 
             let! found = store.FindByIdempotencyKey(scopeB, "shared", 3600, DateTime.UtcNow)
             Expect.equal found None "scope B does not see scope A's idempotency key"
@@ -250,7 +250,7 @@ let tests (name: string) (factory: unit -> IJobStore * string * string) =
                             }
                 }
 
-                do! store.Save job
+                do! JobStoreWrite.orRaise <| store.Save job
 
             let! found = store.FindByIdempotencyKey(scopeA, "never-seen", 3600, DateTime.UtcNow)
             Expect.equal found None "an unseen key returns None even when the scope has other entries"
@@ -268,7 +268,7 @@ let tests (name: string) (factory: unit -> IJobStore * string * string) =
                         NextRunAt = Some(now.AddMinutes(60.0))
                 }
 
-                do! store.Save job
+                do! JobStoreWrite.orRaise <| store.Save job
 
             let! due = store.DueJobs(scopeA, now)
             Expect.isEmpty due "no jobs due → empty list"
@@ -278,7 +278,7 @@ let tests (name: string) (factory: unit -> IJobStore * string * string) =
         <| async {
             let store, scopeA, _ = factory ()
             let job = mkRegistration scopeA "test"
-            do! store.Save job
+            do! JobStoreWrite.orRaise <| store.Save job
 
             let r1 = {
                 mkRun job 1 Failed with
@@ -295,9 +295,9 @@ let tests (name: string) (factory: unit -> IJobStore * string * string) =
                     StartedAt = DateTime.UtcNow
             }
 
-            do! store.RecordRun r1
-            do! store.RecordRun r2
-            do! store.RecordRun r3
+            do! JobStoreWrite.orRaise <| store.RecordRun r1
+            do! JobStoreWrite.orRaise <| store.RecordRun r2
+            do! JobStoreWrite.orRaise <| store.RecordRun r3
 
             let! recent = store.GetRecentRuns(scopeA, job.JobId, 10)
             Expect.equal recent.Length 3 "three runs persisted"
@@ -326,9 +326,9 @@ let tests (name: string) (factory: unit -> IJobStore * string * string) =
                     Status = Disabled
             }
 
-            do! store.Save dueActive
-            do! store.Save futureActive
-            do! store.Save dueButDisabled
+            do! JobStoreWrite.orRaise <| store.Save dueActive
+            do! JobStoreWrite.orRaise <| store.Save futureActive
+            do! JobStoreWrite.orRaise <| store.Save dueButDisabled
 
             let! due = store.DueJobs(scopeA, now)
             let names = due |> List.map _.Handler |> Set.ofList
@@ -338,8 +338,8 @@ let tests (name: string) (factory: unit -> IJobStore * string * string) =
         testCaseAsync "ListScopesWithJobs enumerates distinct scopes"
         <| async {
             let store, scopeA, scopeB = factory ()
-            do! store.Save(mkRegistration scopeA "a")
-            do! store.Save(mkRegistration scopeB "b")
+            do! JobStoreWrite.orRaise <| store.Save(mkRegistration scopeA "a")
+            do! JobStoreWrite.orRaise <| store.Save(mkRegistration scopeB "b")
 
             let! scopes = store.ListScopesWithJobs()
             let asSet = Set.ofList scopes
@@ -361,10 +361,10 @@ let tests (name: string) (factory: unit -> IJobStore * string * string) =
         <| async {
             let store, scopeA, _ = factory ()
             let job = mkRegistration scopeA "handoff"
-            do! store.Save job
+            do! JobStoreWrite.orRaise <| store.Save job
 
             let handle = mkHandle scopeA "backend-token-42"
-            do! store.RecordRun(mkAwaitingRun job 1 handle)
+            do! JobStoreWrite.orRaise <| store.RecordRun(mkAwaitingRun job 1 handle)
 
             let! recent = store.GetRecentRuns(scopeA, job.JobId, 10)
             Expect.equal recent.Length 1 "the awaiting run persisted"
@@ -389,7 +389,7 @@ let tests (name: string) (factory: unit -> IJobStore * string * string) =
             // above passes against an implementation that fabricates a
             // handle for every run.
             let plain = mkRun job 2 Succeeded
-            do! store.RecordRun plain
+            do! JobStoreWrite.orRaise <| store.RecordRun plain
             let! recent2 = store.GetRecentRuns(scopeA, job.JobId, 10)
 
             let plainRead = recent2 |> List.find (fun r -> r.RunId = plain.RunId)
@@ -401,14 +401,14 @@ let tests (name: string) (factory: unit -> IJobStore * string * string) =
         <| async {
             let store, scopeA, _ = factory ()
             let job = mkRegistration scopeA "no-handoff"
-            do! store.Save job
+            do! JobStoreWrite.orRaise <| store.Save job
 
             // Populate ordinary run history, so "empty" is a real answer
             // about the awaiting set rather than an answer about an
             // empty store.
-            do! store.RecordRun(mkRun job 1 Succeeded)
-            do! store.RecordRun(mkRun job 2 Failed)
-            do! store.RecordRun(mkRun job 3 DeadLettered)
+            do! JobStoreWrite.orRaise <| store.RecordRun(mkRun job 1 Succeeded)
+            do! JobStoreWrite.orRaise <| store.RecordRun(mkRun job 2 Failed)
+            do! JobStoreWrite.orRaise <| store.RecordRun(mkRun job 3 DeadLettered)
 
             let! awaiting = store.AwaitingExternalRuns(scopeA, 100)
             Expect.isEmpty awaiting "no awaiting runs → empty, despite three runs in history"
@@ -418,7 +418,7 @@ let tests (name: string) (factory: unit -> IJobStore * string * string) =
         <| async {
             let store, scopeA, _ = factory ()
             let job = mkRegistration scopeA "handoff"
-            do! store.Save job
+            do! JobStoreWrite.orRaise <| store.Save job
 
             let h1 = mkHandle scopeA "ref-1"
             let h2 = mkHandle scopeA "ref-2"
@@ -426,9 +426,9 @@ let tests (name: string) (factory: unit -> IJobStore * string * string) =
             let a2 = mkAwaitingRun job 2 h2
 
             // A terminal run of the same job must not appear.
-            do! store.RecordRun(mkRun job 3 Succeeded)
-            do! store.RecordRun a1
-            do! store.RecordRun a2
+            do! JobStoreWrite.orRaise <| store.RecordRun(mkRun job 3 Succeeded)
+            do! JobStoreWrite.orRaise <| store.RecordRun a1
+            do! JobStoreWrite.orRaise <| store.RecordRun a2
 
             let! awaiting = store.AwaitingExternalRuns(scopeA, 100)
 
@@ -451,11 +451,11 @@ let tests (name: string) (factory: unit -> IJobStore * string * string) =
         <| async {
             let store, scopeA, _ = factory ()
             let job = mkRegistration scopeA "handoff"
-            do! store.Save job
+            do! JobStoreWrite.orRaise <| store.Save job
 
             let handle = mkHandle scopeA "ref-terminal"
             let awaitingRun = mkAwaitingRun job 1 handle
-            do! store.RecordRun awaitingRun
+            do! JobStoreWrite.orRaise <| store.RecordRun awaitingRun
 
             let! before = store.AwaitingExternalRuns(scopeA, 100)
             Expect.equal (before |> List.map _.RunId) [ awaitingRun.RunId ] "awaiting before reconciliation"
@@ -466,7 +466,8 @@ let tests (name: string) (factory: unit -> IJobStore * string * string) =
             // index — the scheduler would otherwise re-poll a finished
             // handle on every tick for the life of the deployment.
             do!
-                store.RecordRun {
+                JobStoreWrite.orRaise
+                <| store.RecordRun {
                     awaitingRun with
                         Status = Succeeded
                         CompletedAt = Some DateTime.UtcNow
@@ -492,8 +493,11 @@ let tests (name: string) (factory: unit -> IJobStore * string * string) =
         <| async {
             let store, scopeA, scopeB = factory ()
             let job = mkRegistration scopeA "handoff"
-            do! store.Save job
-            do! store.RecordRun(mkAwaitingRun job 1 (mkHandle scopeA "ref-a"))
+            do! JobStoreWrite.orRaise <| store.Save job
+
+            do!
+                JobStoreWrite.orRaise
+                <| store.RecordRun(mkAwaitingRun job 1 (mkHandle scopeA "ref-a"))
 
             let! bAwaiting = store.AwaitingExternalRuns(scopeB, 100)
             Expect.isEmpty bAwaiting "scope B sees none of scope A's awaiting runs (GP 4)"
@@ -506,10 +510,12 @@ let tests (name: string) (factory: unit -> IJobStore * string * string) =
         <| async {
             let store, scopeA, _ = factory ()
             let job = mkRegistration scopeA "handoff"
-            do! store.Save job
+            do! JobStoreWrite.orRaise <| store.Save job
 
             for i in 1..5 do
-                do! store.RecordRun(mkAwaitingRun job i (mkHandle scopeA $"ref-{i}"))
+                do!
+                    JobStoreWrite.orRaise
+                    <| store.RecordRun(mkAwaitingRun job i (mkHandle scopeA $"ref-{i}"))
 
             let! capped = store.AwaitingExternalRuns(scopeA, 2)
             Expect.equal capped.Length 2 "limit respected"
@@ -525,7 +531,7 @@ let tests (name: string) (factory: unit -> IJobStore * string * string) =
         <| async {
             let store, scopeA, _ = factory ()
             let job = mkRegistration scopeA "handoff"
-            do! store.Save job
+            do! JobStoreWrite.orRaise <| store.Save job
 
             // Malformed: AwaitingExternal with no handle. Unreachable via
             // `JobResult.HandedOff`, but the store must surface it so the
@@ -537,7 +543,7 @@ let tests (name: string) (factory: unit -> IJobStore * string * string) =
                     ExternalHandle = None
             }
 
-            do! store.RecordRun malformed
+            do! JobStoreWrite.orRaise <| store.RecordRun malformed
 
             let! awaiting = store.AwaitingExternalRuns(scopeA, 100)
             Expect.equal (awaiting |> List.map _.RunId) [ malformed.RunId ] "the malformed run is visible"
@@ -575,7 +581,7 @@ let tests (name: string) (factory: unit -> IJobStore * string * string) =
                     RetryPolicy = policy
             }
 
-            do! store.Save job
+            do! JobStoreWrite.orRaise <| store.Save job
 
             let expectPolicy (label: string) (actual: JobRetryPolicy) =
                 Expect.equal actual.MaxAttempts policy.MaxAttempts $"%s{label}: MaxAttempts"
@@ -606,7 +612,7 @@ let tests (name: string) (factory: unit -> IJobStore * string * string) =
                     DeadLetterDestination = None
             }
 
-            do! store.Update { job with RetryPolicy = widened }
+            do! JobStoreWrite.orRaise <| store.Update { job with RetryPolicy = widened }
 
             match! store.Get(scopeA, job.JobId) with
             | Some retrieved ->
@@ -648,7 +654,7 @@ let tests (name: string) (factory: unit -> IJobStore * string * string) =
             let unkeyed = mkRegistration scopeA "shard-none"
 
             for job in [ a; b; other; unkeyed ] do
-                do! store.Save job
+                do! JobStoreWrite.orRaise <| store.Save job
 
             let! listed = store.ListJobs scopeA
 
@@ -693,7 +699,7 @@ let tests (name: string) (factory: unit -> IJobStore * string * string) =
                     Tags = Map [ "origin", "contract-pack"; "replay-of", "none" ]
             }
 
-            do! store.Save job
+            do! JobStoreWrite.orRaise <| store.Save job
 
             let! stored = async {
                 match! store.Get(scopeA, job.JobId) with
@@ -778,7 +784,7 @@ let restartTests (name: string) (factory: unit -> ReopenableStore) =
             let job = mkDefinition scope "survivor"
 
             let first = binding.Open()
-            do! first.Save job
+            do! JobStoreWrite.orRaise <| first.Save job
 
             // The simulated process death: everything after this line
             // runs against an instance that was never told about the
@@ -806,10 +812,11 @@ let restartTests (name: string) (factory: unit -> ReopenableStore) =
             let job = mkDefinition scope "historic"
 
             let first = binding.Open()
-            do! first.Save job
+            do! JobStoreWrite.orRaise <| first.Save job
 
             do!
-                first.RecordRun {
+                JobStoreWrite.orRaise
+                <| first.RecordRun {
                     RunId = Guid.NewGuid()
                     JobId = job.JobId
                     ScopeId = scope
@@ -846,7 +853,7 @@ let restartTests (name: string) (factory: unit -> ReopenableStore) =
             }
 
             let first = binding.Open()
-            do! first.Save job
+            do! JobStoreWrite.orRaise <| first.Save job
 
             let second = binding.Open()
 
@@ -865,7 +872,7 @@ let restartTests (name: string) (factory: unit -> ReopenableStore) =
             let job = mkDefinition scope "due"
 
             let first = binding.Open()
-            do! first.Save job
+            do! JobStoreWrite.orRaise <| first.Save job
 
             let second = binding.Open()
             let! due = second.DueJobs(scope, DateTime(2026, 9, 22, 9, 30, 0, DateTimeKind.Utc))
@@ -883,7 +890,7 @@ let restartTests (name: string) (factory: unit -> ReopenableStore) =
             let job = mkDefinition scope "isolated"
 
             let first = binding.Open()
-            do! first.Save job
+            do! JobStoreWrite.orRaise <| first.Save job
 
             let second = binding.Open()
             let! neighbours = second.ListJobs other
@@ -891,5 +898,85 @@ let restartTests (name: string) (factory: unit -> ReopenableStore) =
             Expect.isEmpty
                 neighbours
                 "GP 4 is not a property of a live instance's filtering — it has to hold over what was persisted"
+        }
+    ]
+
+/// The failing-backend arm. `factory` builds the implementation
+/// over a backend that refuses every write, and names a scope for the run.
+/// A store with no backend to fail has no honest binding for this arm.
+///
+/// What it holds every implementation to: `Save`, `Update` and `RecordRun`
+/// answer `JobStoreError` when the write did not persist — never `Ok`, never
+/// an exception — and a refused write leaves nothing a later read returns.
+let failingBackendTests (name: string) (factory: unit -> IJobStore * string) =
+    let definition (scopeId: string) : JobDefinition = {
+        JobId = Guid.NewGuid()
+        ScopeId = scopeId
+        Handler = "contract"
+        Payload = "{}"
+        Trigger = CronTrigger "0 9 * * *"
+        Idempotency = None
+        RetryPolicy = JobRetryPolicy.defaults
+        ShardKey = None
+        Precision = Minute
+        Status = Active
+        CreatedAt = DateTime.UtcNow
+        CreatedBy = "alice"
+        NextRunAt = Some(DateTime.UtcNow.AddHours 1.0)
+        LastRunAt = None
+        LastRunStatus = None
+        LastRunError = None
+        ConsecutiveFailures = 0
+        Tags = Map.empty
+        LastRunWarning = None
+    }
+
+    let refused (label: string) (answered: Choice<Result<unit, JobStoreError>, exn>) =
+        match answered with
+        | Choice1Of2(Error _) -> ()
+        | Choice1Of2(Ok()) -> failtestf "%s: a write the backend refused must not answer Ok" label
+        | Choice2Of2 ex -> failtestf "%s: a refused write is data, not an exception: %s" label ex.Message
+
+    testList $"{name} — IJobStore contract, failing backend" [
+        testCaseAsync "Save answers a JobStoreError, and the job does not exist afterwards"
+        <| async {
+            let store, scopeId = factory ()
+            let job = definition scopeId
+            let! saved = Async.Catch(store.Save job)
+            refused "Save" saved
+            let! read = store.Get(scopeId, job.JobId)
+            Expect.isNone read "an Error persisted nothing"
+        }
+
+        testCaseAsync "Update answers a JobStoreError"
+        <| async {
+            let store, scopeId = factory ()
+            let! updated = Async.Catch(store.Update(definition scopeId))
+            refused "Update" updated
+        }
+
+        testCaseAsync "RecordRun answers a JobStoreError, and no run is read back"
+        <| async {
+            let store, scopeId = factory ()
+            let job = definition scopeId
+
+            let run: JobRun = {
+                RunId = Guid.NewGuid()
+                JobId = job.JobId
+                ScopeId = scopeId
+                Attempt = 1
+                StartedAt = DateTime.UtcNow
+                CompletedAt = None
+                Status = Running
+                Error = None
+                DurationMs = None
+                ExternalHandle = None
+                Warning = None
+            }
+
+            let! recorded = Async.Catch(store.RecordRun run)
+            refused "RecordRun" recorded
+            let! runs = store.GetRecentRuns(scopeId, job.JobId, 10)
+            Expect.isEmpty runs "an Error persisted nothing"
         }
     ]

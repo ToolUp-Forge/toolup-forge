@@ -111,7 +111,7 @@ let uiDecodeErrorHandler: HttpHandler =
                     }
 
                     try
-                        do! store.Write evt
+                        do! EventStore.writeOrRaise store evt
                     with _ ->
                         ()
                 | _ -> ()

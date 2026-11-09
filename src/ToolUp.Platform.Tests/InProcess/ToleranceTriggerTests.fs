@@ -192,9 +192,9 @@ type private ToleranceScheduler() =
         }
 
         member _.Schedule(_: JobRegistration) = async { return failwith "only the resolved overload is used" }
-        member _.Cancel(_, _) = async { return () }
-        member _.Disable(_, _) = async { return () }
-        member _.Enable(_, _) = async { return () }
+        member _.Cancel(_, _) = async { return Ok() }
+        member _.Disable(_, _) = async { return Ok() }
+        member _.Enable(_, _) = async { return Ok() }
         member _.Get(_, _) = async { return None }
 
         member _.ListJobs scopeId = async {

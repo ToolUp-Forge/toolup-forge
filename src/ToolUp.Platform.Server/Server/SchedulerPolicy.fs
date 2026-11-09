@@ -100,9 +100,11 @@ let persistNew
         let definition = definitionFor jobId registration DateTime.UtcNow
 
         try
-            do! store.Save definition
-            do! announce definition
-            return Ok(Scheduled jobId)
+            match! store.Save definition with
+            | Error error -> return Error(ScheduleError.StorageFailure(JobStoreError.describe error))
+            | Ok() ->
+                do! announce definition
+                return Ok(Scheduled jobId)
         with ex ->
             return Error(ScheduleError.StorageFailure ex.Message)
     }
@@ -143,22 +145,28 @@ let scheduleValidated
 /// already in `status`; otherwise the job in `status`, with `NextRunAt`
 /// re-armed from its trigger on `Active` and cleared on anything else.
 /// Unguarded: an implementation that must exclude a concurrent dispatch holds
-/// its own lock around it.
-let setStatus (store: IJobStore) (scopeId: string) (jobId: JobId) (status: JobStatus) : Async<unit> = async {
-    match! store.Get(scopeId, jobId) with
-    | None -> ()
-    | Some job when job.Status = status -> ()
-    | Some job ->
-        do!
-            store.Update {
-                job with
-                    Status = status
-                    NextRunAt =
-                        match status with
-                        | Active -> computeNextRunAt job.Trigger DateTime.UtcNow
-                        | _ -> None
-            }
-}
+/// its own lock around it. A write the store did not persist is its `Error`.
+let setStatus
+    (store: IJobStore)
+    (scopeId: string)
+    (jobId: JobId)
+    (status: JobStatus)
+    : Async<Result<unit, JobStoreError>> =
+    async {
+        match! store.Get(scopeId, jobId) with
+        | None -> return Ok()
+        | Some job when job.Status = status -> return Ok()
+        | Some job ->
+            return!
+                store.Update {
+                    job with
+                        Status = status
+                        NextRunAt =
+                            match status with
+                            | Active -> computeNextRunAt job.Trigger DateTime.UtcNow
+                            | _ -> None
+                }
+    }
 
 /// The job a manual `TriggerOnce` may dispatch, or why it may not: an unknown
 /// job, a `Cancelled` one, and a `Disabled` one (`Disable` stops dispatch,

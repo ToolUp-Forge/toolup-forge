@@ -33,7 +33,11 @@ type private StubEventStore() =
     member _.Written = written
 
     interface IEventStore with
-        member _.Write(evt) = async { written <- evt :: written }
+        member _.Write(evt) = async {
+            written <- evt :: written
+            return Result.Ok()
+        }
+
         member _.ReadAll(_) = async { return [] }
         member _.ReadByType(_, _) = async { return [] }
         member _.ReadBySource(_, _) = async { return [] }
@@ -90,7 +94,7 @@ type private CyclicDecorator() =
         member this.InnerStore = this :> IEventStore
 
     interface IEventStore with
-        member _.Write(_) = async { return () }
+        member _.Write(_) = async { return Result.Ok() }
         member _.ReadAll(_) = async { return [] }
         member _.ReadByType(_, _) = async { return [] }
         member _.ReadBySource(_, _) = async { return [] }
@@ -102,7 +106,7 @@ type private CyclicDecorator() =
 /// never reached from a write.
 type private StubWebhookDispatcher() =
     interface WebhookDispatcher.IWebhookDispatcher with
-        member _.Dispatch(_) = ()
+        member _.Dispatch(_) = async { return Result.Ok() }
         member _.TestFire(_, _) = async { return Result.Error "not exercised by the contract pack" }
 
 let private link name position : EventStoreChainLink = {

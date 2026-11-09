@@ -91,9 +91,9 @@ type ReembeddingBackgroundService
     let toJson o =
         JsonSerializer.Serialize(o, jsonOptions)
 
-    let scopeId = ToolUp.RAG.RetrievalTracers.auditScopeId
+    let scopeId = VectorScope.auditScopeId
 
-    // Phase 14z — staleness is measured against the SCOPE'S embedder.
+    // Staleness is measured against the SCOPE'S embedder.
     // `scanScope` already iterates by scope, and under a scope-keyed
     // provider each scope reports its own `ModelId`, so comparing every
     // scope's chunks against one composed embedder would mark every chunk
@@ -131,7 +131,7 @@ type ReembeddingBackgroundService
             Events.create (scopeId scope) "ToolUp.RAG" "KnowledgeChunkReembedded" payload
 
         try
-            do! eventStore.Write(evt)
+            do! EventStore.writeOrRaise eventStore (evt)
         with ex ->
             logger.Error(
                 $"[ReembeddingService] event=audit_emit_failed kind=KnowledgeChunkReembedded scope=%A{scope} chunk={chunkId}: event-store write failed; the chunk IS re-embedded but the audit event is lost",
@@ -151,7 +151,7 @@ type ReembeddingBackgroundService
             Events.create (scopeId scope) "ToolUp.RAG" "KnowledgeChunkReembedFailed" payload
 
         try
-            do! eventStore.Write(evt)
+            do! EventStore.writeOrRaise eventStore (evt)
         with ex ->
             logger.Error(
                 $"[ReembeddingService] event=audit_emit_failed kind=KnowledgeChunkReembedFailed scope=%A{scope} chunk={chunkId}: event-store write failed; the re-embed failure report is lost (original error: {error})",
@@ -250,9 +250,9 @@ type ReembeddingBackgroundService
                 |}
 
             do!
-                eventStore.Write(
-                    Events.create ScopeKey.PlatformContainer "ToolUp.RAG" "ReembeddingScanStarted" scanPayload
-                )
+                EventStore.writeOrRaise
+                    eventStore
+                    (Events.create ScopeKey.PlatformContainer "ToolUp.RAG" "ReembeddingScanStarted" scanPayload)
         with ex ->
             logger.Error("[ReembeddingService] Initial scope drain failed", Some ex)
 

@@ -117,6 +117,11 @@ type VectorScope =
     | Team of teamId: string
     | User of userId: string
 
+// The chunk-id grammar, `{documentId}:chunk:{ordinal}`. The stores keep
+// `chunkId: string` (the wire); producers render through ChunkId.render
+// and readers parse through ChunkId.tryParse.
+type ChunkId = { DocumentId: string; Ordinal: int }
+
 // Stamped onto chunk metadata under ChunkMetadata.OriginKey ("_origin")
 // at ingestion time, so RAG never names a producer's own types.
 type ChunkOrigin =
@@ -168,6 +173,23 @@ type RetrievalRequest = {
     Filters: Map<string, string> option        // AND-combined metadata equality
     OriginFilter: Set<ChunkOrigin> option
 }
+```
+
+A vector scope becomes a string, and a chunk id is spelled, only through these two modules:
+
+```fsharp skip=signature
+module VectorScope =
+    val DeploymentContainer: string                  // "_deployment"
+    val key: VectorScope -> string                   // "platform" | "deployment" | "team:{id}" | "user:{id}" (store blobs, scope column)
+    val tryOfKey: string -> VectorScope option       // the inverse of key; None for a foreign string
+    val container: VectorScope -> string option      // ScopeKey.container of a team or user; None for Platform / Deployment
+    val ofContainer: StorageScope -> VectorScope     // the scope a storage scope's chunks belong to (never Platform)
+    val auditScopeId: VectorScope -> string          // the event-store stream of the scope's RAG audit rows
+
+module ChunkId =
+    val render: ChunkId -> string
+    val tryParse: string -> ChunkId option           // read at the last marker; never throws
+    val ofDocument: documentId: string -> count: int -> ChunkId list
 ```
 
 ### `VectorisationHandler`
@@ -316,7 +338,47 @@ type IVectorStore =
 type IRetrievalPipeline =
     abstract Retrieve: RetrievalRequest -> AccessContext -> Async<VectorMatch list>
     abstract Index: VectorScope -> TextChunk -> Async<unit>
+
+// The space a retrieval's scores are in.
+[<RequireQualifiedAccess>]
+type RetrievalScoreSpace =
+    | Cosine
+    | Fused
+    | Reranked
+
+// One retrieval's result with the space its scores are in.
+type ScoredPool = {
+    Space: RetrievalScoreSpace
+    Unit: float                          // the boost unit (ScoredPool.unitOf)
+    Matches: VectorMatch list            // exactly what Retrieve returns
+    Relevance: VectorMatch list option   // the pre-MMR relevance order, when MMR reordered
+}
+
+// The scored sibling: a capability by probe, never a member of IRetrievalPipeline.
+type IScoredRetrievalPipeline =
+    abstract RetrieveScored: RetrievalRequest -> AccessContext -> Async<ScoredPool>
 ```
+
+```fsharp skip=signature
+module RetrievalScoreSpace =
+    // THE threshold rule: no threshold admits every score, a threshold only
+    // scores strictly above it. Read by the prompt builder's MinScore gate,
+    // the telemetry's classification and the startup validator.
+    val admits: RetrievalScoreSpace -> threshold: float option -> score: float -> bool
+
+module ScoredPool =
+    val unitOf: RetrievalScoreSpace -> VectorMatch list -> float
+    val ofMatches: RetrievalScoreSpace -> VectorMatch list -> ScoredPool
+    // The pipeline's own pool, or its matches read in the composed space.
+    val retrieve: composed: RetrievalScoreSpace -> IRetrievalPipeline -> RetrievalRequest -> AccessContext -> Async<ScoredPool>
+    // The pipeline, declaring the composed space when it declares none.
+    val declaring: composed: RetrievalScoreSpace -> IRetrievalPipeline -> IRetrievalPipeline
+```
+
+The default `RetrievalPipeline` and `StaticCorpusRetrievalPipeline` (cosine) implement the scored sibling. A
+pipeline that does not still composes: `withRAG` hands the prompt builder `ScoredPool.declaring` over it, so
+its matches are read in the space the composition implies (`RetrievalScoreSpace.ofComposition`). A reader that
+compares `VectorMatch.Score` with a threshold calls `RetrievalScoreSpace.admits` with the pool's space.
 
 #### The order the default pipeline ranks in
 
@@ -466,6 +528,11 @@ type IRagTelemetry =
     abstract RecordObserverFailure: observerName: string -> unit
     abstract Snapshot: unit -> Async<RagTelemetrySnapshot>
 ```
+
+A telemetry that also implements `RagTelemetry.IScoredRagTelemetry` (`RollingRagTelemetry` does) is handed
+the chunk pool itself, `RecordScoredRetrieval(pool, minScore)`, and classifies it in the pool's space with
+`RetrievalScoreSpace.admits`: empty, a hit when the best score clears the threshold, a low-score miss
+otherwise. The prompt builder probes for it and falls back to `RecordRetrieval`.
 
 Retrieval outcomes are recorded as a score plus a result count rather than as hit / miss / empty counters per scope, so a caller can set its own thresholds after the fact; per-scope detail for index-load failures lives in the `KnowledgeIndexLoadFailed` audit trail rather than the snapshot.
 

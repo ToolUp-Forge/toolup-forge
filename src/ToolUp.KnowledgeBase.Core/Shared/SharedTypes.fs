@@ -15,20 +15,20 @@ type IngestionStatus =
     | Embedding of chunksProcessed: int * chunksTotal: int
     | Complete of chunkCount: int
     | Failed of reason: string
-    /// Phase 119 — the upload was refused by the deployment's
+    /// The upload was refused by the deployment's
     /// `KnowledgeUploadPolicy` (oversize, disallowed extension, or an
     /// unsafe filename) *before* anything was persisted. The returned
     /// `KnowledgeDocument` carries this status purely so the client can
     /// surface the reason; nothing is stored, so it never appears in
     /// `GetDocuments` / `GetStatus`.
     | UploadRejected of reason: string
-    /// Phase 119 — the document was stored (its original stays
+    /// The document was stored (its original stays
     /// downloadable) but no extractor recognised its type, so it is not
     /// searchable. Distinct from `Complete 0` (a recognised-but-empty
     /// file) so the UI badges "stored, not searchable" honestly rather
     /// than implying a successful index.
     | UnsupportedFormat of detail: string
-    /// Phase 500 — the document was stored, its type IS recognised, and
+    /// The document was stored, its type IS recognised, and
     /// it yielded no text because it has no text layer to yield: a
     /// scanned PDF, a photographed page, an image upload. Recovering
     /// that content needs an `IOcrProvider` companion, and this
@@ -68,7 +68,7 @@ type SourceReference = {
 
 module SourceLocation =
     /// Map the KB-side provenance location onto the neutral
-    /// `ToolUp.Platform` `SourceLocator` (Phase 106). The neutral DU is
+    /// `ToolUp.Platform` `SourceLocator`. The neutral DU is
     /// deliberately smaller — slide titles and sheet row-ranges are
     /// dropped — so `ToolUp.Platform` never grows toward the KB's
     /// domain shape (GP 1). The mapping happens here, at the producer
@@ -132,7 +132,7 @@ type KnowledgeDocument = {
     /// is overwritten by a new ingestion of the same narrative.
     ChunkCount: int
     Source: KnowledgeSource
-    /// Phase 14x — lowercase SHA-256 hex of the raw uploaded bytes,
+    /// Lowercase SHA-256 hex of the raw uploaded bytes,
     /// stamped by `UploadDocument` so a scope-local re-upload of the
     /// same file short-circuits to this document instead of
     /// re-ingesting (see `KnowledgeDedupPolicy`). `None` for notes,
@@ -142,9 +142,9 @@ type KnowledgeDocument = {
     /// the hash. Deserialising a pre-14x index record leaves this
     /// `None` (missing JSON properties absorb leniently).
     ContentHash: string option
-    /// Phase 510 — 1-based version of THIS document's lineage. The
+    /// 1-based version of THIS document's lineage. The
     /// `Id` is the stable lineage identity: a versioned re-upload
-    /// supersedes in place (same `Id`, same `{Id}:chunk:{n}` namespace)
+    /// supersedes in place (same `Id`, same `ChunkId` namespace, `{Id}:chunk:{n}`)
     /// and increments this, so the index always describes exactly one
     /// live document per lineage and retrieval structurally targets the
     /// current version — there is no stale-version chunk to filter out.
@@ -159,7 +159,7 @@ type KnowledgeDocument = {
     /// legacy document is therefore version 1 of its own lineage, which
     /// is exactly what it is.
     Version: int
-    /// Phase 502.C — free-form document tags, normalised by
+    /// Free-form document tags, normalised by
     /// `KnowledgeTags.normalise` (trimmed, lower-cased, de-duplicated,
     /// order-preserving, bounded). Set through
     /// `KnowledgeApi.SetDocumentTags`, and stamped into every one of the
@@ -191,7 +191,7 @@ type KnowledgeDocument = {
     Tags: string list
 }
 
-/// Phase 502.C — the document-tag vocabulary.
+/// The document-tag vocabulary.
 ///
 /// Tags exist to be FILTERED ON, so their whole job is to survive the
 /// round trip from "what the user typed" to "a metadata key a strict
@@ -218,7 +218,7 @@ module KnowledgeTags =
     /// that shape is what makes tags work with the filter machinery
     /// exactly as it already ships. `RetrievalRequest.Filters` is
     /// AND-combined strict equality in which a chunk MISSING the key
-    /// does not pass (Phase 502.A). A joined value could only ever be
+    /// does not pass. A joined value could only ever be
     /// matched in full, so a two-tag document would be unreachable by a
     /// one-tag query; with a key per tag, `{"_tag.policy": "true"}`
     /// matches, and `{"_tag.policy": "true"; "_tag.2024": "true"}` is
@@ -270,7 +270,7 @@ module KnowledgeTags =
     let metadataPairs (tags: string list) : (string * string) list =
         tags |> normalise |> List.map (fun t -> metadataKey t, MetadataValue)
 
-/// Phase 510 — an immutable record of one superseded version of a
+/// An immutable record of one superseded version of a
 /// document lineage. Written once, at the moment a new version takes
 /// over, and never mutated afterwards (GP 5): the current version is
 /// described by the live `KnowledgeDocument` in `knowledge/index.json`,
@@ -290,7 +290,7 @@ type KnowledgeDocumentVersion = {
     FileType: string
     SizeBytes: int64
     /// Chunk count this version indexed, retained so a later repair
-    /// pass knows how much of the `{docId}:chunk:{n}` namespace this
+    /// pass knows how much of the `ChunkId` namespace (`{docId}:chunk:{n}`) this
     /// version occupied.
     ChunkCount: int
     ContentHash: string option
@@ -408,7 +408,7 @@ type InventorySummary = {
     SuggestedQuestions: string list
 }
 
-// ─── Original-document retrieval (Phase 102) ─────────────────────
+// ─── Original-document retrieval ─────────────────────
 
 /// Wire record returned by `KnowledgeApi.GetOriginalDocument` — the
 /// *original* ingested bytes behind a `KnowledgeDocument`, plus the
@@ -440,13 +440,13 @@ type KnowledgeBaseError =
     /// The document exists in the caller's scope but its source kind
     /// has no retrievable original (module-generated narratives,
     /// AI-context entries), or the underlying blob is gone. Resolution
-    /// is per-`KnowledgeSource` via `IOriginalSourceResolver` (Phase 104).
+    /// is per-`KnowledgeSource` via `IOriginalSourceResolver`.
     | NoOriginalAvailable
     /// The fetch failed for an operational reason (storage error).
     /// Carries the underlying message for diagnostics.
     | OriginalRetrievalFailed of reason: string
 
-// ─── Original-document preview (Phase 200) ───────────────────────
+// ─── Original-document preview ───────────────────────
 //
 // Phase 106 gave a citation a `SourceLocator` — *where* in the original
 // the answer came from. Phase 102/104 gave the caller the original's
@@ -545,7 +545,7 @@ module PreviewAnchor =
 /// `SignedUrl` hands back a **time-bound** URL instead, so large
 /// originals are fetched directly from storage rather than streamed
 /// through the API — the same byte-light posture `IMediaLibrary` takes
-/// for range-served media (Phase 88). The URL carries its own expiry so
+/// for range-served media. The URL carries its own expiry so
 /// a client can tell a stale link from a denied one without a round trip.
 [<RequireQualifiedAccess>]
 type PreviewContent =
@@ -608,7 +608,7 @@ module PreviewTarget =
             Anchor = anchor
         }
 
-// ─── Upload policy (Phase 119) ────────────────────────────────────
+// ─── Upload policy ────────────────────────────────────
 
 /// How an upload whose type no extractor recognises is handled.
 /// `Reject` refuses it outright (a typed `UploadRejected`); `AcceptUnindexed`
@@ -679,7 +679,7 @@ module KnowledgeUploadPolicy =
     let warnsUncappedInTeamMode (teamScoped: bool) (policy: KnowledgeUploadPolicy) : bool =
         teamScoped && policy.MaxUploadBytes.IsNone && not policy.AcceptUnboundedUploads
 
-// ─── Document dedup policy (Phase 14x) ───────────────────────────
+// ─── Document dedup policy ───────────────────────────
 
 /// Compose-time content-hash dedup policy for KB uploads. When
 /// `DedupUploads` is `true` (the default a deployment gets without
@@ -687,7 +687,7 @@ module KnowledgeUploadPolicy =
 /// raw uploaded bytes and — when the caller's scope already holds a
 /// document with the same hash — returns the existing document instead
 /// of re-ingesting: uploads are idempotent and the corpus never
-/// accumulates byte-identical duplicates (Phase 14x). The dedup
+/// accumulates byte-identical duplicates. The dedup
 /// decision is audited (`KnowledgeDocumentDeduplicated`) and surfaced
 /// to the user as an Info `SystemMessage`.
 ///
@@ -707,7 +707,7 @@ module KnowledgeDedupPolicy =
     /// lookup, every upload ingests.
     let disabled: KnowledgeDedupPolicy = { DedupUploads = false }
 
-// ─── Document versioning policy (Phase 510) ──────────────────────
+// ─── Document versioning policy ──────────────────────
 
 /// Compose-time lever for KB upload **versioning**. When
 /// `VersionUploads` is `true`, re-uploading an *edited* file under a
@@ -750,7 +750,7 @@ module KnowledgeVersioningPolicy =
     /// version of that document.
     let enabled: KnowledgeVersioningPolicy = { VersionUploads = true }
 
-// ─── Original-document retention policy (Phase 105) ──────────────
+// ─── Original-document retention policy ──────────────
 
 /// Compose-time lever for routing KB **original documents** through
 /// `IDataObjectStore` instead of writing them as a raw `IBlobStorage`
@@ -765,7 +765,7 @@ module KnowledgeVersioningPolicy =
 /// **The objectId IS the `KnowledgeDocument.Id`, and this record
 /// carries no field to change that.** `(scopeId, objectId)` is the
 /// store's identity and `docId` is already unique within the scope,
-/// already stamped into chunk metadata (Phase 103), and already the key
+/// already stamped into chunk metadata, and already the key
 /// `GetOriginalDocument` receives — so retrieval becomes a direct
 /// `Get(scopeId, docId)` with no wire change and no persisted-record
 /// widening. It also makes the two version axes AGREE rather than
@@ -811,7 +811,7 @@ module KnowledgeObjectRetentionPolicy =
     [<Literal>]
     let ObjectDataType = "knowledge-document"
 
-// ─── Per-scope quota + retention (Phase 512) ─────────────────────
+// ─── Per-scope quota + retention ─────────────────────
 
 /// Compose-time per-scope Knowledge Base storage quota — the corpus-level
 /// sibling of `KnowledgeUploadPolicy`, which caps ONE upload. Both levers
@@ -991,7 +991,7 @@ module KnowledgeScopeUsage =
     /// An empty scope under an unlimited quota — the zero value.
     let empty: KnowledgeScopeUsage = ofDocuments KnowledgeQuotaPolicy.unlimited []
 
-// ─── Bulk / programmatic import (Phase 511) ──────────────────────
+// ─── Bulk / programmatic import ──────────────────────
 //
 // Corpus-scale ingestion: a zip of 500 documents, a programmatic batch,
 // or a fetch-by-URL — instead of one browser interaction per file.
@@ -1009,7 +1009,7 @@ module KnowledgeScopeUsage =
 // archive into items safely, deciding whether a URL may be fetched at
 // all, and reporting per-item outcomes plus one completion signal.
 
-/// Compose-time archive-expansion limits (Phase 511.B). Every lever is
+/// Compose-time archive-expansion limits. Every lever is
 /// a resource guard: a zip is attacker-controlled input whose declared
 /// sizes are also attacker-controlled, so expansion is bounded on the
 /// entry count, on each entry, on the total, AND on the compression
@@ -1062,7 +1062,7 @@ module ArchiveImportPolicy =
         MaxCompressionRatio = None
     }
 
-    /// Phase 725.D — names every lever this policy leaves unbounded, in
+    /// Names every lever this policy leaves unbounded, in
     /// the order they appear on the type. `defaults` yields `[]`;
     /// `unbounded` yields all four.
     ///
@@ -1089,7 +1089,7 @@ module ArchiveImportPolicy =
     let isUnguarded (policy: ArchiveImportPolicy) : bool =
         not (List.isEmpty (unguardedLevers policy))
 
-/// Compose-time URL-ingestion allowlist (Phase 511.C). **Inert by
+/// Compose-time URL-ingestion allowlist. **Inert by
 /// default and inert by construction**: `AllowedHosts` is a `Set`, the
 /// empty set admits nothing, and there is no wildcard case — so a
 /// deployment that never composes `withUrlIngestion` cannot fetch any
@@ -1141,7 +1141,7 @@ module UrlIngestionPolicy =
         not (isNull host)
         && policy.AllowedHosts.Contains(host.Trim().ToLowerInvariant())
 
-    /// Phase 725.D — the allowlist size at or above which the compose-time
+    /// The allowlist size at or above which the compose-time
     /// preflight calls the egress surface *broad*.
     ///
     /// A threshold rather than a judgement about which hosts are risky,
@@ -1202,16 +1202,16 @@ type BulkImportSource =
     /// A URL to fetch. Refused unless the deployment allowlisted the
     /// host.
     | Url of url: string
-    /// Phase 725.B — `File` with the payload carried as base64 text.
+    /// `File` with the payload carried as base64 text.
     /// Identical admission; the only difference is what crosses the
     /// wire.
     | FileBase64 of fileName: string * contentBase64: string
-    /// Phase 725.B — `Archive` with the payload carried as base64 text.
+    /// `Archive` with the payload carried as base64 text.
     /// Identical expansion under the same `ArchiveImportPolicy`.
     | ArchiveBase64 of fileName: string * contentBase64: string
 
 module BulkImportSource =
-    /// Phase 725.B — decode a base64 payload, or say why it could not be.
+    /// Decode a base64 payload, or say why it could not be.
     ///
     /// Total by construction: `Convert.FromBase64String` throws on
     /// malformed input, and a batch of 500 items must not lose 499
@@ -1328,7 +1328,7 @@ module BulkImportReport =
         }
 
 /// Wire-format key for the **single** `CustomNotification` a batch
-/// publishes when it completes (Phase 511.D). One signal per batch, not
+/// publishes when it completes. One signal per batch, not
 /// one per file: a 500-document migration that emitted 500 toasts would
 /// be indistinguishable from an outage from the user's seat.
 ///
@@ -1372,7 +1372,7 @@ type UpdateNoteRequest = {
     Body: string
 }
 
-/// Phase 502.C — parameters for replacing a document's tag set.
+/// Parameters for replacing a document's tag set.
 ///
 /// **Replace, not add/remove.** A set-valued PUT is idempotent and has
 /// one obvious outcome; an add/remove pair would need conflict rules
@@ -1409,7 +1409,7 @@ type KnowledgeApi = {
     /// Anonymous-mode deployments upload KB documents into session
     /// scope; the handler derives the target scope from the resolved
     /// `StorageScope`, never from the caller (GP 4).
-    // Phase 69g.tail — document ingestion (extract + chunk + embed) is
+    // Document ingestion (extract + chunk + embed) is
     // an expensive multi-stage path. Conservative per-subject cap;
     // dormant until an `IRateLimitStore` is composed.
     [<AllowAnonymous>]
@@ -1491,22 +1491,22 @@ type KnowledgeApi = {
     [<AllowAnonymous>]
     RefreshAIContext: unit -> Async<unit>
     /// Fetch the *original* ingested document for a `KnowledgeDocument`
-    /// id (Phase 102) — the handle a citation's
+    /// id — the handle a citation's
     /// `RetrievedSource.OriginalRef.DocumentId` carries. Scope-gated:
     /// the lookup runs against the caller's resolved scope only, so an
     /// out-of-scope id returns `Error NotInScope` (no bytes, no
     /// existence signal) and emits a denial audit. Source-kind-aware
-    /// via `IOriginalSourceResolver` (Phase 104): uploaded files return
+    /// via `IOriginalSourceResolver`: uploaded files return
     /// their raw bytes + content type, notes return their markdown,
     /// synthetic sources (narratives, AI-context) return
     /// `Error NoOriginalAvailable`. Every successful fetch emits a
-    /// `KnowledgeOriginalRetrieved` audit event (Phase 107).
+    /// `KnowledgeOriginalRetrieved` audit event.
     /// Deliberately NOT `[<Audit>]`-annotated — the Phase 107 handler
     /// emits the richer `KnowledgeOriginalRetrieved` row; a dispatcher
     /// attribute here would double-row the trail.
     [<AllowAnonymous>]
     GetOriginalDocument: string -> Async<Result<OriginalDocument, KnowledgeBaseError>>
-    /// Phase 108 — the same fetch, delivery-mode aware. Returns
+    /// The same fetch, delivery-mode aware. Returns
     /// `PreviewContent.Inline` carrying exactly what
     /// `GetOriginalDocument` would have returned, unless the deployment
     /// composed `withSignedOriginalUrls` AND its blob backend can mint
@@ -1525,7 +1525,7 @@ type KnowledgeApi = {
     /// it: this method is the opt-in surface, not a replacement.
     [<AllowAnonymous>]
     GetOriginalDelivery: string -> Async<Result<PreviewContent, KnowledgeBaseError>>
-    /// Phase 512 — the caller's scope usage against the composed
+    /// The caller's scope usage against the composed
     /// `KnowledgeQuotaPolicy` (document count / total bytes, the caps,
     /// and the remaining headroom). Read-only and derived from the
     /// scope's own document index, so it carries no cross-tenant signal
@@ -1535,7 +1535,7 @@ type KnowledgeApi = {
     /// how a UI tells "unlimited" from "full".
     [<AllowAnonymous>]
     GetScopeUsage: unit -> Async<KnowledgeScopeUsage>
-    /// Phase 510 — the version history of one document lineage, newest
+    /// The version history of one document lineage, newest
     /// first: the current version (synthesised from the live index
     /// entry, `SupersededAt = None`) followed by every superseded
     /// version still preserved beside it. Scope-gated exactly like
@@ -1549,7 +1549,7 @@ type KnowledgeApi = {
     /// version 1 of its own lineage.
     [<AllowAnonymous>]
     GetDocumentVersions: string -> Async<KnowledgeDocumentVersion list>
-    /// Phase 511 — corpus-scale import: many documents, expanded
+    /// Corpus-scale import: many documents, expanded
     /// archives, and (only where allowlisted) fetched URLs, in one call,
     /// with a per-item outcome report and one batch completion signal.
     ///
@@ -1572,7 +1572,7 @@ type KnowledgeApi = {
     [<AllowAnonymous>]
     [<RateLimit(4, RateLimitSeconds.perMinute)>]
     ImportBatch: BulkImportRequest -> Async<BulkImportReport>
-    /// Phase 502.C — replace a document's tag set, and re-stamp its
+    /// Replace a document's tag set, and re-stamp its
     /// chunks so the tags are actually filterable.
     ///
     /// Tags become `_tag.{tag} = "true"` on every chunk of the

@@ -21,10 +21,10 @@ open ToolUp.Platform.Jobs.WebhookDispatcher
 /// *can* subscribe a webhook to those event types — the documented
 /// alerting use case.
 ///
-/// `Dispatch` is non-blocking — the underlying queue is bounded with
-/// `BoundedChannelFullMode.DropWrite`, so a saturated dispatcher
-/// drops the event and logs a Warn rather than back-pressuring the
-/// caller. The hook never blocks `Write`.
+/// `Dispatch` never waits for delivery — the underlying queue is bounded
+/// and written with a non-waiting `TryWrite`, so a saturated dispatcher
+/// answers `Dropped` (and records the drop) rather than back-pressuring
+/// the caller. A write the inner store refused is never dispatched.
 /// Phase 9u — position 200 in the canonical chain: outside the audit
 /// replicator (which must see every event before a fan-out hook does),
 /// inside the job-notify wrapper (so an `OnEvent` trigger fires after
@@ -41,8 +41,16 @@ type HookedEventStore(inner: IEventStore, dispatcher: IWebhookDispatcher) =
 
     interface IEventStore with
         member _.Write(evt) = async {
-            do! inner.Write evt
-            dispatcher.Dispatch evt
+            match! inner.Write evt with
+            | Error _ as failed -> return failed
+            | Ok() ->
+                // The event is persisted, so the write answers `Ok` whatever
+                // the fan-out does: a `Dropped` dispatch is the dispatcher's
+                // to report (it logs the drop and writes a
+                // `WebhookEventDropped` row), not a failed write.
+                match! dispatcher.Dispatch evt with
+                | Ok()
+                | Error _ -> return Ok()
         }
 
         member _.ReadAll(scopeId) = inner.ReadAll(scopeId)

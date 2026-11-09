@@ -15,6 +15,7 @@ open ToolUp.RAG.RAGCompose
 open ToolUp.RAG.StaticCorpus
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Tests.Contracts
 
 // ─── Phase 63 — StaticCorpus contract + determinism ──────────────────
 //
@@ -261,6 +262,13 @@ let tests =
                 RetrievalRequest.create query [ Deployment ] topK MergeStrategy.Interleaved with
                     OriginFilter = None
             }
+
+            IScoredRetrievalPipelineContract.tests "StaticCorpusRetrievalPipeline" RetrievalScoreSpace.Cosine (fun () ->
+                async.Return {
+                    IScoredRetrievalPipelineContract.Subject.Pipeline = pipeline
+                    Request = request "monthly usage report" 3
+                    Access = access
+                })
 
             testAsync "retrieves the lexically-closest chunk first" {
                 let! matches = pipeline.Retrieve (request "monthly usage report" 3) access

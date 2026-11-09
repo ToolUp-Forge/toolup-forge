@@ -18,7 +18,7 @@ open ToolUp.Platform.Compose
 
 // ─── Tokenisation ─────────────────────────────────────────────────
 //
-// Phase 501 — tokenisation moved behind `ISparseAnalyzer`
+// Tokenisation moved behind `ISparseAnalyzer`
 // (`ToolUp.RAG.SparseAnalysis`). The pre-501 rule (Unicode letter/digit runs,
 // lower-cased) is now `SparseAnalysis.identity` and remains the default, so an
 // index constructed without an analyzer behaves byte-for-byte as before
@@ -44,7 +44,7 @@ type private DocEntry = {
     Metadata: Map<string, string>
 }
 
-/// Phase 501 — `AnalyzerId` records which analyzer produced the persisted
+/// `AnalyzerId` records which analyzer produced the persisted
 /// `DocEntry.Tokens`. A snapshot written by a different analyzer than the one
 /// now composed is re-analysed from `DocEntry.Content` on load rather than
 /// trusted: index-time terms that disagree with query-time terms do not fail,
@@ -62,12 +62,7 @@ type private ScopeSnapshot = {
     AnalyzerId: string
 }
 
-let private scopeToKey (scope: VectorScope) =
-    match scope with
-    | Platform -> "platform"
-    | Deployment -> "deployment"
-    | Team teamId -> $"team:{teamId}"
-    | User userId -> $"user:{userId}"
+let private scopeToKey (scope: VectorScope) = VectorScope.key scope
 
 let private blobName (scope: VectorScope) = $"_rag/{scopeToKey scope}/bm25.json"
 
@@ -86,7 +81,7 @@ let private fromJson<'T> (s: string) =
 /// only under `lockObj`; read paths take the lock briefly to snapshot
 /// what they need.
 ///
-/// Phase 501 — both term-bearing entry points (`Upsert`, `Score`) take an
+/// Both term-bearing entry points (`Upsert`, `Score`) take an
 /// `AnalysedText`, never a `string list`. `AnalysedText` has a private
 /// constructor in `ToolUp.RAG.SparseAnalysis`, so the only way to reach either
 /// is through an `ISparseAnalyzer`; `analyzerId` is the id this scope's
@@ -347,7 +342,7 @@ type InMemoryBM25Index(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs
 
     // Scope keys whose persisted snapshot has been read into memory.
     //
-    // Phase 726 — loadedness is tracked EXPLICITLY, never inferred from
+    // Loadedness is tracked EXPLICITLY, never inferred from
     // `scopes.ContainsKey`. Emptiness is a legitimate state: `DeleteByScope`
     // drops the scope's index while the persisted `bm25.json` survives until
     // the next flush, so reading "holds nothing for this scope" as "not yet
@@ -371,7 +366,7 @@ type InMemoryBM25Index(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs
 
         match scopes.TryGetValue scopeKey with
         | false, _ ->
-            // Phase 115 — a dirty scope that is absent from the in-memory
+            // A dirty scope that is absent from the in-memory
             // map was removed by `DeleteByScope` (dirty-marking is the
             // only way to reach here). Pre-115 this short-circuited,
             // leaving the stale `bm25.json` at rest — the deleted corpus
@@ -443,7 +438,7 @@ type InMemoryBM25Index(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs
             with ex ->
                 log.Warn $"[InMemoryBM25Index] Corrupt index for {scopeToKey scope}: {ex.Message} — starting empty."
         | Error reason ->
-            // Phase 861 — a failed download is ABSENT only when the blob is
+            // A failed download is ABSENT only when the blob is
             // not there. A snapshot that is there but could not be read must
             // not be taken for an empty scope: the next mutation's flush
             // would replace the whole persisted index. Refuse, and leave the
@@ -459,14 +454,14 @@ type InMemoryBM25Index(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs
                     )
                 )
 
-        // Phase 726 — mark loaded after a completed attempt, on every path.
+        // Mark loaded after a completed attempt, on every path.
         // A corrupt or absent snapshot leaves the scope loaded-and-empty,
         // which is the honest state: there is nothing readable at rest for a
         // later read to resurrect. (An unreadable one, above, is not marked.)
         loadedScopes[scopeToKey scope] <- 0uy
     }
 
-    // Phase 861 — cold loads are single-flight, so a mutation cannot land
+    // Cold loads are single-flight, so a mutation cannot land
     // between a concurrent load's download and its replay into the index.
     let loadGate = new SemaphoreSlim(1, 1)
 
@@ -476,7 +471,7 @@ type InMemoryBM25Index(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs
     /// mark themselves loaded like any other, so this one lookup answers for
     /// every scope and no caller re-encodes which scopes are lazy.
     ///
-    /// Phase 861 — EVERY mutating member calls this first. It raises
+    /// EVERY mutating member calls this first. It raises
     /// `RagScopeSnapshotUnreadableException` when the snapshot exists but
     /// cannot be read.
     let ensureScopeLoaded (scope: VectorScope) = async {
@@ -502,7 +497,7 @@ type InMemoryBM25Index(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs
         | Choice2Of2 ex -> ToolUp.RAG.InMemoryVectorStore.rethrow ex
     }
 
-    // Phase 861 — an unreadable eager snapshot does not fail construction:
+    // An unreadable eager snapshot does not fail construction:
     // the scope stays unloaded and the first access retries.
     do
         ensureScopeLoadedForSearch Platform |> Async.RunSynchronously
@@ -528,7 +523,7 @@ type InMemoryBM25Index(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs
     /// stamped into every persisted snapshot.
     member _.AnalyzerId = analyzer.Id
 
-    /// Phase 964 — the postings are this process's in-memory maps, flushed
+    /// The postings are this process's in-memory maps, flushed
     /// to blob storage but searched from memory: each replica holds its own.
     interface ISparseIndexLocality with
         member _.IndexLocality =
@@ -537,7 +532,7 @@ type InMemoryBM25Index(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs
     interface ISparseIndex with
 
         member _.Upsert scope chunkId chunk = async {
-            // Phase 861 — hydrate first. An upsert that is the first thing a
+            // Hydrate first. An upsert that is the first thing a
             // restarted process does to a lazily-loaded scope would otherwise
             // create a fresh, empty index for it, and the next flush would
             // replace the persisted `bm25.json` with just the new chunks.
@@ -587,7 +582,7 @@ type InMemoryBM25Index(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs
         }
 
         member _.DeleteByScope scope = async {
-            // Phase 726 — hydrate BEFORE dropping the scope. A wipe issued on
+            // Hydrate BEFORE dropping the scope. A wipe issued on
             // a fresh process before anything has read this scope would
             // otherwise remove nothing, leave the scope unloaded, and let the
             // very next `Search` re-hydrate the corpus the wipe claimed to
@@ -613,7 +608,7 @@ type InMemoryBM25Index(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs
         }
 
         member _.Erase(scope, subjectUserId, policy, dryRun) = async {
-            // Phase 115 — same matching contract as
+            // Same matching contract as
             // `IVectorStore.eraseSubject`: the subject id appears in the
             // chunk content or in any metadata value. BM25 keeps the full
             // chunk text + metadata per entry, so the match is exact, not

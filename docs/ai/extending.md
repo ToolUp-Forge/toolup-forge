@@ -180,7 +180,7 @@ let sendStreaming (cb: string -> unit) : Async<Result<AIProviderResponse, AIProv
     return
         Ok {
             Content = content
-            StopReason = stopReason
+            StopReason = StopReason.ofToken stopReason
             ToolCalls = collectToolCalls content
             Usage = usage
         }
@@ -194,8 +194,8 @@ Populate `AIProviderResponse.Usage` with the provider's reported token counts:
 ```fsharp
 let providerResponse: AIProviderResponse = {
     Content = text
-    // A wire-level string, not a DU — "end_turn" | "tool_use" | "max_tokens".
-    StopReason = "end_turn"
+    // `StopReason.Token` spells it on the wire: "end_turn" | "tool_use" | "max_tokens".
+    StopReason = StopReason.EndTurn
     ToolCalls = []
     Usage = Some {
         PromptTokens = response.Usage.InputTokens
@@ -870,7 +870,7 @@ let tests =
             match result with
             | Ok response ->
                 Expect.isTrue (response.Content.Length > 0) "expected assistant content"
-                Expect.equal response.StopReason "end_turn" "expected an end_turn stop reason"
+                Expect.equal response.StopReason StopReason.EndTurn "expected an end_turn stop reason"
             | Error err -> failtest (AIProviderError.toMessage err)
         }
     ]
@@ -898,7 +898,7 @@ let scriptedProvider =
             return
                 Ok {
                     Content = """{"ok": true}"""
-                    StopReason = "end_turn"
+                    StopReason = StopReason.EndTurn
                     ToolCalls = []
                     Usage = None
                 }

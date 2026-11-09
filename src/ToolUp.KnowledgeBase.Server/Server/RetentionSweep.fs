@@ -114,18 +114,20 @@ let containerOf (scopeId: string) : string =
     | Some(ScopeKey.User _) -> scopeId
     | _ -> ScopeEnumeration.containerForTeam scopeId
 
-/// Vector scope for a container, mirroring `KnowledgeApiDeps.resolve`
-/// exactly: a `team-` container is the team-shared vector scope, anything
-/// else is that user's own. `Deployment` is never synthesised here — it
-/// is reserved for genuinely deployment-wide shared content, and routing
-/// a per-user purge at it would delete another caller's chunks.
+/// Vector scope for a container, the projection ingestion keyed its chunks
+/// by (`VectorScope.ofContainer`): a container written under the scope
+/// grammar reads back to its key, and any other container is its own id.
 let vectorScopeOf (container: string) : VectorScope =
     match ScopeKey.tryParseContainer container with
-    | Some(ScopeKey.Team teamId) -> Team teamId.Value
-    | Some(ScopeKey.User userId) -> User userId.Value
-    | _ -> User container
+    | Some key -> StorageScope.ofKey true key
+    | None -> {
+        ScopeId = container
+        Container = container
+        Persist = true
+      }
+    |> VectorScope.ofContainer
 
-/// Per-scope content-hash dedup index (Phase 14x), rebuilt here so a
+/// Per-scope content-hash dedup index, rebuilt here so a
 /// purged document's hash ref is dropped alongside its index entry — a
 /// later re-upload of the same bytes then re-ingests instead of
 /// deduplicating onto a document retention removed.
@@ -169,7 +171,7 @@ let sweepScope
                 // Remove ONE expired document. `Ok doc` when its retrieval
                 // entries, raw blob and hash ref all went; `Error (orphans,
                 // reason)` when the Phase 115 fan-out was not clean or
-                // (Phase 971) a blob delete was refused — the caller then
+                //  a blob delete was refused — the caller then
                 // leaves it listed so the next sweep retries it.
                 let purgeOne (doc: KnowledgeDocument) : Async<Result<KnowledgeDocument, int * string>> = async {
                     let! report =
@@ -180,7 +182,7 @@ let sweepScope
                     if IIndexLifecycle.IndexLifecycleReport.isClean report then
                         let rawBlobName = sprintf "knowledge/%s/%s" doc.Id doc.FileName
 
-                        // Phase 504.C — a note's body is not at the
+                        // A note's body is not at the
                         // convention path (see `noteBodyBlobName`); the
                         // same branch `deleteDocument` takes, so an
                         // expired note leaves no residual blob either.
@@ -192,7 +194,7 @@ let sweepScope
                             | FromNarrative _ -> ()
                         ]
 
-                        // Phase 971 — a refused delete leaves the bytes at
+                        // A refused delete leaves the bytes at
                         // rest, so the document is NOT purged: it stays
                         // listed (with its hash ref) and the next sweep
                         // retries it, exactly as for an unclean fan-out.
@@ -269,7 +271,7 @@ let sweepScope
                 let purgedIds = purgedDocs |> List.map _.Id
 
                 if not purgedIds.IsEmpty then
-                    // Phase 959 — the purged entries are removed from the index
+                    // The purged entries are removed from the index
                     // as it stands at the write, through the guarded writer.
                     // The snapshot read at the top of the sweep is stale by now:
                     // writing it back dropped every document uploaded while the

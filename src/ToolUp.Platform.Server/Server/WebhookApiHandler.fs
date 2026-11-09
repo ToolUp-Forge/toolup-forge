@@ -175,7 +175,7 @@ let webhookApi (ctx: HttpContext) : IWebhookApi =
     let emitAudit (scopeId: string) (eventType: string) (payload: 'T) = async {
         try
             let evt = Events.create scopeId "_platform.webhooks" eventType (toAuditJson payload)
-            do! eventStore.Write evt
+            do! EventStore.writeOrRaise eventStore evt
         with ex ->
             logger.Error($"[WebhookApi] audit write failed eventType={eventType}", Some ex)
     }

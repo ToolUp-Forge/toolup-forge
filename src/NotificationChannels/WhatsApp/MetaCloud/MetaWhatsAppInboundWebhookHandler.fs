@@ -288,9 +288,9 @@ type MetaWhatsAppInboundWebhookHandler
                             $"[MetaWhatsAppInbound] RecordInbound failed for contact {contact.Id}: {ExternalContactError.describe e}"
 
                 do!
-                    eventStore.Write(
-                        Events.create scopeId InboundEventSource InboundEventType (inboundEventPayload contact message)
-                    )
+                    EventStore.writeOrRaise
+                        eventStore
+                        (Events.create scopeId InboundEventSource InboundEventType (inboundEventPayload contact message))
 
             return true
     }

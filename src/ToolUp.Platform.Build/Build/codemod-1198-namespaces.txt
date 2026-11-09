@@ -46,6 +46,7 @@ case ToolUp.Platform BudgetRefused ToolUp.Platform.Compose
 case ToolUp.Platform BudgetReserved ToolUp.Platform.Compose
 case ToolUp.Platform BuildFailed ToolUp.Platform.Compose
 case ToolUp.Platform Built ToolUp.Platform.Compose
+case ToolUp.Platform Busy ToolUp.Platform.Jobs
 case ToolUp.Platform ByPeriodCutoff ToolUp.Platform.Infra
 case ToolUp.Platform ByUnitHash ToolUp.Platform.Infra
 case ToolUp.Platform Cancelled ToolUp.Platform.Jobs
@@ -380,6 +381,7 @@ case ToolUp.Platform Pre ToolUp.Platform.Compose
 case ToolUp.Platform PreflightSection ToolUp.Platform.Compose
 case ToolUp.Platform PremiumOnly ToolUp.Platform.Config
 case ToolUp.Platform Present ToolUp.Platform.Infra
+case ToolUp.Platform PriorUnreadable ToolUp.Platform.Jobs
 case ToolUp.Platform ProcessLocal ToolUp.Platform.Compose
 case ToolUp.Platform Profile ToolUp.Platform.Compose
 case ToolUp.Platform ProvenanceAttachmentNode ToolUp.Platform.Infra
@@ -506,6 +508,7 @@ case ToolUp.Platform StorageFailure ToolUp.Platform.Infra
 case ToolUp.Platform StorageFailure ToolUp.Platform.Jobs
 case ToolUp.Platform StorageSubsystem ToolUp.Platform.Compose
 case ToolUp.Platform StoreContractViolation ToolUp.Platform.Infra
+case ToolUp.Platform StoreFailed ToolUp.Platform.Jobs
 case ToolUp.Platform StoreFailure ToolUp.Platform.Infra
 case ToolUp.Platform StoreUnavailable ToolUp.Platform.Infra
 case ToolUp.Platform StoredLayerUnreadable ToolUp.Platform.Compose
@@ -599,6 +602,7 @@ case ToolUp.Platform WorkerSrc ToolUp.Platform.Scope
 case ToolUp.Platform WorstFold ToolUp.Platform.Infra
 case ToolUp.Platform Write ToolUp.Platform.Infra
 case ToolUp.Platform WriteFailed ToolUp.Platform.Infra
+case ToolUp.Platform WriteFailed ToolUp.Platform.Jobs
 case ToolUp.Platform.Metrics Histogram ToolUp.Platform.Infra.Metrics
 case ToolUp.Platform.Metrics Scalar ToolUp.Platform.Infra.Metrics
 member ToolUp.Platform IDataIngestor ToolUp.Platform.Infra
@@ -1449,6 +1453,12 @@ type ToolUp.Platform JobSchedulerInstanceValidator ToolUp.Platform.Jobs
 type ToolUp.Platform JobSchedulerLifecycle ToolUp.Platform.Compose
 type ToolUp.Platform JobScopeReissue ToolUp.Platform.Jobs
 type ToolUp.Platform JobStore ToolUp.Platform.Jobs
+type ToolUp.Platform JobStoreError ToolUp.Platform.Jobs
+type ToolUp.Platform JobStoreWrite ToolUp.Platform.Jobs
+type ToolUp.Platform JobStoreWriteFailed ToolUp.Platform.Jobs
+type ToolUp.Platform JobTransition ToolUp.Platform.Jobs
+type ToolUp.Platform JobTransitionError ToolUp.Platform.Jobs
+type ToolUp.Platform JobTransitionFailed ToolUp.Platform.Jobs
 type ToolUp.Platform JobTriggerWatermark ToolUp.Platform.Jobs
 type ToolUp.Platform JsonConsoleLogger ToolUp.Platform.Infra
 type ToolUp.Platform JsonFrameDatasetCodec ToolUp.Platform.Infra

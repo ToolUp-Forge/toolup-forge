@@ -153,6 +153,7 @@ let private registeredTests =
         VectorisationHookTests.tests
         VectorisationHookTests.stagedTests
         RagTelemetryTests.tests
+        VectorScopeProjectionTests.tests
         ExtractorTests.tests
         TerminalStatusAnnouncementTests.tests
         ConfigValidatorAggregatorTests.tests

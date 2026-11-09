@@ -185,7 +185,7 @@ let private recordFailure (ctx: HttpContext) (endpoint: string) (error: DatadogR
         }
 
         try
-            do! store.Write event
+            do! EventStore.writeOrRaise store event
         with _ ->
             ()
 }

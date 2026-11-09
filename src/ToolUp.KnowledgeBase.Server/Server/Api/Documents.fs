@@ -5,6 +5,7 @@ open System.IO
 open System.Security.Cryptography
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.RAG.IngestionTypes
 open SharedTypes
 open KnowledgeBase.ServerExtractors
@@ -19,7 +20,7 @@ open ToolUp.Platform.Jobs
 open ToolUp.Platform.Compose
 open ToolUp.Platform.Files
 
-// ─── Content-hash dedup (Phase 14x) ───────────────────────────────
+// ─── Content-hash dedup ───────────────────────────────
 
 /// Lowercase SHA-256 hex of the raw uploaded bytes — the dedup
 /// identity. Raw bytes, not extracted text: extraction runs off the
@@ -34,7 +35,7 @@ let private contentHashOf (bytes: byte[]) : string =
 
 /// Per-scope secondary index mapping content hash → docId as
 /// `_platform/kb-content-hash/{hash}/{docId}.ref` inside the scope's
-/// own container (Phase 9f `BlobIndex`). GP 4 is structural: the
+/// own container. GP 4 is structural: the
 /// container IS the tenant boundary, so a hash can never match across
 /// scopes. Refs are existence-only; the canonical
 /// `knowledge/index.json` stays authoritative — a ref whose document
@@ -69,7 +70,7 @@ let private findDuplicate (deps: KnowledgeApiDeps) (contentHash: string) : Async
                     | _ -> true))
 }
 
-// ─── Original retention (Phase 105) ───────────────────────────────
+// ─── Original retention ───────────────────────────────
 //
 // One place decides WHERE an original's bytes live, and three
 // operations — save, read, delete — are expressed against it. Before
@@ -106,7 +107,7 @@ let private conventionOriginalBlobName (docId: string) (fileName: string) =
 /// and an original that landed at the legacy path is fully retrievable
 /// (the read helper below tries both) where a refused upload is not.
 ///
-/// Phase 863 — `Error` when the bytes landed NOWHERE (the convention blob
+/// `Error` when the bytes landed NOWHERE (the convention blob
 /// refused them, after the store did where one is composed); the upload is
 /// then rejected rather than indexed over an original that does not exist.
 let private saveOriginal
@@ -200,7 +201,7 @@ let private readOriginalBytes (deps: KnowledgeApiDeps) (docId: string) (fileName
 /// the document was reported deleted. `Delete` is idempotent on both
 /// sides, so sweeping the location that holds nothing costs a no-op.
 ///
-/// Phase 504.C — the raw-blob delete branches on `doc.Source`. A
+/// The raw-blob delete branches on `doc.Source`. A
 /// `Note`'s body does not live at the convention path: `addNote`
 /// records `FileName = "{title}.md"` but persists the markdown at
 /// `knowledge/{docId}/note.md` (`noteBodyBlobName`), so the
@@ -210,7 +211,7 @@ let private readOriginalBytes (deps: KnowledgeApiDeps) (docId: string) (fileName
 /// note (a note whose sanitised title happens to be `note` has them
 /// coincide, and `Delete` is idempotent).
 ///
-/// Phase 971 — a refused blob delete is reported, not swallowed: the
+/// A refused blob delete is reported, not swallowed: the
 /// `Error` names every convention blob still at rest, and the caller
 /// keeps the index entry so a re-run finds the document again.
 let private deleteOriginal (deps: KnowledgeApiDeps) (doc: KnowledgeDocument) : Async<Result<unit, string>> = async {
@@ -250,7 +251,7 @@ let private deleteOriginal (deps: KnowledgeApiDeps) (doc: KnowledgeDocument) : A
         return Error(String.concat "; " refused)
 }
 
-/// Phase 971 — delete a document's Phase 510 lineage (every preserved
+/// Delete a document's Phase 510 lineage (every preserved
 /// prior-version original under `knowledge/{docId}/versions/`, the version
 /// manifest, the chunk-hash manifest) and answer the blobs still at rest,
 /// each with its refusal; `[]` when everything went. Every delete is
@@ -329,7 +330,7 @@ let private resolveOriginal (deps: KnowledgeApiDeps) (doc: KnowledgeDocument) : 
     | _ -> return! fromResolver ()
 }
 
-// ─── Document tags (Phase 502.C) ──────────────────────────────────
+// ─── Document tags ──────────────────────────────────
 
 /// Stamp a document's tags into every chunk as `_tag.{tag} = "true"`.
 ///
@@ -356,7 +357,7 @@ let private stampTags
 
             { chunk with Metadata = metadata }, src)
 
-// ─── Chunk-level content diff (Phase 510) ─────────────────────────
+// ─── Chunk-level content diff ─────────────────────────
 
 /// Lowercase SHA-256 hex of one chunk's rendered text — the identity a
 /// re-ingest compares against the previous version's manifest.
@@ -401,7 +402,7 @@ let private changedChunkIndices (previous: string list) (current: string list) :
     |> List.choose id
     |> Set.ofList
 
-/// Phase 510 — delete the chunk positions a SHORTER new version left
+/// Delete the chunk positions a SHORTER new version left
 /// behind. `[newCount .. oldCount - 1]` are ids the re-ingest's upserts
 /// never reach (they only cover `0 .. newCount - 1`), so without this
 /// they survive in the vector store AND the sparse index under the live
@@ -428,7 +429,7 @@ let private deleteOrphanTail
             let mutable survivors: string list = []
 
             for i in newChunkCount .. priorChunkCount - 1 do
-                let chunkId = sprintf "%s:chunk:%d" docId i
+                let chunkId = ChunkId.render { DocumentId = docId; Ordinal = i }
                 let! report = lifecycle.DeleteChunk deps.VectorScope chunkId
 
                 if not (ToolUp.Platform.Infra.IIndexLifecycle.IndexLifecycleReport.isClean report) then
@@ -446,7 +447,7 @@ let private deleteOrphanTail
         | _ -> ()
     }
 
-/// Phase 510 — archive the outgoing version before its live blob is
+/// Archive the outgoing version before its live blob is
 /// overwritten: copy its original bytes aside, then record an immutable
 /// `KnowledgeDocumentVersion` for it.
 ///
@@ -456,7 +457,7 @@ let private deleteOrphanTail
 /// copied (a broken promise the API would then have to honour). Same
 /// ordering argument as the Phase 14x hash-ref write.
 ///
-/// Phase 105 — the outgoing bytes are read through `readOriginalBytes`,
+/// The outgoing bytes are read through `readOriginalBytes`,
 /// so this keeps working when the live original lives in the object
 /// store rather than at the convention path. It still WRITES the
 /// archive copy to `knowledge/{docId}/versions/{n}/{fileName}`:
@@ -470,7 +471,7 @@ let private deleteOrphanTail
 /// `KnowledgeDocumentVersion` and is recorded as follow-up work in
 /// `docs/migrations/105-kb-original-retention-idataobjectstore.md`.
 ///
-/// Phase 863 — a refused archive copy is `Error`, and nothing is recorded:
+/// A refused archive copy is `Error`, and nothing is recorded:
 /// the caller then rejects the new version rather than overwrite the only
 /// remaining copy of the prior one.
 let private archiveSupersededVersion (deps: KnowledgeApiDeps) (prior: KnowledgeDocument) : Async<Result<unit, string>> = async {
@@ -534,7 +535,7 @@ let private archiveSupersededVersion (deps: KnowledgeApiDeps) (prior: KnowledgeD
 /// via `withDocumentDedup false`, keeping the opt-out path byte-for-byte
 /// identical to pre-14x behaviour (GP 11): no hash stored, no ref written.
 ///
-/// Phase 510 — `predecessor` is `Some prior` exactly when this upload is
+/// `predecessor` is `Some prior` exactly when this upload is
 /// superseding an existing document in its lineage (`withDocumentVersioning
 /// true` and a same-named live document found). It is `None` on every
 /// pre-510 path, and every `predecessor`-conditioned branch below is a
@@ -566,13 +567,13 @@ let private persistAndIngest
             ChunkCount = 0
             Source = UploadedFile
             ContentHash = contentHash
-            // Phase 510 — the lineage advances only when this upload is
+            // The lineage advances only when this upload is
             // superseding one; a fresh document is version 1.
             Version =
                 match predecessor with
                 | Some prior -> prior.Version + 1
                 | None -> 1
-            // Phase 502.C — a new version of a tagged document keeps its
+            // A new version of a tagged document keeps its
             // tags. The lineage is the same document, so dropping them
             // here would silently un-scope every query that had been
             // narrowing to it, on nothing more than a re-upload.
@@ -582,14 +583,14 @@ let private persistAndIngest
                 | None -> []
         }
 
-        // Phase 510 — archive the outgoing version FIRST. Everything
+        // Archive the outgoing version FIRST. Everything
         // below overwrites the live blob and the live index entry, so
         // the prior version has to be preserved before either happens.
-        // Phase 105 — the original then goes through `IDataObjectStore`
+        // The original then goes through `IDataObjectStore`
         // when the deployment composed `withObjectStoreRetention`, else the
         // pre-105 convention blob.
         //
-        // Phase 863 — either write refused rejects the upload before the
+        // Either write refused rejects the upload before the
         // index entry is written: an indexed document whose bytes (or whose
         // predecessor's preserved bytes) were never stored is the silent
         // loss this path used to produce.
@@ -611,13 +612,13 @@ let private persistAndIngest
                     Status = UploadRejected(sprintf "The document could not be stored: %s" reason)
             }
         | Ok() ->
-            // Phase 116 — atomic index RMW so a concurrent upload to the same
+            // Atomic index RMW so a concurrent upload to the same
             // container can't clobber this entry (or vice versa). Released before
             // the background extraction below, which re-acquires the same
             // container lock via `updateIndexStatus`.
             do! upsertIndexEntry deps.Storage deps.Scope.Container doc
 
-            // Phase 510 — a superseded version's hash ref no longer describes
+            // A superseded version's hash ref no longer describes
             // anything live (the lineage now carries the NEW bytes' hash), so
             // drop it. Left behind it would be a ref that `findDuplicate`
             // resolves to a candidate id and then correctly rejects on the
@@ -631,7 +632,7 @@ let private persistAndIngest
                 | _ -> ()
             | None -> ()
 
-            // Phase 14x — register the content hash in the O(1) dedup index.
+            // Register the content hash in the O(1) dedup index.
             // Written after the canonical index entry so a crash between the
             // two writes leaves a missing ref (dedup miss → harmless
             // re-ingest), never a ref with no canonical entry behind it.
@@ -662,11 +663,11 @@ let private persistAndIngest
 
                     let! extracted = extractChunks deps.OcrProvider deps.TableExtractor docId safeName bytes
 
-                    // Phase 103 — stamp the structured original-document ref
+                    // Stamp the structured original-document ref
                     // (+ Phase 106 neutral locator) into each chunk so retrieval
                     // surfaces `RetrievedSource.OriginalRef` without rebuilding
                     // the blob-name convention.
-                    // Phase 502.C — and the document's tags, so a tagged
+                    // And the document's tags, so a tagged
                     // lineage's new version is filterable the moment it is
                     // indexed rather than only after a manual re-tag.
                     let chunks =
@@ -674,7 +675,7 @@ let private persistAndIngest
                         |> stampTags doc.Tags
 
                     if box deps.Queue <> null && not chunks.IsEmpty then
-                        // Phase 510 — incremental re-index. On a supersede,
+                        // Incremental re-index. On a supersede,
                         // compare each new chunk's content hash against the
                         // previous version's manifest and enqueue only the
                         // positions that actually changed. On a first ingest
@@ -692,11 +693,12 @@ let private persistAndIngest
 
                         let chunkPairs =
                             chunks
-                            |> List.mapi (fun i (chunk, _) -> i, (sprintf "%s:chunk:%d" docId i, chunk))
+                            |> List.mapi (fun i (chunk, _) ->
+                                i, (ChunkId.render { DocumentId = docId; Ordinal = i }, chunk))
                             |> List.filter (fun (i, _) -> changed.Contains i)
                             |> List.map snd
 
-                        // Phase 510 — the shorter-re-upload orphan tail. Run
+                        // The shorter-re-upload orphan tail. Run
                         // BEFORE the enqueue so the stale ids are gone from
                         // every index even if the queue then refuses the job
                         // (a refused ingestion leaves the document `Failed` and
@@ -720,7 +722,7 @@ let private persistAndIngest
                         // before this method returns.
                         do! updateIndexChunkCount deps.Storage deps.Scope.Container docId chunks.Length
 
-                        // Phase 867 — the attempt completes against what it
+                        // The attempt completes against what it
                         // ENQUEUED, which an incremental re-index makes a
                         // strict subset of `chunks`. Counting against the full
                         // chunk count left such a re-upload at
@@ -768,7 +770,7 @@ let private persistAndIngest
                         // outcome, not an empty job to push through the
                         // queue: the document is already fully indexed at
                         // this content.
-                        // Phase 723 — `EnqueueAsync`, not `Enqueue`. On the
+                        // `EnqueueAsync`, not `Enqueue`. On the
                         // in-memory default the two are the same lock-free
                         // channel write; on a queue backed by an
                         // `IIngestionQueueStore` the sync form is
@@ -837,7 +839,7 @@ let private persistAndIngest
 
                             do! deps.MarkIngestionFailed docId safeName reason
                     elif chunks.IsEmpty then
-                        // Phase 510 — the degenerate orphan tail. An empty new
+                        // The degenerate orphan tail. An empty new
                         // version (a recognised-but-empty file, an unsupported
                         // format, a scan with no OCR composed) skips the
                         // extract-and-enqueue branch above — and with it the
@@ -866,7 +868,7 @@ let private persistAndIngest
                             do! saveChunkHashes deps.Storage deps.Scope.Container docId []
                         | None -> ()
 
-                        // Phase 119 — distinguish "no extractor for this type"
+                        // Distinguish "no extractor for this type"
                         // (stored but never searchable) from a recognised-but-empty
                         // file. The pre-119 code reported both as `Complete 0`, which
                         // read as a successful index of an empty document and hid the
@@ -910,7 +912,7 @@ let private persistAndIngest
                     deps.Logger.Error(sprintf "[KnowledgeBase] Extraction failed for %s/%s" docId safeName, Some ex)
 
                     let reason = classify safeName ex
-                    // Phase 863 — the failure record can itself be refused by storage;
+                    // The failure record can itself be refused by storage;
                     // this handler is the last stop before `Async.Start`, so it logs
                     // that instead of letting it escape the background computation.
                     try
@@ -930,11 +932,11 @@ let private persistAndIngest
             return doc
     }
 
-/// Phase 512 — the scope's corpus quota, evaluated against the live
+/// The scope's corpus quota, evaluated against the live
 /// index. Returns `Some reason` when admitting one more document of
 /// `incomingBytes` would breach `deps.QuotaPolicy`.
 ///
-/// Phase 510 — `addsDocument` is `false` when the upload supersedes an
+/// `addsDocument` is `false` when the upload supersedes an
 /// existing document rather than adding one. The distinction is
 /// load-bearing: `KnowledgeQuotaPolicy.exceeds` refuses at
 /// `currentDocuments >= MaxDocuments`, so a scope sitting exactly ON its
@@ -977,7 +979,7 @@ let private quotaRefusal (deps: KnowledgeApiDeps) (incomingBytes: int64) (addsDo
 /// once, in one order, with no second implementation that could drift
 /// out of step with them.
 ///
-/// Phase 511 — `announceToUser` is the ONLY thing the bulk caller
+/// `announceToUser` is the ONLY thing the bulk caller
 /// changes, and it changes nothing about admission: it suppresses the
 /// per-file "already exists, using the existing copy" `SystemMessage`
 /// that the interactive path shows on a dedup hit. A 500-document
@@ -996,7 +998,7 @@ let uploadDocumentCore
     async {
         let docId = Guid.NewGuid().ToString()
 
-        // Phase 119 — server-controlled storage key. `Path.GetFileName` strips
+        // Server-controlled storage key. `Path.GetFileName` strips
         // any directory component the caller smuggled in (`../../index.json` →
         // `index.json`); the docId GUID prefix + a separator-free name then
         // means the blob key can never escape `knowledge/{docId}/` or reach the
@@ -1053,7 +1055,7 @@ let uploadDocumentCore
                 Tags = []
             }
 
-        // Phase 510 — the document this upload supersedes, if any. Identity
+        // The document this upload supersedes, if any. Identity
         // is (file name, scope, `UploadedFile` source):
         //   * the SCOPE is the container, which comes from the server-side
         //     resolver — so a lineage can never span tenants (GP 4), for the
@@ -1090,12 +1092,12 @@ let uploadDocumentCore
                             | _ -> true))
         }
 
-        // Phase 512 — the corpus quota is checked immediately before a
+        // The corpus quota is checked immediately before a
         // persist, never before dedup: a duplicate upload stores nothing new,
         // so refusing it for quota would reject a request that costs the
         // scope no additional storage at all.
         //
-        // Phase 510 — the predecessor lookup runs INSIDE this, after dedup
+        // The predecessor lookup runs INSIDE this, after dedup
         // has already declined to short-circuit, so the ordering Phase 512
         // established (dedup, then quota, then persist) is preserved with
         // versioning slotted between quota and persist.
@@ -1113,7 +1115,7 @@ let uploadDocumentCore
                 return! persistAndIngest deps bytes targetDocId safeName ext contentHash predecessor
         }
 
-        // Phase 515 — run the composed content scanner and audit its verdict.
+        // Run the composed content scanner and audit its verdict.
         //
         // Placement is load-bearing and is the whole point of the phase:
         //   * AFTER the pure `rejectionReason` checks — there is nothing to
@@ -1190,7 +1192,7 @@ let uploadDocumentCore
                 // (GP 11): no hash computed, no lookup, no ref written.
                 return! persistUnlessOverQuota None
             else
-                // Phase 14x — scope-local content-hash dedup, checked before
+                // Scope-local content-hash dedup, checked before
                 // anything is persisted. A duplicate upload stores nothing:
                 // the existing document is returned verbatim (same docId),
                 // ingestion is skipped, the decision is audited, and the
@@ -1227,7 +1229,7 @@ let uploadDocumentCore
                             )
                     | None -> ()
 
-                    // Phase 511 — suppressed under bulk import; the batch's
+                    // Suppressed under bulk import; the batch's
                     // one completion summary replaces N per-file toasts.
                     if announceToUser then
                         try
@@ -1256,7 +1258,7 @@ let uploadDocumentCore
 let uploadDocument (deps: KnowledgeApiDeps) (bytes: byte[]) (fileName: string) : Async<KnowledgeDocument> =
     uploadDocumentCore true deps bytes fileName
 
-// ─── Bulk / programmatic import (Phase 511) ───────────────────────
+// ─── Bulk / programmatic import ───────────────────────
 
 /// Turn one submitted source into zero or more items. Archives expand
 /// under the composed resource guards; a URL is fetched only when the
@@ -1277,7 +1279,7 @@ let private expandSource (deps: KnowledgeApiDeps) (source: BulkImportSource) : A
             }
         ]
     | BulkImportSource.Archive(fileName, content) -> return expandArchive deps.ArchiveImportPolicy fileName content
-    // Phase 725.B — the compact cases decode to EXACTLY the bytes their
+    // The compact cases decode to EXACTLY the bytes their
     // `byte[]` twins carry and then take the identical path, so there is
     // one expansion implementation and one admission decision per kind.
     // A decode failure is one classified refusal line, never a throw
@@ -1320,7 +1322,7 @@ let private expandSource (deps: KnowledgeApiDeps) (source: BulkImportSource) : A
                 | Error reason -> return [ Rejected(url, url, reason) ]
 }
 
-/// Phase 725.A — coalesces inventory publication for the duration of one
+/// Coalesces inventory publication for the duration of one
 /// batch, then publishes once.
 ///
 /// **Why this is a gate around the seam rather than a flag through the
@@ -1383,7 +1385,7 @@ type private BatchInventoryGate(publish: unit -> Async<unit>) =
 
         if shouldPublish then publish () else async.Return()
 
-/// Phase 511 — corpus-scale import. Expands every source, routes each
+/// Corpus-scale import. Expands every source, routes each
 /// surviving item through the single-item upload path, and returns one
 /// report plus one completion notification.
 ///
@@ -1435,7 +1437,7 @@ let importBatch (deps: KnowledgeApiDeps) (request: BulkImportRequest) : Async<Bu
     let startedAt = DateTimeOffset.UtcNow
     let collected = ResizeArray<BulkImportItemReport>()
 
-    // Phase 725.A — every item runs against this, never the caller's
+    // Every item runs against this, never the caller's
     // `deps`; see the enumeration above for what each other reader of the
     // seam sees (nothing changes for any of them).
     let inventoryGate = BatchInventoryGate(deps.PublishInventory)
@@ -1489,7 +1491,7 @@ let importBatch (deps: KnowledgeApiDeps) (request: BulkImportRequest) : Async<Bu
 
                 collected.Add itemReport
 
-    // Phase 725.A — close the window BEFORE the completion summary, so
+    // Close the window BEFORE the completion summary, so
     // the one inventory snapshot the batch publishes has landed by the
     // time the user's client is told the import finished and re-reads.
     // Publishes nothing when no item asked (an all-refused batch mutated
@@ -1509,7 +1511,7 @@ let importBatch (deps: KnowledgeApiDeps) (request: BulkImportRequest) : Async<Bu
             report.Refused
     )
 
-    // Phase 511.D — ONE completion signal for the whole batch. Published
+    // ONE completion signal for the whole batch. Published
     // best-effort on the request path: a notification failure must not
     // turn a completed import into a failed call, and the report the
     // caller already holds is the authoritative record either way.
@@ -1533,7 +1535,7 @@ let importBatch (deps: KnowledgeApiDeps) (request: BulkImportRequest) : Async<Bu
 let getDocuments (deps: KnowledgeApiDeps) : Async<KnowledgeDocument list> =
     loadIndex deps.Storage deps.Scope.Container
 
-/// Phase 512 — the caller's scope usage against the composed quota.
+/// The caller's scope usage against the composed quota.
 /// Purely derived from the scope's own document index, so it cannot
 /// drift from the corpus it describes and carries no cross-tenant
 /// signal (GP 4). An uncomposed deployment gets honest counts with
@@ -1544,7 +1546,7 @@ let getScopeUsage (deps: KnowledgeApiDeps) : Async<KnowledgeScopeUsage> = async 
     return KnowledgeScopeUsage.ofDocuments deps.QuotaPolicy docs
 }
 
-/// Phase 510 — the version history of one document lineage, newest
+/// The version history of one document lineage, newest
 /// first. The current version is SYNTHESISED from the live index entry
 /// rather than stored twice: the index is already authoritative for what
 /// is current, and a second copy of it in the sidecar could only ever
@@ -1601,7 +1603,7 @@ let deleteDocument (deps: KnowledgeApiDeps) (docId: string) : Async<Result<unit,
 
             match prior with
             | Some doc ->
-                // Phase 115 — index deletion runs FIRST, through the unified
+                // Index deletion runs FIRST, through the unified
                 // lifecycle seam (vector store + sparse index fan-out), and the
                 // `index.json` entry is removed only after it completes clean.
                 // The pre-115 ordering removed the index entry first and then
@@ -1630,12 +1632,12 @@ let deleteDocument (deps: KnowledgeApiDeps) (docId: string) : Async<Result<unit,
                             sprintf "Some of the document's index entries could not be deleted (%s). Try again." summary
                         )
                 else
-                    // Phase 105 — removes the object-store object AND the
+                    // Removes the object-store object AND the
                     // convention blob, so a scope holding documents from
                     // both eras is fully swept.
                     let! originalOutcome = deleteOriginal deps doc
 
-                    // Phase 510 — a deleted document takes its whole
+                    // A deleted document takes its whole
                     // lineage with it: every preserved prior-version
                     // original, the version sidecar, and the chunk-hash
                     // manifest. Enumerated by prefix rather than
@@ -1647,7 +1649,7 @@ let deleteDocument (deps: KnowledgeApiDeps) (docId: string) : Async<Result<unit,
                     // afford. `Delete` is idempotent, so a document with
                     // no history simply deletes nothing extra.
                     //
-                    // Phase 971 — every delete is attempted and every
+                    // Every delete is attempted and every
                     // refusal collected (`deleteLineage`). The index entry
                     // is what a re-run finds the document by, so it stays
                     // until every blob went: a refusal answers `Error` and
@@ -1679,16 +1681,16 @@ let deleteDocument (deps: KnowledgeApiDeps) (docId: string) : Async<Result<unit,
                                     stillAtRest
                             )
                     else
-                        // Phase 867 — and the current ingestion attempt.
+                        // And the current ingestion attempt.
                         do! forgetIngestionAttempt deps.Storage deps.Scope.Container docId
 
-                        // Phase 959 — removed from the index as it stands NOW,
+                        // Removed from the index as it stands NOW,
                         // through the guarded writer: the `existing` snapshot
                         // above is stale by the time the fan-out completes, and
                         // writing it back would drop any document added since.
                         do! removeIndexEntries deps.Storage deps.Scope.Container [ docId ]
 
-                        // Phase 14x — drop the content-hash dedup ref so a
+                        // Drop the content-hash dedup ref so a
                         // future upload of the same bytes re-ingests fresh
                         // instead of being pointed at the deleted docId
                         // (`Remove` is idempotent; legacy docs carry no hash).
@@ -1712,7 +1714,7 @@ let deleteDocument (deps: KnowledgeApiDeps) (docId: string) : Async<Result<unit,
                 return Ok()
 }
 
-// ─── Document tagging (Phase 502.C) ──────────────────────────────
+// ─── Document tagging ──────────────────────────────
 
 /// Re-derive a document's current chunk set from its retained source
 /// material, with `tags` stamped in.
@@ -1774,10 +1776,10 @@ let private rederiveChunks
             |> Option.map (fun pairs ->
                 pairs
                 |> stampTags tags
-                |> List.mapi (fun i (chunk, _) -> sprintf "%s:chunk:%d" doc.Id i, chunk))
+                |> List.mapi (fun i (chunk, _) -> ChunkId.render { DocumentId = doc.Id; Ordinal = i }, chunk))
     }
 
-/// Phase 502.C — replace a document's tag set and re-stamp its chunks
+/// Replace a document's tag set and re-stamp its chunks
 /// so the tags are actually filterable.
 ///
 /// **Setting a tag is a re-index, not a label**, and the whole design
@@ -1851,7 +1853,7 @@ let setDocumentTags (deps: KnowledgeApiDeps) (req: SetDocumentTagsRequest) : Asy
 
                                 setStatus doc.Id initialStatus
 
-                                // Phase 867 — a new attempt: seeds the
+                                // A new attempt: seeds the
                                 // persisted status and retires any attempt
                                 // still reporting for this document.
                                 let! attempt =
@@ -1873,7 +1875,7 @@ let setDocumentTags (deps: KnowledgeApiDeps) (req: SetDocumentTagsRequest) : Asy
                                     Attempt = Some attempt
                                 }
 
-                                // Phase 723 — async enqueue; see the
+                                // Async enqueue; see the
                                 // `uploadDocument` call site.
                                 let! accepted = deps.Queue.EnqueueAsync(job)
                                 deps.RecordEnqueue accepted
@@ -1905,7 +1907,7 @@ let setDocumentTags (deps: KnowledgeApiDeps) (req: SetDocumentTagsRequest) : Asy
                                 return Ok updated
 }
 
-// ─── Original-document retrieval (Phase 102) ─────────────────────
+// ─── Original-document retrieval ─────────────────────
 
 /// `KnowledgeSource` case name for the Phase 107 audit payload.
 let private sourceKindName (source: KnowledgeSource) =
@@ -1915,7 +1917,7 @@ let private sourceKindName (source: KnowledgeSource) =
     | Note _ -> "Note"
 
 /// Best-effort audit emission for the original-access trail
-/// (Phase 107). Awaited on the request path (GP 7) — `IAuditLog.Record`
+/// . Awaited on the request path (GP 7) — `IAuditLog.Record`
 /// is contractually best-effort and swallows its own failures, so audit
 /// gaps never fail the fetch.
 let private recordOriginalAccessAudit (deps: KnowledgeApiDeps) (event: AuditEvent) : Async<unit> =
@@ -1923,7 +1925,7 @@ let private recordOriginalAccessAudit (deps: KnowledgeApiDeps) (event: AuditEven
     | Some a -> a.Record(deps.Scope.ScopeId, event)
     | None -> async.Return()
 
-/// Fetch the *original* ingested document for a `docId` (Phase 102),
+/// Fetch the *original* ingested document for a `docId`,
 /// optionally through a Phase 201 classification redactor.
 ///
 /// The lookup runs against the caller's resolved scope's index only —
@@ -1964,14 +1966,14 @@ let private getOriginalDocumentCore
                 do! denied "NotInScope"
                 return Error NotInScope
             | Some doc ->
-                // Phase 105 — store-first for uploaded files when retention
+                // Store-first for uploaded files when retention
                 // is composed; the Phase 104 resolver otherwise, and for
                 // every other source kind.
                 let! resolved = resolveOriginal deps doc
 
                 match resolved with
                 | Some original ->
-                    // Phase 201 — the classification gate, between the
+                    // The classification gate, between the
                     // scope gate above and the bytes below. A composed
                     // redactor masks the spans this caller may not read;
                     // one that cannot vouch for the content withholds,
@@ -2033,7 +2035,7 @@ let private getOriginalDocumentCore
             return Error(OriginalRetrievalFailed ex.Message)
     }
 
-/// Fetch the *original* ingested document for a `docId` (Phase 102).
+/// Fetch the *original* ingested document for a `docId`.
 /// Scope-gated, source-kind-aware, audited — see
 /// `getOriginalDocumentCore`.
 ///
@@ -2044,7 +2046,7 @@ let private getOriginalDocumentCore
 let getOriginalDocument (deps: KnowledgeApiDeps) (docId: string) : Async<Result<OriginalDocument, KnowledgeBaseError>> =
     getOriginalDocumentCore None deps docId
 
-/// Phase 201 — the same fetch, with the deployment's composed
+/// The same fetch, with the deployment's composed
 /// `IOriginalRedactor` applied between the scope gate and the response.
 /// `None` short-circuits to the byte-for-byte Phase 102 path.
 ///
@@ -2060,10 +2062,10 @@ let getRedactedOriginalDocument
     : Async<Result<OriginalDocument, KnowledgeBaseError>> =
     getOriginalDocumentCore redactor deps docId
 
-// ─── Delivery-mode-aware original retrieval (Phase 108) ──────────
+// ─── Delivery-mode-aware original retrieval ──────────
 
 /// Fetch the original for `docId` in whatever delivery mode the
-/// deployment composed (Phase 108).
+/// deployment composed.
 ///
 /// **Unset is not "similar to" the Phase 102 path — it IS the Phase 102
 /// path.** With no preview seam registered this calls
@@ -2120,7 +2122,7 @@ let getOriginalDelivery
                     do! denied "NotInScope"
                     return Error NotInScope
                 | Some doc ->
-                    // Phase 105 — a document whose original lives in the
+                    // A document whose original lives in the
                     // object store has no single signable blob name: the
                     // bytes sit in the store's content-addressed pool
                     // under a hash, and the seam signs an `IBlobStorage`
@@ -2179,7 +2181,7 @@ let getOriginalDelivery
                 return Error(OriginalRetrievalFailed ex.Message)
     }
 
-/// Phase 201 — delivery-mode-aware retrieval with the composed
+/// Delivery-mode-aware retrieval with the composed
 /// redactor applied. `None` short-circuits to the byte-for-byte Phase
 /// 108 path.
 ///

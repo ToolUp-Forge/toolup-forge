@@ -634,16 +634,22 @@ let getScheduledDeprovision (scheduler: IJobScheduler) (scopeId: string) : Async
 }
 
 /// Cancel the pending scheduled offboard for `scopeId` before it fires.
-/// Idempotent — returns `false` when nothing was pending. Returns the
+/// Idempotent — answers `Ok None` when nothing was pending. Answers the
 /// cancelled job's `ScheduledDeprovision` so the caller can audit the
-/// reason it carried.
-let cancelScheduledDeprovision (scheduler: IJobScheduler) (scopeId: string) : Async<ScheduledDeprovision option> = async {
-    match! pendingScheduledJob scheduler scopeId with
-    | None -> return None
-    | Some job ->
-        do! scheduler.Cancel(scopeId, job.JobId)
-        return toScheduledDeprovision job
-}
+/// reason it carried, and the scheduler's refusal when the cancel did not
+/// take — the offboard is then still pending.
+let cancelScheduledDeprovision
+    (scheduler: IJobScheduler)
+    (scopeId: string)
+    : Async<Result<ScheduledDeprovision option, JobTransitionError>> =
+    async {
+        match! pendingScheduledJob scheduler scopeId with
+        | None -> return Ok None
+        | Some job ->
+            match! scheduler.Cancel(scopeId, job.JobId) with
+            | Error error -> return Error error
+            | Ok() -> return Ok(toScheduledDeprovision job)
+    }
 
 /// Resumable, progress-persisting sweep for the background path. Unlike
 /// `run` (parallel, fire-and-forget audit), this runs hooks

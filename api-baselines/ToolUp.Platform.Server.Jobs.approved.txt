@@ -403,9 +403,9 @@ ToolUp.Platform.Jobs.IJobProgressSink (interface)
 ToolUp.Platform.Jobs.IJobProgressSink.Latest(System.Guid) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ProgressCheckpoint]]
 ToolUp.Platform.Jobs.IJobProgressSink.Report(System.Guid, System.String, ToolUp.Platform.ProgressCheckpoint) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.Jobs.IJobScheduler (interface)
-ToolUp.Platform.Jobs.IJobScheduler.Cancel(System.String, System.Guid) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
-ToolUp.Platform.Jobs.IJobScheduler.Disable(System.String, System.Guid) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
-ToolUp.Platform.Jobs.IJobScheduler.Enable(System.String, System.Guid) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.Jobs.IJobScheduler.Cancel(System.String, System.Guid) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.Jobs.JobTransitionError]]
+ToolUp.Platform.Jobs.IJobScheduler.Disable(System.String, System.Guid) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.Jobs.JobTransitionError]]
+ToolUp.Platform.Jobs.IJobScheduler.Enable(System.String, System.Guid) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.Jobs.JobTransitionError]]
 ToolUp.Platform.Jobs.IJobScheduler.Get(System.String, System.Guid) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.JobDefinition]]
 ToolUp.Platform.Jobs.IJobScheduler.GetRecentRuns(System.String, System.Guid, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.JobRun]]
 ToolUp.Platform.Jobs.IJobScheduler.ListJobs(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.JobDefinition]]
@@ -425,16 +425,16 @@ ToolUp.Platform.Jobs.IJobStore.Get(System.String, System.Guid) : Microsoft.FShar
 ToolUp.Platform.Jobs.IJobStore.GetRecentRuns(System.String, System.Guid, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.JobRun]]
 ToolUp.Platform.Jobs.IJobStore.ListJobs(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.JobDefinition]]
 ToolUp.Platform.Jobs.IJobStore.ListScopesWithJobs() : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]
-ToolUp.Platform.Jobs.IJobStore.RecordRun(ToolUp.Platform.JobRun) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
-ToolUp.Platform.Jobs.IJobStore.Save(ToolUp.Platform.JobDefinition) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
-ToolUp.Platform.Jobs.IJobStore.Update(ToolUp.Platform.JobDefinition) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.Jobs.IJobStore.RecordRun(ToolUp.Platform.JobRun) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.Jobs.JobStoreError]]
+ToolUp.Platform.Jobs.IJobStore.Save(ToolUp.Platform.JobDefinition) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.Jobs.JobStoreError]]
+ToolUp.Platform.Jobs.IJobStore.Update(ToolUp.Platform.JobDefinition) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.Jobs.JobStoreError]]
 ToolUp.Platform.Jobs.ILiveChannel (interface)
 ToolUp.Platform.Jobs.ILiveChannel.PushFrame(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.Jobs.ILiveSessionHost (interface)
 ToolUp.Platform.Jobs.ILiveSessionHost.CloseSession(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.Jobs.ILiveSessionHost.ListSessions(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Jobs.LiveSessionDescriptor]]
 ToolUp.Platform.Jobs.ILiveSessionHost.OpenSession(ToolUp.Platform.StorageScope) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Jobs.LiveSessionDescriptor, ToolUp.Platform.Jobs.LiveSessionRefusal]]
-ToolUp.Platform.Jobs.ILiveSessionHost.Subscribe(System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[System.Guid]]
+ToolUp.Platform.Jobs.ILiveSessionHost.Subscribe(System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[System.Guid]]
 ToolUp.Platform.Jobs.ILiveSessionHost.TryGetChannel(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Jobs.ILiveChannel]]
 ToolUp.Platform.Jobs.ILiveSessionHost.Unsubscribe(System.String, System.String, System.Guid) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.Jobs.IModelEvaluationRunner (interface)
@@ -832,6 +832,53 @@ ToolUp.Platform.Jobs.JobStore+IdempotencyEntry (class)
 ToolUp.Platform.Jobs.JobStore+IdempotencyEntry..ctor(System.Guid, System.DateTime)
 ToolUp.Platform.Jobs.JobStore+IdempotencyEntry.CreatedAt : System.DateTime { get }
 ToolUp.Platform.Jobs.JobStore+IdempotencyEntry.JobId : System.Guid { get }
+ToolUp.Platform.Jobs.JobStoreError (class)
+ToolUp.Platform.Jobs.JobStoreError.IsPriorUnreadable : System.Boolean { get }
+ToolUp.Platform.Jobs.JobStoreError.IsWriteFailed : System.Boolean { get }
+ToolUp.Platform.Jobs.JobStoreError.Tag : System.Int32 { get }
+ToolUp.Platform.Jobs.JobStoreError+PriorUnreadable (class)
+ToolUp.Platform.Jobs.JobStoreError+PriorUnreadable.jobId : System.Guid { get }
+ToolUp.Platform.Jobs.JobStoreError+PriorUnreadable.reason : System.String { get }
+ToolUp.Platform.Jobs.JobStoreError+PriorUnreadable.scopeId : System.String { get }
+ToolUp.Platform.Jobs.JobStoreError+Tags (class)
+ToolUp.Platform.Jobs.JobStoreError+Tags.PriorUnreadable : System.Int32 (literal)
+ToolUp.Platform.Jobs.JobStoreError+Tags.WriteFailed : System.Int32 (literal)
+ToolUp.Platform.Jobs.JobStoreError+WriteFailed (class)
+ToolUp.Platform.Jobs.JobStoreError+WriteFailed.jobId : System.Guid { get }
+ToolUp.Platform.Jobs.JobStoreError+WriteFailed.reason : System.String { get }
+ToolUp.Platform.Jobs.JobStoreError+WriteFailed.record : System.String { get }
+ToolUp.Platform.Jobs.JobStoreError+WriteFailed.scopeId : System.String { get }
+ToolUp.Platform.Jobs.JobStoreErrorModule (class)
+ToolUp.Platform.Jobs.JobStoreErrorModule.describe(ToolUp.Platform.Jobs.JobStoreError) : System.String
+ToolUp.Platform.Jobs.JobStoreWrite (class)
+ToolUp.Platform.Jobs.JobStoreWrite.orRaise(Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.Jobs.JobStoreError]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.Jobs.JobStoreWriteFailed (class)
+ToolUp.Platform.Jobs.JobStoreWriteFailed..ctor()
+ToolUp.Platform.Jobs.JobStoreWriteFailed..ctor(ToolUp.Platform.Jobs.JobStoreError)
+ToolUp.Platform.Jobs.JobStoreWriteFailed.Data0 : ToolUp.Platform.Jobs.JobStoreError { get }
+ToolUp.Platform.Jobs.JobStoreWriteFailed.Message : System.String { get }
+ToolUp.Platform.Jobs.JobTransition (class)
+ToolUp.Platform.Jobs.JobTransition.orRaise(Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.Jobs.JobTransitionError]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.Jobs.JobTransitionError (class)
+ToolUp.Platform.Jobs.JobTransitionError.IsBusy : System.Boolean { get }
+ToolUp.Platform.Jobs.JobTransitionError.IsStoreFailed : System.Boolean { get }
+ToolUp.Platform.Jobs.JobTransitionError.Tag : System.Int32 { get }
+ToolUp.Platform.Jobs.JobTransitionError+Busy (class)
+ToolUp.Platform.Jobs.JobTransitionError+Busy.jobId : System.Guid { get }
+ToolUp.Platform.Jobs.JobTransitionError+Busy.scopeId : System.String { get }
+ToolUp.Platform.Jobs.JobTransitionError+Busy.waited : System.TimeSpan { get }
+ToolUp.Platform.Jobs.JobTransitionError+StoreFailed (class)
+ToolUp.Platform.Jobs.JobTransitionError+StoreFailed.Item : ToolUp.Platform.Jobs.JobStoreError { get }
+ToolUp.Platform.Jobs.JobTransitionError+Tags (class)
+ToolUp.Platform.Jobs.JobTransitionError+Tags.Busy : System.Int32 (literal)
+ToolUp.Platform.Jobs.JobTransitionError+Tags.StoreFailed : System.Int32 (literal)
+ToolUp.Platform.Jobs.JobTransitionErrorModule (class)
+ToolUp.Platform.Jobs.JobTransitionErrorModule.message(ToolUp.Platform.Jobs.JobTransitionError) : System.String
+ToolUp.Platform.Jobs.JobTransitionFailed (class)
+ToolUp.Platform.Jobs.JobTransitionFailed..ctor()
+ToolUp.Platform.Jobs.JobTransitionFailed..ctor(ToolUp.Platform.Jobs.JobTransitionError)
+ToolUp.Platform.Jobs.JobTransitionFailed.Data0 : ToolUp.Platform.Jobs.JobTransitionError { get }
+ToolUp.Platform.Jobs.JobTransitionFailed.Message : System.String { get }
 ToolUp.Platform.Jobs.JobTriggerWatermark (class)
 ToolUp.Platform.Jobs.JobTriggerWatermark+JobTriggerCursor (class)
 ToolUp.Platform.Jobs.JobTriggerWatermark+JobTriggerCursor..ctor(System.DateTime, System.Guid)
@@ -1355,7 +1402,7 @@ ToolUp.Platform.Jobs.SchedulerPolicy.definitionFor(System.Guid, ToolUp.Platform.
 ToolUp.Platform.Jobs.SchedulerPolicy.eventTriggered(ToolUp.Platform.Jobs.IJobStore, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.JobDefinition]]
 ToolUp.Platform.Jobs.SchedulerPolicy.persistNew(ToolUp.Platform.Jobs.IJobStore, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.JobDefinition, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]], System.Guid, ToolUp.Platform.JobRegistration) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Jobs.ScheduleOutcome, ToolUp.Platform.ScheduleError]]
 ToolUp.Platform.Jobs.SchedulerPolicy.scheduleValidated(ToolUp.Platform.Jobs.IJobStore, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.Boolean], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.JobDefinition, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpFunc`2[System.Guid, Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], System.String]], ToolUp.Platform.JobRegistration) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Jobs.ScheduleOutcome, ToolUp.Platform.ScheduleError]]
-ToolUp.Platform.Jobs.SchedulerPolicy.setStatus(ToolUp.Platform.Jobs.IJobStore, System.String, System.Guid, ToolUp.Platform.JobStatus) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.Jobs.SchedulerPolicy.setStatus(ToolUp.Platform.Jobs.IJobStore, System.String, System.Guid, ToolUp.Platform.JobStatus) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.Jobs.JobStoreError]]
 ToolUp.Platform.Jobs.SchedulerPolicy.stillDueAt(System.DateTime, ToolUp.Platform.JobDefinition) : System.Boolean
 ToolUp.Platform.Jobs.SchedulerPolicy.triggerable(ToolUp.Platform.Jobs.IJobStore, System.String, System.Guid) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.JobDefinition, ToolUp.Platform.Jobs.TriggerError]]
 ToolUp.Platform.Jobs.SchedulerPolicy.validate(Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.Boolean], ToolUp.Platform.JobRegistration) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.ScheduleError]
@@ -1572,7 +1619,7 @@ ToolUp.Platform.Jobs.WebhookApiHandler.webhookApi(Microsoft.AspNetCore.Http.Http
 ToolUp.Platform.Jobs.WebhookDispatcher (class)
 ToolUp.Platform.Jobs.WebhookDispatcher.create(ToolUp.Platform.Jobs.WebhookDispatcher+WebhookDeps, ToolUp.Platform.Jobs.WebhookDispatcher+WebhookOptions) : ToolUp.Platform.Jobs.WebhookDispatcher+WebhookDispatcherService
 ToolUp.Platform.Jobs.WebhookDispatcher+IWebhookDispatcher (interface)
-ToolUp.Platform.Jobs.WebhookDispatcher+IWebhookDispatcher.Dispatch(ToolUp.Platform.ModuleEvent) : System.Void
+ToolUp.Platform.Jobs.WebhookDispatcher+IWebhookDispatcher.Dispatch(ToolUp.Platform.ModuleEvent) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.Jobs.WebhookDispatcher+WebhookDispatchError]]
 ToolUp.Platform.Jobs.WebhookDispatcher+IWebhookDispatcher.TestFire(System.String, System.Guid) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.WebhookTestResult, System.String]]
 ToolUp.Platform.Jobs.WebhookDispatcher+WebhookDeps (class)
 ToolUp.Platform.Jobs.WebhookDispatcher+WebhookDeps..ctor(ToolUp.Platform.Jobs.IWebhookRegistry, ToolUp.Platform.Jobs.IWebhookDeliveryLog, ToolUp.Platform.IEventStore, System.Net.Http.HttpClient, ToolUp.Platform.WebhookRetryPolicy, ToolUp.Platform.ILogger, ToolUp.Platform.Infra.Tracing.IActivitySink, ToolUp.Platform.Secrets+ISecretStore, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.IRateLimiter], ToolUp.Platform.Jobs.WebhookUrlValidator+WebhookUrlPolicy)
@@ -1586,6 +1633,25 @@ ToolUp.Platform.Jobs.WebhookDispatcher+WebhookDeps.Registry : ToolUp.Platform.Jo
 ToolUp.Platform.Jobs.WebhookDispatcher+WebhookDeps.RetryPolicy : ToolUp.Platform.WebhookRetryPolicy { get }
 ToolUp.Platform.Jobs.WebhookDispatcher+WebhookDeps.SecretStore : ToolUp.Platform.Secrets+ISecretStore { get }
 ToolUp.Platform.Jobs.WebhookDispatcher+WebhookDeps.UrlPolicy : ToolUp.Platform.Jobs.WebhookUrlValidator+WebhookUrlPolicy { get }
+ToolUp.Platform.Jobs.WebhookDispatcher+WebhookDispatchError (class)
+ToolUp.Platform.Jobs.WebhookDispatcher+WebhookDispatchError.IsDeliveryLogWriteFailed : System.Boolean { get }
+ToolUp.Platform.Jobs.WebhookDispatcher+WebhookDispatchError.IsDropped : System.Boolean { get }
+ToolUp.Platform.Jobs.WebhookDispatcher+WebhookDispatchError.Tag : System.Int32 { get }
+ToolUp.Platform.Jobs.WebhookDispatcher+WebhookDispatchError+DeliveryLogWriteFailed (class)
+ToolUp.Platform.Jobs.WebhookDispatcher+WebhookDispatchError+DeliveryLogWriteFailed.deliveryId : System.Guid { get }
+ToolUp.Platform.Jobs.WebhookDispatcher+WebhookDispatchError+DeliveryLogWriteFailed.reason : System.String { get }
+ToolUp.Platform.Jobs.WebhookDispatcher+WebhookDispatchError+DeliveryLogWriteFailed.scopeId : System.String { get }
+ToolUp.Platform.Jobs.WebhookDispatcher+WebhookDispatchError+DeliveryLogWriteFailed.subscriptionId : System.Guid { get }
+ToolUp.Platform.Jobs.WebhookDispatcher+WebhookDispatchError+Dropped (class)
+ToolUp.Platform.Jobs.WebhookDispatcher+WebhookDispatchError+Dropped.eventId : System.Guid { get }
+ToolUp.Platform.Jobs.WebhookDispatcher+WebhookDispatchError+Dropped.eventType : System.String { get }
+ToolUp.Platform.Jobs.WebhookDispatcher+WebhookDispatchError+Dropped.queueCapacity : System.Int32 { get }
+ToolUp.Platform.Jobs.WebhookDispatcher+WebhookDispatchError+Dropped.scopeId : System.String { get }
+ToolUp.Platform.Jobs.WebhookDispatcher+WebhookDispatchError+Tags (class)
+ToolUp.Platform.Jobs.WebhookDispatcher+WebhookDispatchError+Tags.DeliveryLogWriteFailed : System.Int32 (literal)
+ToolUp.Platform.Jobs.WebhookDispatcher+WebhookDispatchError+Tags.Dropped : System.Int32 (literal)
+ToolUp.Platform.Jobs.WebhookDispatcher+WebhookDispatchErrorModule (class)
+ToolUp.Platform.Jobs.WebhookDispatcher+WebhookDispatchErrorModule.describe(ToolUp.Platform.Jobs.WebhookDispatcher+WebhookDispatchError) : System.String
 ToolUp.Platform.Jobs.WebhookDispatcher+WebhookDispatcherService (class)
 ToolUp.Platform.Jobs.WebhookDispatcher+WebhookDispatcherService.ExecuteAsync(System.Threading.CancellationToken) : System.Threading.Tasks.Task
 ToolUp.Platform.Jobs.WebhookDispatcher+WebhookDispatcherService.StopAsync(System.Threading.CancellationToken) : System.Threading.Tasks.Task

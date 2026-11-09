@@ -249,7 +249,7 @@ let tests (name: string) (factory: unit -> IJobScheduler * string * string) =
             let r = mkRegistration scopeA "h" Manual
             let jobId = jobIdOrFail "Schedule" (scheduler.Schedule r |> Async.RunSynchronously)
 
-            do! scheduler.Cancel(scopeA, jobId)
+            do! JobTransition.orRaise <| scheduler.Cancel(scopeA, jobId)
 
             match! scheduler.Get(scopeA, jobId) with
             | Some j -> Expect.equal j.Status Cancelled "status flipped to Cancelled"
@@ -263,8 +263,8 @@ let tests (name: string) (factory: unit -> IJobScheduler * string * string) =
             let r = mkRegistration scopeA "h" Manual
             let jobId = jobIdOrFail "Schedule" (scheduler.Schedule r |> Async.RunSynchronously)
 
-            do! scheduler.Cancel(scopeA, jobId)
-            do! scheduler.Cancel(scopeA, jobId) // second call must not throw
+            do! JobTransition.orRaise <| scheduler.Cancel(scopeA, jobId)
+            do! JobTransition.orRaise <| scheduler.Cancel(scopeA, jobId) // second call must not throw
         }
 
         testCaseAsync "Disable then Enable restores Active"
@@ -274,13 +274,13 @@ let tests (name: string) (factory: unit -> IJobScheduler * string * string) =
             let r = mkRegistration scopeA "h" (CronTrigger "0 9 * * *")
             let jobId = jobIdOrFail "Schedule" (scheduler.Schedule r |> Async.RunSynchronously)
 
-            do! scheduler.Disable(scopeA, jobId)
+            do! JobTransition.orRaise <| scheduler.Disable(scopeA, jobId)
 
             match! scheduler.Get(scopeA, jobId) with
             | Some j -> Expect.equal j.Status Disabled "Disable sets Disabled"
             | None -> failtest "expected job to exist after Disable"
 
-            do! scheduler.Enable(scopeA, jobId)
+            do! JobTransition.orRaise <| scheduler.Enable(scopeA, jobId)
 
             match! scheduler.Get(scopeA, jobId) with
             | Some j ->
@@ -306,7 +306,7 @@ let tests (name: string) (factory: unit -> IJobScheduler * string * string) =
             scheduler.RegisterHandler("h", nullHandler)
             let r = mkRegistration scopeA "h" Manual
             let jobId = jobIdOrFail "Schedule" (scheduler.Schedule r |> Async.RunSynchronously)
-            do! scheduler.Cancel(scopeA, jobId)
+            do! JobTransition.orRaise <| scheduler.Cancel(scopeA, jobId)
 
             match! scheduler.TriggerOnce(scopeA, jobId, UserId "alice") with
             | Error TriggerError.JobCancelled -> ()
@@ -333,7 +333,7 @@ let tests (name: string) (factory: unit -> IJobScheduler * string * string) =
 
             let r = mkRegistration scopeA "h" Manual
             let jobId = jobIdOrFail "Schedule" (scheduler.Schedule r |> Async.RunSynchronously)
-            do! scheduler.Disable(scopeA, jobId)
+            do! JobTransition.orRaise <| scheduler.Disable(scopeA, jobId)
 
             match! scheduler.TriggerOnce(scopeA, jobId, UserId "alice") with
             | Error TriggerError.JobDisabled -> ()
@@ -1018,5 +1018,111 @@ let carriedScopeTests (name: string) (factory: unit -> RestartableScheduler) =
                 "the recomputed value is the new head in the job's own scope"
 
             binding.Close scheduler
+        }
+    ]
+
+/// A store decorator a failing-store arm composes over: once armed, it
+/// refuses every write (`Save`, `Update`, `RecordRun`) with a
+/// `JobStoreError`, and passes every read through.
+type RefusingJobStore(inner: IJobStore) =
+    let mutable armed = false
+
+    /// Refuse every write from now on.
+    member _.Arm() = armed <- true
+
+    member private _.Refuse(scopeId: string, jobId: JobId, record: string) =
+        async.Return(Error(JobStoreError.WriteFailed(scopeId, jobId, record, "refused by the contract")))
+
+    interface IJobStore with
+        member this.Save definition =
+            if armed then
+                this.Refuse(definition.ScopeId, definition.JobId, "definition")
+            else
+                inner.Save definition
+
+        member this.Update definition =
+            if armed then
+                this.Refuse(definition.ScopeId, definition.JobId, "definition")
+            else
+                inner.Update definition
+
+        member _.Get(scopeId, jobId) = inner.Get(scopeId, jobId)
+        member _.ListJobs scopeId = inner.ListJobs scopeId
+
+        member _.FindByIdempotencyKey(scopeId, key, ttlSeconds, now) =
+            inner.FindByIdempotencyKey(scopeId, key, ttlSeconds, now)
+
+        member this.RecordRun run =
+            if armed then
+                this.Refuse(run.ScopeId, run.JobId, $"run %O{run.RunId}")
+            else
+                inner.RecordRun run
+
+        member _.GetRecentRuns(scopeId, jobId, count) =
+            inner.GetRecentRuns(scopeId, jobId, count)
+
+        member _.DueJobs(scopeId, now) = inner.DueJobs(scopeId, now)
+
+        member _.AwaitingExternalRuns(scopeId, limit) =
+            inner.AwaitingExternalRuns(scopeId, limit)
+
+        member _.ListScopesWithJobs() = inner.ListScopesWithJobs()
+
+/// The failing-store arm. `bind` composes the scheduler under
+/// test over the store decorator the pack hands it (wrapping the binding's
+/// own store), registers `handler` under that name, and answers a scope.
+///
+/// What it holds every implementation to: a `Cancel` / `Disable` / `Enable`
+/// whose write the store refused answers `JobTransitionError.StoreFailed` —
+/// never `Ok`, never an exception — and leaves the job as it was.
+let failingStoreTests (name: string) (bind: (IJobStore -> IJobStore) -> string -> IJobScheduler * string) =
+    let handler = "failing-store-contract"
+
+    let registration scopeId : JobRegistration = {
+        ScopeId = scopeId
+        Handler = handler
+        Payload = "{}"
+        Trigger = CronTrigger "0 9 * * *"
+        Idempotency = None
+        RetryPolicy = JobRetryPolicy.defaults
+        ShardKey = None
+        Precision = Minute
+        CreatedBy = "alice"
+        Tags = Map.empty
+    }
+
+    let storeFailed (label: string) (answered: Choice<Result<unit, JobTransitionError>, exn>) =
+        match answered with
+        | Choice1Of2(Error(JobTransitionError.StoreFailed _)) -> ()
+        | Choice1Of2 other -> failtestf "%s: expected StoreFailed, got %A" label other
+        | Choice2Of2 ex -> failtestf "%s: a refused write is data, not an exception: %s" label ex.Message
+
+    testList $"{name} — IJobScheduler contract, failing store" [
+        testCaseAsync "a transition the store refused answers StoreFailed and leaves the job as it was"
+        <| async {
+            let mutable refusing = None
+
+            let decorate (store: IJobStore) =
+                let r = RefusingJobStore store
+                refusing <- Some r
+                r :> IJobStore
+
+            let scheduler, scopeId = bind decorate handler
+            let! scheduled = scheduler.Schedule(registration scopeId)
+
+            let jobId =
+                match scheduled with
+                | Ok outcome -> ScheduleOutcome.jobId outcome
+                | Error e -> failtestf "Schedule failed before the store was armed: %A" e
+
+            refusing.Value.Arm()
+
+            let! disabled = Async.Catch(scheduler.Disable(scopeId, jobId))
+            storeFailed "Disable" disabled
+            let! cancelled = Async.Catch(scheduler.Cancel(scopeId, jobId))
+            storeFailed "Cancel" cancelled
+
+            let! job = scheduler.Get(scopeId, jobId)
+            Expect.equal (job |> Option.map _.Status) (Some Active) "a refused transition changed nothing"
         }
     ]

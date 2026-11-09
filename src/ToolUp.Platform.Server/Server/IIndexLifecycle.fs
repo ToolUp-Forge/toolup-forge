@@ -204,8 +204,8 @@ type DefaultIndexLifecycle
             let mutable vectorOk = true
             let mutable sparseOk = sparseIndex.IsSome
 
-            for i in 0 .. chunkCount - 1 do
-                let chunkId = sprintf "%s:chunk:%d" docId i
+            for id in ChunkId.ofDocument docId chunkCount do
+                let chunkId = ChunkId.render id
 
                 try
                     do! vectorStore.DeleteChunk scope chunkId

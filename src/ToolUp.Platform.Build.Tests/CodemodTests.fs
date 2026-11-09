@@ -130,6 +130,7 @@ let tests =
                             "src/Server/Facts.fs"
                             "src/Server/Hosting.fs"
                             "src/Server/Identity.fs"
+                            "src/Server/Infrastructure.fs"
                             "src/Server/Jobs.fs"
                             "src/Server/Models.fs"
                             "src/Server/Program.fs"
@@ -178,6 +179,7 @@ let tests =
                             "src/Server/Guarded.fs"
                             "src/Server/Hosting.fs"
                             "src/Server/Identity.fs"
+                            "src/Server/Infrastructure.fs"
                             "src/Server/Jobs.fs"
                             "src/Server/Models.fs"
                             "src/Server/Program.fs"
@@ -259,7 +261,7 @@ let tests =
 
                     Expect.equal
                         (Codemod.renderSummary plan)
-                        "Codemod: 21 file(s) visited, 97 rewrite(s) in 17 file(s), 97 site(s) for review."
+                        "Codemod: 22 file(s) visited, 99 rewrite(s) in 18 file(s), 102 site(s) for review."
                         "summary")
         ]
 
@@ -622,6 +624,29 @@ let tests =
                 let rewritten, rewrites = Codemod.rewriteText CodemodFileClass.Project line
                 Expect.equal rewritten line "already the new id"
                 Expect.isEmpty rewrites "no rewrite"
+
+            testCase
+                "873: an event-store or job-store write is routed through its adapter, and a scheduler transition is reported"
+            <| fun () ->
+                let rewritten, _ = rewriteSource "        do! eventStore.Write evt"
+                Expect.equal rewritten "        do! EventStore.writeOrRaise eventStore evt" "event-store write"
+
+                let rewritten, _ = rewriteSource "        do! jobStore.Update job"
+                Expect.equal rewritten "        do! JobStoreWrite.orRaise <| jobStore.Update job" "job-store write"
+
+                let again, rewrites = rewriteSource rewritten
+                Expect.equal again rewritten "a migrated line is a fixed point"
+                Expect.isEmpty rewrites "and plans no second rewrite"
+
+                Expect.equal
+                    (reviewSource "        do! scheduler.Cancel(scopeId, jobId)" |> List.map _.RuleId)
+                    [ "873-job-transition-call" ]
+                    "a transition's Result is the site's to decide"
+
+                Expect.equal
+                    (reviewSource "    interface IEventStore with" |> List.map _.RuleId)
+                    [ "873-implementer" ]
+                    "an implementer is reported"
 
             testCase "an equality read of .Mode is reported, never rewritten"
             <| fun () ->

@@ -200,7 +200,7 @@ type private OpenAIEmbeddingProviderImpl
                         KnowledgeEmbeddingProviderUnavailableEvent
                         payload
 
-                do! store.Write evt
+                do! EventStore.writeOrRaise store evt
             with _ ->
                 ()
     }

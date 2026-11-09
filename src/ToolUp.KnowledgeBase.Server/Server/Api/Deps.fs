@@ -43,7 +43,7 @@ type KnowledgeApiDeps = {
     UserId: UserId
     VectorScope: VectorScope
     VectorStore: IVectorStore option
-    /// Phase 115 — unified deletion/erasure seam over every retrieval
+    /// Unified deletion/erasure seam over every retrieval
     /// index the deployment composed (vector store + sparse index +
     /// embedding cache). Deletion paths route through this instead of
     /// looping `VectorStore.DeleteChunk` so a deleted document cannot
@@ -52,7 +52,7 @@ type KnowledgeApiDeps = {
     /// `composeWithRAG`).
     IndexLifecycle: ToolUp.Platform.Infra.IIndexLifecycle.IIndexLifecycle option
     EventStore: IEventStore option
-    /// Phase 14z — the composed `IEmbeddingProvider`, carried solely so
+    /// The composed `IEmbeddingProvider`, carried solely so
     /// `resetIndex` can drop the scope's embedder state alongside its
     /// chunks. Read through `ScopedEmbedding.resetScope`, which is a
     /// no-op unless the provider is scope-keyed
@@ -65,7 +65,7 @@ type KnowledgeApiDeps = {
     /// test harnesses bypassing `composeWithRAG`).
     EmbeddingProvider: IEmbeddingProvider option
     /// Optional `INarrativeStore` for cross-store reset coherence
-    /// (Phase 4b commit 2). Resolved from DI per request; `None` when
+    /// . Resolved from DI per request; `None` when
     /// the SDK has not registered an `INarrativeStore` (test harnesses
     /// bypassing the standard compose). Used by `resetIndex` to wipe
     /// persisted narrative entries for the caller's scope alongside
@@ -73,7 +73,7 @@ type KnowledgeApiDeps = {
     /// KB and `list_narratives` still returns prior entries.
     NarrativeStore: INarrativeStore option
     AccessContext: AccessContext
-    /// Per-`KnowledgeSource` original-document resolution (Phase 104).
+    /// Per-`KnowledgeSource` original-document resolution.
     /// Resolved from DI when a deployment registered a custom resolver
     /// via `withOriginalSourceResolver`; falls back to the default
     /// (UploadedFile → raw blob, Note → note.md, narrative → `None`).
@@ -114,26 +114,26 @@ type KnowledgeApiDeps = {
     /// user id, no `StorageScope`) keep `false` here but stay tenant-
     /// isolated, so they pass the guard.
     ScopeResolvedFromRequest: bool
-    /// Phase 119 — compose-time upload policy (size cap, type allowlist,
+    /// Compose-time upload policy (size cap, type allowlist,
     /// unsupported-type handling). Resolved from DI when a deployment
     /// composed `withUploadPolicy`; otherwise `KnowledgeUploadPolicy.permissive`
     /// (no caps; pre-119 behaviour modulo always-on filename sanitisation
     /// and the `UnsupportedFormat` status fix). Enforced by `uploadDocument`.
     UploadPolicy: KnowledgeUploadPolicy
-    /// Phase 14x — compose-time content-hash dedup policy. Resolved from
+    /// Compose-time content-hash dedup policy. Resolved from
     /// DI when a deployment composed `withDocumentDedup`; otherwise
     /// `KnowledgeDedupPolicy.enabled` (uploads dedup by default; the
     /// opt-out restores pre-14x behaviour byte-for-byte, GP 11).
     /// Consulted by `uploadDocument` before anything is persisted.
     DedupPolicy: KnowledgeDedupPolicy
-    /// Phase 510 — compose-time upload versioning, registered by
+    /// Compose-time upload versioning, registered by
     /// `withDocumentVersioning`; `KnowledgeVersioningPolicy.disabled`
     /// when absent, which is what every deployment that has not opted in
     /// gets. `uploadDocument` reads it before looking for a predecessor,
     /// so a deployment without it takes no extra index read at all
     /// (GP 11 / GP 13).
     VersioningPolicy: KnowledgeVersioningPolicy
-    /// Phase 105 — the versioned object store KB originals are retained
+    /// The versioned object store KB originals are retained
     /// in, present **only** when the deployment composed
     /// `withObjectStoreRetention true`.
     ///
@@ -146,30 +146,30 @@ type KnowledgeApiDeps = {
     /// makes that guarantee structural: there is no path from an
     /// un-opted-in deployment to a store write.
     DataObjectStore: IDataObjectStore option
-    /// Phase 512 — compose-time per-scope corpus quota, registered by
+    /// Compose-time per-scope corpus quota, registered by
     /// `withKnowledgeQuota`; `KnowledgeQuotaPolicy.unlimited` when absent
     /// (no tally taken, no upload refusable — pre-512 behaviour, GP 11).
     /// Enforced by `uploadDocument` and projected by `getScopeUsage`.
     QuotaPolicy: KnowledgeQuotaPolicy
-    /// Phase 512 — compose-time age-based retention, registered by
+    /// Compose-time age-based retention, registered by
     /// `withKnowledgeRetention`; `KnowledgeRetentionPolicy.retainForever`
     /// when absent. Carried on `deps` for read paths that want to report
     /// the policy; the sweep itself runs off the request path in
     /// `Server/RetentionSweep.fs` on the composed `IJobScheduler`.
     RetentionPolicy: KnowledgeRetentionPolicy
-    /// Phase 515 — the composed content scanner, registered by
+    /// The composed content scanner, registered by
     /// `withContentScanning`. `None` when the deployment composed none,
     /// which is a stronger guarantee than substituting
     /// `AllowAllContentScanner`: the upload path skips the scan branch
     /// entirely, so no digest is computed and no audit row is written —
     /// the pre-515 path byte-for-byte (GP 11 / GP 13).
     ContentScanner: IContentScanner option
-    /// Phase 515 — what the upload boundary does with a
+    /// What the upload boundary does with a
     /// `ScanUnavailable` verdict. `ContentScanPolicy.defaults`
     /// (fail-closed) when absent; unreachable on a deployment with no
     /// scanner, because a deployment with none never scans at all.
     ScanPolicy: ContentScanPolicy
-    /// Phase 525.D — the fact-disclosure egress gate, registered in DI by
+    /// The fact-disclosure egress gate, registered in DI by
     /// the fact companion's compose whenever the fact store is enabled.
     /// `ingestNarrative` refuses to commit a narrative whose Metric spans
     /// reference facts the gate denies at the `FactNarrativePublication`
@@ -178,19 +178,19 @@ type KnowledgeApiDeps = {
     /// paired with it — the request's, or the one a server-side producer
     /// committed under — never one derived from a string.
     DisclosureGate: (IFactDisclosureGate * ResolvedScope) option
-    /// Phase 511 — archive-expansion resource guards for `importBatch`,
+    /// Archive-expansion resource guards for `importBatch`,
     /// registered by `withArchiveImportPolicy`. `ArchiveImportPolicy.defaults`
     /// when absent — the one KB policy whose uncomposed default is NOT
     /// permissive, because an unguarded archive expander is not a
     /// defensible default for a new surface. Read only by `importBatch`;
     /// the single-file upload path never sees it (GP 11).
     ArchiveImportPolicy: ArchiveImportPolicy
-    /// Phase 511 — the URL-ingestion host allowlist, registered by
+    /// The URL-ingestion host allowlist, registered by
     /// `withUrlIngestion`. `UrlIngestionPolicy.disabled` when absent,
     /// whose allowlist is empty, so no URL is fetchable at all: URL
     /// ingestion is inert unless a deployment names a host.
     UrlIngestionPolicy: UrlIngestionPolicy
-    /// Phase 511 — the transport behind an allowlisted URL fetch,
+    /// The transport behind an allowlisted URL fetch,
     /// registered alongside the policy by `withUrlIngestion` (or replaced
     /// by `withUrlContentFetcher`). `None` when URL ingestion was never
     /// composed — which is redundant with the empty allowlist above, and
@@ -204,7 +204,7 @@ module KnowledgeApiDeps =
     /// Resolve all DI values + build the four local closures, given the
     /// service provider and the caller's already-extracted identity.
     ///
-    /// Phase 707 — the request-free core `resolve` now delegates to. Every
+    /// The request-free core `resolve` now delegates to. Every
     /// dependency this record holds comes from DI or from the two identity
     /// values below, so the only thing an `HttpContext` was ever supplying
     /// was those three: the provider, the resolved `StorageScope`, and the
@@ -318,10 +318,7 @@ module KnowledgeApiDeps =
         // collapsed into one namespace that retrieval served to all
         // authenticated users. `Deployment` is now reserved for genuinely
         // deployment-wide shared content only.
-        let vectorScope =
-            match StorageScope.tryTeamId scope with
-            | Some teamId -> Team teamId.Value
-            | None -> User scope.ScopeId
+        let vectorScope = VectorScope.ofContainer scope
 
         // Vector store and event store are resolved lazily — only the Notes
         // and AI-context paths need them, and tests bypassing `composeWithRAG`
@@ -331,7 +328,7 @@ module KnowledgeApiDeps =
             | :? IVectorStore as v -> Some v
             | _ -> None
 
-        // Phase 115 — the composed lifecycle seam wins (it fans out
+        // The composed lifecycle seam wins (it fans out
         // across vector store + sparse index + embedding cache).
         // Deployments with a vector store but no registered seam
         // (KB-without-RAG composition, older composition roots) get a
@@ -351,7 +348,7 @@ module KnowledgeApiDeps =
             | :? IEventStore as e -> Some e
             | _ -> None
 
-        // Phase 14z — `composeWithRAG` registers the (cache-wrapped)
+        // `composeWithRAG` registers the (cache-wrapped)
         // embedder as an `IEmbeddingProvider` singleton; the wrapper
         // forwards the scope-keyed capability, so probing the resolved
         // singleton is equivalent to probing what the operator composed.
@@ -365,7 +362,7 @@ module KnowledgeApiDeps =
             | :? INarrativeStore as n -> Some n
             | _ -> None
 
-        // Original-source resolver (Phase 104). Same probe-with-default
+        // Original-source resolver. Same probe-with-default
         // shape as the OCR / table-extractor providers above: a custom
         // resolver registered before compose wins; otherwise the
         // per-`KnowledgeSource` default applies.
@@ -379,28 +376,28 @@ module KnowledgeApiDeps =
             | :? IAuditLog as a -> Some a
             | _ -> None
 
-        // Phase 119 — upload policy registered by `withUploadPolicy`;
+        // Upload policy registered by `withUploadPolicy`;
         // the permissive default when absent (no caps, pre-119 behaviour).
         let uploadPolicy =
             match services.GetService(typeof<KnowledgeUploadPolicy>) with
             | :? KnowledgeUploadPolicy as p -> p
             | _ -> KnowledgeUploadPolicy.permissive
 
-        // Phase 14x — dedup policy registered by `withDocumentDedup`;
+        // Dedup policy registered by `withDocumentDedup`;
         // dedup enabled when absent.
         let dedupPolicy =
             match services.GetService(typeof<KnowledgeDedupPolicy>) with
             | :? KnowledgeDedupPolicy as p -> p
             | _ -> KnowledgeDedupPolicy.enabled
 
-        // Phase 510 — versioning policy registered by
+        // Versioning policy registered by
         // `withDocumentVersioning`; OFF when absent (pre-510 behaviour).
         let versioningPolicy =
             match services.GetService(typeof<KnowledgeVersioningPolicy>) with
             | :? KnowledgeVersioningPolicy as p -> p
             | _ -> KnowledgeVersioningPolicy.disabled
 
-        // Phase 105 — original retention in the versioned object store.
+        // Original retention in the versioned object store.
         // The POLICY is the gate, not the presence of a store: one is
         // registered for every composed deployment, so probing DI would
         // silently move every existing deployment's originals on
@@ -423,7 +420,7 @@ module KnowledgeApiDeps =
 
                     None
 
-        // Phase 512 — corpus quota + retention policies registered by
+        // Corpus quota + retention policies registered by
         // `withKnowledgeQuota` / `withKnowledgeRetention`; the unlimited /
         // retain-forever defaults when absent.
         let quotaPolicy =
@@ -436,7 +433,7 @@ module KnowledgeApiDeps =
             | :? KnowledgeRetentionPolicy as p -> p
             | _ -> KnowledgeRetentionPolicy.retainForever
 
-        // Phase 515 — the composed content scanner + its error policy.
+        // The composed content scanner + its error policy.
         // `None` rather than a substituted no-op: a deployment that never
         // called `withContentScanning` has no scanner singleton at all,
         // and the upload path skips the whole branch (GP 13).
@@ -450,14 +447,14 @@ module KnowledgeApiDeps =
             | :? ContentScanPolicy as p -> p
             | _ -> ContentScanPolicy.defaults
 
-        // Phase 525.D — the fact-disclosure egress gate, present exactly
+        // The fact-disclosure egress gate, present exactly
         // when the fact companion's compose registered the fact store.
         let disclosureGate =
             match services.GetService(typeof<IFactDisclosureGate>) with
             | :? IFactDisclosureGate as g -> Some(g, factScope)
             | _ -> None
 
-        // Phase 511 — bulk-import policies. The archive guards default to
+        // Bulk-import policies. The archive guards default to
         // `ArchiveImportPolicy.defaults` (real caps, not permissive — see
         // the type); URL ingestion defaults to an EMPTY allowlist, so an
         // uncomposed deployment cannot fetch anything and no transport is
@@ -489,7 +486,7 @@ module KnowledgeApiDeps =
             let status = IngestionStatus.Failed reason
             setStatus docId status
 
-            // Phase 959 — the guarded index writer, not a load-map-save: a
+            // The guarded index writer, not a load-map-save: a
             // concurrent upsert on this or another replica is not overwritten,
             // and a refused write raises `KnowledgeIndexWriteFailed`.
             do! updateIndexStatus storage scope.Container docId status

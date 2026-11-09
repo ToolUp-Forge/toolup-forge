@@ -60,6 +60,7 @@
         <Compile Include="Contracts\IDerivativeRendererContract.fs" />
         <Compile Include="Contracts\InMemoryBlobStorage.fs" />
         <Compile Include="Contracts\IVectorStoreContract.fs" />
+        <Compile Include="Contracts\IScoredRetrievalPipelineContract.fs" />
         <Compile Include="Contracts\IConditionalDataObjectStoreContract.fs" />
         <Compile Include="Contracts\IConditionalBlobStorageContract.fs" />
         <Compile Include="Contracts\IDataSubjectRequestContract.fs" />
@@ -154,6 +155,7 @@
         <Compile Include="InProcess\KnowledgeUserScopeIsolationTests.fs" />
         <Compile Include="InProcess\VectorisationHookTests.fs" />
         <Compile Include="InProcess\RagTelemetryTests.fs" />
+        <Compile Include="InProcess\VectorScopeProjectionTests.fs" />
         <Compile Include="InProcess\ExtractorTests.fs" />
         <Compile Include="InProcess\IngestionStatusStreamTests.fs" />
         <Compile Include="InProcess\ConfigValidatorAggregatorTests.fs" />

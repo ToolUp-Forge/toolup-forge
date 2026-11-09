@@ -23,6 +23,30 @@ type ModuleEvent = {
     Payload: string // JSON-serialised
 }
 
+/// Why an `IEventStore.Write` did not persist its event. A
+/// write that answers `Error` stored nothing a later read will return; a
+/// write that answers `Ok` is persisted. There is no third outcome: an
+/// implementation never completes a failed write as `Ok`.
+[<RequireQualifiedAccess>]
+type EventStoreError =
+    /// The backing store did not persist the event. `location` names what
+    /// was not written (a blob name, a row key, a stream position) and
+    /// `reason` is the backend's own account of the failure.
+    | WriteFailed of scopeId: string * eventId: Guid * location: string * reason: string
+
+module EventStoreError =
+    /// The failure as one sentence, for a log line or an exception message.
+    let describe (error: EventStoreError) : string =
+        match error with
+        | EventStoreError.WriteFailed(scopeId, eventId, location, reason) ->
+            $"event store write failed: event %O{eventId} was not persisted at `%s{location}` (scope=%s{scopeId}): %s{reason}"
+
+/// Raised by `EventStore.writeOrRaise` when a write answers `Error` — the
+/// one adapter for a caller whose failure path is already an exception
+///. The error rides the exception as data.
+exception EventStoreWriteFailed of EventStoreError with
+    override this.Message = EventStoreError.describe this.Data0
+
 /// Interface for persisting and querying module events.
 ///
 /// **Ordering contract.** Each method documents its own ordering guarantee; no
@@ -44,13 +68,12 @@ type IEventStore =
     /// implementation (per-store FIFO); `Id` and `OccurredAt` are the
     /// authoritative timestamps for downstream consumers.
     ///
-    /// **A write that did not persist RAISES (Phase 863).** The return
-    /// type carries no failure, so an implementation whose backing store
-    /// reports one as data (an `Error` result) must raise it rather than
-    /// complete: callers — the audit log's failure policy first among
-    /// them — detect a lost write by the exception, and one that
-    /// completes normally is read as persisted.
-    abstract Write: ModuleEvent -> Async<unit>
+    /// **A write that did not persist answers `Error`.** The
+    /// failure is data: an implementation whose backing store reports one
+    /// answers `EventStoreError.WriteFailed` and never completes the write
+    /// as `Ok`. A decorator propagates its inner store's `Error` unchanged
+    /// and runs its post-write hook only after an `Ok`.
+    abstract Write: ModuleEvent -> Async<Result<unit, EventStoreError>>
     /// Read all events for a given scope, reverse-chronological by
     /// `OccurredAt`. No guarantee across partitions in distributed
     /// implementations.
@@ -124,6 +147,19 @@ module Events =
         SourceModule = sourceModule
         EventType = eventType
         Payload = payload
+    }
+
+/// Writing through an `IEventStore`.
+module EventStore =
+    /// Write `evt` and raise `EventStoreWriteFailed` when the store answers
+    /// `Error`. For a caller whose failure path is already an exception (a
+    /// background loop with a handler, a request the host turns into a 500):
+    /// the failure stays visible, carried as data on the exception. A caller
+    /// that can decide on the failure matches `IEventStore.Write` instead.
+    let writeOrRaise (store: IEventStore) (evt: ModuleEvent) : Async<unit> = async {
+        match! store.Write evt with
+        | Ok() -> ()
+        | Error error -> return raise (EventStoreWriteFailed error)
     }
 
 /// Retention policy for persistent event stores. Both dimensions are

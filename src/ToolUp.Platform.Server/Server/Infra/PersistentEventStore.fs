@@ -143,25 +143,6 @@ let private readEvents (docs: BlobDocumentStore<ModuleEvent>) (logger: ILogger) 
 
 // ─── Store ───────────────────────────────────────────────────────
 
-/// Phase 863 — raised by `PersistentEventStore`'s `IEventStore.Write`
-/// when the CANONICAL event blob could not be written.
-/// `IEventStore.Write` returns `Async<unit>`, so an exception is the one
-/// channel a failed write has; before this phase the `Result` of
-/// `IBlobStorage.Upload` was discarded, and a lost write read as a
-/// success to every caller (the audit log counted it, refused on it and
-/// spilled it only if it THREW). Internal: callers catch it as any
-/// exception, which is all the audit failure policy needs, and the
-/// public surface does not move.
-type internal EventStoreWriteException(scopeId: string, blobName: string, storageError: string) =
-    inherit
-        Exception(
-            $"event store write failed: the canonical event blob `{blobName}` was not written (scope={scopeId}): {storageError}"
-        )
-
-    member _.ScopeId = scopeId
-    member _.BlobName = blobName
-    member _.StorageError = storageError
-
 /// Blob-backed `IEventStore`. One JSON blob per event, stored in the
 /// reserved `_platform` container under `events/{scopeId}/`.
 ///
@@ -378,7 +359,13 @@ type PersistentEventStore(blobStorage: IBlobStorage, retentionPolicy: EventReten
             )
 
         let evt = Events.create scopeId MaintenanceSourceModule "IndexRebuilt" payload
-        do! (this :> IEventStore).Write evt
+
+        // The indexes are rebuilt either way; a maintenance record that did
+        // not persist is reported, not raised, so the rebuild's count stands.
+        match! (this :> IEventStore).Write evt with
+        | Ok() -> ()
+        | Error error ->
+            logger.Warn $"[PersistentEventStore] event=index_rebuilt_record_failed {EventStoreError.describe error}"
 
         return events.Length
     }
@@ -448,11 +435,12 @@ type PersistentEventStore(blobStorage: IBlobStorage, retentionPolicy: EventReten
             let bytes = serialize event
             let name = blobName event
 
-            // Phase 863 — the canonical write is the event; a failed one
-            // RAISES, so the caller (the audit log's failure policy above
-            // all) sees it instead of a success.
+            // The canonical write is the event; a failed one answers
+            // `WriteFailed`, so the caller sees it as data
+            // instead of a success.
             match! blobStorage.Upload(platformContainer, name, bytes) with
-            | Error storageError -> return raise (EventStoreWriteException(event.ScopeId, name, storageError))
+            | Error storageError ->
+                return Error(EventStoreError.WriteFailed(event.ScopeId, event.Id, name, storageError))
             | Ok _ ->
                 // Index writes are best-effort — a failure here leaves
                 // canonical authoritative and surfaces as drift in
@@ -462,7 +450,7 @@ type PersistentEventStore(blobStorage: IBlobStorage, retentionPolicy: EventReten
                 with _ ->
                     ()
 
-                return ()
+                return Ok()
         }
 
         member _.ReadAll(scopeId) = async {

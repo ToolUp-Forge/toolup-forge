@@ -155,14 +155,20 @@ type QuartzJobScheduler
         // Quartz trigger on `Disable` / `Cancel` and restores it on `Enable`,
         // so the schedule and the record never disagree about whether a job
         // should fire.
-        member _.Cancel(scopeId, jobId) =
-            SchedulerPolicy.setStatus jobStore scopeId jobId Cancelled
+        member _.Cancel(scopeId, jobId) = async {
+            let! written = SchedulerPolicy.setStatus jobStore scopeId jobId Cancelled
+            return Result.mapError JobTransitionError.StoreFailed written
+        }
 
-        member _.Disable(scopeId, jobId) =
-            SchedulerPolicy.setStatus jobStore scopeId jobId Disabled
+        member _.Disable(scopeId, jobId) = async {
+            let! written = SchedulerPolicy.setStatus jobStore scopeId jobId Disabled
+            return Result.mapError JobTransitionError.StoreFailed written
+        }
 
-        member _.Enable(scopeId, jobId) =
-            SchedulerPolicy.setStatus jobStore scopeId jobId Active
+        member _.Enable(scopeId, jobId) = async {
+            let! written = SchedulerPolicy.setStatus jobStore scopeId jobId Active
+            return Result.mapError JobTransitionError.StoreFailed written
+        }
 
         member _.Get(scopeId, jobId) = jobStore.Get(scopeId, jobId)
 
@@ -230,7 +236,9 @@ type QuartzJobScheduler
                     | Error e -> return Error e
                     | Ok updated ->
                         match! Async.Catch(jobStore.Update updated) with
-                        | Choice1Of2() -> return Ok()
+                        | Choice1Of2(Ok()) -> return Ok()
+                        | Choice1Of2(Error error) ->
+                            return Error(ScopeReissueError.Failed(JobStoreError.describe error))
                         | Choice2Of2 ex -> return Error(ScopeReissueError.Failed ex.Message)
         }
 

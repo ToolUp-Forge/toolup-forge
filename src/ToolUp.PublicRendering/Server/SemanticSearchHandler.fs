@@ -20,9 +20,9 @@ open ToolUp.Platform.Infra
 // in-app AI side panel. It shares the retrieval→Narrative core with
 // `RagAnswerSource`: results are extractive (the retrieved chunk content,
 // grounded by construction) and each can deep-link into a KB-as-docs page
-// (Phase 91 `KnowledgeDocsSource`) via an opt-in per-result link builder.
+//  via an opt-in per-result link builder.
 //
-// **Rate limiting (Phase 14y).** The `/search` route is mounted on the
+// **Rate limiting.** The `/search` route is mounted on the
 // SDK's route chain, so it rides the deployment's *general* rate-limit
 // partition — exactly the posture Phase 14y documents for retrieval
 // (retrieval rides the general partition rather than a bespoke limiter).
@@ -50,7 +50,7 @@ type SemanticSearchConfig = {
     /// Minimum fused score a match must clear to be shown. Matches below
     /// this are dropped before rendering.
     MinScore: float
-    /// Application-layer query-size cap (Phase 14y). A query longer than
+    /// Application-layer query-size cap. A query longer than
     /// this is refused (`400`) rather than truncated at the provider
     /// boundary. Default 16384.
     MaxQueryChars: int
@@ -62,7 +62,7 @@ type SemanticSearchConfig = {
     /// (GP 1).
     ResultLink: (VectorMatch -> string option) option
     /// Layout to render the search page under. `None` → the declared
-    /// default layout (Phase 1039, `PublicLayouts.resolve`); a name nobody
+    /// default layout; a name nobody
     /// registered is refused at compose.
     Layout: LayoutName option
 }
@@ -199,20 +199,15 @@ module SemanticSearch =
     /// A ready-made `ResultLink` builder for the common case: deep-link a
     /// match into a `KnowledgeDocsSource` page using the KB chunk-id
     /// convention `"{docId}:chunk:{i}"` (the shape `KnowledgeApi` uploads
-    /// write). Returns `/<docsPrefix>/<docId>` when the chunk id carries a
-    /// `":chunk:"` marker; `None` otherwise. Opt-in — a deployment whose
+    /// write, `ChunkId.render`). Returns `/<docsPrefix>/<docId>` when the chunk
+    /// id parses (`ChunkId.tryParse`); `None` otherwise. Opt-in — a deployment whose
     /// chunk ids differ supplies its own `withResultLink`.
     let docsLinkByChunkId (docsPrefix: string) : VectorMatch -> string option =
         let prefix = docsPrefix.Trim('/')
 
         fun (m: VectorMatch) ->
-            let marker = ":chunk:"
-            let idx = m.ChunkId.IndexOf(marker, StringComparison.Ordinal)
-
-            if idx > 0 then
-                Some("/" + prefix + "/" + m.ChunkId.Substring(0, idx))
-            else
-                None
+            ChunkId.tryParse m.ChunkId
+            |> Option.map (fun id -> "/" + prefix + "/" + id.DocumentId)
 
 module SemanticSearchHandler =
 
@@ -286,7 +281,7 @@ module SemanticSearchHandler =
                 | _ -> AccessContext.unrestricted (AnonymousSession "anonymous")
 
             match SemanticSearch.classify config rawQuery with
-            // Phase 996 — retrieval runs under the caller's scope, and a
+            // Retrieval runs under the caller's scope, and a
             // publication reader is not an app user: it reads its
             // publications and nothing else, so search refuses it.
             | _ when AccessContext.isPublicationReader accessContext ->

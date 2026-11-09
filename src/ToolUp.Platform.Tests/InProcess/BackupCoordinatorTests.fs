@@ -120,7 +120,7 @@ let private populate (live: IBlobStorage) =
 
             for i in 1..2 do
                 do!
-                    events.Write {
+                    EventStore.writeOrRaise events {
                         Id = Guid.NewGuid()
                         OccurredAt = DateTime(2026, 9, 16, 10, 0, i, DateTimeKind.Utc)
                         ScopeId = Team

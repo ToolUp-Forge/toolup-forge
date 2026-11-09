@@ -17,6 +17,27 @@ open ToolUp.Platform.Config
 
 // ─── Public surface ──────────────────────────────────────────────
 
+/// What the webhook dispatcher could not do, as data.
+[<RequireQualifiedAccess>]
+type WebhookDispatchError =
+    /// `Dispatch` did not enqueue the event: the bounded queue was full.
+    /// The event will not be delivered to any subscription; a
+    /// `WebhookEventDropped` row records the gap.
+    | Dropped of scopeId: string * eventId: Guid * eventType: string * queueCapacity: int
+    /// One delivery attempt's delivery-log row was not written. The
+    /// delivery itself stands (the receiver has the event); the operator's
+    /// record of it is missing. `reason` is the delivery log's account.
+    | DeliveryLogWriteFailed of scopeId: string * subscriptionId: Guid * deliveryId: Guid * reason: string
+
+module WebhookDispatchError =
+    /// The error as one sentence, for a log line.
+    let describe (error: WebhookDispatchError) : string =
+        match error with
+        | WebhookDispatchError.Dropped(scopeId, eventId, eventType, capacity) ->
+            $"event %O{eventId} (%s{eventType}, scope %s{scopeId}) was dropped: the dispatch queue is full (capacity %d{capacity})"
+        | WebhookDispatchError.DeliveryLogWriteFailed(scopeId, subscriptionId, deliveryId, reason) ->
+            $"delivery %O{deliveryId} to subscription %O{subscriptionId} (scope %s{scopeId}) stands, but its delivery-log row was not written: %s{reason}"
+
 /// Server-internal dispatcher. The post-write hook installed in
 /// `compose` calls `Dispatch` for every event written to
 /// `IEventStore`; the admin UI's `IWebhookApi.TestFire` calls
@@ -24,11 +45,13 @@ open ToolUp.Platform.Config
 type IWebhookDispatcher =
     /// Enqueue an event for fan-out to every active subscription
     /// in the event's scope whose `EventTypes` filter accepts the
-    /// type. Returns immediately — actual delivery runs on the
-    /// background worker. The queue is bounded; if it's full the
-    /// event is logged and dropped (back-pressure: better to skip
-    /// than to OOM, audit will show the gap).
-    abstract Dispatch: event: ModuleEvent -> unit
+    /// type. Answers once the event is enqueued — actual delivery runs
+    /// on the background worker. The queue is bounded; when it is full
+    /// the event is not enqueued and the answer is
+    /// `WebhookDispatchError.Dropped` (back-pressure: better to skip than
+    /// to OOM), after the drop has been logged and its
+    /// `WebhookEventDropped` audit row written.
+    abstract Dispatch: event: ModuleEvent -> Async<Result<unit, WebhookDispatchError>>
 
     /// Synthesise a `WebhookTest` event and run a single delivery
     /// attempt to the named subscription. Returns the first-attempt
@@ -45,31 +68,46 @@ type IWebhookDispatcher =
 /// dispatch take effect on the same event.
 type private DispatchTask = { Event: ModuleEvent }
 
-/// Phase 1064 — record one delivery attempt in the delivery log, best
-/// effort. `IWebhookDeliveryLog.Record` answers a `Result`, and the
-/// dispatcher used to discard it (`let! _ =`), so a delivery-log write
-/// failure was invisible on every attempt. A failure is still not allowed
-/// to fail the delivery — the receiver already has the event, and the log
-/// is the operator's record of it, not the delivery — but it is now logged
-/// at Warning, carrying the `best-effort-write` marker, and counted on
-/// `failures`. Full propagation as a typed `WebhookDispatchError` is Phase
-/// 873's.
-let internal recordDeliveryBestEffort
-    (logger: ILogger)
+/// Record one delivery attempt in the delivery log. A failed write is
+/// `WebhookDispatchError.DeliveryLogWriteFailed` (Phase 1064
+/// stopped discarding it). It never fails the delivery — the receiver
+/// already has the event, and the log is the operator's record of it, not
+/// the delivery — so the delivery paths carry it to their end, where
+/// `reportDispatchErrors` logs and counts it.
+let internal recordDelivery
     (deliveryLog: IWebhookDeliveryLog)
-    (failures: int64 ref)
     (scopeId: string)
     (delivery: WebhookDelivery)
-    : Async<unit> =
+    : Async<Result<unit, WebhookDispatchError>> =
     async {
         match! deliveryLog.Record(scopeId, delivery) with
-        | Ok() -> ()
+        | Ok() -> return Ok()
         | Error reason ->
+            return
+                Error(
+                    WebhookDispatchError.DeliveryLogWriteFailed(
+                        scopeId,
+                        delivery.SubscriptionId,
+                        delivery.DeliveryId,
+                        reason
+                    )
+                )
+    }
+
+/// The one place a delivery path's `WebhookDispatchError`s end: each is
+/// logged at Warning, carrying the `best-effort-write` marker for a
+/// delivery-log row, and every delivery-log failure is counted on
+/// `failures`.
+let internal reportDispatchErrors (logger: ILogger) (failures: int64 ref) (errors: WebhookDispatchError list) =
+    for error in errors do
+        match error with
+        | WebhookDispatchError.DeliveryLogWriteFailed _ ->
             Interlocked.Increment(&failures.contents) |> ignore
 
             logger.Warn
-                $"[WebhookDispatcher] event=delivery_log_write_failed best-effort-write scope=%s{scopeId} subscription=%O{delivery.SubscriptionId} delivery=%O{delivery.DeliveryId} reason=%s{reason} — the delivery stands; its delivery-log row was not written"
-    }
+                $"[WebhookDispatcher] event=delivery_log_write_failed best-effort-write {WebhookDispatchError.describe error}"
+        | WebhookDispatchError.Dropped _ ->
+            logger.Warn $"[WebhookDispatcher] event=queue_full {WebhookDispatchError.describe error}"
 
 [<Literal>]
 let private QueueCapacity = 1024
@@ -505,26 +543,43 @@ type WebhookDispatcherService internal (deps: WebhookDeps, options: WebhookOptio
     /// host's shutdown window.
     let fanOuts = Background.DrainSet()
 
+    /// `Wait`, not `DropWrite`: under `DropWrite` a full channel's
+    /// `TryWrite` still answers `true` (it discards the item it was handed),
+    /// so `Dispatch` could never see the queue was full and a dropped event
+    /// vanished unlogged. `Dispatch` only ever calls `TryWrite`, which never
+    /// waits, so `Wait` changes nothing but the answer: `false` when full.
     let queue =
         Channel.CreateBounded<DispatchTask>(
-            BoundedChannelOptions(QueueCapacity, FullMode = BoundedChannelFullMode.DropWrite, SingleReader = true)
+            BoundedChannelOptions(QueueCapacity, FullMode = BoundedChannelFullMode.Wait, SingleReader = true)
         )
 
     /// Phase 1064 — delivery-log writes that answered `Error`.
     let deliveryLogWriteFailures = ref 0L
 
-    let recordDelivery (scopeId: string) (delivery: WebhookDelivery) =
-        recordDeliveryBestEffort logger deliveryLog deliveryLogWriteFailures scopeId delivery
+    /// Record one attempt in the delivery log, adding a row that was not
+    /// written to `errors` — the delivery path's own list, which it hands
+    /// back to `reportDispatchErrors` when it ends.
+    let recordInto (errors: ResizeArray<WebhookDispatchError>) (scopeId: string) (delivery: WebhookDelivery) = async {
+        match! recordDelivery deliveryLog scopeId delivery with
+        | Ok() -> ()
+        | Error error -> errors.Add error
+    }
 
     let emitAudit (scopeId: string) (eventType: string) (payload: 'T) = async {
+        let failed (detail: string) (ex: exn option) =
+            logger.Error(
+                $"[WebhookDispatcher] event=audit_write_failed eventType={eventType} payloadType={typeof<'T>.Name} scope={scopeId}{detail}",
+                ex
+            )
+
         try
             let evt = Events.create scopeId SourceModule eventType (toAuditJson payload)
-            do! eventStore.Write evt
+
+            match! eventStore.Write evt with
+            | Ok() -> ()
+            | Error error -> failed $": {EventStoreError.describe error}" None
         with ex ->
-            logger.Error(
-                $"[WebhookDispatcher] event=audit_write_failed eventType={eventType} payloadType={typeof<'T>.Name} scope={scopeId}",
-                Some ex
-            )
+            failed "" (Some ex)
     }
 
     /// Phase 6d.A — resolve one signing-secret VALUE from `ISecretStore`,
@@ -583,7 +638,9 @@ type WebhookDispatcherService internal (deps: WebhookDeps, options: WebhookOptio
     /// `ConsecutiveFailures`; flips the subscription to `Disabled`
     /// (and emits `WebhookSubscriptionAutoDisabled`) once
     /// `DisableAfterConsecutiveFailures` is hit.
-    let runDeliveryInner (sub: WebhookSubscription) (event: ModuleEvent) = async {
+    let runDeliveryInner (errors: ResizeArray<WebhookDispatchError>) (sub: WebhookSubscription) (event: ModuleEvent) = async {
+        let recordDelivery = recordInto errors
+
         // Phase 6d.A — resolve the signing secret(s) from ISecretStore ONCE
         // per delivery (audited), then re-derive the accepted set per
         // attempt from the resolved values so a grace window that closes
@@ -839,9 +896,15 @@ type WebhookDispatcherService internal (deps: WebhookDeps, options: WebhookOptio
     /// (re-resolution would only re-fail) and emits the standard DeliveryFailed
     /// audit; it does NOT bump ConsecutiveFailures — a platform-side block is
     /// not a receiver-health signal (mirrors the rate-limit-refused treatment).
+    ///
+    /// Answers the `WebhookDispatchError`s the delivery met on its way —
+    /// the delivery-log rows it could not write.
     let runDelivery (sub: WebhookSubscription) (event: ModuleEvent) = async {
+        let errors = ResizeArray<WebhookDispatchError>()
+        let recordDelivery = recordInto errors
+
         match WebhookUrlValidator.validate urlPolicy sub.TargetUrl with
-        | Ok() -> do! runDeliveryInner sub event
+        | Ok() -> do! runDeliveryInner errors sub event
         | Error reason ->
             let blocked =
                 sprintf "SSRF policy refused target at delivery (DNS rebinding guard): %s" reason
@@ -866,6 +929,8 @@ type WebhookDispatcherService internal (deps: WebhookDeps, options: WebhookOptio
 
             logger.Warn
                 $"[WebhookDispatcher] event=ssrf_blocked_at_delivery subscriptionId={sub.SubscriptionId} scope={sub.ScopeId}: {blocked}"
+
+        return List.ofSeq errors
     }
 
     /// Match an event against every active subscription in its scope.
@@ -882,40 +947,43 @@ type WebhookDispatcherService internal (deps: WebhookDeps, options: WebhookOptio
 
         // Run each subscription's delivery loop concurrently —
         // independent endpoints shouldn't queue behind each other.
-        do!
-            matches
-            |> List.map (fun s -> runDelivery s event)
-            |> Async.Parallel
-            |> Async.Ignore
+        let! errors = matches |> List.map (fun s -> runDelivery s event) |> Async.Parallel
+        reportDispatchErrors logger deliveryLogWriteFailures (errors |> Seq.concat |> List.ofSeq)
     }
 
     /// Phase 1064 — how many delivery-log writes have answered `Error` since
     /// the dispatcher started. Each one is also logged at Warning with the
-    /// `best-effort-write` marker.
+    /// `best-effort-write` marker (`reportDispatchErrors`).
     member internal _.DeliveryLogWriteFailures =
         Interlocked.Read(&deliveryLogWriteFailures.contents)
 
     interface IWebhookDispatcher with
-        member _.Dispatch(event) =
-            if not (queue.Writer.TryWrite { Event = event }) then
-                logger.Warn
-                    $"[WebhookDispatcher] event=queue_full capacity={QueueCapacity} eventId={event.Id} eventType={event.EventType} sourceModule={event.SourceModule} scope={event.ScopeId}: dropping event"
+        member _.Dispatch(event) = async {
+            if queue.Writer.TryWrite { Event = event } then
+                return Ok()
+            else
+                let dropped =
+                    WebhookDispatchError.Dropped(event.ScopeId, event.Id, event.EventType, QueueCapacity)
+
+                reportDispatchErrors logger deliveryLogWriteFailures [ dropped ]
 
                 // Gap audit #7 — emit a structured audit row so the
                 // gap is visible in the audit trail when operators
                 // query by subscription. Without this row, "why did
                 // subscription X miss event Y?" investigations have
                 // no signal that the queue was the cause.
-                let droppedPayload = {|
-                    EventId = event.Id
-                    EventType = event.EventType
-                    SourceModule = event.SourceModule
-                    ScopeId = event.ScopeId
-                    QueueCapacity = QueueCapacity
-                    Reason = "queue_full"
-                |}
+                do!
+                    emitAudit event.ScopeId "WebhookEventDropped" {|
+                        EventId = event.Id
+                        EventType = event.EventType
+                        SourceModule = event.SourceModule
+                        ScopeId = event.ScopeId
+                        QueueCapacity = QueueCapacity
+                        Reason = "queue_full"
+                    |}
 
-                Async.Start(emitAudit event.ScopeId "WebhookEventDropped" droppedPayload)
+                return Error dropped
+        }
 
         member _.TestFire(scopeId, subscriptionId) = async {
             match! registry.GetSubscription(scopeId, subscriptionId) with
@@ -984,8 +1052,12 @@ type WebhookDispatcherService internal (deps: WebhookDeps, options: WebhookOptio
                 // Record the test-fire row so admins see it in the log
                 // (event id None — the synthesised event isn't written
                 // to IEventStore, so there's nothing to correlate to).
+                // The fire stands whether or not its row is written, so a
+                // failed row is reported, not answered.
+                let errors = ResizeArray<WebhookDispatchError>()
+
                 do!
-                    recordDelivery sub.ScopeId {
+                    recordInto errors sub.ScopeId {
                         DeliveryId = payload.DeliveryId
                         SubscriptionId = sub.SubscriptionId
                         EventId = None
@@ -993,6 +1065,8 @@ type WebhookDispatcherService internal (deps: WebhookDeps, options: WebhookOptio
                         AttemptedAt = payload.DeliveredAt
                         Outcome = outcome
                     }
+
+                reportDispatchErrors logger deliveryLogWriteFailures (List.ofSeq errors)
 
                 let result =
                     match outcome with

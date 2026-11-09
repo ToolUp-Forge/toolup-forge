@@ -162,7 +162,7 @@ scheduler.Schedule(myJob)
 `Manual`-triggered jobs sit in the registry without an automatic fire path. Trigger explicitly:
 
 ```fsharp
-scheduler.TriggerOnce(scopeId, myJobId, userId)
+scheduler.TriggerOnce(scopeId, myJobId, UserId userId)
 ```
 
 `TriggerOnce` takes the same `scopeId` every other scheduler method does (a

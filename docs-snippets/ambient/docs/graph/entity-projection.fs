@@ -10,7 +10,7 @@ open ToolUp.Platform.EntityTypes
 module PageAmbient =
 
     type Book = {
-        Id: EntityId
+        Id: string
         Type: string
         Version: int
         Title: string
@@ -18,7 +18,7 @@ module PageAmbient =
     }
 
     type Author = {
-        Id: EntityId
+        Id: string
         Type: string
         Version: int
         Name: string

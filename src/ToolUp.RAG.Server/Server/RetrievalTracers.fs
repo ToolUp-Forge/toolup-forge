@@ -34,25 +34,12 @@ let hashQuery (input: string) =
 
     sb.ToString()
 
-/// The event-store scope id every RAG audit row for `scope` is written
-/// under: the retrieval trace and miss, the over-length-query refusal, the
-/// re-embedding run and the vacuum sweep. One spelling, so one team's RAG
-/// rows read back from one stream. A team row is keyed by the bare team id
-/// (the persisted stream key every other team audit row uses); the two
-/// shared scopes by their well-known container names.
-let internal auditScopeId (scope: VectorKnowledgeTypes.VectorScope) : string =
-    match scope with
-    | VectorKnowledgeTypes.Platform -> ScopeEnumeration.PlatformContainer
-    | VectorKnowledgeTypes.Deployment -> ScopeEnumeration.DeploymentContainer
-    | VectorKnowledgeTypes.Team teamId -> teamId
-    | VectorKnowledgeTypes.User userId -> $"user:{userId}"
-
 /// The audit scope of a retrieval caller: its team, or the platform scope
 /// for a caller with none.
 let internal callerAuditScopeId (ctx: AccessContext) : string =
     match ctx.TeamId with
-    | Some teamId -> auditScopeId (VectorKnowledgeTypes.Team teamId)
-    | None -> auditScopeId VectorKnowledgeTypes.Platform
+    | Some teamId -> VectorKnowledgeTypes.VectorScope.auditScopeId (VectorKnowledgeTypes.Team teamId)
+    | None -> VectorKnowledgeTypes.VectorScope.auditScopeId VectorKnowledgeTypes.Platform
 
 // ─── No-op tracer ─────────────────────────────────────────────────
 
@@ -86,10 +73,10 @@ type KnowledgeRetrievedPayload = {
     LatencyMs: int64
     Stages: string list
     ResultCount: int
-    /// Per-stage `(stageName, elapsedMs)` timings (Phase 122). Additive:
+    /// Per-stage `(stageName, elapsedMs)` timings. Additive:
     /// pre-122 events lack the property and old readers ignore it.
     StageTimings: (string * float) list
-    /// Query-rewrite decision (Phase 506) — one of the
+    /// Query-rewrite decision — one of the
     /// `QueryRewriteDecision` literals, or absent when no rewrite stage
     /// ran. Additive on the same terms as `StageTimings`: pre-506 events
     /// lack the property and old readers ignore it.
@@ -113,12 +100,7 @@ type KnowledgeRetrievalMissPayload = {
     TopScore: float
 }
 
-let private scopeToString (scope: VectorKnowledgeTypes.VectorScope) =
-    match scope with
-    | VectorKnowledgeTypes.Platform -> "platform"
-    | VectorKnowledgeTypes.Deployment -> "deployment"
-    | VectorKnowledgeTypes.Team teamId -> sprintf "team:%s" teamId
-    | VectorKnowledgeTypes.User userId -> sprintf "user:%s" userId
+let private scopeToString = VectorKnowledgeTypes.VectorScope.key
 
 let private traceJsonOptions = PlatformJson.options
 
@@ -159,7 +141,7 @@ type EventStoreRetrievalTracer(eventStore: IEventStore, logger: ILogger) =
                 let evt =
                     Events.create scopeId RetrievalTraceSourceModule KnowledgeRetrievedEventType (toTraceJson payload)
 
-                do! eventStore.Write evt
+                do! EventStore.writeOrRaise eventStore evt
             with ex ->
                 logger.Warn(sprintf "[RetrievalTracer] write failed: %s" ex.Message)
         }
@@ -184,7 +166,7 @@ type EventStoreRetrievalTracer(eventStore: IEventStore, logger: ILogger) =
                         KnowledgeRetrievalMissEventType
                         (toTraceJson payload)
 
-                do! eventStore.Write evt
+                do! EventStore.writeOrRaise eventStore evt
             with ex ->
                 logger.Warn(sprintf "[RetrievalTracer] miss write failed: %s" ex.Message)
         }
@@ -193,7 +175,7 @@ let createNoOp () : IRetrievalTracer = NoOpRetrievalTracer() :> _
 
 let createEventStore (eventStore: IEventStore) (logger: ILogger) : IRetrievalTracer =
     EventStoreRetrievalTracer(eventStore, logger) :> _
-// ─── Off-request-path tracer (Phase 894) ──────────────────────────
+// ─── Off-request-path tracer ──────────────────────────
 
 /// One queued tracer emission.
 [<RequireQualifiedAccess>]
@@ -201,7 +183,7 @@ type private TraceWork =
     | Trace of RetrievalTrace * AccessContext
     | Miss of RetrievalMiss * AccessContext
 
-/// Decorator that takes the trace write off the request path (Phase 894).
+/// Decorator that takes the trace write off the request path.
 /// `Trace` / `Miss` enqueue onto a bounded in-process channel and return
 /// at once; a single background loop drains the channel into `inner`. A
 /// chat turn therefore never waits on the audit write behind its trace.
@@ -293,7 +275,7 @@ type BackgroundRetrievalTracer(inner: IRetrievalTracer, capacity: int, logger: I
     interface IDisposable with
         member _.Dispose() = channel.Writer.TryComplete() |> ignore
 
-/// Phase 894 — wrap `inner` so its writes leave the request path, through
+/// Wrap `inner` so its writes leave the request path, through
 /// a bounded queue of `capacity` emissions (see `BackgroundRetrievalTracer`).
 let createBackground (inner: IRetrievalTracer) (capacity: int) (logger: ILogger) : BackgroundRetrievalTracer =
     new BackgroundRetrievalTracer(inner, capacity, logger)

@@ -139,23 +139,6 @@ type JobTriggerCatchUpPayload = {
     ScanStartedAt: DateTime
 }
 
-// ─── A status transition that could not get the job ──────────────
-
-/// The typed "busy" refusal of a status transition: the job's lease is held by
-/// an in-flight dispatch (typically sleeping in its retry backoff) and was not
-/// released within `LeasePolicy.TransitionCeiling`. Retryable: nothing was
-/// written. `IJobScheduler.Cancel` / `Disable` / `Enable` return
-/// `Async<unit>`, so the refusal is raised; the admin API (`JobApiHandler`)
-/// renders it as a retryable `Error`. A caller outside the server tier sees
-/// an `InvalidOperationException`.
-type internal JobStatusBusyException(jobId: JobId, waited: TimeSpan) =
-    inherit
-        InvalidOperationException(
-            $"Job %O{jobId} is busy: an in-flight dispatch holds its lease (waited %.0f{waited.TotalMilliseconds} ms). Nothing was changed; retry shortly."
-        )
-
-    member _.JobId = jobId
-
 /// Where the dispatch loop is: the attempt it runs next, and the error the
 /// attempt before it left (a run that succeeds after a retriable failure keeps
 /// that error as its `LastRunError`).
@@ -431,7 +414,7 @@ type InProcessJobScheduler internal (deps: SchedulerDeps, options: SchedulerOpti
     /// idiom as `AuditLog.Record` / `WebhookDispatcher.emitAudit`.
     let writeEvent (scopeId: string) (eventType: string) (payload: string) (payloadType: string) = async {
         try
-            do! eventStore.Write(Events.create scopeId JobsSourceModule eventType payload)
+            do! EventStore.writeOrRaise eventStore (Events.create scopeId JobsSourceModule eventType payload)
         with ex ->
             logger.Warn
                 $"[JobScheduler] event=write_failed eventType={eventType} payloadType={payloadType} scope=%s{scopeId}: {ex.Message}"
@@ -452,10 +435,12 @@ type InProcessJobScheduler internal (deps: SchedulerDeps, options: SchedulerOpti
 
     /// Where a run-ending transition's effects go.
     let effects: JobLifecycle.LifecycleEffects = {
-        RecordRun = store.RecordRun
+        // The lifecycle's failure path is the dispatch loop's exception
+        // handler, so a write the store refused is raised into it.
+        RecordRun = fun run -> JobStoreWrite.orRaise (store.RecordRun run)
         Emit = fun scopeId e -> writeEvent scopeId e.EventType e.Payload (e.EventType + "Payload")
         Notify = notifyDeadLetter
-        Update = store.Update
+        Update = fun job -> JobStoreWrite.orRaise (store.Update job)
     }
 
     // ─── The dispatch loop ───────────────────────────────────────
@@ -613,7 +598,7 @@ type InProcessJobScheduler internal (deps: SchedulerDeps, options: SchedulerOpti
                     Warning = None
                 }
 
-                do! store.RecordRun runningRow
+                do! JobStoreWrite.orRaise (store.RecordRun runningRow)
 
                 do!
                     emitEvent job.ScopeId "JobStarted" {
@@ -851,10 +836,11 @@ type InProcessJobScheduler internal (deps: SchedulerDeps, options: SchedulerOpti
         let! lease = tryAcquireWithin leases.TransitionCeiling (jobLockId jobId) leases.Transition
 
         match lease with
-        | None -> return raise (JobStatusBusyException(jobId, leases.TransitionCeiling))
+        | None -> return Error(JobTransitionError.Busy(scopeId, jobId, leases.TransitionCeiling))
         | Some lease ->
             try
-                do! SchedulerPolicy.setStatus store scopeId jobId status
+                let! written = SchedulerPolicy.setStatus store scopeId jobId status
+                return Result.mapError JobTransitionError.StoreFailed written
             finally
                 releaseJobLease lease
     }
@@ -1718,7 +1704,9 @@ type InProcessJobScheduler internal (deps: SchedulerDeps, options: SchedulerOpti
                         | Error e -> return Error e
                         | Ok updated ->
                             match! Async.Catch(store.Update updated) with
-                            | Choice1Of2() -> return Ok()
+                            | Choice1Of2(Ok()) -> return Ok()
+                            | Choice1Of2(Error error) ->
+                                return Error(ScopeReissueError.Failed(JobStoreError.describe error))
                             | Choice2Of2 ex -> return Error(ScopeReissueError.Failed ex.Message)
                 finally
                     releaseJobLease lease

@@ -25,6 +25,7 @@ open ToolUp.Platform.Infra.IEmbeddingProvider
 open ToolUp.Platform.Infra.IRetrievalPipeline
 open ToolUp.Platform.Infra.IRetrievalTracer
 open ToolUp.Platform.VectorKnowledgeTypes
+open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Jobs
@@ -217,7 +218,7 @@ let private auditScopeTests =
         }
 
         test "the four spellings are one" {
-            let spell = ToolUp.RAG.RetrievalTracers.auditScopeId
+            let spell = VectorScope.auditScopeId
             Expect.equal (spell team) "acme" "a team row is keyed by the persisted stream key, the bare id"
             Expect.equal (spell Platform) "_platform" "the platform scope"
             Expect.equal (spell Deployment) "_deployment" "the deployment scope, the deployment container's name"
@@ -225,5 +226,234 @@ let private auditScopeTests =
         }
     ]
 
+/// A reranker that scores every candidate by how many query words it holds.
+let private overlapReranker =
+    { new ToolUp.Platform.Infra.IReranker.IReranker with
+        member _.Name = "overlap"
+        member _.MaxBatchSize = 100
+
+        member _.Rerank query candidates = async {
+            let words = Set.ofArray (query.ToLowerInvariant().Split ' ')
+
+            return
+                candidates
+                |> List.map (fun m ->
+                    let held =
+                        m.Content.ToLowerInvariant().Split ' '
+                        |> Array.filter words.Contains
+                        |> Array.length
+
+                    { m with Score = float held })
+                |> List.sortByDescending _.Score
+        }
+    }
+
+/// A pipeline over `corpus` in one of the three compositions.
+let private composed (keywordIndex: bool) (reranker: bool) (corpus: string list) = async {
+    let storage = InMemoryBlobStorage() :> IBlobStorage
+
+    let store =
+        new ToolUp.RAG.InMemoryVectorStore.InMemoryVectorStore(storage, logger = noopLogger, flushIntervalMs = 60000)
+
+    let options = {
+        ToolUp.RAG.RetrievalPipeline.RetrievalPipelineOptions.defaults with
+            Reranker = if reranker then Some overlapReranker else None
+    }
+
+    let pipeline =
+        if keywordIndex then
+            let index =
+                new ToolUp.RAG.InMemoryBM25Index.InMemoryBM25Index(storage, flushIntervalMs = 60000)
+
+            new ToolUp.RAG.RetrievalPipeline.RetrievalPipeline(
+                store,
+                lexicalEmbedder,
+                sparseIndex = index,
+                options = options
+            )
+            :> IRetrievalPipeline
+        else
+            new ToolUp.RAG.RetrievalPipeline.RetrievalPipeline(store, lexicalEmbedder, options = options)
+            :> IRetrievalPipeline
+
+    for i, content in List.indexed corpus do
+        do!
+            pipeline.Index
+                (sprintf "c%d" i)
+                {
+                    Content = content
+                    Metadata = Map.empty
+                }
+                team
+
+    return pipeline
+}
+
+let private hitCorpus = [
+    "acme quarterly revenue rose sharply in the third quarter"
+    "the office kitchen rota for next week"
+]
+
+let private missCorpus = [
+    "the office kitchen rota for next week"
+    "parking permits renew every january"
+]
+
+let private query = "acme quarterly revenue"
+
+let private request () =
+    RetrievalRequest.create query [ team ] 5 Interleaved
+
+/// Retrieve through the scored sibling and classify the pool in its space.
+let private classify (pipeline: IRetrievalPipeline) (minScore: float option) = async {
+    let! pool = ScoredPool.retrieve RetrievalScoreSpace.Fused pipeline (request ()) teamAccess
+    let telemetry = ToolUp.RAG.RagTelemetry.RollingRagTelemetry()
+    (telemetry :> ToolUp.RAG.RagTelemetry.IScoredRagTelemetry).RecordScoredRetrieval(pool, minScore)
+    let! snapshot = (telemetry :> ToolUp.Platform.Infra.IRagTelemetry.IRagTelemetry).Snapshot()
+    return pool, snapshot
+}
+
+let private scoredPoolTests =
+    testList "Phase 1083 — the pool carries its space and the telemetry classifies by admits" [
+        testCaseAsync "each composition returns the space its scores are in, and Retrieve returns the pool's matches"
+        <| async {
+            for keywordIndex, reranker, expected in
+                [
+                    false, false, RetrievalScoreSpace.Cosine
+                    true, false, RetrievalScoreSpace.Fused
+                    true, true, RetrievalScoreSpace.Reranked
+                ] do
+                let! pipeline = composed keywordIndex reranker hitCorpus
+                let! pool = (pipeline :?> IScoredRetrievalPipeline).RetrieveScored (request ()) teamAccess
+                let! matches = pipeline.Retrieve (request ()) teamAccess
+                Expect.equal pool.Space expected (sprintf "%A" expected)
+
+                Expect.equal
+                    (pool.Matches |> List.map (fun m -> m.ChunkId, m.Score))
+                    (matches |> List.map (fun m -> m.ChunkId, m.Score))
+                    "Retrieve returns the pool's matches, scores unchanged"
+        }
+
+        testCaseAsync "dense-only: a hit corpus is a hit and a miss corpus a low-score miss, in cosine space"
+        <| async {
+            let! hitPipeline = composed false false hitCorpus
+            let! missPipeline = composed false false missCorpus
+            let! _, hit = classify hitPipeline (Some 0.3)
+            let! missPool, miss = classify missPipeline (Some 0.3)
+
+            Expect.equal hit.RetrievalHits 1 "the answering corpus clears a cosine floor"
+            Expect.equal miss.RetrievalLowScoreMisses 1 "the off-topic corpus returns chunks the floor drops"
+            Expect.isNonEmpty missPool.Matches "a low-score miss is not an empty pool"
+        }
+
+        testCaseAsync
+            "fused: the best candidate is 1.0 by construction, so a relative threshold reads a hit on both corpora"
+        <| async {
+            let! hitPipeline = composed true false hitCorpus
+            let! missPipeline = composed true false missCorpus
+            let! _, hit = classify hitPipeline (Some 0.5)
+            let! _, miss = classify missPipeline (Some 0.5)
+            Expect.equal hit.RetrievalHits 1 "a hit"
+            Expect.equal miss.RetrievalHits 1 "the fused space is relative: it has no absolute floor to miss"
+        }
+
+        testCaseAsync "reranked: the threshold is read on the reranker's own scale"
+        <| async {
+            let! hitPipeline = composed true true hitCorpus
+            let! missPipeline = composed true true missCorpus
+            let! _, hit = classify hitPipeline (Some 2.0)
+            let! _, miss = classify missPipeline (Some 2.0)
+            Expect.equal hit.RetrievalHits 1 "three query words held clear a threshold of two"
+            Expect.equal miss.RetrievalLowScoreMisses 1 "no candidate holds more than none"
+        }
+
+        testCaseAsync "an empty pool is empty, whatever the threshold"
+        <| async {
+            let telemetry = ToolUp.RAG.RagTelemetry.RollingRagTelemetry()
+
+            (telemetry :> ToolUp.RAG.RagTelemetry.IScoredRagTelemetry)
+                .RecordScoredRetrieval(ScoredPool.ofMatches RetrievalScoreSpace.Cosine [], Some 0.5)
+
+            let! snapshot = (telemetry :> ToolUp.Platform.Infra.IRagTelemetry.IRagTelemetry).Snapshot()
+            Expect.equal snapshot.RetrievalEmpties 1 "empty"
+        }
+
+        testCaseAsync "a pipeline without the scored sibling still composes and reads in the composed space"
+        <| async {
+            let! inner = composed false false hitCorpus
+
+            let plain =
+                { new IRetrievalPipeline with
+                    member _.Retrieve request context = inner.Retrieve request context
+                    member _.Index chunkId chunk scope = inner.Index chunkId chunk scope
+                    member _.DeleteByScope scope = inner.DeleteByScope scope
+                }
+
+            let! direct = inner.Retrieve (request ()) teamAccess
+            let! pool = ScoredPool.retrieve RetrievalScoreSpace.Cosine plain (request ()) teamAccess
+            Expect.equal pool.Space RetrievalScoreSpace.Cosine "the composed space"
+
+            Expect.equal (pool.Matches |> List.map _.ChunkId) (direct |> List.map _.ChunkId) "its matches unchanged"
+
+            Expect.isTrue
+                (ScoredPool.declaring RetrievalScoreSpace.Cosine plain :? IScoredRetrievalPipeline)
+                "declaring hands readers a scored pipeline"
+
+            Expect.isTrue
+                (obj.ReferenceEquals(ScoredPool.declaring RetrievalScoreSpace.Fused inner, inner))
+                "a pipeline that declares its own space keeps it"
+        }
+    ]
+
+/// The default pipeline in each composition, and a plain pipeline a
+/// composition declares a space for, held to the scored-sibling contract.
+let private scoredContractTests =
+    let subject keywordIndex reranker () = async {
+        let! pipeline = composed keywordIndex reranker hitCorpus
+
+        let subject: IScoredRetrievalPipelineContract.Subject = {
+            Pipeline = pipeline
+            Request = request ()
+            Access = teamAccess
+        }
+
+        return subject
+    }
+
+    let declared () = async {
+        let! inner = composed false false hitCorpus
+
+        let plain =
+            { new IRetrievalPipeline with
+                member _.Retrieve request context = inner.Retrieve request context
+                member _.Index chunkId chunk scope = inner.Index chunkId chunk scope
+                member _.DeleteByScope scope = inner.DeleteByScope scope
+            }
+
+        let subject: IScoredRetrievalPipelineContract.Subject = {
+            Pipeline = ScoredPool.declaring RetrievalScoreSpace.Cosine plain
+            Request = request ()
+            Access = teamAccess
+        }
+
+        return subject
+    }
+
+    testList "the scored sibling's contract" [
+        IScoredRetrievalPipelineContract.tests
+            "RetrievalPipeline (dense-only)"
+            RetrievalScoreSpace.Cosine
+            (subject false false)
+        IScoredRetrievalPipelineContract.tests
+            "RetrievalPipeline (fused)"
+            RetrievalScoreSpace.Fused
+            (subject true false)
+        IScoredRetrievalPipelineContract.tests
+            "RetrievalPipeline (reranked)"
+            RetrievalScoreSpace.Reranked
+            (subject true true)
+        IScoredRetrievalPipelineContract.tests "ScoredPool.declaring" RetrievalScoreSpace.Cosine declared
+    ]
+
 let tests =
-    testList "RAG telemetry and audit scope" [ scoreSpaceTests; auditScopeTests ]
+    testList "RAG telemetry and audit scope" [ scoreSpaceTests; auditScopeTests; scoredPoolTests; scoredContractTests ]

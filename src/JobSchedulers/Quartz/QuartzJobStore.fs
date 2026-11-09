@@ -270,11 +270,16 @@ type internal QuartzDispatchJob(context: QuartzDispatchContext) =
     let effects: JobLifecycle.LifecycleEffects = {
         RecordRun =
             fun run -> async {
-                try
-                    do! context.Store.RecordRun run
-                with ex ->
+                let failed (reason: string) =
                     context.Logger.Warn
-                        $"[QuartzJobScheduler] event=run_record_failed jobId={run.JobId} runId={run.RunId} attempt={run.Attempt}: {ex.Message}"
+                        $"[QuartzJobScheduler] event=run_record_failed jobId={run.JobId} runId={run.RunId} attempt={run.Attempt}: {reason}"
+
+                try
+                    match! context.Store.RecordRun run with
+                    | Ok() -> ()
+                    | Error error -> failed (JobStoreError.describe error)
+                with ex ->
+                    failed ex.Message
             }
         Emit = fun _ _ -> async.Return()
         Notify =
@@ -287,11 +292,16 @@ type internal QuartzDispatchJob(context: QuartzDispatchContext) =
             }
         Update =
             fun job -> async {
-                try
-                    do! context.Store.Update job
-                with ex ->
+                let failed (reason: string) =
                     context.Logger.Warn
-                        $"[QuartzJobScheduler] event=definition_update_failed jobId={job.JobId} status=%A{job.LastRunStatus}: {ex.Message}"
+                        $"[QuartzJobScheduler] event=definition_update_failed jobId={job.JobId} status=%A{job.LastRunStatus}: {reason}"
+
+                try
+                    match! context.Store.Update job with
+                    | Ok() -> ()
+                    | Error error -> failed (JobStoreError.describe error)
+                with ex ->
+                    failed ex.Message
             }
     }
 
@@ -529,14 +539,22 @@ type QuartzJobStore(inner: IJobStore, scheduler: IScheduler, logger: ILogger) =
     }
 
     interface IJobStore with
+        // The projection follows a write the inner store persisted, never
+        // one it refused.
         member _.Save definition = async {
-            do! inner.Save definition
-            do! project definition
+            match! inner.Save definition with
+            | Error _ as failed -> return failed
+            | Ok() ->
+                do! project definition
+                return Ok()
         }
 
         member _.Update definition = async {
-            do! inner.Update definition
-            do! project definition
+            match! inner.Update definition with
+            | Error _ as failed -> return failed
+            | Ok() ->
+                do! project definition
+                return Ok()
         }
 
         member _.Get(scopeId, jobId) = inner.Get(scopeId, jobId)

@@ -57,7 +57,11 @@ type private RecordingEventStore() =
     member _.Events = written |> List.ofSeq
 
     interface IEventStore with
-        member _.Write(evt) = async { written.Add evt }
+        member _.Write(evt) = async {
+            written.Add evt
+            return Ok()
+        }
+
         member _.ReadAll(scopeId) = async { return written |> Seq.filter (fun e -> e.ScopeId = scopeId) |> List.ofSeq }
 
         member _.ReadByType(scopeId, eventType) = async {
@@ -88,7 +92,11 @@ type private ReadFaultingEventStore() =
     member _.Events = written |> List.ofSeq
 
     interface IEventStore with
-        member _.Write(evt) = async { written.Add evt }
+        member _.Write(evt) = async {
+            written.Add evt
+            return Ok()
+        }
+
         member _.ReadAll(_scopeId) = async { return failwith "simulated event-store read failure" }
         member _.ReadByType(_scopeId, _eventType) = async { return failwith "simulated event-store read failure" }
         member _.ReadBySource(_scopeId, _sourceModule) = async { return failwith "simulated read failure" }
@@ -366,7 +374,9 @@ let tests =
             let legacyJson =
                 """{"UserId":"admin","TeamId":"acme","AffectedUserId":"alice","ModuleName":"reports","Permissions":"Read"}"""
 
-            (store :> IEventStore).Write(Events.create scope AuditSourceModule.value "PermissionChanged" legacyJson)
+            EventStore.writeOrRaise
+                (store :> IEventStore)
+                (Events.create scope AuditSourceModule.value "PermissionChanged" legacyJson)
             |> Async.RunSynchronously
 
             let auditLog = AuditLog.EventStoreAuditLog(store, silentLogger) :> IAuditLog
@@ -383,7 +393,9 @@ let tests =
             let legacyJson =
                 """{"UserId":"admin","TeamId":"acme","AffectedUserId":"legacy","ModuleName":"reports","Permissions":"Read"}"""
 
-            (store :> IEventStore).Write(Events.create scope AuditSourceModule.value "PermissionChanged" legacyJson)
+            EventStore.writeOrRaise
+                (store :> IEventStore)
+                (Events.create scope AuditSourceModule.value "PermissionChanged" legacyJson)
             |> Async.RunSynchronously
 
             let auditLog = AuditLog.EventStoreAuditLog(store, silentLogger) :> IAuditLog

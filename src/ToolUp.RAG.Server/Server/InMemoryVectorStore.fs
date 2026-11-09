@@ -62,12 +62,7 @@ type IndexEntry = {
     Metadata: Map<string, string>
 }
 
-let private scopeToKey (scope: VectorScope) =
-    match scope with
-    | Platform -> "platform"
-    | Deployment -> "deployment"
-    | Team teamId -> $"team:{teamId}"
-    | User userId -> $"user:{userId}"
+let private scopeToKey (scope: VectorScope) = VectorScope.key scope
 
 let private blobName (scope: VectorScope) = $"_rag/{scopeToKey scope}/index.json"
 
@@ -135,7 +130,7 @@ let internal rethrow (ex: exn) : 'a =
 /// lost across restart. `composeRAG` registers the store it constructs as an
 /// instance, which the DI container never disposes, so its
 /// `RetrievalStoreFlushService` disposes it once the host has stopped
-/// (Phase 869). A store you construct and supply yourself is yours to dispose.
+/// . A store you construct and supply yourself is yours to dispose.
 ///
 /// Suitable for deployments with up to ~50,000 chunks; for larger corpora
 /// replace with a distributed vector-database companion (Qdrant, pgvector, etc.)
@@ -147,7 +142,7 @@ type InMemoryVectorStore
         ?flushIntervalMs: int,
         ?flushChunkThreshold: int,
         ?telemetry: IRagTelemetry,
-        // Phase 14v — optional collaborators for corrupt-index observability.
+        // Optional collaborators for corrupt-index observability.
         // `auditLog` records a `KnowledgeIndexLoadFailed` event; `notifications`
         // publishes a `SystemMessage` (Error) to platform admins on first
         // observed corruption per scope. Both optional — a deployment with
@@ -180,7 +175,7 @@ type InMemoryVectorStore
 
     // Scope keys whose persisted snapshot has been read into memory.
     //
-    // Phase 726 — loadedness is tracked EXPLICITLY; it is never inferred from
+    // Loadedness is tracked EXPLICITLY; it is never inferred from
     // whether `store` currently holds anything for the scope. Emptiness is a
     // legitimate state: `DeleteByScope` leaves a scope loaded-and-EMPTY while
     // the persisted snapshot survives until the next flush, so reading "holds
@@ -387,7 +382,7 @@ type InMemoryVectorStore
                     |> ignore
             | Error reason -> do! handleCorruption scope bytes.Length reason
         | Error reason ->
-            // Phase 861 — a failed download is ABSENT only when the blob is
+            // A failed download is ABSENT only when the blob is
             // not there. One that is there but could not be read (a storage
             // fault, not a missing file) must not be taken for an empty
             // scope: this store persists a scope by writing back everything
@@ -400,7 +395,7 @@ type InMemoryVectorStore
             if present then
                 raise (RagScopeSnapshotUnreadableException(scopeToKey scope, blobName scope, reason))
 
-        // Phase 726 — mark loaded only after a COMPLETED attempt, and only
+        // Mark loaded only after a COMPLETED attempt, and only
         // here, so every load path agrees on what "loaded" means. Under the
         // fail-loud toggle `handleCorruption` raises, so a refused scope is
         // never marked and every subsequent read re-attempts and re-refuses;
@@ -410,7 +405,7 @@ type InMemoryVectorStore
         loadedScopes[scopeToKey scope] <- 0uy
     }
 
-    // Phase 861 — cold loads are single-flight. Without it, a mutation that
+    // Cold loads are single-flight. Without it, a mutation that
     // lands between a concurrent load's `Download` and its replay into
     // `store` is overwritten by the snapshot's older copy of the same chunk.
     // Loads happen once per scope per process, so one gate costs nothing.
@@ -425,7 +420,7 @@ type InMemoryVectorStore
     /// so one uniform lookup answers for every scope and there is no second
     /// place encoding which scopes are lazy.
     ///
-    /// Phase 861 — EVERY mutating member calls this first, so a mutation
+    /// EVERY mutating member calls this first, so a mutation
     /// never lands on an un-hydrated scope (whose flush would replace the
     /// persisted corpus). It raises `RagScopeSnapshotUnreadableException`
     /// when the snapshot exists but cannot be read.
@@ -485,17 +480,7 @@ type InMemoryVectorStore
     let isTombstoned (chunk: TextChunk) =
         chunk.Metadata.ContainsKey ChunkMetadata.DeletedAtKey
 
-    let scopeFromKey (sk: string) =
-        if sk = "platform" then
-            Platform
-        elif sk = "deployment" then
-            Deployment
-        elif sk.StartsWith "user:" then
-            User(sk.Substring("user:".Length))
-        else
-            Team(sk.Substring("team:".Length))
-
-    /// Phase 861 — the scope key a persisted index blob belongs to, for
+    /// The scope key a persisted index blob belongs to, for
     /// `ListScopes`: `_rag/{scopeKey}/index.json`, and only a key this store
     /// writes (the BM25 and HNSW snapshots under the same prefix are other
     /// files and never match).
@@ -506,20 +491,14 @@ type InMemoryVectorStore
         if name.StartsWith prefix && name.EndsWith suffix then
             let key = name.Substring(prefix.Length, name.Length - prefix.Length - suffix.Length)
 
-            if
-                not (key.Contains "/")
-                && (key = "platform"
-                    || key = "deployment"
-                    || key.StartsWith "team:"
-                    || key.StartsWith "user:")
-            then
+            if not (key.Contains "/") && (VectorScope.tryOfKey key).IsSome then
                 Some key
             else
                 None
         else
             None
 
-    /// Phase 963 — the index is this process's in-memory map; each replica
+    /// The index is this process's in-memory map; each replica
     /// holds its own (flushed to blob storage, but searched from memory).
     interface IVectorStoreLocality with
         member _.IndexLocality = Some VectorIndexLocality.InProcess
@@ -527,7 +506,7 @@ type InMemoryVectorStore
     interface IVectorStore with
 
         member _.Upsert scope chunkId vector chunk = async {
-            // Phase 861 — hydrate first. An upload that is the first thing a
+            // Hydrate first. An upload that is the first thing a
             // restarted process does to a lazily-loaded scope would otherwise
             // land on an empty map, and the next flush would replace the
             // persisted corpus with just the new document's chunks.
@@ -587,7 +566,8 @@ type InMemoryVectorStore
                     ChunkId = cid
                     Content = chunk.Content
                     Score = score
-                    Scope = scopeFromKey sk
+                    // Every key in `store` was written by `VectorScope.key`.
+                    Scope = (VectorScope.tryOfKey sk).Value
                     Metadata = chunk.Metadata
                 })
                 |> Seq.toList
@@ -619,7 +599,7 @@ type InMemoryVectorStore
         }
 
         member _.DeleteByScope scope = async {
-            // Phase 726 — hydrate BEFORE deleting. A wipe issued on a fresh
+            // Hydrate BEFORE deleting. A wipe issued on a fresh
             // process before anything has read this scope would otherwise
             // remove nothing from an unloaded (empty) map, leave the scope
             // unloaded, and let the very next read bring the whole persisted
@@ -640,7 +620,7 @@ type InMemoryVectorStore
             // is the path that hard-removes tombstoned entries past their
             // retention window.
             //
-            // Phase 726 — hydrate first, for the same reason `DeleteByScope`
+            // Hydrate first, for the same reason `DeleteByScope`
             // does: a tombstone written before this scope has ever been read
             // would find no entry to stamp, report success, and leave the
             // chunk in the snapshot to reappear on the next read.
@@ -663,7 +643,7 @@ type InMemoryVectorStore
         }
 
         member _.RestoreChunk scope chunkId = async {
-            // Phase 861 — hydrate first: a restore issued before any read of
+            // Hydrate first: a restore issued before any read of
             // this scope would find no tombstone to lift and silently no-op.
             do! ensureScopeLoaded scope
             let key = makeKey scope chunkId
@@ -682,7 +662,7 @@ type InMemoryVectorStore
         }
 
         member _.Vacuum scope olderThan = async {
-            // Phase 861 — hydrate first: an un-hydrated scope purges nothing
+            // Hydrate first: an un-hydrated scope purges nothing
             // and reports zero while the tombstones stay at rest.
             do! ensureScopeLoaded scope
             let scopeKey = scopeToKey scope
@@ -715,7 +695,7 @@ type InMemoryVectorStore
         }
 
         member _.ListScopes() = async {
-            // Phase 861 — persisted scopes too, not only the ones this process
+            // Persisted scopes too, not only the ones this process
             // has loaded: after a restart a cold scope holds nothing in memory
             // yet, and a re-embed sweep driven from this list would skip it.
             // A LOADED scope answers from memory (so a wipe not yet flushed is
@@ -729,11 +709,15 @@ type InMemoryVectorStore
 
             let inMemory = store.Keys |> Seq.map fst
 
-            return Seq.append inMemory cold |> Seq.distinct |> Seq.map scopeFromKey |> Seq.toList
+            return
+                Seq.append inMemory cold
+                |> Seq.distinct
+                |> Seq.choose VectorScope.tryOfKey
+                |> Seq.toList
         }
 
         member this.Erase(scope, subjectUserId, policy, dryRun) = async {
-            // Phase 861 — an unreadable snapshot surfaces as the interface's
+            // An unreadable snapshot surfaces as the interface's
             // own typed failure rather than an exception out of the erasure
             // fan-out; the orchestrator retries `StoreUnreachable`.
             match!

@@ -446,9 +446,11 @@ let private webhookArm (mode: FailureMode) =
                 message.Contains "event=dispatch_unhandled"
                 && message.Contains(sprintf "eventId=%O" event.Id))
 
-        (dispatcher :> WebhookDispatcher.IWebhookDispatcher).Dispatch first
+        let! dispatchedFirst = (dispatcher :> WebhookDispatcher.IWebhookDispatcher).Dispatch first
+        Expect.isOk dispatchedFirst "the first event is enqueued"
         let! firstLogged = settleOn 60 (unhandledFor first)
-        (dispatcher :> WebhookDispatcher.IWebhookDispatcher).Dispatch second
+        let! dispatchedSecond = (dispatcher :> WebhookDispatcher.IWebhookDispatcher).Dispatch second
+        Expect.isOk dispatchedSecond "the second event is enqueued"
         let! secondLogged = settleOn 60 (unhandledFor second)
 
         use stopWindow = new CancellationTokenSource(TimeSpan.FromSeconds 10.0)

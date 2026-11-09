@@ -124,7 +124,7 @@ type JobSchedulerBuildOrchestrator(scheduler: IJobScheduler, eventStore: IEventS
             let evt =
                 Events.create BuildScopeId BuildSourceModule eventType (Json.serialize payload)
 
-            do! eventStore.Write evt
+            do! EventStore.writeOrRaise eventStore evt
         with ex ->
             logger.Warn $"[BuildOrchestrator] event=write_failed eventType={eventType}: {ex.Message}"
     }
@@ -389,7 +389,14 @@ type JobSchedulerBuildOrchestrator(scheduler: IJobScheduler, eventStore: IEventS
                         builds[buildId] <- cancelled
 
                         match jobByBuild.TryGetValue buildId with
-                        | true, jobId -> do! scheduler.Cancel(BuildScopeId, jobId)
+                        | true, jobId ->
+                            // The build is cancelled either way; a job that
+                            // could not be cancelled is reported.
+                            match! scheduler.Cancel(BuildScopeId, jobId) with
+                            | Ok() -> ()
+                            | Error error ->
+                                logger.Warn
+                                    $"[BuildOrchestrator] event=job_cancel_failed buildId={buildId} jobId={jobId}: {JobTransitionError.message error}"
                         | _ -> ()
 
                         do!

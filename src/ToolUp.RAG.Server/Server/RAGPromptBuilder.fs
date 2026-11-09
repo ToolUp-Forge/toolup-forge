@@ -19,9 +19,9 @@ open ToolUp.Platform.Compose
 /// thin / noisy / off-topic for the queries it's getting.
 let private MissThreshold = 2
 
-// ─── Tool-aware framing (Phase 14r) ──────────────────────────────
+// ─── Tool-aware framing ──────────────────────────────
 
-/// Phase 14r — a compact, request-independent summary of the tools
+/// A compact, request-independent summary of the tools
 /// available to the assistant, derived once at compose time from the
 /// deployment's registered tool list. Drives tool-aware retrieval
 /// framing: when the deployment has live-interface tools loaded, the
@@ -47,7 +47,7 @@ module ToolFraming =
 
     /// A tool counts as a "live-interface" tool when it reads or drives
     /// the user's on-screen module state. Two triggers, both typed
-    /// (Phase 538):
+    /// :
     ///
     ///  * `IsLiveInterface = true` — the tool *declares* the capability.
     ///    This is the provider-agnostic opt-in: a host adapter, a
@@ -68,7 +68,7 @@ module ToolFraming =
     /// server-resident tool that merely happened to carry the prefix
     /// wrongly tripped it. The flag replaces it; no name is inspected.
     ///
-    /// Phase 860 — the predicate itself is `CompositionManifest.isLiveInterfaceTool`,
+    /// The predicate itself is `CompositionManifest.isLiveInterfaceTool`,
     /// so the composition manifest's `LiveInterfaceTools` and this framing
     /// share one definition rather than two that happen to agree.
     let private isLiveUiTool (def: AIToolDefinition) : bool =
@@ -150,7 +150,7 @@ let private formatMatch (index: int) (m: VectorMatch) =
 
     $"{header}\n{m.Content}"
 
-// ─── Fact-first framing (Phase 522) ───────────────────────────────
+// ─── Fact-first framing ───────────────────────────────
 
 /// Whether a match is a resolved fact (the pre-vector stage stamped
 /// `_origin = "Fact"`) rather than a similarity chunk.
@@ -202,7 +202,7 @@ let private snippet (charLimit: int) (content: string) =
 /// client renders in its Sources panel. `_source` carries provenance; the
 /// `_origin` and `_locationHint` metadata flags are stamped by the chunk
 /// producer so retrieval doesn't have to parse the structured `_source`
-/// JSON for either field. `_originalRef` (Phase 103) carries the
+/// JSON for either field. `_originalRef` carries the
 /// producer-stamped `OriginalDocumentRef` — a `ToolUp.Platform` type, so
 /// it deserialises here directly with no producer compile-time edge;
 /// chunks without the key (notes, narratives, pre-Phase-103 ingests)
@@ -223,7 +223,7 @@ let toRetrievedSource (charLimit: int) (m: VectorMatch) : RetrievedSource =
         m.Metadata.TryFind ChunkMetadata.OriginalRefKey
         |> Option.bind tryDeserialise<OriginalDocumentRef>
 
-    // Phase 522.C — fact-origin matches carry their id / rendering /
+    // Fact-origin matches carry their id / rendering /
     // freshness / supersession pointer in metadata (stamped by the
     // pre-vector fact-resolution stage). Project them onto the fact
     // fields; a non-fact source leaves every fact field `None`.
@@ -240,7 +240,7 @@ let toRetrievedSource (charLimit: int) (m: VectorMatch) : RetrievedSource =
 
     let factSupersededBy = m.Metadata.TryFind ChunkMetadata.FactSupersededByKey
 
-    // Phase 505 — the chunk producer stamps the source character span it
+    // The chunk producer stamps the source character span it
     // derived the chunk from. Three things can go wrong on the way here and
     // all three land in the same place: the key is absent (a producer that
     // does not know its offsets, or a pre-505 ingest), the JSON does not
@@ -296,7 +296,7 @@ let toRetrievedSource (charLimit: int) (m: VectorMatch) : RetrievedSource =
 
 // ─── Retrieval builder ────────────────────────────────────────────
 
-/// Phase 14r — the message injected when knowledge-base retrieval found
+/// The message injected when knowledge-base retrieval found
 /// nothing for the turn. With no live-interface tools the wording is the
 /// historical neutral one (byte-identical — a no-UI-tools deployment sees
 /// no change). When the deployment *does* have live-interface tools, the
@@ -340,14 +340,14 @@ let private emptyRetrievalMessage (toolFraming: ToolFraming) : string =
 ///   admins can spot teams whose KB is too thin for their queries without
 ///   sampling individual conversations.
 ///
-/// Phase 14r — `toolFraming` makes the empty-retrieval message tool-aware:
+/// `toolFraming` makes the empty-retrieval message tool-aware:
 /// when the deployment has live-interface tools loaded, a knowledge-base
 /// miss redirects the model to the interface inspection tool instead of
 /// framing the miss as a dead end (see `emptyRetrievalMessage`). Pass
 /// `ToolFraming.none` (as the back-compat `withRetrieval` wrapper does) for
 /// the historical knowledge-base-first empty message.
 ///
-/// Phase 708 — `clausePlanner` is the fact-clause feeder. See
+/// `clausePlanner` is the fact-clause feeder. See
 /// `withRetrievalPlanned` below, which this delegates to with no planner;
 /// the behaviour of this entry point is byte-identical to its pre-708 self.
 let rec withRetrievalToolAware
@@ -423,16 +423,16 @@ and withRetrievalPlanned
                 | Some teamId -> [ Platform; Deployment; Team teamId ]
                 | None -> [ Platform; Deployment; User ctx.Access.UserId ]
 
-            // Phase 708 — the fact-clause feeder. Runs BEFORE the request
+            // The fact-clause feeder. Runs BEFORE the request
             // is built, because its whole output is one field on it.
             //
             // The scope handed to the planner is the one the platform's
-            // scope resolution minted for this request (Phase 821) — never
+            // scope resolution minted for this request — never
             // one derived here from `Access`. The planner resolves and gates
             // under it through the fact tier's `ResolvedScope` members, so a
             // pushed clause was resolved in the shard the request resolved
             // to. `principal` is the acting user, so the planner's
-            // disclosure gate (Phase 525) judges under the same identity
+            // disclosure gate judges under the same identity
             // the pipeline's egress door will.
             let! planned =
                 match clausePlanner with
@@ -491,7 +491,7 @@ and withRetrievalPlanned
             let request = {
                 RetrievalRequest.create query scopes defaults.TopK defaults.Merge with
                     OriginFilter = defaults.OriginFilter
-                    // Phase 708 — the clause the planner produced, or
+                    // The clause the planner produced, or
                     // `None` on every turn that planned nothing, which is
                     // byte-identical to every request built before 708.
                     //
@@ -505,11 +505,11 @@ and withRetrievalPlanned
                     // budgeting work that owns how much fact material a
                     // turn may carry at all.
                     FactClause = List.tryHead planned.Clauses
-                    // Phase 820 — the fact stage reads in the scope the
+                    // The fact stage reads in the scope the
                     // platform minted for this request (the one the fact
                     // tools read), never one derived from `ctx.Access`.
                     FactScope = ctx.Scope
-                    // Phase 502.D — the metadata-equality scope for this
+                    // The metadata-equality scope for this
                     // turn. This is the wiring that makes `Filters` reachable
                     // from the prompt path at all: 502.A taught the default
                     // pipeline to HONOUR the field, but this builder
@@ -525,7 +525,7 @@ and withRetrievalPlanned
                     // is byte-identical to its pre-502.D request (GP 11).
                     Filters = RetrievalDefaults.mergeFilters defaults.Filters ctx.RetrievalFilters
                     ActiveModule = ctx.ActiveModule
-                    // Phase 506 — the prior turns, forwarded so a composed
+                    // The prior turns, forwarded so a composed
                     // `IQueryRewriter` can resolve a follow-up query against
                     // them. This is the wiring that makes `History` a live
                     // field rather than a documented one: before 506 nothing
@@ -543,9 +543,18 @@ and withRetrievalPlanned
                         | turns -> Some turns
             }
 
-            let! rawMatches = pipeline.Retrieve request ctx.Access
+            // The pool carries the space its scores are in; a pipeline that
+            // declares none is read in the default composition's space.
+            let! pool =
+                ScoredPool.retrieve
+                    (RetrievalPipeline.RetrievalScoreSpace.ofComposition true false)
+                    pipeline
+                    request
+                    ctx.Access
 
-            // Phase 522 — split resolved facts from similarity chunks. Facts
+            let rawMatches = pool.Matches
+
+            // Split resolved facts from similarity chunks. Facts
             // lead the result set (the pipeline merged them ahead); they are
             // exact hits, so the MinScore gate and the KB miss/telemetry
             // classification below apply to CHUNKS only — a fact must never
@@ -555,16 +564,10 @@ and withRetrievalPlanned
             // Apply MinScore filter to chunks: a deployment that wants to
             // refuse weak matches drops them here so neither the prompt nor
             // the Sources panel surfaces them — keeps the model and the user
-            // aligned. Phase 866 — the threshold is read in the space the
-            // default pipeline declares on its trace (`ScoreSpace:<space>`):
-            // cosine when dense-only, and the fused score normalised onto
-            // [0, 1] within the pool when a keyword index is composed (the
-            // default). Before 866 the fused score was raw RRF, topping out
-            // at 2/61, so any threshold above ~0.033 dropped every chunk.
+            // aligned. The threshold is read in the space the pool declares.
             let chunks =
-                match defaults.MinScore with
-                | None -> rawChunks
-                | Some threshold -> rawChunks |> List.filter (fun m -> m.Score > threshold)
+                rawChunks
+                |> List.filter (fun m -> RetrievalScoreSpace.admits pool.Space defaults.MinScore m.Score)
 
             let rawTop =
                 match rawChunks with
@@ -573,14 +576,15 @@ and withRetrievalPlanned
 
             let threshold = defaults.MinScore |> Option.defaultValue 0.0
 
-            // Telemetry classifies hit / low-score-miss / empty against the
-            // *raw* top score — passing the raw top through preserves the
-            // distinction between "pipeline returned nothing" (Empty) and
-            // "pipeline returned weak matches the threshold dropped"
-            // (LowScoreMiss). The post-filter `matches.Length` then tells
-            // the consumer how many actually reached the model.
+            // Telemetry classifies hit / low-score-miss / empty. A scored
+            // recorder reads the chunk pool in its own space, so "returned
+            // nothing" (Empty) and "returned only chunks the gate drops"
+            // (LowScoreMiss) stay distinct; a plain recorder gets the raw
+            // top score and the count that reached the model.
             match telemetry with
             | None -> ()
+            | Some(:? RagTelemetry.IScoredRagTelemetry as scored) ->
+                scored.RecordScoredRetrieval({ pool with Matches = rawChunks }, defaults.MinScore)
             | Some t -> t.RecordRetrieval(rawTop, chunks.Length, threshold)
 
             // Miss diagnostic: fewer than `MissThreshold` chunks surviving

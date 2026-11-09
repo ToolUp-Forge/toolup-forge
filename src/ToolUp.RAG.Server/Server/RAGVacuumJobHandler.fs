@@ -21,7 +21,7 @@ open ToolUp.Platform.Compose
 // via `RagOptions.withVacuumSchedule`.
 //
 // **Why this exists.** `IVectorStore.DeleteChunk` is a tombstone write
-// (Phase 14h) — it stamps `_deletedAt` and keeps the entry so
+//  — it stamps `_deletedAt` and keeps the entry so
 // `RestoreChunk` can un-delete within the retention window. `Vacuum`
 // hard-removes tombstones past the window, but until this phase it was
 // only ever driven by an operator's own admin path. A long-running
@@ -67,21 +67,6 @@ type RAGVacuumDeps = {
     Logger: ILogger
 }
 
-/// Descriptive scope key for the audit payload — matches the
-/// `InMemoryBM25Index` / vector-store convention (`platform`,
-/// `deployment`, `team:{id}`).
-let private scopeKey (scope: VectorScope) =
-    match scope with
-    | Platform -> "platform"
-    | Deployment -> "deployment"
-    | Team teamId -> $"team:{teamId}"
-    | User userId -> $"user:{userId}"
-
-/// Audit routing scope id — where the `KnowledgeVacuumCompleted` event
-/// lands so it is queryable in the same stream as the scope's other RAG
-/// rows (`RetrievalTracers.auditScopeId`).
-let private auditScopeId = ToolUp.RAG.RetrievalTracers.auditScopeId
-
 let private utf8Len (s: string) =
     if isNull s then 0 else Encoding.UTF8.GetByteCount s
 
@@ -125,10 +110,10 @@ type RAGVacuumJobHandler(deps: RAGVacuumDeps) =
                             ToolUp.RAG.IngestionService.Outcome.emitAudit
                                 deps.EventStore
                                 deps.Logger
-                                (auditScopeId scope)
+                                (VectorScope.auditScopeId scope)
                                 "KnowledgeVacuumCompleted"
                                 {|
-                                    ScopeKey = scopeKey scope
+                                    ScopeKey = VectorScope.key scope
                                     ChunksRemoved = removed
                                     BytesReclaimed = bytesReclaimed
                                     DurationMs = sw.ElapsedMilliseconds
@@ -137,7 +122,7 @@ type RAGVacuumJobHandler(deps: RAGVacuumDeps) =
                         deps.Logger.Info(
                             sprintf
                                 "[RAGVacuumJobHandler] scope=%s purged %d tombstoned chunk(s), ~%d bytes reclaimed in %dms."
-                                (scopeKey scope)
+                                (VectorScope.key scope)
                                 removed
                                 bytesReclaimed
                                 sw.ElapsedMilliseconds

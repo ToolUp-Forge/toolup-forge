@@ -27,7 +27,7 @@ let private sha256Hex (bytes: byte[]) : string =
 /// Fake event store answering ReadBySource from a fixed map.
 type private FakeEventStore(bySource: Map<string, ModuleEvent list>) =
     interface IEventStore with
-        member _.Write _ = async { return () }
+        member _.Write _ = async { return Ok() }
         member _.ReadAll _ = async { return [] }
         member _.ReadByType(_, _) = async { return [] }
 

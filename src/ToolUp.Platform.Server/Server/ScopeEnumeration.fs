@@ -93,7 +93,7 @@ module ScopeEnumeration =
     /// The deployment-wide container used by deployment-scoped
     /// substrate.
     [<Literal>]
-    let DeploymentContainer = "_deployment"
+    let DeploymentContainer = VectorKnowledgeTypes.VectorScope.DeploymentContainer
 
     /// The two well-known containers every deployment may hold
     /// regardless of its team model. Included by `fromTeamStore` because
@@ -201,7 +201,7 @@ type IIngestionRecoverySurface =
     abstract MarkInterrupted: scope: string * documentId: string * reason: string -> Async<unit>
 
 /// The one restart-recovery sweep implementation, shared by every
-/// ingestion-status surface (Phase 723.D).
+/// ingestion-status surface.
 module IngestionRecoverySweep =
 
     /// The reason written onto every document the sweep marks. One

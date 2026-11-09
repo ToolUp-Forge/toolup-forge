@@ -135,7 +135,7 @@ type DefaultDeployPipeline
             let evt =
                 Events.create DeployScopeId DeploySourceModule DeployStateChangedEventType (Json.serialize summary)
 
-            do! eventStore.Write evt
+            do! EventStore.writeOrRaise eventStore evt
         with ex ->
             logger.Warn $"[DeployPipeline] event=write_failed deployId={summary.DeployId}: {ex.Message}"
     }
@@ -149,7 +149,7 @@ type DefaultDeployPipeline
                     DeployRecordSealedEventType
                     (Json.serialize signedRecord)
 
-            do! eventStore.Write evt
+            do! EventStore.writeOrRaise eventStore evt
         with ex ->
             logger.Warn
                 $"[DeployPipeline] event=record_write_failed deployId={signedRecord.Record.DeployId}: {ex.Message}"

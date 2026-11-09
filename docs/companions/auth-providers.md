@@ -809,7 +809,7 @@ type MyAuthProvider(config: MyAuthConfig) =
             match validateToken token with
             | Ok claims ->
                 return {
-                    UserId = claims.Subject
+                    UserId = UserId claims.Subject
                     DisplayName = claims.Name
                     Email = claims.Email
                     TenantId = None
