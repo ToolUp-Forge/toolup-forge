@@ -113,7 +113,7 @@ module InMemoryRenderCache =
 /// address `…/team-A/…` blobs — it cannot name team B's blob.
 type BlobRenderCache(blobStorage: IBlobStorage, container: string) =
 
-    static let jsonOptions = FableConverters.create ()
+    static let jsonOptions = PlatformJson.options
 
     let escape (s: string) = Uri.EscapeDataString s
 
