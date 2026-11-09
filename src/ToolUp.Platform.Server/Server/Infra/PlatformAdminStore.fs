@@ -247,28 +247,18 @@ let bootstrap
         match target with
         | None -> ()
         | Some(trimmed, source, isDevFallback) ->
-            let! existing = async {
-                try
-                    let! admins = store.ListPlatformAdmins()
-                    return Ok admins
-                with DocumentUnavailableException error ->
-                    return Error(BlobMapStoreError.describe error)
-            }
+            // An unreadable list raises `DocumentUnavailableException` here
+            // rather than reading as empty: bootstrapping over it would
+            // replace every admin with the target, so the fault refuses the
+            // boot (the composition root turns a raised bootstrap into a
+            // preflight refusal).
+            let! existing = store.ListPlatformAdmins()
 
             match existing with
-            | Error reason ->
-                // An unreadable list is not an empty one: bootstrapping over
-                // it would replace every admin with the bootstrap target.
-                logger.Error(
-                    sprintf
-                        "[PlatformAdmin] Bootstrap skipped: the admin list could not be read (%s). Nothing was assigned."
-                        reason,
-                    None
-                )
-            | Ok existing when not (List.isEmpty existing) ->
+            | existing when not (List.isEmpty existing) ->
                 // Already-populated — bootstrap is one-shot. No-op.
                 ()
-            | Ok _ ->
+            | _ ->
                 let! result = store.AssignPlatformAdmin(UserId bootstrapActor, UserId trimmed)
 
                 match result with
