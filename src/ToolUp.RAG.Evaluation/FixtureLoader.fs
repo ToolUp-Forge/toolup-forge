@@ -13,7 +13,7 @@ open ToolUp.Platform.Compose
 // explicitly below so fixtures stay readable alongside `EventStoreRetrievalTracer`
 // payloads without going through a DU converter.
 
-let private jsonOptions = FableConverters.create ()
+let private jsonOptions = PlatformJson.options
 
 [<CLIMutable>]
 type JsonCorpusEntry = {
