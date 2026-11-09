@@ -22,7 +22,7 @@ open ToolUp.Platform.Jobs.WebhookDispatcher
 /// alerting use case.
 ///
 /// `Dispatch` never waits for delivery — the underlying queue is bounded
-/// with `BoundedChannelFullMode.DropWrite`, so a saturated dispatcher
+/// and written with a non-waiting `TryWrite`, so a saturated dispatcher
 /// answers `Dropped` (and records the drop) rather than back-pressuring
 /// the caller. A write the inner store refused is never dispatched.
 /// Phase 9u — position 200 in the canonical chain: outside the audit

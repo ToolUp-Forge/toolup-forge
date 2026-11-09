@@ -1,0 +1,32 @@
+module Server.Infrastructure
+
+open ToolUp.Platform
+open ToolUp.Platform.Jobs
+
+let record (eventStore: IEventStore) evt = async {
+    do! eventStore.Write evt
+}
+
+let save (jobStore: IJobStore) job = async {
+    do! jobStore.Save job
+}
+
+let retire (scheduler: IJobScheduler) scopeId jobId = async {
+    do! scheduler.Cancel(scopeId, jobId)
+}
+
+let persist (store: IEventStore) (e: ModuleEvent) = async {
+    let! written = store.Write(e)
+    return written
+}
+
+let update (store: IJobStore) job = async {
+    do! store.Update job
+}
+
+type Recorder() =
+    interface IEventStore with
+        member _.Write(evt) = async { return Ok() }
+
+type Retirer() =
+    member _.Cancel(scopeId, jobId) = async { return Ok() }

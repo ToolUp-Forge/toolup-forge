@@ -543,9 +543,14 @@ type WebhookDispatcherService internal (deps: WebhookDeps, options: WebhookOptio
     /// host's shutdown window.
     let fanOuts = Background.DrainSet()
 
+    /// `Wait`, not `DropWrite`: under `DropWrite` a full channel's
+    /// `TryWrite` still answers `true` (it discards the item it was handed),
+    /// so `Dispatch` could never see the queue was full and a dropped event
+    /// vanished unlogged. `Dispatch` only ever calls `TryWrite`, which never
+    /// waits, so `Wait` changes nothing but the answer: `false` when full.
     let queue =
         Channel.CreateBounded<DispatchTask>(
-            BoundedChannelOptions(QueueCapacity, FullMode = BoundedChannelFullMode.DropWrite, SingleReader = true)
+            BoundedChannelOptions(QueueCapacity, FullMode = BoundedChannelFullMode.Wait, SingleReader = true)
         )
 
     /// Phase 1064 — delivery-log writes that answered `Error`.
