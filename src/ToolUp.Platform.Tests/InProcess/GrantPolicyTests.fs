@@ -72,6 +72,23 @@ type private RecordingAuditLog() =
 
         member _.GetAuditTrail(_, _, _) = async { return [] }
 
+/// Phase 1062 — an inner store whose document cannot be read. Before the
+/// phase its read RAISED (`PermissionStoreUnavailableException`), and the
+/// raise travelled through the decorator and out of `grantModuleAccess`
+/// past the classification of its `Result`.
+type private UnreadablePermissionStore() =
+    static member Fault =
+        PermissionStoreUnavailableException "pinned: the permission document is unreadable"
+
+    interface IPermissionStore with
+        member _.GetTeamPermissions _ = async { return raise UnreadablePermissionStore.Fault }
+        member _.SetTeamPermissions(_, _) = async { return raise UnreadablePermissionStore.Fault }
+        member _.GetEffectivePermissions(_, _) = async { return raise UnreadablePermissionStore.Fault }
+        member _.SetMemberPermissions(_, _, _, _) = async { return raise UnreadablePermissionStore.Fault }
+        member _.SetTeamDefaults(_, _) = async { return raise UnreadablePermissionStore.Fault }
+        member _.GetModuleExposure _ = async { return raise UnreadablePermissionStore.Fault }
+        member _.SetModuleExposure(_, _, _) = async { return raise UnreadablePermissionStore.Fault }
+
 /// The synchronous scheduler the dispatch cases pass to
 /// `guardDispatch`, so decision and emission are observed together.
 let private runNow (work: Async<unit>) = Async.RunSynchronously work
@@ -273,6 +290,34 @@ let tests =
 
         // ── 2. The write guard, per arm ──────────────────────────────
         testList "grant-write guard (551.C)" [
+            testCaseAsync "Phase 1062 — an unreadable permission document is a typed refusal, never a throw"
+            <| async {
+                let store =
+                    GrantPolicyGuard.GrantPolicyPermissionStore(
+                        UnreadablePermissionStore(),
+                        registryOf [ "Partner", GrantPolicy.RequiresAcknowledgement ]
+                    )
+                    :> IPermissionStore
+
+                let request: GrantPolicyGuard.ModuleGrantRequest = {
+                    TeamId = TeamId "t1"
+                    ActorId = "admin"
+                    SubjectId = "alice"
+                    ModuleName = "Partner"
+                    Permissions = [ Read ]
+                    Evidence = GrantPolicyGuard.GrantEvidence.acknowledged "quarterly review"
+                }
+
+                let! outcome =
+                    GrantPolicyGuard.PermissionGrants.grantModuleAccess store (registryOf []) request
+                    |> Async.Catch
+
+                match outcome with
+                | Choice1Of2(Error(GrantRefusal.StoreUnavailable("Partner", _))) -> ()
+                | Choice1Of2 other -> failtestf "expected StoreUnavailable, got %A" other
+                | Choice2Of2 ex -> failtestf "grantModuleAccess threw past its Result: %s" ex.Message
+            }
+
             testCaseAsync "RequiresAcknowledgement refuses a grant with no confirmation, then no justification"
             <| async {
                 let registry = registryOf [ "Partner", GrantPolicy.RequiresAcknowledgement ]

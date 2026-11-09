@@ -85,6 +85,23 @@ type private RecordingAuditLog() =
         member _.Record(scopeId, audit) = async { recorded.Add(scopeId, audit) }
         member _.GetAuditTrail(_, _, _) = async { return [] }
 
+/// Phase 1062 — an inner store whose document cannot be read. Before the
+/// phase its read RAISED (`PermissionStoreUnavailableException`), and the
+/// raise travelled through the decorator and out of `grantModuleAccess`
+/// past the classification of its `Result`.
+type private UnreadablePermissionStore() =
+    static member Fault =
+        PermissionStoreUnavailableException "pinned: the permission document is unreadable"
+
+    interface IPermissionStore with
+        member _.GetTeamPermissions _ = async { return raise UnreadablePermissionStore.Fault }
+        member _.SetTeamPermissions(_, _) = async { return raise UnreadablePermissionStore.Fault }
+        member _.GetEffectivePermissions(_, _) = async { return raise UnreadablePermissionStore.Fault }
+        member _.SetMemberPermissions(_, _, _, _) = async { return raise UnreadablePermissionStore.Fault }
+        member _.SetTeamDefaults(_, _) = async { return raise UnreadablePermissionStore.Fault }
+        member _.GetModuleExposure _ = async { return raise UnreadablePermissionStore.Fault }
+        member _.SetModuleExposure(_, _, _) = async { return raise UnreadablePermissionStore.Fault }
+
 /// The synchronous scheduler the ceremony cases pass, so decision and
 /// emission are observed together.
 let private runNow (work: Async<unit>) = Async.RunSynchronously work
@@ -127,6 +144,40 @@ let tests =
 
         // ── 1. The ceremony ──────────────────────────────────────────
         testList "the two-person ceremony" [
+            test "Phase 1062 — dual control over an unreadable document refuses with a typed error, never a throw" {
+                let gate =
+                    DualControlPermissionStore(
+                        UnreadablePermissionStore(),
+                        settingsAll,
+                        BlobAdminMutationApprovalStore(storageAt (tempDir ())),
+                        nothingIsPolicyBearing,
+                        (fun () -> Some "admin-a"),
+                        (fun () -> t0)
+                    )
+                    :> IPermissionStore
+
+                let request: GrantPolicyGuard.ModuleGrantRequest = {
+                    TeamId = TeamId "acme"
+                    ActorId = "admin-a"
+                    SubjectId = "bob"
+                    ModuleName = "reports"
+                    Permissions = [ Read ]
+                    Evidence = GrantPolicyGuard.GrantEvidence.none
+                }
+
+                match
+                    GrantPolicyGuard.PermissionGrants.grantModuleAccess
+                        gate
+                        GrantPolicyGuard.ModuleGrantPolicyRegistry.empty
+                        request
+                    |> Async.Catch
+                    |> run
+                with
+                | Choice1Of2(Error(GrantRefusal.StoreUnavailable("reports", _))) -> ()
+                | Choice1Of2 other -> failtestf "expected StoreUnavailable, got %A" other
+                | Choice2Of2 ex -> failtestf "grantModuleAccess threw past its Result: %s" ex.Message
+            }
+
 
             test "a gated grant is inert until a second administrator approves it" {
                 let _, _, permissions, approvals = freshFixture ()
