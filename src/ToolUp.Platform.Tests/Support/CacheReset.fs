@@ -28,10 +28,6 @@ module ToolUp.Platform.Tests.Support.CacheReset
 /// Returns `Async<unit>` so it composes naturally inside
 /// `testCaseAsync` blocks; the actual resets are synchronous.
 let invalidateAll () : Async<unit> = async {
-    // (b) — PendingInviteStore.cache: 30s TTL cache of the pending-
-    // invite blob; read on every middleware sign-in resolve.
-    ToolUp.Platform.Scope.Teams.PendingInviteStore.__internal_resetForTests ()
-
     // (b) — AdAnalyticsApiHandler.slotSnapshot: 60s TTL snapshot of the
     // configured ad-slot ids used by the slot sanity check.
     ToolUp.Platform.Audit.AdAnalyticsApiHandler.__internal_resetForTests ()

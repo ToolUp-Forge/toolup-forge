@@ -4476,7 +4476,6 @@ let main args =
         "SessionRegistry.fs"
         "ShareTokenStore.fs"
         "SmokeTests.fs"
-        "Teams/InMemoryPendingInviteStore.fs"
         "UsageLog.fs"
         "WebhookRegistry.fs"
         "WhatsAppTemplateRegistry.fs"
