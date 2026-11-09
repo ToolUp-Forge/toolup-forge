@@ -5918,7 +5918,9 @@ ToolUp.Platform.Compose.RegistrationCatalogue tryResolve
 ToolUp.Platform.Compose.RemotingDecoderFacet coverage
 ToolUp.Platform.Compose.RemotingDecoderFacet describe
 ToolUp.Platform.Compose.RemotingDecoderFacet describeArguments
+ToolUp.Platform.Compose.RemotingDecoderFacet describeCodecs
 ToolUp.Platform.Compose.RemotingDecoderFacet inspect
+ToolUp.Platform.Compose.RemotingDecoderFacet inspectCodecs
 ToolUp.Platform.Compose.RemotingDecoderFacet inspectPlatform
 ToolUp.Platform.Compose.RemotingDecoderFacet inspectServed
 ToolUp.Platform.Compose.RemotingDecoderFacet inspectServedArguments
@@ -8326,6 +8328,8 @@ ToolUp.Platform.Tests.Remoting.GeneratorFidelityTests End
 ToolUp.Platform.Tests.Remoting.GeneratorFidelityTests Link
 ToolUp.Platform.Tests.Remoting.MsgPackHostileInputTests Leaf
 ToolUp.Platform.Tests.Remoting.MsgPackHostileInputTests Node
+ToolUp.Platform.Tests.Remoting.StjRoundTripTests Plain
+ToolUp.Platform.Tests.Remoting.StjRoundTripTests Tagged
 ToolUp.Platform.Tests.Remoting.WireCorpus Accepted
 ToolUp.Platform.Tests.Remoting.WireCorpus Binary
 ToolUp.Platform.Tests.Remoting.WireCorpus Branch
@@ -8520,10 +8524,17 @@ ToolUp.Remoting.Giraffe.GiraffeUtil contractFor
 ToolUp.Remoting.Giraffe.Remoting buildHttpHandler
 ToolUp.Remoting.Json Array
 ToolUp.Remoting.Json Bool
+ToolUp.Remoting.Json DecodeJson
+ToolUp.Remoting.Json DecodeMsgPack
+ToolUp.Remoting.Json EncodeJson
+ToolUp.Remoting.Json ForRecord
 ToolUp.Remoting.Json Null
 ToolUp.Remoting.Json Number
 ToolUp.Remoting.Json Object
+ToolUp.Remoting.Json ReflectionFallback
 ToolUp.Remoting.Json String
+ToolUp.Remoting.Json Unscoped
+ToolUp.Remoting.Json VerifiedOnly
 ToolUp.Remoting.Json.BrowserJsonWriter serialize
 ToolUp.Remoting.Json.JsonDecoders BrowserLossPrefix
 ToolUp.Remoting.Json.JsonDecoders browserOracle
@@ -8535,6 +8546,13 @@ ToolUp.Remoting.Json.JsonDecoders verifyBothByTypeWith
 ToolUp.Remoting.Json.JsonDecoders verifyBothWith
 ToolUp.Remoting.Json.JsonDecoders verifyByTypeWith
 ToolUp.Remoting.Json.JsonDecoders verifyWith
+ToolUp.Remoting.Json.JsonEncoders describeRefusal
+ToolUp.Remoting.Json.JsonEncoders gateWith
+ToolUp.Remoting.Json.JsonEncoders registerVerifiedWith
+ToolUp.Remoting.Json.JsonEncoders render
+ToolUp.Remoting.Json.JsonEncoders shippedEncoder
+ToolUp.Remoting.Json.JsonEncoders verifyByTypeWith
+ToolUp.Remoting.Json.JsonEncoders verifyWith
 ToolUp.Remoting.Json.JsonRead DefaultMaxDepth
 ToolUp.Remoting.Json.JsonRead DefaultMaxMembers
 ToolUp.Remoting.Json.JsonRead tryParse
@@ -8549,7 +8567,9 @@ ToolUp.Remoting.Json.SystemTextJson.FableConverters registerVerifiedFor
 ToolUp.Remoting.Json.SystemTextJson.FableConverters shared
 ToolUp.Remoting.Json.SystemTextJson.FableConverters tryDeserialise
 ToolUp.Remoting.Json.SystemTextJson.FableConverters tryDeserialiseElement
+ToolUp.Remoting.Json.SystemTextJson.FableConverters tryDeserialiseElementWith
 ToolUp.Remoting.Json.SystemTextJson.FableConverters tryDeserialiseFor
+ToolUp.Remoting.Json.SystemTextJson.FableConverters tryDeserialiseWith
 ToolUp.Remoting.Json.SystemTextJson.FableConverters verifyDecoder
 ToolUp.Remoting.Json.SystemTextJson.NestedRead index
 ToolUp.Remoting.Json.SystemTextJson.NestedRead prefixed
@@ -8760,6 +8780,7 @@ ToolUp.Remoting.Server.Patterns TwoArgLambda
 ToolUp.Remoting.Server.Patterns TwoArgs
 ToolUp.Remoting.Server.Patterns UnionValue
 ToolUp.Remoting.Server.Proxy ApiProxy
+ToolUp.Remoting.Server.Proxy CodecMiss
 ToolUp.Remoting.Server.Proxy Faulted
 ToolUp.Remoting.Server.Proxy Invoked
 ToolUp.Remoting.Server.Proxy NotRouted
@@ -8768,6 +8789,7 @@ ToolUp.Remoting.Server.Proxy Refused
 ToolUp.Remoting.Server.Proxy Streamed
 ToolUp.Remoting.Server.Proxy VerbRefused
 ToolUp.Remoting.Server.Proxy Written
+ToolUp.Remoting.Server.Proxy codecMisses
 ToolUp.Remoting.Server.Proxy contractOf
 ToolUp.Remoting.Server.Proxy getRecyclableMemoryStreamManager
 ToolUp.Remoting.Server.Proxy jsonSerializeWithBackend
@@ -8794,6 +8816,7 @@ ToolUp.Remoting.Server.Remoting withAudit
 ToolUp.Remoting.Server.Remoting withAuditRequiredOnRoleGated
 ToolUp.Remoting.Server.Remoting withAuthContext
 ToolUp.Remoting.Server.Remoting withBinarySerialization
+ToolUp.Remoting.Server.Remoting withDecodePolicy
 ToolUp.Remoting.Server.Remoting withDiagnosticsLogger
 ToolUp.Remoting.Server.Remoting withDocs
 ToolUp.Remoting.Server.Remoting withErrorHandler
