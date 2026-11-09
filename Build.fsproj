@@ -72,6 +72,12 @@
          MetadataLoadContext, which this project does not reference. -->
     <Compile Include="src\ToolUp.Platform.Tests\Contracts\SurfaceDiff.fs" Link="SurfaceDiff.fs" />
     <Compile Include="SemVerBump.fs" />
+    <!-- The three documentation gates behind the VerifyDocSnippets,
+         VerifySourceCitations and VerifyUploadResults targets. FAKE-free and
+         source-linked into ToolUp.Platform.Build.Tests (DocGatesTests.fs), so
+         the targets and their go-red proofs run one implementation. After
+         SurfaceDiff.fs, whose parse is how it reads the api-baselines. -->
+    <Compile Include="DocGates.fs" />
     <!-- Phase 762 — the TOOLUP_TEST_LANE vocabulary. Source-linked from
          the Platform test pack rather than copied: the VerifyAll target
          below selects PACKS by lane and that pack's entry point selects
