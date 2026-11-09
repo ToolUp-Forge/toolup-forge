@@ -122,18 +122,21 @@ type private GatedAuditLog(gate: Task) =
     member _.Written = List.ofSeq written
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async {
+        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
             do! gate |> Async.AwaitTask
             written.Enqueue(scopeId, audit)
             return Ok()
         }
 
-        member _.GetAuditTrail(_, _, _) = async { return [] }
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
 
 type private ThrowingAuditLog() =
     interface IAuditLog with
-        member _.Record(_, _) = async { return raise (InvalidOperationException "sink unavailable") }
-        member _.GetAuditTrail(_, _, _) = async { return [] }
+        member _.Record(AuditScope.StreamKey _, _actor, _) = async {
+            return raise (InvalidOperationException "sink unavailable")
+        }
+
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
 
 type private CountingMetrics() =
     let increments =
@@ -342,7 +345,8 @@ let tests =
                 Expect.isTrue
                     (queue.TryEnqueue {
                         AuditLog = log
-                        ScopeId = "earlier"
+                        Scope = AuditScope.shard "earlier"
+                        Actor = AuditSubject.system "test"
                         Event = platformEvent "Earlier"
                     })
                     "the one slot is taken"
@@ -364,7 +368,8 @@ let tests =
 
                 let work = {
                     AuditLog = ThrowingAuditLog()
-                    ScopeId = "scope-856"
+                    Scope = AuditScope.shard "scope-856"
+                    Actor = AuditSubject.system "test"
                     Event = platformEvent "Create"
                 }
 
@@ -401,7 +406,8 @@ let tests =
                     Expect.isTrue
                         (queue.TryEnqueue {
                             AuditLog = auditLog
-                            ScopeId = "scope-856"
+                            Scope = AuditScope.shard "scope-856"
+                            Actor = AuditSubject.system "test"
                             Event = platformEvent (sprintf "M%d" i)
                         })
                         "accepted"
@@ -409,7 +415,7 @@ let tests =
                 service.StopAsync(CancellationToken.None).Wait()
 
                 let trail =
-                    auditLog.GetAuditTrail("scope-856", None, Some "RemotingMethodAudited")
+                    auditLog.GetAuditTrail(AuditScope.shard "scope-856", None, Some "RemotingMethodAudited")
                     |> Async.RunSynchronously
 
                 Expect.equal trail.Length 50 "every accepted record was written before the drain stopped"
@@ -418,7 +424,8 @@ let tests =
                 Expect.isFalse
                     (queue.TryEnqueue {
                         AuditLog = auditLog
-                        ScopeId = "late"
+                        Scope = AuditScope.shard "late"
+                        Actor = AuditSubject.system "test"
                         Event = platformEvent "Late"
                     })
                     "a record after shutdown is refused by the queue, so the emitter writes it inline"
@@ -446,7 +453,8 @@ let tests =
                     Expect.isTrue
                         (queue.TryEnqueue {
                             AuditLog = auditLog
-                            ScopeId = "scope-869"
+                            Scope = AuditScope.shard "scope-869"
+                            Actor = AuditSubject.system "test"
                             Event = platformEvent (sprintf "M%d" i)
                         })
                         "accepted"
@@ -455,7 +463,7 @@ let tests =
                 service.StopAsync(CancellationToken.None).Wait()
 
                 let trail =
-                    auditLog.GetAuditTrail("scope-869", None, Some "RemotingMethodAudited")
+                    auditLog.GetAuditTrail(AuditScope.shard "scope-869", None, Some "RemotingMethodAudited")
                     |> Async.RunSynchronously
 
                 Expect.equal trail.Length 50 "every accepted record was written although the loop never ran"

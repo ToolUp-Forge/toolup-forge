@@ -107,7 +107,8 @@ let hook: TenantHook<TeardownSubstrate> = {
                         for team in teams do
                             do!
                                 auditLog.Record(
-                                    team.TeamId,
+                                    AuditScope.team (TeamId team.TeamId),
+                                    AuditSubject.UserAudit(UserId actorUserId),
                                     MemberRemoved {
                                         UserId = UserId actorUserId
                                         TeamId = TeamId team.TeamId

@@ -1100,7 +1100,11 @@ module EvidenceChainWalker =
             }
 
             do!
-                auditLog.Record(PlatformScopeId, EvidenceChainWalked payload)
+                auditLog.Record(
+                    AuditScope.platform,
+                    AuditSubject.system "EvidenceChainWalker",
+                    EvidenceChainWalked payload
+                )
                 |> AuditRow.orRefuse
         | _ -> ()
     }

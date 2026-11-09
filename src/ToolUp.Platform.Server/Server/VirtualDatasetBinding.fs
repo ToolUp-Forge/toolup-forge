@@ -245,7 +245,8 @@ type VirtualDatasetReader
                 | Ok dobj ->
                     do!
                         audit.Record(
-                            scopeId,
+                            AuditScope.shard scopeId,
+                            AuditSubject.system "VirtualDataset",
                             DatasetSpillCreated {
                                 Actor = actor
                                 ScopeId = scopeId
@@ -286,7 +287,8 @@ type VirtualDatasetReader
             | Ok() ->
                 do!
                     audit.Record(
-                        scopeId,
+                        AuditScope.shard scopeId,
+                        AuditSubject.system "VirtualDataset",
                         DatasetSpillDeleted {
                             Actor = actor
                             ScopeId = scopeId

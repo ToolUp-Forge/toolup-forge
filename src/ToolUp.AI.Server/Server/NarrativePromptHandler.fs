@@ -381,7 +381,8 @@ let narrativePromptApi (ctx: HttpContext) : NarrativePromptApi =
         | Some log ->
             do!
                 log.Record(
-                    AuditStreamKey.ofTeam caller.TeamId.Value,
+                    AuditScope.team (TeamId caller.TeamId.Value),
+                    ToolUp.Platform.Config.Background.requestActor "NarrativePrompt" ctx,
                     RemotingMethodAudited {
                         Kind = kind
                         MethodName = methodName

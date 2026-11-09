@@ -729,16 +729,20 @@ type BlobPageDocumentStore
                 Detached = platform.Detached
             })
 
-    let auditScope (key: PageLayerKey) (scope: ResolvedScope) =
+    let auditScope (key: PageLayerKey) (scope: ResolvedScope) : AuditScope =
         match key.Layer with
-        | PageLayer.Platform -> AuditScope.streamKey AuditScope.PlatformScope
-        | _ -> scope.ScopeId
+        | PageLayer.Platform -> AuditScope.platform
+        | _ -> ResolvedScope.auditScope scope
 
-    let callerTrail (scope: ResolvedScope) =
+    let callerTrail (scope: ResolvedScope) : AuditScope =
         if scope.IsAnonymous then
-            AuditScope.streamKey AuditScope.PlatformScope
+            AuditScope.platform
         else
-            scope.ScopeId
+            ResolvedScope.auditScope scope
+
+    /// The store's rows carry the store as their actor; the writer is the
+    /// caller's resolved scope, named by the trail the row lands in.
+    let storeActor = AuditSubject.system "PageDocumentStore"
 
     /// Run a write; on refusal, record it under the caller's trail.
     let audited
@@ -764,6 +768,7 @@ type BlobPageDocumentStore
                 do!
                     audit.Record(
                         callerTrail scope,
+                        storeActor,
                         PageWriteRefused {
                             PageWriteRefusedPayload.Module = page.Module
                             Page = page.Page
@@ -791,6 +796,7 @@ type BlobPageDocumentStore
         AuditRow.emit
             audit
             (auditScope receipt.Key scope)
+            storeActor
             (PageSaved {
                 PageSavedPayload.Module = receipt.Key.Page.Module
                 Page = receipt.Key.Page.Page
@@ -858,7 +864,8 @@ type BlobPageDocumentStore
                            |> bind (fun (version, _) -> async {
                                do!
                                    audit.Record(
-                                       AuditScope.streamKey AuditScope.PlatformScope,
+                                       AuditScope.platform,
+                                       storeActor,
                                        PageReseeded {
                                            PageReseededPayload.Module = page.Module
                                            Page = page.Page
@@ -1066,7 +1073,8 @@ type BlobPageDocumentStore
                                | Ok page -> async {
                                    do!
                                        audit.Record(
-                                           AuditScope.streamKey AuditScope.PlatformScope,
+                                           AuditScope.platform,
+                                           storeActor,
                                            PageReseeded {
                                                PageReseededPayload.Module = page.Page.Module
                                                Page = page.Page.Page
@@ -1114,7 +1122,8 @@ type BlobPageDocumentStore
 
                         do!
                             audit.Record(
-                                AuditScope.streamKey AuditScope.PlatformScope,
+                                AuditScope.platform,
+                                storeActor,
                                 PageDetached {
                                     PageDetachedPayload.Module = key.Page.Module
                                     Page = key.Page.Page

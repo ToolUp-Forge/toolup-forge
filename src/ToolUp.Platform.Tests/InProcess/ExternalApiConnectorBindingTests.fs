@@ -207,7 +207,7 @@ let private linkFactory (endpoint: string) () =
         InProcessRateLimiter(
             [ LinkConnector.Window ],
             NoOpMetricsSink() :> IMetricsSink,
-            AuditLog.NoOpAuditLog() :> IAuditLog,
+            NoOpAuditLog() :> IAuditLog,
             TimeSpan.FromSeconds 5.0,
             noopLogger
         )

@@ -454,8 +454,12 @@ let consentVerdictsFromItems
 /// caller's thread, so a synchronous log has recorded it before the
 /// decision returns: one call yields both the decision and the row, and the
 /// two cannot be covered separately.
-let private emit (auditLog: IAuditLog) (scopeId: string) (event: AuditEvent) =
-    AuditRow.emit auditLog scopeId event |> Background.startAuditRowImmediate
+let private emit (auditLog: IAuditLog) (scope: AuditScope) (actor: AuditSubject) (event: AuditEvent) =
+    AuditRow.emit auditLog scope actor event |> Background.startAuditRowImmediate
+
+/// The store's own rows (a verification refusal, a lodged record) carry the
+/// store as their actor: the recorder is named in the payload.
+let private storeActor = AuditSubject.system "GrantConsentStore"
 
 /// The tamper alert (552.E). Fires ONLY for a trust failure — a record
 /// presenting itself as consent that is not. An ordinary revocation,
@@ -473,7 +477,8 @@ let private emitTrustDenial
     if ConsentDenial.isTrustFailure denial then
         emit
             auditLog
-            (AuditStreamKey.ofTeam subject.TeamId.Value)
+            (AuditScope.team subject.TeamId)
+            storeActor
             (GrantConsentVerificationDenied {
                 ConsentId =
                     match record with
@@ -603,7 +608,7 @@ module GrantConsents =
                     match written with
                     | Error e -> return Error(ConsentDenial.StoreUnavailable e)
                     | Ok() ->
-                        emit auditLog (AuditStreamKey.ofTeam record.Subject.TeamId.Value) (event record)
+                        emit auditLog (AuditScope.team record.Subject.TeamId) storeActor (event record)
                         return Ok record
         }
 
@@ -885,6 +890,11 @@ let guardDispatchWithConsent
                     InertReason = inertReason
                 }
 
-                emit auditLog scopeId (UnconsentedGrantRefused payload)
+                emit
+                    auditLog
+                    (AuditScope.shard scopeId)
+                    (AuditSubject.UserAudit(UserId userId))
+                    (UnconsentedGrantRefused payload)
+
                 Error payload
         | _ -> GrantPolicyGuard.guardDispatch registry grants auditLog scopeId userId moduleName

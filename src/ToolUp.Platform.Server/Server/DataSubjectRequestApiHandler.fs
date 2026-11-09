@@ -198,7 +198,11 @@ let auditToLog (auditLog: IAuditLog) : AuditOnDsr =
             Properties = ev.Properties
         }
 
-        auditLog.Record(ev.ScopeId, AuditEvent.DataSubjectRequest payload)
+        auditLog.Record(
+            AuditScope.shard ev.ScopeId,
+            AuditSubject.system "DataSubjectRequest",
+            AuditEvent.DataSubjectRequest payload
+        )
         |> AuditRow.orRefuse
 
 /// Phase 9h.A — substrate the async export methods route through. Built

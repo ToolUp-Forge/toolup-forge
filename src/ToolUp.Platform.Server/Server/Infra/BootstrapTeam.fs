@@ -136,7 +136,8 @@ let bootstrap (logger: ILogger) (auditLog: IAuditLog) (teamStore: ITeamStore) : 
                 | Ok team ->
                     do!
                         auditLog.Record(
-                            teamId,
+                            AuditScope.team (TeamId teamId),
+                            AuditSubject.system "BootstrapTeam",
                             TeamCreated {
                                 UserId = UserId bootstrapActor
                                 TeamId = TeamId teamId
@@ -170,7 +171,8 @@ let bootstrap (logger: ILogger) (auditLog: IAuditLog) (teamStore: ITeamStore) : 
                     | Ok() ->
                         do!
                             auditLog.Record(
-                                teamId,
+                                AuditScope.team (TeamId teamId),
+                                AuditSubject.system "BootstrapTeam",
                                 MemberAdded {
                                     UserId = UserId bootstrapActor
                                     TeamId = TeamId teamId

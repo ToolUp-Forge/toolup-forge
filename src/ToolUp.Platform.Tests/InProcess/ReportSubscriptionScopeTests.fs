@@ -688,7 +688,7 @@ let private deploy () : Deployment =
     |> ignore
 
     services.AddSingleton<IArtefactSigner>(
-        DefaultArtefactSigner.createSystem secrets (AuditLog.NoOpAuditLog() :> IAuditLog) "grounding-v1" Ed25519
+        DefaultArtefactSigner.createSystem secrets (NoOpAuditLog() :> IAuditLog) "grounding-v1" Ed25519
     )
     |> ignore
 

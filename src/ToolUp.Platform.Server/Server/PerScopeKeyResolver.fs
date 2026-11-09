@@ -310,7 +310,8 @@ type PerScopeKeyResolver
                             do!
                                 AuditRow.emit
                                     log
-                                    scopeId
+                                    (AuditScope.shard scopeId)
+                                    (AuditSubject.system "PerScopeKeyResolver")
                                     (EncryptionKeyUnreadable {
                                         ScopeId = scopeId
                                         KeyId = keyIdFor scopeId
@@ -342,7 +343,8 @@ type PerScopeKeyResolver
                             do!
                                 AuditRow.emit
                                     log
-                                    scopeId
+                                    (AuditScope.shard scopeId)
+                                    (AuditSubject.system "PerScopeKeyResolver")
                                     (EncryptionKeyCreated {
                                         UserId = UserId "system"
                                         ScopeId = scopeId
@@ -471,7 +473,8 @@ type PerScopeKeyResolver
                     return!
                         AuditRow.emit
                             log
-                            scopeId
+                            (AuditScope.shard scopeId)
+                            (AuditSubject.UserAudit(UserId actorUserId))
                             (EncryptionKeyDestroyed {
                                 UserId = UserId actorUserId
                                 ScopeId = scopeId
@@ -665,7 +668,7 @@ type PerScopeKeyResolver
                             Background.writeFailureLogger "PerScopeKeyResolver" logger "" "the key eviction"
 
                         try
-                            log.Record(scopeId, row)
+                            log.Record(AuditScope.shard scopeId, AuditSubject.system "PerScopeKeyResolver", row)
                             |> Background.startAuditRow warn "EncryptionKeyDestroyAcknowledged audit"
                         with ex ->
                             warn "EncryptionKeyDestroyAcknowledged audit" ex

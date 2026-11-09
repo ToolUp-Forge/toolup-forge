@@ -59,8 +59,8 @@ open ToolUp.Platform.Scope
 /// A log that records nothing and never refuses — the test's "no audit".
 let private noAudit =
     { new IAuditLog with
-        member _.Record(_, _) = async { return Ok() }
-        member _.GetAuditTrail(_, _, _) = async { return [] }
+        member _.Record(AuditScope.StreamKey _, _actor, _) = async { return Ok() }
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
     }
 
 
@@ -112,12 +112,12 @@ type private RecordingAuditLog() =
         recorded |> Seq.map (snd >> AuditEvent.eventTypeName) |> List.ofSeq
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async {
+        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
             recorded.Add(scopeId, audit)
             return Ok()
         }
 
-        member _.GetAuditTrail(_, _, _) = async { return [] }
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
 
 
 let private registry =
@@ -828,10 +828,10 @@ let tests =
                 // proves it is never reached.
                 let exploding =
                     { new IAuditLog with
-                        member _.Record(_, _) =
+                        member _.Record(AuditScope.StreamKey _, _actor, _) =
                             failtest "an all-default deployment must not audit anything"
 
-                        member _.GetAuditTrail(_, _, _) = async { return [] }
+                        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
                     }
 
                 let result =

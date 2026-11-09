@@ -347,7 +347,8 @@ let run
 
                             do!
                                 auditLog.Record(
-                                    ScopeKey.PlatformContainer,
+                                    AuditScope.platform,
+                                    AuditSubject.system "ConfigDriftDetector",
                                     ConfigDrift {
                                         Changes = changes
                                         CompanionSetFrom = prevHash

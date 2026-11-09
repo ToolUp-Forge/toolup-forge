@@ -31,7 +31,7 @@ let private workingChain () =
 /// reports `Healthy` for an explicitly-off configuration.
 let private noOpChain () =
     let store = InMemoryEventStore.InMemoryEventStore() :> IEventStore
-    let auditLog = AuditLog.NoOpAuditLog() :> IAuditLog
+    let auditLog = NoOpAuditLog() :> IAuditLog
     auditLog, store
 
 /// Build a working IAuditLog but a non-durable IEventStore — Write
@@ -103,7 +103,8 @@ let tests =
 
             // The audit trail filters to SourceModule = "_platform.audit"
             let trail =
-                auditLog.GetAuditTrail("_platform", None, None) |> Async.RunSynchronously
+                auditLog.GetAuditTrail(AuditScope.shard "_platform", None, None)
+                |> Async.RunSynchronously
 
             Expect.isEmpty trail "probe events do not surface in the audit trail"
 

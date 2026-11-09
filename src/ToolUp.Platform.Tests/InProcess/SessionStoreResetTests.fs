@@ -52,12 +52,12 @@ type private RecordingAuditLog() =
     member _.Events = List.ofSeq recorded
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async {
+        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
             recorded.Enqueue(scopeId, audit)
             return Ok()
         }
 
-        member _.GetAuditTrail(_, _, _) = async { return recorded |> Seq.map snd |> List.ofSeq }
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return recorded |> Seq.map snd |> List.ofSeq }
 
 /// Records every `Publish` so a test can assert the notification's key,
 /// payload and scope. Deliberately NOT the in-tree

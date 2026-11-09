@@ -56,7 +56,8 @@ module DatasetProvenance =
                     | Ok nv ->
                         do!
                             audit.Record(
-                                scopeId,
+                                AuditScope.shard scopeId,
+                                AuditSubject.system "DatasetProvenance",
                                 DatasetDeclassified {
                                     Actor = actor
                                     ScopeId = scopeId

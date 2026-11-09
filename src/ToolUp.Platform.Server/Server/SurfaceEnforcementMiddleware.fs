@@ -548,7 +548,8 @@ let private emitDenialAudit
             let correlationId = ToolUp.Remoting.Server.CallContext.correlationId ()
 
             auditLog.Record(
-                ScopeKey.PlatformContainer,
+                AuditScope.platform,
+                AuditSubject.fromSubject subject,
                 SurfaceDenied {
                     Method = ctx.Request.Method
                     Path = string ctx.Request.Path

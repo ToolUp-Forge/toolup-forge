@@ -204,7 +204,7 @@ let buildNotificationStack
 
     let auditLog: IAuditLog =
         match config.AuditLog with
-        | FeatureMode.Disabled -> AuditLog.NoOpAuditLog() :> _
+        | FeatureMode.Disabled -> NoOpAuditLog() :> _
         | FeatureMode.Enabled ->
             AuditLog.EventStoreAuditLog(
                 eventStore,

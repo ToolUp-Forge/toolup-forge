@@ -85,12 +85,12 @@ let private sinks (failure: (FailureMode * string) option) : Sinks =
     {
         AuditLog =
             { new IAuditLog with
-                member _.Record(_, _) = async {
+                member _.Record(AuditScope.StreamKey _, _actor, _) = async {
                     do! write ()
                     return Ok()
                 }
 
-                member _.GetAuditTrail(_, _, _) = async { return [] }
+                member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
             }
         Hook =
             { new IAuthAuditHook with
@@ -400,14 +400,15 @@ let private transactionalDelivery: Site = {
 
             let auditLog =
                 { new IAuditLog with
-                    member _.Record(scopeId, event) = async {
+                    member _.Record(AuditScope.StreamKey scopeId, _actor, event) = async {
                         try
-                            return! sinks.AuditLog.Record(scopeId, event)
+                            return! sinks.AuditLog.Record(AuditScope.shard scopeId, AuditSubject.system "test", event)
                         finally
                             written.TrySetResult() |> ignore
                     }
 
-                    member _.GetAuditTrail(a, b, c) = sinks.AuditLog.GetAuditTrail(a, b, c)
+                    member _.GetAuditTrail(AuditScope.StreamKey a, b, c) =
+                        sinks.AuditLog.GetAuditTrail(AuditScope.shard a, b, c)
                 }
 
             let dispatcher =

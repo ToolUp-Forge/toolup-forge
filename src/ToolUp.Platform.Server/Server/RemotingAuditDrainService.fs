@@ -32,7 +32,7 @@ let internal writeOne (logger: ILogger) (metrics: unit -> Metrics.IMetricsSink) 
     task {
         try
             do!
-                work.AuditLog.Record(work.ScopeId, work.Event)
+                work.AuditLog.Record(work.Scope, work.Actor, work.Event)
                 |> AuditRow.orRefuse
                 |> Async.StartAsTask
         with ex ->
@@ -43,7 +43,7 @@ let internal writeOne (logger: ILogger) (metrics: unit -> Metrics.IMetricsSink) 
             logger.Warn(
                 sprintf
                     "[AuditLog] write failed scope=%s eventType=%s: %s (queued remoting audit, Phase 856)"
-                    work.ScopeId
+                    (AuditScope.streamKey work.Scope)
                     eventTypeName
                     ex.Message
             )

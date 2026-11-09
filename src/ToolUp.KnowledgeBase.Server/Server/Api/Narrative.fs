@@ -581,7 +581,8 @@ let private performReset (deps: KnowledgeApiDeps) : Async<Result<unit, string>> 
         | Some auditLog ->
             do!
                 auditLog.Record(
-                    deps.Scope.ScopeId,
+                    StorageScope.auditScope deps.Scope,
+                    AuditSubject.fromSubject deps.AccessContext.Subject,
                     KnowledgeScopeErased {
                         UserId = deps.UserId
                         ScopeId = deps.Scope.ScopeId

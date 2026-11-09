@@ -2461,12 +2461,12 @@ type private CapturingAuditLog() =
             | _ -> None)
 
     interface IAuditLog with
-        member _.Record(_scopeId, audit) = async {
+        member _.Record(AuditScope.StreamKey _scopeId, _actor, audit) = async {
             lock events (fun () -> events.Add audit)
             return Ok()
         }
 
-        member _.GetAuditTrail(_, _, _) = async { return [] }
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
 
 [<Literal>]
 let private transitionKey = "sha256:artifact-key"

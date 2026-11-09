@@ -222,7 +222,9 @@ let platformTenantApi (ctx: HttpContext) : IPlatformTenantApi =
     // a sink failure can't fail an offboard.
     let emitAudit (scopeId: string) (event: AuditEvent) =
         match auditLog with
-        | Some a -> AuditRow.emit a scopeId event |> AuditRow.bestEffort
+        | Some a ->
+            AuditRow.emit a (AuditScope.shard scopeId) (AuditSubject.system "PlatformTenantApi") event
+            |> AuditRow.bestEffort
         | None -> async { return () }
 
     // Phase 54e — persist the run's summary durably (best-effort) and

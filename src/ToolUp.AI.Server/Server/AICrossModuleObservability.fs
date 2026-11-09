@@ -287,7 +287,7 @@ let reportFor (auditLogOpt: IAuditLog option) (scopeId: string) : Async<CrossMod
     let! events =
         match auditLogOpt with
         | None -> async { return [] }
-        | Some auditLog -> auditLog.GetAuditTrail(scopeId, Some(windowStart, now), Some EventType)
+        | Some auditLog -> auditLog.GetAuditTrail(AuditScope.shard scopeId, Some(windowStart, now), Some EventType)
 
     let rows =
         events

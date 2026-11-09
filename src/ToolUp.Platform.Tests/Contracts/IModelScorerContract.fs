@@ -50,12 +50,12 @@ type private RecordingAuditLog() =
     member _.Events = List.ofSeq recorded
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async {
+        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
             recorded.Add(scopeId, audit)
             return Ok()
         }
 
-        member _.GetAuditTrail(_, _, _) = async { return recorded |> Seq.map snd |> List.ofSeq }
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return recorded |> Seq.map snd |> List.ofSeq }
 
 /// A minimal `IModelRegistry` double for the batch-handler tests: it resolves
 /// exactly the artifacts it was seeded with (by scope + composite-key hash)

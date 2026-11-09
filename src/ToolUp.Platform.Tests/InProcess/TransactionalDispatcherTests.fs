@@ -113,7 +113,7 @@ type CapturingAuditLog() =
                     cap.TotalSeconds)
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async {
+        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
             lock gate (fun () ->
                 recorded.Add((scopeId, audit))
                 Monitor.PulseAll gate)
@@ -121,7 +121,7 @@ type CapturingAuditLog() =
             return Ok()
         }
 
-        member _.GetAuditTrail(_, _, _) = async { return [] }
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
 
 /// Fake `INotificationSink` that signals a `TaskCompletionSource` on
 /// each `Send`, returning a result chosen by the constructor. Used

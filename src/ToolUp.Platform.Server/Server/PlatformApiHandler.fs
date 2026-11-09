@@ -124,7 +124,8 @@ let private recordAudit (ctx: HttpContext) (auditLog: IAuditLog option) : string
             let what = sprintf "%s audit" (AuditEvent.eventTypeName audit)
 
             try
-                a.Record(scopeId, audit) |> Background.startAuditRow warn what
+                a.Record(AuditScope.shard scopeId, AuditSubject.system "PlatformApi", audit)
+                |> Background.startAuditRow warn what
             with ex ->
                 warn what ex
         | None -> ()

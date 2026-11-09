@@ -2093,6 +2093,42 @@ let internal tryDecodeAuditEvent (eventType: string) (payload: string) : Result<
         with ex ->
             Error(sprintf "payload decode error: %s" ex.Message)
 
+/// The property a persisted row carries its actor in, beside the event's
+/// own fields. Every reader of a payload ignores a property its record does
+/// not declare, so the rows it is added to read exactly as before.
+[<Literal>]
+let internal ActorProperty = "_actor"
+
+/// The persisted payload of a row: the event's JSON with the actor appended
+/// as `_actor`. The event's own bytes are kept verbatim — the actor is
+/// spliced in before the closing brace, never re-serialised around it.
+let internal withActor (actor: AuditSubject) (eventJson: string) : string =
+    let body = eventJson.TrimEnd()
+
+    if not (body.EndsWith "}") then
+        failwithf "an audit payload is not a JSON object: %s" body
+
+    let open' = body.Substring(0, body.Length - 1).TrimEnd()
+    let separator = if open'.EndsWith "{" then "" else ","
+    let actorJson = JsonSerializer.Serialize(actor, auditJsonOptions)
+    $"{open'}{separator}\"{ActorProperty}\":{actorJson}}}"
+
+/// The actor a persisted row carries. A row written before rows carried one
+/// — or one whose actor no longer decodes — answers
+/// `AuditSubject.unattributed`: nothing is guessed from the stream key.
+let internal decodeActor (payload: string) : AuditSubject =
+    if isNull payload || not (payload.Contains("\"" + ActorProperty + "\"")) then
+        AuditSubject.unattributed
+    else
+        try
+            use doc = JsonDocument.Parse payload
+
+            match doc.RootElement.TryGetProperty ActorProperty with
+            | true, actor -> JsonSerializer.Deserialize<AuditSubject>(actor.GetRawText(), auditJsonOptions)
+            | _ -> AuditSubject.unattributed
+        with _ ->
+            AuditSubject.unattributed
+
 /// Decode a persisted `ModuleEvent` whose `SourceModule` is
 /// `AuditSourceModule.value` back into an `AuditEvent`. Returns
 /// `None` for unknown `EventType` strings or malformed payloads —
@@ -2282,7 +2318,8 @@ type EventStoreAuditLog
     /// the row lands, or — when it does not — `Ok ()` under `LogAndContinue`
     /// and `DegradeToFile` (counted, logged, and under `DegradeToFile`
     /// spilled), and the `Error` under `RefuseAction`. Never raises.
-    let record (scopeId: string) (audit: AuditEvent) : Async<Result<unit, AuditWriteError>> = async {
+    let record (scope: AuditScope) (actor: AuditSubject) (audit: AuditEvent) : Async<Result<unit, AuditWriteError>> = async {
+        let scopeId = AuditScope.streamKey scope
         let eventTypeName = AuditEvent.eventTypeName audit
 
         /// A row that did not land: counted and logged under every policy;
@@ -2345,7 +2382,13 @@ type EventStoreAuditLog
             // fails to SERIALISE has nothing spillable.
             let envelope =
                 try
-                    Ok(Events.create scopeId AuditSourceModule.value eventTypeName (serialiseAuditEvent audit))
+                    Ok(
+                        Events.create
+                            scopeId
+                            AuditSourceModule.value
+                            eventTypeName
+                            (serialiseAuditEvent audit |> withActor actor)
+                    )
                 with ex ->
                     Error ex.Message
 
@@ -2392,10 +2435,10 @@ type EventStoreAuditLog
     }
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = record scopeId audit
+        member _.Record(scope, actor, audit) = record scope actor audit
 
-        member _.GetAuditTrail(scopeId, dateRange, eventType) = async {
-            let! events = eventStore.ReadBySource(scopeId, AuditSourceModule.value)
+        member _.GetAuditTrail(scope, dateRange, eventType) = async {
+            let! events = eventStore.ReadBySource(AuditScope.streamKey scope, AuditSourceModule.value)
 
             let filtered =
                 events
@@ -2411,17 +2454,3 @@ type EventStoreAuditLog
 
             return filtered |> List.choose decodeAuditEvent
         }
-
-/// `NoOp` `IAuditLog`. Registered by `compose` when
-/// `ServerConfig.AuditLog = FeatureMode.Disabled` (Phase 1g lightweight default).
-/// `Record` returns immediately without serialising or touching the
-/// event store; `GetAuditTrail` returns an empty list. Emission sites
-/// (`ScopeResolutionMiddleware`, `PlatformApi` handlers,
-/// `fileManagementApi`) keep their unconditional `IAuditLog.Record`
-/// calls — the no-op makes them free at runtime, and callsites stay
-/// clean across mode changes.
-type NoOpAuditLog() =
-    interface IAuditLog with
-        member _.Record(_scopeId, _audit) = async { return Ok() }
-
-        member _.GetAuditTrail(_scopeId, _dateRange, _eventType) = async { return [] }

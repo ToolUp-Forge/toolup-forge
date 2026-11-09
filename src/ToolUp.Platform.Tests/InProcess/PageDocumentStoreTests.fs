@@ -519,7 +519,7 @@ let private expectOk (label: string) (r: Result<'T, PageStoreError>) : 'T =
     | Error e -> failtestf "%s: %A" label e
 
 let private trail (rig: Rig) (stream: string) (kind: string) =
-    rig.Audit.GetAuditTrail(stream, None, Some kind) |> run
+    rig.Audit.GetAuditTrail(AuditScope.shard stream, None, Some kind) |> run
 
 let private seeded (options: PageStoreOptions) =
     let rig = rig options

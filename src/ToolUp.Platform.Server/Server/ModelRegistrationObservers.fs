@@ -91,7 +91,8 @@ type ObservedModelRegistry
                 try
                     do!
                         deps.Audit.Record(
-                            scopeId,
+                            AuditScope.shard scopeId,
+                            AuditSubject.system "ModelRegistry",
                             ModelRegistrationObserverFailed {
                                 CompositeKeyHash = artifact.CompositeKey.Hash
                                 Observer = observer.Name

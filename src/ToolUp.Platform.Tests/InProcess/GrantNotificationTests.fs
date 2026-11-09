@@ -49,8 +49,8 @@ open ToolUp.Platform.Scope
 /// A log that records nothing and never refuses — the test's "no audit".
 let private noAudit =
     { new IAuditLog with
-        member _.Record(_, _) = async { return Ok() }
-        member _.GetAuditTrail(_, _, _) = async { return [] }
+        member _.Record(AuditScope.StreamKey _, _actor, _) = async { return Ok() }
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
     }
 
 

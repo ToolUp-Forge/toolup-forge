@@ -49,12 +49,12 @@ type private RecordingAudit() =
     member _.Events = lock recorded (fun () -> List.ofSeq recorded)
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async {
+        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
             lock recorded (fun () -> recorded.Add((scopeId, audit)))
             return Ok()
         }
 
-        member _.GetAuditTrail(_, _, _) = async { return recorded |> Seq.map snd |> List.ofSeq }
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return recorded |> Seq.map snd |> List.ofSeq }
 
 /// A primary handler that never opens a socket: it records every request
 /// it was handed and answers with an echo of it, so "the inner handler
@@ -342,7 +342,7 @@ let private handlerTests =
 
             match deniedRows audit with
             | [ scope, row ] ->
-                Expect.equal scope EgressEnforcement.AuditScope "reserved platform scope"
+                Expect.equal scope (AuditScope.streamKey EgressEnforcement.Scope) "reserved platform scope"
                 Expect.equal row.Component "module:reports" "the claimed component"
                 Expect.equal row.Origin "https://hooks.example.com:8443" "origin, with its non-default port"
                 Expect.equal row.Surface "webhook" "surface label"

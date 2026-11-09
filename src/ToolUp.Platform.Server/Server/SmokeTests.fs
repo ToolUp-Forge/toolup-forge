@@ -298,9 +298,16 @@ type AuditLogSmoke(auditLog: IAuditLog) =
                             SizeBytes = 0L
                         }
 
-                    do! auditLog.Record(SmokeTest.SentinelScope, probeEvent) |> AuditRow.orRefuse
+                    do!
+                        auditLog.Record(
+                            AuditScope.shard SmokeTest.SentinelScope,
+                            AuditSubject.system "SmokeTest",
+                            probeEvent
+                        )
+                        |> AuditRow.orRefuse
 
-                    let! trail = auditLog.GetAuditTrail(SmokeTest.SentinelScope, None, Some "FileUploaded")
+                    let! trail =
+                        auditLog.GetAuditTrail(AuditScope.shard SmokeTest.SentinelScope, None, Some "FileUploaded")
 
                     if
                         trail

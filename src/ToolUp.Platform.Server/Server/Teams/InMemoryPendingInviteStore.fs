@@ -283,7 +283,8 @@ module internal PendingInviteExpiryHook =
                     try
                         do!
                             log.Record(
-                                AuditStreamKey.ofTeam entry.TeamId,
+                                AuditScope.team (TeamId entry.TeamId),
+                                AuditSubject.system "PendingInviteStore",
                                 TeamInviteExpired {
                                     TeamId = entry.TeamId
                                     InviteeEmail = email

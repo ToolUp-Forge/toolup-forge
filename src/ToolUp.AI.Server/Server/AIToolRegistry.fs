@@ -672,7 +672,7 @@ let guardToolGrant (ctx: HttpContext) (access: AccessContext) (moduleName: strin
         let auditLog =
             match ctx.RequestServices.GetService(typeof<IAuditLog>) with
             | :? IAuditLog as log -> log
-            | _ -> ToolUp.Platform.Audit.AuditLog.NoOpAuditLog() :> IAuditLog
+            | _ -> ToolUp.Platform.NoOpAuditLog() :> IAuditLog
 
         let scopeId =
             match ctx.Items.TryGetValue "ToolUp.StorageScope" with

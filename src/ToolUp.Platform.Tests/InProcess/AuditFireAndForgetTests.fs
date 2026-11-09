@@ -50,18 +50,18 @@ let private healthyAuditLog () =
 
     rows,
     { new IAuditLog with
-        member _.Record(_, event) = async {
+        member _.Record(AuditScope.StreamKey _, _actor, event) = async {
             rows.Enqueue event
             return Ok()
         }
 
-        member _.GetAuditTrail(_, _, _) = async { return [] }
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
     }
 
 let private failingAuditLog (mode: FailureMode) (marker: string) =
     { new IAuditLog with
-        member _.Record(_, _) = failWith mode marker
-        member _.GetAuditTrail(_, _, _) = async { return [] }
+        member _.Record(AuditScope.StreamKey _, _actor, _) = failWith mode marker
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
     }
 
 let private pendingStore (consume: unit -> Async<Result<PendingInviteByEmail option, PendingInviteStoreError>>) =

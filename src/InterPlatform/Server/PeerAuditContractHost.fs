@@ -149,8 +149,8 @@ let registration (auditLog: IAuditLog) : PeerContractRegistration =
                     let query =
                         unmarshalArgs argsJson [ typeof<PeerAuditQuery> ] |> List.head :?> PeerAuditQuery
 
-                    let! scheduled = auditLog.GetAuditTrail(PeerJob.Scope, None, Some "PeerCallCompleted")
-                    let! terminal = auditLog.GetAuditTrail(PeerJob.Scope, None, Some "PeerJobCompleted")
+                    let! scheduled = auditLog.GetAuditTrail(AuditScope.platform, None, Some "PeerCallCompleted")
+                    let! terminal = auditLog.GetAuditTrail(AuditScope.platform, None, Some "PeerJobCompleted")
                     let entries = project context.Peer.PeerId query (scheduled @ terminal)
                     return Ok(JsonRpc.serialize entries)
                 with ex ->

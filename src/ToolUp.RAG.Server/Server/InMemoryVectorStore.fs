@@ -325,7 +325,8 @@ type InMemoryVectorStore
             | Some a ->
                 do!
                     a.Record(
-                        KnowledgeSourceModule.value,
+                        AuditScope.shard KnowledgeSourceModule.value,
+                        AuditSubject.system "VectorStore",
                         KnowledgeIndexLoadFailed {
                             ScopeKey = scopeKey
                             Reason = reason

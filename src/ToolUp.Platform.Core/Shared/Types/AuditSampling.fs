@@ -28,6 +28,9 @@ type AuditSubjectKind =
     | ClaimAuditKind
     /// Phase 1002 — `ReaderAudit` (a publication reader).
     | ReaderAuditKind
+    /// `SystemAudit` — a row a platform component emitted with no principal
+    /// in reach.
+    | SystemAuditKind
 
 /// Phase 66 Stream C.2 (design §3.6 + D17) — per-subject-kind audit
 /// sampling. A single central policy on `ServerConfig` (NOT per-sink):
@@ -86,6 +89,9 @@ module AuditSamplingPolicy =
         // Phase 1002 — a publication reader's trail is never sampled: it is
         // low-volume and is the record of who read a publication.
         | ReaderAuditKind -> 1.0
+        // A component's own rows are the platform's record of what it did,
+        // and are not sampled either.
+        | SystemAuditKind -> 1.0
 
     /// Deterministic `Guid` → `[0, 1)` projection. Folds six bytes of
     /// the id into a 48-bit non-negative integer (which fits exactly in

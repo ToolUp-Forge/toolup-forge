@@ -67,12 +67,12 @@ type private RecordingAuditLog() =
     member _.All = recorded |> Seq.map snd |> List.ofSeq
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async {
+        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
             recorded.Enqueue((scopeId, audit))
             return Ok()
         }
 
-        member _.GetAuditTrail(scopeId, _dateRange, eventType) = async {
+        member _.GetAuditTrail(AuditScope.StreamKey scopeId, _dateRange, eventType) = async {
             return
                 recorded
                 |> Seq.filter (fun (s, _) -> s = scopeId)
@@ -97,8 +97,8 @@ type private NoopSeamJobHandler() =
 /// is proved there; what the mapper probes is the mirror it produces.
 type private SilentSeamAuditLog() =
     interface IAuditLog with
-        member _.Record(_, _) = async { return Ok() }
-        member _.GetAuditTrail(_, _, _) = async { return [] }
+        member _.Record(AuditScope.StreamKey _, _actor, _) = async { return Ok() }
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
 
 /// A service provider over an explicit type→instance table. Small on
 /// purpose: the report resolves exactly two services (the evidence and
@@ -464,7 +464,8 @@ let private seedLedger (storage: IBlobStorage) = async {
     let batch =
         [ 0..4 ]
         |> List.map (fun i ->
-            AuditEnvelope.fromScopeId
+            AuditEnvelope.create
+                AuditSubject.unattributed
                 scope
                 (DateTime(2026, 8, 24, 9, 0, 0, DateTimeKind.Utc).AddSeconds(float i))
                 (DeploymentVerified {

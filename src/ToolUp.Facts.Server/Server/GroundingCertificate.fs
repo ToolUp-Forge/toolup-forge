@@ -716,7 +716,8 @@ module GroundingCertificate =
             | Some audit ->
                 return!
                     audit.Record(
-                        scopeId,
+                        AuditScope.shard scopeId,
+                        AuditSubject.system "GroundingCertificate",
                         AuditEvent.CertificateIssued {
                             Digest = certificateDigest body
                             Subject = body.Root
@@ -1187,7 +1188,7 @@ module GroundingCertificate =
     let auditTrailLog (audit: IAuditLog) : ICertificateIssuanceLog =
         { new ICertificateIssuanceLog with
             member _.Issued(scopeId) = async {
-                let! events = audit.GetAuditTrail(scopeId, None, Some "CertificateIssued")
+                let! events = audit.GetAuditTrail(AuditScope.shard scopeId, None, Some "CertificateIssued")
                 return Ok(issuancesOf events)
             }
         }
@@ -1216,7 +1217,7 @@ module GroundingCertificate =
                 match! integrity () with
                 | Error reason -> return Error reason
                 | Ok() ->
-                    let! events = audit.GetAuditTrail(scopeId, None, Some "CertificateIssued")
+                    let! events = audit.GetAuditTrail(AuditScope.shard scopeId, None, Some "CertificateIssued")
                     return Ok(issuancesOf events)
             }
         }

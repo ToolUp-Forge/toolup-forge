@@ -298,7 +298,8 @@ module InProcessOAuthTokenRefresher =
             (elapsedMs: int64)
             : Async<unit> =
             auditLog.Record(
-                descriptor.ScopeId,
+                AuditScope.shard descriptor.ScopeId,
+                AuditSubject.system "OAuthTokenRefresher",
                 OAuthTokenRefreshed {
                     Provider = descriptor.Provider
                     ConfigId = descriptor.ConfigId
@@ -312,7 +313,8 @@ module InProcessOAuthTokenRefresher =
 
         let emitInvalidatedAudit (descriptor: OAuthRefreshDescriptor) (reason: string) : Async<unit> =
             auditLog.Record(
-                descriptor.ScopeId,
+                AuditScope.shard descriptor.ScopeId,
+                AuditSubject.system "OAuthTokenRefresher",
                 OAuthRefreshTokenInvalidated {
                     Provider = descriptor.Provider
                     ConfigId = descriptor.ConfigId

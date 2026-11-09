@@ -80,12 +80,12 @@ type private RecordingAuditLog() =
         this.Events |> List.filter (fun e -> AuditEvent.eventTypeName e = eventType)
 
     interface IAuditLog with
-        member _.Record(scope, audit) = async {
+        member _.Record(AuditScope.StreamKey scope, _actor, audit) = async {
             recorded.Enqueue(scope, audit)
             return Result.Ok()
         }
 
-        member _.GetAuditTrail(_, _, _) = async { return recorded |> Seq.map snd |> List.ofSeq }
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return recorded |> Seq.map snd |> List.ofSeq }
 
 /// Poll until at least `count` events of `eventType` are recorded, or the
 /// budget expires. Returns what it found either way so the caller asserts

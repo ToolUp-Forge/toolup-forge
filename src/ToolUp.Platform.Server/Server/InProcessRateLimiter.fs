@@ -235,7 +235,8 @@ type InProcessRateLimiter
                     if waited >= slowRateLimitThreshold then
                         do!
                             auditLog.Record(
-                                key.ScopeId,
+                                AuditScope.shard key.ScopeId,
+                                AuditSubject.system "RateLimiter",
                                 RateLimitWaited {
                                     ScopeId = key.ScopeId
                                     Provider = key.Provider
@@ -249,7 +250,8 @@ type InProcessRateLimiter
 
                     do!
                         auditLog.Record(
-                            key.ScopeId,
+                            AuditScope.shard key.ScopeId,
+                            AuditSubject.system "RateLimiter",
                             RateLimitRefused {
                                 ScopeId = key.ScopeId
                                 Provider = key.Provider

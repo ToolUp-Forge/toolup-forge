@@ -40,12 +40,12 @@ type private RecordingAuditLog() =
     member _.Count = recorded.Count
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async {
+        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
             recorded.Enqueue(scopeId, audit)
             return Ok()
         }
 
-        member _.GetAuditTrail(_, _, _) = async { return [] }
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
 
 let private silentLogger =
     { new ILogger with
@@ -158,10 +158,14 @@ let tests =
         testCase "AuditScope.streamKey renders the bare id the rows at rest carry"
         <| fun _ ->
             Expect.equal bareKey "acme" "the bare team id"
-            Expect.equal (AuditStreamKey.ofTeam teamId) bareKey "the 1059 helper renders through AuditScope"
 
             Expect.equal
-                (AuditStreamKey.ofScope (StorageScope.ofKey true (ScopeKey.Team(TeamId teamId))))
+                (AuditScope.streamKey (AuditScope.team (TeamId teamId)))
+                bareKey
+                "the team constructor renders the bare id"
+
+            Expect.equal
+                (AuditScope.streamKey (StorageScope.auditScope (StorageScope.ofKey true (ScopeKey.Team(TeamId teamId)))))
                 bareKey
                 "a team's StorageScope keys the same stream"
 

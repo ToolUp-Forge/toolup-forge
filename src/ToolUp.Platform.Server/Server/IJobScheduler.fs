@@ -636,7 +636,7 @@ module ScheduledJobDeclaration =
                 RetryPolicy = declaration.RetryPolicy
                 ShardKey = declaration.ShardKey
                 Precision = declaration.Precision
-                CreatedBy = AuditSubject.PlatformSentinelUserId
+                CreatedBy = ScopeKey.PlatformContainer
                 Tags = declaration.Tags |> Map.add "source" "compose-time"
             }
 

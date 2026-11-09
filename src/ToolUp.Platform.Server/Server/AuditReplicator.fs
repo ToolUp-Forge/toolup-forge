@@ -198,6 +198,10 @@ type AuditReplicator
     ) =
     inherit BackgroundService()
 
+    /// The replicator's own rows (delivery outcomes, decode failures) are
+    /// the replicator's, attributed to it.
+    let replicatorActor = AuditSubject.system "AuditReplicator"
+
     // ─── Sink-level state ───────────────────────────────────────────
     //
     // Per-sink resources:
@@ -258,7 +262,7 @@ type AuditReplicator
         // event from re-entering the replicator pipeline. Best-effort: the
         // replicator's own rows never stall its delivery loop.
         do!
-            AuditRow.emit auditLog ScopeKey.PlatformContainer (AuditSinkDelivered payload)
+            AuditRow.emit auditLog AuditScope.platform replicatorActor (AuditSinkDelivered payload)
             |> AuditRow.bestEffort
     }
 
@@ -273,7 +277,7 @@ type AuditReplicator
         }
 
         do!
-            AuditRow.emit auditLog ScopeKey.PlatformContainer (AuditSinkFailed payload)
+            AuditRow.emit auditLog AuditScope.platform replicatorActor (AuditSinkFailed payload)
             |> AuditRow.bestEffort
     }
 
@@ -288,7 +292,7 @@ type AuditReplicator
         }
 
         do!
-            AuditRow.emit auditLog ScopeKey.PlatformContainer (AuditSinkDeadLettered payload)
+            AuditRow.emit auditLog AuditScope.platform replicatorActor (AuditSinkDeadLettered payload)
             |> AuditRow.bestEffort
     }
 
@@ -388,7 +392,7 @@ type AuditReplicator
                     }
 
                     do!
-                        AuditRow.emit auditLog ScopeKey.PlatformContainer (AuditEventDecodeFailed payload)
+                        AuditRow.emit auditLog AuditScope.platform replicatorActor (AuditEventDecodeFailed payload)
                         |> AuditRow.bestEffort
 
                 if List.isEmpty decodedPairs then
@@ -404,15 +408,10 @@ type AuditReplicator
                     do! cursorStore.Save(sink.Name, scopeId, newCursor)
                     return ()
                 else
-                    // Phase 66 Stream B.7 — wrap each decoded event in an
-                    // `AuditEnvelope` before handing it to the sink. The
-                    // dispatcher does not have the originating
-                    // `AccessContext.Subject` (`ModuleEvent` does not
-                    // persist it today), so the subject is derived from
-                    // `ScopeId` via `AuditSubject.fromScopeId`. Sinks at
-                    // `SchemaVersion = LatestAuditSchemaVersion` (2) read
-                    // these envelopes natively; future schema-version
-                    // mismatches would be detected and translated here.
+                    // Wrap each decoded event in an `AuditEnvelope` before
+                    // handing it to the sink, attributed to the actor the row
+                    // carries (`AuditSubject.unattributed` for a row written
+                    // before rows carried one).
                     // Phase 66 Stream C.2 — apply the central
                     // `AuditSamplingPolicy` before delivery. The keep/skip
                     // decision is deterministic on the event id (per subject
@@ -427,7 +426,12 @@ type AuditReplicator
                     let envelopes =
                         decodedPairs
                         |> List.choose (fun (modEvt, audit) ->
-                            let env = AuditEnvelope.fromScopeId modEvt.ScopeId modEvt.OccurredAt audit
+                            let env =
+                                AuditEnvelope.create
+                                    (AuditLog.decodeActor modEvt.Payload)
+                                    modEvt.ScopeId
+                                    modEvt.OccurredAt
+                                    audit
 
                             if
                                 AuditSamplingPolicy.shouldDeliver

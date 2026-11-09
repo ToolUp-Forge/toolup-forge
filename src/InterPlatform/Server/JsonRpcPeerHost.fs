@@ -469,7 +469,7 @@ module JsonRpcPeerHost =
                 }
 
                 do!
-                    auditLog.Record(PeerJob.Scope, PeerCallCompleted payload)
+                    auditLog.Record(AuditScope.platform, AuditSubject.system "PeerHost", PeerCallCompleted payload)
                     |> AuditRow.orRefuse
                     |> Async.StartAsTask
         }
@@ -538,7 +538,11 @@ module JsonRpcPeerHost =
                         }
 
                         do!
-                            auditLog.Record(PeerJob.Scope, PeerJobCompleted payload)
+                            auditLog.Record(
+                                AuditScope.platform,
+                                AuditSubject.system "PeerHost",
+                                PeerJobCompleted payload
+                            )
                             |> AuditRow.orRefuse
                             |> Async.StartAsTask
             with _ ->

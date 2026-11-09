@@ -100,12 +100,14 @@ type private RecordingAuditLog() =
         this.Kinds |> List.filter ((=) name) |> List.length
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async {
+        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
             lock gate (fun () -> recorded.Add((scopeId, audit)))
             return Ok()
         }
 
-        member _.GetAuditTrail(_, _, _) = async { return lock gate (fun () -> recorded |> Seq.map snd |> List.ofSeq) }
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async {
+            return lock gate (fun () -> recorded |> Seq.map snd |> List.ofSeq)
+        }
 
 /// A dispatcher that records every spec it was handed and mints a handle.
 /// The submission COUNT is the load-bearing observation in most of these

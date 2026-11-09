@@ -179,7 +179,11 @@ let publicFormApi
                                     }
 
                                     do!
-                                        auditLog.Record(claim.ScopeId, AuditEvent.FormSubmitted payload)
+                                        auditLog.Record(
+                                            AuditScope.shard claim.ScopeId,
+                                            AuditSubject.fromSubject (ClaimBearer claim),
+                                            AuditEvent.FormSubmitted payload
+                                        )
                                         |> AuditRow.orRefuse
 
                                     return Ok saved

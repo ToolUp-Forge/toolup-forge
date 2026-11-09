@@ -233,7 +233,8 @@ let tryConsumePendingForUser
                     | Error reason ->
                         do!
                             auditLog.Record(
-                                AuditStreamKey.ofTeam entry.TeamId,
+                                AuditScope.team (TeamId entry.TeamId),
+                                AuditSubject.TeamAudit(user.UserId, TeamId entry.TeamId),
                                 TeamInviteAcceptedFromPendingFailed {
                                     TeamId = TeamId entry.TeamId
                                     InviteeUserId = user.UserId
@@ -253,7 +254,8 @@ let tryConsumePendingForUser
 
                         do!
                             auditLog.Record(
-                                AuditStreamKey.ofTeam entry.TeamId,
+                                AuditScope.team (TeamId entry.TeamId),
+                                AuditSubject.TeamAudit(user.UserId, TeamId entry.TeamId),
                                 TeamInviteAcceptedFromPending {
                                     TeamId = TeamId entry.TeamId
                                     InviteeUserId = user.UserId
@@ -326,7 +328,11 @@ let teamInvitationApi
                                 }
 
                                 do!
-                                    auditLog.Record(AuditStreamKey.ofTeam req.TeamId, TeamInviteIssued payload)
+                                    auditLog.Record(
+                                        AuditScope.team (TeamId req.TeamId),
+                                        AuditSubject.fromSubject access.Subject,
+                                        TeamInviteIssued payload
+                                    )
                                     |> AuditRow.orRefuse
 
                                 return
@@ -422,7 +428,8 @@ let teamInvitationApi
 
                                 do!
                                     auditLog.Record(
-                                        AuditStreamKey.ofTeam teamId,
+                                        AuditScope.team (TeamId teamId),
+                                        AuditSubject.fromSubject access.Subject,
                                         TeamInviteAccepted {
                                             TeamId = TeamId teamId
                                             TokenId = claim.TokenId
@@ -435,7 +442,8 @@ let teamInvitationApi
 
                                 do!
                                     auditLog.Record(
-                                        AuditStreamKey.ofTeam teamId,
+                                        AuditScope.team (TeamId teamId),
+                                        AuditSubject.fromSubject access.Subject,
                                         TeamInviteRedeemed {
                                             TeamId = TeamId teamId
                                             TokenId = claim.TokenId
@@ -505,7 +513,8 @@ let teamInvitationApi
                         | Ok() ->
                             do!
                                 auditLog.Record(
-                                    AuditStreamKey.ofTeam teamId,
+                                    AuditScope.team (TeamId teamId),
+                                    AuditSubject.fromSubject access.Subject,
                                     TeamInviteRevoked {
                                         TeamId = TeamId teamId
                                         TokenId = claim.TokenId
@@ -606,7 +615,11 @@ let teamInvitationApi
                             logger.Info "[invite] audit Record: starting"
 
                             match!
-                                AuditRow.emit auditLog (AuditStreamKey.ofTeam req.TeamId) (TeamInviteIssued payload)
+                                AuditRow.emit
+                                    auditLog
+                                    (AuditScope.team (TeamId req.TeamId))
+                                    (AuditSubject.fromSubject access.Subject)
+                                    (TeamInviteIssued payload)
                             with
                             | Ok() -> logger.Info "[invite] audit Record: ok"
                             | Error e ->
@@ -802,7 +815,8 @@ let teamInvitationApi
                                     let! recorded =
                                         AuditRow.emit
                                             auditLog
-                                            (AuditStreamKey.ofTeam entry.TeamId)
+                                            (AuditScope.team (TeamId entry.TeamId))
+                                            (AuditSubject.fromSubject access.Subject)
                                             (TeamInviteRevoked {
                                                 TeamId = TeamId entry.TeamId
                                                 TokenId = sprintf "pending:%s" normalised
@@ -834,7 +848,7 @@ let teamInvitationApi
 
                     let! trail =
                         auditLog.GetAuditTrail(
-                            AuditStreamKey.ofTeam teamId,
+                            AuditScope.team (TeamId teamId),
                             Some(windowStart, now),
                             Some "TeamInviteExpired"
                         )

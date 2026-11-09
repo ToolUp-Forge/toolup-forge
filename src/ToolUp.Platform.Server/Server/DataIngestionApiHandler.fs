@@ -366,7 +366,8 @@ let dataIngestionApi (ctx: HttpContext) : IDataIngestionApi =
 
                                 try
                                     auditLog.Record(
-                                        scopeId,
+                                        AuditScope.shard scopeId,
+                                        Background.requestActor "DataIngestionApi" ctx,
                                         OAuthDisconnected {
                                             UserId = UserId accessContext.UserId
                                             ScopeId = scopeId

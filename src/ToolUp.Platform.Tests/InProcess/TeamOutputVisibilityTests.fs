@@ -705,12 +705,12 @@ type private CapturingAudit() =
             | _ -> None)
 
     interface IAuditLog with
-        member _.Record(_, event) = async {
+        member _.Record(AuditScope.StreamKey _, _actor, event) = async {
             lock rows (fun () -> rows.Add event)
             return Ok()
         }
 
-        member _.GetAuditTrail(_, _, _) = async { return [] }
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
 
 type private World = {
     Storage: IBlobStorage

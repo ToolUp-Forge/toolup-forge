@@ -117,7 +117,8 @@ module RateLimitVerdict =
             try
                 do!
                     log.Record(
-                        scopeId,
+                        AuditScope.shard scopeId,
+                        AuditSubject.system "RateLimiter",
                         AuditEvent.RateLimitRefused {
                             ScopeId = scopeId
                             Provider = limiter

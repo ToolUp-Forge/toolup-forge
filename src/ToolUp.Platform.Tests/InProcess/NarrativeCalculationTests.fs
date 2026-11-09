@@ -432,7 +432,7 @@ let private fixture () : Fixture =
         ProvenanceGraph.createWithFacts lineage (FactStoreEvidenceSource.create store)
 
     let secrets = InMemorySecretStore() :> ISecretStore
-    let audit = AuditLog.NoOpAuditLog() :> IAuditLog
+    let audit = NoOpAuditLog() :> IAuditLog
 
     let signer =
         DefaultArtefactSigner.createSystem secrets audit "grounding-calc" Ed25519

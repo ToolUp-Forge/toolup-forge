@@ -77,7 +77,9 @@ type LifecycleJobHandler(services: IServiceProvider) =
                 // an offboard (mirrors the inline handler's seam).
                 let emitAudit (scope: string) (event: AuditEvent) =
                     match auditLog with
-                    | Some a -> AuditRow.emit a scope event |> AuditRow.bestEffort
+                    | Some a ->
+                        AuditRow.emit a (AuditScope.shard scope) (AuditSubject.system "LifecycleJob") event
+                        |> AuditRow.bestEffort
                     | None -> async { return () }
 
                 // Persist the terminal summary durably (best-effort) +

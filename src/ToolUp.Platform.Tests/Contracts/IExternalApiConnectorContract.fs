@@ -270,7 +270,7 @@ let private limiterOf (descriptors: RateLimitDescriptor list) : IRateLimiter =
     InProcessRateLimiter(
         descriptors,
         NoOpMetricsSink() :> IMetricsSink,
-        AuditLog.NoOpAuditLog() :> IAuditLog,
+        NoOpAuditLog() :> IAuditLog,
         TimeSpan.FromSeconds 5.0,
         noopLogger
     )

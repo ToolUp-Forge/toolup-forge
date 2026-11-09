@@ -294,7 +294,8 @@ let sweepScope
                     | Some audit ->
                         do!
                             audit.Record(
-                                scopeId,
+                                AuditScope.shard scopeId,
+                                AuditSubject.system "KnowledgeRetentionSweep",
                                 KnowledgeDocumentsPurged {
                                     ScopeId = scopeId
                                     DocumentIds = purgedIds

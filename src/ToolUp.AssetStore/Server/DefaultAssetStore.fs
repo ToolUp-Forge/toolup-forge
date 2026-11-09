@@ -115,7 +115,9 @@ type DefaultAssetStore
         if options.EmitAudit then
             async {
                 try
-                    do! auditLog.Record(scopeId, event) |> AuditRow.orRefuse
+                    do!
+                        auditLog.Record(AuditScope.shard scopeId, AuditSubject.system "AssetStore", event)
+                        |> AuditRow.orRefuse
                 with ex ->
                     logger.Warn(sprintf "[AssetStore] audit emission failed: %s" ex.Message)
             }

@@ -345,7 +345,8 @@ let private recordAndAuditRefusal (ctx: HttpContext) (ip: string) (reason: strin
     | Some audit ->
         do!
             audit.Record(
-                platformScope,
+                AuditScope.platform,
+                AuditSubject.system "ExternalComputeCallback",
                 ExternalCallbackRejected {
                     HandleId = handleId |> Option.map string
                     Reason = reason
@@ -391,7 +392,8 @@ let private auditResolved
         | Some audit ->
             do!
                 audit.Record(
-                    record.Handle.ScopeId,
+                    AuditScope.shard record.Handle.ScopeId,
+                    AuditSubject.system "ExternalComputeCallback",
                     ExternalCallbackResolved {
                         HandleId = string record.Handle.HandleId
                         Backend = record.Handle.Backend

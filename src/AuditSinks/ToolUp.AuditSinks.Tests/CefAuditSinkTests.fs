@@ -313,7 +313,7 @@ let private emptyStorage () =
 let private baseTime = DateTime(2026, 5, 28, 12, 0, 0, DateTimeKind.Utc)
 
 let private envelopeFor (scopeId: string) (event: AuditEvent) =
-    AuditEnvelope.fromScopeId scopeId baseTime event
+    AuditEnvelope.create AuditSubject.unattributed scopeId baseTime event
 
 let private loginEvent (userId: string) =
     UserLoggedIn {

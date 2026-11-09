@@ -118,7 +118,10 @@ type ScimDeps = {
 /// round-trip an IdP will time out.
 let private audit (deps: ScimDeps) (event: AuditEvent) =
     match deps.Audit with
-    | Some log -> log.Record(deps.Config.TeamId.Value, event) |> AuditRow.orRefuse |> Async.Start
+    | Some log ->
+        log.Record(AuditScope.team deps.Config.TeamId, AuditSubject.system "Scim", event)
+        |> AuditRow.orRefuse
+        |> Async.Start
     | None -> ()
 
 // ─── Projection: platform membership → SCIM User ─────────────────────

@@ -77,12 +77,12 @@ let private runWith (store: IPermissionStore) (onReached: HttpContext -> unit) =
 
     services.AddSingleton<IAuditLog>(
         { new IAuditLog with
-            member _.Record(scopeId, event) = async {
+            member _.Record(AuditScope.StreamKey scopeId, _actor, event) = async {
                 rows.Enqueue(scopeId, event)
                 return Ok()
             }
 
-            member _.GetAuditTrail(_, _, _) = async { return [] }
+            member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
         }
     )
     |> ignore

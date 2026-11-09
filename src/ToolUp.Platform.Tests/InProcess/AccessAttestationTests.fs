@@ -88,7 +88,7 @@ let private keyId = "deploy-v1"
 /// deterministic and the whole-envelope determinism claim is testable.
 let private deploymentKey () =
     let secrets = InMemorySecretStore() :> ISecretStore
-    let audit = AuditLog.NoOpAuditLog() :> IAuditLog
+    let audit = NoOpAuditLog() :> IAuditLog
     let byteSigner = DefaultArtefactSigner.createSystem secrets audit keyId Ed25519
     let publicKey = byteSigner.VerifyKey() |> Async.RunSynchronously
     let envelopeSigner = DsseEnvelopeSigning.fromSecretStore secrets keyId Ed25519

@@ -231,7 +231,8 @@ type AnonymousSessionMigrationMiddleware(next: RequestDelegate) =
 
                                         try
                                             auditLog.Record(
-                                                scopeId,
+                                                AuditScope.shard scopeId,
+                                                Background.requestActor "AnonymousSessionMigration" ctx,
                                                 AnonymousSessionMigrated {
                                                     AnonymousSessionId = sid
                                                     TargetUserId = UserId uid

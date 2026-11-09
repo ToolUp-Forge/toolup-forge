@@ -564,7 +564,8 @@ let private bundleHandler (config: ServerConfig) (capture: DevDiagnosticsHandler
         | Some log ->
             do!
                 log.Record(
-                    platformScopeId,
+                    AuditScope.platform,
+                    Background.requestActor "DiagnosticBundle" ctx,
                     DiagnosticBundleAccessed {
                         UserId = UserId callerUserId
                         ScopeId = callerScopeId

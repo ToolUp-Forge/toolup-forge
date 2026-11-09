@@ -1227,7 +1227,8 @@ let private announceStoreReset
 
         try
             auditLog.Record(
-                scope.ScopeId,
+                StorageScope.auditScope scope,
+                AuditSubject.system "FileManagement",
                 SessionStoreReset {
                     Container = scope.Container
                     Reason = SessionStoreResetReasonEvicted
@@ -1421,7 +1422,8 @@ let fileManagementApi (ctx: HttpContext) : FileManagementApi =
             let what = sprintf "%s audit" (AuditEvent.eventTypeName event)
 
             try
-                a.Record(scopeId, event) |> Background.startAuditRow auditWarn what
+                a.Record(AuditScope.shard scopeId, AuditSubject.system "FileManagement", event)
+                |> Background.startAuditRow auditWarn what
             with ex ->
                 auditWarn what ex
         | None -> ()

@@ -87,26 +87,34 @@ let tests =
         testList "the seam decides, per mode" [
             testCaseAsync "RefuseAction answers StoreUnavailable"
             <| async {
-                match! (logUnder RefuseAction).Record("team-acme", row) with
+                match!
+                    (logUnder RefuseAction).Record(AuditScope.shard "team-acme", AuditSubject.system "test", row)
+                with
                 | Error(AuditWriteError.StoreUnavailable _) -> ()
                 | other -> failtestf "expected StoreUnavailable; got %A" other
             }
 
             testCaseAsync "LogAndContinue answers Ok"
             <| async {
-                let! answer = (logUnder LogAndContinue).Record("team-acme", row)
+                let! answer =
+                    (logUnder LogAndContinue).Record(AuditScope.shard "team-acme", AuditSubject.system "test", row)
+
                 Expect.equal answer (Ok()) "the action completes"
             }
 
             testCaseAsync "DegradeToFile answers Ok (nothing to spill to is logged as lost)"
             <| async {
-                let! answer = (logUnder DegradeToFile).Record("team-acme", row)
+                let! answer =
+                    (logUnder DegradeToFile).Record(AuditScope.shard "team-acme", AuditSubject.system "test", row)
+
                 Expect.equal answer (Ok()) "the action completes"
             }
 
             testCaseAsync "NoOpAuditLog answers Ok"
             <| async {
-                let! answer = (AuditLog.NoOpAuditLog() :> IAuditLog).Record("team-acme", row)
+                let! answer =
+                    (NoOpAuditLog() :> IAuditLog).Record(AuditScope.shard "team-acme", AuditSubject.system "test", row)
+
                 Expect.equal answer (Ok()) "a log with no substrate never refuses"
             }
 
@@ -120,7 +128,7 @@ let tests =
                     )
                     :> IAuditLog
 
-                let! answer = log.Record("team-acme", row)
+                let! answer = log.Record(AuditScope.shard "team-acme", AuditSubject.system "test", row)
                 Expect.equal answer (Ok()) "a persisted row is Ok"
             }
         ]
@@ -129,7 +137,11 @@ let tests =
             testCaseAsync "orRefuse turns a refused row into AuditWriteRefusedException"
             <| async {
                 let! outcome =
-                    AuditRow.emit (logUnder RefuseAction) "team-acme" row
+                    AuditRow.emit
+                        (logUnder RefuseAction)
+                        (AuditScope.shard "team-acme")
+                        (AuditSubject.system "test")
+                        row
                     |> AuditRow.orRefuse
                     |> Async.Catch
 
@@ -142,6 +154,66 @@ let tests =
             }
 
             testCaseAsync "bestEffort discards a refused row"
-            <| async { do! AuditRow.emit (logUnder RefuseAction) "team-acme" row |> AuditRow.bestEffort }
+            <| async {
+                do!
+                    AuditRow.emit
+                        (logUnder RefuseAction)
+                        (AuditScope.shard "team-acme")
+                        (AuditSubject.system "test")
+                        row
+                    |> AuditRow.bestEffort
+            }
+        ]
+
+        testList "the row carries its actor" [
+            testCaseAsync "a recorded row persists its actor, and the replicator's envelope reads it back"
+            <| async {
+                let store = InMemoryEventStore.InMemoryEventStore()
+                let log = AuditLog.EventStoreAuditLog(store, silentLogger) :> IAuditLog
+                let actor = TeamAudit(UserId "alice", TeamId "acme")
+
+                let! answer = log.Record(AuditScope.team (TeamId "acme"), actor, row)
+                Expect.equal answer (Ok()) "the row lands"
+
+                let! persisted = (store :> IEventStore).ReadBySource("acme", AuditSourceModule.value)
+
+                match persisted with
+                | [ evt ] ->
+                    Expect.equal (AuditLog.decodeActor evt.Payload) actor "the actor rides the row"
+                    Expect.equal (AuditLog.decodeAuditEvent evt) (Some row) "the event decodes unchanged"
+
+                    let envelope =
+                        AuditEnvelope.create (AuditLog.decodeActor evt.Payload) evt.ScopeId evt.OccurredAt row
+
+                    Expect.equal envelope.Subject actor "the sink sees the actor, not a guess from the key"
+                | rows -> failtestf "expected one persisted row; got %d" (List.length rows)
+            }
+
+            testCase "a system row names its emitter"
+            <| fun _ ->
+                let payload = AuditLog.withActor (AuditSubject.system "BootstrapTeam") "{\"A\":1}"
+                Expect.equal (AuditLog.decodeActor payload) (SystemAudit "BootstrapTeam") "the emitter round-trips"
+
+            testCase "a row written before rows carried an actor decodes unchanged, as unattributed"
+            <| fun _ ->
+                // The bytes a row was persisted with before this phase: the
+                // event's own payload, and nothing else.
+                let atRest = "{\"UserId\":\"alice\",\"AuthProvider\":\"Header\"}"
+
+                Expect.equal (AuditLog.serialiseAuditEvent row) atRest "today's event encoding is the encoding at rest"
+                Expect.equal (AuditLog.tryDecodeAuditEvent "UserLoggedIn" atRest) (Ok row) "it decodes unchanged"
+                Expect.equal (AuditLog.decodeActor atRest) AuditSubject.unattributed "no actor is guessed from the key"
+
+            testCase "the actor is appended after the event's bytes, which are kept verbatim"
+            <| fun _ ->
+                let eventJson = AuditLog.serialiseAuditEvent row
+                let persisted = AuditLog.withActor (UserAudit(UserId "alice")) eventJson
+
+                Expect.stringStarts persisted (eventJson.TrimEnd('}')) "the event's bytes are a prefix of the row"
+
+                Expect.equal
+                    (AuditLog.tryDecodeAuditEvent "UserLoggedIn" persisted)
+                    (Ok row)
+                    "a reader ignores the actor"
         ]
     ]

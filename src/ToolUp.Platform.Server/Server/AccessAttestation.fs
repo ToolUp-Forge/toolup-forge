@@ -454,7 +454,7 @@ let private liveApprovalsFor
                     // read, and reading must not raise the tamper alert a
                     // request would (the alert belongs to the guard).
                     let! resolved =
-                        resolveLive sources.Consents sources.ConsentVerifier (AuditLog.NoOpAuditLog()) now subject party
+                        resolveLive sources.Consents sources.ConsentVerifier (NoOpAuditLog()) now subject party
 
                     match resolved with
                     | Ok record ->

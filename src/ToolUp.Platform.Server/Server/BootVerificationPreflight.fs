@@ -1422,7 +1422,11 @@ module BootVerificationPreflight =
             }
 
             do!
-                auditLog.Record(options.ScopeId, AuditEvent.CompositionVerificationRecorded payload)
+                auditLog.Record(
+                    AuditScope.shard options.ScopeId,
+                    AuditSubject.system "BootVerification",
+                    AuditEvent.CompositionVerificationRecorded payload
+                )
                 |> AuditRow.orRefuse
     }
 
@@ -1535,11 +1539,15 @@ module VerifiedCompositionProfile =
     /// `auditingObserver` is the same call started fire-and-forget.
     let recordRefusal
         (auditLog: IAuditLog)
-        (scopeId: string)
+        (scope: AuditScope)
         (profile: CompositionProfile)
         (denial: CapabilityDenial)
         : Async<unit> =
-        auditLog.Record(scopeId, AuditEvent.CompositionCapabilityRefused(refusalPayload profile denial))
+        auditLog.Record(
+            scope,
+            AuditSubject.system "CompositionCapabilityGate",
+            AuditEvent.CompositionCapabilityRefused(refusalPayload profile denial)
+        )
         |> AuditRow.orRefuse
 
     /// The warning a failed refusal audit write is logged as.
@@ -1561,12 +1569,12 @@ module VerifiedCompositionProfile =
     /// host. The refusal itself is unaffected either way.
     let auditingObserver
         (auditLog: IAuditLog)
-        (scopeId: string)
+        (scope: AuditScope)
         (profile: CompositionProfile)
         : CapabilityDenial -> unit =
         fun denial ->
             try
-                recordRefusal auditLog scopeId profile denial
+                recordRefusal auditLog scope profile denial
                 |> Background.startAudit refusalWarn "CompositionCapabilityRefused audit"
             with ex ->
                 refusalWarn "CompositionCapabilityRefused audit" ex
@@ -1597,7 +1605,7 @@ module VerifiedCompositionProfile =
         (profile: CompositionProfile)
         (signature: CapabilitySignature option)
         : Result<ICompositionCapabilityGate, CompositionProfileRefusal> =
-        resolveGate profile (auditingObserver auditLog scopeId profile) signature
+        resolveGate profile (auditingObserver auditLog (AuditScope.shard scopeId) profile) signature
 
     // ─── The seam-authority arm of the profile ────────────
 
@@ -1659,7 +1667,7 @@ module VerifiedCompositionProfile =
         (signature: CapabilitySignature option)
         (grants: SeamGrantSignature option)
         : Result<ISeamAuthorityGate, CompositionProfileRefusal> =
-        resolveSeamGate profile (auditingObserver auditLog scopeId profile) signature grants
+        resolveSeamGate profile (auditingObserver auditLog (AuditScope.shard scopeId) profile) signature grants
 
     /// Bind an external-compute dispatcher to the profile.
     ///

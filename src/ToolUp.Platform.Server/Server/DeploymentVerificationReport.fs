@@ -3371,7 +3371,11 @@ module DeploymentVerificationReport =
             }
 
             do!
-                auditLog.Record(PlatformScopeId, DeploymentVerified payload)
+                auditLog.Record(
+                    AuditScope.platform,
+                    AuditSubject.system "DeploymentVerification",
+                    DeploymentVerified payload
+                )
                 |> AuditRow.orRefuse
         | _ -> ()
     }

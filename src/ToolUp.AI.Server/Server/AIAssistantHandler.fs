@@ -477,7 +477,8 @@ module ConversationRetention =
                         | Some audit ->
                             do!
                                 audit.Record(
-                                    scopeId,
+                                    AuditScope.shard scopeId,
+                                    AuditSubject.system "ConversationPurge",
                                     ConversationsPurged {
                                         ScopeId = scopeId
                                         ConversationIds = purged |> List.map string
@@ -1684,7 +1685,13 @@ let aiAssistantApi
             }
 
             try
-                do! auditLog.Record(scope.ScopeId, BeaconRejected payload) |> AuditRow.orRefuse
+                do!
+                    auditLog.Record(
+                        StorageScope.auditScope scope,
+                        AuditSubject.UserAudit(UserId userId),
+                        BeaconRejected payload
+                    )
+                    |> AuditRow.orRefuse
             with ex ->
                 logger.Warn $"BeaconRejected audit write failed (submit; conversation {conversationId}): {ex.Message}"
         | None -> ()

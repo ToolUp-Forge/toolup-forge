@@ -321,7 +321,7 @@ let tests =
                 let! freshPresent = siblingsPresent storage fresh
                 Expect.equal freshPresent [ true; true; true; true ] "the fresh conversation is untouched"
 
-                let! trail = audit.GetAuditTrail(scopeId, None, Some "ConversationsPurged")
+                let! trail = audit.GetAuditTrail(AuditScope.shard scopeId, None, Some "ConversationsPurged")
 
                 match trail with
                 | [ ConversationsPurged p ] ->
@@ -379,7 +379,7 @@ let tests =
                 let! present = siblingsPresent storage ancient
                 Expect.equal present [ true; true; true; true ] "every blob still there"
 
-                let! trail = audit.GetAuditTrail(scopeId, None, None)
+                let! trail = audit.GetAuditTrail(AuditScope.shard scopeId, None, None)
                 Expect.isEmpty trail "no audit row for a run that removed nothing"
             }
 
@@ -401,7 +401,7 @@ let tests =
 
                 Expect.equal report.Examined 1 "enumerated"
                 Expect.isEmpty report.Purged "nothing expired"
-                let! trail = audit.GetAuditTrail(scopeId, None, None)
+                let! trail = audit.GetAuditTrail(AuditScope.shard scopeId, None, None)
                 Expect.isEmpty trail "no row"
             }
 
@@ -468,7 +468,7 @@ let tests =
                 let! present = siblingsPresent storage stale
                 Expect.equal present [ false; false; false; false ] "purged through the handler"
 
-                let! trail = audit.GetAuditTrail(scopeId, None, Some "ConversationsPurged")
+                let! trail = audit.GetAuditTrail(AuditScope.shard scopeId, None, Some "ConversationsPurged")
                 Expect.equal trail.Length 1 "audited"
 
                 // No storage composed ⇒ permanent, not transient.

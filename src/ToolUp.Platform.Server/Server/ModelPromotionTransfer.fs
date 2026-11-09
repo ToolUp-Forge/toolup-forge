@@ -435,7 +435,8 @@ module ModelPromotion =
             try
                 do!
                     deps.Transition.Audit.Record(
-                        scopeId,
+                        AuditScope.shard scopeId,
+                        AuditSubject.system "ModelPromotion",
                         ModelArtifactPromoted {
                             CompositeKeyHash = promoted.Outcome.CompositeKey.Hash
                             TargetStatus = ModelArtifactStatus.name promoted.Target

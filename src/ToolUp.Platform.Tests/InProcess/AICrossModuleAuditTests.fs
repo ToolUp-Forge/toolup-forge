@@ -242,7 +242,7 @@ let private run (h: Harness) (name: string) (args: string) =
 /// `/dev/ai-cross-module` uses, so a row this cannot see is a row the
 /// endpoint cannot show either.
 let private rows (h: Harness) : CrossModuleReadPayload list =
-    h.AuditLog.GetAuditTrail(scope.ScopeId, None, Some AICrossModuleObservability.EventType)
+    h.AuditLog.GetAuditTrail(AuditScope.shard scope.ScopeId, None, Some AICrossModuleObservability.EventType)
     |> Async.RunSynchronously
     |> List.choose (function
         | CrossModuleRead p -> Some p
@@ -310,7 +310,8 @@ let private gunzip (bytes: byte[]) : string =
 
 /// One envelope carrying a `CrossModuleRead`, for the sink assertions.
 let private sinkEnvelope: AuditEnvelope =
-    AuditEnvelope.fromScopeId
+    AuditEnvelope.create
+        AuditSubject.unattributed
         "team-sinks"
         (DateTime(2026, 5, 28, 12, 0, 0, DateTimeKind.Utc))
         (CrossModuleRead(syntheticRow (Some "Payroll") "_platform.ai.list_results" 12.0 AICrossModuleAudit.OkOutcome))

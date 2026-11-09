@@ -110,7 +110,7 @@ let internal permissionGuardedApiCore<'T> (moduleName: string) (apiBuilder: Http
         let auditLog =
             match ctx.RequestServices.GetService(typeof<IAuditLog>) with
             | :? IAuditLog as log -> log
-            | _ -> ToolUp.Platform.Audit.AuditLog.NoOpAuditLog() :> IAuditLog
+            | _ -> ToolUp.Platform.NoOpAuditLog() :> IAuditLog
 
         let scopeId =
             accessCtx.TeamId

@@ -212,7 +212,7 @@ let private noOpChannelTests =
 
         testCaseAsync "NoOpAuditLog.Record returns immediately without throwing"
         <| async {
-            let log = AuditLog.NoOpAuditLog() :> IAuditLog
+            let log = NoOpAuditLog() :> IAuditLog
 
             let payload =
                 UserLoggedIn {
@@ -220,13 +220,15 @@ let private noOpChannelTests =
                     AuthProvider = "test"
                 }
 
-            do! log.Record("scope-x", payload) |> AuditRow.orRefuse
+            do!
+                log.Record(AuditScope.shard "scope-x", AuditSubject.system "test", payload)
+                |> AuditRow.orRefuse
         }
 
         testCaseAsync "NoOpAuditLog.GetAuditTrail returns empty list"
         <| async {
-            let log = AuditLog.NoOpAuditLog() :> IAuditLog
-            let! trail = log.GetAuditTrail("scope-x", None, None)
+            let log = NoOpAuditLog() :> IAuditLog
+            let! trail = log.GetAuditTrail(AuditScope.shard "scope-x", None, None)
             Expect.isEmpty trail "no audit trail when audit log is disabled"
         }
     ]

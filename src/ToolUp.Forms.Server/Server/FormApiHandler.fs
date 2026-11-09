@@ -231,7 +231,14 @@ let formApi
                                 InitialState = SubmissionState.toIndexValue saved.State
                             }
 
-                            do! auditLog.Record(scopeId, AuditEvent.FormSubmitted payload) |> AuditRow.orRefuse
+                            do!
+                                auditLog.Record(
+                                    AuditScope.shard scopeId,
+                                    AuditSubject.UserAudit(UserId userId),
+                                    AuditEvent.FormSubmitted payload
+                                )
+                                |> AuditRow.orRefuse
+
                             return Ok saved
             }
 
@@ -274,7 +281,11 @@ let formApi
                                     }
 
                                     do!
-                                        auditLog.Record(scopeId, AuditEvent.FormSubmissionUpdated payload)
+                                        auditLog.Record(
+                                            AuditScope.shard scopeId,
+                                            AuditSubject.UserAudit(UserId userId),
+                                            AuditEvent.FormSubmissionUpdated payload
+                                        )
                                         |> AuditRow.orRefuse
 
                                     return Ok saved

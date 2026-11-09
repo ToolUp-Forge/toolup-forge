@@ -683,7 +683,9 @@ let auditTests =
             | Applied _ -> ()
             | other -> failtestf "expected Applied, got %A" other
 
-            let trail = auditLog.GetAuditTrail("team-a", None, None) |> Async.RunSynchronously
+            let trail =
+                auditLog.GetAuditTrail(AuditScope.shard "team-a", None, None)
+                |> Async.RunSynchronously
 
             match lifecycleRows trail with
             | [ ("EntityCreated", p) ] ->
@@ -755,7 +757,10 @@ let auditTests =
             | Applied _ -> ()
             | other -> failtestf "expected Applied, got %A" other
 
-            let trail = auditLog.GetAuditTrail("team-a", None, None) |> Async.RunSynchronously
+            let trail =
+                auditLog.GetAuditTrail(AuditScope.shard "team-a", None, None)
+                |> Async.RunSynchronously
+
             let rows = lifecycleRows trail
 
             // Compared as a sorted set: the trail orders by OccurredAt,

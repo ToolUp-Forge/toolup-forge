@@ -33,17 +33,24 @@ open ToolUp.Platform.Config.TeamManagement
 /// a compromised session must not be blocked because the audit fabric is
 /// down — that is precisely the incident during which they need it to
 /// work. The same posture `ModuleVisibilityApiHandler` takes (GP 6).
-let private audit (auditLogOpt: IAuditLog option) (logger: ILogger option) (scopeId: string) (event: AuditEvent) = async {
-    match auditLogOpt with
-    | None -> return ()
-    | Some auditLog ->
-        try
-            do! auditLog.Record(scopeId, event) |> AuditRow.orRefuse
-        with ex ->
-            match logger with
-            | Some l -> l.Warn(sprintf "SessionApi: audit write failed for scope %s: %s" scopeId ex.Message)
-            | None -> ()
-}
+let private audit
+    (auditLogOpt: IAuditLog option)
+    (logger: ILogger option)
+    (actor: AuditSubject)
+    (scopeId: string)
+    (event: AuditEvent)
+    =
+    async {
+        match auditLogOpt with
+        | None -> return ()
+        | Some auditLog ->
+            try
+                do! auditLog.Record(AuditScope.shard scopeId, actor, event) |> AuditRow.orRefuse
+            with ex ->
+                match logger with
+                | Some l -> l.Warn(sprintf "SessionApi: audit write failed for scope %s: %s" scopeId ex.Message)
+                | None -> ()
+    }
 
 /// Build the `ISessionApi` ToolUp.Remoting handler. Resolves the registry,
 /// the access context and the team store lazily from DI per request — the
@@ -167,6 +174,7 @@ let sessionApi (ctx: HttpContext) : ISessionApi =
                                     audit
                                         auditLogOpt
                                         logger
+                                        (AuditSubject.fromSubject accessContext.Subject)
                                         scopeId
                                         (AuditEvent.SessionRevoked {
                                             ActorUserId = UserId accessContext.UserId
@@ -192,6 +200,7 @@ let sessionApi (ctx: HttpContext) : ISessionApi =
                             audit
                                 auditLogOpt
                                 logger
+                                (AuditSubject.fromSubject accessContext.Subject)
                                 scopeId
                                 (AuditEvent.AllSessionsRevoked {
                                     ActorUserId = UserId accessContext.UserId
@@ -239,6 +248,7 @@ let sessionApi (ctx: HttpContext) : ISessionApi =
                                         audit
                                             auditLogOpt
                                             logger
+                                            (AuditSubject.fromSubject accessContext.Subject)
                                             scopeId
                                             (AuditEvent.AllSessionsRevoked {
                                                 ActorUserId = UserId accessContext.UserId

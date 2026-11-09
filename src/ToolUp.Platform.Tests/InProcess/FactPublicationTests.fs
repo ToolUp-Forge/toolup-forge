@@ -379,7 +379,7 @@ let private worldWith (options: WorldOptions) : World =
         | PublicationSigning.RecordedProvenance -> None, None
         | PublicationSigning.SignedCertificate ->
             let signer =
-                DefaultArtefactSigner.createSystem secrets (AuditLog.NoOpAuditLog()) "publication-v1" Ed25519
+                DefaultArtefactSigner.createSystem secrets (NoOpAuditLog()) "publication-v1" Ed25519
 
             let verifier =
                 match options.Verifier with

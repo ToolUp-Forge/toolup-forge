@@ -128,7 +128,11 @@ type WorkflowEngine
             }
 
             do!
-                auditLog.Record(scopeId, AuditEvent.WorkflowActionExecuted payload)
+                auditLog.Record(
+                    AuditScope.shard scopeId,
+                    AuditSubject.system "WorkflowEngine",
+                    AuditEvent.WorkflowActionExecuted payload
+                )
                 |> AuditRow.orRefuse
         }
 
@@ -302,7 +306,11 @@ type WorkflowEngine
                                                 }
 
                                                 do!
-                                                    auditLog.Record(scopeId, AuditEvent.WorkflowTransitioned payload)
+                                                    auditLog.Record(
+                                                        AuditScope.shard scopeId,
+                                                        AuditSubject.system "WorkflowEngine",
+                                                        AuditEvent.WorkflowTransitioned payload
+                                                    )
                                                     |> AuditRow.orRefuse
 
                                                 // 8. Action invocation

@@ -143,7 +143,8 @@ type WhatsAppSendPolicyFilter
             | Some log, recipients ->
                 do!
                     log.Record(
-                        scopeId,
+                        AuditScope.shard scopeId,
+                        AuditSubject.system "WhatsAppSendPolicyFilter",
                         NotificationDeliveryRefused {
                             NotificationKind = kindWire
                             ScopeId = scopeId

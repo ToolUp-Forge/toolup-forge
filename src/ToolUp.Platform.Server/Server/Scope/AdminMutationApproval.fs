@@ -440,7 +440,7 @@ let isGated
 /// before the decision returns and a test observes decision and row from
 /// one call.
 let private emit (auditLog: IAuditLog) (teamId: string) (event: AuditEvent) =
-    AuditRow.emit auditLog (AuditStreamKey.ofTeam teamId) event
+    AuditRow.emit auditLog (AuditScope.team (TeamId teamId)) (AuditSubject.system "DualControl") event
     |> Background.startAuditRowImmediate
 
 /// Capture a gated mutation as a pending record. **Nothing is applied.**

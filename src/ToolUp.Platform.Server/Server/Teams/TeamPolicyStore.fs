@@ -396,7 +396,8 @@ module OutputVisibilityAudit =
             | Some log ->
                 do!
                     log.Record(
-                        scopeId,
+                        AuditScope.shard scopeId,
+                        AuditSubject.TeamAudit(UserId changedBy, TeamId teamId),
                         RemotingMethodAudited {
                             Kind = LevelChangedKind
                             MethodName = "SetOutputVisibility"

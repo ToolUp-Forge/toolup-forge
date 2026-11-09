@@ -75,7 +75,8 @@ let publicationReaderApi (ctx: HttpContext) : IPublicationReaderApi =
             | Some log ->
                 do!
                     log.Record(
-                        AuditStreamKey.ofTeam scope,
+                        AuditScope.team (TeamId scope),
+                        AuditSubject.fromSubject accessContext.Subject,
                         event {
                             ActorId = accessContext.UserId
                             PublishingScope = scope

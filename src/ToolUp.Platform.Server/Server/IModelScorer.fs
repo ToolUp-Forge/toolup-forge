@@ -360,7 +360,8 @@ type ModelScorer
     let refuse (request: ScoreRequest) (error: ScoreError) : Async<Result<DatasetVersionRef, ScoreError>> = async {
         do!
             audit.Record(
-                request.ScopeId,
+                AuditScope.shard request.ScopeId,
+                AuditSubject.system "ModelScorer",
                 ModelScoreRefused {
                     CompositeKeyHash = request.Artifact.CompositeKey.Hash
                     ProviderId = request.Artifact.CompositeKey.ProviderId
@@ -500,7 +501,8 @@ type ModelScorer
 
                                         do!
                                             audit.Record(
-                                                request.ScopeId,
+                                                AuditScope.shard request.ScopeId,
+                                                AuditSubject.system "ModelScorer",
                                                 ModelScored {
                                                     CompositeKeyHash = request.Artifact.CompositeKey.Hash
                                                     ProviderId = providerId

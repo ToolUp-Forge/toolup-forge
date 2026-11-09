@@ -96,7 +96,9 @@ type EntityBackedExternalContactStore(entities: IEntityStore.IEntityStore, audit
 
     let audit (scopeId: string) (event: AuditEvent) : Async<unit> =
         match auditLog with
-        | Some log -> log.Record(scopeId, event) |> AuditRow.orRefuse
+        | Some log ->
+            log.Record(AuditScope.shard scopeId, AuditSubject.system "ExternalContactStore", event)
+            |> AuditRow.orRefuse
         | None -> async { return () }
 
     /// Read one contact, coercing the collections a payload written

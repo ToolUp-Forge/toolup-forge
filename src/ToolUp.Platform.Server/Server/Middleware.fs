@@ -306,7 +306,8 @@ let private observeResolverErrorDowngrade
                 let correlationId = ToolUp.Remoting.Server.CallContext.correlationId ()
 
                 auditLog.Record(
-                    AuditScope.streamKey AuditScope.PlatformScope,
+                    AuditScope.platform,
+                    Background.requestActor "ScopeResolution" ctx,
                     AuthScopeResolutionFailed {
                         Method = methodName
                         Path = pathStr
@@ -353,7 +354,8 @@ let internal recordPublicationReaderSignIn
                 cache.Set(cacheKey, true, entryOpts) |> ignore
 
                 auditLog.Record(
-                    AuditScope.streamKey AuditScope.PlatformScope,
+                    AuditScope.platform,
+                    AuditSubject.ReaderAudit(UserId readerId),
                     PublicationReaderSignedIn {
                         SubjectKind = AuditSubject.kindString ReaderAuditKind
                         ReaderId = readerId
@@ -506,7 +508,8 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                 let correlationId = ToolUp.Remoting.Server.CallContext.correlationId ()
 
                 auditLog.Record(
-                    AuditScope.streamKey AuditScope.PlatformScope,
+                    AuditScope.platform,
+                    Background.requestActor "ScopeResolution" ctx,
                     AuthScopeResolutionFailed {
                         Method = methodName
                         Path = pathStr
@@ -743,7 +746,8 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                                     // through to the anonymous fallback.
                                     try
                                         auditLog.Record(
-                                            scope.ScopeId,
+                                            StorageScope.auditScope scope,
+                                            AuditSubject.fromSubject subject,
                                             UserLoggedIn {
                                                 UserId = user.UserId
                                                 AuthProvider = authProv.GetType().Name
@@ -889,7 +893,7 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                                             let auditLog =
                                                 match ctx.RequestServices.GetService(typeof<IAuditLog>) with
                                                 | :? IAuditLog as log -> log
-                                                | _ -> ToolUp.Platform.Audit.AuditLog.NoOpAuditLog() :> IAuditLog
+                                                | _ -> ToolUp.Platform.NoOpAuditLog() :> IAuditLog
 
                                             let mutable verdicts = Map.empty<string, Result<unit, ConsentDenial>>
 

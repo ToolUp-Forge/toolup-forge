@@ -209,7 +209,7 @@ let private v2Tests =
         testCaseAsync "a narrative certificate seals its admissions in document order, and any edit to one fails"
         <| async {
             let secrets = InMemorySecretStore() :> ISecretStore
-            let audit = AuditLog.NoOpAuditLog() :> IAuditLog
+            let audit = NoOpAuditLog() :> IAuditLog
             let signer = DefaultArtefactSigner.createSystem secrets audit "grounding-v2" Ed25519
             let verifier = DefaultArtefactVerifier.create secrets
             let! issuer, factId = issuerWith (Some signer)
@@ -323,7 +323,7 @@ let tests =
             // One shared secret store binds signer + verifier (the
             // deployment key + its public component).
             let secrets = InMemorySecretStore() :> ISecretStore
-            let audit = AuditLog.NoOpAuditLog() :> IAuditLog
+            let audit = NoOpAuditLog() :> IAuditLog
             let signer = DefaultArtefactSigner.createSystem secrets audit "grounding-v1" Ed25519
             let verifier = DefaultArtefactVerifier.create secrets
 
@@ -360,7 +360,7 @@ let tests =
         testCaseAsync "any byte change to the sealed body fails verification (tamper detection)"
         <| async {
             let secrets = InMemorySecretStore() :> ISecretStore
-            let audit = AuditLog.NoOpAuditLog() :> IAuditLog
+            let audit = NoOpAuditLog() :> IAuditLog
             let signer = DefaultArtefactSigner.createSystem secrets audit "grounding-v1" Ed25519
             let verifier = DefaultArtefactVerifier.create secrets
 
@@ -401,7 +401,7 @@ let tests =
             "a withheld fact discloses id + policy only; its value never appears; a disclosable fact carries its method"
         <| async {
             let secrets = InMemorySecretStore() :> ISecretStore
-            let audit = AuditLog.NoOpAuditLog() :> IAuditLog
+            let audit = NoOpAuditLog() :> IAuditLog
             let signer = DefaultArtefactSigner.createSystem secrets audit "grounding-v1" Ed25519
 
             let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
@@ -474,7 +474,7 @@ let tests =
         testCaseAsync "an answer's recorded plan joins its certificate exactly as it joins the answer chain"
         <| async {
             let secrets = InMemorySecretStore() :> ISecretStore
-            let audit = AuditLog.NoOpAuditLog() :> IAuditLog
+            let audit = NoOpAuditLog() :> IAuditLog
             let signer = DefaultArtefactSigner.createSystem secrets audit "grounding-v1" Ed25519
 
             let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore

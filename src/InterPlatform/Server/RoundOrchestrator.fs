@@ -344,7 +344,10 @@ type PlatformRoundObserver(auditLog: IAuditLog option, channel: INotificationCha
     let record (scopeId: string) (event: AuditEvent) = async {
         match auditLog with
         | None -> ()
-        | Some log -> do! log.Record(scopeId, event) |> AuditRow.orRefuse
+        | Some log ->
+            do!
+                log.Record(AuditScope.shard scopeId, AuditSubject.system "RoundOrchestrator", event)
+                |> AuditRow.orRefuse
     }
 
     interface IRoundObserver with

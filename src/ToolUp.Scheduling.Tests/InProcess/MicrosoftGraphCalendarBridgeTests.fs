@@ -533,8 +533,8 @@ let private silentLogger =
 
 let private nullAudit =
     { new IAuditLog with
-        member _.Record(_, _) = async { return Ok() }
-        member _.GetAuditTrail(_, _, _) = async { return [] }
+        member _.Record(AuditScope.StreamKey _, _actor, _) = async { return Ok() }
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
     }
 
 let private settings: MicrosoftGraphCalendarSettings = {

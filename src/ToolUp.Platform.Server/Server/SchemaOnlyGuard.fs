@@ -116,7 +116,11 @@ let assertReadAllowed
 
             try
                 do!
-                    auditLog.Record(scopeId, SchemaOnlyAccessAttempted payload)
+                    auditLog.Record(
+                        AuditScope.shard scopeId,
+                        AuditSubject.fromSubject ctx.Subject,
+                        SchemaOnlyAccessAttempted payload
+                    )
                     |> AuditRow.bestEffort
             with _ ->
                 // Audit best-effort — swallow per IAuditLog contract.

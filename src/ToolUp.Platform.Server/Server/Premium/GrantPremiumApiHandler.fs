@@ -113,7 +113,8 @@ let private grantHandler (userId: string) : HttpHandler =
 
                     try
                         auditLog.Record(
-                            PlatformScope,
+                            AuditScope.platform,
+                            Background.requestActor "GrantPremiumApi" ctx,
                             AuditEvent.PremiumGranted(UserId userId, grantor, reason, occurredAt)
                         )
                         |> Background.startAuditRow warn "PremiumGranted audit"
@@ -147,7 +148,8 @@ let private revokeHandler (userId: string) : HttpHandler =
 
                     try
                         auditLog.Record(
-                            PlatformScope,
+                            AuditScope.platform,
+                            Background.requestActor "GrantPremiumApi" ctx,
                             AuditEvent.PremiumRevoked(UserId userId, grantor, reason, DateTimeOffset.UtcNow)
                         )
                         |> Background.startAuditRow warn "PremiumRevoked audit"

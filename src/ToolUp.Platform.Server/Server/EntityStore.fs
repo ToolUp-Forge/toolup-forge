@@ -570,7 +570,9 @@ type BlobEntityStore
                         EntityUpdated payload
 
                 // best-effort-write: the entity write has committed; its row cannot un-commit it
-                do! AuditRow.emit log scopeId evt |> AuditRow.bestEffort
+                do!
+                    AuditRow.emit log (AuditScope.shard scopeId) (AuditSubject.system "EntityStore") evt
+                    |> AuditRow.bestEffort
             | None -> ()
 
             return refFromDataObject<'T> savedObject core.Id core.Type
@@ -691,7 +693,8 @@ type BlobEntityStore
                             do!
                                 AuditRow.emit
                                     log
-                                    scopeId
+                                    (AuditScope.shard scopeId)
+                                    (AuditSubject.system "EntityStore")
                                     (EntityDeleted(lifecyclePayload actor entityType entityId headVersion))
                                 |> AuditRow.bestEffort
                         | None -> ()

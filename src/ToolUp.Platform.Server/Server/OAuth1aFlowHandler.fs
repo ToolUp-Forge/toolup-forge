@@ -252,7 +252,8 @@ let private callback (flowName: string) : HttpHandler =
 
                                         try
                                             auditLog.Record(
-                                                state.ScopeId,
+                                                AuditScope.shard state.ScopeId,
+                                                AuditSubject.fromSubject (resolveAccessContext ctx).Subject,
                                                 OAuth1aConnected {
                                                     UserId = state.UserId
                                                     ScopeId = state.ScopeId

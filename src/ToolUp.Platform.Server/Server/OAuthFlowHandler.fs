@@ -867,7 +867,8 @@ let private callback (flowName: string) : HttpHandler =
 
                                                         try
                                                             auditLog.Record(
-                                                                entry.ScopeId,
+                                                                AuditScope.shard entry.ScopeId,
+                                                                Background.requestActor "OAuthFlowHandler" ctx,
                                                                 OAuthConnected {
                                                                     UserId = entry.UserId
                                                                     ScopeId = entry.ScopeId

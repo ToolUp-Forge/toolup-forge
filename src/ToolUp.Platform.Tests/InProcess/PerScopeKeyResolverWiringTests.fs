@@ -501,12 +501,12 @@ let private resolverOver (stored: string) = async {
 
     let audit =
         { new IAuditLog with
-            member _.Record(scope, event) = async {
+            member _.Record(AuditScope.StreamKey scope, _actor, event) = async {
                 rows.Enqueue(scope, event)
                 return Result.Ok()
             }
 
-            member _.GetAuditTrail(_, _, _) = async { return [] }
+            member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
         }
 
     let resolver =

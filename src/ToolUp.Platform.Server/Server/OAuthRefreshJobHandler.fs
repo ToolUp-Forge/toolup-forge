@@ -92,7 +92,8 @@ let private classify
         | TransientError reason ->
             do!
                 auditLog.Record(
-                    descriptor.ScopeId,
+                    AuditScope.shard descriptor.ScopeId,
+                    AuditSubject.system "OAuthRefreshJob",
                     OAuthTokenRefreshFailed {
                         Provider = descriptor.Provider
                         ConfigId = descriptor.ConfigId
@@ -106,7 +107,8 @@ let private classify
             if attempt >= maxAttempts then
                 do!
                     auditLog.Record(
-                        descriptor.ScopeId,
+                        AuditScope.shard descriptor.ScopeId,
+                        AuditSubject.system "OAuthRefreshJob",
                         OAuthRefreshDeadLettered {
                             Provider = descriptor.Provider
                             ConfigId = descriptor.ConfigId
@@ -123,7 +125,8 @@ let private classify
         | PermanentError reason ->
             do!
                 auditLog.Record(
-                    descriptor.ScopeId,
+                    AuditScope.shard descriptor.ScopeId,
+                    AuditSubject.system "OAuthRefreshJob",
                     OAuthTokenRefreshFailed {
                         Provider = descriptor.Provider
                         ConfigId = descriptor.ConfigId
@@ -136,7 +139,8 @@ let private classify
 
             do!
                 auditLog.Record(
-                    descriptor.ScopeId,
+                    AuditScope.shard descriptor.ScopeId,
+                    AuditSubject.system "OAuthRefreshJob",
                     OAuthRefreshDeadLettered {
                         Provider = descriptor.Provider
                         ConfigId = descriptor.ConfigId

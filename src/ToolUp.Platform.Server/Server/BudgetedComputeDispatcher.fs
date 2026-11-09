@@ -196,7 +196,10 @@ type ComputeBudgetGuard
     let record (scopeId: string) (event: AuditEvent) = async {
         match audit with
         | Some log ->
-            do! log.Record(scopeId, event) |> AuditRow.orRefuse
+            do!
+                log.Record(AuditScope.shard scopeId, AuditSubject.system "ComputeDispatcher", event)
+                |> AuditRow.orRefuse
+
             return ()
         | None -> return ()
     }

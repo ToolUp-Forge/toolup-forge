@@ -51,12 +51,12 @@ type private RecordingAuditLog() =
     member _.Events = List.ofSeq recorded
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async {
+        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
             recorded.Add((scopeId, audit))
             return Ok()
         }
 
-        member _.GetAuditTrail(_, _, _) = async { return recorded |> Seq.map snd |> List.ofSeq }
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return recorded |> Seq.map snd |> List.ofSeq }
 
 /// The full default substrate stack a submitter-facing deployment
 /// composes, temp-dir isolated per fixture.

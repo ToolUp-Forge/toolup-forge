@@ -110,7 +110,10 @@ let private resolveAuditLog (ctx: HttpContext) : IAuditLog option =
 /// failed primary write.
 let private recordAudit (auditLog: IAuditLog option) (event: AuditEvent) =
     match auditLog with
-    | Some a -> a.Record(platformContainer, event) |> AuditRow.orRefuse |> Async.Start
+    | Some a ->
+        a.Record(AuditScope.platform, AuditSubject.system "KnowledgePlatformAdmin", event)
+        |> AuditRow.orRefuse
+        |> Async.Start
     | None -> ()
 
 /// Fan a `DataRefreshed("PlatformKnowledgeBase", "_platform")` event out

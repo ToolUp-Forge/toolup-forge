@@ -28,14 +28,12 @@ open System
 /// `Subject` too. The DU stays append-only at the case level; envelope
 /// shape evolves under the `LatestAuditSchemaVersion` contract.
 ///
-/// **Construction.** Three call sites construct envelopes:
-///   * `IAuditLog.Record` emission sites with an `AccessContext` in
-///     scope — use `AuditSubject.fromSubject ctx.Subject`.
-///   * `AuditReplicator` dispatch path — decodes `ModuleEvent` into
-///     `AuditEvent` and derives `AuditSubject` from `ModuleEvent.ScopeId`
-///     via `AuditSubject.fromScopeId` (best-effort; the persisted
-///     `ModuleEvent` does not carry the originating subject today).
-///   * Tests and contract packs — synthesise envelopes directly.
+/// **Construction.** The `AuditReplicator` decodes each persisted row into
+/// its event and the actor the row carries (`IAuditLog.Record`'s `actor`;
+/// a row written before rows carried one decodes as
+/// `AuditSubject.unattributed`), and builds the envelope with
+/// `AuditEnvelope.create`. Tests and contract packs synthesise envelopes
+/// the same way.
 type AuditEnvelope = {
     /// Resolved per-request subject of the audited operation. Sinks
     /// read this to populate `subject_kind` / `subject.user_id` /
@@ -72,16 +70,20 @@ module AuditEnvelope =
             ScopeId = scopeId
         }
 
-    /// Construct an envelope without a resolved `Subject`. Used by the
-    /// audit-replicator dispatch path, which only has `ScopeId`
-    /// available post-`ModuleEvent` decode. Defers to
-    /// `AuditSubject.fromScopeId`.
-    let fromScopeId (scopeId: string) (occurredAt: System.DateTime) (event: AuditEvent) : AuditEnvelope = {
-        Subject = AuditSubject.fromScopeId scopeId
-        Event = event
-        OccurredAt = occurredAt
-        ScopeId = scopeId
-    }
+    /// Construct an envelope from the actor a row carries — what the
+    /// audit-replicator dispatch path decodes from each persisted row.
+    let create
+        (actor: AuditSubject)
+        (scopeId: string)
+        (occurredAt: System.DateTime)
+        (event: AuditEvent)
+        : AuditEnvelope =
+        {
+            Subject = actor
+            Event = event
+            OccurredAt = occurredAt
+            ScopeId = scopeId
+        }
 
     /// Project the envelope to its underlying event. Convenience for
     /// sinks that batch-serialise events and need only the inner
@@ -149,8 +151,9 @@ module AuditWriteError =
 /// (writes through the configured store; reads filter to `SourceModule =
 /// AuditSourceModule.value`).
 ///
-/// **Scoping.** `Record` writes the event under the supplied `scopeId`;
-/// `GetAuditTrail` reads from that scope only. Cross-scope reads are
+/// **Scoping.** `Record` writes the event under the supplied `AuditScope`'s
+/// stream (`AuditScope.streamKey`); `GetAuditTrail` reads from that scope
+/// only. Cross-scope reads are
 /// structurally impossible — the underlying `IEventStore` enforces
 /// team isolation via the blob path prefix.
 ///
@@ -173,12 +176,20 @@ module AuditWriteError =
 /// (`AuditRow.emit`), refuse by exception where the site has no error channel
 /// (`|> AuditRow.orRefuse`), or discard it where the row is not the control
 /// (`|> AuditRow.bestEffort`).
+///
+/// **The actor rides the row.** `actor` is who the row is attributed to:
+/// `AuditSubject.fromSubject` of the request's principal where the emitting
+/// site holds one, and `AuditSubject.system "<component>"` for a row a
+/// platform component emits with no principal in reach. It is persisted
+/// with the row and decoded by the replicator; it is never derived from the
+/// stream key.
 type IAuditLog =
-    /// Record an audit event under the given scope. Answers per the
-    /// composed `AuditFailurePolicy` — see the type's documentation.
-    abstract Record: scopeId: string * audit: AuditEvent -> Async<Result<unit, AuditWriteError>>
+    /// Record an audit event under the given scope, attributed to `actor`.
+    /// Answers per the composed `AuditFailurePolicy` — see the type's
+    /// documentation.
+    abstract Record: scope: AuditScope * actor: AuditSubject * audit: AuditEvent -> Async<Result<unit, AuditWriteError>>
 
-    /// Query audit events for `scopeId`. Optional filters:
+    /// Query audit events for `scope`. Optional filters:
     /// - `dateRange`: inclusive `(from, to)` filter on `OccurredAt`.
     ///   `None` = no date constraint.
     /// - `eventType`: case-name filter (e.g. `"UserLoggedIn"`).
@@ -186,7 +197,19 @@ type IAuditLog =
     /// Returned list is reverse-chronological by `OccurredAt`,
     /// matching `IEventStore.ReadAll`.
     abstract GetAuditTrail:
-        scopeId: string * dateRange: (DateTime * DateTime) option * eventType: string option -> Async<AuditEvent list>
+        scope: AuditScope * dateRange: (DateTime * DateTime) option * eventType: string option -> Async<AuditEvent list>
+
+/// The `IAuditLog` of a deployment with audit off
+/// (`ServerConfig.AuditLog = FeatureMode.Disabled`), and the value a component
+/// takes when it is composed with no audit substrate: `Record` answers `Ok ()`
+/// without serialising or writing anything, and `GetAuditTrail` answers an
+/// empty trail. It costs what an absent log cost (GP 13), so a component
+/// takes an `IAuditLog`, never an `IAuditLog option`.
+type NoOpAuditLog() =
+    interface IAuditLog with
+        member _.Record(_scope, _actor, _audit) = async { return Ok() }
+
+        member _.GetAuditTrail(_scope, _dateRange, _eventType) = async { return [] }
 
 /// Raised by `AuditRow.orRefuse` when the log refused a row at a call site that
 /// has no error channel of its own: the action fails visibly (a 500, "audit
@@ -207,8 +230,13 @@ type AuditWriteRefusedException(error: AuditWriteError) =
 module AuditRow =
     /// Emit one row and answer the seam's decision for the caller to
     /// propagate. The shape for a site whose own result can carry it.
-    let emit (log: IAuditLog) (scopeId: string) (event: AuditEvent) : Async<Result<unit, AuditWriteError>> =
-        log.Record(scopeId, event)
+    let emit
+        (log: IAuditLog)
+        (scope: AuditScope)
+        (actor: AuditSubject)
+        (event: AuditEvent)
+        : Async<Result<unit, AuditWriteError>> =
+        log.Record(scope, actor, event)
 
     /// For a site with no error channel: a refused row aborts the operation
     /// with `AuditWriteRefusedException`.
@@ -226,34 +254,6 @@ module AuditRow =
         let! _ = row
         return ()
     }
-
-/// Phase 1059 — the ONE rendering of an audit stream key: the `scopeId` an
-/// `IAuditLog.Record` / `GetAuditTrail` call passes for a team or a storage
-/// scope. The event store keys a stream on that string verbatim, so a team
-/// whose writers spelled its key four ways (`teamId`, `team-{teamId}`,
-/// `scope.ScopeId`, `scope.Container`) had its trail split across several
-/// streams, and a reader of one spelling never saw rows written under
-/// another.
-///
-/// The key is the BARE id — what every event already at rest under the
-/// request middleware, the platform admin API and file management carries
-/// (GP 11). Rows written under a `team-{id}` key before this phase are
-/// history: readable under their own key, not migrated.
-///
-/// Phase 1060 — the rendering itself is `AuditScope.streamKey`, over the
-/// closed `AuditScope`; these two are its spellings for a call site that
-/// holds a bare team id or a `StorageScope` rather than a key.
-/// `IAuditLog.Record` keeps its string parameter until it takes an
-/// `AuditScope` directly.
-module AuditStreamKey =
-    /// The audit stream key for a team: its bare id.
-    let ofTeam (teamId: string) : string =
-        AuditScope.streamKey (AuditScope.Scoped(ScopeKey.Team(TeamId teamId)))
-
-    /// The audit stream key for a storage scope: its `ScopeId` (the bare
-    /// user, team or session id), never its `Container` — what
-    /// `AuditScope.streamKey` renders for the key the scope projects.
-    let ofScope (scope: StorageScope) : string = scope.ScopeId
 
 // ─── Phase 120 — IAuthAuditHook (structured authz-denial trail) ──────
 //
@@ -389,8 +389,7 @@ module BlobStorageAuthAudit =
     /// across every tenant and leave no single place to ask "when did
     /// this start". The container the call was made against is carried in
     /// the payload instead, so nothing is lost by centralising.
-    [<Literal>]
-    let scopeId = ScopeKey.PlatformContainer
+    let scope: AuditScope = AuditScope.PlatformScope
 
     /// Longest sanitised SDK message kept on a row. An SDK message is a
     /// diagnostic aid here, not a queryable axis — the four fields above
@@ -469,32 +468,28 @@ module BlobStorageAuthAudit =
             At = DateTime.UtcNow
         }
 
-    /// Record one credential-rejection row, if the companion was composed
-    /// with an audit log.
+    /// Record one credential-rejection row, attributed to the companion that
+    /// saw the rejection (`AuditSubject.system`): the call that discovered it
+    /// carries no principal down to the storage tier.
     ///
-    /// **Never throws, and never delays the caller's own error.** A
-    /// deployment that composed no `IAuditLog` (`None`) does nothing at
-    /// all; a sink that raises is swallowed here, matching
-    /// `IAuditLog.Record`'s own best-effort contract. The one thing this
+    /// **Never delays or changes the caller's own error.** A deployment with
+    /// audit off composes `NoOpAuditLog`, which answers `Ok` at once; a
+    /// refused row is discarded (`AuditRow.bestEffort`) because the storage
+    /// failure is the caller's answer either way. The one thing this
     /// function must not do is turn a storage failure into a different
     /// storage failure — the caller returns the error it always returned,
     /// immediately after this returns.
     let record
-        (audit: IAuditLog option)
+        (audit: IAuditLog)
         (companion: string)
         (container: string)
         (operation: string)
         (statusCode: int)
         (message: string)
         : Async<unit> =
-        async {
-            match audit with
-            | None -> ()
-            | Some log ->
-                do!
-                    AuditRow.emit
-                        log
-                        scopeId
-                        (BlobStorageAuthFailed(payload companion container operation statusCode message))
-                    |> AuditRow.bestEffort
-        }
+        AuditRow.emit
+            audit
+            scope
+            (AuditSubject.system companion)
+            (BlobStorageAuthFailed(payload companion container operation statusCode message))
+        |> AuditRow.bestEffort

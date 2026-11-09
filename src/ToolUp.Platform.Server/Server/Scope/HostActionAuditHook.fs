@@ -79,7 +79,8 @@ type HostActionAuditHook(auditLog: IAuditLog, logger: ILogger, ?now: unit -> Dat
 
                     do!
                         auditLog.Record(
-                            scopeId,
+                            AuditScope.shard scopeId,
+                            AuditSubject.fromSubject principal,
                             HostActionDispatched {
                                 SubjectKind = kind
                                 SubjectId = subjectId

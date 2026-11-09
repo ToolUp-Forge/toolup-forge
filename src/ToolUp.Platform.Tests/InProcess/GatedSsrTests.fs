@@ -2094,12 +2094,12 @@ let private recordingAuditLog () =
 
     let log =
         { new IAuditLog with
-            member _.Record(scopeId, audit) = async {
+            member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
                 rows.Enqueue((scopeId, audit))
                 return Ok()
             }
 
-            member _.GetAuditTrail(_, _, _) = async { return [] }
+            member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
         }
 
     rows, log
@@ -2296,8 +2296,8 @@ let private readerProbes: (string * HttpMethod * string * bool) list = [
 /// Phase 1006 — an `IAuditLog` whose every write throws before returning.
 let private throwingAuditLog =
     { new IAuditLog with
-        member _.Record(_, _) = failwith "audit sink unavailable"
-        member _.GetAuditTrail(_, _, _) = async { return [] }
+        member _.Record(AuditScope.StreamKey _, _actor, _) = failwith "audit sink unavailable"
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
     }
 
 /// Phase 1006 — an `IAuthAuditHook` whose write fails asynchronously.

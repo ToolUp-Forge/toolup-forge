@@ -44,12 +44,12 @@ type private RecordingAuditLog() =
         |> Seq.toList
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async {
+        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
             recorded.Enqueue(scopeId, audit)
             return Ok()
         }
 
-        member _.GetAuditTrail(scopeId, _dateRange, _eventType) = async {
+        member _.GetAuditTrail(AuditScope.StreamKey scopeId, _dateRange, _eventType) = async {
             return recorded |> Seq.filter (fun (s, _) -> s = scopeId) |> Seq.map snd |> List.ofSeq
         }
 

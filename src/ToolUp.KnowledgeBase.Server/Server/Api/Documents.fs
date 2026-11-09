@@ -1159,7 +1159,8 @@ let uploadDocumentCore
                     // passed from one it was never shown.
                     do!
                         audit.Record(
-                            deps.Scope.ScopeId,
+                            StorageScope.auditScope deps.Scope,
+                            AuditSubject.fromSubject deps.AccessContext.Subject,
                             ContentScanned {
                                 UserId = deps.UserId
                                 ScopeId = deps.Scope.ScopeId
@@ -1219,7 +1220,8 @@ let uploadDocumentCore
                         // — an audit gap never fails the upload.
                         do!
                             audit.Record(
-                                deps.Scope.ScopeId,
+                                StorageScope.auditScope deps.Scope,
+                                AuditSubject.fromSubject deps.AccessContext.Subject,
                                 KnowledgeDocumentDeduplicated {
                                     UserId = deps.UserId
                                     ScopeId = deps.Scope.ScopeId
@@ -1924,7 +1926,9 @@ let private sourceKindName (source: KnowledgeSource) =
 /// gaps never fail the fetch.
 let private recordOriginalAccessAudit (deps: KnowledgeApiDeps) (event: AuditEvent) : Async<unit> =
     match deps.AuditLog with
-    | Some a -> a.Record(deps.Scope.ScopeId, event) |> AuditRow.orRefuse
+    | Some a ->
+        a.Record(StorageScope.auditScope deps.Scope, AuditSubject.fromSubject deps.AccessContext.Subject, event)
+        |> AuditRow.orRefuse
     | None -> async.Return()
 
 /// Fetch the *original* ingested document for a `docId`,

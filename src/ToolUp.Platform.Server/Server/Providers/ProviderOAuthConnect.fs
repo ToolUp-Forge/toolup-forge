@@ -201,7 +201,8 @@ let internal completeConnectObserved
                         | Some log ->
                             try
                                 log.Record(
-                                    scope.ScopeId,
+                                    StorageScope.auditScope scope,
+                                    AuditSubject.system "ProviderOAuthConnect",
                                     OAuthConnected {
                                         UserId = UserId userId
                                         ScopeId = scope.ScopeId
@@ -307,7 +308,8 @@ let private markNeedsReauthorization
             // payload's convention for a scheduled refresh.
             do!
                 log.Record(
-                    scope.ScopeId,
+                    StorageScope.auditScope scope,
+                    AuditSubject.system "ProviderOAuthConnect",
                     OAuthRefreshFailed {
                         UserId = UserId "system"
                         ScopeId = scope.ScopeId

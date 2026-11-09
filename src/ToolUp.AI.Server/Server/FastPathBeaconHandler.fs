@@ -605,7 +605,13 @@ let private emitBeaconRejected
             }
 
             try
-                do! auditLog.Record(scopeId, BeaconRejected payload) |> AuditRow.orRefuse
+                do!
+                    auditLog.Record(
+                        AuditScope.shard scopeId,
+                        AuditSubject.system "FastPathBeacon",
+                        BeaconRejected payload
+                    )
+                    |> AuditRow.orRefuse
             with ex ->
                 logWarn
                     logger

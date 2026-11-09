@@ -264,7 +264,13 @@ type NotificationPreferenceFilter
                     CorrelationId = correlationId
                 }
 
-                do! log.Record(scopeId, NotificationSilentlySkipped payload) |> AuditRow.orRefuse
+                do!
+                    log.Record(
+                        AuditScope.shard scopeId,
+                        AuditSubject.system "NotificationPreferenceFilter",
+                        NotificationSilentlySkipped payload
+                    )
+                    |> AuditRow.orRefuse
             | _ -> ()
         }
 

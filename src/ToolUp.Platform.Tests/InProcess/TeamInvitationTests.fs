@@ -39,12 +39,12 @@ type private CapturingAuditLog() =
     member _.Recorded = recorded |> Seq.toList
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async {
+        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
             recorded.Enqueue(scopeId, audit)
             return Ok()
         }
 
-        member _.GetAuditTrail(_, _, _) = async { return [] }
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
 
 let private freshTeamStore () =
     let storage = InMemoryBlobStorage() :> IBlobStorage
@@ -829,12 +829,12 @@ type private TrailAuditLog() =
     let recorded = ConcurrentQueue<string * AuditEvent * DateTime>()
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async {
+        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
             recorded.Enqueue(scopeId, audit, DateTime.UtcNow)
             return Ok()
         }
 
-        member _.GetAuditTrail(scopeId, dateRange, eventType) = async {
+        member _.GetAuditTrail(AuditScope.StreamKey scopeId, dateRange, eventType) = async {
             return
                 recorded
                 |> Seq.filter (fun (s, e, at) ->
@@ -956,7 +956,8 @@ let expiredInviteVisibilityTests =
             do!
                 (audit :> IAuditLog)
                     .Record(
-                        teamId,
+                        AuditScope.shard teamId,
+                        AuditSubject.system "test",
                         TeamInviteExpired {
                             TeamId = teamId
                             InviteeEmail = "bare@x.com"
@@ -997,7 +998,8 @@ let expiredInviteVisibilityTests =
             do!
                 (audit :> IAuditLog)
                     .Record(
-                        teamId,
+                        AuditScope.shard teamId,
+                        AuditSubject.system "test",
                         TeamInviteExpired {
                             TeamId = teamId
                             InviteeEmail = "old@x.com"

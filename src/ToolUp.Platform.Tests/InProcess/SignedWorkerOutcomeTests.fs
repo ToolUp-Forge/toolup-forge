@@ -1113,12 +1113,12 @@ type private CapturingAuditLog() =
             | _ -> None)
 
     interface IAuditLog with
-        member _.Record(scopeId: string, audit: AuditEvent) = async {
+        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
             events.Enqueue((scopeId, audit))
             return Ok()
         }
 
-        member _.GetAuditTrail(_, _, _) = async { return [] }
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
 
 type private CapturingLogger() =
     let warns = System.Collections.Concurrent.ConcurrentQueue<string>()

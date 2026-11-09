@@ -68,18 +68,19 @@ module ClassificationGate =
         policy classification.Level ctx
 
     /// Scope under which classification audit is recorded — the caller's
-    /// config scope's audit stream (`AuditStreamKey.ofScope` — its bare id, never
-    /// its container) when resolvable, else the reserved `_platform` scope.
-    let private auditScope (ctx: AccessContext) : string =
+    /// config scope's audit stream (`StorageScope.auditScope` — its bare id,
+    /// never its container) when resolvable, else the platform's trail.
+    let private auditScope (ctx: AccessContext) : AuditScope =
         AccessContext.configScope ctx
-        |> Option.map AuditStreamKey.ofScope
-        |> Option.defaultValue ScopeKey.PlatformContainer
+        |> Option.map StorageScope.auditScope
+        |> Option.defaultValue AuditScope.platform
 
     let private recordRead (audit: IAuditLog) (ctx: AccessContext) (c: FieldClassification) (redacted: bool) =
         if c.AuditOnRead then
             AuditRow.emit
                 audit
                 (auditScope ctx)
+                (AuditSubject.fromSubject ctx.Subject)
                 (AuditEvent.ClassifiedFieldRead {
                     UserId = UserId ctx.UserId
                     EntityName = c.EntityName
@@ -159,6 +160,7 @@ module ClassificationGate =
                             AuditRow.emit
                                 audit
                                 (auditScope ctx)
+                                (AuditSubject.fromSubject ctx.Subject)
                                 (AuditEvent.ClassifiedFieldWritten {
                                     UserId = UserId ctx.UserId
                                     EntityName = c.EntityName
@@ -357,8 +359,7 @@ module EgressGate =
     /// `_platform` cross-tenant audit scope. Egress happens outside a
     /// per-request config scope; the `Actor` + `Destination` on the
     /// payload carry attribution.
-    [<Literal>]
-    let private auditScope = ScopeKey.PlatformContainer
+    let private auditScope = AuditScope.platform
 
     /// The row records a decision already taken — the field is blocked or
     /// redacted whether or not the row lands — so it is best-effort.
@@ -366,6 +367,7 @@ module EgressGate =
         AuditRow.emit
             audit
             auditScope
+            (AuditSubject.system "EgressGate")
             (AuditEvent.EgressBlocked {
                 Actor = ctx.Actor
                 EntityName = c.EntityName

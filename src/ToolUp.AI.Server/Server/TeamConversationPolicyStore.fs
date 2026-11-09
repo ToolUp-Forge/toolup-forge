@@ -185,7 +185,10 @@ module ConversationVisibilityAudit =
     /// completing un-audited — an elevated open then returns nothing.
     let private record (audit: IAuditLog option) (scopeId: string) (event: AuditEvent) = async {
         match audit with
-        | Some log -> do! log.Record(scopeId, event) |> AuditRow.orRefuse
+        | Some log ->
+            do!
+                log.Record(AuditScope.shard scopeId, AuditSubject.system "TeamConversationPolicy", event)
+                |> AuditRow.orRefuse
         | None -> ()
     }
 

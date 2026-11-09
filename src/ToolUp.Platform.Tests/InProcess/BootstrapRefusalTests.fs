@@ -105,7 +105,7 @@ let tests =
                         services
                         ServerConfig.defaults
                         (throwingReads ())
-                        (AuditLog.NoOpAuditLog() :> IAuditLog)
+                        (NoOpAuditLog() :> IAuditLog)
                         silentLogger
                         InProcessDistributedLock.shared
                     |> ignore
@@ -131,7 +131,7 @@ let tests =
                     services
                     ServerConfig.defaults
                     storage
-                    (AuditLog.NoOpAuditLog() :> IAuditLog)
+                    (NoOpAuditLog() :> IAuditLog)
                     silentLogger
                     InProcessDistributedLock.shared
                 |> ignore

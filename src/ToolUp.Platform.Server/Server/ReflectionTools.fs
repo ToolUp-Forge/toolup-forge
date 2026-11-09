@@ -279,7 +279,7 @@ let private audit
                 }
 
             do!
-                log.Record(DeploymentVerificationReport.PlatformScopeId, event)
+                log.Record(AuditScope.platform, AuditSubject.system "ReflectionTools", event)
                 |> AuditRow.orRefuse
         | _ -> ()
     }

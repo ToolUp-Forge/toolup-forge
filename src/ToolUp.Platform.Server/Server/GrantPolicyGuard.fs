@@ -185,7 +185,11 @@ let guardDispatch
     else
         let payload = refusalPayload registry grants userId moduleName
 
-        AuditRow.emit auditLog scopeId (UnconsentedGrantRefused payload)
+        AuditRow.emit
+            auditLog
+            (AuditScope.shard scopeId)
+            (AuditSubject.UserAudit(UserId userId))
+            (UnconsentedGrantRefused payload)
         |> Background.startAuditRowImmediate
 
         Error payload
@@ -469,7 +473,11 @@ type GrantPolicyPermissionStore
         }
 
         // Best-effort: the refusal fires regardless of whether the row lands.
-        AuditRow.emit auditLog (AuditStreamKey.ofTeam teamId) (GrantPolicyRefused payload)
+        AuditRow.emit
+            auditLog
+            (AuditScope.team (TeamId teamId))
+            (AuditSubject.system "GrantPolicyGuard")
+            (GrantPolicyRefused payload)
         |> Background.startAuditRowImmediate
 
     /// Phase 730 — the success twin of `record`, emitted from this same
@@ -511,7 +519,11 @@ type GrantPolicyPermissionStore
             // refusal path. The write has already committed by the time
             // this runs; a downed audit pipeline must not turn a
             // successful grant into an error.
-            AuditRow.emit auditLog (AuditStreamKey.ofTeam teamId) (GrantRecorded payload)
+            AuditRow.emit
+                auditLog
+                (AuditScope.team (TeamId teamId))
+                (AuditSubject.system "GrantPolicyGuard")
+                (GrantRecorded payload)
             |> Background.startAuditRowImmediate
 
     /// The policy-bearing subset of a write's delta — the entries this

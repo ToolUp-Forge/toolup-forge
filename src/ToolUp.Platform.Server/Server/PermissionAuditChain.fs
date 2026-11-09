@@ -362,6 +362,6 @@ let permissionPayloads (events: AuditEvent list) : PermissionChangedPayload list
 /// it to the pure `verify` above. A caller holding rows from anywhere
 /// else — an export, a replica, a backup — calls `verify` directly.
 let verifyScope (auditLog: IAuditLog) (scopeId: string) : Async<PermissionChainReport> = async {
-    let! events = auditLog.GetAuditTrail(scopeId, None, Some chainedEventType)
+    let! events = auditLog.GetAuditTrail(AuditScope.shard scopeId, None, Some chainedEventType)
     return verify scopeId (permissionPayloads events)
 }

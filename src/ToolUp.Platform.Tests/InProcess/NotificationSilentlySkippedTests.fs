@@ -53,11 +53,16 @@ let tests =
             let auditLog, _ = mkChain ()
             let payload = samplePayload ()
 
-            auditLog.Record(payload.ScopeId, NotificationSilentlySkipped payload)
+            auditLog.Record(
+                AuditScope.shard payload.ScopeId,
+                AuditSubject.system "test",
+                NotificationSilentlySkipped payload
+            )
             |> Async.RunSynchronously
 
             let trail =
-                auditLog.GetAuditTrail(payload.ScopeId, None, None) |> Async.RunSynchronously
+                auditLog.GetAuditTrail(AuditScope.shard payload.ScopeId, None, None)
+                |> Async.RunSynchronously
 
             Expect.equal trail.Length 1 "one event recorded"
 
@@ -76,11 +81,16 @@ let tests =
 
             // Record one of ours and one unrelated event so the
             // eventType filter has something to discriminate against.
-            auditLog.Record(payload.ScopeId, NotificationSilentlySkipped payload)
+            auditLog.Record(
+                AuditScope.shard payload.ScopeId,
+                AuditSubject.system "test",
+                NotificationSilentlySkipped payload
+            )
             |> Async.RunSynchronously
 
             auditLog.Record(
-                payload.ScopeId,
+                AuditScope.shard payload.ScopeId,
+                AuditSubject.system "test",
                 UserLoggedIn {
                     UserId = UserId "alice"
                     AuthProvider = "Header"
@@ -89,7 +99,7 @@ let tests =
             |> Async.RunSynchronously
 
             let filtered =
-                auditLog.GetAuditTrail(payload.ScopeId, None, Some "NotificationSilentlySkipped")
+                auditLog.GetAuditTrail(AuditScope.shard payload.ScopeId, None, Some "NotificationSilentlySkipped")
                 |> Async.RunSynchronously
 
             Expect.equal filtered.Length 1 "filter narrowed to one"

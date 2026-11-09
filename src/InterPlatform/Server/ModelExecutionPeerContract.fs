@@ -1774,7 +1774,9 @@ module ModelExecutionPeerContract =
                         OccurredAt = DateTimeOffset.UtcNow
                     }
 
-                    do! log.Record(PeerJob.Scope, PeerJobCompleted payload) |> AuditRow.orRefuse
+                    do!
+                        log.Record(AuditScope.platform, AuditSubject.system "PeerHost", PeerJobCompleted payload)
+                        |> AuditRow.orRefuse
                 with _ ->
                     ()
         }

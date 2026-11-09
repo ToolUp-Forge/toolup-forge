@@ -252,7 +252,8 @@ let sweepScope
                             | Some audit ->
                                 do!
                                     audit.Record(
-                                        scopeId,
+                                        AuditScope.shard scopeId,
+                                        AuditSubject.system "OrphanSweepJob",
                                         OrphanedContentBlobReclaimed {
                                             ScopeId = scopeId
                                             ContentHash = reclaimed.ContentHash
@@ -284,7 +285,8 @@ let sweepScope
                 | Some audit ->
                     do!
                         audit.Record(
-                            scopeId,
+                            AuditScope.shard scopeId,
+                            AuditSubject.system "OrphanSweepJob",
                             OrphanSweepCompleted {
                                 ScopeId = scopeId
                                 OrphansFound = orphans.Length

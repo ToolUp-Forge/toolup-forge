@@ -90,7 +90,8 @@ type AuthAuditHook(auditLog: IAuditLog, logger: ILogger, ?dedupWindow: TimeSpan,
 
             do!
                 auditLog.Record(
-                    scopeId,
+                    AuditScope.shard scopeId,
+                    AuditSubject.fromSubject denial.Subject,
                     AuthorizationDenied {
                         Route = denial.Route
                         Requirement = AuthDenialRequirement.toString denial.Requirement

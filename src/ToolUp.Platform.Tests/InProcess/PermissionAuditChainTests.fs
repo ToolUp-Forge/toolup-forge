@@ -138,14 +138,15 @@ let private recordGrants (grants: PermissionChangedPayload list) =
     let auditLog = AuditLog.EventStoreAuditLog(store, silentLogger) :> IAuditLog
 
     for g in grants do
-        auditLog.Record(scope, PermissionChanged g) |> Async.RunSynchronously
+        auditLog.Record(AuditScope.shard scope, AuditSubject.system "test", PermissionChanged g)
+        |> Async.RunSynchronously
 
     store, auditLog
 
 /// Read the chain back the way an auditor does — through the query
 /// seam, not from the writer's in-memory state.
 let private readChain (auditLog: IAuditLog) =
-    auditLog.GetAuditTrail(scope, None, Some PermissionAuditChain.chainedEventType)
+    auditLog.GetAuditTrail(AuditScope.shard scope, None, Some PermissionAuditChain.chainedEventType)
     |> Async.RunSynchronously
     |> PermissionAuditChain.permissionPayloads
 
@@ -405,10 +406,10 @@ let tests =
 
             let auditLog = AuditLog.EventStoreAuditLog(store, silentLogger) :> IAuditLog
 
-            auditLog.Record(scope, PermissionChanged(grant "alice" "Read"))
+            auditLog.Record(AuditScope.shard scope, AuditSubject.system "test", PermissionChanged(grant "alice" "Read"))
             |> Async.RunSynchronously
 
-            auditLog.Record(scope, PermissionChanged(grant "bob" "Write"))
+            auditLog.Record(AuditScope.shard scope, AuditSubject.system "test", PermissionChanged(grant "bob" "Write"))
             |> Async.RunSynchronously
 
             let summary = expectIntact (PermissionAuditChain.verify scope (readChain auditLog))
@@ -426,7 +427,7 @@ let tests =
                 AuditLog.EventStoreAuditLog(store, silentLogger, (fun () -> sink :> IMetricsSink), LogAndContinue)
                 :> IAuditLog
 
-            auditLog.Record(scope, PermissionChanged(grant "alice" "Read"))
+            auditLog.Record(AuditScope.shard scope, AuditSubject.system "test", PermissionChanged(grant "alice" "Read"))
             |> Async.RunSynchronously
 
             Expect.equal store.Events.Length 1 "the audit row still landed — the action is not un-audited"
@@ -453,7 +454,11 @@ let tests =
 
             expectRefused
                 (fun () ->
-                    auditLog.Record(scope, PermissionChanged(grant "alice" "Read"))
+                    auditLog.Record(
+                        AuditScope.shard scope,
+                        AuditSubject.system "test",
+                        PermissionChanged(grant "alice" "Read")
+                    )
                     |> Async.RunSynchronously)
                 "a deployment that would rather fail than be un-audited would rather fail than be un-evidenced"
 
@@ -500,7 +505,8 @@ let tests =
             // Reads throw in this store, so a non-permission event that
             // tried to read the head would refuse. It must not.
             auditLog.Record(
-                scope,
+                AuditScope.shard scope,
+                AuditSubject.system "test",
                 UserLoggedIn {
                     UserId = UserId "alice"
                     AuthProvider = "Header"
@@ -521,7 +527,9 @@ let tests =
             let preChained =
                 PermissionAuditChain.link scope PermissionAuditChain.genesisHash (grant "alice" "Read")
 
-            auditLog.Record(scope, PermissionChanged preChained) |> Async.RunSynchronously
+            auditLog.Record(AuditScope.shard scope, AuditSubject.system "test", PermissionChanged preChained)
+            |> Async.RunSynchronously
+
             let payloads = readChain auditLog
 
             Expect.equal
@@ -554,7 +562,8 @@ let tests =
 
                 for g in [ grant "alice" "Read"; grant "bob" "Write" ] do
                     Expect.equal
-                        (streamEra.Record(scope, PermissionChanged g) |> Async.RunSynchronously)
+                        (streamEra.Record(AuditScope.shard scope, AuditSubject.system "test", PermissionChanged g)
+                         |> Async.RunSynchronously)
                         (Ok())
                         "an early-era row lands"
 
@@ -568,7 +577,8 @@ let tests =
 
                 for g in [ grant "carol" "Read"; grant "dave" "Admin" ] do
                     Expect.equal
-                        (documentEra.Record(scope, PermissionChanged g) |> Async.RunSynchronously)
+                        (documentEra.Record(AuditScope.shard scope, AuditSubject.system "test", PermissionChanged g)
+                         |> Async.RunSynchronously)
                         (Ok())
                         "a document-era row lands"
 
@@ -621,7 +631,11 @@ let tests =
                 // The store's stream reads fault: a write that needed one
                 // would refuse under RefuseAction. This one lands.
                 Expect.equal
-                    (log.Record(scope, PermissionChanged(grant "alice" "Read"))
+                    (log.Record(
+                        AuditScope.shard scope,
+                        AuditSubject.system "test",
+                        PermissionChanged(grant "alice" "Read")
+                     )
                      |> Async.RunSynchronously)
                     (Ok())
                     "the head document answered; no stream scan was made"

@@ -227,12 +227,12 @@ type private RecordingAuditLog() =
             | _ -> None)
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async {
+        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
             lock recorded (fun () -> recorded.Add((scopeId, audit)))
             return Ok()
         }
 
-        member _.GetAuditTrail(_scopeId, _dateRange, _eventType) = async { return [] }
+        member _.GetAuditTrail(AuditScope.StreamKey _scopeId, _dateRange, _eventType) = async { return [] }
 
 type private InMemorySecretStore() =
     let store = ConcurrentDictionary<string * string, string>()

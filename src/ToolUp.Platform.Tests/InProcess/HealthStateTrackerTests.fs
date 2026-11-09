@@ -59,13 +59,13 @@ type private FakeAuditLog() =
         |> Seq.toList
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async {
+        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
             captured.Add(scopeId, audit)
             return Ok()
         }
         // Tests don't exercise the read side — the tracker is a
         // write-only consumer of IAuditLog.
-        member _.GetAuditTrail(_, _, _) = async { return [] }
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
 
 let private now () =
     DateTime(2026, 5, 4, 12, 0, 0, DateTimeKind.Utc)

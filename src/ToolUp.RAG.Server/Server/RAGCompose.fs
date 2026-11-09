@@ -277,7 +277,8 @@ let emitIngestionDrop
             try
                 do!
                     a.Record(
-                        KnowledgeSourceModule.value,
+                        AuditScope.shard KnowledgeSourceModule.value,
+                        AuditSubject.system "IngestionQueue",
                         KnowledgeIngestionDropped {
                             ScopeKey = scopeKey
                             DocId = docId
@@ -1974,7 +1975,7 @@ let composeRAG (options: RagOptions) (app: ServerApp) : ServerApp =
                                         RetryPolicy = JobRetryPolicy.defaults
                                         ShardKey = None
                                         Precision = JobPrecision.Minute
-                                        CreatedBy = AuditSubject.PlatformSentinelUserId
+                                        CreatedBy = ScopeKey.PlatformContainer
                                         Tags = Map.ofList [ "source", "rag-compose"; "purpose", "tombstone-vacuum" ]
                                     }
 

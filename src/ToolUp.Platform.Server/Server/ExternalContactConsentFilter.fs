@@ -143,7 +143,8 @@ type ExternalContactConsentFilter
             | Some log, contactIds ->
                 do!
                     log.Record(
-                        scopeId,
+                        AuditScope.shard scopeId,
+                        AuditSubject.system "ExternalContactConsentFilter",
                         NotificationDeliveryRefused {
                             NotificationKind = kindLabel notification
                             ScopeId = scopeId

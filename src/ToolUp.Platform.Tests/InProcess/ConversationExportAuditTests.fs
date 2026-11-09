@@ -43,9 +43,11 @@ let tests =
                 ExportedBy = "alice"
             }
 
-            do! auditLog.Record("user-alice", ConversationExported payload) |> AuditRow.orRefuse
+            do!
+                auditLog.Record(AuditScope.shard "user-alice", AuditSubject.system "test", ConversationExported payload)
+                |> AuditRow.orRefuse
 
-            let! trail = auditLog.GetAuditTrail("user-alice", None, Some "ConversationExported")
+            let! trail = auditLog.GetAuditTrail(AuditScope.shard "user-alice", None, Some "ConversationExported")
 
             match trail with
             | [ ConversationExported p ] ->
@@ -61,7 +63,8 @@ let tests =
 
             do!
                 auditLog.Record(
-                    "user-bob",
+                    AuditScope.shard "user-bob",
+                    AuditSubject.system "test",
                     ConversationExported {
                         ConversationId = "22222222-2222-2222-2222-222222222222"
                         IncludeToolDetails = true
@@ -70,7 +73,7 @@ let tests =
                 )
                 |> AuditRow.orRefuse
 
-            let! trail = auditLog.GetAuditTrail("user-bob", None, None)
+            let! trail = auditLog.GetAuditTrail(AuditScope.shard "user-bob", None, None)
 
             match trail with
             | [ ConversationExported p ] -> Expect.isTrue p.IncludeToolDetails "opt-in records IncludeToolDetails=true"
@@ -83,7 +86,8 @@ let tests =
 
             do!
                 auditLog.Record(
-                    "user-carol",
+                    AuditScope.shard "user-carol",
+                    AuditSubject.system "test",
                     ConversationExported {
                         ConversationId = "33333333-3333-3333-3333-333333333333"
                         IncludeToolDetails = false
@@ -92,10 +96,10 @@ let tests =
                 )
                 |> AuditRow.orRefuse
 
-            let! unrelated = auditLog.GetAuditTrail("user-carol", None, Some "UserLoggedIn")
+            let! unrelated = auditLog.GetAuditTrail(AuditScope.shard "user-carol", None, Some "UserLoggedIn")
             Expect.isEmpty unrelated "the filter must not return ConversationExported under another type"
 
-            let! matched = auditLog.GetAuditTrail("user-carol", None, Some "ConversationExported")
+            let! matched = auditLog.GetAuditTrail(AuditScope.shard "user-carol", None, Some "ConversationExported")
             Expect.equal (List.length matched) 1 "one export event under its own type"
         }
     ]

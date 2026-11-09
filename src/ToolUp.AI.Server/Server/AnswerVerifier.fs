@@ -925,7 +925,10 @@ let runVerificationStageWithScope
                 // store failures; this guard covers a composed sink that
                 // throws or hangs on the way in.
                 try
-                    let recordTask = auditLog.Record(scopeId, event) |> Async.StartAsTask
+                    let recordTask =
+                        auditLog.Record(AuditScope.shard scopeId, AuditSubject.system "AnswerVerifier", event)
+                        |> Async.StartAsTask
+
                     let timeoutTask = Task.Delay 5_000
                     let! winner = Task.WhenAny(recordTask :> Task, timeoutTask) |> Async.AwaitTask
 
@@ -1099,7 +1102,7 @@ let deploymentVerificationSource
     fun () -> async {
         let! rowSets =
             answerVerificationEventTypes
-            |> List.map (fun eventType -> auditLog.GetAuditTrail(scopeId, None, Some eventType))
+            |> List.map (fun eventType -> auditLog.GetAuditTrail(AuditScope.shard scopeId, None, Some eventType))
             |> Async.Parallel
 
         let payloads =

@@ -245,7 +245,7 @@ type private RecordingAuditLog() =
                     cap.TotalSeconds)
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async {
+        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
             lock gate (fun () ->
                 recorded.Add(scopeId, audit)
                 Threading.Monitor.PulseAll gate)
@@ -253,7 +253,9 @@ type private RecordingAuditLog() =
             return Ok()
         }
 
-        member _.GetAuditTrail(_, _, _) = async { return lock gate (fun () -> recorded |> Seq.map snd |> List.ofSeq) }
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async {
+            return lock gate (fun () -> recorded |> Seq.map snd |> List.ofSeq)
+        }
 
 // ── 1. the derivation is the shipped projection, not a second map ─────
 

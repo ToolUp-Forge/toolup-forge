@@ -320,7 +320,8 @@ module ModelTransition =
             try
                 do!
                     deps.Audit.Record(
-                        scopeId,
+                        AuditScope.shard scopeId,
+                        AuditSubject.system "ModelRegistry",
                         ModelArtifactTransitionAttributed {
                             CompositeKeyHash = request.ArtifactKey
                             FromStatus = from

@@ -420,7 +420,7 @@ let private gateFixture () : GateFixture =
         ProvenanceGraph.createWithFacts lineage (FactStoreEvidenceSource.create store)
 
     let secrets = InMemorySecretStore() :> ISecretStore
-    let audit = AuditLog.NoOpAuditLog() :> IAuditLog
+    let audit = NoOpAuditLog() :> IAuditLog
     let signer = DefaultArtefactSigner.createSystem secrets audit "grounding-v1" Ed25519
 
     let issuer =
@@ -874,7 +874,7 @@ let private deployShaped
     |> ignore
 
     services.AddSingleton<IArtefactSigner>(
-        DefaultArtefactSigner.createSystem secrets (AuditLog.NoOpAuditLog() :> IAuditLog) "grounding-v1" Ed25519
+        DefaultArtefactSigner.createSystem secrets (NoOpAuditLog() :> IAuditLog) "grounding-v1" Ed25519
     )
     |> ignore
 
@@ -2202,12 +2202,12 @@ let private promptApi
 
     services.AddSingleton<IAuditLog>(
         { new IAuditLog with
-            member _.Record(stream, event) = async {
+            member _.Record(AuditScope.StreamKey stream, _actor, event) = async {
                 audit.Enqueue((stream, event))
                 return Ok()
             }
 
-            member _.GetAuditTrail(_, _, _) = async { return [] }
+            member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
         }
     )
     |> ignore

@@ -155,6 +155,14 @@ let internal requestLogger (ctx: HttpContext) : ILogger option =
 /// either way, and a logger that itself throws is ignored. The formatting
 /// is `writeFailureLogger`'s, shared with the
 /// stores that have no request in hand.
+/// The actor of an audit row a request handler emits: the principal of the
+/// request's registered `AccessContext`, or `emitter` as a system actor when
+/// the request resolved none.
+let requestActor (emitter: string) (ctx: HttpContext) : AuditSubject =
+    match ctx.RequestServices.GetService(typeof<AccessContext>) with
+    | :? AccessContext as access -> AuditSubject.fromSubject access.Subject
+    | _ -> AuditSubject.system emitter
+
 let internal writeFailureWarner (source: string) (logger: ILogger option) (ctx: HttpContext) : string -> exn -> unit =
     let route = sprintf " on %s %s" ctx.Request.Method (string ctx.Request.Path)
     writeFailureLogger source logger route "the response"

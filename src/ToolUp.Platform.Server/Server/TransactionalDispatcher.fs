@@ -239,7 +239,11 @@ let private runDelivery
                 }
 
                 do!
-                    auditLog.Record(envelope.ScopeId, NotificationSilentlySkipped payload)
+                    auditLog.Record(
+                        AuditScope.shard envelope.ScopeId,
+                        AuditSubject.system "TransactionalDispatcher",
+                        NotificationSilentlySkipped payload
+                    )
                     |> AuditRow.orRefuse
             else
                 let recipientUserIds, correlationId = auditFieldsOf envelope.Notification
@@ -266,7 +270,8 @@ let private runDelivery
 
                         do!
                             auditLog.Record(
-                                envelope.ScopeId,
+                                AuditScope.shard envelope.ScopeId,
+                                AuditSubject.system "TransactionalDispatcher",
                                 NotificationSent {
                                     UserId = UserId SystemActorId
                                     ScopeId = envelope.ScopeId
@@ -308,7 +313,8 @@ let private runDelivery
 
                             do!
                                 auditLog.Record(
-                                    envelope.ScopeId,
+                                    AuditScope.shard envelope.ScopeId,
+                                    AuditSubject.system "TransactionalDispatcher",
                                     NotificationDeliveryFailed {
                                         UserId = UserId SystemActorId
                                         ScopeId = envelope.ScopeId
@@ -329,7 +335,8 @@ let private runDelivery
 
                         do!
                             auditLog.Record(
-                                envelope.ScopeId,
+                                AuditScope.shard envelope.ScopeId,
+                                AuditSubject.system "TransactionalDispatcher",
                                 NotificationDeliveryFailed {
                                     UserId = UserId SystemActorId
                                     ScopeId = envelope.ScopeId
@@ -488,7 +495,8 @@ type TransactionalDispatcher
                                 (async {
                                     return!
                                         auditLog.Record(
-                                            task.Envelope.ScopeId,
+                                            AuditScope.shard task.Envelope.ScopeId,
+                                            AuditSubject.system "TransactionalDispatcher",
                                             NotificationDeliveryFailed {
                                                 UserId = UserId SystemActorId
                                                 ScopeId = task.Envelope.ScopeId

@@ -393,7 +393,8 @@ module MembershipDoctorStorage =
                     | Some log ->
                         do!
                             log.Record(
-                                teamId,
+                                AuditScope.team (TeamId teamId),
+                                AuditSubject.system "MembershipDoctor",
                                 MemberRemoved {
                                     UserId = UserId actorUserId
                                     TeamId = TeamId teamId

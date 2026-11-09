@@ -194,7 +194,11 @@ let runTick
                     // Mirrors the scope choice used by Phase 9b's
                     // job lifecycle events.
                     do!
-                        auditLog.Record(ScopeKey.PlatformContainer, HealthStateChanged payload)
+                        auditLog.Record(
+                            AuditScope.platform,
+                            AuditSubject.system "HealthStateTracker",
+                            HealthStateChanged payload
+                        )
                         |> AuditRow.orRefuse
     }
 

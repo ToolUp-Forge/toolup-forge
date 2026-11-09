@@ -284,20 +284,10 @@ let private auditTests =
         testCase "the platform trail is _platform"
         <| fun _ -> Expect.equal (AuditScope.streamKey AuditScope.PlatformScope) "_platform" "platform trail"
 
-        testCase "AuditSubject.fromScopeId reads through the one parser"
+        testCase "a shard renders its key verbatim and is never read as a team or a user"
         <| fun _ ->
-            let rows = [
-                "_platform", UserAudit(UserId AuditSubject.PlatformSentinelUserId)
-                "", UserAudit(UserId AuditSubject.PlatformSentinelUserId)
-                "session-s1", AnonymousAudit "s1"
-                "user-alice", UserAudit(UserId "alice")
-                "team-acme", TeamAudit(UserId AuditSubject.DispatcherSentinelUserId, TeamId "acme")
-                "acme", UserAudit(UserId "acme")
-                "team-", UserAudit(UserId "team-")
-            ]
-
-            for scopeId, expected in rows do
-                Expect.equal (AuditSubject.fromScopeId scopeId) expected $"%A{scopeId}"
+            for key in [ "acme"; "team-acme"; "_platform.ads.config" ] do
+                Expect.equal (AuditScope.streamKey (AuditScope.shard key)) key $"%A{key}"
     ]
 
 /// The key a scope renders from, read off the scope itself: present for

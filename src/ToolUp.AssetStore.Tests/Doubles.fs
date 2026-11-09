@@ -26,9 +26,9 @@ let nullLogger =
 
 let nullAuditLog =
     { new IAuditLog with
-        member _.Record(_, _) = async.Return(Ok())
+        member _.Record(AuditScope.StreamKey _, _actor, _) = async.Return(Ok())
 
-        member _.GetAuditTrail(_, _, _) = async.Return []
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async.Return []
     }
 
 /// Counting image renderer — deterministic bytes derived from the
