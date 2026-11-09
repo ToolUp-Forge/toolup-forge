@@ -24,57 +24,22 @@ open System.Buffers.Binary
 #nowarn "9"
 #nowarn "51"
 
-/// Can this wire value reach the target type without losing
-/// what the wire actually carried?
-///
-/// `sourceBits` is the width of the WIRE FORMAT the value arrived in and
-/// `targetBits` the width of the type it is going to; `lo`/`hi` are the
-/// target's signed minimum and its maximum as an unsigned magnitude.
+/// Can this wire value reach the target type without losing what the wire
+/// actually carried? The rule is `Value.signedFits` / `Value.unsignedFits`,
+/// the one the decoder algebra applies; this is its entry for a reader
+/// holding the value at whatever numeric type the format byte chose.
 ///
 /// The source's width is passed rather than derived. Deriving it from the
 /// value's own static type is exact and one character long — `sizeof<'a>`
-/// inside this `inline` function resolves per call site — and Fable
-/// refuses it outright (`Operators.SizeOf is not supported`). The width
-/// is known at every call site in `Read`, because the format byte is what
-/// chose the read; passing it is the version of this that compiles on
-/// both hosts, which is the only version worth having for a reader whose
-/// one production caller runs under Fable.
-///
-/// Three rules, and the middle one is the one the wire corpus forced.
-///
-///   * A NEGATIVE value never decodes into an unsigned target. No format
-///     this transport emits puts a negative on the wire for an unsigned
-///     field, so a sign flip there is a mutation, not a convention. Into
-///     a SIGNED target a negative source always fits, because a narrower
-///     signed range is contained in a wider one.
-///   * A source NO WIDER than the target always survives — including the
-///     signed/unsigned reinterpretation older writers depend
-///     on. That is not a loophole, it is the format as those writers
-///     emit it: their `writeSByte` puts `-128y` on the wire as `uint8
-///     128`, and their `writeDecimal`'s four words go through
-///     `write32bitNumber`, so a negative int32 arrives as `uint32
-///     0xFFFFFFFF`. The target type is what recovers the sign, and no bit
-///     is lost either way. Refusing these would refuse well-formed
-///     traffic from every peer still on such a writer — the corpus pins
-///     those older bytes in `preEmitterDisciplinePayloads`. This
-///     repository's own writers no longer emit the form at all
-///     (see `Format.fs`), which is what lets this rule refuse a value
-///     that is genuinely too wide: it now always arrives wider.
-///   * A source WIDER than the target is the genuine narrowing, and it is
-///     refused unless the value fits the target's own range. This is the
-///     arm that catches an `int64` payload aimed at an `int` field.
-///
-/// A target whose legal values are a DOMAIN rather than a width — a
-/// `DateOnly` day number, a `TimeOnly` tick count — passes `targetBits`
-/// of 0, which disables the reinterpretation rule and leaves the range
-/// check applying to every source.
+/// inside this `inline` function resolves per call site — and Fable refuses
+/// it outright (`Operators.SizeOf is not supported`). The width is known at
+/// every call site in `Read`, because the format byte is what chose the
+/// read.
 let inline private integerFits (sourceBits: int) (targetBits: int) (lo: int64) (hi: uint64) n =
     if n < LanguagePrimitives.GenericZero then
-        lo < 0L && int64 n >= lo
-    elif sourceBits <= targetBits then
-        true
+        Value.signedFits sourceBits targetBits lo hi (int64 n)
     else
-        uint64 n <= hi
+        Value.unsignedFits sourceBits targetBits hi (uint64 n)
 
 /// The refusal a failed width check raises. `Expected` names
 /// the target type, so the rendered sentence reads
@@ -112,190 +77,108 @@ let interpretStringAs (typ: Type) (str: string) =
         FSharpValue.MakeUnion(case, [||])
 #endif
 
-// Every arm decodes at the width its TARGET TYPE declares
-// and refuses a wire value that does not fit, rather than casting it
-// down. The two `#if` branches are kept arm-for-arm identical in this
-// respect: under Fable the same `integerFits` test runs over the JS
-// number (or BigInt) the arm would otherwise have narrowed, so a client
-// and a server disagree about no payload. See `Format.fs`'s header for
+// The one place the reader's two hosts differ about an integer target: how a
+// `Type` is named, and how an enum value is made.
+#if FABLE_COMPILER
+/// `.FullName` is a computed call under Fable, so it is read once per decode.
+let inline private integerTypeKey (typ: Type) : string = typ.FullName
+
+/// An enum is its number under Fable.
+let inline private enumOf (_: Type) n : obj = box (float n)
+#else
+/// The runtime's own types only: a foreign type spelled `System.Int32` from
+/// another assembly is not the primitive, and keys to nothing.
+let inline private integerTypeKey (typ: Type) : string =
+    if Object.ReferenceEquals(typ.Assembly, typeof<int>.Assembly) then
+        typ.FullName
+    else
+        ""
+
+let inline private enumOf (typ: Type) n : obj = Enum.ToObject(typ, int64 n)
+#endif
+
+// Every arm decodes at the width its TARGET TYPE declares and refuses a wire
+// value that does not fit, rather than casting it down, on both hosts — so a
+// client and a server disagree about no payload. See `Format.fs`'s header for
 // why these are refusals rather than clamps.
 let inline interpretIntegerAsFrom (typ: Type) (sourceBits: int) n =
-#if !FABLE_COMPILER
-    if typ = typeof<Int32> then
+    match integerTypeKey typ with
+    // `int<m>` erases to `int` on .NET; Fable keeps the measure in the name.
+    | "System.Int32"
+    | "Microsoft.FSharp.Core.int32`1" ->
         if integerFits sourceBits 32 -2147483648L 2147483647UL n then
             int32 n |> box
         else
             refuseWidth typ n
-    elif typ = typeof<Int64> then
+    | "System.Int64"
+    | "Microsoft.FSharp.Core.int64`1" ->
         if integerFits sourceBits 64 Int64.MinValue 9223372036854775807UL n then
             int64 n |> box
         else
             refuseWidth typ n
-    elif typ = typeof<Int16> then
+    | "System.Int16"
+    | "Microsoft.FSharp.Core.int16`1" ->
         if integerFits sourceBits 16 -32768L 32767UL n then
             int16 n |> box
         else
             refuseWidth typ n
-    elif typ = typeof<UInt32> then
+    | "System.UInt32" ->
         if integerFits sourceBits 32 0L 4294967295UL n then
             uint32 n |> box
         else
             refuseWidth typ n
-    elif typ = typeof<UInt64> then
+    | "System.UInt64" ->
         if integerFits sourceBits 64 0L 18446744073709551615UL n then
             uint64 n |> box
         else
             refuseWidth typ n
-    elif typ = typeof<UInt16> then
+    | "System.UInt16" ->
         if integerFits sourceBits 16 0L 65535UL n then
             uint16 n |> box
         else
             refuseWidth typ n
-    elif typ = typeof<TimeSpan> then
+    | "System.TimeSpan" ->
         if integerFits sourceBits 64 Int64.MinValue 9223372036854775807UL n then
             TimeSpan(int64 n) |> box
         else
             refuseWidth typ n
-#if NET6_0_OR_GREATER
-    elif typ = typeof<DateOnly> then
-        // The bound here is `DateOnly`'s OWN domain (day numbers up to
-        // `DateOnly.MaxValue.DayNumber`), not the int32 range: outside
-        // it `FromDayNumber` raises an `ArgumentOutOfRangeException`,
-        // which would leave `TryRead` as something other than a refusal.
+    // The bound is `DateOnly`'s OWN domain (day numbers up to
+    // `DateOnly.MaxValue.DayNumber`), not the int32 range: outside it
+    // `FromDayNumber` raises, which would leave `TryRead` as something other
+    // than a refusal.
+    | "System.DateOnly" ->
         if integerFits sourceBits 0 0L 3652058UL n then
             DateOnly.FromDayNumber(int32 n) |> box
         else
             refuseWidth typ n
-    elif typ = typeof<TimeOnly> then
-        // Likewise `TimeOnly`'s own domain, in ticks, for the same reason.
+    // Likewise `TimeOnly`'s own domain, in ticks. One host limit, recorded
+    // rather than hidden: Fable's `TimeOnly` is MILLISECOND resolution, so
+    // the ticks below one millisecond are truncated on the way in.
+    | "System.TimeOnly" ->
         if integerFits sourceBits 0 0L 863999999999UL n then
             TimeOnly(int64 n) |> box
         else
             refuseWidth typ n
-#endif
-    elif typ = typeof<byte> then
+    | "System.Byte" ->
         if integerFits sourceBits 8 0L 255UL n then
             byte n |> box
         else
             refuseWidth typ n
-    elif typ = typeof<sbyte> then
+    | "System.SByte" ->
         if integerFits sourceBits 8 -128L 127UL n then
             sbyte n |> box
         else
             refuseWidth typ n
-    elif typ.IsEnum then
-        // Bounded at the width `Enum.ToObject` takes its value at, which
-        // is 64 bits — so every wire integer reaches it, a `uint64` above
-        // `Int64.MaxValue` arriving as its signed reinterpretation like
-        // any other same-width value. The enum's own UNDERLYING width is
-        // deliberately not checked: a value outside an enum's declared
-        // cases is legal in .NET (flags combinations are the common
-        // case), so there is no narrower bound to defend.
+    // Bounded at the width `Enum.ToObject` takes its value at, which is 64
+    // bits, so every wire integer reaches it. The enum's own UNDERLYING width
+    // is deliberately not checked: a value outside an enum's declared cases
+    // is legal in .NET (flags combinations are the common case).
+    | _ when typ.IsEnum ->
         if integerFits sourceBits 64 Int64.MinValue 9223372036854775807UL n then
-            Enum.ToObject(typ, int64 n)
+            enumOf typ n
         else
             refuseWidth typ n
-    else
-        DecodeError.failWith typ.Name (sprintf "integer %A" n)
-#else
-    if Object.ReferenceEquals(typ, typeof<Int32>) then
-        if integerFits sourceBits 32 -2147483648L 2147483647UL n then
-            int32 n |> box
-        else
-            refuseWidth typ n
-    else
-        // .FullName in Fable is a function call with multiple operations, so let's compute the value just once
-        let typeName = typ.FullName
-
-        if typeName = "System.Int64" then
-            if integerFits sourceBits 64 Int64.MinValue 9223372036854775807UL n then
-                int64 n |> box
-            else
-                refuseWidth typ n
-        elif Object.ReferenceEquals(typ, typeof<Int16>) then
-            if integerFits sourceBits 16 -32768L 32767UL n then
-                int16 n |> box
-            else
-                refuseWidth typ n
-        elif Object.ReferenceEquals(typ, typeof<UInt32>) then
-            if integerFits sourceBits 32 0L 4294967295UL n then
-                uint32 n |> box
-            else
-                refuseWidth typ n
-        elif typeName = "System.UInt64" then
-            if integerFits sourceBits 64 0L 18446744073709551615UL n then
-                uint64 n |> box
-            else
-                refuseWidth typ n
-        elif Object.ReferenceEquals(typ, typeof<UInt16>) then
-            if integerFits sourceBits 16 0L 65535UL n then
-                uint16 n |> box
-            else
-                refuseWidth typ n
-        elif typeName = "System.TimeSpan" then
-            if integerFits sourceBits 64 Int64.MinValue 9223372036854775807UL n then
-                TimeSpan(int64 n) |> box
-            else
-                refuseWidth typ n
-        // The two arms this block was EMPTY for. Fable's
-        // library carries both types (`DateOnly` as a UTC-midnight
-        // `Date`, `TimeOnly` as a millisecond count), so the same
-        // day-number / tick encoding the .NET arm decodes — and the
-        // Fable WRITER beside this file already emits — decodes here
-        // at the same domain bounds. No `#if NET6_0_OR_GREATER` guard:
-        // this arm only ever compiles under Fable, whose shim has the
-        // types unconditionally, and the empty guarded block that stood
-        // here was what made a browser client refuse both outright.
-        //
-        // One host limit, recorded rather than hidden: Fable's
-        // `TimeOnly` is MILLISECOND resolution, so the ticks below one
-        // millisecond are truncated on the way in. The corpus cannot
-        // measure that — its declared value is evaluated under Fable
-        // too, and truncates identically — so it is stated here, at the
-        // arm that does it.
-        elif typeName = "System.DateOnly" then
-            if integerFits sourceBits 0 0L 3652058UL n then
-                DateOnly.FromDayNumber(int32 n) |> box
-            else
-                refuseWidth typ n
-        elif typeName = "System.TimeOnly" then
-            if integerFits sourceBits 0 0L 863999999999UL n then
-                TimeOnly(int64 n) |> box
-            else
-                refuseWidth typ n
-        elif typeName = "Microsoft.FSharp.Core.int16`1" then
-            if integerFits sourceBits 16 -32768L 32767UL n then
-                int16 n |> box
-            else
-                refuseWidth typ n
-        elif typeName = "Microsoft.FSharp.Core.int32`1" then
-            if integerFits sourceBits 32 -2147483648L 2147483647UL n then
-                int32 n |> box
-            else
-                refuseWidth typ n
-        elif typeName = "Microsoft.FSharp.Core.int64`1" then
-            if integerFits sourceBits 64 Int64.MinValue 9223372036854775807UL n then
-                int64 n |> box
-            else
-                refuseWidth typ n
-        elif Object.ReferenceEquals(typ, typeof<byte>) then
-            if integerFits sourceBits 8 0L 255UL n then
-                byte n |> box
-            else
-                refuseWidth typ n
-        elif Object.ReferenceEquals(typ, typeof<sbyte>) then
-            if integerFits sourceBits 8 -128L 127UL n then
-                sbyte n |> box
-            else
-                refuseWidth typ n
-        elif typ.IsEnum then
-            if integerFits sourceBits 64 Int64.MinValue 9223372036854775807UL n then
-                float n |> box
-            else
-                refuseWidth typ n
-        else
-            DecodeError.failWith typ.Name (sprintf "integer %A" n)
-#endif
+    | _ -> DecodeError.failWith typ.Name (sprintf "integer %A" n)
 
 let inline interpretFloatAs (typ: Type) n =
 #if FABLE_COMPILER
