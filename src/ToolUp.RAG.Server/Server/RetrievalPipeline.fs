@@ -1162,7 +1162,8 @@ type RetrievalPipeline
         fun turn ->
             match factResolver, turn.Request.FactClause with
             | Some resolver, Some clause -> async {
-                let factScope = turn.Request.FactScope
+                let request, ctx = turn.Request, turn.Access
+                let factScope = request.FactScope
 
                 let resolveAndDisclose = async {
                     let! resolved = resolver.Resolve(factScope, clause)
@@ -1171,7 +1172,7 @@ type RetrievalPipeline
                         match disclosureGate, resolved with
                         | Some gate, _ :: _ -> async {
                             let ids = resolved |> List.map _.FactId
-                            let! verdicts = gate.Check(factScope, turn.Access.UserId, FactRetrieval, ids)
+                            let! verdicts = gate.Check(factScope, ctx.UserId, FactRetrieval, ids)
 
                             let permitted =
                                 resolved
@@ -1192,7 +1193,7 @@ type RetrievalPipeline
                         | _ -> async.Return(resolved, [])
 
                     let disclosed, marks = disclosed
-                    let scope = factScopeFor turn.Request.Scopes
+                    let scope = factScopeFor request.Scopes
                     return disclosed |> List.map (factToMatch scope), marks
                 }
 
