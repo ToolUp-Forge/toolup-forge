@@ -11,7 +11,7 @@ module Remoting =
     /// is also fine for shared use — every caller gets the same byte-compat
     /// converter registration.
     let private defaultStjOptions =
-        ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()
+        ToolUp.Remoting.Json.SystemTextJson.PlatformJson.options
 
     let documentation (name: string) (routes: RouteDocs list) : Documentation = Documentation(name, routes)
 
