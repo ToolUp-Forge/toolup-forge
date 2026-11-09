@@ -83,7 +83,7 @@ let private expiryHookKey () = async {
     let audit = RecordingAuditLog()
 
     let hook =
-        ToolUp.Platform.Scope.Teams.PendingInviteExpiryHook.build silentLogger (Some(audit :> IAuditLog)) None
+        ToolUp.Platform.Scope.Teams.PendingInviteExpiryHook.build silentLogger ((audit :> IAuditLog)) None
 
     do!
         hook [

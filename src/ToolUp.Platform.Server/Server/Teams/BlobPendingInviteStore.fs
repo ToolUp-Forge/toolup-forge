@@ -109,7 +109,7 @@ type BlobPendingInviteStore
     (
         storage: IBlobStorage,
         logger: ILogger,
-        auditLog: IAuditLog option,
+        auditLog: IAuditLog,
         expiryNotifier: ((string * PendingInviteByEmail) list -> Async<unit>) option,
         options: BlobPendingInviteStoreOptions
     ) =
@@ -166,19 +166,19 @@ type BlobPendingInviteStore
         (
             storage: IBlobStorage,
             logger: ILogger,
-            auditLog: IAuditLog option,
+            auditLog: IAuditLog,
             expiryNotifier: ((string * PendingInviteByEmail) list -> Async<unit>) option
         ) =
         BlobPendingInviteStore(storage, logger, auditLog, expiryNotifier, BlobPendingInviteStoreOptions.defaults)
 
     /// Audit-log-only constructor (no inviter notifier), default budget.
-    new(storage: IBlobStorage, logger: ILogger, auditLog: IAuditLog option) =
+    new(storage: IBlobStorage, logger: ILogger, auditLog: IAuditLog) =
         BlobPendingInviteStore(storage, logger, auditLog, None, BlobPendingInviteStoreOptions.defaults)
 
     /// Minimal constructor — no audit log, no notifier, default budget.
     /// The expiry sweep is then silent (GP 11).
     new(storage: IBlobStorage, logger: ILogger) =
-        BlobPendingInviteStore(storage, logger, None, None, BlobPendingInviteStoreOptions.defaults)
+        BlobPendingInviteStore(storage, logger, NoOpAuditLog(), None, BlobPendingInviteStoreOptions.defaults)
 
     /// Build the store when `blobs` implements `IConditionalBlobStorage`,
     /// `None` otherwise — the probing form, for a compose path that falls
@@ -189,7 +189,7 @@ type BlobPendingInviteStore
         (
             blobs: IBlobStorage,
             logger: ILogger,
-            auditLog: IAuditLog option,
+            auditLog: IAuditLog,
             expiryNotifier: ((string * PendingInviteByEmail) list -> Async<unit>) option
         ) : IPendingInviteStore option =
         match box blobs with
@@ -199,7 +199,7 @@ type BlobPendingInviteStore
 
     /// Probing form with the default hooks (no audit log, no notifier).
     static member TryCreate(blobs: IBlobStorage, logger: ILogger) : IPendingInviteStore option =
-        BlobPendingInviteStore.TryCreate(blobs, logger, None, None)
+        BlobPendingInviteStore.TryCreate(blobs, logger, NoOpAuditLog(), None)
 
     interface IPendingInviteStore with
         member _.Upsert(email, pending) =

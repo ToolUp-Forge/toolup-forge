@@ -1471,10 +1471,7 @@ let roundOrchestrationServices (options: PeerOptions) (services: IServiceCollect
                 // deployment with `AuditLog = FeatureMode.Disabled` still gets
                 // progress, and a partial host with neither observes
                 // nothing rather than failing to compose.
-                let auditLog =
-                    sp.GetService(typeof<IAuditLog>)
-                    |> Option.ofObj
-                    |> Option.map (fun x -> x :?> IAuditLog)
+                let auditLog = Background.resolveAuditLog sp
 
                 let channel =
                     sp.GetService(typeof<INotificationChannel>)
@@ -1911,10 +1908,7 @@ let private composePeer (options: PeerOptions) (app: ServerApp) : ServerApp =
                                 // request path treats it: a partial host
                                 // without one records nothing rather
                                 // than failing to compose.
-                                let auditLog =
-                                    sp.GetService(typeof<IAuditLog>)
-                                    |> Option.ofObj
-                                    |> Option.map (fun x -> x :?> IAuditLog)
+                                let auditLog = Background.resolveAuditLog sp
 
                                 {
                                     Scheduler = scheduler

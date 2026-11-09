@@ -642,7 +642,7 @@ type BootVerificationOptions = {
     Transcript: BuildTranscript option
     /// Where the verdict is recorded. `None` records nothing, which is
     /// what a deployment with no audit log composed has to mean.
-    AuditLog: IAuditLog option
+    AuditLog: IAuditLog
     /// Scope the verdict is recorded under.
     ScopeId: string
     /// The verification level the deployment requires. `None`
@@ -1408,26 +1408,23 @@ module BootVerificationPreflight =
     /// chain-covered boot verdict for free; one running no sink at all
     /// still gets the row in its own audit trail.
     let recordVerdict (options: BootVerificationOptions) (result: BootVerificationResult) : Async<unit> = async {
-        match options.AuditLog with
-        | None -> ()
-        | Some auditLog ->
-            let payload: CompositionVerificationRecordedPayload = {
-                Verdict = BootVerificationVerdict.label result.Verdict
-                Profile = CompositionProfile.label result.Profile
-                Policy = BootVerificationPolicy.label result.Policy
-                RefusedStart = result.RefusedStart
-                Findings = BootVerificationVerdict.findings result.Verdict
-                Summary = BootVerificationVerdict.describe result.Verdict
-                OccurredAt = DateTimeOffset.UtcNow
-            }
+        let payload: CompositionVerificationRecordedPayload = {
+            Verdict = BootVerificationVerdict.label result.Verdict
+            Profile = CompositionProfile.label result.Profile
+            Policy = BootVerificationPolicy.label result.Policy
+            RefusedStart = result.RefusedStart
+            Findings = BootVerificationVerdict.findings result.Verdict
+            Summary = BootVerificationVerdict.describe result.Verdict
+            OccurredAt = DateTimeOffset.UtcNow
+        }
 
-            do!
-                auditLog.Record(
-                    AuditScope.shard options.ScopeId,
-                    AuditSubject.system "BootVerification",
-                    AuditEvent.CompositionVerificationRecorded payload
-                )
-                |> AuditRow.orRefuse
+        do!
+            options.AuditLog.Record(
+                AuditScope.shard options.ScopeId,
+                AuditSubject.system "BootVerification",
+                AuditEvent.CompositionVerificationRecorded payload
+            )
+            |> AuditRow.orRefuse
     }
 
     /// Run the preflight against a deployment that may have

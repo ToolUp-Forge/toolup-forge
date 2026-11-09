@@ -643,7 +643,7 @@ let tests =
                 run h "_platform.ai.list_accessible_modules" "{}" |> ignore
 
                 let report =
-                    AICrossModuleObservability.reportFor (Some h.AuditLog) scope.ScopeId
+                    AICrossModuleObservability.reportFor (h.AuditLog) scope.ScopeId
                     |> Async.RunSynchronously
 
                 Expect.equal report.TotalReadsInWindow 2 "both invocations visible to the endpoint"

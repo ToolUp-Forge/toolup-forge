@@ -112,7 +112,7 @@ let internal completeConnectObserved
     (warn: string -> exn -> unit)
     (providerProfile: IProviderProfile)
     (secretStore: ISecretStore)
-    (auditLog: IAuditLog option)
+    (auditLog: IAuditLog)
     (scope: StorageScope)
     (userId: string)
     (flow: IProviderOAuthFlow)
@@ -197,24 +197,21 @@ let internal completeConnectObserved
                         // (`provider-entry:{label}`) so a reader can
                         // tell the two families apart without a schema
                         // change.
-                        match auditLog with
-                        | Some log ->
-                            try
-                                log.Record(
-                                    StorageScope.auditScope scope,
-                                    AuditSubject.system "ProviderOAuthConnect",
-                                    OAuthConnected {
-                                        UserId = UserId userId
-                                        ScopeId = scope.ScopeId
-                                        FlowName = flow.Name
-                                        DataSourceId = OAuthCorrelationKey.render correlation
-                                        ConnectedAt = connectedAt
-                                    }
-                                )
-                                |> Background.startAuditRow warn "OAuthConnected audit"
-                            with ex ->
-                                warn "OAuthConnected audit" ex
-                        | None -> ()
+                        try
+                            auditLog.Record(
+                                StorageScope.auditScope scope,
+                                AuditSubject.system "ProviderOAuthConnect",
+                                OAuthConnected {
+                                    UserId = UserId userId
+                                    ScopeId = scope.ScopeId
+                                    FlowName = flow.Name
+                                    DataSourceId = OAuthCorrelationKey.render correlation
+                                    ConnectedAt = connectedAt
+                                }
+                            )
+                            |> Background.startAuditRow warn "OAuthConnected audit"
+                        with ex ->
+                            warn "OAuthConnected audit" ex
 
                         return Ok()
     }
@@ -230,7 +227,7 @@ let internal completeConnectObserved
 let completeConnect
     (providerProfile: IProviderProfile)
     (secretStore: ISecretStore)
-    (auditLog: IAuditLog option)
+    (auditLog: IAuditLog)
     (scope: StorageScope)
     (userId: string)
     (flow: IProviderOAuthFlow)
@@ -281,7 +278,7 @@ let DefaultLeadTime: TimeSpan = TimeSpan.FromMinutes 5.0
 /// background job.
 let private markNeedsReauthorization
     (providerProfile: IProviderProfile)
-    (auditLog: IAuditLog option)
+    (auditLog: IAuditLog)
     (scope: StorageScope)
     (entry: ProviderEntry)
     (flow: IProviderOAuthFlow)
@@ -299,27 +296,24 @@ let private markNeedsReauthorization
                 }
             )
 
-        match auditLog with
-        | Some log ->
-            // `OAuthRefreshFailed` is the shipped audit case for
-            // exactly this transition (its own doc comment says the
-            // substrate flips the credential to
-            // `NeedsReauthorization`). `UserId = "system"` per that
-            // payload's convention for a scheduled refresh.
-            do!
-                log.Record(
-                    StorageScope.auditScope scope,
-                    AuditSubject.system "ProviderOAuthConnect",
-                    OAuthRefreshFailed {
-                        UserId = UserId "system"
-                        ScopeId = scope.ScopeId
-                        FlowName = flow.Name
-                        DataSourceId = OAuthCorrelationKey.render (OAuthCorrelationKey.providerEntry entry.Label)
-                        Reason = reason
-                    }
-                )
-                |> AuditRow.orRefuse
-        | None -> ()
+        // `OAuthRefreshFailed` is the shipped audit case for
+        // exactly this transition (its own doc comment says the
+        // substrate flips the credential to
+        // `NeedsReauthorization`). `UserId = "system"` per that
+        // payload's convention for a scheduled refresh.
+        do!
+            auditLog.Record(
+                StorageScope.auditScope scope,
+                AuditSubject.system "ProviderOAuthConnect",
+                OAuthRefreshFailed {
+                    UserId = UserId "system"
+                    ScopeId = scope.ScopeId
+                    FlowName = flow.Name
+                    DataSourceId = OAuthCorrelationKey.render (OAuthCorrelationKey.providerEntry entry.Label)
+                    Reason = reason
+                }
+            )
+            |> AuditRow.orRefuse
     }
 
 /// Run one proactive refresh attempt for a single OAuth-connected
@@ -337,7 +331,7 @@ let private markNeedsReauthorization
 let refreshEntry
     (providerProfile: IProviderProfile)
     (secretStore: ISecretStore)
-    (auditLog: IAuditLog option)
+    (auditLog: IAuditLog)
     (scope: StorageScope)
     (flow: IProviderOAuthFlow)
     (entry: ProviderEntry)

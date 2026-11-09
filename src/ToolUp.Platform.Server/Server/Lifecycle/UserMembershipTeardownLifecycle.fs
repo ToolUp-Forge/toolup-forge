@@ -48,7 +48,7 @@ open ToolUp.Platform.Config.TeamManagement
 /// pending-invite store (the stale-invite sweep).
 type TeardownSubstrate = {
     Teams: ITeamStore
-    Audit: IAuditLog option
+    Audit: IAuditLog
     Directory: IUserDirectory option
     Invites: IPendingInviteStore option
 }
@@ -82,7 +82,9 @@ let hook: TenantHook<TeardownSubstrate> = {
             optional<ITeamStore> services
             |> Option.map (fun teams -> {
                 Teams = teams
-                Audit = optional<IAuditLog> services
+                Audit =
+                    optional<IAuditLog> services
+                    |> Option.defaultWith (fun () -> NoOpAuditLog() :> IAuditLog)
                 Directory = optional<IUserDirectory> services
                 Invites = optional<IPendingInviteStore> services
             })
@@ -102,21 +104,18 @@ let hook: TenantHook<TeardownSubstrate> = {
                 match! store.PurgeUser(userId) with
                 | Error err -> return LifecycleHookResult.Failed err
                 | Ok() ->
-                    match substrate.Audit with
-                    | Some auditLog ->
-                        for team in teams do
-                            do!
-                                auditLog.Record(
-                                    AuditScope.team (TeamId team.TeamId),
-                                    AuditSubject.UserAudit(UserId actorUserId),
-                                    MemberRemoved {
-                                        UserId = UserId actorUserId
-                                        TeamId = TeamId team.TeamId
-                                        AffectedUserId = userId
-                                    }
-                                )
-                                |> AuditRow.orRefuse
-                    | None -> ()
+                    for team in teams do
+                        do!
+                            substrate.Audit.Record(
+                                AuditScope.team (TeamId team.TeamId),
+                                AuditSubject.UserAudit(UserId actorUserId),
+                                MemberRemoved {
+                                    UserId = UserId actorUserId
+                                    TeamId = TeamId team.TeamId
+                                    AffectedUserId = userId
+                                }
+                            )
+                            |> AuditRow.orRefuse
 
                     // Pending-invite sweep — a purged user must not
                     // auto-rejoin from a stale email invite on their next

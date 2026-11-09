@@ -307,7 +307,7 @@ let private resolveSigningKey (secretStore: ISecretStore) (logger: ILogger) : As
 /// against a key resolved from `ISecretStore`. Audit emission is
 /// optional — pass `None` for the `audit` constructor parameter when
 /// the deployment runs `AuditLog = FeatureMode.Disabled`.
-type BlobShareTokenStore(storage: IBlobStorage, secretStore: ISecretStore, audit: IAuditLog option, logger: ILogger) =
+type BlobShareTokenStore(storage: IBlobStorage, secretStore: ISecretStore, audit: IAuditLog, logger: ILogger) =
 
     let lockObj = obj ()
 
@@ -431,16 +431,13 @@ type BlobShareTokenStore(storage: IBlobStorage, secretStore: ISecretStore, audit
         Background.writeFailureLogger "BlobShareTokenStore" (Some logger) "" "the operation"
 
     let recordAudit (scopeId: string) (event: AuditEvent) =
-        match audit with
-        | Some a ->
-            let what = sprintf "%s audit" (AuditEvent.eventTypeName event)
+        let what = sprintf "%s audit" (AuditEvent.eventTypeName event)
 
-            try
-                a.Record(AuditScope.shard scopeId, AuditSubject.system "ShareTokenStore", event)
-                |> Background.startAuditRow auditWarn what
-            with ex ->
-                auditWarn what ex
-        | None -> ()
+        try
+            audit.Record(AuditScope.shard scopeId, AuditSubject.system "ShareTokenStore", event)
+            |> Background.startAuditRow auditWarn what
+        with ex ->
+            auditWarn what ex
 
     interface IShareTokenStore with
         member _.Issue(request) = async {
@@ -720,10 +717,5 @@ type BlobShareTokenStore(storage: IBlobStorage, secretStore: ISecretStore, audit
 /// Convenience constructor mirroring `JobStore.BlobJobStore` /
 /// `EntityStore.BlobEntityStore` — keeps the wiring in `compose`
 /// terse.
-let create
-    (storage: IBlobStorage)
-    (secretStore: ISecretStore)
-    (audit: IAuditLog option)
-    (logger: ILogger)
-    : IShareTokenStore =
+let create (storage: IBlobStorage) (secretStore: ISecretStore) (audit: IAuditLog) (logger: ILogger) : IShareTokenStore =
     BlobShareTokenStore(storage, secretStore, audit, logger) :> IShareTokenStore

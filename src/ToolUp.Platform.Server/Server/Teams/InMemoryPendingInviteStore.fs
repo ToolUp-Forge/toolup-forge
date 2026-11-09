@@ -273,36 +273,33 @@ module internal PendingInviteExpiryHook =
     /// / GP 13).
     let private auditExpired
         (logger: ILogger)
-        (auditLog: IAuditLog option)
+        (auditLog: IAuditLog)
         : (string * PendingInviteByEmail) list -> Async<unit> =
-        match auditLog with
-        | None -> fun _ -> async { return () }
-        | Some log ->
-            fun expired -> async {
-                for email, entry in expired do
-                    try
-                        do!
-                            log.Record(
-                                AuditScope.team (TeamId entry.TeamId),
-                                AuditSubject.system "PendingInviteStore",
-                                TeamInviteExpired {
-                                    TeamId = entry.TeamId
-                                    InviteeEmail = email
-                                    InviterUserId = entry.InviterUserId
-                                    Role = entry.Role
-                                    IssuedAt = entry.IssuedAt
-                                    ExpiredAt = entry.ExpiresAt
-                                }
-                            )
-                            |> AuditRow.orRefuse
-                    with ex ->
-                        logger.Warn(
-                            sprintf
-                                "[PendingInviteStore] TeamInviteExpired audit emission failed for team %s: %s"
-                                entry.TeamId
-                                ex.Message
+        fun expired -> async {
+            for email, entry in expired do
+                try
+                    do!
+                        auditLog.Record(
+                            AuditScope.team (TeamId entry.TeamId),
+                            AuditSubject.system "PendingInviteStore",
+                            TeamInviteExpired {
+                                TeamId = entry.TeamId
+                                InviteeEmail = email
+                                InviterUserId = entry.InviterUserId
+                                Role = entry.Role
+                                IssuedAt = entry.IssuedAt
+                                ExpiredAt = entry.ExpiresAt
+                            }
                         )
-            }
+                        |> AuditRow.orRefuse
+                with ex ->
+                    logger.Warn(
+                        sprintf
+                            "[PendingInviteStore] TeamInviteExpired audit emission failed for team %s: %s"
+                            entry.TeamId
+                            ex.Message
+                    )
+        }
 
     /// The full hook: audit emission first, then — only when a notifier
     /// was composed — the Phase 547.C inviter notification, run AFTER
@@ -313,7 +310,7 @@ module internal PendingInviteExpiryHook =
     /// shape (GP 11 / GP 13).
     let build
         (logger: ILogger)
-        (auditLog: IAuditLog option)
+        (auditLog: IAuditLog)
         (expiryNotifier: ((string * PendingInviteByEmail) list -> Async<unit>) option)
         : (string * PendingInviteByEmail) list -> Async<unit> =
         let auditExpired = auditExpired logger auditLog
@@ -344,7 +341,7 @@ type InMemoryPendingInviteStore
     (
         storage: IBlobStorage,
         logger: ILogger,
-        auditLog: IAuditLog option,
+        auditLog: IAuditLog,
         expiryNotifier: ((string * PendingInviteByEmail) list -> Async<unit>) option
     ) =
 
@@ -363,14 +360,14 @@ type InMemoryPendingInviteStore
     }
 
     /// Phase 547 3-arg constructor — audit log but no expiry notifier.
-    new(storage: IBlobStorage, logger: ILogger, auditLog: IAuditLog option) =
+    new(storage: IBlobStorage, logger: ILogger, auditLog: IAuditLog) =
         InMemoryPendingInviteStore(storage, logger, auditLog, None)
 
     /// 2-arg constructor — no audit log, so the expiry sweep stays silent
     /// (GP 11). `ComposeTeamRuntime` uses the 4-arg form to wire the
     /// resolved `IAuditLog` and, when the deployment opts in, the Phase
     /// 547.C expiry notifier.
-    new(storage: IBlobStorage, logger: ILogger) = InMemoryPendingInviteStore(storage, logger, None, None)
+    new(storage: IBlobStorage, logger: ILogger) = InMemoryPendingInviteStore(storage, logger, NoOpAuditLog(), None)
 
     interface IPendingInviteStore with
         member _.Upsert(email, pending) =

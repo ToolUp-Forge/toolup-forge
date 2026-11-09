@@ -204,7 +204,7 @@ type IAuditLog =
 /// takes when it is composed with no audit substrate: `Record` answers `Ok ()`
 /// without serialising or writing anything, and `GetAuditTrail` answers an
 /// empty trail. It costs what an absent log cost (GP 13), so a component
-/// takes an `IAuditLog`, never an `IAuditLog option`.
+/// takes an `IAuditLog`, never an optional one.
 type NoOpAuditLog() =
     interface IAuditLog with
         member _.Record(_scope, _actor, _audit) = async { return Ok() }

@@ -148,7 +148,7 @@ let tests (name: string) (factory: unit -> IProviderOAuthFlow) =
         ProviderOAuthConnect.completeConnect
             profiles
             (secrets :> ISecretStore)
-            None
+            (NoOpAuditLog())
             scope
             "user-1"
             flow
@@ -328,7 +328,7 @@ let tests (name: string) (factory: unit -> IProviderOAuthFlow) =
                 ProviderOAuthConnect.refreshEntry
                     profiles
                     (secrets :> ISecretStore)
-                    None
+                    (NoOpAuditLog())
                     scope
                     flow
                     entry
@@ -352,7 +352,7 @@ let tests (name: string) (factory: unit -> IProviderOAuthFlow) =
                 ProviderOAuthConnect.refreshEntry
                     profiles
                     (secrets :> ISecretStore)
-                    None
+                    (NoOpAuditLog())
                     scope
                     flow
                     pasted
@@ -388,7 +388,7 @@ let tests (name: string) (factory: unit -> IProviderOAuthFlow) =
                 ProviderOAuthConnect.refreshEntry
                     profiles
                     (secrets :> ISecretStore)
-                    None
+                    (NoOpAuditLog())
                     scope
                     flow
                     entry

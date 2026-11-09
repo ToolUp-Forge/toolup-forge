@@ -150,7 +150,9 @@ let private populate (live: IBlobStorage) =
 
             let registry = EntityRegistry()
             registry.Register<IEntityStoreContract.TestEntity>(IEntityStoreContract.testEntityRegistration)
-            let entities = BlobEntityStore(objects, live, registry, None) :> IEntityStore
+
+            let entities =
+                BlobEntityStore(objects, live, registry, (NoOpAuditLog())) :> IEntityStore
 
             let! savedEntity =
                 entities.Save<IEntityStoreContract.TestEntity>(

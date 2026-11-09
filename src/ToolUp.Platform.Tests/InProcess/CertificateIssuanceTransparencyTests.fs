@@ -365,14 +365,11 @@ let tests =
 
             // Two issuers over two identically-seeded stores, one logging
             // and one not, on the same frozen clock.
-            let issueWith (audit: IAuditLog option) = async {
+            let issueWith (audit: IAuditLog) = async {
                 let graph, store, gate, events = substrate ()
 
                 let issuer =
-                    match audit with
-                    | Some a ->
-                        GroundingCertificate.createIssuerWithClockAudited graph store gate events (Some signer) a frozen
-                    | None -> GroundingCertificate.createIssuerWithClock graph store gate events (Some signer) frozen
+                    GroundingCertificate.createIssuerWithClockAudited graph store gate events (Some signer) audit frozen
 
                 let! factId = seed store scopeA "revenue" "h1" 100m
                 let! result = issuer.Issue(TestScope.resolved scopeA, "auditor", FactCertificate factId, 5)
@@ -380,8 +377,8 @@ let tests =
             }
 
             let audit = RecordingAuditLog()
-            let! logged = issueWith (Some(audit :> IAuditLog))
-            let! plain = issueWith None
+            let! logged = issueWith ((audit :> IAuditLog))
+            let! plain = issueWith (NoOpAuditLog())
 
             Expect.equal
                 (GroundingCertificate.canonicalBytes logged.Body)

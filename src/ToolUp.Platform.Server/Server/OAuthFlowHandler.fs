@@ -541,7 +541,7 @@ let private providerCallbackTail
                             (Background.writeFailureWarner "OAuthFlowHandler" (Background.requestLogger ctx) ctx)
                             providerProfile
                             secretStore
-                            (tryGetService<IAuditLog> ctx)
+                            (Background.resolveAuditLog ctx.RequestServices)
                             scope
                             entry.UserId.Value
                             providerFlow
@@ -857,30 +857,29 @@ let private callback (flowName: string) : HttpHandler =
                                                     // Fire-and-forget,
                                                     // observed: a failed
                                                     // write is a Warning.
-                                                    match tryGetService<IAuditLog> ctx with
-                                                    | Some auditLog ->
-                                                        let warn =
-                                                            Background.writeFailureWarner
-                                                                "OAuthFlowHandler"
-                                                                (Background.requestLogger ctx)
-                                                                ctx
+                                                    let auditLog = Background.resolveAuditLog ctx.RequestServices
 
-                                                        try
-                                                            auditLog.Record(
-                                                                AuditScope.shard entry.ScopeId,
-                                                                Background.requestActor "OAuthFlowHandler" ctx,
-                                                                OAuthConnected {
-                                                                    UserId = entry.UserId
-                                                                    ScopeId = entry.ScopeId
-                                                                    FlowName = flowName
-                                                                    DataSourceId = entry.DataSourceId
-                                                                    ConnectedAt = connectedAt
-                                                                }
-                                                            )
-                                                            |> Background.startAuditRow warn "OAuthConnected audit"
-                                                        with ex ->
-                                                            warn "OAuthConnected audit" ex
-                                                    | None -> ()
+                                                    let warn =
+                                                        Background.writeFailureWarner
+                                                            "OAuthFlowHandler"
+                                                            (Background.requestLogger ctx)
+                                                            ctx
+
+                                                    try
+                                                        auditLog.Record(
+                                                            AuditScope.shard entry.ScopeId,
+                                                            Background.requestActor "OAuthFlowHandler" ctx,
+                                                            OAuthConnected {
+                                                                UserId = entry.UserId
+                                                                ScopeId = entry.ScopeId
+                                                                FlowName = flowName
+                                                                DataSourceId = entry.DataSourceId
+                                                                ConnectedAt = connectedAt
+                                                            }
+                                                        )
+                                                        |> Background.startAuditRow warn "OAuthConnected audit"
+                                                    with ex ->
+                                                        warn "OAuthConnected audit" ex
 
                                                     logger.Info
                                                         $"OAuth callback: connected flow={flowName} dataSource={entry.DataSourceId} scope={entry.ScopeId}"

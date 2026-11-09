@@ -206,7 +206,8 @@ let private concurrencyTests =
             // is asserted is that every writer that reported Ok is in the
             // blob and that no successful write erased a peer's.
             let replica () =
-                BlobPendingInviteStore(storage, silentLogger, None, None, fastOptions 50) :> IPendingInviteStore
+                BlobPendingInviteStore(storage, silentLogger, NoOpAuditLog(), None, fastOptions 50)
+                :> IPendingInviteStore
 
             let a, b = replica (), replica ()
 
@@ -282,7 +283,8 @@ let private concurrencyTests =
                 )
 
             let a =
-                BlobPendingInviteStore(injecting, silentLogger, None, None, fastOptions 3) :> IPendingInviteStore
+                BlobPendingInviteStore(injecting, silentLogger, NoOpAuditLog(), None, fastOptions 3)
+                :> IPendingInviteStore
 
             let! result = a.Upsert("mine@example.com", freshPending "team-mine")
             okOrFail "Upsert after replay" result
@@ -301,7 +303,8 @@ let private retryTests =
             let injecting = conflictInjecting (InMemoryBlobStorage()) 3
 
             let store =
-                BlobPendingInviteStore(injecting, silentLogger, None, None, fastOptions 3) :> IPendingInviteStore
+                BlobPendingInviteStore(injecting, silentLogger, NoOpAuditLog(), None, fastOptions 3)
+                :> IPendingInviteStore
 
             let! result = store.Upsert("retry@example.com", freshPending "team-retry")
             okOrFail "Upsert within budget" result
@@ -315,7 +318,8 @@ let private retryTests =
             let injecting = conflictInjecting (InMemoryBlobStorage()) 4
 
             let store =
-                BlobPendingInviteStore(injecting, silentLogger, None, None, fastOptions 3) :> IPendingInviteStore
+                BlobPendingInviteStore(injecting, silentLogger, NoOpAuditLog(), None, fastOptions 3)
+                :> IPendingInviteStore
 
             let! result = store.Upsert("hot@example.com", freshPending "team-hot")
 
@@ -332,7 +336,8 @@ let private retryTests =
             let injecting = conflictInjecting (InMemoryBlobStorage()) 1
 
             let store =
-                BlobPendingInviteStore(injecting, silentLogger, None, None, fastOptions 0) :> IPendingInviteStore
+                BlobPendingInviteStore(injecting, silentLogger, NoOpAuditLog(), None, fastOptions 0)
+                :> IPendingInviteStore
 
             let! result = store.Remove "nobody@example.com"
 
@@ -363,7 +368,8 @@ let private retryTests =
                 )
 
             let store =
-                BlobPendingInviteStore(failing, silentLogger, None, None, fastOptions 3) :> IPendingInviteStore
+                BlobPendingInviteStore(failing, silentLogger, NoOpAuditLog(), None, fastOptions 3)
+                :> IPendingInviteStore
 
             let! result = store.Upsert("down@example.com", freshPending "team-down")
 
@@ -468,7 +474,7 @@ let private substrateTests =
             let audit = CapturingAuditLog()
 
             let store =
-                BlobPendingInviteStore((storage :> IBlobStorage), silentLogger, Some(audit :> IAuditLog))
+                BlobPendingInviteStore((storage :> IBlobStorage), silentLogger, (audit :> IAuditLog))
                 :> IPendingInviteStore
 
             let near = {

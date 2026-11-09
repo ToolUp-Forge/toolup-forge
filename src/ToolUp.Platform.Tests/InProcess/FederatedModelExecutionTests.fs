@@ -390,7 +390,7 @@ let private dataHost (bindings: Map<string, string>) =
     let fusion: PeerJobFusion = {
         Scheduler = scheduler
         ResultStore = results
-        AuditLog = None
+        AuditLog = (NoOpAuditLog())
     }
 
     let peer = DefaultPlatformPeer("data-host") :> IPlatformPeer
@@ -1058,7 +1058,7 @@ let private dataHostGranting
     let fusion: PeerJobFusion = {
         Scheduler = scheduler
         ResultStore = results
-        AuditLog = None
+        AuditLog = (NoOpAuditLog())
     }
 
     let peer = DefaultPlatformPeer("data-host") :> IPlatformPeer
@@ -1800,7 +1800,7 @@ let private dataHostRendering
     let fusion: PeerJobFusion = {
         Scheduler = scheduler
         ResultStore = results
-        AuditLog = None
+        AuditLog = (NoOpAuditLog())
     }
 
     let peer = DefaultPlatformPeer("data-host") :> IPlatformPeer
@@ -2520,7 +2520,7 @@ let private dataHostTransitioning (grant: ModelTransitionAuthority) =
     let fusion: PeerJobFusion = {
         Scheduler = scheduler
         ResultStore = results
-        AuditLog = Some(audit :> IAuditLog)
+        AuditLog = (audit :> IAuditLog)
     }
 
     let peer = DefaultPlatformPeer("data-host") :> IPlatformPeer

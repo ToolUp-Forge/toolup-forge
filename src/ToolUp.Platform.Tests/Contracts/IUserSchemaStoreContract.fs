@@ -66,7 +66,7 @@ let private mkStore () : IUserSchemaStore * IDataObjectStore * CapturingAuditLog
     let audit = CapturingAuditLog()
 
     let store =
-        BlobUserSchemaStore.BlobUserSchemaStore(dos, Some(audit :> IAuditLog)) :> IUserSchemaStore
+        BlobUserSchemaStore.BlobUserSchemaStore(dos, (audit :> IAuditLog)) :> IUserSchemaStore
 
     store, dos, audit
 

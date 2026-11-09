@@ -339,15 +339,12 @@ type IRoundObserver =
 /// notifications through `INotificationChannel`. Either half is optional,
 /// so a deployment with `AuditLog = FeatureMode.Disabled` still gets progress, and
 /// one that wants an audit trail without client chatter gets that.
-type PlatformRoundObserver(auditLog: IAuditLog option, channel: INotificationChannel option) =
+type PlatformRoundObserver(auditLog: IAuditLog, channel: INotificationChannel option) =
 
     let record (scopeId: string) (event: AuditEvent) = async {
-        match auditLog with
-        | None -> ()
-        | Some log ->
-            do!
-                log.Record(AuditScope.shard scopeId, AuditSubject.system "RoundOrchestrator", event)
-                |> AuditRow.orRefuse
+        do!
+            auditLog.Record(AuditScope.shard scopeId, AuditSubject.system "RoundOrchestrator", event)
+            |> AuditRow.orRefuse
     }
 
     interface IRoundObserver with
@@ -411,15 +408,15 @@ module RoundObserver =
 
     /// Audit rows + progress notifications.
     let create (auditLog: IAuditLog) (channel: INotificationChannel) : IRoundObserver =
-        PlatformRoundObserver(Some auditLog, Some channel) :> IRoundObserver
+        PlatformRoundObserver(auditLog, Some channel) :> IRoundObserver
 
     /// Audit rows only — no client-visible progress.
     let auditOnly (auditLog: IAuditLog) : IRoundObserver =
-        PlatformRoundObserver(Some auditLog, None) :> IRoundObserver
+        PlatformRoundObserver(auditLog, None) :> IRoundObserver
 
     /// Progress notifications only — no audit trail.
     let notifyOnly (channel: INotificationChannel) : IRoundObserver =
-        PlatformRoundObserver(None, Some channel) :> IRoundObserver
+        PlatformRoundObserver(NoOpAuditLog(), Some channel) :> IRoundObserver
 
 // ─── Resumable state persistence ──────────────────────────────────────
 

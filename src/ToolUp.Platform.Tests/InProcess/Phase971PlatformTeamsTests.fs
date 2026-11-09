@@ -79,7 +79,7 @@ let tests =
                 raises (
                     repair
                         (MembershipDoctorStorage.reads storage)
-                        (MembershipDoctorStorage.writes storage None None "doctor-actor")
+                        (MembershipDoctorStorage.writes storage (NoOpAuditLog()) None "doctor-actor")
                 )
 
             Expect.isTrue

@@ -113,7 +113,7 @@ let private setup () =
     let audit = RecordingAuditLog()
 
     let inner =
-        ShareTokenStore.create storage secrets (Some(audit :> IAuditLog)) silentLogger
+        ShareTokenStore.create storage secrets ((audit :> IAuditLog)) silentLogger
 
     let channel = InMemoryNotificationChannel(None) :> INotificationChannel
     let decorator = new RevokeOnIssuerRemovedStore(inner, channel, silentLogger)

@@ -103,7 +103,7 @@ let private mkDeps
         NarrativeStore = None
         AccessContext = AccessContext.unrestricted (AnonymousSession "user-1")
         OriginalResolver = createDefault ()
-        AuditLog = Some(auditLog :> IAuditLog)
+        AuditLog = (auditLog :> IAuditLog)
         RecordEnqueue = ignore
         PublishInventory = fun () -> async.Return()
         MarkIngestionFailed = fun _ _ _ -> async.Return()

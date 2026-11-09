@@ -235,7 +235,7 @@ let private optionsFor
     (policy: BootVerificationPolicy)
     (record: SealedDeployRecord option)
     (binding: SealedCompositionBinding option)
-    (auditLog: IAuditLog option)
+    (auditLog: IAuditLog)
     : BootVerificationOptions =
     {
         Profile = profile
@@ -517,7 +517,7 @@ let tests =
                         BootVerificationPolicy.LogAndServe
                         (Some sealedRecord)
                         (Some sealedBinding)
-                        None
+                        (NoOpAuditLog())
 
                 match verdictOf options legacy with
                 | BootVerificationVerdict.VerificationFailed(failures, findings) ->
@@ -609,7 +609,7 @@ let tests =
                         BootVerificationPolicy.LogAndServe
                         (Some sealedRecord)
                         (Some sealedBinding)
-                        None
+                        (NoOpAuditLog())
 
                 Expect.equal
                     (verdictOf options composition)
@@ -628,7 +628,7 @@ let tests =
                         BootVerificationPolicy.LogAndServe
                         (Some sealedRecord)
                         (Some sealedBinding)
-                        None
+                        (NoOpAuditLog())
 
                 let verdict = verdictOf options observed
 
@@ -665,7 +665,7 @@ let tests =
                             BootVerificationPolicy.RefuseOnDrift
                             (Some sealedRecord)
                             (Some sealedBinding)
-                            None
+                            (NoOpAuditLog())
 
                     BootVerificationPreflight.run options observed |> Async.RunSynchronously
 
@@ -970,7 +970,7 @@ let tests =
                         BootVerificationPolicy.RefuseOnDrift
                         (Some sealedRecord)
                         (Some sealedBinding)
-                        None
+                        (NoOpAuditLog())
 
                 match verdictOf options observed with
                 | BootVerificationVerdict.VerifiedUnrecorded [ ContributionPlanUnrecorded _; ConfigKeysUnrecorded _ ] ->
@@ -991,7 +991,7 @@ let tests =
                         BootVerificationPolicy.LogAndServe
                         (Some sealedRecord)
                         (Some sealedBinding)
-                        None
+                        (NoOpAuditLog())
 
                 Expect.equal
                     (verdictOf options composition)
@@ -1015,7 +1015,7 @@ let tests =
                         BootVerificationPolicy.LogAndServe
                         (Some sealedRecord)
                         (Some sealedBinding)
-                        None
+                        (NoOpAuditLog())
 
                 match verdictOf options observed with
                 | BootVerificationVerdict.Drifted drift ->
@@ -1042,7 +1042,7 @@ let tests =
                         BootVerificationPolicy.LogAndServe
                         (Some tampered)
                         (Some sealedBinding)
-                        None
+                        (NoOpAuditLog())
 
                 match verdictOf options composition with
                 | BootVerificationVerdict.VerificationFailed(failures, _) ->
@@ -1067,7 +1067,7 @@ let tests =
                         BootVerificationPolicy.LogAndServe
                         (Some sealedRecord)
                         (Some foreignBinding)
-                        None
+                        (NoOpAuditLog())
 
                 match verdictOf options composition with
                 | BootVerificationVerdict.VerificationFailed(_, bindingFindings) ->
@@ -1097,7 +1097,7 @@ let tests =
                         BootVerificationPolicy.LogAndServe
                         (Some sealedRecord)
                         (Some tampered)
-                        None
+                        (NoOpAuditLog())
 
                 match verdictOf options composition with
                 | BootVerificationVerdict.VerificationFailed(_, bindingFindings) ->
@@ -1128,7 +1128,7 @@ let tests =
                             BootVerificationPolicy.LogAndServe
                             (Some sealedRecord)
                             (Some sealedBinding)
-                            None with
+                            (NoOpAuditLog()) with
                             Locate = DeployRecords.locateUnder root
                     }
 
@@ -1150,7 +1150,7 @@ let tests =
 
             test "no sealed record is Unsealed, not a failure" {
                 let options =
-                    optionsFor CompositionProfile.Standard BootVerificationPolicy.LogAndServe None None None
+                    optionsFor CompositionProfile.Standard BootVerificationPolicy.LogAndServe None None (NoOpAuditLog())
 
                 match verdictOf options composition with
                 | BootVerificationVerdict.Unsealed reason ->
@@ -1167,7 +1167,7 @@ let tests =
                         BootVerificationPolicy.LogAndServe
                         (Some sealedRecord)
                         None
-                        None
+                        (NoOpAuditLog())
 
                 match verdictOf options composition with
                 | BootVerificationVerdict.Unsealed _ -> ()
@@ -1188,7 +1188,7 @@ let tests =
                         BootVerificationPolicy.LogAndServe
                         (Some sealedRecord)
                         (Some sealedBinding)
-                        None
+                        (NoOpAuditLog())
 
                 match BootVerificationPreflight.run options observed |> Async.RunSynchronously with
                 | Ok result ->
@@ -1211,7 +1211,7 @@ let tests =
                         BootVerificationPolicy.RefuseOnDrift
                         (Some sealedRecord)
                         (Some sealedBinding)
-                        None
+                        (NoOpAuditLog())
 
                 match BootVerificationPreflight.run options observed |> Async.RunSynchronously with
                 | Error result -> Expect.isTrue result.RefusedStart "the policy is adoptable on its own"
@@ -1228,7 +1228,7 @@ let tests =
                         BootVerificationPolicy.LogAndServe
                         (Some sealedRecord)
                         (Some sealedBinding)
-                        None
+                        (NoOpAuditLog())
 
                 match BootVerificationPreflight.run options observed |> Async.RunSynchronously with
                 | Error result ->
@@ -1241,7 +1241,7 @@ let tests =
 
             test "the verified profile refuses an unsealed deployment" {
                 let options =
-                    optionsFor CompositionProfile.Verified BootVerificationPolicy.LogAndServe None None None
+                    optionsFor CompositionProfile.Verified BootVerificationPolicy.LogAndServe None None (NoOpAuditLog())
 
                 match BootVerificationPreflight.run options composition |> Async.RunSynchronously with
                 | Error result ->
@@ -1258,7 +1258,7 @@ let tests =
                         BootVerificationPolicy.LogAndServe
                         (Some sealedRecord)
                         (Some sealedBinding)
-                        None
+                        (NoOpAuditLog())
 
                 match BootVerificationPreflight.run options composition |> Async.RunSynchronously with
                 | Ok result -> Expect.isFalse result.RefusedStart "an honest deployment is not refused"
@@ -1279,7 +1279,7 @@ let tests =
                         BootVerificationPolicy.LogAndServe
                         (Some sealedRecord)
                         (Some sealedBinding)
-                        (Some(auditLog :> IAuditLog))
+                        ((auditLog :> IAuditLog))
 
                 BootVerificationPreflight.run options composition
                 |> Async.RunSynchronously
@@ -1306,7 +1306,7 @@ let tests =
                         BootVerificationPolicy.LogAndServe
                         (Some sealedRecord)
                         (Some sealedBinding)
-                        (Some(auditLog :> IAuditLog))
+                        ((auditLog :> IAuditLog))
 
                 let observed = { composition with Tools = [] }
 
@@ -1324,7 +1324,7 @@ let tests =
 
             test "no audit log composed records nothing and still decides" {
                 let options =
-                    optionsFor CompositionProfile.Standard BootVerificationPolicy.LogAndServe None None None
+                    optionsFor CompositionProfile.Standard BootVerificationPolicy.LogAndServe None None (NoOpAuditLog())
 
                 match BootVerificationPreflight.run options composition |> Async.RunSynchronously with
                 | Ok _ -> ()
@@ -1555,7 +1555,7 @@ let tests =
                         BootVerificationPolicy.LogAndServe
                         (Some sealedRecord)
                         (Some sealedBinding)
-                        None
+                        (NoOpAuditLog())
 
                 let digest = baseRecord |> DeployRecords.canonicalBytes |> DeployRecords.digestBytes
 
@@ -1618,7 +1618,7 @@ let tests =
                         BootVerificationPolicy.RefuseOnDrift
                         (Some sealedRecord)
                         (Some sealedBinding)
-                        None
+                        (NoOpAuditLog())
 
                 let retirement =
                     DeployRetirement.create
@@ -1654,7 +1654,7 @@ let tests =
                         BootVerificationPolicy.LogAndServe
                         (Some sealedRecord)
                         (Some sealedBinding)
-                        None
+                        (NoOpAuditLog())
 
                 let drifted = {
                     composition with
@@ -1757,7 +1757,7 @@ let tests =
                         BootVerificationPolicy.LogAndServe
                         (Some record)
                         (Some sealedBinding)
-                        None
+                        (NoOpAuditLog())
                     |> runWith
 
                 // The honest twin first: the same pair, un-relabelled, verifies.
@@ -1837,7 +1837,7 @@ let tests =
                         BootVerificationPolicy.RefuseOnDrift
                         (Some sealedLegacy)
                         (Some sealedBinding)
-                        None
+                        (NoOpAuditLog())
                     |> runWith
                 with
                 | Ok result ->
@@ -1902,7 +1902,7 @@ let tests =
                         BootVerificationPolicy.LogAndServe
                         (Some sealedRecord)
                         (Some sealedBinding)
-                        None with
+                        (NoOpAuditLog()) with
                         MinimumLevel = Some floor
                 }
 
@@ -1943,7 +1943,7 @@ let tests =
                         BootVerificationPolicy.LogAndServe
                         (Some sealedRecord)
                         (Some sealedBinding)
-                        None with
+                        (NoOpAuditLog()) with
                         MinimumLevel = Some VerificationLevel.RuntimeQuoted
                 }
 
@@ -1967,7 +1967,7 @@ let tests =
                         BootVerificationPolicy.LogAndServe
                         (Some sealedRecord)
                         (Some sealedBinding)
-                        None with
+                        (NoOpAuditLog()) with
                         MinimumLevel = Some VerificationLevel.RuntimeQuoted
                 }
 
@@ -2031,7 +2031,7 @@ let tests =
                         BootVerificationPolicy.RefuseOnDrift
                         (Some sealedRecord)
                         (Some sealedBinding)
-                        None with
+                        (NoOpAuditLog()) with
                         MinimumLevel = Some VerificationLevel.RuntimeQuoted
                         Attestor = attestorObserving observation
                 }

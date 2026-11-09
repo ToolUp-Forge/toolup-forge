@@ -292,7 +292,7 @@ let private openCursorStore (directory: string) : IEntityStore =
     let dos = DataObjectStore(blob) :> IDataObjectStore
     let registry = EntityRegistry()
     registry.Register<SyncCursorEntity>(SyncCursor.registration)
-    BlobEntityStore(dos, blob, registry, None) :> IEntityStore
+    BlobEntityStore(dos, blob, registry, (NoOpAuditLog())) :> IEntityStore
 
 let private tempDir () =
     Path.Combine(Path.GetTempPath(), "toolup-sync-cursor-" + Guid.NewGuid().ToString("N"))

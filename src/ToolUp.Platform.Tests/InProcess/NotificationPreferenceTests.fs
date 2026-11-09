@@ -121,15 +121,7 @@ let private harnessAt (now: DateTime) (store: INotificationPreferenceStore optio
     let audit = CapturingAuditLog()
 
     let filter =
-        NotificationPreferenceFilter(
-            inner,
-            store,
-            categories,
-            Some(audit :> IAuditLog),
-            logger,
-            (fun () -> now),
-            utcOnly
-        )
+        NotificationPreferenceFilter(inner, store, categories, (audit :> IAuditLog), logger, (fun () -> now), utcOnly)
 
     {
         Store = store

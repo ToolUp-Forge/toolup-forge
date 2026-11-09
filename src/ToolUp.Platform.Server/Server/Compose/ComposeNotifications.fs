@@ -273,7 +273,7 @@ let buildNotificationStack
             // guard.
             Some(
                 StoreIdSanitising.SanitisingShareTokenStore(
-                    ShareTokenStore.create resolvedBlobStorage secretStore (Some auditLog) resolvedLogger
+                    ShareTokenStore.create resolvedBlobStorage secretStore (auditLog) resolvedLogger
                 )
                 :> IShareTokenStore
             )
@@ -331,7 +331,7 @@ let buildNotificationStack
                 substrate.Beneath,
                 substrate.Store,
                 config.NotificationCategories,
-                Some auditLog,
+                auditLog,
                 resolvedLogger
             )
             :> INotificationChannel

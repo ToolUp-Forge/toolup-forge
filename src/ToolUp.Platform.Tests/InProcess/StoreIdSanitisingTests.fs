@@ -126,7 +126,8 @@ let private buildStores (storage: IBlobStorage) : StoreIdSanitisingContract.Sani
         Team = SanitisingTeamStore(TeamStore(storage, nc) :> ITeamStore) :> ITeamStore
         Permission = SanitisingPermissionStore(PermissionStore(storage, silentLogger)) :> IPermissionStore
         ShareToken =
-            SanitisingShareTokenStore(ShareTokenStore.create storage secrets None silentLogger) :> IShareTokenStore
+            SanitisingShareTokenStore(ShareTokenStore.create storage secrets (NoOpAuditLog()) silentLogger)
+            :> IShareTokenStore
     }
 
 let private inMemoryBackedContract =

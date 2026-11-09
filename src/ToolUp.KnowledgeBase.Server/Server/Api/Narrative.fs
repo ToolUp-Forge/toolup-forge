@@ -577,21 +577,18 @@ let private performReset (deps: KnowledgeApiDeps) : Async<Result<unit, string>> 
         // contractually best-effort and swallows its own failures, so an
         // audit gap never fails the reset. No-op when no `IAuditLog` is
         // composed (test harness / `FeatureMode.Disabled` deployment).
-        match deps.AuditLog with
-        | Some auditLog ->
-            do!
-                auditLog.Record(
-                    StorageScope.auditScope deps.Scope,
-                    AuditSubject.fromSubject deps.AccessContext.Subject,
-                    KnowledgeScopeErased {
-                        UserId = deps.UserId
-                        ScopeId = deps.Scope.ScopeId
-                        DocumentCount = documentCount
-                        OrphanChunkCount = orphanChunkCount
-                    }
-                )
-                |> AuditRow.orRefuse
-        | None -> ()
+        do!
+            deps.AuditLog.Record(
+                StorageScope.auditScope deps.Scope,
+                AuditSubject.fromSubject deps.AccessContext.Subject,
+                KnowledgeScopeErased {
+                    UserId = deps.UserId
+                    ScopeId = deps.Scope.ScopeId
+                    DocumentCount = documentCount
+                    OrphanChunkCount = orphanChunkCount
+                }
+            )
+            |> AuditRow.orRefuse
 
         do! deps.Notifications.Publish(deps.UserId.Value, DataRefreshed("KnowledgeBase", deps.Scope.ScopeId))
         do! deps.PublishInventory()

@@ -47,7 +47,7 @@ let private mkStore () =
     let dos = DataObjectStore(blob) :> IDataObjectStore
     let registry = EntityRegistry()
     registry.Register<Item>(itemRegistration)
-    let store = BlobEntityStore(dos, blob, registry, None) :> IEntityStore
+    let store = BlobEntityStore(dos, blob, registry, (NoOpAuditLog())) :> IEntityStore
     let scope = "team-q-" + Guid.NewGuid().ToString("N").Substring(0, 6)
     store, scope
 
@@ -116,7 +116,7 @@ let private mkFtStore () : IEntityStore =
     let sparse =
         new InMemoryBM25Index(blob, flushIntervalMs = 3_600_000) :> ISparseIndex
 
-    BlobEntityStore(dos, blob, registry, None, Some sparse) :> IEntityStore
+    BlobEntityStore(dos, blob, registry, (NoOpAuditLog()), Some sparse) :> IEntityStore
 
 let private mkFtScope () =
     "team-ft-" + Guid.NewGuid().ToString("N").Substring(0, 6)
@@ -172,7 +172,7 @@ let private mkStaleQueryRig () =
     registry.Register<Item>(itemRegistration)
 
     {
-        Store = BlobEntityStore(DataObjectStore(blob), blob, registry, None)
+        Store = BlobEntityStore(DataObjectStore(blob), blob, registry, (NoOpAuditLog()))
         Inner = inner
         Refusing = refusing
         Scope = "team-974-" + Guid.NewGuid().ToString("N").Substring(0, 8)

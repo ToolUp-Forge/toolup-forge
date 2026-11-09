@@ -298,7 +298,7 @@ let private buildAdUnits () =
     let blob = InMemoryBlobStorage.InMemoryBlobStorage() :> IBlobStorage
     let dos = DataObjectStore(blob) :> IDataObjectStore
     let registry = EntityRegistry()
-    let store = BlobEntityStore(dos, blob, registry, None) :> IEntityStore
+    let store = BlobEntityStore(dos, blob, registry, (NoOpAuditLog())) :> IEntityStore
 
     let host =
         Host

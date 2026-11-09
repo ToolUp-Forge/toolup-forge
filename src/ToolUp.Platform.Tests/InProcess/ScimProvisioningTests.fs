@@ -191,7 +191,7 @@ let private freshWorld () =
             {
                 Teams = teams
                 Permissions = None
-                Audit = Some(auditLog :> IAuditLog)
+                Audit = (auditLog :> IAuditLog)
                 Config = ScimConfig.create teamId
             }
     }

@@ -213,7 +213,7 @@ module EgressEnforcement =
     // go through `gate`; reads of `binding` are a single reference read.
     let private gate = obj ()
     let mutable private binding: EgressPolicyBinding = EgressPolicy.permitAllBinding
-    let mutable private auditLog: IAuditLog option = None
+    let mutable private auditLog: IAuditLog = NoOpAuditLog()
     let private denials = Queue<EgressDenialRecord>()
     let mutable private denialsSinceBoot = 0
 
@@ -232,8 +232,7 @@ module EgressEnforcement =
     /// `ComposeRuntimeServices.registerPlatformHttpClient` with the
     /// composition's `IAuditLog`; until then a denial is ledgered and
     /// raised but not audited.
-    let bindAudit (log: IAuditLog) : unit =
-        lock gate (fun () -> auditLog <- Some log)
+    let bindAudit (log: IAuditLog) : unit = lock gate (fun () -> auditLog <- log)
 
     /// Every refusal since boot, retained or not.
     let denialCount () : int = lock gate (fun () -> denialsSinceBoot)
@@ -248,11 +247,11 @@ module EgressEnforcement =
     let reset () : unit =
         lock gate (fun () ->
             binding <- EgressPolicy.permitAllBinding
-            auditLog <- None
+            auditLog <- NoOpAuditLog()
             denials.Clear()
             denialsSinceBoot <- 0)
 
-    let private ledger (record: EgressDenialRecord) : IAuditLog option =
+    let private ledger (record: EgressDenialRecord) : IAuditLog =
         lock gate (fun () ->
             denials.Enqueue record
             denialsSinceBoot <- denialsSinceBoot + 1
@@ -301,26 +300,18 @@ module EgressEnforcement =
                     DeniedReason = reason
                 }
 
-            match log with
-            | None -> ()
-            | Some log ->
-                try
-                    do!
-                        log.Record(
-                            Scope,
-                            AuditSubject.system "EgressEnforcement",
-                            AuditEvent.EgressDenied {
-                                Component = ComponentId.value componentId
-                                Origin = origin
-                                Surface = surfaceLabel
-                                Reason = reason
-                            }
-                        )
-                        |> AuditRow.bestEffort
-                with _ ->
-                    // Best-effort by contract; the denial itself still
-                    // stands and is still ledgered.
-                    ()
+            do!
+                log.Record(
+                    Scope,
+                    AuditSubject.system "EgressEnforcement",
+                    AuditEvent.EgressDenied {
+                        Component = ComponentId.value componentId
+                        Origin = origin
+                        Surface = surfaceLabel
+                        Reason = reason
+                    }
+                )
+                |> AuditRow.bestEffort
 
             return Error(EgressDeniedException(componentId, destination, surface, reason))
     }

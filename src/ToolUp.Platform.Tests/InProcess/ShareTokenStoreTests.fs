@@ -67,7 +67,7 @@ let tests =
         let storage = LocalFileStorage.LocalFileStorage(root) :> IBlobStorage
         let secrets = InMemorySecretStore() :> ISecretStore
 
-        let store = ShareTokenStore.create storage secrets None silentLogger
+        let store = ShareTokenStore.create storage secrets (NoOpAuditLog()) silentLogger
 
         let suffix = Guid.NewGuid().ToString("N").Substring(0, 8)
         store, "team-a-" + suffix, "team-b-" + suffix
@@ -140,7 +140,7 @@ let private harness () =
     backing, secrets
 
 let private storeOver (storage: IBlobStorage) (secrets: ISecretStore) =
-    ShareTokenStore.create storage secrets None silentLogger
+    ShareTokenStore.create storage secrets (NoOpAuditLog()) silentLogger
 
 let private request scopeId : ShareTokenIssueRequest = {
     ScopeId = scopeId

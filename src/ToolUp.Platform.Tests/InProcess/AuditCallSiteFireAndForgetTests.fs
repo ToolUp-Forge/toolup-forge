@@ -221,7 +221,7 @@ let private serviceAccount: Site = {
     Act =
         fun sinks logger -> async {
             let store =
-                ServiceAccountStore.BlobServiceAccountStore(InMemoryBlobStorage(), Some sinks.AuditLog, logger)
+                ServiceAccountStore.BlobServiceAccountStore(InMemoryBlobStorage(), sinks.AuditLog, logger)
                 :> IServiceAccountStore
 
             let! created =
@@ -245,8 +245,7 @@ let private consent: Site = {
     Source = "InMemoryConsentStateStore"
     Act =
         fun sinks logger -> async {
-            let store =
-                InMemoryConsentStateStore(Some sinks.AuditLog, logger) :> IConsentStateStore
+            let store = InMemoryConsentStateStore(sinks.AuditLog, logger) :> IConsentStateStore
 
             let record =
                 ConsentRecord.create
@@ -354,7 +353,7 @@ let private oauth: Site = {
                     warn
                     profiles
                     secrets
-                    (Some sinks.AuditLog)
+                    (sinks.AuditLog)
                     scope
                     "user-1026"
                     flow

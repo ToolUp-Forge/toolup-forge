@@ -141,7 +141,7 @@ let registerTeamPermissionStores
                     ToolUp.Platform.Scope.Teams.BlobPendingInviteStore.TryCreate(
                         resolvedBlobStorage,
                         resolvedLogger,
-                        Some auditLog,
+                        auditLog,
                         inviteExpiryNotifier
                     )
                 else
@@ -160,7 +160,7 @@ let registerTeamPermissionStores
                 ToolUp.Platform.Scope.Teams.InMemoryPendingInviteStore(
                     resolvedBlobStorage,
                     resolvedLogger,
-                    Some auditLog,
+                    auditLog,
                     inviteExpiryNotifier
                 )
                 :> IPendingInviteStore)

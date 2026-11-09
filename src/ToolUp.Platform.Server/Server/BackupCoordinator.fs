@@ -194,19 +194,18 @@ type BackupCoordinator
         ?clock: unit -> DateTime
     ) =
 
+    let auditLog = defaultArg auditLog (NoOpAuditLog() :> IAuditLog)
+
     let now = defaultArg clock (fun () -> DateTime.UtcNow)
 
     let audit (event: AuditEvent) = async {
-        match auditLog with
-        | Some log ->
-            try
-                do!
-                    log.Record(AuditScope.platform, AuditSubject.system "BackupCoordinator", event)
-                    |> AuditRow.orRefuse
-            with ex ->
-                logger
-                |> Option.iter (fun l -> l.Warn(sprintf "[Phase 445] audit emission failed: %s" ex.Message))
-        | None -> ()
+        try
+            do!
+                auditLog.Record(AuditScope.platform, AuditSubject.system "BackupCoordinator", event)
+                |> AuditRow.orRefuse
+        with ex ->
+            logger
+            |> Option.iter (fun l -> l.Warn(sprintf "[Phase 445] audit emission failed: %s" ex.Message))
     }
 
     /// The event-store head — `PersistentEventStore`'s canonical blobs

@@ -890,10 +890,7 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                                                 // the record".
                                                 | _ -> GrantConsentStore.denyingVerifier
 
-                                            let auditLog =
-                                                match ctx.RequestServices.GetService(typeof<IAuditLog>) with
-                                                | :? IAuditLog as log -> log
-                                                | _ -> ToolUp.Platform.NoOpAuditLog() :> IAuditLog
+                                            let auditLog = Background.resolveAuditLog ctx.RequestServices
 
                                             let mutable verdicts = Map.empty<string, Result<unit, ConsentDenial>>
 

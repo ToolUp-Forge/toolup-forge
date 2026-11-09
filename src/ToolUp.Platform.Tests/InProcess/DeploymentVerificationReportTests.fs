@@ -111,15 +111,13 @@ type private StubServices(entries: (Type * obj) list) =
             |> Option.map snd
             |> Option.defaultValue null
 
-let private servicesWith (evidence: IDeploymentVerificationEvidence option) (auditLog: IAuditLog option) =
+let private servicesWith (evidence: IDeploymentVerificationEvidence option) (auditLog: IAuditLog) =
     StubServices(
         [
             match evidence with
             | Some e -> typeof<IDeploymentVerificationEvidence>, box e
             | None -> ()
-            match auditLog with
-            | Some a -> typeof<IAuditLog>, box a
-            | None -> ()
+            typeof<IAuditLog>, box auditLog
         ]
     )
     :> IServiceProvider
@@ -421,7 +419,7 @@ let private evidenceWithAllFacets () =
     |> DeploymentVerificationEvidence.withEgress (Some sampleEgress)
     |> DeploymentVerificationEvidence.withHostingBaseline (Some sampleHostingBaseline)
 
-let private runReport (evidence: IDeploymentVerificationEvidence) (auditLog: IAuditLog option) =
+let private runReport (evidence: IDeploymentVerificationEvidence) (auditLog: IAuditLog) =
     DeploymentVerificationReport.run (servicesWith (Some evidence) auditLog) "probe"
     |> Async.RunSynchronously
 
@@ -527,7 +525,7 @@ let tests =
 
         testList "a deployment composing every substrate" [
             test "reports every section affirmative and exits zero" {
-                let report = runReport (healthyEvidence ()) None
+                let report = runReport (healthyEvidence ()) (NoOpAuditLog())
 
                 Expect.equal
                     (evidenceSectionIds |> List.map (labelOf report))
@@ -553,7 +551,7 @@ let tests =
             }
 
             test "still states what it does not prove" {
-                let report = runReport (healthyEvidence ()) None
+                let report = runReport (healthyEvidence ()) (NoOpAuditLog())
 
                 Expect.isGreaterThan report.NotProved.Length 0 "the not-proved statements are always present"
 
@@ -572,7 +570,7 @@ let tests =
 
             test "records one audited-read row carrying the verdict digest" {
                 let audit = RecordingAuditLog()
-                let report = runReport (healthyEvidence ()) (Some(audit :> IAuditLog))
+                let report = runReport (healthyEvidence ()) ((audit :> IAuditLog))
 
                 match audit.All with
                 | [ DeploymentVerified payload ] ->
@@ -595,7 +593,7 @@ let tests =
                 // a deployment-wide evidence summary onto a surface with
                 // its own readers and its own export paths.
                 let audit = RecordingAuditLog()
-                runReport (healthyEvidence ()) (Some(audit :> IAuditLog)) |> ignore
+                runReport (healthyEvidence ()) ((audit :> IAuditLog)) |> ignore
 
                 match audit.All with
                 | [ DeploymentVerified payload ] ->
@@ -606,8 +604,8 @@ let tests =
             }
 
             test "the verdict digest is stable across runs and moves with a verdict" {
-                let first = runReport (healthyEvidence ()) None
-                let second = runReport (healthyEvidence ()) None
+                let first = runReport (healthyEvidence ()) (NoOpAuditLog())
+                let second = runReport (healthyEvidence ()) (NoOpAuditLog())
 
                 Expect.equal
                     first.VerdictDigest
@@ -622,7 +620,7 @@ let tests =
                             None
                             None
                             None)
-                        None
+                        (NoOpAuditLog())
 
                 Expect.notEqual first.VerdictDigest moved.VerdictDigest "a changed section verdict changes the digest"
             }
@@ -633,7 +631,7 @@ let tests =
         testList "a bare deployment composing nothing" [
             test "reads every section as absent and exits ZERO" {
                 let report =
-                    DeploymentVerificationReport.run (servicesWith None None) "probe"
+                    DeploymentVerificationReport.run (servicesWith None (NoOpAuditLog())) "probe"
                     |> Async.RunSynchronously
 
                 Expect.equal
@@ -660,7 +658,7 @@ let tests =
 
             test "each absent section names what would have to be composed" {
                 let report =
-                    DeploymentVerificationReport.run (servicesWith None None) "probe"
+                    DeploymentVerificationReport.run (servicesWith None (NoOpAuditLog())) "probe"
                     |> Async.RunSynchronously
 
                 for id in allSectionIds do
@@ -674,7 +672,7 @@ let tests =
 
             test "the not-proved statements stand un-narrowed" {
                 let report =
-                    DeploymentVerificationReport.run (servicesWith None None) "probe"
+                    DeploymentVerificationReport.run (servicesWith None (NoOpAuditLog())) "probe"
                     |> Async.RunSynchronously
 
                 Expect.isTrue
@@ -686,7 +684,7 @@ let tests =
                 let evidence =
                     DeploymentVerificationEvidence.create (Some healthyBootSeal) None None None None
 
-                let report = runReport evidence None
+                let report = runReport evidence (NoOpAuditLog())
 
                 Expect.equal (labelOf report BootSealSection) "verified" "the composed section verifies"
                 Expect.equal (labelOf report AuditLedgerSection) "not-composed" "the absent sections stay absent"
@@ -720,7 +718,7 @@ let tests =
                         None
                         None
 
-                let report = runReport evidence None
+                let report = runReport evidence (NoOpAuditLog())
                 onlyAdverse report BootSealSection
 
                 Expect.equal (labelOf report BootSealSection) "failed" "a drifted boot verdict fails its section"
@@ -739,7 +737,7 @@ let tests =
                         None
                         None
 
-                let report = runReport evidence None
+                let report = runReport evidence (NoOpAuditLog())
                 onlyAdverse report GroundingContinuitySection
 
                 Expect.stringContains
@@ -755,7 +753,7 @@ let tests =
 
                 let source = deploymentVerificationSource ledgerSettings storage None
                 let evidence = fullEvidence None None (Some source) None None
-                let report = runReport evidence None
+                let report = runReport evidence (NoOpAuditLog())
 
                 onlyAdverse report AuditLedgerSection
 
@@ -770,7 +768,7 @@ let tests =
             test "certificate issuance — the log refuses to verify" {
                 let source () = async { return Error "the backing chain breaks at position 2" }
                 let evidence = fullEvidence None None None (Some source) None
-                let report = runReport evidence None
+                let report = runReport evidence (NoOpAuditLog())
 
                 onlyAdverse report CertificateIssuanceSection
 
@@ -796,7 +794,7 @@ let tests =
                 }
 
                 let evidence = fullEvidence None None None None (Some source)
-                let report = runReport evidence None
+                let report = runReport evidence (NoOpAuditLog())
 
                 onlyAdverse report AnswerJoinSection
 
@@ -809,7 +807,7 @@ let tests =
                 let source () : Async<Result<LedgerIntegrity, string>> = async { return failwith "storage unreachable" }
 
                 let evidence = fullEvidence None None (Some source) None None
-                let report = runReport evidence None
+                let report = runReport evidence (NoOpAuditLog())
 
                 onlyAdverse report AuditLedgerSection
 
@@ -833,7 +831,8 @@ let tests =
                         }
                 }
 
-                let report = runReport (fullEvidence None None None (Some source) None) None
+                let report =
+                    runReport (fullEvidence None None None (Some source) None) (NoOpAuditLog())
 
                 Expect.equal
                     (labelOf report CertificateIssuanceSection)
@@ -852,7 +851,7 @@ let tests =
                 let evidence =
                     fullEvidence None (Some(GroundingContinuous("seal-abc", 0, 0, "digest-empty"))) None None None
 
-                let report = runReport evidence None
+                let report = runReport evidence (NoOpAuditLog())
 
                 Expect.equal
                     (labelOf report GroundingContinuitySection)
@@ -865,7 +864,8 @@ let tests =
                     return Ok(LedgerHeadUnverifiable(9L, "head", "head is signed but no verifier was supplied"))
                 }
 
-                let report = runReport (fullEvidence None None (Some source) None None) None
+                let report =
+                    runReport (fullEvidence None None (Some source) None None) (NoOpAuditLog())
 
                 // The cheapest attack on this section would be to withhold
                 // the verifier. It exits non-zero instead.
@@ -880,7 +880,8 @@ let tests =
             test "a ledger head whose signature is invalid is failed, not merely unreadable" {
                 let source () = async { return Ok(LedgerHeadRejected(9L, "head", "INVALID (key-1 / Ed25519)")) }
 
-                let report = runReport (fullEvidence None None (Some source) None None) None
+                let report =
+                    runReport (fullEvidence None None (Some source) None None) (NoOpAuditLog())
 
                 Expect.equal
                     (labelOf report AuditLedgerSection)
@@ -890,7 +891,9 @@ let tests =
 
             test "an empty ledger is observed, not verified" {
                 let source () = async { return Ok(LedgerChainVerified(0L, "genesis", "unsigned")) }
-                let report = runReport (fullEvidence None None (Some source) None None) None
+
+                let report =
+                    runReport (fullEvidence None None (Some source) None None) (NoOpAuditLog())
 
                 Expect.equal
                     (labelOf report AuditLedgerSection)
@@ -907,7 +910,7 @@ let tests =
                         None
                         None
 
-                let report = runReport evidence None
+                let report = runReport evidence (NoOpAuditLog())
 
                 Expect.equal (labelOf report BootSealSection) "observed" "an unsealed start is honest, not adverse"
                 Expect.equal (exitCode report) 0 "and does not redden CI"
@@ -1055,7 +1058,7 @@ let tests =
             }
 
             test "the rendered report names every section and every bound" {
-                let report = runReport (healthyEvidence ()) None
+                let report = runReport (healthyEvidence ()) (NoOpAuditLog())
                 let rendered = render report
 
                 for id in allSectionIds do
@@ -1341,7 +1344,7 @@ let tests =
                 VerificationSectionVerdict.detail (sectionOf report SeamAuthoritySection).Verdict
 
             test "a declared-and-admitted composition verifies" {
-                let report = runReport (healthyEvidence ()) None
+                let report = runReport (healthyEvidence ()) (NoOpAuditLog())
 
                 Expect.equal
                     (seamLabel report)
@@ -1361,7 +1364,7 @@ let tests =
 
             test "the section enumerates each component's declared set beside its derived reach" {
                 let findings =
-                    (sectionOf (runReport (healthyEvidence ()) None) SeamAuthoritySection).Findings
+                    (sectionOf (runReport (healthyEvidence ()) (NoOpAuditLog())) SeamAuthoritySection).Findings
 
                 Expect.hasLength findings 2 "one line per component in the composition"
 
@@ -1388,7 +1391,7 @@ let tests =
                             )
                 }
 
-                let report = runReport (withSeam refused) None
+                let report = runReport (withSeam refused) (NoOpAuditLog())
 
                 onlyAdverse report SeamAuthoritySection
 
@@ -1413,7 +1416,7 @@ let tests =
                             )
                 }
 
-                onlyAdverse (runReport (withSeam refused) None) SeamAuthoritySection
+                onlyAdverse (runReport (withSeam refused) (NoOpAuditLog())) SeamAuthoritySection
             }
 
             test "grants declared and never checked are OBSERVED, not verified" {
@@ -1425,7 +1428,7 @@ let tests =
                         Verification = SeamAuthorityUnenforced
                 }
 
-                let report = runReport (withSeam unenforced) None
+                let report = runReport (withSeam unenforced) (NoOpAuditLog())
 
                 Expect.equal (seamLabel report) "observed" "declaring is not enforcing"
 
@@ -1458,7 +1461,7 @@ let tests =
                             })
                 }
 
-                let report = runReport (withSeam floor) None
+                let report = runReport (withSeam floor) (NoOpAuditLog())
 
                 Expect.equal (seamLabel report) "observed" "an admission over an undeclared composition is structural"
 
@@ -1480,7 +1483,7 @@ let tests =
                         Verification = SeamAuthorityUnenforced
                 }
 
-                let report = runReport (withSeam bare) None
+                let report = runReport (withSeam bare) (NoOpAuditLog())
 
                 Expect.equal (seamLabel report) "observed" "composed, read, and with nothing to affirm"
 
@@ -1503,7 +1506,7 @@ let tests =
                         (Some healthyCertificates)
                         (Some healthyAnswerJoins)
 
-                let report = runReport preExisting None
+                let report = runReport preExisting (NoOpAuditLog())
 
                 Expect.equal
                     (seamLabel report)
@@ -1531,7 +1534,7 @@ let tests =
                 let report =
                     healthyEvidence ()
                     |> DeploymentVerificationEvidence.withGroundingContinuity (Some healthyContinuity)
-                    |> fun evidence -> runReport evidence None
+                    |> fun evidence -> runReport evidence (NoOpAuditLog())
 
                 Expect.equal (seamLabel report) "verified" "replacing one member must not drop another"
             }
@@ -1540,7 +1543,7 @@ let tests =
                 let report =
                     healthyEvidence ()
                     |> DeploymentVerificationEvidence.withSeamAuthority (Some healthySeamAuthority)
-                    |> fun evidence -> runReport evidence None
+                    |> fun evidence -> runReport evidence (NoOpAuditLog())
 
                 Expect.equal
                     (evidenceSectionIds |> List.map (labelOf report))
@@ -1550,7 +1553,7 @@ let tests =
 
             test "composing the section narrows the subset-claim statement without deleting it" {
                 let statement =
-                    (runReport (healthyEvidence ()) None).NotProved
+                    (runReport (healthyEvidence ()) (NoOpAuditLog())).NotProved
                     |> List.find (fun st -> st.Id = "seam-reach-is-a-subset-claim")
 
                 Expect.isSome statement.Narrowing "a composed section narrows the bound"
@@ -1578,7 +1581,7 @@ let tests =
                 }
 
                 let findings =
-                    (sectionOf (runReport (withSeam stale) None) SeamAuthoritySection).Findings
+                    (sectionOf (runReport (withSeam stale) (NoOpAuditLog())) SeamAuthoritySection).Findings
 
                 Expect.stringContains
                     (String.Join(" ", findings))
@@ -1601,7 +1604,7 @@ let tests =
                 }
 
                 let findings =
-                    (sectionOf (runReport (withSeam many) None) SeamAuthoritySection).Findings
+                    (sectionOf (runReport (withSeam many) (NoOpAuditLog())) SeamAuthoritySection).Findings
 
                 Expect.hasLength
                     findings
@@ -1700,7 +1703,7 @@ let tests =
                     "the declarations are still reported — they exist, they simply bound nothing"
 
                 Expect.equal
-                    (labelOf (runReport (withSeam mirror) None) SeamAuthoritySection)
+                    (labelOf (runReport (withSeam mirror) (NoOpAuditLog())) SeamAuthoritySection)
                     "observed"
                     "and end to end that reads as observed, never as a verification"
             }
@@ -1750,7 +1753,7 @@ let tests =
                 | other -> failtestf "expected SeamAuthorityRefused, got %A" other
 
                 Expect.equal
-                    (labelOf (runReport (withSeam mirror) None) SeamAuthoritySection)
+                    (labelOf (runReport (withSeam mirror) (NoOpAuditLog())) SeamAuthoritySection)
                     "failed"
                     "and a real refusal reddens the section end to end"
             }
@@ -1770,7 +1773,7 @@ let tests =
         testSequenced (
             testList "the configuration conformance section" [
                 test "a deployment declaring no manifest says so rather than omitting the section" {
-                    let report = runReport (healthyEvidence ()) None
+                    let report = runReport (healthyEvidence ()) (NoOpAuditLog())
                     let verdict = (sectionOf report ConfigConformanceSection).Verdict
 
                     Expect.equal
@@ -1797,7 +1800,7 @@ let tests =
                 test "a manifest key the environment overrides renders as an override, not a failure" {
                     withManifest [ Names.replicaCount, "3" ] (fun () ->
                         withEnv Names.replicaCount (Some "9") (fun () ->
-                            let report = runReport (healthyEvidence ()) None
+                            let report = runReport (healthyEvidence ()) (NoOpAuditLog())
                             let s = sectionOf report ConfigConformanceSection
 
                             Expect.equal
@@ -1839,7 +1842,7 @@ let tests =
                     | Some key ->
                         withManifest [ key.EnvVar, "declared-but-unread" ] (fun () ->
                             withEnv key.EnvVar None (fun () ->
-                                let report = runReport (healthyEvidence ()) None
+                                let report = runReport (healthyEvidence ()) (NoOpAuditLog())
                                 let s = sectionOf report ConfigConformanceSection
 
                                 Expect.equal
@@ -1868,7 +1871,7 @@ let tests =
                     // through to a lower layer.
                     withManifest [ Names.replicaCount, "" ] (fun () ->
                         withEnv Names.replicaCount None (fun () ->
-                            let report = runReport (healthyEvidence ()) None
+                            let report = runReport (healthyEvidence ()) (NoOpAuditLog())
                             let s = sectionOf report ConfigConformanceSection
 
                             Expect.equal
@@ -1886,7 +1889,7 @@ let tests =
                     withManifest [ Names.replicaCount, "3"; Names.logLevel, "Debug" ] (fun () ->
                         withEnv Names.replicaCount None (fun () ->
                             withEnv Names.logLevel None (fun () ->
-                                let report = runReport (healthyEvidence ()) None
+                                let report = runReport (healthyEvidence ()) (NoOpAuditLog())
                                 let s = sectionOf report ConfigConformanceSection
                                 let detail = VerificationSectionVerdict.detail s.Verdict
 
@@ -1915,7 +1918,8 @@ let tests =
 
                 test "a manifest declaring nothing is observed, never verified" {
                     withManifest [] (fun () ->
-                        let s = sectionOf (runReport (healthyEvidence ()) None) ConfigConformanceSection
+                        let s =
+                            sectionOf (runReport (healthyEvidence ()) (NoOpAuditLog())) ConfigConformanceSection
 
                         // Same discipline as continuity over an envelope
                         // declaring nothing: a comparison with nothing to
@@ -1931,7 +1935,11 @@ let tests =
                     withProfile [ Names.replicaCount, "5"; Names.logLevel, "Warning" ] (fun () ->
                         withManifest [ Names.replicaCount, "3" ] (fun () ->
                             withEnv Names.replicaCount None (fun () ->
-                                let s = sectionOf (runReport (healthyEvidence ()) None) ConfigConformanceSection
+                                let s =
+                                    sectionOf
+                                        (runReport (healthyEvidence ()) (NoOpAuditLog()))
+                                        ConfigConformanceSection
+
                                 let joined = String.Join(" ", s.Findings)
 
                                 Expect.stringContains joined "probe-profile" "the profile in force is named"
@@ -1949,7 +1957,8 @@ let tests =
 
                 test "a profile with no manifest is stated honestly rather than as an absence" {
                     withProfile [ Names.logLevel, "Warning" ] (fun () ->
-                        let s = sectionOf (runReport (healthyEvidence ()) None) ConfigConformanceSection
+                        let s =
+                            sectionOf (runReport (healthyEvidence ()) (NoOpAuditLog())) ConfigConformanceSection
 
                         Expect.equal
                             (VerificationSectionVerdict.label s.Verdict)
@@ -1964,7 +1973,7 @@ let tests =
 
                 test "composing the section narrows the declared-intent bound without deleting it" {
                     let bare =
-                        (runReport (healthyEvidence ()) None).NotProved
+                        (runReport (healthyEvidence ()) (NoOpAuditLog())).NotProved
                         |> List.find (fun st -> st.Id = "declared-config-is-not-observed-behaviour")
 
                     Expect.isNone bare.Narrowing "with no manifest declared, nothing narrows the bound"
@@ -1972,7 +1981,7 @@ let tests =
                     withManifest [ Names.replicaCount, "3" ] (fun () ->
                         withEnv Names.replicaCount None (fun () ->
                             let declared =
-                                (runReport (healthyEvidence ()) None).NotProved
+                                (runReport (healthyEvidence ()) (NoOpAuditLog())).NotProved
                                 |> List.find (fun st -> st.Id = "declared-config-is-not-observed-behaviour")
 
                             Expect.isSome declared.Narrowing "declaring a manifest narrows what the report cannot see"
@@ -1988,7 +1997,7 @@ let tests =
             testList "the accepted-acknowledgement section" [
                 test "a deployment opening no hatch renders an explicit none" {
                     let s =
-                        sectionOf (runReport (healthyEvidence ()) None) AcceptedAcknowledgementSection
+                        sectionOf (runReport (healthyEvidence ()) (NoOpAuditLog())) AcceptedAcknowledgementSection
 
                     Expect.equal
                         (VerificationSectionVerdict.label s.Verdict)
@@ -2005,7 +2014,7 @@ let tests =
 
                 test "an active hatch is named with the registry's own description of what it lowers" {
                     withEnv Names.acceptLocalFallback (Some "1") (fun () ->
-                        let report = runReport (healthyEvidence ()) None
+                        let report = runReport (healthyEvidence ()) (NoOpAuditLog())
                         let s = sectionOf report AcceptedAcknowledgementSection
 
                         Expect.equal
@@ -2035,7 +2044,9 @@ let tests =
                     withManifest [ Names.acceptLocalFallback, "true" ] (fun () ->
                         withEnv Names.acceptLocalFallback None (fun () ->
                             let s =
-                                sectionOf (runReport (healthyEvidence ()) None) AcceptedAcknowledgementSection
+                                sectionOf
+                                    (runReport (healthyEvidence ()) (NoOpAuditLog()))
+                                    AcceptedAcknowledgementSection
 
                             Expect.isTrue
                                 (s.Findings
@@ -2052,7 +2063,7 @@ let tests =
                     // also say when a set hatch is not counting.
                     withEnv Names.acceptLocalFallback (Some "yes-please") (fun () ->
                         let s =
-                            sectionOf (runReport (healthyEvidence ()) None) AcceptedAcknowledgementSection
+                            sectionOf (runReport (healthyEvidence ()) (NoOpAuditLog())) AcceptedAcknowledgementSection
 
                         Expect.equal
                             (VerificationSectionVerdict.label s.Verdict)
@@ -2114,7 +2125,9 @@ let tests =
                     | Some secret ->
                         withEnv secret.EnvVar (Some "super-secret-anchor-material") (fun () ->
                             let s =
-                                sectionOf (runReport (healthyEvidence ()) None) AcceptedAcknowledgementSection
+                                sectionOf
+                                    (runReport (healthyEvidence ()) (NoOpAuditLog()))
+                                    AcceptedAcknowledgementSection
 
                             Expect.isFalse
                                 (String.Join(" ", s.Findings).Contains "super-secret-anchor-material")
@@ -2127,14 +2140,14 @@ let tests =
 
                 test "composing the section narrows the inventory bound without deleting it" {
                     let bare =
-                        (runReport (healthyEvidence ()) None).NotProved
+                        (runReport (healthyEvidence ()) (NoOpAuditLog())).NotProved
                         |> List.find (fun st -> st.Id = "hatches-are-an-inventory-not-a-waiver-record")
 
                     Expect.isNone bare.Narrowing "with no hatch open, nothing narrows the bound"
 
                     withEnv Names.acceptLocalFallback (Some "1") (fun () ->
                         let opened =
-                            (runReport (healthyEvidence ()) None).NotProved
+                            (runReport (healthyEvidence ()) (NoOpAuditLog())).NotProved
                             |> List.find (fun st -> st.Id = "hatches-are-an-inventory-not-a-waiver-record")
 
                         Expect.isSome opened.Narrowing "an enumerated hatch set narrows what the reader must infer"
@@ -2152,7 +2165,7 @@ let tests =
         testSequenced (
             testList "the two new sections cost an undeclared deployment nothing" [
                 test "every section 686 and 693 shipped is byte-identical with no manifest and no hatch" {
-                    let report = runReport (healthyEvidence ()) None
+                    let report = runReport (healthyEvidence ()) (NoOpAuditLog())
 
                     // The GP 11 assertion the phase asks for, stated over
                     // the four fields the canonical form is taken across:
@@ -2184,7 +2197,7 @@ let tests =
                     // top-line regression no section-level assertion would
                     // have caught.
                     let report =
-                        DeploymentVerificationReport.run (servicesWith None None) "probe"
+                        DeploymentVerificationReport.run (servicesWith None (NoOpAuditLog())) "probe"
                         |> Async.RunSynchronously
 
                     Expect.equal

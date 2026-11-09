@@ -124,8 +124,8 @@ let private fanoutTests =
             use cacheA = newCache ()
             use cacheB = newCache ()
 
-            let replicaA = PerScopeKeyResolver.create secrets cacheA None
-            let replicaB = PerScopeKeyResolver.create secrets cacheB None
+            let replicaA = PerScopeKeyResolver.create secrets cacheA (NoOpAuditLog())
+            let replicaB = PerScopeKeyResolver.create secrets cacheB (NoOpAuditLog())
             let storageA = EncryptedBlobStorage(inner, replicaA) :> IBlobStorage
             let storageB = EncryptedBlobStorage(inner, replicaB) :> IBlobStorage
 
@@ -161,8 +161,8 @@ let private fanoutTests =
             use cacheB = newCache ()
             let channel = InMemoryNotificationChannel(None) :> INotificationChannel
 
-            let replicaA = PerScopeKeyResolver.create secrets cacheA None
-            let replicaB = PerScopeKeyResolver.create secrets cacheB None
+            let replicaA = PerScopeKeyResolver.create secrets cacheA (NoOpAuditLog())
+            let replicaB = PerScopeKeyResolver.create secrets cacheB (NoOpAuditLog())
             do! replicaA.WireToChannel(channel, "replica-a")
             do! replicaB.WireToChannel(channel, "replica-b")
 
@@ -196,8 +196,8 @@ let private fanoutTests =
             let auditA = RecordingAuditLog()
             let auditB = RecordingAuditLog()
 
-            let replicaA = PerScopeKeyResolver.create secrets cacheA (Some(auditA :> IAuditLog))
-            let replicaB = PerScopeKeyResolver.create secrets cacheB (Some(auditB :> IAuditLog))
+            let replicaA = PerScopeKeyResolver.create secrets cacheA ((auditA :> IAuditLog))
+            let replicaB = PerScopeKeyResolver.create secrets cacheB ((auditB :> IAuditLog))
             do! replicaA.WireToChannel(channel, "replica-a")
             do! replicaB.WireToChannel(channel, "replica-b")
 
@@ -265,7 +265,7 @@ let private fanoutTests =
             let channel = InMemoryNotificationChannel(None) :> INotificationChannel
             let audit = RecordingAuditLog()
 
-            let resolver = PerScopeKeyResolver.create secrets cache (Some(audit :> IAuditLog))
+            let resolver = PerScopeKeyResolver.create secrets cache ((audit :> IAuditLog))
             do! resolver.WireToChannel channel
 
             let storage = EncryptedBlobStorage(inner, resolver) :> IBlobStorage
@@ -318,7 +318,7 @@ let private envelopeTests =
                         | _ -> ()
                 )
 
-            let resolver = PerScopeKeyResolver.create secrets cache None
+            let resolver = PerScopeKeyResolver.create secrets cache (NoOpAuditLog())
             do! resolver.WireToChannel(channel, "replica-a")
 
             let resolverIface = resolver :> IBlobEncryptionKeyResolver
@@ -358,7 +358,7 @@ let private envelopeTests =
             let channel = InMemoryNotificationChannel(None) :> INotificationChannel
             let audit = RecordingAuditLog()
 
-            let replica = PerScopeKeyResolver.create secrets cache (Some(audit :> IAuditLog))
+            let replica = PerScopeKeyResolver.create secrets cache ((audit :> IAuditLog))
             do! replica.WireToChannel(channel, "replica-b")
 
             let storage = EncryptedBlobStorage(inner, replica) :> IBlobStorage
@@ -422,7 +422,7 @@ let private servicesWith (resolver: IBlobEncryptionKeyResolver option) (channel:
     services
 
 let private perScopeResolver () : IBlobEncryptionKeyResolver =
-    PerScopeKeyResolver.create (newSecretStore ()) (newCache ()) None :> IBlobEncryptionKeyResolver
+    PerScopeKeyResolver.create (newSecretStore ()) (newCache ()) (NoOpAuditLog()) :> IBlobEncryptionKeyResolver
 
 let private validate (config: ServerConfig) (services: IServiceCollection) : ValidationResult =
     let v =

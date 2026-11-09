@@ -39,7 +39,7 @@ open ToolUp.Platform.Infra
 // consent rows are emitted here and not in the API handler, because the
 // handler is one caller of several — a job, an intake pipeline, an
 // inbound webhook can all reach the store — and an audit emitted at each
-// caller is an audit some caller will forget. `IAuditLog option` follows
+// caller is an audit some caller will forget. `IAuditLog` follows
 // the `BlobEntityStore` shape: `None` in a deployment with no audit log
 // composed, which degrades to no rows rather than to a failure.
 
@@ -92,14 +92,11 @@ let private ofEntityError (error: EntityError) : ExternalContactError =
 /// Stateless across calls (portability rule 4) — every member reads what
 /// it needs. Async at every boundary (rule 2). Expected failures are
 /// `ExternalContactError` values, never exceptions (rule 3).
-type EntityBackedExternalContactStore(entities: IEntityStore.IEntityStore, auditLog: IAuditLog option) =
+type EntityBackedExternalContactStore(entities: IEntityStore.IEntityStore, auditLog: IAuditLog) =
 
     let audit (scopeId: string) (event: AuditEvent) : Async<unit> =
-        match auditLog with
-        | Some log ->
-            log.Record(AuditScope.shard scopeId, AuditSubject.system "ExternalContactStore", event)
-            |> AuditRow.orRefuse
-        | None -> async { return () }
+        auditLog.Record(AuditScope.shard scopeId, AuditSubject.system "ExternalContactStore", event)
+        |> AuditRow.orRefuse
 
     /// Read one contact, coercing the collections a payload written
     /// before a field existed can deserialise as `null`.
@@ -422,5 +419,5 @@ type EntityBackedExternalContactStore(entities: IEntityStore.IEntityStore, audit
                 })
 
 /// Build the SDK-default store over a composed `IEntityStore`.
-let entityBacked (entities: IEntityStore.IEntityStore) (auditLog: IAuditLog option) : IExternalContactStore =
+let entityBacked (entities: IEntityStore.IEntityStore) (auditLog: IAuditLog) : IExternalContactStore =
     EntityBackedExternalContactStore(entities, auditLog) :> IExternalContactStore

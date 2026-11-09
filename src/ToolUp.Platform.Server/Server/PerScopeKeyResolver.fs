@@ -68,9 +68,8 @@ open ToolUp.Platform.Infra
 //   admin request. The originating replica does not self-acknowledge.
 //
 // Both audit emissions go to the `_platform.audit` source module via
-// `IAuditLog.Record`. If `IAuditLog` is not provided (constructor
-// `auditLog: IAuditLog option = None`), audit emission is silently
-// skipped — useful for tests that don't wire `IEventStore`.
+// `IAuditLog.Record`. Composed with `NoOpAuditLog`, audit emission costs
+// nothing — useful for tests that don't wire `IEventStore`.
 //
 // ─── Channel wiring: optional on one replica, REQUIRED on more ───────
 //
@@ -238,8 +237,7 @@ let private generateKey () : byte[] =
 /// apart from the unwired-destroy counter, which costs one `int`. A logger
 /// is only ever used for the unwired-`DestroyKey` security warning; every
 /// other diagnostic on this path goes through `IAuditLog`.
-type PerScopeKeyResolver
-    (secretStore: ISecretStore, cache: IMemoryCache, auditLog: IAuditLog option, logger: ILogger option) =
+type PerScopeKeyResolver(secretStore: ISecretStore, cache: IMemoryCache, auditLog: IAuditLog, logger: ILogger option) =
 
     let mutable channel: INotificationChannel option = None
     let mutable subscriptionId: NotificationSubscriptionId option = None
@@ -305,22 +303,19 @@ type PerScopeKeyResolver
 
                         // The refusal below is the control, whether or not
                         // this row lands.
-                        match auditLog with
-                        | Some log ->
-                            do!
-                                AuditRow.emit
-                                    log
-                                    (AuditScope.shard scopeId)
-                                    (AuditSubject.system "PerScopeKeyResolver")
-                                    (EncryptionKeyUnreadable {
-                                        ScopeId = scopeId
-                                        KeyId = keyIdFor scopeId
-                                        Resolver = ResolverName
-                                        LengthSeen = lengthSeen
-                                        Reason = reason
-                                    })
-                                |> AuditRow.bestEffort
-                        | None -> ()
+                        do!
+                            AuditRow.emit
+                                auditLog
+                                (AuditScope.shard scopeId)
+                                (AuditSubject.system "PerScopeKeyResolver")
+                                (EncryptionKeyUnreadable {
+                                    ScopeId = scopeId
+                                    KeyId = keyIdFor scopeId
+                                    Resolver = ResolverName
+                                    LengthSeen = lengthSeen
+                                    Reason = reason
+                                })
+                            |> AuditRow.bestEffort
 
                         return
                             failwithf
@@ -338,21 +333,18 @@ type PerScopeKeyResolver
                         // The resolver's failure channel is the raise the
                         // unpersistable-key path below takes: a refused row
                         // fails the resolution the same way.
-                        match auditLog with
-                        | Some log ->
-                            do!
-                                AuditRow.emit
-                                    log
-                                    (AuditScope.shard scopeId)
-                                    (AuditSubject.system "PerScopeKeyResolver")
-                                    (EncryptionKeyCreated {
-                                        UserId = UserId "system"
-                                        ScopeId = scopeId
-                                        KeyId = keyIdFor scopeId
-                                        Resolver = ResolverName
-                                    })
-                                |> AuditRow.orRefuse
-                        | None -> ()
+                        do!
+                            AuditRow.emit
+                                auditLog
+                                (AuditScope.shard scopeId)
+                                (AuditSubject.system "PerScopeKeyResolver")
+                                (EncryptionKeyCreated {
+                                    UserId = UserId "system"
+                                    ScopeId = scopeId
+                                    KeyId = keyIdFor scopeId
+                                    Resolver = ResolverName
+                                })
+                            |> AuditRow.orRefuse
 
                         return {
                             KeyId = keyIdFor scopeId
@@ -425,7 +417,7 @@ type PerScopeKeyResolver
     /// unwired-`DestroyKey` warning has nowhere to go; the counter behind
     /// `UnwiredDestroyKeyCount` still records it and the `/dev/inspect`
     /// "Crypto-shred fanout" panel still surfaces it.
-    new(secretStore: ISecretStore, cache: IMemoryCache, auditLog: IAuditLog option) =
+    new(secretStore: ISecretStore, cache: IMemoryCache, auditLog: IAuditLog) =
         PerScopeKeyResolver(secretStore, cache, auditLog, None)
 
     interface IBlobEncryptionKeyResolver with
@@ -468,20 +460,17 @@ type PerScopeKeyResolver
             // instead of it: a sibling left decrypting from its cache is the
             // worse outcome.
             let! recorded = async {
-                match auditLog with
-                | Some log ->
-                    return!
-                        AuditRow.emit
-                            log
-                            (AuditScope.shard scopeId)
-                            (AuditSubject.UserAudit(UserId actorUserId))
-                            (EncryptionKeyDestroyed {
-                                UserId = UserId actorUserId
-                                ScopeId = scopeId
-                                KeyId = keyIdFor scopeId
-                                Resolver = ResolverName
-                            })
-                | None -> return Ok()
+                return!
+                    AuditRow.emit
+                        auditLog
+                        (AuditScope.shard scopeId)
+                        (AuditSubject.UserAudit(UserId actorUserId))
+                        (EncryptionKeyDestroyed {
+                            UserId = UserId actorUserId
+                            ScopeId = scopeId
+                            KeyId = keyIdFor scopeId
+                            Resolver = ResolverName
+                        })
             }
 
             // Gap audit #1 / Phase 22b — broadcast destruction to other
@@ -650,8 +639,8 @@ type PerScopeKeyResolver
                     // call or inside the write, is a Warning to the
                     // resolver's logger and never escapes into the channel
                     // or the host.
-                    match decoded, auditLog with
-                    | Some e, Some log ->
+                    match decoded with
+                    | Some e ->
                         let row =
                             EncryptionKeyDestroyAcknowledged {
                                 UserId = UserId e.RequestedBy
@@ -668,7 +657,7 @@ type PerScopeKeyResolver
                             Background.writeFailureLogger "PerScopeKeyResolver" logger "" "the key eviction"
 
                         try
-                            log.Record(AuditScope.shard scopeId, AuditSubject.system "PerScopeKeyResolver", row)
+                            auditLog.Record(AuditScope.shard scopeId, AuditSubject.system "PerScopeKeyResolver", row)
                             |> Background.startAuditRow warn "EncryptionKeyDestroyAcknowledged audit"
                         with ex ->
                             warn "EncryptionKeyDestroyAcknowledged audit" ex
@@ -685,12 +674,12 @@ type PerScopeKeyResolver
     }
 
 /// Build a `PerScopeKeyResolver` from an `ISecretStore` + `IMemoryCache`
-/// + optional `IAuditLog`. Audit emission is opt-in — pass `None` to
-/// disable (useful in tests that don't wire `IEventStore`).
+/// + an `IAuditLog`. Pass `NoOpAuditLog()` to record nothing (useful in
+/// tests that don't wire `IEventStore`).
 ///
 /// The resolver auto-creates a fresh AES-256 key per scope on first
 /// `ResolveKey` call when none is stored.
-let create (secretStore: ISecretStore) (cache: IMemoryCache) (auditLog: IAuditLog option) : PerScopeKeyResolver =
+let create (secretStore: ISecretStore) (cache: IMemoryCache) (auditLog: IAuditLog) : PerScopeKeyResolver =
     PerScopeKeyResolver(secretStore, cache, auditLog)
 
 /// Phase 458 — `create` plus a logger for the unwired-`DestroyKey`
@@ -702,7 +691,7 @@ let create (secretStore: ISecretStore) (cache: IMemoryCache) (auditLog: IAuditLo
 let createWithLogger
     (secretStore: ISecretStore)
     (cache: IMemoryCache)
-    (auditLog: IAuditLog option)
+    (auditLog: IAuditLog)
     (logger: ILogger)
     : PerScopeKeyResolver =
     PerScopeKeyResolver(secretStore, cache, auditLog, Some logger)

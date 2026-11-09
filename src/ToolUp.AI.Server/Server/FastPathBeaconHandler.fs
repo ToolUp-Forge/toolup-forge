@@ -280,10 +280,8 @@ let private resolveLogger (ctx: HttpContext) : ILogger option =
     | :? ILogger as l -> Some l
     | _ -> None
 
-let private tryResolveAuditLog (ctx: HttpContext) : IAuditLog option =
-    match ctx.RequestServices.GetService(typeof<IAuditLog>) with
-    | :? IAuditLog as a -> Some a
-    | _ -> None
+let private tryResolveAuditLog (ctx: HttpContext) : IAuditLog =
+    ToolUp.Platform.Config.Background.resolveAuditLog ctx.RequestServices
 
 let private safeLen (s: string) = if isNull s then 0 else s.Length
 
@@ -585,7 +583,7 @@ let private emitRejection
 /// `IAuditLog.GetAuditTrail` queries. Silent no-op when `IAuditLog`
 /// is not in DI (e.g. tests that bypass `compose`).
 let private emitBeaconRejected
-    (auditLogOpt: IAuditLog option)
+    (auditLogOpt: IAuditLog)
     (logger: ILogger option)
     (scopeId: string)
     (conversationId: Guid)
@@ -594,28 +592,25 @@ let private emitBeaconRejected
     (surface: string)
     : Async<unit> =
     async {
-        match auditLogOpt with
-        | None -> return ()
-        | Some auditLog ->
-            let payload: BeaconRejectedPayload = {
-                ConversationId = conversationId
-                Caller = caller
-                Owner = owner
-                Surface = surface
-            }
+        let payload: BeaconRejectedPayload = {
+            ConversationId = conversationId
+            Caller = caller
+            Owner = owner
+            Surface = surface
+        }
 
-            try
-                do!
-                    auditLog.Record(
-                        AuditScope.shard scopeId,
-                        AuditSubject.system "FastPathBeacon",
-                        BeaconRejected payload
-                    )
-                    |> AuditRow.orRefuse
-            with ex ->
-                logWarn
-                    logger
-                    $"BeaconRejected audit write failed (conversation {conversationId}, caller='{caller}', owner='{owner}', surface='{surface}'): {ex.Message}"
+        try
+            do!
+                auditLogOpt.Record(
+                    AuditScope.shard scopeId,
+                    AuditSubject.system "FastPathBeacon",
+                    BeaconRejected payload
+                )
+                |> AuditRow.orRefuse
+        with ex ->
+            logWarn
+                logger
+                $"BeaconRejected audit write failed (conversation {conversationId}, caller='{caller}', owner='{owner}', surface='{surface}'): {ex.Message}"
     }
 
 // ─── HTTP handler ───────────────────────────────────────────────

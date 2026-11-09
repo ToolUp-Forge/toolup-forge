@@ -118,7 +118,7 @@ let private dropEmission =
 
             run (
                 ToolUp.RAG.RAGCompose.emitIngestionDrop
-                    (Some(audit :> IAuditLog))
+                    ((audit :> IAuditLog))
                     None
                     q
                     noopLogger
@@ -147,7 +147,7 @@ let private dropEmission =
 
             run (
                 ToolUp.RAG.RAGCompose.emitIngestionDrop
-                    None
+                    (NoOpAuditLog())
                     (Some(notifs :> INotificationChannel))
                     q
                     noopLogger
@@ -171,7 +171,7 @@ let private dropEmission =
 
             run (
                 ToolUp.RAG.RAGCompose.emitIngestionDrop
-                    None
+                    (NoOpAuditLog())
                     (Some(notifs :> INotificationChannel))
                     q
                     noopLogger

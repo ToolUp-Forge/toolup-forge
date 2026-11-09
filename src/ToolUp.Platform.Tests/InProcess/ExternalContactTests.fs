@@ -104,14 +104,14 @@ let private scope = "team-6fA"
 /// A fresh entity-backed contact store over in-memory blob storage,
 /// with the `ExternalContact` entity registered exactly as
 /// `registerEntityStore` registers it in a composed deployment.
-let private freshStore (auditLog: IAuditLog option) : IExternalContactStore =
+let private freshStore (auditLog: IAuditLog) : IExternalContactStore =
     let blob = InMemoryBlobStorage() :> IBlobStorage
     let dos = DataObjectStore.DataObjectStore(blob) :> IDataObjectStore
     let registry = EntityRegistry()
     registry.Register ExternalContactStore.registration
 
     let entities =
-        BlobEntityStore(dos, blob, registry, None) :> IEntityStore.IEntityStore
+        BlobEntityStore(dos, blob, registry, NoOpAuditLog()) :> IEntityStore.IEntityStore
 
     ExternalContactStore.entityBacked entities auditLog
 
@@ -309,7 +309,7 @@ let private emailTo (recipients: RecipientId list) : Notification =
 // ─── The contract pack binding ───────────────────────────────────────
 
 let private contractBinding: IExternalContactStoreContract.ExternalContactBinding = {
-    Factory = fun () -> freshStore None
+    Factory = fun () -> freshStore (NoOpAuditLog())
     Scopes =
         fun () ->
             let suffix = Guid.NewGuid().ToString("N").Substring(0, 8)
@@ -336,7 +336,7 @@ let tests =
                 // through; an audit emitted per caller is one some
                 // caller will forget.
                 let audit = CapturingAuditLog()
-                let store = freshStore (Some(audit :> IAuditLog))
+                let store = freshStore ((audit :> IAuditLog))
 
                 let! contact =
                     seedContact store "Audited" (Some "audited@example.com") None (Some NotificationKind.SinkKind.Email)
@@ -372,7 +372,7 @@ let tests =
                 // honoured, which is the fact a recipient's complaint
                 // turns on — not whether a record happened to exist.
                 let audit = CapturingAuditLog()
-                let store = freshStore (Some(audit :> IAuditLog))
+                let store = freshStore ((audit :> IAuditLog))
                 let! contact = seedContact store "Never opted in" (Some "never@example.com") None None
 
                 let! result =
@@ -386,7 +386,7 @@ let tests =
         testList "address book — the External arm" [
             testCaseAsync "an address resolves ONLY behind a live consent"
             <| async {
-                let store = freshStore None
+                let store = freshStore (NoOpAuditLog())
                 let blob = InMemoryBlobStorage() :> IBlobStorage
 
                 let book =
@@ -414,7 +414,7 @@ let tests =
 
             testCaseAsync "consent is per channel: an SMS opt-in does not unlock the email address"
             <| async {
-                let store = freshStore None
+                let store = freshStore (NoOpAuditLog())
                 let blob = InMemoryBlobStorage() :> IBlobStorage
 
                 let book =
@@ -456,7 +456,7 @@ let tests =
 
             testCaseAsync "an external recipient never has push tokens"
             <| async {
-                let store = freshStore None
+                let store = freshStore (NoOpAuditLog())
                 let blob = InMemoryBlobStorage() :> IBlobStorage
 
                 let book =
@@ -480,7 +480,7 @@ let tests =
 
             testCaseAsync "a WhatsApp number resolves ONLY behind a live WhatsApp consent"
             <| async {
-                let store = freshStore None
+                let store = freshStore (NoOpAuditLog())
                 let blob = InMemoryBlobStorage() :> IBlobStorage
 
                 let book =
@@ -587,7 +587,7 @@ let tests =
         testList "the consent gate" [
             testCaseAsync "a recipient with no consent is REFUSED, and the refusal is audited"
             <| async {
-                let store = freshStore None
+                let store = freshStore (NoOpAuditLog())
                 let audit = CapturingAuditLog()
                 let inner = CapturingChannel "inner"
 
@@ -595,7 +595,7 @@ let tests =
                     ExternalContactConsentFilter(
                         inner,
                         Some store,
-                        Some(audit :> IAuditLog),
+                        (audit :> IAuditLog),
                         SilentLogger(),
                         fun () -> DateTime.UtcNow
                     )
@@ -627,12 +627,12 @@ let tests =
                 // having no lawful basis to send call for different
                 // action from an operator: one is a setting, the other
                 // is a consent to go and obtain.
-                let store = freshStore None
+                let store = freshStore (NoOpAuditLog())
                 let audit = CapturingAuditLog()
                 let inner = CapturingChannel "inner"
 
                 let filter =
-                    ExternalContactConsentFilter(inner, Some store, Some(audit :> IAuditLog), SilentLogger())
+                    ExternalContactConsentFilter(inner, Some store, (audit :> IAuditLog), SilentLogger())
                     :> INotificationChannel
 
                 let! contact = seedContact store "Unconsented" None (Some "+447700900502") None
@@ -651,12 +651,12 @@ let tests =
 
             testCaseAsync "a consenting recipient is delivered to"
             <| async {
-                let store = freshStore None
+                let store = freshStore (NoOpAuditLog())
                 let audit = CapturingAuditLog()
                 let inner = CapturingChannel "inner"
 
                 let filter =
-                    ExternalContactConsentFilter(inner, Some store, Some(audit :> IAuditLog), SilentLogger())
+                    ExternalContactConsentFilter(inner, Some store, (audit :> IAuditLog), SilentLogger())
                     :> INotificationChannel
 
                 let! contact =
@@ -670,12 +670,12 @@ let tests =
 
             testCaseAsync "a mixed envelope keeps the consenting recipients and drops the rest"
             <| async {
-                let store = freshStore None
+                let store = freshStore (NoOpAuditLog())
                 let audit = CapturingAuditLog()
                 let inner = CapturingChannel "inner"
 
                 let filter =
-                    ExternalContactConsentFilter(inner, Some store, Some(audit :> IAuditLog), SilentLogger())
+                    ExternalContactConsentFilter(inner, Some store, (audit :> IAuditLog), SilentLogger())
                     :> INotificationChannel
 
                 let! yes = seedContact store "Yes" None (Some "+447700900504") (Some NotificationKind.SinkKind.Sms)
@@ -704,12 +704,12 @@ let tests =
             <| async {
                 // The phase's own acceptance criterion: opt in to SMS
                 // only, then watch the email channel refuse.
-                let store = freshStore None
+                let store = freshStore (NoOpAuditLog())
                 let audit = CapturingAuditLog()
                 let inner = CapturingChannel "inner"
 
                 let filter =
-                    ExternalContactConsentFilter(inner, Some store, Some(audit :> IAuditLog), SilentLogger())
+                    ExternalContactConsentFilter(inner, Some store, (audit :> IAuditLog), SilentLogger())
                     :> INotificationChannel
 
                 let! contact =
@@ -733,12 +733,12 @@ let tests =
 
             testCaseAsync "withdrawing the consent refuses the next send"
             <| async {
-                let store = freshStore None
+                let store = freshStore (NoOpAuditLog())
                 let audit = CapturingAuditLog()
                 let inner = CapturingChannel "inner"
 
                 let filter =
-                    ExternalContactConsentFilter(inner, Some store, Some(audit :> IAuditLog), SilentLogger())
+                    ExternalContactConsentFilter(inner, Some store, (audit :> IAuditLog), SilentLogger())
                     :> INotificationChannel
 
                 let! contact =
@@ -763,7 +763,7 @@ let tests =
 
             testCaseAsync "an EXPIRED consent refuses exactly like an absent one"
             <| async {
-                let store = freshStore None
+                let store = freshStore (NoOpAuditLog())
                 let audit = CapturingAuditLog()
                 let inner = CapturingChannel "inner"
                 let expiry = DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc)
@@ -773,7 +773,7 @@ let tests =
                     ExternalContactConsentFilter(
                         inner,
                         Some store,
-                        Some(audit :> IAuditLog),
+                        (audit :> IAuditLog),
                         SilentLogger(),
                         fun () -> clock.Value
                     )
@@ -843,7 +843,7 @@ let tests =
                 let inner = CapturingChannel "inner"
 
                 let filter =
-                    ExternalContactConsentFilter(inner, Some failing, Some(audit :> IAuditLog), SilentLogger())
+                    ExternalContactConsentFilter(inner, Some failing, (audit :> IAuditLog), SilentLogger())
                     :> INotificationChannel
 
                 do! filter.Publish(scope, smsTo [ RecipientId.External "whoever" ])
@@ -854,12 +854,12 @@ let tests =
 
             testCaseAsync "an envelope with no external recipient costs nothing and passes through"
             <| async {
-                let store = freshStore None
+                let store = freshStore (NoOpAuditLog())
                 let audit = CapturingAuditLog()
                 let inner = CapturingChannel "inner"
 
                 let filter =
-                    ExternalContactConsentFilter(inner, Some store, Some(audit :> IAuditLog), SilentLogger())
+                    ExternalContactConsentFilter(inner, Some store, (audit :> IAuditLog), SilentLogger())
                     :> INotificationChannel
 
                 do! filter.Publish(scope, smsTo [ RecipientId.User(UserId "alice"); RecipientId.User(UserId "bob") ])
@@ -876,11 +876,12 @@ let tests =
 
             testCaseAsync "a non-transactional notification is not gated at all"
             <| async {
-                let store = freshStore None
+                let store = freshStore (NoOpAuditLog())
                 let inner = CapturingChannel "inner"
 
                 let filter =
-                    ExternalContactConsentFilter(inner, Some store, None, SilentLogger()) :> INotificationChannel
+                    ExternalContactConsentFilter(inner, Some store, NoOpAuditLog(), SilentLogger())
+                    :> INotificationChannel
 
                 do! filter.Publish(scope, SystemMessage(SystemMessageLevel.Info, "hello"))
                 Expect.equal (List.length inner.Published) 1 "SSE-bound kinds carry no recipient list to gate"
@@ -895,7 +896,7 @@ let tests =
                 // filter let through. If preference ran first, the
                 // probe would see the refused contact still on the
                 // envelope; it can only be absent if consent ran first.
-                let contacts = freshStore None
+                let contacts = freshStore (NoOpAuditLog())
                 let audit = CapturingAuditLog()
                 let sink = CapturingChannel "sink"
                 let probe = CapturingChannel "between-the-filters"
@@ -907,7 +908,7 @@ let tests =
 
                 // Inner: Phase 441, untouched.
                 let preference =
-                    NotificationPreferenceFilter(sink, prefStore, categories, Some(audit :> IAuditLog), SilentLogger())
+                    NotificationPreferenceFilter(sink, prefStore, categories, (audit :> IAuditLog), SilentLogger())
                     :> INotificationChannel
 
                 // The probe, then the outer consent gate over it.
@@ -926,7 +927,7 @@ let tests =
                     ExternalContactConsentFilter(
                         probeOverPreference,
                         Some contacts,
-                        Some(audit :> IAuditLog),
+                        (audit :> IAuditLog),
                         SilentLogger()
                     )
                     :> INotificationChannel
@@ -1024,7 +1025,8 @@ let tests =
                 let categories = [ NotificationCategory.create "reports.summary" "Report summaries" ]
 
                 let preference =
-                    NotificationPreferenceFilter(sink, spying, categories, None, SilentLogger()) :> INotificationChannel
+                    NotificationPreferenceFilter(sink, spying, categories, NoOpAuditLog(), SilentLogger())
+                    :> INotificationChannel
 
                 do!
                     NotificationCategoryScope.publish

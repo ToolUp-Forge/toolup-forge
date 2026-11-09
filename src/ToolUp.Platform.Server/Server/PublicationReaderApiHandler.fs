@@ -71,22 +71,21 @@ let publicationReaderApi (ctx: HttpContext) : IPublicationReaderApi =
         (event: PublicationReaderGrantChangedPayload -> AuditEvent)
         =
         async {
-            match service<IAuditLog> ctx with
-            | Some log ->
-                do!
-                    log.Record(
-                        AuditScope.team (TeamId scope),
-                        AuditSubject.fromSubject accessContext.Subject,
-                        event {
-                            ActorId = accessContext.UserId
-                            PublishingScope = scope
-                            ReaderId = entry.UserId
-                            Role = entry.Role
-                            OccurredAt = DateTimeOffset.UtcNow
-                        }
-                    )
-                    |> AuditRow.orRefuse
-            | None -> ()
+            let log = ToolUp.Platform.Config.Background.resolveAuditLog ctx.RequestServices
+
+            do!
+                log.Record(
+                    AuditScope.team (TeamId scope),
+                    AuditSubject.fromSubject accessContext.Subject,
+                    event {
+                        ActorId = accessContext.UserId
+                        PublishingScope = scope
+                        ReaderId = entry.UserId
+                        Role = entry.Role
+                        OccurredAt = DateTimeOffset.UtcNow
+                    }
+                )
+                |> AuditRow.orRefuse
         }
 
     let trimmed (entry: PublicationReaderEntry) = {

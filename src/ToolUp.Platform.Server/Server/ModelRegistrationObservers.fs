@@ -88,25 +88,18 @@ type ObservedModelRegistry
                 deps.Logger.Warn
                     $"registration observer '{observer.Name}' failed for artifact {artifact.CompositeKey.Hash}: {ex.Message}"
 
-                try
-                    do!
-                        deps.Audit.Record(
-                            AuditScope.shard scopeId,
-                            AuditSubject.system "ModelRegistry",
-                            ModelRegistrationObserverFailed {
-                                CompositeKeyHash = artifact.CompositeKey.Hash
-                                Observer = observer.Name
-                                Reason = ex.Message
-                                ScopeId = scopeId
-                            }
-                        )
-                        |> AuditRow.bestEffort
-                with _ ->
-                    // An audit store having a bad day must not turn one
-                    // isolated observer failure into a failed registration
-                    // — which is the very thing this whole path exists to
-                    // prevent.
-                    ()
+                do!
+                    deps.Audit.Record(
+                        AuditScope.shard scopeId,
+                        AuditSubject.system "ModelRegistry",
+                        ModelRegistrationObserverFailed {
+                            CompositeKeyHash = artifact.CompositeKey.Hash
+                            Observer = observer.Name
+                            Reason = ex.Message
+                            ScopeId = scopeId
+                        }
+                    )
+                    |> AuditRow.bestEffort
     }
 
     /// Register through the inner registry and observe the arrival.

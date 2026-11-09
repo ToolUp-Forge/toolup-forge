@@ -88,7 +88,7 @@ let private chunk content : TextChunk = {
 
 let private mkDeps
     (storage: IBlobStorage)
-    (auditLog: IAuditLog option)
+    (auditLog: IAuditLog)
     (lifecycle: ToolUp.Platform.Infra.IIndexLifecycle.IIndexLifecycle option)
     (container: string)
     : KnowledgeApiDeps =
@@ -162,7 +162,7 @@ let tests =
             do! sparse.Upsert Deployment "doc-2:chunk:0" (chunk "beta")
 
             let audit = CapturingAuditLog()
-            let deps = mkDeps storage (Some(audit :> IAuditLog)) (Some lifecycle) "team-a"
+            let deps = mkDeps storage ((audit :> IAuditLog)) (Some lifecycle) "team-a"
 
             let! result = resetIndex deps
             Expect.isOk result "reset must succeed"
@@ -192,7 +192,7 @@ let tests =
                 :> ToolUp.Platform.Infra.IIndexLifecycle.IIndexLifecycle
 
             do! saveIndex storage "team-a" [ mkDoc "doc-1" ]
-            let deps = mkDeps storage None (Some lifecycle) "team-a"
+            let deps = mkDeps storage (NoOpAuditLog()) (Some lifecycle) "team-a"
 
             let! result = resetIndex deps
             Expect.isOk result "absent IAuditLog never fails the reset"
@@ -222,7 +222,7 @@ let tests =
             do! saveIndex storage "team-a" [ mkDoc "doc-1" ]
 
             let deps = {
-                mkDeps storage None None "team-a" with
+                mkDeps storage (NoOpAuditLog()) None "team-a" with
                     VectorScope = Team "team-a"
                     EmbeddingProvider = Some(family :> IEmbeddingProvider)
             }
@@ -250,7 +250,7 @@ let tests =
             do! saveIndex storage "team-a" [ mkDoc "doc-1" ]
 
             let deps = {
-                mkDeps storage None None "team-a" with
+                mkDeps storage (NoOpAuditLog()) None "team-a" with
                     VectorScope = Team "team-a"
                     EmbeddingProvider = Some shared
             }

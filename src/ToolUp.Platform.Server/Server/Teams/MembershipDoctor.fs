@@ -335,7 +335,7 @@ module MembershipDoctorStorage =
     /// doctor writes blobs directly and must not skip publication.
     let writes
         (storage: IBlobStorage)
-        (auditLog: IAuditLog option)
+        (auditLog: IAuditLog)
         (notifications: INotificationChannel option)
         (actorUserId: string)
         : MembershipWrites =
@@ -389,20 +389,17 @@ module MembershipDoctorStorage =
                 }
             EmitMemberRemoved =
                 fun teamId affectedUserId -> async {
-                    match auditLog with
-                    | Some log ->
-                        do!
-                            log.Record(
-                                AuditScope.team (TeamId teamId),
-                                AuditSubject.system "MembershipDoctor",
-                                MemberRemoved {
-                                    UserId = UserId actorUserId
-                                    TeamId = TeamId teamId
-                                    AffectedUserId = UserId affectedUserId
-                                }
-                            )
-                            |> AuditRow.orRefuse
-                    | None -> ()
+                    do!
+                        auditLog.Record(
+                            AuditScope.team (TeamId teamId),
+                            AuditSubject.system "MembershipDoctor",
+                            MemberRemoved {
+                                UserId = UserId actorUserId
+                                TeamId = TeamId teamId
+                                AffectedUserId = UserId affectedUserId
+                            }
+                        )
+                        |> AuditRow.orRefuse
 
                     do! publish teamId affectedUserId MembershipChangeKind.Removed
                 }

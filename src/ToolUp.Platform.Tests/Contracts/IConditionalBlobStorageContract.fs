@@ -487,7 +487,7 @@ let tests (name: string) (factory: unit -> IBlobStorage) =
             let n = 6
 
             let replicas =
-                List.init n (fun _ -> ShareTokenStore.create storage secrets None silentLogger)
+                List.init n (fun _ -> ShareTokenStore.create storage secrets (NoOpAuditLog()) silentLogger)
 
             let scope = freshId "team"
 

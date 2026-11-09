@@ -140,7 +140,7 @@ let unwiredDestroyTests =
             use cache = newCache ()
 
             let resolver =
-                PerScopeKeyResolver.createWithLogger (newSecretStore ()) cache None (logger :> ILogger)
+                PerScopeKeyResolver.createWithLogger (newSecretStore ()) cache (NoOpAuditLog()) (logger :> ILogger)
 
             // Create the key first, so the destroy is a real shred rather
             // than a delete of nothing.
@@ -182,7 +182,7 @@ let unwiredDestroyTests =
             use cache = newCache ()
 
             let resolver =
-                PerScopeKeyResolver.createWithLogger (newSecretStore ()) cache None (logger :> ILogger)
+                PerScopeKeyResolver.createWithLogger (newSecretStore ()) cache (NoOpAuditLog()) (logger :> ILogger)
 
             let! _ = resolver.DestroyKey("tenant-a", "admin@example.com")
             let! _ = resolver.DestroyKey("tenant-b", "admin@example.com")
@@ -208,7 +208,7 @@ let unwiredDestroyTests =
             let channel = InMemoryNotificationChannel(None) :> INotificationChannel
 
             let resolver =
-                PerScopeKeyResolver.createWithLogger (newSecretStore ()) cache None (logger :> ILogger)
+                PerScopeKeyResolver.createWithLogger (newSecretStore ()) cache (NoOpAuditLog()) (logger :> ILogger)
 
             do! resolver.WireToChannel channel
             let! _ = resolver.DestroyKey(scopeId, "admin@example.com")
@@ -220,7 +220,7 @@ let unwiredDestroyTests =
         testCaseAsync "a logger-less resolver still counts unwired destroys (GP 11 — the 3-arg ctor is unchanged)"
         <| async {
             use cache = newCache ()
-            let resolver = PerScopeKeyResolver.create (newSecretStore ()) cache None
+            let resolver = PerScopeKeyResolver.create (newSecretStore ()) cache (NoOpAuditLog())
 
             let! _ = resolver.DestroyKey(scopeId, "admin@example.com")
 
@@ -245,7 +245,7 @@ let wiringValidatorTests =
             // multi-instance in code — skipped the one hard-Error guard
             // over the crypto-shred contract.
             use cache = newCache ()
-            let resolver = PerScopeKeyResolver.create (newSecretStore ()) cache None
+            let resolver = PerScopeKeyResolver.create (newSecretStore ()) cache (NoOpAuditLog())
 
             let v =
                 validator
@@ -274,7 +274,7 @@ let wiringValidatorTests =
             // would be evidence of nothing more than "PerScopeKeyResolver
             // present".
             use cache = newCache ()
-            let resolver = PerScopeKeyResolver.create (newSecretStore ()) cache None
+            let resolver = PerScopeKeyResolver.create (newSecretStore ()) cache (NoOpAuditLog())
 
             let v =
                 validator
@@ -290,7 +290,7 @@ let wiringValidatorTests =
         <| withoutReplicaCountEnv (fun () -> async {
             use cache = newCache ()
             let channel = InMemoryNotificationChannel(None) :> INotificationChannel
-            let resolver = PerScopeKeyResolver.create (newSecretStore ()) cache None
+            let resolver = PerScopeKeyResolver.create (newSecretStore ()) cache (NoOpAuditLog())
             do! resolver.WireToChannel channel
 
             let v =
@@ -310,7 +310,7 @@ let wiringValidatorTests =
         <| withoutReplicaCountEnv (fun () -> async {
             use cache = newCache ()
             let channel = NoOpNotificationChannel() :> INotificationChannel
-            let resolver = PerScopeKeyResolver.create (newSecretStore ()) cache None
+            let resolver = PerScopeKeyResolver.create (newSecretStore ()) cache (NoOpAuditLog())
             do! resolver.WireToChannel channel
 
             let v =
@@ -328,7 +328,7 @@ let wiringValidatorTests =
         <| withoutReplicaCountEnv (fun () -> async {
             use cache = newCache ()
             let channel = FakeDistributedChannel() :> INotificationChannel
-            let resolver = PerScopeKeyResolver.create (newSecretStore ()) cache None
+            let resolver = PerScopeKeyResolver.create (newSecretStore ()) cache (NoOpAuditLog())
             do! resolver.WireToChannel channel
 
             let v =
@@ -348,7 +348,7 @@ let wiringValidatorTests =
 
             try
                 use cache = newCache ()
-                let resolver = PerScopeKeyResolver.create (newSecretStore ()) cache None
+                let resolver = PerScopeKeyResolver.create (newSecretStore ()) cache (NoOpAuditLog())
 
                 // Config says one replica; only the env var says otherwise.
                 let v =
@@ -402,7 +402,7 @@ let wiringDiagnosticsTests =
         testCaseAsync "the panel reports unwired before WireToChannel and wired after"
         <| async {
             use cache = newCache ()
-            let resolver = PerScopeKeyResolver.create (newSecretStore ()) cache None
+            let resolver = PerScopeKeyResolver.create (newSecretStore ()) cache (NoOpAuditLog())
 
             let contributor =
                 PerScopeKeyResolver.CryptoShredFanoutContributor(resolver) :> IDevDiagnosticsContributor
@@ -433,7 +433,7 @@ let wiringDiagnosticsTests =
         testCaseAsync "the panel surfaces unwired destroys that already happened"
         <| async {
             use cache = newCache ()
-            let resolver = PerScopeKeyResolver.create (newSecretStore ()) cache None
+            let resolver = PerScopeKeyResolver.create (newSecretStore ()) cache (NoOpAuditLog())
 
             let contributor =
                 PerScopeKeyResolver.CryptoShredFanoutContributor(resolver) :> IDevDiagnosticsContributor
@@ -455,7 +455,7 @@ let wiringDiagnosticsTests =
         testCaseAsync "compose registers the panel for a per-scope resolver and not for a single-key one"
         <| async {
             use cache = newCache ()
-            let perScope = PerScopeKeyResolver.create (newSecretStore ()) cache None
+            let perScope = PerScopeKeyResolver.create (newSecretStore ()) cache (NoOpAuditLog())
 
             let withPerScope = ServiceCollection() :> IServiceCollection
 
@@ -509,8 +509,7 @@ let private resolverOver (stored: string) = async {
             member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
         }
 
-    let resolver =
-        PerScopeKeyResolver.PerScopeKeyResolver(secrets, newCache (), Some audit)
+    let resolver = PerScopeKeyResolver.PerScopeKeyResolver(secrets, newCache (), audit)
 
     return secrets, resolver :> IBlobEncryptionKeyResolver, rows
 }

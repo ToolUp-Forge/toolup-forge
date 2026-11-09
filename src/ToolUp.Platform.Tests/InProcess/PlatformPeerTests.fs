@@ -362,7 +362,7 @@ let private pollFixtureFusion () =
     let fusion: PeerJobFusion = {
         Scheduler = IPlatformPeerContract.StubScheduler()
         ResultStore = store
-        AuditLog = None
+        AuditLog = (NoOpAuditLog())
     }
 
     store, fusion

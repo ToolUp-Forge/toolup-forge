@@ -310,7 +310,7 @@ let private liveMember
     let fusion: PeerJobFusion = {
         Scheduler = scheduler
         ResultStore = store
-        AuditLog = None
+        AuditLog = (NoOpAuditLog())
     }
 
     let platformPeer = DefaultPlatformPeer() :> IPlatformPeer
@@ -457,7 +457,7 @@ let private inboundContext: PeerCallContext = {
 /// A `TestServer`-hosted gateway whose poll route resolves group handles.
 /// No `PeerJobFusion` is registered: a gateway has no job substrate of its
 /// own, which is exactly the composition the fronting has to work under.
-let private hostGateway (auth: IPeerAuthProvider) (fronting: PeerGroupJobFronting) (audit: IAuditLog option) =
+let private hostGateway (auth: IPeerAuthProvider) (fronting: PeerGroupJobFronting) (audit: IAuditLog) =
     Host
         .CreateDefaultBuilder()
         .ConfigureWebHostDefaults(fun webHost ->
@@ -467,9 +467,7 @@ let private hostGateway (auth: IPeerAuthProvider) (fronting: PeerGroupJobFrontin
                     services.AddSingleton<IPeerAuthProvider>(auth) |> ignore
                     services.AddSingleton<PeerGroupJobFronting>(fronting) |> ignore
 
-                    match audit with
-                    | Some log -> services.AddSingleton<IAuditLog>(log) |> ignore
-                    | None -> ())
+                    services.AddSingleton<IAuditLog>(audit) |> ignore)
                 .Configure(fun (app: IApplicationBuilder) -> app.UseGiraffe JsonRpcPeerHost.routes)
             |> ignore)
         .Build()
@@ -555,7 +553,9 @@ let tests =
             seedSigningKey callerSecrets callerPeer.PeerId callerKey
             let callerAuth = JwtPeerAuthProvider(callerSecrets) :> IPeerAuthProvider
 
-            use host = hostGateway receiverAuth { Map = f.Map; Client = f.Client } None
+            use host =
+                hostGateway receiverAuth { Map = f.Map; Client = f.Client } (NoOpAuditLog())
+
             host.Start()
             use httpClient = host.GetTestClient()
 
@@ -635,7 +635,9 @@ let tests =
             let intruderSecrets = InMemorySecretStore() :> ISecretStore
             seedSigningKey intruderSecrets intruderPeer.PeerId intruderKey
 
-            use host = hostGateway receiverAuth { Map = f.Map; Client = f.Client } None
+            use host =
+                hostGateway receiverAuth { Map = f.Map; Client = f.Client } (NoOpAuditLog())
+
             host.Start()
             use httpClient = host.GetTestClient()
 
@@ -692,7 +694,9 @@ let tests =
             let callerSecrets = InMemorySecretStore() :> ISecretStore
             seedSigningKey callerSecrets callerPeer.PeerId callerKey
 
-            use host = hostGateway receiverAuth { Map = f.Map; Client = f.Client } None
+            use host =
+                hostGateway receiverAuth { Map = f.Map; Client = f.Client } (NoOpAuditLog())
+
             host.Start()
             use httpClient = host.GetTestClient()
 
@@ -745,7 +749,9 @@ let tests =
             let callerSecrets = InMemorySecretStore() :> ISecretStore
             seedSigningKey callerSecrets callerPeer.PeerId callerKey
 
-            use host = hostGateway receiverAuth { Map = f.Map; Client = f.Client } None
+            use host =
+                hostGateway receiverAuth { Map = f.Map; Client = f.Client } (NoOpAuditLog())
+
             host.Start()
             use httpClient = host.GetTestClient()
 
@@ -810,7 +816,7 @@ let tests =
             seedSigningKey callerSecrets callerPeer.PeerId callerKey
 
             use host =
-                hostGateway receiverAuth { Map = f.Map; Client = f.Client } (Some(audit :> IAuditLog))
+                hostGateway receiverAuth { Map = f.Map; Client = f.Client } ((audit :> IAuditLog))
 
             host.Start()
             use httpClient = host.GetTestClient()

@@ -94,7 +94,7 @@ let private newKeyResolver () : PerScopeKeyResolver.PerScopeKeyResolver =
     PerScopeKeyResolver.create
         (FileSecretStore.FileSecretStore(baseDir = newTempDir ()) :> ISecretStore)
         (new MemoryCache(MemoryCacheOptions()) :> IMemoryCache)
-        None
+        (NoOpAuditLog())
 
 /// Minimal `_platform` schema for the config-seed idempotency probe — a
 /// single `currencySymbol` field, so the test can pre-write a custom

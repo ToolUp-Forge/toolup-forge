@@ -669,10 +669,7 @@ let guardToolGrant (ctx: HttpContext) (access: AccessContext) (moduleName: strin
     | :? GrantPolicyGuard.ModuleGrantPolicyRegistry as registry when
         not (GrantPolicyGuard.ModuleGrantPolicyRegistry.isEmpty registry)
         ->
-        let auditLog =
-            match ctx.RequestServices.GetService(typeof<IAuditLog>) with
-            | :? IAuditLog as log -> log
-            | _ -> ToolUp.Platform.NoOpAuditLog() :> IAuditLog
+        let auditLog = ToolUp.Platform.Config.Background.resolveAuditLog ctx.RequestServices
 
         let scopeId =
             match ctx.Items.TryGetValue "ToolUp.StorageScope" with

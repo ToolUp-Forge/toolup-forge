@@ -143,6 +143,8 @@ module private Errors =
 /// validation); `table` defaults to `toolup_entities`.
 type PostgresEntityStore
     (dataSource: NpgsqlDataSource, registry: EntityStore.EntityRegistry, ?table: string, ?auditLog: IAuditLog) =
+    let auditLog = defaultArg auditLog (NoOpAuditLog() :> IAuditLog)
+
     let table = defaultArg table "toolup_entities"
 
     // Best-effort expression-index creation, once per entity type.
@@ -186,15 +188,9 @@ type PostgresEntityStore
     }
 
     let recordAudit (scopeId: string) (event: AuditEvent) = async {
-        match auditLog with
-        | Some log ->
-            try
-                do!
-                    log.Record(AuditScope.shard scopeId, AuditSubject.system "PostgresEntityStore", event)
-                    |> AuditRow.bestEffort
-            with _ ->
-                ()
-        | None -> ()
+        do!
+            auditLog.Record(AuditScope.shard scopeId, AuditSubject.system "PostgresEntityStore", event)
+            |> AuditRow.bestEffort
     }
 
     /// Phase 806 — the lifecycle row for `version` of an entity, stamped

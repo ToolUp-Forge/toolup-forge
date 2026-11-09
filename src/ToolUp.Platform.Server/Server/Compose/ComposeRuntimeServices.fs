@@ -152,7 +152,7 @@ let internal composeWhatsAppSendPolicy
             | :? IExternalContactStore as store -> Some store
             | _ -> None
 
-        WhatsAppSendPolicyFilter(channel, templates, contacts, Some auditLog, logger) :> INotificationChannel
+        WhatsAppSendPolicyFilter(channel, templates, contacts, auditLog, logger) :> INotificationChannel
     | _ -> channel
 
 /// Register the core SDK singletons that every consumer resolves
@@ -216,7 +216,7 @@ let registerCoreSdkSingletons
 
             match sp.GetService(typeof<IExternalContactStore>) with
             | :? IExternalContactStore as contacts ->
-                ExternalContactConsentFilter(beneathConsent, Some contacts, Some auditLog, resolvedLogger)
+                ExternalContactConsentFilter(beneathConsent, Some contacts, auditLog, resolvedLogger)
                 :> INotificationChannel
             | _ -> beneathConsent)
         .AddSingleton<INarrativeStore>(narrativeStore)
@@ -768,7 +768,7 @@ let registerFileManagementRuntime
                 Some notificationChannel
             else
                 None
-        AuditLog = Some auditLog
+        AuditLog = auditLog
     }
 
     // The post-save hooks are the `PostSaveHook`s registered in DI, which a

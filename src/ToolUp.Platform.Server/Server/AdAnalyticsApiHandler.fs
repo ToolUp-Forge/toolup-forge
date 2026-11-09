@@ -48,8 +48,6 @@ open ToolUp.Platform.Config
 
 let private jsonOptions = PlatformJson.options
 
-let private PlatformScope = ScopeKey.PlatformContainer
-
 /// Body cap. `AdImpression` / `AdClick` are small flat records — a
 /// generous 8 KB admits any legitimate payload (long SPA paths
 /// included) while refusing bulk junk before it is deserialised or

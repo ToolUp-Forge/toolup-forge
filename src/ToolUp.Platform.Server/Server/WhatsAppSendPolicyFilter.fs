@@ -117,7 +117,7 @@ type WhatsAppSendPolicyFilter
         inner: INotificationChannel,
         templates: IWhatsAppTemplateRegistry,
         contacts: IExternalContactStore option,
-        auditLog: IAuditLog option,
+        auditLog: IAuditLog,
         logger: ILogger,
         clock: unit -> DateTime
     ) =
@@ -137,12 +137,11 @@ type WhatsAppSendPolicyFilter
             logger.Debug
                 $"[WhatsAppSendPolicy] refused scope=%s{scopeId} count=%d{List.length refused} reason=%s{reason}"
 
-            match auditLog, refused with
-            | _, []
-            | None, _ -> return ()
-            | Some log, recipients ->
+            match refused with
+            | [] -> return ()
+            | recipients ->
                 do!
-                    log.Record(
+                    auditLog.Record(
                         AuditScope.shard scopeId,
                         AuditSubject.system "WhatsAppSendPolicyFilter",
                         NotificationDeliveryRefused {
@@ -240,7 +239,7 @@ type WhatsAppSendPolicyFilter
             inner: INotificationChannel,
             templates: IWhatsAppTemplateRegistry,
             contacts: IExternalContactStore option,
-            auditLog: IAuditLog option,
+            auditLog: IAuditLog,
             logger: ILogger
         ) =
         WhatsAppSendPolicyFilter(inner, templates, contacts, auditLog, logger, fun () -> DateTime.UtcNow)

@@ -410,7 +410,8 @@ let private realStoreOver (events: IEventStore) (audited: bool) =
     let auditLog = AuditLog.EventStoreAuditLog(events, silentLogger) :> IAuditLog
 
     let store =
-        EntityStore.BlobEntityStore(dos, blob, registry, (if audited then Some auditLog else None)) :> IEntityStore
+        EntityStore.BlobEntityStore(dos, blob, registry, (if audited then auditLog else (NoOpAuditLog())))
+        :> IEntityStore
 
     store, auditLog
 

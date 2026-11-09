@@ -242,30 +242,29 @@ let private callback (flowName: string) : HttpHandler =
                                     return! respondText ctx 500 (sprintf "Failed to persist access token: %s" msg)
                                 | Ok(), Ok() ->
                                     // Best-effort audit (GP 6).
-                                    match tryGetService<IAuditLog> ctx with
-                                    | Some auditLog ->
-                                        let warn =
-                                            Background.writeFailureWarner
-                                                "OAuth1aFlowHandler"
-                                                (Background.requestLogger ctx)
-                                                ctx
+                                    let auditLog = ToolUp.Platform.Config.Background.resolveAuditLog ctx.RequestServices
 
-                                        try
-                                            auditLog.Record(
-                                                AuditScope.shard state.ScopeId,
-                                                AuditSubject.fromSubject (resolveAccessContext ctx).Subject,
-                                                OAuth1aConnected {
-                                                    UserId = state.UserId
-                                                    ScopeId = state.ScopeId
-                                                    FlowName = flowName
-                                                    ResourceId = state.ResourceId
-                                                    ConnectedAt = DateTime.UtcNow
-                                                }
-                                            )
-                                            |> Background.startAuditRow warn "OAuth1aConnected audit"
-                                        with ex ->
-                                            warn "OAuth1aConnected audit" ex
-                                    | None -> ()
+                                    let warn =
+                                        Background.writeFailureWarner
+                                            "OAuth1aFlowHandler"
+                                            (Background.requestLogger ctx)
+                                            ctx
+
+                                    try
+                                        auditLog.Record(
+                                            AuditScope.shard state.ScopeId,
+                                            AuditSubject.fromSubject (resolveAccessContext ctx).Subject,
+                                            OAuth1aConnected {
+                                                UserId = state.UserId
+                                                ScopeId = state.ScopeId
+                                                FlowName = flowName
+                                                ResourceId = state.ResourceId
+                                                ConnectedAt = DateTime.UtcNow
+                                            }
+                                        )
+                                        |> Background.startAuditRow warn "OAuth1aConnected audit"
+                                    with ex ->
+                                        warn "OAuth1aConnected audit" ex
 
                                     return! respondRedirect ctx "/?oauth1a=connected"
     }

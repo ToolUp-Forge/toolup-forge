@@ -114,11 +114,11 @@ let private makeEnv (autoProject: bool) : Env =
     let graph = ToolUp.Graph.InMemory.InMemoryGraphStore() :> IGraphStore
     let projectorCell = ref Unchecked.defaultof<IEntityGraphProjection>
 
-    let auditLog: IAuditLog option =
+    let auditLog: IAuditLog =
         if autoProject then
-            Some(ProjectingAuditLog(NoOpAuditLog(), (fun () -> projectorCell.Value)) :> IAuditLog)
+            (ProjectingAuditLog(NoOpAuditLog(), (fun () -> projectorCell.Value)) :> IAuditLog)
         else
-            None
+            (NoOpAuditLog())
 
     let store = BlobEntityStore(dos, blob, registry, auditLog) :> IEntityStore
 
@@ -401,7 +401,7 @@ let tests =
             registry.Register authorReg
             let services = ServiceCollection()
 
-            services.AddSingleton<IEntityStore>(BlobEntityStore(dos, blob, registry, None) :> IEntityStore)
+            services.AddSingleton<IEntityStore>(BlobEntityStore(dos, blob, registry, (NoOpAuditLog())) :> IEntityStore)
             |> ignore
 
             services.AddSingleton<IGraphStore>(ToolUp.Graph.InMemory.InMemoryGraphStore() :> IGraphStore)

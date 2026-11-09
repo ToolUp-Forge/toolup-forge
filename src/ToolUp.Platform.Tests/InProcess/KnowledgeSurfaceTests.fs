@@ -120,7 +120,7 @@ let private mkPublisher (guardrails: NarrativePublishGuardrails) : INarrativePag
     let dos = DataObjectStore(blob) :> IDataObjectStore
     let registry = EntityRegistry()
     registry.Register<PublicPageEntity>(PublicPageEntity.registration)
-    let store = BlobEntityStore(dos, blob, registry, None) :> IEntityStore
+    let store = BlobEntityStore(dos, blob, registry, (NoOpAuditLog())) :> IEntityStore
 
     let publisher =
         PublicRenderingNarrativePagePublisher.create store [ LayoutName "page" ] None guardrails None

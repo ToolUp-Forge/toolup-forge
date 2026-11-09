@@ -183,18 +183,15 @@ module ConversationVisibilityAudit =
     /// write under the default failure policy, and under a compliance-grade
     /// policy it raises on purpose so the action fails rather than
     /// completing un-audited — an elevated open then returns nothing.
-    let private record (audit: IAuditLog option) (scopeId: string) (event: AuditEvent) = async {
-        match audit with
-        | Some log ->
-            do!
-                log.Record(AuditScope.shard scopeId, AuditSubject.system "TeamConversationPolicy", event)
-                |> AuditRow.orRefuse
-        | None -> ()
+    let private record (audit: IAuditLog) (scopeId: string) (event: AuditEvent) = async {
+        do!
+            audit.Record(AuditScope.shard scopeId, AuditSubject.system "TeamConversationPolicy", event)
+            |> AuditRow.orRefuse
     }
 
     /// An elevated open (859.E): the viewer, the author and the conversation.
     let elevatedRead
-        (audit: IAuditLog option)
+        (audit: IAuditLog)
         (scopeId: string)
         (viewer: string)
         (author: string)
@@ -220,7 +217,7 @@ module ConversationVisibilityAudit =
 
     /// A change of a team's level (859.E): who, the old level and the new.
     let levelChanged
-        (audit: IAuditLog option)
+        (audit: IAuditLog)
         (scopeId: string)
         (teamId: string)
         (changedBy: string)
@@ -320,10 +317,7 @@ let teamConversationVisibilityApi (ctx: HttpContext) : TeamConversationVisibilit
                 member _.Error(_, _) = ()
             }
 
-    let audit =
-        match services.GetService(typeof<IAuditLog>) with
-        | :? IAuditLog as a -> Some a
-        | _ -> None
+    let audit = ToolUp.Platform.Config.Background.resolveAuditLog services
 
     let access = ConversationVisibility.accessOf ctx
 

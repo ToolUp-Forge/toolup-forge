@@ -126,7 +126,7 @@ let private mkRig () =
 
     let runtime = {
         FileManagementRuntime.empty with
-            AuditLog = Some(audit :> IAuditLog)
+            AuditLog = (audit :> IAuditLog)
             NotificationChannel = Some(channel :> INotificationChannel)
     }
 
@@ -345,7 +345,7 @@ let tests =
 
             let runtime = {
                 FileManagementRuntime.empty with
-                    AuditLog = Some(audit :> IAuditLog)
+                    AuditLog = (audit :> IAuditLog)
                     NotificationChannel = None
             }
 

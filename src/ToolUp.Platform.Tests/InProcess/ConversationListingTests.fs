@@ -622,7 +622,14 @@ let tests =
                 }
 
                 let! report =
-                    ConversationRetention.sweepContainer storage None silentLogger t0 policy container container
+                    ConversationRetention.sweepContainer
+                        storage
+                        (NoOpAuditLog())
+                        silentLogger
+                        t0
+                        policy
+                        container
+                        container
 
                 Expect.equal report.Purged [ stale ] "the sweep purged the stale conversation"
 

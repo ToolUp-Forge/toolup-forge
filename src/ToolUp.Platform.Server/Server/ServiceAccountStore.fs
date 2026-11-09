@@ -151,7 +151,7 @@ let private listUnder<'T> (docs: BlobDocumentStore<'T>) (logger: ILogger) (prefi
 /// well: a concurrent revoke and a concurrent permission-widening cannot
 /// combine to un-revoke a token, because revocation lives on the token
 /// record and permissions live on the account record.
-type BlobServiceAccountStore(storage: IBlobStorage, audit: IAuditLog option, logger: ILogger) =
+type BlobServiceAccountStore(storage: IBlobStorage, audit: IAuditLog, logger: ILogger) =
 
     // Phase 1026 — fire-and-forget, and observed: a failing sink loses that
     // one row and logs a Warning naming it, never blocking the primary
@@ -206,16 +206,13 @@ type BlobServiceAccountStore(storage: IBlobStorage, audit: IAuditLog option, log
         }
 
     let recordAudit (scopeId: string) (event: AuditEvent) =
-        match audit with
-        | Some a ->
-            let what = sprintf "%s audit" (AuditEvent.eventTypeName event)
+        let what = sprintf "%s audit" (AuditEvent.eventTypeName event)
 
-            try
-                a.Record(AuditScope.shard scopeId, AuditSubject.system "ServiceAccountStore", event)
-                |> Background.startAuditRow auditWarn what
-            with ex ->
-                auditWarn what ex
-        | None -> ()
+        try
+            audit.Record(AuditScope.shard scopeId, AuditSubject.system "ServiceAccountStore", event)
+            |> Background.startAuditRow auditWarn what
+        with ex ->
+            auditWarn what ex
 
     /// Read an account and REFUSE a scope mismatch rather than returning
     /// it. The blob path already carries the scope, so a mismatch here
@@ -475,5 +472,5 @@ type BlobServiceAccountStore(storage: IBlobStorage, audit: IAuditLog option, log
 /// Construct the default blob-backed store. Mirrors
 /// `ShareTokenStore.create`'s shape so the two substrates are composed
 /// the same way.
-let create (storage: IBlobStorage) (audit: IAuditLog option) (logger: ILogger) : IServiceAccountStore =
+let create (storage: IBlobStorage) (audit: IAuditLog) (logger: ILogger) : IServiceAccountStore =
     BlobServiceAccountStore(storage, audit, logger) :> IServiceAccountStore

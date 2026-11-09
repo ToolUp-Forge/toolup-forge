@@ -72,7 +72,7 @@ let private pendingStore (storage: IBlobStorage) : IPendingInviteStore =
 let private freshShareTokenStore () =
     let storage = InMemoryBlobStorage() :> IBlobStorage
     let secrets = InMemorySecretStore() :> ISecretStore
-    ShareTokenStore.create storage secrets None silentLogger
+    ShareTokenStore.create storage secrets (NoOpAuditLog()) silentLogger
 
 let private ctxFor (userId: string) : HttpContext =
     let services = ServiceCollection()
@@ -714,7 +714,7 @@ let pendingInviteExpiryAuditTests =
             let audit = CapturingAuditLog()
 
             let store =
-                ToolUp.Platform.Scope.Teams.InMemoryPendingInviteStore(storage, silentLogger, Some(audit :> IAuditLog))
+                ToolUp.Platform.Scope.Teams.InMemoryPendingInviteStore(storage, silentLogger, (audit :> IAuditLog))
                 :> IPendingInviteStore
 
             // Seed three entries that are still valid at upsert time (so
@@ -762,7 +762,7 @@ let pendingInviteExpiryAuditTests =
             let audit = CapturingAuditLog()
 
             let store =
-                ToolUp.Platform.Scope.Teams.InMemoryPendingInviteStore(storage, silentLogger, Some(audit :> IAuditLog))
+                ToolUp.Platform.Scope.Teams.InMemoryPendingInviteStore(storage, silentLogger, (audit :> IAuditLog))
                 :> IPendingInviteStore
 
             let issuedAt = DateTime.UtcNow.AddDays -3.0
@@ -876,7 +876,7 @@ let expiredInviteVisibilityTests =
             let! teamId = provisionTeam ts "alice@example.com" "bob@example.com"
 
             let store =
-                ToolUp.Platform.Scope.Teams.InMemoryPendingInviteStore(storage, silentLogger, Some(audit :> IAuditLog))
+                ToolUp.Platform.Scope.Teams.InMemoryPendingInviteStore(storage, silentLogger, (audit :> IAuditLog))
                 :> IPendingInviteStore
 
             // A live entry — must stay out of the expired list.
@@ -950,7 +950,7 @@ let expiredInviteVisibilityTests =
             let! teamId = provisionTeam ts "alice@example.com" "bob@example.com"
 
             let store =
-                ToolUp.Platform.Scope.Teams.InMemoryPendingInviteStore(storage, silentLogger, Some(audit :> IAuditLog))
+                ToolUp.Platform.Scope.Teams.InMemoryPendingInviteStore(storage, silentLogger, (audit :> IAuditLog))
                 :> IPendingInviteStore
 
             do!
@@ -989,7 +989,7 @@ let expiredInviteVisibilityTests =
             let! teamId = provisionTeam ts "alice@example.com" "bob@example.com"
 
             let store =
-                ToolUp.Platform.Scope.Teams.InMemoryPendingInviteStore(storage, silentLogger, Some(audit :> IAuditLog))
+                ToolUp.Platform.Scope.Teams.InMemoryPendingInviteStore(storage, silentLogger, (audit :> IAuditLog))
                 :> IPendingInviteStore
 
             // Recorded NOW (inside the GetAuditTrail date pre-filter) with an
@@ -1332,7 +1332,7 @@ let checkMyInvitesTests =
                     (expiredEntry teamId "alice@example.com" (DateTime.UtcNow.AddDays -3.0))
 
             let store =
-                ToolUp.Platform.Scope.Teams.InMemoryPendingInviteStore(storage, silentLogger, Some(audit :> IAuditLog))
+                ToolUp.Platform.Scope.Teams.InMemoryPendingInviteStore(storage, silentLogger, (audit :> IAuditLog))
                 :> IPendingInviteStore
 
             let ctx = ctxForAuthenticatedUser store (signedInAs email)

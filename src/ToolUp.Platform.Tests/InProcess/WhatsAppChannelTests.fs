@@ -142,9 +142,9 @@ let private freshStore () : IExternalContactStore =
     registry.Register ExternalContactStore.registration
 
     let entities =
-        BlobEntityStore(dos, blob, registry, None) :> IEntityStore.IEntityStore
+        BlobEntityStore(dos, blob, registry, (NoOpAuditLog())) :> IEntityStore.IEntityStore
 
-    ExternalContactStore.entityBacked entities None
+    ExternalContactStore.entityBacked entities (NoOpAuditLog())
 
 /// Numbers are unique per seeded contact: the store refuses a second
 /// contact with the same phone number in one address book.
@@ -242,7 +242,7 @@ let private policy
     let audit = RecordingAuditLog()
 
     let filter =
-        WhatsAppSendPolicyFilter(beneath, templates, contacts, Some(audit :> IAuditLog), SilentLogger(), fun () -> now)
+        WhatsAppSendPolicyFilter(beneath, templates, contacts, (audit :> IAuditLog), SilentLogger(), fun () -> now)
 
     beneath, audit, filter :> INotificationChannel
 
@@ -729,7 +729,7 @@ let tests =
                     ExternalContactConsentFilter(
                         policyChannel,
                         Some store,
-                        Some(consentAudit :> IAuditLog),
+                        (consentAudit :> IAuditLog),
                         SilentLogger(),
                         fun () -> now
                     )
@@ -763,7 +763,7 @@ let tests =
                     ExternalContactConsentFilter(
                         policyChannel,
                         Some store,
-                        Some(consentAudit :> IAuditLog),
+                        (consentAudit :> IAuditLog),
                         SilentLogger(),
                         fun () -> now
                     )

@@ -175,7 +175,7 @@ let private verifiedBoot () =
         Record = Some sealedRecord
         Binding = Some sealedBinding
         Transcript = None
-        AuditLog = None
+        AuditLog = (NoOpAuditLog())
         ScopeId = BootVerificationPreflight.PlatformScopeId
         MinimumLevel = None
         Attestor = RuntimeAttestor.unattested
@@ -297,7 +297,7 @@ let tests =
             let answer, verdict =
                 runStage
                     {
-                        AuditLog = Some auditLog
+                        AuditLog = auditLog
                         Anchors = Some anchors
                     }
                     sources

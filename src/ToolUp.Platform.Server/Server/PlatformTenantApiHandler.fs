@@ -103,10 +103,7 @@ let platformTenantApi (ctx: HttpContext) : IPlatformTenantApi =
         | :? seq<ITenantLifecycle> as hooks -> List.ofSeq hooks
         | _ -> []
 
-    let auditLog =
-        match services.GetService(typeof<IAuditLog>) with
-        | :? IAuditLog as a -> Some a
-        | _ -> None
+    let auditLog = Background.resolveAuditLog services
 
     let snapshot =
         match services.GetService(typeof<TenantLifecycleSnapshot>) with
@@ -221,11 +218,8 @@ let platformTenantApi (ctx: HttpContext) : IPlatformTenantApi =
     // when audit is off). IAuditLog.Record is best-effort by contract —
     // a sink failure can't fail an offboard.
     let emitAudit (scopeId: string) (event: AuditEvent) =
-        match auditLog with
-        | Some a ->
-            AuditRow.emit a (AuditScope.shard scopeId) (AuditSubject.system "PlatformTenantApi") event
-            |> AuditRow.bestEffort
-        | None -> async { return () }
+        AuditRow.emit auditLog (AuditScope.shard scopeId) (AuditSubject.system "PlatformTenantApi") event
+        |> AuditRow.bestEffort
 
     // Phase 54e — persist the run's summary durably (best-effort) and
     // refresh the process-local cache. A durable-store failure must not

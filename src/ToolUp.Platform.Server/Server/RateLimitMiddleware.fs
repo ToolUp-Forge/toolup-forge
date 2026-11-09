@@ -186,7 +186,7 @@ module RateLimitMiddleware =
                     // the row is written under the platform shard.
                     do!
                         RateLimitVerdict.auditRefusal
-                            (Some audit)
+                            audit
                             ScopeKey.PlatformContainer
                             ("inbound:" + policy.Route)
                             reason

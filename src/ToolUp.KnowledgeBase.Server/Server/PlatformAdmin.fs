@@ -99,22 +99,17 @@ let private platformDeps (baseDeps: KnowledgeApiDeps) : KnowledgeApiDeps =
 /// mutations. Returns `None` when the audit-log substrate isn't
 /// registered (test bypass, `FeatureMode.Disabled` deployment) — emission is
 /// fire-and-forget and silent when the substrate is absent.
-let private resolveAuditLog (ctx: HttpContext) : IAuditLog option =
-    match ctx.RequestServices.GetService(typeof<IAuditLog>) with
-    | :? IAuditLog as a -> Some a
-    | _ -> None
+let private resolveAuditLog (ctx: HttpContext) : IAuditLog =
+    ToolUp.Platform.Config.Background.resolveAuditLog ctx.RequestServices
 
 /// Emit a Platform KB audit event under `_platform` scope. Fire-and-
 /// forget — `IAuditLog.Record` is contractually best-effort and
 /// swallows its own failures, so audit gaps never cascade into a
 /// failed primary write.
-let private recordAudit (auditLog: IAuditLog option) (event: AuditEvent) =
-    match auditLog with
-    | Some a ->
-        a.Record(AuditScope.platform, AuditSubject.system "KnowledgePlatformAdmin", event)
-        |> AuditRow.orRefuse
-        |> Async.Start
-    | None -> ()
+let private recordAudit (auditLog: IAuditLog) (event: AuditEvent) =
+    auditLog.Record(AuditScope.platform, AuditSubject.system "KnowledgePlatformAdmin", event)
+    |> AuditRow.orRefuse
+    |> Async.Start
 
 /// Fan a `DataRefreshed("PlatformKnowledgeBase", "_platform")` event out
 /// to every connected SSE client so the team-side "Platform Library" page

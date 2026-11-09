@@ -155,6 +155,14 @@ let internal requestLogger (ctx: HttpContext) : ILogger option =
 /// either way, and a logger that itself throws is ignored. The formatting
 /// is `writeFailureLogger`'s, shared with the
 /// stores that have no request in hand.
+/// The composed `IAuditLog`, or `NoOpAuditLog` where none is registered (a
+/// harness that composed no audit). `compose` registers `NoOpAuditLog` when
+/// audit is off, so a component holds a log, never an optional one.
+let resolveAuditLog (services: IServiceProvider) : IAuditLog =
+    match services.GetService(typeof<IAuditLog>) with
+    | :? IAuditLog as log -> log
+    | _ -> NoOpAuditLog() :> IAuditLog
+
 /// The actor of an audit row a request handler emits: the principal of the
 /// request's registered `AccessContext`, or `emitter` as a system actor when
 /// the request resolved none.

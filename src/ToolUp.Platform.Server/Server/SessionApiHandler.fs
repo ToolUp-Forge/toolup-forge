@@ -34,22 +34,19 @@ open ToolUp.Platform.Config.TeamManagement
 /// down — that is precisely the incident during which they need it to
 /// work. The same posture `ModuleVisibilityApiHandler` takes (GP 6).
 let private audit
-    (auditLogOpt: IAuditLog option)
+    (auditLogOpt: IAuditLog)
     (logger: ILogger option)
     (actor: AuditSubject)
     (scopeId: string)
     (event: AuditEvent)
     =
     async {
-        match auditLogOpt with
-        | None -> return ()
-        | Some auditLog ->
-            try
-                do! auditLog.Record(AuditScope.shard scopeId, actor, event) |> AuditRow.orRefuse
-            with ex ->
-                match logger with
-                | Some l -> l.Warn(sprintf "SessionApi: audit write failed for scope %s: %s" scopeId ex.Message)
-                | None -> ()
+        try
+            do! auditLogOpt.Record(AuditScope.shard scopeId, actor, event) |> AuditRow.orRefuse
+        with ex ->
+            match logger with
+            | Some l -> l.Warn(sprintf "SessionApi: audit write failed for scope %s: %s" scopeId ex.Message)
+            | None -> ()
     }
 
 /// Build the `ISessionApi` ToolUp.Remoting handler. Resolves the registry,
@@ -62,10 +59,10 @@ let sessionApi (ctx: HttpContext) : ISessionApi =
         | :? ISessionRegistry as r -> Some r
         | _ -> None
 
-    let auditLogOpt: IAuditLog option =
+    let auditLogOpt: IAuditLog =
         match ctx.RequestServices.GetService typeof<IAuditLog> with
-        | :? IAuditLog as a -> Some a
-        | _ -> None
+        | :? IAuditLog as a -> a
+        | _ -> NoOpAuditLog() :> IAuditLog
 
     let logger: ILogger option =
         match ctx.RequestServices.GetService typeof<ILogger> with

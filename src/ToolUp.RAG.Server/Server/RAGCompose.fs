@@ -259,7 +259,7 @@ let private refuseSaturationThreshold = 5
 /// vector-store scope key (`platform` / `deployment` / `team:{id}`),
 /// matching `KnowledgeIndexLoadFailedPayload.ScopeKey`.
 let emitIngestionDrop
-    (auditLog: IAuditLog option)
+    (auditLog: IAuditLog)
     (notifications: INotificationChannel option)
     (queue: IngestionQueue)
     (logger: ILogger)
@@ -272,27 +272,22 @@ let emitIngestionDrop
     async {
         queue.RecordDrop()
 
-        match auditLog with
-        | Some a ->
-            try
-                do!
-                    a.Record(
-                        AuditScope.shard KnowledgeSourceModule.value,
-                        AuditSubject.system "IngestionQueue",
-                        KnowledgeIngestionDropped {
-                            ScopeKey = scopeKey
-                            DocId = docId
-                            ChunkCount = chunkCount
-                            QueueCapacity = queue.Capacity
-                            Reason = reason
-                        }
-                    )
-                    |> AuditRow.orRefuse
-            with ex ->
-                logger.Warn(
-                    sprintf "[RAGCompose] KnowledgeIngestionDropped audit write failed for %s: %s" docId ex.Message
+        try
+            do!
+                auditLog.Record(
+                    AuditScope.shard KnowledgeSourceModule.value,
+                    AuditSubject.system "IngestionQueue",
+                    KnowledgeIngestionDropped {
+                        ScopeKey = scopeKey
+                        DocId = docId
+                        ChunkCount = chunkCount
+                        QueueCapacity = queue.Capacity
+                        Reason = reason
+                    }
                 )
-        | None -> ()
+                |> AuditRow.orRefuse
+        with ex ->
+            logger.Warn(sprintf "[RAGCompose] KnowledgeIngestionDropped audit write failed for %s: %s" docId ex.Message)
 
         match notifications, originatingUserId with
         | Some ch, Some uid ->
@@ -607,7 +602,7 @@ let internal makeVectorisationHook
                             // surfaced on /health/rag).
                             do!
                                 emitIngestionDrop
-                                    (Some auditLog)
+                                    auditLog
                                     (Some notifications)
                                     queue
                                     logger
@@ -1459,7 +1454,6 @@ let composeRAG (options: RagOptions) (app: ServerApp) : ServerApp =
     // projected from it by factory.
     let ragStaged (substrate: Substrate) (s: IServiceCollection) =
         let eventStore = substrate.EventStore
-        let auditLog = substrate.AuditLog
         let notifications = substrate.Notifications
 
         // Citation seam — RAG-specific (composeWithAI callers never register
@@ -1535,7 +1529,7 @@ let composeRAG (options: RagOptions) (app: ServerApp) : ServerApp =
                     blobStorageForRag,
                     logger = ragLogger,
                     telemetry = telemetry,
-                    auditLog = auditLog,
+                    auditLog = substrate.AuditLog,
                     notifications = notifications
                 )
                 :> IVectorStore)
@@ -1799,7 +1793,7 @@ let composeRAG (options: RagOptions) (app: ServerApp) : ServerApp =
                                 eventStore
                                 (RagRuntime.resolve sp).IngestionStatusStore
                                 options.OverflowPolicy
-                                auditLog
+                                substrate.AuditLog
                                 notifications
                                 ragLogger
                         ))

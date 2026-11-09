@@ -851,7 +851,7 @@ let registerProviderOAuth
                             providerFlows
                             providerProfile
                             secretStore
-                            (Some auditLog)
+                            (auditLog)
                             resolvedLogger
                     )
 

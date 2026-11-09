@@ -125,7 +125,7 @@ let private kbDeps (storage: IBlobStorage) : KnowledgeApiDeps = {
     NarrativeStore = None
     AccessContext = AccessContext.unrestricted (AnonymousSession "user-1")
     OriginalResolver = KnowledgeBase.ServerOriginalSourceResolver.createDefault ()
-    AuditLog = None
+    AuditLog = (NoOpAuditLog())
     RecordEnqueue = ignore
     PublishInventory = fun () -> async.Return()
     MarkIngestionFailed = fun _ _ _ -> async.Return()
@@ -300,7 +300,7 @@ let tests =
                 let! report =
                     ConversationRetention.sweepContainer
                         storage
-                        (Some audit)
+                        (audit)
                         silentLogger
                         now
                         (agePolicy 30)
@@ -348,7 +348,14 @@ let tests =
                 }
 
                 let! report =
-                    ConversationRetention.sweepContainer storage None silentLogger now policy scopeId container
+                    ConversationRetention.sweepContainer
+                        storage
+                        (NoOpAuditLog())
+                        silentLogger
+                        now
+                        policy
+                        scopeId
+                        container
 
                 Expect.equal (Set.ofList report.Purged) (Set.ofList (List.skip 2 ids)) "the two least-recent purged"
 
@@ -366,7 +373,7 @@ let tests =
                 let! report =
                     ConversationRetention.sweepContainer
                         storage
-                        (Some audit)
+                        (audit)
                         silentLogger
                         now
                         ConversationRetentionPolicy.retainForever
@@ -392,7 +399,7 @@ let tests =
                 let! report =
                     ConversationRetention.sweepContainer
                         storage
-                        (Some audit)
+                        (audit)
                         silentLogger
                         now
                         (agePolicy 30)
@@ -421,7 +428,7 @@ let tests =
                 let! report =
                     ConversationRetention.sweepContainer
                         storage
-                        None
+                        (NoOpAuditLog())
                         silentLogger
                         DateTime.UtcNow
                         (agePolicy 30)
@@ -578,7 +585,14 @@ let tests =
                 }
 
                 let! report =
-                    KnowledgeBase.ServerRetentionSweep.sweepScope storage None None silentLogger sweepNow policy scopeId
+                    KnowledgeBase.ServerRetentionSweep.sweepScope
+                        storage
+                        None
+                        (NoOpAuditLog())
+                        silentLogger
+                        sweepNow
+                        policy
+                        scopeId
 
                 Expect.equal report.Purged [ docId ] "the note was selected and purged"
 

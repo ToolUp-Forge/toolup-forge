@@ -192,17 +192,7 @@ let registerEntityStore
         services.AddSingleton<IEntityStore.IEntityStore>(fun (sp: System.IServiceProvider) ->
             let dos = sp.GetService(typeof<IDataObjectStore>) :?> IDataObjectStore
             let bs = sp.GetService(typeof<IBlobStorage>) :?> IBlobStorage
-            // IAuditLog is always registered (Phase 9 ensures even
-            // FeatureMode.Disabled mode resolves to NoOpAuditLog). Wrap in
-            // Some/None for the BlobEntityStore constructor's
-            // option parameter.
-            let auditLogObj = sp.GetService(typeof<IAuditLog>)
-
-            let auditLog =
-                if isNull auditLogObj then
-                    None
-                else
-                    Some(auditLogObj :?> IAuditLog)
+            let auditLog = Background.resolveAuditLog sp
 
             // Phase 19b — pass the BM25 sparse index through when one is
             // registered (RAG composes it as a singleton). Resolved
@@ -253,13 +243,7 @@ let registerUserSchemaStore (services: IServiceCollection) (config: ServerConfig
     | FeatureMode.Enabled ->
         services.AddSingleton<IUserSchemaStore>(fun (sp: System.IServiceProvider) ->
             let dos = sp.GetService(typeof<IDataObjectStore>) :?> IDataObjectStore
-            let auditLogObj = sp.GetService(typeof<IAuditLog>)
-
-            let auditLog =
-                if isNull auditLogObj then
-                    None
-                else
-                    Some(auditLogObj :?> IAuditLog)
+            let auditLog = Background.resolveAuditLog sp
 
             let store =
                 BlobUserSchemaStore.BlobUserSchemaStore(dos, auditLog) :> IUserSchemaStore
@@ -539,11 +523,9 @@ let registerSessionRegistry (services: IServiceCollection) (config: ServerConfig
 /// own `IServiceAccountStore` singleton in DI; `NoServiceAccounts` (the
 /// default) registers nothing at all.
 ///
-/// `IAuditLog` is resolved OPTIONALLY inside the factory rather than
-/// required: a deployment running `AuditLog = FeatureMode.Disabled` composes no
-/// `IAuditLog`, and the store's audit emission is a no-op under `None`.
-/// Requiring it here would make the audit mode a hard dependency of the
-/// substrate, which is the coupling GP 13 exists to prevent.
+/// `IAuditLog` is resolved with `Background.resolveAuditLog`: a deployment
+/// running `AuditLog = FeatureMode.Disabled` composes `NoOpAuditLog`, and the
+/// store's audit emission then costs nothing (GP 13).
 ///
 /// `TryAddSingleton` so a consumer that pre-registered its own store
 /// under `EnabledServiceAccounts` is never overridden.
@@ -555,10 +537,7 @@ let registerServiceAccountStore (services: IServiceCollection) (config: ServerCo
         services.TryAddSingleton<IServiceAccountStore>(fun (sp: System.IServiceProvider) ->
             let storage = sp.GetService(typeof<IBlobStorage>) :?> IBlobStorage
 
-            let audit =
-                match sp.GetService(typeof<IAuditLog>) with
-                | :? IAuditLog as a -> Some a
-                | _ -> None
+            let audit = Background.resolveAuditLog sp
 
             let logger = sp.GetService(typeof<ILogger>) :?> ILogger
             ServiceAccountStore.create storage audit logger)
@@ -740,23 +719,18 @@ let registerColumnMappingStore (services: IServiceCollection) (config: ServerCon
 /// the factory resolves `null` for `IEntityStore` otherwise and fails
 /// loudly at first resolve.
 let registerConsentStateStore (services: IServiceCollection) (config: ServerConfig) : unit =
-    let resolveAuditLog (sp: System.IServiceProvider) : IAuditLog option =
-        match sp.GetService(typeof<IAuditLog>) with
-        | :? IAuditLog as log -> Some log
-        | _ -> None
-
     match config.Stores.ConsentStateStore with
     | NoConsentStateStore -> ()
     | InMemoryConsentStateStore ->
         services.AddSingleton<Consent.ConsentStateStore.IConsentStateStore>(fun (sp: System.IServiceProvider) ->
-            Consent.ConsentStateStore.ConsentStateStore.inMemory (resolveAuditLog sp))
+            Consent.ConsentStateStore.ConsentStateStore.inMemory (Background.resolveAuditLog sp))
         |> ignore
     | EntityBackedConsentStateStore ->
         services.AddSingleton<Consent.ConsentStateStore.IConsentStateStore>(fun (sp: System.IServiceProvider) ->
             let entityStore =
                 sp.GetService(typeof<IEntityStore.IEntityStore>) :?> IEntityStore.IEntityStore
 
-            Consent.ConsentStateStore.ConsentStateStore.entityBacked entityStore (resolveAuditLog sp))
+            Consent.ConsentStateStore.ConsentStateStore.entityBacked entityStore (Background.resolveAuditLog sp))
         |> ignore
 
 /// Phase 6f.A — register the `IExternalContactStore` when
@@ -784,10 +758,7 @@ let registerExternalContactStore (services: IServiceCollection) (config: ServerC
                 let entityStore =
                     sp.GetService(typeof<IEntityStore.IEntityStore>) :?> IEntityStore.IEntityStore
 
-                let auditLog =
-                    match sp.GetService(typeof<IAuditLog>) with
-                    | :? IAuditLog as log -> Some log
-                    | _ -> None
+                let auditLog = Background.resolveAuditLog sp
 
                 ExternalContactStore.entityBacked entityStore auditLog)
             |> ignore
@@ -1020,10 +991,7 @@ let registerBackupCoordinator
                     failwith
                         "ServerConfig.Backup = BackupEnabled but no IBackupTarget is registered — register one (BackupTarget.ofStorage <destination IBlobStorage>) through ComposeExtensions.ServiceConfig, or set Backup = NoBackup."
 
-            let auditLog =
-                match sp.GetService(typeof<IAuditLog>) with
-                | :? IAuditLog as a -> Some a
-                | _ -> None
+            let auditLog = Background.resolveAuditLog sp
 
             let logger =
                 match sp.GetService(typeof<ILogger>) with
@@ -1034,7 +1002,7 @@ let registerBackupCoordinator
                 innerBlobStorage,
                 target,
                 ?keyResolver = encryptionKeyResolver,
-                ?auditLog = auditLog,
+                auditLog = auditLog,
                 ?logger = logger
             )
             :> Backup.IBackupCoordinator)
@@ -1042,17 +1010,14 @@ let registerBackupCoordinator
         services.TryAddSingleton<RestoreDrill.RestoreDrillVerifier>(fun (sp: System.IServiceProvider) ->
             let coordinator = sp.GetRequiredService<Backup.IBackupCoordinator>()
 
-            let auditLog =
-                match sp.GetService(typeof<IAuditLog>) with
-                | :? IAuditLog as a -> Some a
-                | _ -> None
+            let auditLog = Background.resolveAuditLog sp
 
             let logger =
                 match sp.GetService(typeof<ILogger>) with
                 | :? ILogger as l -> Some l
                 | _ -> None
 
-            RestoreDrill.RestoreDrillVerifier(coordinator, innerBlobStorage, ?auditLog = auditLog, ?logger = logger))
+            RestoreDrill.RestoreDrillVerifier(coordinator, innerBlobStorage, auditLog = auditLog, ?logger = logger))
 
         services.AddSingleton<HealthChecks.IHealthCheck>(fun (sp: System.IServiceProvider) ->
             RestoreDrill.RestoreDrillHealthCheck(sp.GetRequiredService<RestoreDrill.RestoreDrillVerifier>())

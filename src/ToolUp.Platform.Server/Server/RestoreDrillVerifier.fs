@@ -135,22 +135,21 @@ type RestoreDrillVerifier
         ?indexSampleSize: int
     ) =
 
+    let auditLog = defaultArg auditLog (NoOpAuditLog() :> IAuditLog)
+
     let now = defaultArg clock (fun () -> DateTime.UtcNow)
     let sampleSize = defaultArg indexSampleSize 200
     let mutable lastOutcome: DrillOutcome option = None
     let gate = obj ()
 
     let audit (event: AuditEvent) = async {
-        match auditLog with
-        | Some log ->
-            try
-                do!
-                    log.Record(AuditScope.platform, AuditSubject.system "RestoreDrillVerifier", event)
-                    |> AuditRow.orRefuse
-            with ex ->
-                logger
-                |> Option.iter (fun l -> l.Warn(sprintf "[Phase 445] drill audit emission failed: %s" ex.Message))
-        | None -> ()
+        try
+            do!
+                auditLog.Record(AuditScope.platform, AuditSubject.system "RestoreDrillVerifier", event)
+                |> AuditRow.orRefuse
+        with ex ->
+            logger
+            |> Option.iter (fun l -> l.Warn(sprintf "[Phase 445] drill audit emission failed: %s" ex.Message))
     }
 
     /// Invariant 1 — what was written re-hashes to the manifest.

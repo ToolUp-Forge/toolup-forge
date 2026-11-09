@@ -26,8 +26,6 @@ open ToolUp.Platform.Config
 // `ToolUp.Platform.ConsentEvent` verbatim — the wire is the same
 // record type the client serialises.
 
-let private PlatformScope = ScopeKey.PlatformContainer
-
 let private jsonOptions = PlatformJson.options
 
 let private consentHandler: HttpHandler =
