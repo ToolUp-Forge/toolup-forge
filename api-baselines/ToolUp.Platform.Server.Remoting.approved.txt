@@ -196,6 +196,10 @@ ToolUp.Remoting.Json.SystemTextJson.Int64Converter (class)
 ToolUp.Remoting.Json.SystemTextJson.Int64Converter..ctor()
 ToolUp.Remoting.Json.SystemTextJson.Int64Converter.Read(System.Text.Json.Utf8JsonReader&, System.Type, System.Text.Json.JsonSerializerOptions) : System.Int64
 ToolUp.Remoting.Json.SystemTextJson.Int64Converter.Write(System.Text.Json.Utf8JsonWriter, System.Int64, System.Text.Json.JsonSerializerOptions) : System.Void
+ToolUp.Remoting.Json.SystemTextJson.PlatformJson (class)
+ToolUp.Remoting.Json.SystemTextJson.PlatformJson.deserialize`1(System.Byte[]) : Microsoft.FSharp.Core.FSharpResult`2[T, System.String]
+ToolUp.Remoting.Json.SystemTextJson.PlatformJson.options : System.Text.Json.JsonSerializerOptions { get }
+ToolUp.Remoting.Json.SystemTextJson.PlatformJson.serialize`1(T) : System.Byte[]
 ToolUp.Remoting.Json.SystemTextJson.StringConverter (class)
 ToolUp.Remoting.Json.SystemTextJson.StringConverter..ctor()
 ToolUp.Remoting.Json.SystemTextJson.StringConverter.Read(System.Text.Json.Utf8JsonReader&, System.Type, System.Text.Json.JsonSerializerOptions) : System.String
