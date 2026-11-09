@@ -1,4 +1,4 @@
-Codemod: 105 site(s) in 19 file(s) need human review (not rewritten):
+Codemod: 107 site(s) in 19 file(s) need human review (not rewritten):
   src/Client/App.fs
     L14 [66-dev-default-user-id] DevDefaultUserId = "dev-admin"
       -> Phase 66: `ClientConfig.DevDefaultUserId` is deleted — the public-utility-with-admin shape it approximated is `Surfaces = Surfaces.anonymousAndIndividual` (worked example 4)
@@ -137,10 +137,14 @@ Codemod: 105 site(s) in 19 file(s) need human review (not rewritten):
       -> Phase 873: if this implements `IJobScheduler`, `Cancel` / `Disable` / `Enable` answer `Result<unit, JobTransitionError>`: a scheduler over `SchedulerPolicy.setStatus` maps its `JobStoreError` with `JobTransitionError.StoreFailed`, and a lease it could not take is `Busy`
     L35 [1062-record-call] do! auditLog.Record(scopeId, event)
       -> Phase 1062: if this is `IAuditLog.Record`, it answers `Result<unit, AuditWriteError>` (an `Error` only under `RefuseAction`): propagate it (`AuditRow.emit`), `|> AuditRow.orRefuse` where the site has no error channel, or `|> AuditRow.bestEffort` where the row records a decision already taken
+    L35 [1062-record-arguments] do! auditLog.Record(scopeId, event)
+      -> Phase 1062: if this is `IAuditLog.Record` / `GetAuditTrail` / `AuditRow.emit`, the scope is an `AuditScope` by its shape (`AuditScope.team teamId`, `AuditScope.platform`, `StorageScope.auditScope scope`, `ResolvedScope.auditScope scope`, or `AuditScope.shard key` for a string-keyed store's shard) and `Record` takes the row's actor next: `AuditSubject.fromSubject` of the request's principal where the site holds one, else `AuditSubject.system "<component>"` — never an invented user
     L42 [1062-audit-implementer] interface IAuditLog with
       -> Phase 1062: an `IAuditLog` implementer: `Record` answers `Async<Result<unit, AuditWriteError>>` and never raises — `Ok` once the row lands, `Error StoreUnavailable` for a lost row when the deployment's policy refuses, `Ok` when it continues
     L47 [1062-permission-store-implementer] interface IPermissionStore with
       -> Phase 1062: an `IPermissionStore` implementer: the reads answer `Result<_, PermissionStoreError>` (wrap a document in `Ok`; an absent one is `Ok TeamPermissions.empty`; an unreadable one is `Error`, never empty), and `UpdateTeamPermissions(teamId, change)` is one guarded read-modify-write
+    L54 [1062-audit-log-match] let quiet auditLog = match auditLog with Some log -> log | None -> NoOpAuditLog() :> IAuditLog
+      -> Phase 1062: if this matches an audit log's `Some` / `None`, the log is no longer optional: keep the `Some` arm over the value (over `NoOpAuditLog` it does what the `None` arm did)
   src/Server/Jobs.fs
     L8 [1066-schedule-call] match! scheduler.Schedule registration with
       -> Phase 1066: `Schedule` answers `Ok(Scheduled jobId)` for a job it created and `Ok(Coalesced jobId)` for one an idempotency key recovered: `Ok _` still compiles; a site that reads the id matches both (`Ok(Scheduled jobId | Coalesced jobId)`) or calls `ScheduleOutcome.jobId`, and a site that fires what it schedules fires only `Scheduled`, so a replayed request runs once

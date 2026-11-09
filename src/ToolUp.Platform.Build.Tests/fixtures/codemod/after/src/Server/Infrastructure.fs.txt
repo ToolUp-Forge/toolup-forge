@@ -40,9 +40,15 @@ let gate registry (auditLog: IAuditLog) =
 
 type QuietLog() =
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async { return Ok() }
-        member _.GetAuditTrail(_, _, _) = async { return [] }
+        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async { return Ok() }
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
 
 type FixedPermissions() =
     interface IPermissionStore with
         member _.GetTeamPermissions teamId = async { return TeamPermissions.empty }
+
+let envelope scopeId at event = AuditEnvelope.create AuditSubject.unattributed scopeId at event
+
+let sink (audit: IAuditLog) = audit
+
+let quiet auditLog = match auditLog with Some log -> log | None -> NoOpAuditLog() :> IAuditLog

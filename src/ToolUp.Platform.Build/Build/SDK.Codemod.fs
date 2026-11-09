@@ -1018,6 +1018,40 @@ module Codemod =
             @"\(?\bSome\s*\(?\s*(\w*[aA]udit\w*|\w*[lL]og)\s*\)?\)?\s+(?:Async\.Start|Async\.StartImmediate)\b"
             "$1"
             "`(Some auditLog) Async.Start` (an `IAuditLog option` and its `schedule`) → `auditLog`"
+        // A custom IAuditLog takes the typed scope and the row's actor; an
+        // implementation keyed on the event store's string matches the scope
+        // by its stream key.
+        rewrite
+            "1062-record-implementer-scope"
+            CodemodMigration.AuditFailureAsData
+            CodemodFileClass.Source
+            @"(\bmember\s+\w+\.Record\s*\(\s*)(\w+)(\s*,\s*)(_?audit\w*|_?event\w*|_)(\s*\))"
+            "${1}AuditScope.StreamKey ${2}, _actor, ${4}${5}"
+            "`member _.Record(scopeId, audit)` → `member _.Record(AuditScope.StreamKey scopeId, _actor, audit)` (`Record` takes `AuditScope * actor: AuditSubject * AuditEvent`; a decorator forwards both unchanged)"
+        rewrite
+            "1062-get-audit-trail-implementer-scope"
+            CodemodMigration.AuditFailureAsData
+            CodemodFileClass.Source
+            @"(\bmember\s+\w+\.GetAuditTrail\s*\(\s*)(\w+)(\s*,)"
+            "${1}AuditScope.StreamKey ${2}${3}"
+            "`member _.GetAuditTrail(scopeId, …)` → `member _.GetAuditTrail(AuditScope.StreamKey scopeId, …)`"
+        // The envelope carries the actor the row persisted, never one guessed
+        // from the stream key.
+        rewrite
+            "1062-envelope-from-scope-id"
+            CodemodMigration.AuditFailureAsData
+            CodemodFileClass.Source
+            @"\bAuditEnvelope\.fromScopeId\b"
+            "AuditEnvelope.create AuditSubject.unattributed"
+            "`AuditEnvelope.fromScopeId scopeId at event` → `AuditEnvelope.create AuditSubject.unattributed scopeId at event` (or the actor the row carried)"
+        // An IAuditLog option is an IAuditLog; NoOpAuditLog is the absent value.
+        rewrite
+            "1062-audit-log-option"
+            CodemodMigration.AuditFailureAsData
+            CodemodFileClass.Source
+            @"\b((?:ToolUp\.Platform\.)?IAuditLog)\s+option\b"
+            "$1"
+            "`IAuditLog option` → `IAuditLog` (pass `NoOpAuditLog()` where `None` was passed)"
     ]
 
     // ── The review rules ──────────────────────────────────────────────
@@ -1591,6 +1625,18 @@ module Codemod =
             CodemodFileClass.Source
             @"\binterface\s+(?:[\w.]+\.)?IPermissionStore\b"
             "an `IPermissionStore` implementer: the reads answer `Result<_, PermissionStoreError>` (wrap a document in `Ok`; an absent one is `Ok TeamPermissions.empty`; an unreadable one is `Error`, never empty), and `UpdateTeamPermissions(teamId, change)` is one guarded read-modify-write"
+        review
+            "1062-record-arguments"
+            CodemodMigration.AuditFailureAsData
+            CodemodFileClass.Source
+            @"^(?!.*\bmember\b).*(?:\.(?:Record|GetAuditTrail)\s*\(\s*|\bAuditRow\.emit\s+\w+\s+)(?!\(?(?:AuditScope|StorageScope|ResolvedScope)\.)[\w""(]"
+            "if this is `IAuditLog.Record` / `GetAuditTrail` / `AuditRow.emit`, the scope is an `AuditScope` by its shape (`AuditScope.team teamId`, `AuditScope.platform`, `StorageScope.auditScope scope`, `ResolvedScope.auditScope scope`, or `AuditScope.shard key` for a string-keyed store's shard) and `Record` takes the row's actor next: `AuditSubject.fromSubject` of the request's principal where the site holds one, else `AuditSubject.system \"<component>\"` — never an invented user"
+        review
+            "1062-audit-log-match"
+            CodemodMigration.AuditFailureAsData
+            CodemodFileClass.Source
+            @"\bmatch\s+\w*[aA]udit\w*\s+with\b"
+            "if this matches an audit log's `Some` / `None`, the log is no longer optional: keep the `Some` arm over the value (over `NoOpAuditLog` it does what the `None` arm did)"
     ]
 
 

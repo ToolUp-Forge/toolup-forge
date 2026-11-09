@@ -38,7 +38,6 @@ module PageAmbient =
 
     let memoryCache: IMemoryCache = failwith "ambient"
 
-    /// Where `EncryptionKeyCreated` / key-destruction events land. The
-    /// constructor takes it as `IAuditLog option`, so the block passes
-    /// `Some auditLog`.
+    /// Where `EncryptionKeyCreated` / key-destruction events land
+    /// (`NoOpAuditLog()` records nothing).
     let auditLog: IAuditLog = failwith "ambient"

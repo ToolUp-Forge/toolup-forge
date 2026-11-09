@@ -342,7 +342,7 @@ Three new `AuditEvent` cases under `_platform.share_tokens`:
 - `ShareTokenUsed` — payload carries `TokenId`, `ResourceKind`, `ResourceId`, `AttributedHandle option`. **No `UserId`** — consumers are anonymous; the token IS the authentication.
 - `ShareTokenRevoked` — payload carries `UserId` (actor), `TokenId`, `ResourceKind`, `ResourceId`.
 
-`BlobShareTokenStore` takes an `IAuditLog option` constructor parameter — `Some` when `ServerConfig.AuditLog = FeatureMode.Enabled`, `None` otherwise. Audit emission is fire-and-forget per the existing `IAuditLog.Record` contract.
+`BlobShareTokenStore` takes an `IAuditLog` constructor parameter — the composed log when `ServerConfig.AuditLog = FeatureMode.Enabled`, `NoOpAuditLog` otherwise. Audit emission is fire-and-forget, observed (`Background.startAuditRow`).
 
 ### Anonymous-route registry
 

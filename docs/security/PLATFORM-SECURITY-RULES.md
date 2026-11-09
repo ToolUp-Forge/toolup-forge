@@ -1190,12 +1190,17 @@ section eliminates structurally.
 > every call site says what it does with the answer (`AuditRow.emit` to
 > propagate, `AuditRow.orRefuse` where the site has no error channel,
 > `AuditRow.bestEffort` where the row records a decision already taken), so no
-> site swallows a refusal by accident.
+> site swallows a refusal by accident. `Record` takes the typed `AuditScope` and
+> the row's actor (`AuditSubject`: the request's principal, or the emitting
+> component as `SystemAudit`), and the actor is persisted with the row — a
+> replicated row names who it is attributed to, never a guess from its stream
+> key. A component holds an `IAuditLog`, never an optional one; `NoOpAuditLog` is
+> the value of a deployment with audit off.
 > **Evidence:** `src/ToolUp.Platform.Core/Shared/Audit/AuditEnvelope.fs`
 > (`IAuditLog`, `AuditWriteError`, `AuditRow`) ·
 > `src/ToolUp.Platform.Server/Server/AuditLog.fs` (`EventStoreAuditLog`, the
 > seam) · `src/ToolUp.Platform.Tests/InProcess/AuditEmitTests.fs` (each mode
-> pinned, and a classified read refused under `RefuseAction`) ·
+> pinned, a classified read refused under `RefuseAction`, and the actor round-trip) ·
 > `src/ToolUp.Platform.Core/Shared/Config/RuntimeModes.fs`
 > (`AuditFailurePolicy`) ·
 > `src/ToolUp.Platform.Server/Server/AuditFallbackStore.fs` ·
