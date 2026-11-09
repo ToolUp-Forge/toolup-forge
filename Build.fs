@@ -4451,13 +4451,14 @@ let main args =
         "the ASP.NET Core IXmlRepository adapter: it hands the framework's opaque key XML to the key manager, which owns the policy for an unreadable key"
         "IdempotencySweepJob.fs",
         "a maintenance sweep that deletes only what it read and proved expired; an unreadable entry is left for the next pass"
+        "ResultStore.fs",
+        "the lineage outbox is a queue, not a document store: a relay pass reads each staged intent once, leaves an unreadable one in place for the next pass, and MOVES a poison one out of the queue (lineage-outbox-poison/) so the relay drains; the document store's leave-in-place quarantine would wedge it"
     ]
 
     let blobDownloadAllowList = [
         // Excluded from the move by Phase 1061's own rule until 976 and 979 ship.
         "EntityOutbox.fs"
         "Remoting/Idempotency.fs"
-        "ResultStore.fs"
     ]
 
     let runVerifyBlobDownloads (root: string) : int =
