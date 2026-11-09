@@ -1,0 +1,16 @@
+module Server.Remoting
+
+open ToolUp.Remoting.Server
+
+let errorHandler (ex: exn) (_: RouteInfo<_>) =
+    match ex with
+    | :? System.ArgumentException -> ErrorResult.PropagateCategorised(ErrorCategory.User, box ex.Message)
+    | _ -> ErrorResult.Propagate ex.Message
+
+let unclassified () = MethodClassification.Unclassified
+
+let options = { Remoting.createApi () with ResponseSerialization = MessagePack }
+
+let describe (result: InvocationResult) = string result
+
+let ticks = AsyncStream.fromCallback (fun n -> n > 3) (fun emit -> async { emit 1 })

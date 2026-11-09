@@ -27,7 +27,7 @@ type FeedApi = {
 
 Produce the `IAsyncEnumerable<'T>` however you like (an F# `taskSeq { }` from `FSharp.Control.TaskSeq`, a C#-style iterator, or a hand-rolled `IAsyncEnumerable`). The dispatcher iterates it and frames each element.
 
-**Constraint — pre-flight attributes are refused on streaming methods.** The SSE short-circuit runs *before* the auth / rate-limit / audit / idempotency pre-flight, so those attributes can't be enforced on a streaming method. The adapter **refuses to start** if a streaming method carries `[<RequiresRole>]` / `[<RequiresClaim>]` / `[<TenantScoped>]` / `[<RateLimit>]` / `[<Audit>]` / `[<Idempotent>]` (recognised across both the server-tier family and the `ToolUp.Platform.*` mirrors). `[<AllowAnonymous>]` / `[<PublicEndpoint>]` are the only markers honoured — gate a streaming method inside its handler, or expose it anonymously and gate the non-streaming surface around it, until per-frame pre-flight composition lands.
+**A streaming call is a call.** Since Phase 1056 a streaming method runs through the same request pipeline as every other method (`docs/migrations/1056-redesign-b-request-pipeline-as-stages-with-streaming-inside.md`): it may carry `[<RequiresRole>]` / `[<RequiresClaim>]` / `[<TenantScoped>]` (an unauthorised caller is refused with 401 before the producer runs), `[<RateLimit>]` (charged when the stream opens) and `[<Audit>]` (one row when the stream opens), in either attribute family. Its argument decodes through the same seam as a unary method's, so a malformed body is a 400 `validation` envelope, never a call on a constructed default. The one marker it cannot carry is `[<Idempotent>]`: a stream has no single response to memoise, so the composition refuses to start (`ContractRefusal.IdempotentStreaming`). The producer is handed the request's abort token, so a client that leaves cancels it.
 
 ## Producing the stream from a callback (`AsyncStream.fromCallback`)
 
@@ -91,8 +91,8 @@ Streaming methods are **unary** on the client as on the server (one argument, or
 
 1. Declare an `'arg -> IAsyncEnumerable<'T>` method; `curl -N` the route with a JSON-array body and observe `event: chunk` frames followed by `event: complete`.
 2. Throw inside the sequence and observe a single `event: error` frame with the message (no stack trace).
-3. Add a `[<RequiresRole>]` to the streaming method and confirm the adapter refuses to start, naming the method + the unenforceable attribute.
-4. Contract pack: `InProcess/StreamingTests.fs` (`ToolUp.Platform.Tests`) — classification, the unenforceable-attribute refusal (both families), SSE frame formatting incl. multiline framing, and first-arg parsing.
+3. Add a `[<RequiresRole>]` to the streaming method, compose an auth resolver, and confirm a caller without the role gets a 401 and no frame.
+4. Contract packs: `InProcess/StreamingTests.fs` — classification, markers read onto a streaming method's contract (both families), SSE frame formatting incl. multiline framing, typed element encoding; `InProcess/StreamingPipelineTests.fs` — cancellation reaches the producer, back-pressure holds, a malformed argument is a 400, a role-gated streaming method composes and refuses.
 
 ## Shipped — the AI chat turn, one implementation, two sinks (69c.tail A → 69c.F)
 
@@ -129,7 +129,7 @@ AsyncStream.fromSubscription isTerminalStatus (fun emit ->
 - `ToolUp.AI.ConversationReplay.replayStream` — Phase 53's replay, one `ConversationReplayEvent` per transition instead of N provider calls of silence followed by one result. Built as ONE implementation over an injected sink (`replayWith emit`), so `replay` is that with `ignore` and is byte-for-byte what it was.
 - `KnowledgeBase.Server.ingestionStatusStream` — one document's ingestion status as it changes, over a new change-notification seam on the KB status cache (`IngestionStatusFeed`, written to by `setStatus` / `updateStatus` / `clearStatus`). Its element type is `IngestionStatus` itself, the published wire contract unchanged, so a consumer decodes each chunk with the parser it already has for `GetStatus`. The 2 s client poll is untouched and remains the restart path — a cache miss falls back to the persisted index, which a subscription cannot.
 
-**Why both are library surfaces and not endpoints.** A streaming method cannot carry a pre-flight attribute — the SSE short-circuit runs before auth / rate-limit / audit / idempotency, and the adapter REFUSES TO START on a streaming method that declares one. Replay is a privileged operator action whose authority arrives in the `AccessContext` its caller supplies, and KB status is scope-gated through its request deps. So the composer declares a server-only record over its own gated per-request closure — the shape `AIStreamingApi` uses — and mounts it beside its existing surface:
+**Why both are library surfaces and not endpoints.** Replay is a privileged operator action whose authority arrives in the `AccessContext` its caller supplies, and KB status is scope-gated through its request deps — authority a method marker does not express. So the composer declares a server-only record over its own gated per-request closure — the shape `AIStreamingApi` uses — and mounts it beside its existing surface (since Phase 1056 such a record may also carry an authorisation marker, which the pipeline enforces for the stream):
 
 ```fsharp skip=fragment
 type KnowledgeStreamingApi = {
