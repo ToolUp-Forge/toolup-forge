@@ -195,8 +195,11 @@ ToolUp.Platform.Infra.BlobDocumentStore`1..ctor(ToolUp.Platform.BlobStorage+IBlo
 ToolUp.Platform.Infra.BlobDocumentStore`1.Delete(ToolUp.Platform.ScopeKey, ToolUp.Platform.Infra.DocPath) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.Infra.BlobMapStoreError]]
 ToolUp.Platform.Infra.BlobDocumentStore`1.List(ToolUp.Platform.ScopeKey, System.String, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.Infra.DocPath, Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Platform.Infra.BlobMapStoreError]]]]
 ToolUp.Platform.Infra.BlobDocumentStore`1.Read(ToolUp.Platform.ScopeKey, ToolUp.Platform.Infra.DocPath) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[T], ToolUp.Platform.Infra.BlobMapStoreError]]
+ToolUp.Platform.Infra.BlobDocumentStore`1.ReadMany(ToolUp.Platform.ScopeKey, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Infra.DocPath], System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.Infra.DocPath, Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Platform.Infra.BlobMapStoreError]]]]
 ToolUp.Platform.Infra.BlobDocumentStore`1.SupportsConditionalWrites(ToolUp.Platform.ScopeKey, ToolUp.Platform.Infra.DocPath) : Microsoft.FSharp.Control.FSharpAsync`1[System.Boolean]
 ToolUp.Platform.Infra.BlobDocumentStore`1.Update`1(ToolUp.Platform.ScopeKey, ToolUp.Platform.Infra.DocPath, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpOption`1[T], ToolUp.Platform.Infra.BlobUpdate`2[T, R]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[R, ToolUp.Platform.Infra.BlobMapStoreError]]
+ToolUp.Platform.Infra.BlobDocuments (class)
+ToolUp.Platform.Infra.BlobDocuments.readAvailable`1(ToolUp.Platform.Infra.BlobDocumentStore`1[T], ToolUp.Platform.ILogger, System.String, ToolUp.Platform.ScopeKey, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[T]]
 ToolUp.Platform.Infra.BlobDpKeyRing (class)
 ToolUp.Platform.Infra.BlobDpKeyRing.Container : System.String (literal)
 ToolUp.Platform.Infra.BlobDpKeyRing.Prefix : System.String (literal)
