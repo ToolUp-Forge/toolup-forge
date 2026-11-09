@@ -118,8 +118,8 @@ let resolveCallModel (configured: string) (options: AIProviderCallOptions) : str
         configured
         options
 
-type CopilotAIProvider private (endpoint: string, apiVersion: string, auth: CopilotAuth, model: string) =
-    let client = sharedClient.Value
+type CopilotAIProvider
+    private (endpoint: string, apiVersion: string, auth: CopilotAuth, model: string, client: HttpClient) =
 
     // The absolute Azure OpenAI request URL. `model` is the deployment name.
     let requestUrl =
@@ -164,7 +164,8 @@ type CopilotAIProvider private (endpoint: string, apiVersion: string, auth: Copi
             endpoint,
             defaultArg apiVersion DefaultApiVersion,
             ApiKeyAuth(fun () -> async { return Some apiKey }),
-            defaultArg model DefaultModel
+            defaultArg model DefaultModel,
+            sharedClient.Value
         )
 
     /// Construct reading the api-key from the secret store on every request.
@@ -174,7 +175,8 @@ type CopilotAIProvider private (endpoint: string, apiVersion: string, auth: Copi
             endpoint,
             defaultArg apiVersion DefaultApiVersion,
             ApiKeyAuth(fun () -> secretStore.GetSecret(ScopeKey.PlatformContainer, SecretKeyName)),
-            defaultArg model DefaultModel
+            defaultArg model DefaultModel,
+            sharedClient.Value
         )
 
     /// Construct with Microsoft Entra ID auth via an `Azure.Core`
@@ -186,7 +188,18 @@ type CopilotAIProvider private (endpoint: string, apiVersion: string, auth: Copi
             endpoint,
             defaultArg apiVersion DefaultApiVersion,
             EntraAuth credential,
-            defaultArg model DefaultModel
+            defaultArg model DefaultModel,
+            sharedClient.Value
+        )
+
+    /// Construct over an injected client, so a test can answer the request offline.
+    internal new(endpoint: string, apiKey: string, model: string, client: HttpClient) =
+        CopilotAIProvider(
+            endpoint,
+            DefaultApiVersion,
+            ApiKeyAuth(fun () -> async { return Some apiKey }),
+            model,
+            client
         )
 
     interface IAIProvider with
@@ -410,7 +423,7 @@ type CopilotAIProvider private (endpoint: string, apiVersion: string, auth: Copi
                 if served = model then
                     this :> IAIProvider
                 else
-                    CopilotAIProvider(endpoint, apiVersion, auth, served) :> IAIProvider
+                    CopilotAIProvider(endpoint, apiVersion, auth, served, client) :> IAIProvider
 
             target.SendMessage(messages, tools, systemPrompt, onStream, retryPolicy)
             |> AIProviderCallResponse.attach outcome
@@ -422,7 +435,7 @@ type CopilotAIProvider private (endpoint: string, apiVersion: string, auth: Copi
                 if served = model then
                     this :> IAIProvider
                 else
-                    CopilotAIProvider(endpoint, apiVersion, auth, served) :> IAIProvider
+                    CopilotAIProvider(endpoint, apiVersion, auth, served, client) :> IAIProvider
 
             target.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy)
             |> AIProviderCallResponse.attach outcome

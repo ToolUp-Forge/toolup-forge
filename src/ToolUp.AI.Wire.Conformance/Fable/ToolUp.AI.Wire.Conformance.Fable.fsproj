@@ -60,6 +60,7 @@
         <!-- Numbers at the precision boundary, and the writer's string escaping. -->
         <Compile Include="..\Shared\NumberFixtures.fs" />
         <Compile Include="..\Shared\StringFixtures.fs" />
+        <Compile Include="..\Shared\ConnectorFixtures.fs" />
         <Compile Include="..\Shared\Corpus.fs" />
         <Compile Include="..\Shared\ConformanceSuite.fs" />
         <Compile Include="ProgramFable.fs" />

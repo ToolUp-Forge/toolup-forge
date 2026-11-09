@@ -85,8 +85,7 @@ let canServeModel (modelId: string) : bool = ModelIdFamily.isGoogle modelId
 let resolveCallModel (configured: string) (options: AIProviderCallOptions) : string * ModelOverrideOutcome =
     ModelOverrideOutcome.resolve canServeModel "not a Google (gemini-*/gemma-*) model id" configured options
 
-type GeminiAIProvider private (apiKeyFetcher: unit -> Async<string option>, model: string) =
-    let client = sharedClient.Value
+type GeminiAIProvider private (apiKeyFetcher: unit -> Async<string option>, model: string, client: HttpClient) =
 
     /// Per-request auth header. Gemini reads the key from
     /// `x-goog-api-key`; the header rides on the request, never on the
@@ -209,15 +208,20 @@ type GeminiAIProvider private (apiKeyFetcher: unit -> Async<string option>, mode
     /// Construct with an API key provided directly (factory path —
     /// user-supplied or deployment-resolved key).
     new(apiKey: string, ?model: string) =
-        GeminiAIProvider((fun () -> async { return Some apiKey }), defaultArg model DefaultModel)
+        GeminiAIProvider((fun () -> async { return Some apiKey }), defaultArg model DefaultModel, sharedClient.Value)
 
     /// Construct reading the API key from the secret store on every
     /// request. Reads `GEMINI_API_KEY` from the `_platform` scope.
     new(secretStore: ISecretStore, ?model: string) =
         GeminiAIProvider(
             (fun () -> secretStore.GetSecret(ScopeKey.PlatformContainer, SecretKeyName)),
-            defaultArg model DefaultModel
+            defaultArg model DefaultModel,
+            sharedClient.Value
         )
+
+    /// Construct over an injected client, so a test can answer the request offline.
+    internal new(apiKey: string, model: string, client: HttpClient) =
+        GeminiAIProvider((fun () -> async { return Some apiKey }), model, client)
 
     interface IAIProvider with
         member _.Capabilities = {
@@ -338,7 +342,7 @@ type GeminiAIProvider private (apiKeyFetcher: unit -> Async<string option>, mode
                 if served = model then
                     this :> IAIProvider
                 else
-                    GeminiAIProvider(apiKeyFetcher, served) :> IAIProvider
+                    GeminiAIProvider(apiKeyFetcher, served, client) :> IAIProvider
 
             target.SendMessage(messages, tools, systemPrompt, onStream, retryPolicy)
             |> AIProviderCallResponse.attach outcome
@@ -350,7 +354,7 @@ type GeminiAIProvider private (apiKeyFetcher: unit -> Async<string option>, mode
                 if served = model then
                     this :> IAIProvider
                 else
-                    GeminiAIProvider(apiKeyFetcher, served) :> IAIProvider
+                    GeminiAIProvider(apiKeyFetcher, served, client) :> IAIProvider
 
             target.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy)
             |> AIProviderCallResponse.attach outcome

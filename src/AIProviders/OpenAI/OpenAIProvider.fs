@@ -78,20 +78,24 @@ let resolveCallModel (configured: string) (options: AIProviderCallOptions) : str
         configured
         options
 
-type OpenAIProvider private (apiKeyFetcher: unit -> Async<string option>, model: string) =
-    let client = sharedClient.Value
+type OpenAIProvider private (apiKeyFetcher: unit -> Async<string option>, model: string, client: HttpClient) =
+
+    /// Construct over an injected client, so a test can answer the request offline.
+    internal new(apiKey: string, model: string, client: HttpClient) =
+        OpenAIProvider((fun () -> async { return Some apiKey }), model, client)
 
     /// Construct with an API key provided directly (Phase A+ factory
     /// path — user-supplied or deployment-resolved key).
     new(apiKey: string, ?model: string) =
-        OpenAIProvider((fun () -> async { return Some apiKey }), defaultArg model DefaultModel)
+        OpenAIProvider((fun () -> async { return Some apiKey }), defaultArg model DefaultModel, sharedClient.Value)
 
     /// Construct reading the API key from the secret store on every
     /// request. Reads `OPENAI_API_KEY` from the `_platform` scope.
     new(secretStore: ISecretStore, ?model: string) =
         OpenAIProvider(
             (fun () -> secretStore.GetSecret(ScopeKey.PlatformContainer, "OPENAI_API_KEY")),
-            defaultArg model DefaultModel
+            defaultArg model DefaultModel,
+            sharedClient.Value
         )
 
     interface IAIProvider with
@@ -357,7 +361,7 @@ type OpenAIProvider private (apiKeyFetcher: unit -> Async<string option>, model:
                 if served = model then
                     this :> IAIProvider
                 else
-                    OpenAIProvider(apiKeyFetcher, served) :> IAIProvider
+                    OpenAIProvider(apiKeyFetcher, served, client) :> IAIProvider
 
             target.SendMessage(messages, tools, systemPrompt, onStream, retryPolicy)
             |> AIProviderCallResponse.attach outcome
@@ -369,7 +373,7 @@ type OpenAIProvider private (apiKeyFetcher: unit -> Async<string option>, model:
                 if served = model then
                     this :> IAIProvider
                 else
-                    OpenAIProvider(apiKeyFetcher, served) :> IAIProvider
+                    OpenAIProvider(apiKeyFetcher, served, client) :> IAIProvider
 
             target.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy)
             |> AIProviderCallResponse.attach outcome

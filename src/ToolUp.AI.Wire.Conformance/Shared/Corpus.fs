@@ -77,9 +77,74 @@ let blockRequestFixtures: (string * string * string) list = [
     """{"model":"claude-sonnet-4-5","max_tokens":1024,"messages":[{"role":"user","content":[{"type":"text","text":"Show me revenue by site.","cache_control":{"type":"ephemeral"}}]},{"role":"assistant","content":[{"type":"text","text":"Revenue by site for the last delivery."},{"type":"text","text":"[block: table, table=daily-trade, metric=revenue, period=2026-10-26, facts=3, withheld=2]"},{"type":"text","text":"[block: trend, table=daily-trade, metric=revenue, period=2026-09-29..2026-10-26, facts=2, withheld=0]"}]}]}"""
 ]
 
+/// Every connector's four call shapes, built through its wire mapper with the
+/// arguments the connector passes. `ToolUp.AIProviders.Tests` holds each
+/// connector's SENT bytes to the same goldens.
+let connectorRequestFixtures: (string * string * string) list =
+    let f = ConnectorFixtures.systemPrompt
+    let msgs = ConnectorFixtures.messages
+    let tools = ConnectorFixtures.tools
+    let vision = ConnectorFixtures.visionMessages
+    let schemaValue = ToolUp.AI.Wire.JsonHost.parse ConnectorFixtures.schema
+
+    let claude messages tools stream schema =
+        ClaudeAIProviderWire.buildRequestBodyWithEffort
+            None
+            ConnectorFixtures.claudeModel
+            ConnectorFixtures.claudeMaxTokens
+            messages
+            tools
+            f
+            stream
+            schema
+
+    let openAI model messages tools stream schema =
+        OpenAIProviderWire.buildRequestBody model messages tools f stream schema
+
+    let gemini messages tools schema =
+        GeminiAIProviderWire.buildRequestBody messages tools f schema
+
+    let openAIShapes name model = [
+        name + "/buffered", openAI model msgs tools false None
+        name + "/streaming", openAI model msgs tools true None
+        name + "/structured", openAI model msgs tools false schemaValue
+        name + "/vision", openAI model vision [] false None
+    ]
+
+    [
+        "connector/claude/buffered", claude msgs tools false None, ConnectorFixtures.claudeBuffered
+        "connector/claude/streaming", claude msgs tools true None, ConnectorFixtures.claudeStreaming
+        "connector/claude/structured",
+        claude msgs tools false (Some ConnectorFixtures.schema),
+        ConnectorFixtures.claudeStructured
+        "connector/claude/vision", claude vision [] false None, ConnectorFixtures.claudeVision
+        "connector/gemini/buffered", gemini msgs tools None, ConnectorFixtures.geminiBuffered
+        "connector/gemini/streaming", gemini msgs tools None, ConnectorFixtures.geminiStreaming
+        "connector/gemini/structured", gemini msgs tools schemaValue, ConnectorFixtures.geminiStructured
+        "connector/gemini/vision", gemini vision [] None, ConnectorFixtures.geminiVision
+    ]
+    @ List.map2
+        (fun (name, built) golden -> name, built, golden)
+        (openAIShapes "connector/openai" ConnectorFixtures.openAIModel
+         @ openAIShapes "connector/copilot" ConnectorFixtures.copilotModel)
+        [
+            ConnectorFixtures.openAIBuffered
+            ConnectorFixtures.openAIStreaming
+            ConnectorFixtures.openAIStructured
+            ConnectorFixtures.openAIVision
+            ConnectorFixtures.copilotBuffered
+            ConnectorFixtures.copilotStreaming
+            ConnectorFixtures.copilotStructured
+            ConnectorFixtures.copilotVision
+        ]
+
 /// The full cross-provider request corpus, `(name, builtBytes, golden)`.
 let requestFixtures: (string * string * string) list =
-    openAIRequests @ geminiRequests @ claudeRequests @ blockRequestFixtures
+    openAIRequests
+    @ geminiRequests
+    @ claudeRequests
+    @ blockRequestFixtures
+    @ connectorRequestFixtures
 
 // ─── Response structural-parity corpus ───────────────────────────────
 
