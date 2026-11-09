@@ -132,7 +132,7 @@
        family's property in Directory.Packages.props moves that family alone.
   -->
   <PropertyGroup>
-    <ToolUpAIProvidersVersion Condition="'$(ToolUpAIProvidersVersion)' == ''">0.39.2</ToolUpAIProvidersVersion>
+    <ToolUpAIProvidersVersion Condition="'$(ToolUpAIProvidersVersion)' == ''">0.39.3</ToolUpAIProvidersVersion>
     <ToolUpAlgorithmProvidersVersion Condition="'$(ToolUpAlgorithmProvidersVersion)' == ''">0.39.2</ToolUpAlgorithmProvidersVersion>
     <ToolUpArtefactSigningVersion Condition="'$(ToolUpArtefactSigningVersion)' == ''">0.39.2</ToolUpArtefactSigningVersion>
     <ToolUpAuditSinksVersion Condition="'$(ToolUpAuditSinksVersion)' == ''">0.39.2</ToolUpAuditSinksVersion>
@@ -192,6 +192,7 @@
     <PackageVersion Include="ToolUp.AIProviders.Claude.Client" Version="$(ToolUpAIProvidersVersion)" />
     <PackageVersion Include="ToolUp.AIProviders.Copilot" Version="$(ToolUpAIProvidersVersion)" />
     <PackageVersion Include="ToolUp.AIProviders.Gemini" Version="$(ToolUpAIProvidersVersion)" />
+    <PackageVersion Include="ToolUp.AIProviders.Microsoft365Copilot" Version="$(ToolUpAIProvidersVersion)" />
     <PackageVersion Include="ToolUp.AIProviders.OpenAI" Version="$(ToolUpAIProvidersVersion)" />
     <PackageVersion Include="ToolUp.AlgorithmProviders.MathNet" Version="$(ToolUpAlgorithmProvidersVersion)" />
     <PackageVersion Include="ToolUp.Algorithms.Client" Version="$(ToolUpSdkVersion)" />

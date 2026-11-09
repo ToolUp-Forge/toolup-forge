@@ -22,6 +22,7 @@
         <Compile Include="Tests\OpenAIProviderTests.fs" />
         <Compile Include="Tests\GeminiProviderTests.fs" />
         <Compile Include="Tests\CopilotProviderTests.fs" />
+        <Compile Include="Tests\Microsoft365CopilotProviderTests.fs" />
         <!-- Phase 661 - per-call model override: offline, per connector. -->
         <Compile Include="Tests\ModelOverrideTests.fs" />
         <!-- Both Claude sends back off from a 429 by the same floor: offline. -->
@@ -50,6 +51,7 @@
         <ProjectReference Include="..\AIProviders\OpenAI\OpenAIProvider.fsproj" />
         <ProjectReference Include="..\AIProviders\Gemini\Gemini.fsproj" />
         <ProjectReference Include="..\AIProviders\Copilot\CopilotAIProvider.fsproj" />
+        <ProjectReference Include="..\AIProviders\Microsoft365Copilot\Microsoft365CopilotAIProvider.fsproj" />
     </ItemGroup>
     <ItemGroup>
         <PackageReference Include="FSharp.Core" />

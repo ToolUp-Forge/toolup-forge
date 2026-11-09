@@ -1050,7 +1050,7 @@
   -->
   <PropertyGroup>
     <ToolUpProjectRelativePath>$([MSBuild]::MakeRelative('$(MSBuildThisFileDirectory)', '$(MSBuildProjectFullPath)').Replace('\', '/'))</ToolUpProjectRelativePath>
-    <ToolUpAIProvidersVersion>0.39.2</ToolUpAIProvidersVersion>
+    <ToolUpAIProvidersVersion>0.39.3</ToolUpAIProvidersVersion>
     <ToolUpAlgorithmProvidersVersion>0.39.2</ToolUpAlgorithmProvidersVersion>
     <ToolUpArtefactSigningVersion>0.39.2</ToolUpArtefactSigningVersion>
     <ToolUpAuditSinksVersion>0.39.2</ToolUpAuditSinksVersion>
