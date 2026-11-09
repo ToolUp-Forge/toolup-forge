@@ -176,6 +176,24 @@ let private compositionDetection =
 
 // ─── Structural arm: the "OCR unavailable" classification ────────────
 
+/// The terminal status an upload of `bytes` reaches when it yields no
+/// chunk, decided from the parts the extractor reported, and its detail
+/// when that status is `OcrUnavailable`.
+let private ocrUnavailableDetail (ocr: IOcrProvider) (fileName: string) (bytes: byte[]) =
+    let deps: ExtractDeps = {
+        Ocr = ocr
+        Tables = noOpTables
+        Docx = KnowledgeBase.DocxExtraction.DocxExtractionMode.Flat
+    }
+
+    match
+        extractParts deps fileName bytes
+        |> Async.RunSynchronously
+        |> emptyExtractionStatus fileName
+    with
+    | OcrUnavailable detail -> Some detail
+    | _ -> None
+
 let private unavailableClassification =
     testList "OCR-unavailable classification" [
         test "a scanned PDF with no companion is classified, and the detail names the remedy" {
@@ -235,9 +253,23 @@ let private unavailableClassification =
         test "a corrupt PDF is NOT classified (it is the error classifier's business)" {
             let notAPdf = Text.Encoding.UTF8.GetBytes "%PDF-1.4 this is not a pdf"
 
-            Expect.isNone
-                (ocrUnavailableDetail noOpOcr "corrupt.pdf" notAPdf)
-                "an unopenable PDF must fall through to ExtractionErrors.classify, which can say 'corrupt'; claiming it needs OCR would misdirect the user"
+            Expect.throws
+                (fun () -> ocrUnavailableDetail noOpOcr "corrupt.pdf" notAPdf |> ignore)
+                "an unopenable PDF raises from its one open, so ExtractionErrors.classify can say 'corrupt'; it is never reported as needing OCR"
+        }
+
+        test "the scanned judgement is the extractor's, from the one open it made" {
+            let deps: ExtractDeps = {
+                Ocr = noOpOcr
+                Tables = noOpTables
+                Docx = KnowledgeBase.DocxExtraction.DocxExtractionMode.Flat
+            }
+
+            let parts =
+                extractParts deps "contract-scan.pdf" (scannedPdf "INVOICE")
+                |> Async.RunSynchronously
+
+            Expect.equal parts [ Unread Textless.ScannedPdf ] "the PDF extractor reports the textless pages as a part"
         }
     ]
 
