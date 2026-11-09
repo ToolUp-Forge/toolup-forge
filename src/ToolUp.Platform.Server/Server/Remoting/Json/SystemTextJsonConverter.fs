@@ -1731,13 +1731,29 @@ module FableConverters =
         Found = sprintf "%s (%s)" (string element.ValueKind) ex.Message
     }
 
-    /// THE argument decode seam, record-scoped and under `policy`. One match
-    /// on `Codecs.resolveJson`: a registered decoder (record-scoped first,
-    /// then unscoped) reads the element through the closed value model in one
-    /// bounded pass; a miss under `ReflectionFallback` is System.Text.Json's
-    /// typed deserialise, exactly as before; a miss under `VerifiedOnly` is
-    /// refused naming the type. `recordName = None` is a caller with no record
-    /// to name, which gets the bare-type lookup.
+    /// THE argument decode seam, record-scoped and under `policy`: the one
+    /// match on `Codecs.resolveJson`. A registered decoder (record-scoped
+    /// first, then unscoped) reads the element through the closed value model
+    /// in one bounded pass; a miss under `VerifiedOnly` is refused naming the
+    /// type; a miss under `ReflectionFallback` is `None`, which each caller
+    /// answers with System.Text.Json's typed deserialise, exactly as before.
+    let private throughCodecs
+        (policy: DecodePolicy)
+        (recordName: string option)
+        (element: JsonElement)
+        (targetType: Type)
+        : Result<obj, DecodeError> option =
+        let scope =
+            match recordName with
+            | Some name -> Scope.ForRecord name
+            | None -> Scope.Unscoped
+
+        match Codecs.resolveJson policy scope targetType with
+        | Some(Ok decoder) -> Some(ToolUp.Remoting.Json.JsonRead.tryRead element |> Result.bind decoder)
+        | Some(Error refusal) -> Some(Error refusal)
+        | None -> None
+
+    /// The erased seam: `throughCodecs`, then the by-`Type` deserialise.
     let tryDeserialiseElementWith
         (policy: DecodePolicy)
         (recordName: string option)
@@ -1745,14 +1761,8 @@ module FableConverters =
         (targetType: Type)
         (options: JsonSerializerOptions)
         : Result<obj, DecodeError> =
-        let scope =
-            match recordName with
-            | Some name -> Scope.ForRecord name
-            | None -> Scope.Unscoped
-
-        match Codecs.resolveJson policy scope targetType with
-        | Some(Ok decoder) -> ToolUp.Remoting.Json.JsonRead.tryRead element |> Result.bind decoder
-        | Some(Error refusal) -> Error refusal
+        match throughCodecs policy recordName element targetType with
+        | Some decoded -> decoded
         | None ->
             try
                 Ok(element.Deserialize(targetType, options))
@@ -1768,17 +1778,23 @@ module FableConverters =
         : Result<obj, DecodeError> =
         tryDeserialiseElementWith DecodePolicy.ReflectionFallback recordName element targetType options
 
-    /// The statically-typed form of `tryDeserialiseElementWith`, for the
-    /// dispatcher's argument parse, where the target type is a type parameter:
-    /// the same seam, its value unboxed at `'T`.
+    /// The statically-typed seam, for the dispatcher's argument parse, where
+    /// the target type is a type parameter: `throughCodecs`, then the GENERIC
+    /// `Deserialize<'T>` overload, so well-formed traffic on the reflective
+    /// path is byte-identical rather than routed through a boxing `unbox`.
     let tryDeserialiseWith<'T>
         (policy: DecodePolicy)
         (recordName: string option)
         (element: JsonElement)
         (options: JsonSerializerOptions)
         : Result<'T, DecodeError> =
-        tryDeserialiseElementWith policy recordName element typeof<'T> options
-        |> Result.map unbox<'T>
+        match throughCodecs policy recordName element typeof<'T> with
+        | Some decoded -> decoded |> Result.map unbox<'T>
+        | None ->
+            try
+                Ok(element.Deserialize<'T>(options))
+            with ex ->
+                Error(refusalOf element typeof<'T> ex)
 
     /// `tryDeserialiseWith` under the default posture, record-scoped: the
     /// form the source generator's dispatch tables and the long-running

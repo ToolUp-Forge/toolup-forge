@@ -35,9 +35,10 @@ open ToolUp.Remoting.MsgPack
 // **The posture is the seam's single switch.** Under `ReflectionFallback` a
 // miss is `None` — the reflective path. Under `VerifiedOnly` a miss is
 // `Some (Error refusal)` naming the type, so a deployment can state that
-// nothing it decodes runs outside the proved path, and a boot walk over every
-// mounted contract (the server's `RemotingDecoderFacet.inspectContracts`)
-// refuses before the first request rather than at it.
+// nothing it decodes runs outside the proved path, and a walk over every
+// mounted contract (the server's `Proxy.codecMisses`) refuses at the mount
+// rather than at the first request; `RemotingDecoderFacet.inspectCodecs`
+// reports the same walk at boot under either posture.
 //
 // **Keyed by `Type.FullName`, and a miss is the safe failure.** It is the one
 // identity both hosts compute (Fable resolves reflected types the same way).
