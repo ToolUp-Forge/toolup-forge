@@ -162,7 +162,7 @@ module Codec =
     [<Literal>]
     let FormatVersion = 1
 
-    let private jsonOptions = FableConverters.create ()
+    let private jsonOptions = PlatformJson.options
 
     let encode (job: DocumentIngestionJob) : string =
         let json = JsonSerializer.Serialize(job, jsonOptions)
