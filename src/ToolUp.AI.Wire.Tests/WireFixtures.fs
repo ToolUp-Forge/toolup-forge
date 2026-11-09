@@ -1,6 +1,7 @@
 module ToolUp.AI.Wire.Tests.WireFixtures
 
 open ToolUp.AI.Wire
+open ToolUp.Remoting.Json
 
 /// `(name, value, canonical serialization)` triples shared by the .NET
 /// Expecto pack and the Fable smoke. Both hosts compile this same file and

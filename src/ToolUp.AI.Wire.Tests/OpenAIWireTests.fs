@@ -2,6 +2,7 @@ module ToolUp.AI.Wire.Tests.OpenAIWireTests
 
 open Expecto
 open ToolUp.AI.Wire.Tests
+open ToolUp.Remoting.Json
 
 // .NET host pack for the portable OpenAI mapper. Asserts the golden
 // request bytes + parsed-response shapes from the shared

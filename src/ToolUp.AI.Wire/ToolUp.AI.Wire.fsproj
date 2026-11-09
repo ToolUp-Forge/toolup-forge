@@ -2,7 +2,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>
-        <Description>ToolUp.AI.Wire — a portable, Fable-compilable JSON value model: a JsonValue DU with ergonomic builders + total (never-throwing) accessors, and a host-bridged serialization seam (browser JSON under Fable, System.Text.Json on .NET) with byte-stable object key order. Neutral wire-mapping substrate shared by server and browser hosts. FSharp.Core + Fable.Core only — no System.Net.Http, no unguarded System.Text.Json.</Description>
+        <Description>ToolUp.AI.Wire — the portable, Fable-compilable JSON substrate: the one closed JSON value model (numbers as their lexical tokens), its text parser and its one writer, ergonomic builders and total accessors, plus the provider connector contract and the pure streaming state machine. Shared by server and browser hosts. FSharp.Core + Fable.Core only — no System.Net.Http, no System.Text.Json.</Description>
         <PackageTags>fsharp;fable;sdk;json;wire;portable</PackageTags>
         <!-- Fable-touching project: nullable reference types stay disabled
              (forge CLAUDE.md "Nullable reference types — keep disabled on
@@ -16,15 +16,24 @@
         <Content Include="**\*.fsproj;**\*.fs" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
     </ItemGroup>
     <ItemGroup>
+        <!-- The ONE JSON value model of the tree. The
+             decode-refusal vocabulary (`ToolUp.Remoting.DecodeError`) and
+             the lexical model with its text parser (`ToolUp.Remoting.Json`
+             `JsonValue` / `JsonText`) moved DOWN from ToolUp.Platform.Core
+             with their namespaces preserved, so every Core consumer resolves
+             them unchanged; JsonHost holds the one writer, and JsonEncode
+             (the typed encoders) writes through it. -->
+        <Compile Include="DecodeError.fs" />
         <Compile Include="JsonValue.fs" />
         <Compile Include="JsonHost.fs" />
-        <!-- Phase 250 — the portable connector contract value types
+        <Compile Include="JsonEncode.fs" />
+        <!-- The portable connector contract value types
              (relocated from ToolUp.Platform.Core's IAIProvider.fs, namespace
              ToolUp.Platform.AI preserved so consumers see no change).
              Depends only on FSharp.Core (+ Fable-supported System.Uri); does
              not consume JsonValue, so order is independent. -->
         <Compile Include="Contract.fs" />
-        <!-- Phase 251 — the portable egress seam. RetryPolicy relocated
+        <!-- The portable egress seam. RetryPolicy relocated
              from ToolUp.Platform.Core (namespace ToolUp.Platform preserved);
              IHttpTransport + the pure error classifier + the pure retry
              runner factor the HTTP egress out of the per-provider mappers so
@@ -34,13 +43,13 @@
              companion). RetryRunner depends on both RetryPolicy (delayFor /
              MaxAttempts) and Contract (AIProviderError / RetriesExhausted), so
              it is compiled last. -->
-        <!-- Phase 128 — RetryPolicy and the HTTP seam moved down to
+        <!-- RetryPolicy and the HTTP seam moved down to
              ToolUp.Platform.Transport (referenced below); what stays here is
              the AI projection of the transport taxonomy (ErrorClassifier)
              and the AI wrapper over the shared retry loop (RetryRunner). -->
         <Compile Include="Transport\ErrorClassifier.fs" />
         <Compile Include="Transport\RetryRunner.fs" />
-        <!-- Phase 254 — the pure SSE streaming state machine. Depends on
+        <!-- The pure SSE streaming state machine. Depends on
              JsonValue/JsonHost (parse) + Contract (AIProviderResponse), so it
              compiles after them. Shared home for per-provider stream
              processors (Claude first; OpenAI folds in later). -->
@@ -54,7 +63,7 @@
              #if FABLE_COMPILER parse bridge in JsonHost.fs needs. On the
              .NET host it adds no runtime behaviour. -->
         <PackageReference Include="Fable.Core" />
-        <!-- Phase 250 — pin the managed FSharp.Core (10.1.300 via CPM)
+        <!-- Pin the managed FSharp.Core (10.1.300 via CPM)
              explicitly. Contract.fs uses string interpolation
              (AIProviderError.toMessage), which needs FSharp.Core 5.0+; left
              implicit, the project resolved the compiler's older bundled copy

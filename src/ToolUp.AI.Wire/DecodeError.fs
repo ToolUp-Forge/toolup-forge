@@ -3,15 +3,15 @@
 
 namespace ToolUp.Remoting
 
-/// Phase 783 — a decode refusal: what the decoder expected, what it
+/// A decode refusal: what the decoder expected, what it
 /// actually found, and where it was when it found it.
 ///
 /// The whole point is that the set is CLOSED and small. A decode failure
 /// is not an open-ended message string that a client has to pattern-match
 /// on; it is three fields a caller can branch on and a renderer can turn
-/// into one sentence. Phase 785 rewrites the decoders themselves around
-/// this record; Phase 787 states the totality theorem over it. Nothing
-/// downstream may widen it without moving those two.
+/// into one sentence. The decoders are written around this record and the
+/// totality theorem is stated over it; nothing downstream may widen it
+/// without moving both.
 ///
 /// `Path` is OUTERMOST-FIRST — `[ "args[0]"; "count" ]` renders as
 /// `args[0].count`. It is a list rather than a pre-joined string because
@@ -20,12 +20,12 @@ namespace ToolUp.Remoting
 /// quadratic. An empty path is legitimate: the value that failed WAS the
 /// root.
 ///
-/// Lives in `ToolUp.Platform.Core` rather than beside the server
-/// dispatcher because all three tiers refuse with it — the MsgPack reader
-/// (this assembly), the server's argument-parse stage
+/// Lives in `ToolUp.AI.Wire`, under the remoting namespace, because the JSON text parser beside it
+/// refuses with it, and every tier above refuses with it too — the MsgPack
+/// reader (Core), the server's argument-parse stage
 /// (`ToolUp.Platform.Server`) and the Fable client proxy
-/// (`ToolUp.Platform.Client`) — and Core is the only tier whose source
-/// ships under `fable/` in the nupkg (GP 10).
+/// (`ToolUp.Platform.Client`). This package's source ships under `fable/`
+/// in the nupkg, as Core's does (GP 10).
 type DecodeError = {
     /// Field path, outermost first. Empty when the root value is what failed.
     Path: string list
@@ -37,18 +37,18 @@ type DecodeError = {
     Found: string
 }
 
-/// Phase 783 — the carrier that gets a refusal out of a decoder whose
+/// The carrier that gets a refusal out of a decoder whose
 /// interior is still written in exceptions, to the one seam that converts
 /// it back into a `Result`.
 ///
 /// It is deliberately NOT part of the surface a caller is expected to
-/// catch: every public seam this phase ships (`Reader.TryRead`,
+/// catch: every public seam (`Reader.TryRead`,
 /// `FableConverters.tryDeserialiseElement`, `InvocationResult.DecodeRefused`)
 /// returns the refusal as data. The exception exists because the MsgPack
 /// reader and the System.Text.Json converter set are both deeply recursive
 /// over cached `Type -> obj` delegates, and threading a `Result` through
-/// those signatures is exactly the interior rewrite Phase 785 owns. Until
-/// then the exception is how a named refusal survives the descent —
+/// those signatures is an interior rewrite of its own. Until then the
+/// exception is how a named refusal survives the descent —
 /// which is still strictly better than the `failwithf` it replaces,
 /// because the refusal arrives structured rather than as prose.
 exception DecodeException of DecodeError
@@ -80,7 +80,7 @@ module DecodeError =
 
     /// Render the path as a consumer reads it: `args[0].count`. Segments
     /// are dot-joined, which is the shape both System.Text.Json's own
-    /// `$.a.b` reader paths and the Phase 69e validation violation paths
+    /// `$.a.b` reader paths and the validation violation paths
     /// already use. An indexer is carried INSIDE its segment
     /// (`"args[0]"`), never as a segment of its own, so the join needs no
     /// special case. A map key holding a dot stays in one bracketed segment,

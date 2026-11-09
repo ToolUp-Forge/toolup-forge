@@ -5,6 +5,7 @@ namespace ToolUp.Facts.Presentation
 
 open System
 open ToolUp.AI.Wire
+open ToolUp.Remoting.Json
 open ToolUp.Platform.AI
 open ToolUp.Facts
 
@@ -382,8 +383,8 @@ module PresentationRequest =
         JsonHost.serialize (toJsonValue request)
 
     let private field (name: string) (v: JsonValue) : JsonValue option =
-        match JsonValue.tryField name v with
-        | Some JNull
+        match JsonValue.tryMember name v with
+        | Some JsonValue.Null
         | None -> None
         | some -> some
 
@@ -411,10 +412,10 @@ module PresentationRequest =
             match JsonValue.asArray j with
             | None -> Error(PresentationRequestError.InvalidField(name, "it is not an array"))
             | Some items ->
-                let strings = items |> List.choose JsonValue.asString
+                let strings = items |> Array.choose JsonValue.asString
 
-                if List.length strings = List.length items then
-                    Ok strings
+                if strings.Length = items.Length then
+                    Ok(List.ofArray strings)
                 else
                     Error(PresentationRequestError.InvalidField(name, "an item is not a string"))
 
@@ -487,7 +488,7 @@ module PresentationRequest =
                             |> Result.mapError (fun _ -> PresentationRequestError.MissingField "annotations.label")
                             |> Result.map (fun label -> { On = on; Label = label } :: done')))
 
-                items |> List.fold folder (Ok []) |> Result.map List.rev
+                items |> Array.fold folder (Ok []) |> Result.map List.rev
 
     /// The request a JSON value says, or the refusal naming what to repair.
     let ofJsonValue (v: JsonValue) : Result<PresentationRequest, PresentationRequestError> =

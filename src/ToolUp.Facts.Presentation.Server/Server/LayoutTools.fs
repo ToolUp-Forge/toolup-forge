@@ -17,6 +17,7 @@ open ToolUp.Platform
 open ToolUp.Platform.AI
 open ToolUp.Platform.Grounding
 open ToolUp.AI.Wire
+open ToolUp.Remoting.Json
 open ToolUp.Facts
 open ToolUp.AI
 open ToolUp.Platform.Infra
@@ -273,32 +274,39 @@ module internal LayoutJson =
 
     let rec ofJson (v: JsonValue) : JVal option =
         match v with
-        | JsonValue.JNull -> None
-        | JsonValue.JBool b -> Some(JVal.JBool b)
-        | JsonValue.JString s -> Some(JStr s)
-        | JsonValue.JNumber n when n = Math.Floor n && n >= float Int32.MinValue && n <= float Int32.MaxValue ->
-            Some(JInt(int n))
-        | JsonValue.JNumber n -> Some(JFloat n)
-        | JsonValue.JArray items -> Some(JArr(items |> List.choose ofJson))
-        | JsonValue.JObject members ->
-            Some(JObj(members |> List.choose (fun (k, m) -> ofJson m |> Option.map (fun j -> k, j))))
+        | JsonValue.Null -> None
+        | JsonValue.Bool b -> Some(JVal.JBool b)
+        | JsonValue.String s -> Some(JStr s)
+        | JsonValue.Number _ ->
+            match JsonValue.asInt v with
+            | Some n -> Some(JInt n)
+            | None -> JsonValue.asFloat v |> Option.map JFloat
+        | JsonValue.Array items -> Some(JArr(items |> List.ofArray |> List.choose ofJson))
+        | JsonValue.Object members ->
+            Some(
+                JObj(
+                    members
+                    |> List.ofArray
+                    |> List.choose (fun (k, m) -> ofJson m |> Option.map (fun j -> k, j))
+                )
+            )
 
     let rec toJson (v: JVal) : JsonValue =
         match v with
-        | JStr s -> JsonValue.JString s
-        | JInt i -> JsonValue.JNumber(float i)
-        | JFloat f -> JsonValue.JNumber f
-        | JVal.JBool b -> JsonValue.JBool b
-        | JArr items -> JsonValue.JArray(items |> List.map toJson)
-        | JObj members -> JsonValue.JObject(members |> List.map (fun (k, m) -> k, toJson m))
+        | JStr s -> JsonValue.String s
+        | JInt i -> jint i
+        | JFloat f -> jnum f
+        | JVal.JBool b -> JsonValue.Bool b
+        | JArr items -> jarr (items |> List.map toJson)
+        | JObj members -> jobj (members |> List.map (fun (k, m) -> k, toJson m))
 
     let canonical (v: JVal) : string = Canonical.write Rendering.CrossHost v
 
     let private probe (period: JsonValue) : JsonValue =
-        JsonValue.JObject [
-            "kind", JsonValue.JString "trend"
-            "tableId", JsonValue.JString "probe"
-            "metrics", JsonValue.JArray [ JsonValue.JString "probe" ]
+        jobj [
+            "kind", jstr "trend"
+            "tableId", jstr "probe"
+            "metrics", jarr [ jstr "probe" ]
             "period", period
         ]
 
@@ -322,16 +330,16 @@ module internal LayoutJson =
             Title = None
             Annotations = []
         }
-        |> JsonValue.tryField "period"
-        |> Option.defaultValue JsonValue.JNull
+        |> JsonValue.tryMember "period"
+        |> Option.defaultValue JsonValue.Null
 
     let strings (v: JsonValue) : Result<string list, string> =
         match v with
-        | JsonValue.JArray items ->
-            let texts = items |> List.choose JsonValue.asString
+        | JsonValue.Array items ->
+            let texts = items |> Array.choose JsonValue.asString
 
-            if List.length texts = List.length items then
-                Ok texts
+            if texts.Length = items.Length then
+                Ok(List.ofArray texts)
             else
                 Error "every item must be a string"
         | _ -> Error "it must be an array of strings"
@@ -1063,15 +1071,15 @@ module LayoutTools =
 
     let rec private carriesRows (path: string) (v: JsonValue) : string option =
         match v with
-        | JsonValue.JObject members ->
+        | JsonValue.Object members ->
             members
-            |> List.tryPick (fun (k, m) ->
+            |> Array.tryPick (fun (k, m) ->
                 let here = if path = "" then k else path + "." + k
 
                 if rowMembers.Contains k && not (path.EndsWith "payload" && k = "table") then
                     match m with
-                    | JsonValue.JArray _
-                    | JsonValue.JObject _ -> Some here
+                    | JsonValue.Array _
+                    | JsonValue.Object _ -> Some here
                     | _ -> carriesRows here m
                 else
                     carriesRows here m)
@@ -1085,8 +1093,8 @@ module LayoutTools =
     let private text (name: string) (args: Args) : Result<string option, LayoutRefusal> =
         match arg name args with
         | None
-        | Some JsonValue.JNull -> Ok None
-        | Some(JsonValue.JString s) when not (String.IsNullOrWhiteSpace s) -> Ok(Some(s.Trim()))
+        | Some JsonValue.Null -> Ok None
+        | Some(JsonValue.String s) when not (String.IsNullOrWhiteSpace s) -> Ok(Some(s.Trim()))
         | Some _ -> Error(LayoutRefusal.Arguments(sprintf "'%s' must be a non-empty string" name))
 
     let private required (name: string) (args: Args) : Result<string, LayoutRefusal> =
@@ -1098,7 +1106,7 @@ module LayoutTools =
     let private stringList (name: string) (args: Args) : Result<string list option, LayoutRefusal> =
         match arg name args with
         | None
-        | Some JsonValue.JNull -> Ok None
+        | Some JsonValue.Null -> Ok None
         | Some v ->
             LayoutJson.strings v
             |> Result.map Some
@@ -1107,7 +1115,7 @@ module LayoutTools =
     let private period (name: string) (args: Args) : Result<PresentationPeriod option, LayoutRefusal> =
         match arg name args with
         | None
-        | Some JsonValue.JNull -> Ok None
+        | Some JsonValue.Null -> Ok None
         | Some v ->
             LayoutJson.periodOf v
             |> Result.map Some
@@ -1130,11 +1138,11 @@ module LayoutTools =
              else
                  JsonHost.parse argsJson)
         with
-        | Some(JsonValue.JObject members as v) ->
+        | Some(JsonValue.Object members as v) ->
             match carriesRows "" v with
             | Some path -> Error(LayoutRefusal.InlineRows(sprintf "the argument '%s'" path))
             | None ->
-                match members |> List.tryFind (fun (k, _) -> not ((allowed tool).Contains k)) with
+                match members |> Array.tryFind (fun (k, _) -> not ((allowed tool).Contains k)) with
                 | Some(k, _) ->
                     Error(
                         LayoutRefusal.Arguments(
@@ -1145,7 +1153,7 @@ module LayoutTools =
                                 (allowed tool |> Set.toList |> String.concat ", ")
                         )
                     )
-                | None -> Ok members
+                | None -> Ok(List.ofArray members)
         | _ -> Error(LayoutRefusal.Arguments "the arguments are not a JSON object")
 
     let private pageOf (args: Args) : Result<PageRef, LayoutRefusal> =
@@ -1471,34 +1479,39 @@ module LayoutTools =
     /// takes the page's standing defaults, written into the payload before
     /// the request codec reads it, so the codec judges the result.
     let private withDefaults (defaults: PageDefaults) (request: JsonValue) : JsonValue =
-        let missing (name: string) (members: (string * JsonValue) list) =
-            match members |> List.tryFind (fun (k, _) -> k = name) with
+        let missing (name: string) (members: (string * JsonValue)[]) =
+            match members |> Array.tryFind (fun (k, _) -> k = name) with
             | None
-            | Some(_, JsonValue.JNull) -> true
+            | Some(_, JsonValue.Null) -> true
             | Some _ -> false
 
         match request with
-        | JsonValue.JObject members when
-            (JsonValue.tryField "kind" request |> Option.bind JsonValue.asString) = Some PageRequest.PresentationKind
+        | JsonValue.Object members when
+            (JsonValue.tryMember "kind" request |> Option.bind JsonValue.asString) = Some PageRequest.PresentationKind
             ->
-            JsonValue.JObject(
+            JsonValue.Object(
                 members
-                |> List.map (fun (k, v) ->
+                |> Array.map (fun (k, v) ->
                     match k, v with
-                    | "payload", JsonValue.JObject payload ->
+                    | "payload", JsonValue.Object payload ->
                         let added = [
                             match defaults.Period with
                             | Some period when missing "period" payload -> "period", LayoutJson.periodJson period
                             | _ -> ()
                             match defaults.Site with
                             | Some site when missing "subjectPrefix" payload ->
-                                "subjectPrefix", JsonValue.JArray(site |> List.map JsonValue.JString)
+                                "subjectPrefix", jarr (site |> List.map JsonValue.String)
                             | _ -> ()
                         ]
 
                         let named = added |> List.map fst |> Set.ofList
 
-                        k, JsonValue.JObject((payload |> List.filter (fun (n, _) -> not (named.Contains n))) @ added)
+                        k,
+                        JsonValue.Object(
+                            Array.append
+                                (payload |> Array.filter (fun (n, _) -> not (named.Contains n)))
+                                (List.toArray added)
+                        )
                     | _ -> k, v)
             )
         | other -> other
@@ -1771,23 +1784,20 @@ module LayoutTools =
                 let payload =
                     PresentationRequest.toJsonValue r
                     |> function
-                        | JsonValue.JObject members ->
+                        | JsonValue.Object members ->
                             let set (name: string) (value: JsonValue option) members =
                                 match value with
                                 | None -> members
                                 | Some v -> (members |> List.filter (fun (k, _) -> k <> name)) @ [ name, v ]
 
-                            JsonValue.JObject(
-                                members
+                            JsonValue.Object(
+                                List.ofArray members
                                 |> set "period" (period |> Option.map LayoutJson.periodJson)
-                                |> set "compareTo" (compareTo |> Option.map JsonValue.JString)
-                                |> set
-                                    "metrics"
-                                    (metrics |> Option.map (List.map JsonValue.JString >> JsonValue.JArray))
-                                |> set "subjectLevel" (level |> Option.map JsonValue.JString)
-                                |> set
-                                    "subjectPrefix"
-                                    (site |> Option.map (List.map JsonValue.JString >> JsonValue.JArray))
+                                |> set "compareTo" (compareTo |> Option.map JsonValue.String)
+                                |> set "metrics" (metrics |> Option.map (List.map JsonValue.String >> jarr))
+                                |> set "subjectLevel" (level |> Option.map JsonValue.String)
+                                |> set "subjectPrefix" (site |> Option.map (List.map JsonValue.String >> jarr))
+                                |> List.toArray
                             )
                         | other -> other
 
@@ -1973,7 +1983,9 @@ module LayoutTools =
             let at = sprintf "'tabs'[%d]" i
 
             match entry with
-            | JsonValue.JObject members ->
+            | JsonValue.Object members ->
+                let members = List.ofArray members
+
                 match
                     members
                     |> List.tryFind (fun (k, _) -> k <> "label" && k <> "blocks" && k <> "tab")
@@ -1999,10 +2011,11 @@ module LayoutTools =
 
         match arg "tabs" args with
         | None
-        | Some JsonValue.JNull -> bad "'tabs' is required: every tab, with its label and the ids of the blocks it holds"
-        | Some(JsonValue.JArray []) -> bad "'tabs' names no tab; to take a section's tabs away, use action untab"
-        | Some(JsonValue.JArray entries) ->
+        | Some JsonValue.Null -> bad "'tabs' is required: every tab, with its label and the ids of the blocks it holds"
+        | Some(JsonValue.Array [||]) -> bad "'tabs' names no tab; to take a section's tabs away, use action untab"
+        | Some(JsonValue.Array entries) ->
             entries
+            |> List.ofArray
             |> List.indexed
             |> List.fold
                 (fun acc (i, entry) ->

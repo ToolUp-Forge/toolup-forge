@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
     ToolUp.AI.Wire.Conformance (.NET host) — the convergence gate that
-    closes Wave 32 (Phase 255). It consolidates the three per-provider wire
+    closes Wave 32. It consolidates the three per-provider wire
     smokes (seeded by Phases 252 / 253 / 254) into ONE dual-run conformance
     pack: the portable ToolUp.AI.Wire layer + all three provider mappers,
     asserted to produce byte-identical request JSON and an identical parsed
@@ -28,7 +28,7 @@
              run on each host proves byte-parity. The golden DATA lives in
              ToolUp.AI.Wire.Tests (one source of truth) — source-linked here,
              not duplicated. -->
-        <!-- Phase 508 — the shared fixture module the three mapper fixture
+        <!-- The shared fixture module the three mapper fixture
              files now read (`nestedToolInputSchema`, the rich tool schema all
              three carry). Compiles first, exactly as it does in the Expecto
              pack and the Fable smoke; it adds no assertion here. -->
@@ -45,10 +45,13 @@
              path that Fable keeps under its `output/` dir. An immediate-parent
              `..\*.fs` reference instead rebases the transpiled .js ABOVE
              output/ into the tracked project dir (a stray-artifact trap). -->
-        <!-- Phase 1128 — the block-part fixture family. ToolUp.Platform.Tests
+        <!-- The block-part fixture family. ToolUp.Platform.Tests
              compiles it too (holding the server writer to its pinned literal),
              as does ToolUp.AI.Client.Tests (holding the browser reader to it). -->
         <Compile Include="Shared\BlockPartFixtures.fs" />
+        <!-- Numbers at the precision boundary, and the writer's string escaping. -->
+        <Compile Include="Shared\NumberFixtures.fs" />
+        <Compile Include="Shared\StringFixtures.fs" />
         <Compile Include="Shared\Corpus.fs" />
         <Compile Include="Shared\ConformanceSuite.fs" />
         <Compile Include="ProgramNet.fs" />

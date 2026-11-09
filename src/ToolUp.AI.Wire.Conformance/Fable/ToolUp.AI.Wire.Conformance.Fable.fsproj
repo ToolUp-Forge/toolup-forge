@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
     ToolUp.AI.Wire.Conformance.Fable — the Fable (browser) host of the
-    Wave 32 conformance pack (Phase 255). It transpiles via Fable and runs
+    Wave 32 conformance pack. It transpiles via Fable and runs
     the SAME shared suite (..\Corpus.fs + ..\ConformanceSuite.fs) the .NET
     Expecto host runs, under Node's built-in test runner (node:test). A
     green run on BOTH hosts is the byte-parity / structural-parity gate —
@@ -38,7 +38,7 @@
         <Compile Include="NodeTest.fs" />
         <!-- The same provider mappers + golden fixtures the .NET host
              compiles (one source of truth in ToolUp.AI.Wire.Tests). -->
-        <!-- Phase 508 — the shared fixture module the three mapper fixture
+        <!-- The shared fixture module the three mapper fixture
              files now read (`nestedToolInputSchema`, the rich tool schema all
              three carry). Compiles first, exactly as it does in the Expecto
              pack and the Fable smoke; it adds no assertion here. -->
@@ -55,8 +55,11 @@
              keeps the transpiled .js under output/ — an immediate-parent
              ..\*.fs reference rebases the .js above output/ into the tracked
              tree (a stray-artifact trap). -->
-        <!-- Phase 1128 — the block-part fixture family, as the .NET host. -->
+        <!-- The block-part fixture family, as the .NET host. -->
         <Compile Include="..\Shared\BlockPartFixtures.fs" />
+        <!-- Numbers at the precision boundary, and the writer's string escaping. -->
+        <Compile Include="..\Shared\NumberFixtures.fs" />
+        <Compile Include="..\Shared\StringFixtures.fs" />
         <Compile Include="..\Shared\Corpus.fs" />
         <Compile Include="..\Shared\ConformanceSuite.fs" />
         <Compile Include="ProgramFable.fs" />

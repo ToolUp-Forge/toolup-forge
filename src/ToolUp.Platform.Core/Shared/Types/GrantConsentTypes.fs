@@ -186,6 +186,12 @@ module GrantConsentRecord =
     /// Escape a value for the canonical payload so no field can smuggle a
     /// separator and re-frame a neighbouring one. Backslash first, else
     /// the escape of a newline would itself be re-escapable.
+    ///
+    /// Not a JSON escaper, and not to be swapped for one: the payload is
+    /// newline-framed `key=value` lines, so the backslash and the line
+    /// breaks are the whole escape set, and every byte this writes is under
+    /// a stored signature. A different escape set re-canonicalises every
+    /// consent record already signed.
     let private escape (raw: string) =
         if isNull (box raw) then
             ""

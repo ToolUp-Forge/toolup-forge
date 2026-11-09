@@ -5,9 +5,9 @@ namespace ToolUp.Remoting.Json
 
 open System
 open System.Globalization
-open System.Text
+open ToolUp.AI.Wire
 
-// ─── Phase 853 — the JSON algebra's WRITING half ─────────────────────
+// ─── The JSON algebra's WRITING half ─────────────────────────────────
 //
 // `JsonDecode` reads the wire the System.Text.Json converter set writes;
 // this module writes it. A generated client proxy (ToolUp.Remoting.Generator
@@ -19,7 +19,7 @@ open System.Text
 // Each encoder reproduces the WRITER's convention for its shape (the
 // converter named beside it), because that is the shape the server's
 // argument seam reads on both of its paths: the registered algebra decoder
-// (`PlatformJsonDecoders`, Phase 841) and the converter set's own reader.
+// (`PlatformJsonDecoders`) and the converter set's own reader.
 // The two halves are one contract read off one set of metadata — a record
 // by its member NAMES, a union by its CASE NAME, the signed `int64` string.
 //
@@ -30,101 +30,24 @@ open System.Text
 // written (a non-finite float, which the writer itself cannot express as a
 // JSON number — see `float`).
 
-/// Phase 853 — a JSON encoder for `'T`: pure, reflection-free, the
+/// A JSON encoder for `'T`: pure, reflection-free, the
 /// writer's convention for the shape.
 type JsonEncoder<'T> = 'T -> JsonValue
 
-/// Phase 853 — the combinators that build a `JsonValue` from a typed
-/// value, and the text writer over the model.
+/// The combinators that build a `JsonValue` from a typed
+/// value, and the text of the model through the one writer.
 [<RequireQualifiedAccess>]
 module JsonEncode =
 
     // ─── The text writer ─────────────────────────────────────────────
 
-    let private hex = "0123456789abcdef"
-
-    /// Escape exactly as `StringConverter.Write` does: the quote, the
-    /// backslash and the C0 controls (short forms where JSON has one,
-    /// `\u00xx` otherwise); every other character is written as itself.
-    ///
-    /// Runs of characters that need no escape are appended whole, not a
-    /// character at a time: on the Fable host a `StringBuilder` append is
-    /// an array push, so per-character appends dominate a request's cost.
-    let private appendString (sb: StringBuilder) (text: string) =
-        sb.Append '"' |> ignore
-        let mutable run = 0
-
-        for i in 0 .. text.Length - 1 do
-            let c = text.[i]
-
-            if c = '"' || c = '\\' || int c <= 0x1F then
-                if i > run then
-                    sb.Append(text.Substring(run, i - run)) |> ignore
-
-                match c with
-                | '"' -> sb.Append "\\\"" |> ignore
-                | '\\' -> sb.Append "\\\\" |> ignore
-                | '\b' -> sb.Append "\\b" |> ignore
-                | '\012' -> sb.Append "\\f" |> ignore
-                | '\n' -> sb.Append "\\n" |> ignore
-                | '\r' -> sb.Append "\\r" |> ignore
-                | '\t' -> sb.Append "\\t" |> ignore
-                | c ->
-                    let code = int c
-
-                    sb.Append("\\u00").Append(hex.[(code >>> 4) &&& 0xF]).Append(hex.[code &&& 0xF])
-                    |> ignore
-
-                run <- i + 1
-
-        if run = 0 then
-            sb.Append text |> ignore
-        elif run < text.Length then
-            sb.Append(text.Substring run) |> ignore
-
-        sb.Append '"' |> ignore
-
-    let rec private append (sb: StringBuilder) (value: JsonValue) =
-        match value with
-        | JsonValue.Null -> sb.Append "null" |> ignore
-        | JsonValue.Bool true -> sb.Append "true" |> ignore
-        | JsonValue.Bool false -> sb.Append "false" |> ignore
-        | JsonValue.Number lexical -> sb.Append lexical |> ignore
-        | JsonValue.String text -> appendString sb text
-        | JsonValue.Array items ->
-            sb.Append '[' |> ignore
-            let mutable first = true
-
-            for item in items do
-                if not first then
-                    sb.Append ',' |> ignore
-
-                first <- false
-                append sb item
-
-            sb.Append ']' |> ignore
-        | JsonValue.Object members ->
-            sb.Append '{' |> ignore
-            let mutable first = true
-
-            for name, item in members do
-                if not first then
-                    sb.Append ',' |> ignore
-
-                first <- false
-                appendString sb name
-                sb.Append ':' |> ignore
-                append sb item
-
-            sb.Append '}' |> ignore
-
     /// The compact JSON text of a value — no whitespace, members in model
     /// order, numbers exactly as their lexical form, strings escaped as
     /// the writer escapes them.
-    let toText (value: JsonValue) : string =
-        let sb = StringBuilder()
-        append sb value
-        sb.ToString()
+    ///
+    /// This is `JsonHost.serialize`, the one writer: a remoting argument
+    /// array and a provider request body are written by the same function.
+    let toText (value: JsonValue) : string = JsonHost.serialize value
 
     /// A request body: the argument ARRAY the server's argument seam
     /// parses (`[a1, a2, …]`, one element per argument in declaration
@@ -322,7 +245,7 @@ module JsonEncode =
     let map<'K, 'V when 'K: comparison> (key: KeyEncoder<'K>) (value: JsonEncoder<'V>) : JsonEncoder<Map<'K, 'V>> =
         fun m -> JsonValue.Object(m |> Map.toArray |> Array.map (fun (k, v) -> key k, value v))
 
-    /// Phase 899 — a map whose key is not string-representable, as an
+    /// A map whose key is not string-representable, as an
     /// array of `[key, value]` pairs in the map's order, each key in its
     /// own JSON form: what `Fable.SimpleJson` writes for such a key, and
     /// the inverse of `JsonDecode.asMapOf`.

@@ -5,7 +5,7 @@ module ToolUp.AI.Wire.Conformance.BlockPartFixtures
 
 open ToolUp.Platform.AI
 
-// ─── The block-part fixture family (Phase 1128) ──────────────────────
+// ─── The block-part fixture family ──────────────────────
 //
 // One declaration of the block-part values every host asserts against:
 //

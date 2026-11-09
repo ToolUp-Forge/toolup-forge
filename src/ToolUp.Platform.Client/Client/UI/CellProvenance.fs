@@ -30,6 +30,7 @@ open Fable.Core.JsInterop
 open Feliz
 open ToolUp.Platform
 open Feliz.AgGrid
+open ToolUp.Remoting.Json
 
 #nowarn "1182"
 
@@ -104,26 +105,25 @@ let subscribeProvenanceClick (handler: CellProvenance -> unit) : unit -> unit =
 
     fun () -> clickHandlers <- clickHandlers |> List.filter (fun (hid, _) -> hid <> id)
 
-let private jsonEscape (s: string) : string =
-    s.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\n", "\\n").Replace("\r", "\\r")
-
 let private provenancePayloadJson (prov: CellProvenance) : string =
     let opt =
         function
-        | Some s -> "\"" + jsonEscape s + "\""
-        | None -> "null"
+        | Some s -> jstr s
+        | None -> jnull
 
     let entityType, entityId =
         match prov.LinkedEntity with
         | Some(t, i) -> Some t, Some i
         | None -> None, None
 
-    sprintf
-        "{\"sourceLabel\":\"%s\",\"detail\":%s,\"linkedEntityType\":%s,\"linkedEntityId\":%s}"
-        (jsonEscape prov.SourceLabel)
-        (opt prov.Detail)
-        (opt entityType)
-        (opt entityId)
+    ToolUp.AI.Wire.JsonHost.serialize (
+        jobj [
+            "sourceLabel", jstr prov.SourceLabel
+            "detail", opt prov.Detail
+            "linkedEntityType", opt entityType
+            "linkedEntityId", opt entityId
+        ]
+    )
 
 /// Emit a provenance-click event: fan out to typed subscribers and publish
 /// a `CustomNotification` envelope on the shared client notification seam.

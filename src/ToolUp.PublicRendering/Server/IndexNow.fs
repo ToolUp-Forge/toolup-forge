@@ -19,6 +19,7 @@ open ToolUp.Platform.Metrics
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Infra.Metrics
+open ToolUp.Remoting.Json
 
 // ─── Phase 109 — IndexNow push-indexing ──────────────────────────────
 //
@@ -401,20 +402,17 @@ module IndexNow =
         let normalisedBase = baseUrl.TrimEnd('/')
         entries |> List.map (fun (Slug s, _) -> normalisedBase + "/" + s)
 
-    /// Compose the IndexNow batched-URL POST body.
+    /// Compose the IndexNow batched-URL POST body, through the one JSON
+    /// writer so every string in it is escaped as JSON escapes it.
     let buildBody (host: string) (key: string) (urls: string seq) : string =
-        let escaped =
-            urls
-            |> Seq.map (fun u -> "\"" + u.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"")
-            |> String.concat ","
-
-        sprintf
-            """{"host":"%s","key":"%s","keyLocation":"https://%s/%s.txt","urlList":[%s]}"""
-            host
-            key
-            host
-            key
-            escaped
+        ToolUp.AI.Wire.JsonHost.serialize (
+            jobj [
+                "host", jstr host
+                "key", jstr key
+                "keyLocation", jstr (sprintf "https://%s/%s.txt" host key)
+                "urlList", jarr [ for u in urls -> jstr u ]
+            ]
+        )
 
     /// Decide which batch indices to skip given the prior on-disk state and
     /// the current deploy signature. Returns `(skipSet, fullyDone)` where

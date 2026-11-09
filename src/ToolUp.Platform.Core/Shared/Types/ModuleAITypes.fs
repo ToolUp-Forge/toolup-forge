@@ -508,17 +508,11 @@ and ToolSchemaMember = {
 module ToolSchema =
 
     /// JSON-escape a string so it can be embedded inside a
-    /// double-quoted JSON string literal. Backslashes first, so the
-    /// replacements that follow are not double-escaped.
-    ///
-    /// This is the one implementation in the SDK: the AI companion's
-    /// provider-definition renderer delegates to it rather than keeping
-    /// a second copy that could drift.
-    let jsonEscape (s: string) : string =
-        if isNull (box s) then
-            ""
-        else
-            s.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\n", "\\n").Replace("\r", "\\r").Replace("\t", "\\t")
+    /// double-quoted JSON string literal: the one JSON writer's escape
+    /// (`JsonHost.escape`), so a control character in a description or an
+    /// enum value cannot produce a schema that is not JSON. The AI
+    /// companion's provider-definition renderer delegates here.
+    let jsonEscape (s: string) : string = ToolUp.AI.Wire.JsonHost.escape s
 
     /// A free-form JSON string.
     let text = SchemaString []

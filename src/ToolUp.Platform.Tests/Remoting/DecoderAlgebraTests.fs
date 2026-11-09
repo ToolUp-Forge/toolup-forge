@@ -291,7 +291,7 @@ let private algebraOutcomes: (string * RefusalOutcome) list = [
 /// plus the closure classes F# emits for its lambdas, which is where the
 /// combinator bodies actually live.
 let private decodeModuleTypes () =
-    let assembly = typeof<DecodeError>.Assembly
+    let assembly = typeof<Value>.Assembly
     let root = "ToolUp.Remoting.Decode"
 
     assembly.GetTypes()

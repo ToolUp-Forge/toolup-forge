@@ -756,13 +756,6 @@
              entries to keep the insertion off the contended mid-file
              region. Ships under fable/ with the rest of Core. -->
         <Compile Include="Shared\Interfaces\IContentScanner.fs" />
-        <!-- The remoting decode-refusal vocabulary
-             (`DecodeError` + the `DecodeException` carrier). MUST precede
-             the MsgPack block below: Read.fs refuses with it. Also
-             consumed by Platform.Server's argument-parse stage and
-             Platform.Client's proxy, which is why it lives in Core (the
-             only tier whose source ships under fable/, GP 10). -->
-        <Compile Include="Shared\Remoting\DecodeError.fs" />
         <!-- The event-stream grammar both hosts frame and parse a
              streaming method through. Lexical, FSharp.Core only. -->
         <Compile Include="Shared\Remoting\Sse.fs" />
@@ -792,15 +785,14 @@
              above, so it must see all of them. -->
         <Compile Include="Shared\Remoting\Decode.fs" />
         <Compile Include="Shared\Remoting\DecoderRegistry.fs" />
-        <!-- The JSON wire joins the algebra: the lexical value
-             model, the combinators over it, the argument-seam registry,
-             and (after PlatformDecoders, beside it) the platform's own
-             hand-written argument decoders. -->
-        <Compile Include="Shared\Remoting\Json\JsonValue.fs" />
+        <!-- The JSON wire joins the algebra: the combinators over the
+             lexical value model, the argument-seam registry, and (after
+             PlatformDecoders, beside it) the platform's own hand-written
+             argument decoders. The model itself (`JsonValue`, `JsonText`),
+             its one writer and the encoders (`JsonEncode`), and the
+             `DecodeError` vocabulary live in ToolUp.AI.Wire (referenced
+             below), namespaces preserved (Phase 881). -->
         <Compile Include="Shared\Remoting\Json\JsonDecode.fs" />
-        <!-- The writing half: the encoders a generated client
-             proxy builds a request's argument array through. -->
-        <Compile Include="Shared\Remoting\Json\JsonEncode.fs" />
         <Compile Include="Shared\Remoting\Json\JsonDecoderRegistry.fs" />
         <Compile Include="Shared\Remoting\PlatformDecoders.fs" />
         <Compile Include="Shared\Remoting\Json\PlatformJsonDecoders.fs" />

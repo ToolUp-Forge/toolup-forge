@@ -18,7 +18,9 @@ open Expecto
 #endif
 
 open ToolUp.Platform.AI
+open ToolUp.AI.Wire
 open ToolUp.AI.Wire.Tests
+open ToolUp.Remoting.Json
 
 let suite =
     testList "ToolUp.AI.Wire conformance (dual-host: .NET ↔ Fable)" [
@@ -33,7 +35,7 @@ let suite =
                 testCase name (fun () -> Expect.equal actual golden "request body bytes")
         ]
 
-        // ── 1b. Block parts (Phase 1128) — the node never leaves as a payload ──
+        // ── 1b. Block parts — the node never leaves as a payload ──
         //
         // A block's text stand-ins render identically on both hosts, and no
         // provider request body built from a history holding blocks carries
@@ -81,6 +83,44 @@ let suite =
                     Expect.isTrue (not (body.Contains BlockPartFixtures.NodeMarker)) "the node marker is absent"
                     Expect.isTrue (body.Contains "[block: table, table=daily-trade") "the table summary is present"
                     Expect.isTrue (body.Contains "[block: trend, table=daily-trade") "the trend summary is present")
+        ]
+
+        // ── 1c. Numbers at the precision boundary ──
+        //
+        // A number keeps the digits it was written with: every text below
+        // survives parse-then-serialize byte for byte on both hosts, and a
+        // number a double holds exactly is written as it always was.
+        testList "numbers at the precision boundary" [
+            for name, value, golden in NumberFixtures.builtPairs do
+                testCase ("built: " + name) (fun () -> Expect.equal (JsonHost.serialize value) golden "wire bytes")
+
+            for name, text in NumberFixtures.roundTrips do
+                testCase ("round trip: " + name) (fun () ->
+                    Expect.equal
+                        (JsonHost.parse text |> Option.map JsonHost.serialize)
+                        (Some text)
+                        "re-serialized text")
+
+            testCase "an int64 past 2^53 reads exactly" (fun () ->
+                Expect.equal
+                    (JsonHost.parse "9007199254740993" |> Option.bind JsonValue.asInt64)
+                    (Some 9007199254740993L)
+                    "asInt64")
+
+            testCase "a count written with a fraction reads by value" (fun () ->
+                Expect.equal (JsonHost.parse "7.0" |> Option.bind JsonValue.asInt) (Some 7) "asInt")
+        ]
+
+        // ── 1d. The one writer's string escaping, run-copied ──
+        testList "string escaping" [
+            for name, text, literal in StringFixtures.cases do
+                testCase name (fun () ->
+                    Expect.equal (JsonHost.serialize (jstr text)) literal "string literal"
+
+                    Expect.equal
+                        (JsonHost.escape text)
+                        (literal.Substring(1, literal.Length - 2))
+                        "escape is the literal without its quotes")
         ]
 
         // ── 2. Response structural-parity — OpenAI ──

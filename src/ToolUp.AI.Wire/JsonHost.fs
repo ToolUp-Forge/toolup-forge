@@ -3,178 +3,151 @@
 
 namespace ToolUp.AI.Wire
 
-#if FABLE_COMPILER
-open Fable.Core
-open Fable.Core.JsInterop
-#else
-open System.Text.Json
-#endif
+open System.Text
+open ToolUp.Remoting.Json
 
-/// The host-bridged serialization seam for `JsonValue`.
+/// The text seam for the one JSON value model (`ToolUp.Remoting.Json.JsonValue`):
+/// the tree's ONE JSON writer, and the parse a provider mapper reads a
+/// response through.
 ///
-/// **`parse` is host-bridged** (`#if FABLE_COMPILER`): under Fable it
-/// reifies the result of the browser's `JSON.parse`; on .NET it walks a
-/// `System.Text.Json` document. Parsing JSON correctly (escapes, numbers,
-/// unicode) is exactly the work to delegate to a battle-tested host engine.
+/// **`serialize` is a single portable writer** shared by both hosts — the
+/// same F# compiled to .NET and to Fable, never `System.Text.Json` or
+/// `JSON.stringify`. Two host engines do not guarantee identical number
+/// formatting, string escaping or member order, and **byte-stable output is
+/// the load-bearing property the parity gate depends on**. Object members
+/// emit in model order; a number emits as the token it carries; output is
+/// compact (no insignificant whitespace). `JsonEncode.toText` is this
+/// writer, so a provider request body and a remoting argument array are
+/// written by one function, and `escape` is its string escape for a caller
+/// that writes JSON by hand.
 ///
-/// **`serialize` is a single portable writer** shared by both hosts — it is
-/// *not* `#if`-split. Two different host JSON engines do not guarantee
-/// identical number formatting, string escaping, or object key order, and
-/// **byte-stable output is the load-bearing property the parity gate
-/// depends on**. A canonical hand-rolled writer — the same F# compiled to
-/// both hosts — makes byte-parity true by construction rather than by luck
-/// of two engines agreeing. (This is the "hand-rolled pretty-printer"
-/// idiom the phase cites.) Object members emit in `JObject` list order;
-/// output is compact (no insignificant whitespace).
+/// **`parse` is the portable text parser** (`JsonText.tryParse`) on both
+/// hosts — not the browser's `JSON.parse`, which reads every number as a
+/// double and keeps only the last of a duplicated key, and not a
+/// `System.Text.Json` document walked to `float`s. A number reaches the
+/// mapper with the digits it was written with.
 [<RequireQualifiedAccess>]
 module JsonHost =
 
-    // ─── serialize (portable canonical writer) ───────────────────────
+    let private hex = "0123456789abcdef"
 
-    /// Lower-case `\uXXXX` escape, hand-built from nibbles so the output is
-    /// identical on .NET and Fable (a numeric `ToString("x4")` format
-    /// specifier is not guaranteed to compile to the same text under Fable).
-    let private unicodeEscape (code: int) : string =
-        let digits = "0123456789abcdef"
+    /// Whether `c` must be escaped inside a JSON string: the quote, the
+    /// backslash and the C0 controls. Nothing else is — non-ASCII and lone
+    /// surrogates pass through as themselves.
+    let inline private needsEscape (c: char) = c = '"' || c = '\\' || int c <= 0x1F
 
-        let nibble shift = string digits[(code >>> shift) &&& 0xF]
+    let private appendEscape (sb: StringBuilder) (c: char) =
+        match c with
+        | '"' -> sb.Append "\\\"" |> ignore
+        | '\\' -> sb.Append "\\\\" |> ignore
+        | '\b' -> sb.Append "\\b" |> ignore
+        | '\012' -> sb.Append "\\f" |> ignore
+        | '\n' -> sb.Append "\\n" |> ignore
+        | '\r' -> sb.Append "\\r" |> ignore
+        | '\t' -> sb.Append "\\t" |> ignore
+        | c ->
+            let code = int c
 
-        "\\u" + nibble 12 + nibble 8 + nibble 4 + nibble 0
+            sb.Append("\\u00").Append(hex.[(code >>> 4) &&& 0xF]).Append(hex.[code &&& 0xF])
+            |> ignore
 
-    let private writeString (sb: System.Text.StringBuilder) (s: string) : unit =
-        sb.Append('"') |> ignore
+    /// The index of the first character of `text` at or after `start` that
+    /// needs an escape, or `text.Length`.
+    let private nextEscape (text: string) (start: int) =
+        let mutable i = start
 
-        for ch in s do
-            match ch with
-            | '"' -> sb.Append("\\\"") |> ignore
-            | '\\' -> sb.Append("\\\\") |> ignore
-            | '\b' -> sb.Append("\\b") |> ignore
-            | '\f' -> sb.Append("\\f") |> ignore
-            | '\n' -> sb.Append("\\n") |> ignore
-            | '\r' -> sb.Append("\\r") |> ignore
-            | '\t' -> sb.Append("\\t") |> ignore
-            // Remaining C0 control characters have no short escape — emit the
-            // 6-char \u form. Everything else (including non-ASCII) is emitted
-            // literally, matching both JSON.stringify and System.Text.Json's
-            // relaxed encoder.
-            | c when int c < 0x20 -> sb.Append(unicodeEscape (int c)) |> ignore
-            | c -> sb.Append(c) |> ignore
+        while i < text.Length && not (needsEscape text.[i]) do
+            i <- i + 1
 
-        sb.Append('"') |> ignore
+        i
 
-    /// Canonical number formatting. JSON has no NaN / ±∞ (they become
-    /// `null`, as `JSON.stringify` does). Integral values in a safe range
-    /// emit without a decimal point via int64 formatting (identical on both
-    /// hosts); other values fall back to the shortest round-trip string.
-    let private writeNumber (sb: System.Text.StringBuilder) (f: float) : unit =
-        if System.Double.IsNaN f || System.Double.IsInfinity f then
-            sb.Append("null") |> ignore
-        elif f = floor f && abs f < 1e15 then
-            sb.Append(string (int64 f)) |> ignore
+    /// Append `text`'s escaped content (no quotes). Scan-then-copy: each run
+    /// of characters that need no escape is appended whole, never a
+    /// character at a time — on the Fable host a `StringBuilder` append is
+    /// an array push, so per-character appends dominate a request's cost —
+    /// and a string with nothing to escape is appended as itself.
+    let private appendEscaped (sb: StringBuilder) (text: string) =
+        let first = nextEscape text 0
+
+        if first = text.Length then
+            sb.Append text |> ignore
         else
-            sb.Append(string f) |> ignore
+            if first > 0 then
+                sb.Append(text.Substring(0, first)) |> ignore
 
-    let rec private writeValue (sb: System.Text.StringBuilder) (v: JsonValue) : unit =
-        match v with
-        | JNull -> sb.Append("null") |> ignore
-        | JBool b -> sb.Append(if b then "true" else "false") |> ignore
-        | JNumber f -> writeNumber sb f
-        | JString s -> writeString sb s
-        | JArray items ->
-            sb.Append('[') |> ignore
+            let mutable i = first
 
-            items
-            |> List.iteri (fun i item ->
+            while i < text.Length do
+                appendEscape sb text.[i]
+                let runEnd = nextEscape text (i + 1)
+
+                if runEnd > i + 1 then
+                    sb.Append(text.Substring(i + 1, runEnd - i - 1)) |> ignore
+
+                i <- runEnd
+
+    let private appendString (sb: StringBuilder) (text: string) =
+        sb.Append '"' |> ignore
+        appendEscaped sb text
+        sb.Append '"' |> ignore
+
+    let rec private append (sb: StringBuilder) (value: JsonValue) =
+        match value with
+        | JsonValue.Null -> sb.Append "null" |> ignore
+        | JsonValue.Bool true -> sb.Append "true" |> ignore
+        | JsonValue.Bool false -> sb.Append "false" |> ignore
+        | JsonValue.Number lexical -> sb.Append lexical |> ignore
+        | JsonValue.String text -> appendString sb text
+        | JsonValue.Array items ->
+            sb.Append '[' |> ignore
+
+            for i in 0 .. items.Length - 1 do
                 if i > 0 then
-                    sb.Append(',') |> ignore
+                    sb.Append ',' |> ignore
 
-                writeValue sb item)
+                append sb items[i]
 
-            sb.Append(']') |> ignore
-        | JObject members ->
-            sb.Append('{') |> ignore
+            sb.Append ']' |> ignore
+        | JsonValue.Object members ->
+            sb.Append '{' |> ignore
 
-            members
-            |> List.iteri (fun i (key, value) ->
+            for i in 0 .. members.Length - 1 do
                 if i > 0 then
-                    sb.Append(',') |> ignore
+                    sb.Append ',' |> ignore
 
-                writeString sb key
-                sb.Append(':') |> ignore
-                writeValue sb value)
+                let name, item = members[i]
+                appendString sb name
+                sb.Append ':' |> ignore
+                append sb item
 
-            sb.Append('}') |> ignore
+            sb.Append '}' |> ignore
 
-    /// Serialize a `JsonValue` to a compact JSON string. Byte-stable: object
-    /// members emit in `JObject` order, and the writer is the same code on
-    /// every host.
-    let serialize (v: JsonValue) : string =
-        let sb = System.Text.StringBuilder()
-        writeValue sb v
+    /// `text` escaped for the inside of a JSON string literal, without the
+    /// surrounding quotes, exactly as `serialize` escapes a string: the
+    /// quote, the backslash and the C0 controls (short forms where JSON has
+    /// one, lower-case `\u00xx` otherwise). The one escaper for a caller
+    /// that writes JSON by hand; `null` escapes to the empty string.
+    let escape (text: string) : string =
+        if isNull text then
+            ""
+        elif nextEscape text 0 = text.Length then
+            text
+        else
+            let sb = StringBuilder(text.Length + 8)
+            appendEscaped sb text
+            sb.ToString()
+
+    /// Serialize a `JsonValue` to compact JSON text. Byte-stable: members
+    /// emit in model order and the writer is the same code on every host.
+    let serialize (value: JsonValue) : string =
+        let sb = StringBuilder()
+        append sb value
         sb.ToString()
 
-    // ─── parse (host-bridged) ────────────────────────────────────────
-
-#if FABLE_COMPILER
-    [<Emit("JSON.parse($0)")>]
-    let private jsonParse (s: string) : obj = jsNative
-
-    [<Emit("$0 === null")>]
-    let private isJsNull (o: obj) : bool = jsNative
-
-    [<Emit("typeof $0")>]
-    let private jsTypeOf (o: obj) : string = jsNative
-
-    [<Emit("Array.isArray($0)")>]
-    let private isJsArray (o: obj) : bool = jsNative
-
-    [<Emit("Object.keys($0)")>]
-    let private jsKeys (o: obj) : string[] = jsNative
-
-    let rec private reify (o: obj) : JsonValue =
-        if isJsNull o then
-            JNull
-        else
-            match jsTypeOf o with
-            | "boolean" -> JBool(unbox o)
-            | "number" -> JNumber(unbox o)
-            | "string" -> JString(unbox o)
-            | _ ->
-                if isJsArray o then
-                    JArray [ for item in (unbox<obj[]> o) -> reify item ]
-                else
-                    // Object.keys preserves source order for string keys (the
-                    // integer-like-key reordering JS performs does not arise
-                    // for wire-mapping field names).
-                    JObject [ for k in jsKeys o -> k, reify (o?(k)) ]
-
-    /// Parse a JSON string into a `JsonValue`, or `None` when the input is
-    /// not valid JSON. Never throws.
-    let parse (s: string) : JsonValue option =
-        try
-            Some(reify (jsonParse s))
-        with _ ->
-            None
-#else
-    let rec private fromElement (el: JsonElement) : JsonValue =
-        match el.ValueKind with
-        | JsonValueKind.Null
-        | JsonValueKind.Undefined -> JNull
-        | JsonValueKind.True -> JBool true
-        | JsonValueKind.False -> JBool false
-        | JsonValueKind.Number -> JNumber(el.GetDouble())
-        | JsonValueKind.String -> JString(el.GetString())
-        | JsonValueKind.Array -> JArray [ for item in el.EnumerateArray() -> fromElement item ]
-        | JsonValueKind.Object -> JObject [ for prop in el.EnumerateObject() -> prop.Name, fromElement prop.Value ]
-        | _ -> JNull
-
-    /// Parse a JSON string into a `JsonValue`, or `None` when the input is
-    /// not valid JSON. Never throws. The value is fully materialised before
-    /// the document is disposed, so no `JsonElement` escapes the seam.
-    let parse (s: string) : JsonValue option =
-        try
-            use doc = JsonDocument.Parse(s)
-            Some(fromElement doc.RootElement)
-        with _ ->
-            None
-#endif
+    /// Parse JSON text into a `JsonValue`, numbers as their lexical tokens,
+    /// or `None` when the input is not valid JSON (RFC 8259, under
+    /// `JsonText`'s default bounds). Never throws.
+    let parse (text: string) : JsonValue option =
+        match JsonText.tryParse text with
+        | Ok value -> Some value
+        | Error _ -> None

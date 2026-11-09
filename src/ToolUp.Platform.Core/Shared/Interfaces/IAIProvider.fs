@@ -157,15 +157,15 @@ type IAIProviderModelOverride =
         retryPolicy: RetryPolicy ->
             Async<Result<AIProviderCallResponse, AIProviderError>>
 
-/// Phase 67b — fallback implementations external `IAIProvider`
+/// Fallback implementations external `IAIProvider`
 /// implementers may compose into their own `SendStructuredMessage`
 /// methods. The shipped providers (Gemini, OpenAI, Claude) provide
 /// native implementations; this helper is the path for non-native
 /// providers (and the contract test surface for the default fallback).
 ///
-/// Portable (Phase 250). The JSON post-validation routes through the
-/// Fable-safe `ToolUp.AI.Wire.JsonHost.parse` (browser `JSON.parse` under
-/// Fable, `System.Text.Json` on .NET) instead of an unguarded
+/// Portable. The JSON post-validation routes through the portable
+/// `ToolUp.AI.Wire.JsonHost.parse` (the same text parser on both hosts)
+/// instead of an unguarded
 /// `System.Text.Json.JsonDocument.Parse`, so the whole module — and with
 /// it the connector contract — compiles to both hosts with no
 /// `#if !FABLE_COMPILER` guard.
@@ -215,7 +215,7 @@ module IAIProviderDefaults =
                         )
                     else
                         // `JsonHost.parse` is total (returns `option`, never
-                        // throws) and host-bridged, so the validation needs no
+                        // throws) and portable, so the validation needs no
                         // try/with and carries no host-specific parse exception
                         // to report — `None` is the single "not parseable JSON"
                         // signal on both .NET and Fable.

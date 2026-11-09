@@ -1,6 +1,7 @@
 module internal ClaudeAIProviderWire
 
 open ToolUp.AI.Wire
+open ToolUp.Remoting.Json
 open ToolUp.Platform.AI
 
 // ─── Portable Claude wire mapping ───────────
@@ -40,11 +41,11 @@ open ToolUp.Platform.AI
 /// cache-write count (useful for cost analysis — writes are billed at a
 /// premium over reads).
 let parseUsage (root: JsonValue) : TokenUsage option =
-    match root |> JsonValue.tryField "usage" with
+    match root |> JsonValue.tryMember "usage" with
     | Some usage ->
         let getInt (name: string) =
             usage
-            |> JsonValue.tryField name
+            |> JsonValue.tryMember name
             |> Option.bind JsonValue.asInt
             |> Option.defaultValue 0
 
@@ -59,7 +60,7 @@ let parseUsage (root: JsonValue) : TokenUsage option =
             OutputTokens = outputTokens
             CacheCreationTokens =
                 (usage
-                 |> JsonValue.tryField "cache_creation_input_tokens"
+                 |> JsonValue.tryMember "cache_creation_input_tokens"
                  |> Option.bind JsonValue.asInt)
         }
     | None -> None
@@ -76,40 +77,40 @@ let parseResponse (json: string) : AIProviderResponse =
     | Some root ->
         let stopReason =
             root
-            |> JsonValue.tryField "stop_reason"
+            |> JsonValue.tryMember "stop_reason"
             |> Option.bind JsonValue.asString
             |> Option.defaultValue "end_turn"
 
         let blocks =
             root
-            |> JsonValue.tryField "content"
+            |> JsonValue.tryMember "content"
             |> Option.bind JsonValue.asArray
-            |> Option.defaultValue []
+            |> Option.defaultValue [||]
 
         let mutable textContent = ""
         let mutable toolCalls: AIProviderToolCall list = []
 
         for block in blocks do
-            match block |> JsonValue.tryField "type" |> Option.bind JsonValue.asString with
+            match block |> JsonValue.tryMember "type" |> Option.bind JsonValue.asString with
             | Some "text" ->
-                match block |> JsonValue.tryField "text" |> Option.bind JsonValue.asString with
+                match block |> JsonValue.tryMember "text" |> Option.bind JsonValue.asString with
                 | Some txt -> textContent <- textContent + txt
                 | None -> ()
             | Some "tool_use" ->
                 let id =
                     block
-                    |> JsonValue.tryField "id"
+                    |> JsonValue.tryMember "id"
                     |> Option.bind JsonValue.asString
                     |> Option.defaultValue ""
 
                 let name =
                     block
-                    |> JsonValue.tryField "name"
+                    |> JsonValue.tryMember "name"
                     |> Option.bind JsonValue.asString
                     |> Option.defaultValue ""
 
                 let input =
-                    match block |> JsonValue.tryField "input" with
+                    match block |> JsonValue.tryMember "input" with
                     | Some v -> JsonHost.serialize v
                     | None -> "{}"
 
@@ -157,7 +158,7 @@ let private cacheControlMarker: JsonValue = jobj [ "type", jstr "ephemeral" ]
 /// A non-object value passes through unchanged.
 let private withCacheControl (v: JsonValue) : JsonValue =
     match v with
-    | JObject members -> JObject(members @ [ "cache_control", cacheControlMarker ])
+    | JsonValue.Object members -> JsonValue.Object(Array.append members [| "cache_control", cacheControlMarker |])
     | other -> other
 
 /// Embed a JSON-Schema / arguments string as JSON structure. Parses the
@@ -390,8 +391,8 @@ let normaliseStructuredPayload (schemaJson: string) (payload: string) : string =
     let schemaDeclaresInput =
         match JsonHost.parse schemaJson with
         | Some schema ->
-            match schema |> JsonValue.tryField "properties" with
-            | Some props -> (props |> JsonValue.tryField "input").IsSome
+            match schema |> JsonValue.tryMember "properties" with
+            | Some props -> (props |> JsonValue.tryMember "input").IsSome
             | None -> false
         | None -> false
 
@@ -400,10 +401,10 @@ let normaliseStructuredPayload (schemaJson: string) (payload: string) : string =
     // strings (a field value of "123" or "true" is plausibly literal).
     let tryUnstring (v: JsonValue) : JsonValue option =
         match v with
-        | JString s ->
+        | JsonValue.String s ->
             match JsonHost.parse s with
-            | Some(JObject _ as inner) -> Some inner
-            | Some(JArray _ as inner) -> Some inner
+            | Some(JsonValue.Object _ as inner) -> Some inner
+            | Some(JsonValue.Array _ as inner) -> Some inner
             | _ -> None
         | _ -> None
 
@@ -420,7 +421,7 @@ let normaliseStructuredPayload (schemaJson: string) (payload: string) : string =
         let el =
             if not schemaDeclaresInput then
                 match el with
-                | JObject [ ("input", v) ] ->
+                | JsonValue.Object [| ("input", v) |] ->
                     let unwrapped =
                         match tryUnstring v with
                         | Some inner -> inner
@@ -430,8 +431,8 @@ let normaliseStructuredPayload (schemaJson: string) (payload: string) : string =
                     // "input" is more plausibly a (degenerate) legitimate
                     // payload than the envelope disease.
                     match unwrapped with
-                    | JObject _
-                    | JArray _ -> unwrapped
+                    | JsonValue.Object _
+                    | JsonValue.Array _ -> unwrapped
                     | _ -> el
                 | _ -> el
             else
@@ -454,7 +455,7 @@ let buildRequestBodyWithEffort
     (stream: bool)
     (structuredOutputSchema: string option)
     : string =
-    // Build the request as an ordered JObject to control which fields are
+    // Build the request as an ordered JsonValue.Object to control which fields are
     // included (Claude rejects null/unknown fields) and the member order
     // (so the serialized bytes are deterministic across hosts).
     //

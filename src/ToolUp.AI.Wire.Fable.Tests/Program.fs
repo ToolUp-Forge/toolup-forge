@@ -1,6 +1,7 @@
 module ToolUp.AI.Wire.Fable.Tests.Program
 
 open ToolUp.AI.Wire
+open ToolUp.Remoting.Json
 open ToolUp.AI.Wire.Fable.Tests.NodeTest
 open ToolUp.AI.Wire.Tests
 open ToolUp.Platform.AI // Phase 251 — ErrorClassifier / AIProviderError on the Fable host

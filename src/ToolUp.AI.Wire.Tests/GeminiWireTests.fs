@@ -12,6 +12,7 @@ module ToolUp.AI.Wire.Tests.GeminiWireTests
 open Expecto
 open ToolUp.Platform.AI
 open ToolUp.AI.Wire.Tests.GeminiWireFixtures
+open ToolUp.Remoting.Json
 
 let tests =
     testList "GeminiWire" [

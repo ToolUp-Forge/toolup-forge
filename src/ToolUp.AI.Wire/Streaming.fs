@@ -4,8 +4,9 @@
 namespace ToolUp.AI.Wire
 
 open ToolUp.Platform.AI
+open ToolUp.Remoting.Json
 
-// ─── Pure SSE streaming state machine (Wave 32, Phase 254) ───────
+// ─── Pure SSE streaming state machine ────────────────────────────
 //
 // A provider's streaming response assembly — accumulate text deltas,
 // stitch tool-call argument fragments, capture token usage from the
@@ -20,7 +21,7 @@ open ToolUp.Platform.AI
 // `state -> AIProviderResponse` finalizer: immutable records + string
 // concatenation, parsing each chunk through `JsonHost.parse` (no
 // `System.Text.Json`), so the same source compiles to both hosts (GP 8 /
-// GP 12). Claude lands here first (Phase 254); OpenAI's `chunk -> delta`
+// GP 12). Claude lands here first; OpenAI's `chunk -> delta`
 // parser folds into the same file in a follow-up.
 
 /// Claude (Anthropic Messages API) streaming assembly.
@@ -75,7 +76,7 @@ module ClaudeStreaming =
     /// non-numeric (matches the non-streaming `parseUsage` helper).
     let private getInt (name: string) (obj: JsonValue) : int =
         obj
-        |> JsonValue.tryField name
+        |> JsonValue.tryMember name
         |> Option.bind JsonValue.asInt
         |> Option.defaultValue 0
 
@@ -89,14 +90,14 @@ module ClaudeStreaming =
         match JsonHost.parse data with
         | None -> state, None
         | Some root ->
-            match root |> JsonValue.tryField "type" |> Option.bind JsonValue.asString with
+            match root |> JsonValue.tryMember "type" |> Option.bind JsonValue.asString with
             | Some "content_block_delta" ->
-                match root |> JsonValue.tryField "delta" with
+                match root |> JsonValue.tryMember "delta" with
                 | None -> state, None
                 | Some delta ->
-                    match delta |> JsonValue.tryField "type" |> Option.bind JsonValue.asString with
+                    match delta |> JsonValue.tryMember "type" |> Option.bind JsonValue.asString with
                     | Some "text_delta" ->
-                        match delta |> JsonValue.tryField "text" |> Option.bind JsonValue.asString with
+                        match delta |> JsonValue.tryMember "text" |> Option.bind JsonValue.asString with
                         | Some t ->
                             {
                                 state with
@@ -108,7 +109,7 @@ module ClaudeStreaming =
                         // Append `partial_json` onto the last opened tool
                         // call's Arguments buffer. Correct because Anthropic
                         // keeps at most one tool-use block active at a time.
-                        match delta |> JsonValue.tryField "partial_json" |> Option.bind JsonValue.asString with
+                        match delta |> JsonValue.tryMember "partial_json" |> Option.bind JsonValue.asString with
                         | Some pj when not state.ToolCalls.IsEmpty ->
                             let lastIdx = state.ToolCalls.Length - 1
 
@@ -131,20 +132,20 @@ module ClaudeStreaming =
                 // Arguments buffer starts empty and the `input_json_delta`
                 // chunks above fill it. An empty buffer is defaulted to "{}"
                 // by `finalize` (a zero-input tool call emits no deltas).
-                match root |> JsonValue.tryField "content_block" with
+                match root |> JsonValue.tryMember "content_block" with
                 | None -> state, None
                 | Some cb ->
-                    match cb |> JsonValue.tryField "type" |> Option.bind JsonValue.asString with
+                    match cb |> JsonValue.tryMember "type" |> Option.bind JsonValue.asString with
                     | Some "tool_use" ->
                         let id =
                             cb
-                            |> JsonValue.tryField "id"
+                            |> JsonValue.tryMember "id"
                             |> Option.bind JsonValue.asString
                             |> Option.defaultValue ""
 
                         let name =
                             cb
-                            |> JsonValue.tryField "name"
+                            |> JsonValue.tryMember "name"
                             |> Option.bind JsonValue.asString
                             |> Option.defaultValue ""
 
@@ -159,12 +160,16 @@ module ClaudeStreaming =
             | Some "message_start" ->
                 // Initial usage: input/cache counts + the role-marker
                 // output_tokens (later replaced by the cumulative value).
-                match root |> JsonValue.tryField "message" |> Option.bind (JsonValue.tryField "usage") with
+                match
+                    root
+                    |> JsonValue.tryMember "message"
+                    |> Option.bind (JsonValue.tryMember "usage")
+                with
                 | None -> state, None
                 | Some usage ->
                     let cacheCreationOpt =
                         usage
-                        |> JsonValue.tryField "cache_creation_input_tokens"
+                        |> JsonValue.tryMember "cache_creation_input_tokens"
                         |> Option.bind JsonValue.asInt
 
                     {
@@ -183,8 +188,8 @@ module ClaudeStreaming =
                 let state =
                     match
                         root
-                        |> JsonValue.tryField "delta"
-                        |> Option.bind (JsonValue.tryField "stop_reason")
+                        |> JsonValue.tryMember "delta"
+                        |> Option.bind (JsonValue.tryMember "stop_reason")
                         |> Option.bind JsonValue.asString
                     with
                     | Some sr -> { state with StopReason = sr }
@@ -193,8 +198,8 @@ module ClaudeStreaming =
                 let state =
                     match
                         root
-                        |> JsonValue.tryField "usage"
-                        |> Option.bind (JsonValue.tryField "output_tokens")
+                        |> JsonValue.tryMember "usage"
+                        |> Option.bind (JsonValue.tryMember "output_tokens")
                         |> Option.bind JsonValue.asInt
                     with
                     | Some o -> {
