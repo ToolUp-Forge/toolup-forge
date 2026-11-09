@@ -251,7 +251,7 @@ let tests =
 
             let book =
                 ToolUp.Platform.Jobs.NotificationAddressBook.BlobBackedNotificationAddressBook(storage, Some logger)
-                :> INotificationAddressBook
+                :> ToolUp.Platform.Jobs.INotificationAddressBook
 
             Expect.isNone (book.ResolveEmail(RecipientId.User(UserId "u1"), "t1") |> run) "the one send is skipped"
             Expect.isNonEmpty warned "and never silently, as though the user had no address"
