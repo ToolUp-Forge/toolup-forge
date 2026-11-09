@@ -247,6 +247,7 @@ let private registeredTests =
         ObservabilityHandlersTests.datadogReadbackTests
         AnonymousSessionBindingTests.tests
         BlobCorruptionChaosTests.tests
+        DocumentStoreAdoptersTests.tests
         BlobPlatformAIKeyStoreTests.tests
         MultiPlatformProviderResolutionTests.tests
         AIProviderFallbackTests.tests

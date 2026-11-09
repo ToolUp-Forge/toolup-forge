@@ -4466,7 +4466,6 @@ let main args =
         "DataSourceConfigStore.fs"
         // Excluded from the move by Phase 1061's own rule until 976 and 979 ship.
         "EntityOutbox.fs"
-        "FeatureFlagStore.fs"
         "IExternalHandleStore.fs"
         "ILifecycleLedger.fs"
         "ILifecycleSummaryStore.fs"
