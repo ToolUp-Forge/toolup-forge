@@ -226,6 +226,7 @@ ToolUp.Platform.Codemod.analyseFileFor(Microsoft.FSharp.Collections.FSharpList`1
 ToolUp.Platform.Codemod.analyseFileIn(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.SubsystemNamespaces+ProjectScope+Scope], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CodemodMigration], System.String, ToolUp.Platform.CodemodFileClass, System.String) : ToolUp.Platform.CodemodFileResult
 ToolUp.Platform.Codemod.apply(ToolUp.Platform.CodemodPlan) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Platform.Codemod.classify(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.CodemodFileClass]
+ToolUp.Platform.Codemod.clientConcernFields : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]]] { get }
 ToolUp.Platform.Codemod.concernFields : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]]] { get }
 ToolUp.Platform.Codemod.featureModes : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`3[System.String, System.String, System.String]] { get }
 ToolUp.Platform.Codemod.migrationOfPhase(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.CodemodMigration]
@@ -277,6 +278,7 @@ ToolUp.Platform.CodemodMigration.ApiStability : ToolUp.Platform.CodemodMigration
 ToolUp.Platform.CodemodMigration.AuditFailureAsData : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration.BackgroundPlacement : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration.Capabilities : ToolUp.Platform.CodemodMigration { get }
+ToolUp.Platform.CodemodMigration.ClientConfigByConcern : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration.CompanionOptions : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration.ConnectorKernel : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration.Deprecations : ToolUp.Platform.CodemodMigration { get }
@@ -287,6 +289,7 @@ ToolUp.Platform.CodemodMigration.IsApiStability : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsAuditFailureAsData : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsBackgroundPlacement : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsCapabilities : System.Boolean { get }
+ToolUp.Platform.CodemodMigration.IsClientConfigByConcern : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsCompanionOptions : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsConnectorKernel : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsDeprecations : System.Boolean { get }
@@ -331,6 +334,7 @@ ToolUp.Platform.CodemodMigration+Tags.ApiStability : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.AuditFailureAsData : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.BackgroundPlacement : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.Capabilities : System.Int32 (literal)
+ToolUp.Platform.CodemodMigration+Tags.ClientConfigByConcern : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.CompanionOptions : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.ConnectorKernel : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.Deprecations : System.Int32 (literal)

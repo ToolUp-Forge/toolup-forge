@@ -8,7 +8,7 @@ Feliz.AgCharts 41/335
 Feliz.AgGrid 66/695
 Feliz.AgGrid.Enterprise 45/667
 InterPlatform 1371/2493
-ToolUp.AI.Client 181/796
+ToolUp.AI.Client 186/793
 ToolUp.AI.Core 454/928
 ToolUp.AI.McpHost 142/245
 ToolUp.AI.SampleClientTool.Client 1/2
@@ -137,8 +137,8 @@ ToolUp.Offline.Server 16/33
 ToolUp.OpenXml 107/298
 ToolUp.OpenXml.Spreadsheet 45/141
 ToolUp.OpenXml.SvgRasterizer.Skia 3/3
-ToolUp.Platform.Build 583/1047
-ToolUp.Platform.Client 2191/5604
+ToolUp.Platform.Build 585/1051
+ToolUp.Platform.Client 2217/5614
 ToolUp.Platform.Core 8235/17125
 ToolUp.Platform.Server 3073/5525
 ToolUp.Platform.Server.Audit 376/696
