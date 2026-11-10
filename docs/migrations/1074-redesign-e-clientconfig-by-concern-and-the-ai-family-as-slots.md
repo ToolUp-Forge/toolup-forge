@@ -8,7 +8,6 @@ type ClientConfig = {
     AppName: string
     AppLogo: string
     Surfaces: SurfaceProfile list
-    BrowserHistory: BrowserHistoryMode   // bound by the public composition profile; see below
     Slots: ShellSlotFills                // 879
     Chrome: ShellChrome                  // the six chrome rows
     Auth: AuthConfig
@@ -51,7 +50,7 @@ reported as `1074-shared-field-read`.
 
 | Was (`ClientConfig.`) | Is |
 |---|---|
-| `LoadingIndicator`, `ActiveModule`, `NotAuthorisedView`, `HomeRecents`, `ToastCentre`, `GlobalOverlays`, `InputsPaneWidth`, `GridModules`, `Presence`, `Offline` | `Shell.<same>` |
+| `LoadingIndicator`, `ActiveModule`, `BrowserHistory`, `NotAuthorisedView`, `HomeRecents`, `ToastCentre`, `GlobalOverlays`, `InputsPaneWidth`, `GridModules`, `Presence`, `Offline` | `Shell.<same>` |
 | `CommandPalette: CommandPaletteMode` | `Shell.CommandPalette: FeatureMode` (`NoCommandPalette` → `Disabled`, `DefaultCommandPalette` → `Enabled`) |
 | `AuthUI`, `AuthBridge`, `DevDefaultUserId` | `Auth.<same>` |
 | `AuthTokenStorage: AuthTokenStorage` | `Auth.HttpOnlySession: FeatureMode` (`ClientCookieAndLocalStorage` → `Disabled`, `ServerSetHttpOnlyCookie` → `Enabled`) — the client twin of the server's `SecurityPosture.AuthCookieIssuance` |
@@ -72,10 +71,11 @@ The retired types: `CommandPaletteMode`, `AuthTokenStorage`, `AdminSurfaceMode`,
 call `SidebarVisibility.isAdminSidebarGroup` / `isPlatformAdminSidebarGroup`. The no-active-team gate's
 admin exception is `SidebarVisibility.noActiveTeamAdmits`.
 
-**Kept, with the reason.** `BrowserHistory` keeps its `BrowserHistoryMode` union and its top-level
-field: the public composition profile binds it (`spec/surface-binding.json`, `clientShell.browserHistory`
-— one case per profile token, one for the absent member), and a reduction writes the field, so
-retyping or moving it is a profile change (§P7). `ModuleAvailability`, `ModuleArea` and
+**Kept, with the reason.** `BrowserHistory` keeps its `BrowserHistoryMode` union and its cases and moves
+to `Shell.BrowserHistory`: the public composition profile binds the union (`spec/surface-binding.json`,
+`clientShell.browserHistory` — one case per profile token, one for the absent member), and the binding
+now names the field by its path from `ClientConfig`. The profile's vocabulary is unchanged, so its
+version does not move (§P1). `ModuleAvailability`, `ModuleArea` and
 `BearerTokenKind` are two-case unions with no payload, but they classify a module or choose a token,
 and neither case is "off" — 877's rule keeps such a choice its own type. `OfflineMode` carries a
 payload.

@@ -70,6 +70,9 @@
 @@ L16 [1074-client-config-field]
 -            CommandPalette = FeatureMode.Enabled
 +            Shell.CommandPalette = FeatureMode.Enabled
+@@ L17 [1074-client-config-field]
+-            BrowserHistory = HashHistory
++            Shell.BrowserHistory = HashHistory
 @@ L18 [1074-chrome-on]
 -            AdminSurface = SeparateArea
 +            AdminSurface = ChromeFill.On()
@@ -531,4 +534,4 @@
 @@ L41 [73-remoting-namespace]
 -let legacyJson = Fable.Remoting.Json.FableJsonConverter()
 +let legacyJson = ToolUp.Remoting.Json.FableJsonConverter()
-Codemod: 143 rewrite(s) across 20 file(s) pending.
+Codemod: 144 rewrite(s) across 20 file(s) pending.

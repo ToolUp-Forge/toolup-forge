@@ -1550,9 +1550,9 @@ type NotAuthorisedMode =
 /// Phase 1240 — whether the shell's views have browser history and a URL.
 ///
 /// Kept as its own union by Phase 1074: the public composition profile
-/// binds it (`spec/surface-binding.json`, `clientShell.browserHistory`) —
-/// one case per profile token and one for the absent member — so retyping
-/// it, or moving the field, is a profile change.
+/// binds it (`spec/surface-binding.json`, `clientShell.browserHistory`,
+/// the field `Shell.BrowserHistory`) — one case per profile token and one
+/// for the absent member — so retyping it is a profile change.
 type BrowserHistoryMode =
     /// The default — the active view lives in the model alone: no history
     /// entry is written, and the URL is neither read nor changed.
@@ -2148,6 +2148,13 @@ type ShellConfig = {
     /// Name of the module to show on startup. Falls back to the first
     /// module if None or not found.
     ActiveModule: string option
+    /// Phase 1240 — browser history and a URL per view. **Default
+    /// `NoBrowserHistory`** (the URL is neither read nor written).
+    /// `HashHistory` gives each view the URL `#/{moduleId}{pageRoute}`: a
+    /// navigation adds a history entry, Back and Forward move between
+    /// views, and a reload restores the view through the route guard
+    /// (Phase 569).
+    BrowserHistory: BrowserHistoryMode
     /// Phase 569 — the view rendered when the route guard refuses a
     /// deep-linked module. **Default `DefaultNotAuthorised`** — the SDK's
     /// reason-aware surface. The guard itself is not configurable: a
@@ -2200,13 +2207,14 @@ type ShellConfig = {
 
 /// Phase 1074 — shell presentation defaults.
 module ShellConfig =
-    /// The skeleton loader, the first module, the SDK's
+    /// The skeleton loader, the first module, no URL history, the SDK's
     /// denial surface, no palette, no recents, the built-in toasts, no
     /// overlays, a narrow inputs pane, Community grid modules, no
     /// presence mount, online-only.
     let defaults: ShellConfig = {
         LoadingIndicator = SkeletonLoader
         ActiveModule = None
+        BrowserHistory = NoBrowserHistory
         NotAuthorisedView = DefaultNotAuthorised
         CommandPalette = FeatureMode.Disabled
         HomeRecents = false
@@ -2232,13 +2240,6 @@ type ClientConfig = {
     /// derives the active `SubjectKind` per render from the list + auth
     /// state + active team scope (`ClientConfig.resolveSubjectKind`).
     Surfaces: SurfaceProfile list
-    /// Phase 1240 — browser history and a URL per view. **Default
-    /// `NoBrowserHistory`** (the URL is neither read nor written).
-    /// `HashHistory` makes Back, Forward and reload work. It stays at the
-    /// top level, beside the concern records, because the public
-    /// composition profile binds it here (`clientShell.browserHistory`):
-    /// a composition's reduction writes this field.
-    BrowserHistory: BrowserHistoryMode
     /// Phase 879 — what fills each shell slot: the data manager, the team
     /// manager, the Home landing and the admin built-ins a deployment can
     /// replace. Default `ShellSlotFills.defaults`; set a slot with a
@@ -2345,7 +2346,6 @@ module ClientConfig =
         AppName = "My App"
         AppLogo = "favicon.png"
         Surfaces = Surfaces.anonymous
-        BrowserHistory = NoBrowserHistory
         Slots = ShellSlotFills.defaults
         Chrome = ShellChrome.defaults
         Auth = AuthConfig.defaults

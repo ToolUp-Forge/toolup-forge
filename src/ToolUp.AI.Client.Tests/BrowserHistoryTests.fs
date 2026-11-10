@@ -110,7 +110,7 @@ let private bus = Unchecked.defaultof<IModuleQueryBus>
 
 let private on = {
     ClientConfig.defaults with
-        BrowserHistory = HashHistory
+        Shell.BrowserHistory = HashHistory
 }
 
 let private singlePage (id: string) (inits: ResizeArray<string>) =
@@ -830,7 +830,7 @@ let tests =
                         Client.init
                             {
                                 config with
-                                    BrowserHistory = HashHistory
+                                    Shell.BrowserHistory = HashHistory
                             }
                             bus
                             modules

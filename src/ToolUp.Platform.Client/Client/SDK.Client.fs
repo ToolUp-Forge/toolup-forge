@@ -876,7 +876,7 @@ module Client =
     /// page the URL just restored, so the current page stands while the module
     /// has not changed. Everything else resets as it always has.
     let private settledPageRoute (config: ClientConfig) (model: Model) (moduleImpl: ErasedModule) =
-        match config.BrowserHistory, model.ActivePageRoute with
+        match config.Shell.BrowserHistory, model.ActivePageRoute with
         | HashHistory, Some route when model.ActiveModuleId = moduleImpl.Definition.Id -> Some route
         | _ -> defaultPageRoute moduleImpl
 
@@ -1072,7 +1072,7 @@ module Client =
                     bootDefaultModuleId config modules
                 else
                     model.ActiveModuleId
-            elif config.BrowserHistory = HashHistory && not model.ActiveTeamLoadCompleted then
+            elif config.Shell.BrowserHistory = HashHistory && not model.ActiveTeamLoadCompleted then
                 // Phase 1240 — "no team" is not known yet, only "no team
                 // loaded". Forcing the landing here would lose a view the URL
                 // restored, since a team arriving moves a caller on the landing
@@ -1333,7 +1333,7 @@ module Client =
         // Phase 1241 — signed in with no view in the URL, the view kept across
         // sign-in stands in for it, under those same decisions.
         let restoredView =
-            match _config.BrowserHistory with
+            match _config.Shell.BrowserHistory with
             | NoBrowserHistory -> None
             | HashHistory ->
                 let entries = RegisteredModules.snapshot ()
@@ -1448,7 +1448,7 @@ module Client =
         // out with no fragment, on its way to reloading `/`, and the default view
         // it shows meanwhile must not overwrite the view being carried.
         let firstEntryCmd =
-            match _config.BrowserHistory with
+            match _config.Shell.BrowserHistory with
             | NoBrowserHistory -> []
             | HashHistory ->
                 let view = BrowserHistory.viewId model.ActiveModuleId model.ActivePageRoute
@@ -2137,7 +2137,7 @@ module Client =
     let update (config: ClientConfig) (queryBus: IModuleQueryBus) (modules: ErasedModule list) msg model =
         let next, cmd = updateShell config queryBus modules msg model
 
-        match config.BrowserHistory with
+        match config.Shell.BrowserHistory with
         | NoBrowserHistory -> next, cmd
         | HashHistory ->
             let view = BrowserHistory.viewId next.ActiveModuleId next.ActivePageRoute
@@ -4516,7 +4516,7 @@ module Client =
         // `Init` all apply. Attached only under browser history: by default the
         // shell does not listen, and this list is what it was.
         let browserHistoryEffects =
-            match config.BrowserHistory with
+            match config.Shell.BrowserHistory with
             | NoBrowserHistory -> []
             | HashHistory -> [
                 EffectHandle.programLifetime "browser-history" (fun dispatch ->

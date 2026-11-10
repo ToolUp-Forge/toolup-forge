@@ -2653,6 +2653,7 @@ module Codemod =
         [
             "LoadingIndicator"
             "ActiveModule"
+            "BrowserHistory"
             "NotAuthorisedView"
             "CommandPalette"
             "HomeRecents"

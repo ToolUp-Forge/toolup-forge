@@ -132,8 +132,8 @@
   },
   "clientShell": {
     "browserHistory": {
-      "note": "What the member of profile section P3.1 reduces to in forge: a field of the client's configuration, which a reduction writes into the client entry it generates. It is not a ServerConfig field, so it is bound here and not under settings. The field's union has one case per token, and one for the absent member.",
-      "field": "BrowserHistory",
+      "note": "What the member of profile section P3.1 reduces to in forge: a field of the client's configuration, which a reduction writes into the client entry it generates. It is not a ServerConfig field, so it is bound here and not under settings. The field is named by its path from ClientConfig (Shell.BrowserHistory: the field sits in the Shell concern record). The field's union has one case per token, and one for the absent member.",
+      "field": "Shell.BrowserHistory",
       "absent": "NoBrowserHistory",
       "tokens": { "hash": "HashHistory" }
     }
