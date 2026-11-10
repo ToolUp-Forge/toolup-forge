@@ -524,7 +524,7 @@ type ErasedModule = {
 ///
 /// ```fsharp
 /// Slots.DataIngestionAdmin =
-///     SlotFill.External(DataIngestionUI.create None |> ErasedModule.withGroup "Operations")
+///     SlotFill.External(ShellSlots.builtIn DataIngestionUI.builtIn None |> ErasedModule.withGroup "Operations")
 /// ```
 ///
 /// The slot's position, gate and tile are unchanged (`SlotFill.External`

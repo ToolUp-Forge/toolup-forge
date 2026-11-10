@@ -661,49 +661,35 @@ let private bodyView (msgs: DataIngestionMessages) (model: Model) (dispatch: Msg
         ]
     ]
 
-/// The module body as a React COMPONENT, so it has a hook
-/// site from which to read the resolved catalog. See `HealthMonitorUI`'s
-/// equivalent for why a module's `view` cannot hold the hook itself.
-[<ReactComponent>]
-let private DataIngestionBody (model: Model) (dispatch: Msg -> unit) =
-    let msgs = (MessageCatalogProvider.useMessages ()).DataIngestion
-
+/// The module's page, over the catalog section the view hands it.
+let private body (msgs: DataIngestionMessages) (model: Model) (dispatch: Msg -> unit) : ReactElement =
     Html.div [
         prop.className "flex flex-col h-full"
         prop.children [ bodyView msgs model dispatch ]
     ]
 
-let private view (model: Model) (dispatch: Msg -> unit) : ReactElement = DataIngestionBody model dispatch
+let private view (model: Model) (ctx: RenderContext<Msg>) : PageContent =
+    PageContent.FullWidth(body ctx.Messages.DataIngestion model ctx.Dispatch)
 
 // ─── Module creation ────────────────────────────────────────────────
 
 /// Phase 879 — this built-in's module id. Its shell slot reads it
 /// (`ShellSlot.FilledModuleId`) to know which module fills the slot
-/// without building one; `create` registers the module under it.
+/// without building one; `builtIn` declares the module under it.
 let moduleId = "_sdk.DataIngestion"
 
-let create (config: ModuleLabel option) : ErasedModule =
-    let name = config |> Option.map _.Name |> Option.defaultValue "Data Sources"
-
-    let icon =
-        config |> Option.map _.Icon |> Option.defaultValue ToolUp.Platform.Icons.upload
-
-    ToolUp.Platform.ClientModule.create {
-        Init = init
-        Update = update
-        Name = name
-        Icon = icon
+let builtIn: BuiltIn<Model, Msg> = {
+    Id = moduleId
+    Defaults = {
+        Name = "Data Sources"
+        Icon = ToolUp.Platform.Icons.upload
     }
-    |> ToolUp.Platform.ClientModule.withId moduleId
-    |> ToolUp.Platform.ClientModule.withView (fun model ctx -> PageContent.FullWidth(view model ctx.Dispatch))
-    // Phase 1112 — ingesting data is not team administration. The module
-    // sits with the SDK's data managers ("Data Management", the group
-    // `FileManagerUI` and `MappingDataManagerUI` default to) rather than
-    // under "Team Management" with the people-and-permissions built-ins.
-    // The nav role is unchanged: who may see it is a separate axis from
-    // where it is filed. A deployment re-files it with
-    // `ErasedModule.withGroup` on the created module.
-    |> ToolUp.Platform.ClientModule.withGroup "Data Management"
-    |> ToolUp.Platform.ClientModule.withNavRole ToolUp.Platform.NavRole.TeamOwnerAdmin
-    |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated
-    |> ToolUp.Platform.ClientModule.register
+    Group = Some "Data Management"
+    NavRole = Some ToolUp.Platform.NavRole.TeamOwnerAdmin
+    Area = Product
+    Visibility = ToolUp.Platform.Visibility.visibleToAuthenticated
+    Init = fun _ -> init ()
+    Update = update
+    View = BuiltInView.Page view
+    Extend = id
+}

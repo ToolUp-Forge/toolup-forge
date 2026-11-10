@@ -226,7 +226,7 @@ SDK's support tooling rather than with your application's modules.
 let config = {
     ClientConfig.defaults with
         Slots.DataIngestionAdmin =
-            SlotFill.External(DataIngestionUI.create None |> ErasedModule.withGroup "Operations")
+            SlotFill.External(ShellSlots.builtIn DataIngestionUI.builtIn None |> ErasedModule.withGroup "Operations")
 }
 ```
 

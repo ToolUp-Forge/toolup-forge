@@ -324,7 +324,7 @@ module ShellSlots =
         authenticatedAdmin
             _.DataIngestionAdmin
             DataIngestionUI.moduleId
-            DataIngestionUI.create
+            (builtIn DataIngestionUI.builtIn)
             None
             "DataIngestionAdmin"
 

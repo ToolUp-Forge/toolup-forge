@@ -320,7 +320,7 @@ let visibilityTests =
         }
 
         test "DataIngestionUI declares visibleToAuthenticated" {
-            let m = DataIngestionUI.create None
+            let m = ShellSlots.builtIn DataIngestionUI.builtIn None
             assertVisibleToAuthenticated "DataIngestionUI" m
         }
 
@@ -360,7 +360,7 @@ let visibilityTests =
                 "UsageDashboard", UsageDashboard.create None
                 "ServiceStatusBoardUI", ServiceStatusBoardUI.create None
                 "PermissionsAdminUI", PermissionsAdminUI.create None
-                "DataIngestionUI", DataIngestionUI.create None
+                "DataIngestionUI", ShellSlots.builtIn DataIngestionUI.builtIn None
                 "WebhookAdminUI", WebhookAdminUI.create None
                 "TeamConfigUI", TeamConfigUI.create None
                 "FileManagerUI", FileManagerUI.create [] DataManagerConfig.unlabelled
