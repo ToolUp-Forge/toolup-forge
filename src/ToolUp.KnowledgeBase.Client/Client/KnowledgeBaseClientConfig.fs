@@ -58,10 +58,16 @@ let appendKnowledgeBaseModule (mode: KnowledgeBaseMode) (modules: ErasedModule l
     | NoKnowledgeBase -> modules
     | DefaultKnowledgeBase ->
         modules
-        @ [ KnowledgeBaseView.create None; PlatformKnowledgeAdminUI.register () ]
+        @ [
+            KnowledgeBaseView.create None
+            ShellSlots.builtIn PlatformKnowledgeAdminUI.builtIn None
+        ]
     | ConfiguredKnowledgeBase cfg ->
         modules
-        @ [ KnowledgeBaseView.create (Some cfg); PlatformKnowledgeAdminUI.register () ]
+        @ [
+            KnowledgeBaseView.create (Some cfg)
+            ShellSlots.builtIn PlatformKnowledgeAdminUI.builtIn None
+        ]
     | ExternalKnowledgeBase custom -> modules @ [ custom ]
 
 // ─── Handler-registry transformation ─────────────────────────────
