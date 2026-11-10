@@ -215,7 +215,7 @@ module ShellSlots =
             ShellSlotGate.Always
             _.HomeModule
             Home.moduleId
-            (fun ctx label -> Home.create ctx.Config.Shell.HomeRecents label)
+            (fun ctx label -> builtIn (Home.builtIn ctx.Config.Shell.HomeRecents) label)
             None
 
     /// The data-manager slot — the one the shell reads for the boot-time
