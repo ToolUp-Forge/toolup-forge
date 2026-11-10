@@ -9,6 +9,7 @@ open Expecto
 open ToolUp.Forge
 open ToolUp.Forge.SemVerBump
 open ToolUp.Forge.ReleaseChannel
+open ToolUp.Platform.Testing
 
 // ─── Phase 263 — the release-candidate channel and its soak gate ─────
 //
@@ -470,33 +471,22 @@ let tests =
                 // 2026-09-22 reason), so a candidate tagged off-branch is
                 // invisible to every reader alike: the channel check, the
                 // bump check, the scorecard and the changelog.
-                let dir =
-                    Path.Combine(Path.GetTempPath(), "tags-released-" + Guid.NewGuid().ToString "N")
+                use scratch = TempDir.create "tags-released"
+                let dir = scratch.Path
 
-                Directory.CreateDirectory dir |> ignore
+                gitIn dir [ "init"; "-q"; "-b"; "main" ]
+                gitIn dir [ "commit"; "-q"; "--allow-empty"; "-m"; "one" ]
+                gitIn dir [ "tag"; "v0.1.0" ]
+                gitIn dir [ "tag"; "vnext" ]
+                gitIn dir [ "checkout"; "-q"; "-b"; "side" ]
+                gitIn dir [ "commit"; "-q"; "--allow-empty"; "-m"; "two" ]
+                gitIn dir [ "tag"; "v0.2.0-rc.1" ]
+                gitIn dir [ "checkout"; "-q"; "main" ]
 
-                try
-                    gitIn dir [ "init"; "-q"; "-b"; "main" ]
-                    gitIn dir [ "commit"; "-q"; "--allow-empty"; "-m"; "one" ]
-                    gitIn dir [ "tag"; "v0.1.0" ]
-                    gitIn dir [ "tag"; "vnext" ]
-                    gitIn dir [ "checkout"; "-q"; "-b"; "side" ]
-                    gitIn dir [ "commit"; "-q"; "--allow-empty"; "-m"; "two" ]
-                    gitIn dir [ "tag"; "v0.2.0-rc.1" ]
-                    gitIn dir [ "checkout"; "-q"; "main" ]
+                Expect.equal (Tags.released dir) [ "v0.1.0" ] "only the merged, version-shaped tag"
 
-                    Expect.equal (Tags.released dir) [ "v0.1.0" ] "only the merged, version-shaped tag"
-
-                    gitIn dir [ "merge"; "-q"; "--ff-only"; "side" ]
-                    Expect.equal (Tags.released dir) [ "v0.1.0"; "v0.2.0-rc.1" ] "merged, the candidate is visible"
-                finally
-                    try
-                        for f in Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories) do
-                            File.SetAttributes(f, FileAttributes.Normal)
-
-                        Directory.Delete(dir, true)
-                    with _ ->
-                        ())
+                gitIn dir [ "merge"; "-q"; "--ff-only"; "side" ]
+                Expect.equal (Tags.released dir) [ "v0.1.0"; "v0.2.0-rc.1" ] "merged, the candidate is visible")
         ]
 
         // ── the workflow, linted ──

@@ -16,6 +16,7 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Scope
 open ToolUp.Platform.Audit
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 /// Tamper-evidence tests for the chained audit ledger sink.
 ///
@@ -64,9 +65,8 @@ let private makeEnvelope (offset: float) : AuditEnvelope =
         })
 
 /// A fresh ledger over its own directory.
-let private newLedger () =
-    let dir = uniqueDir ()
-    let storage = LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage
+let private newLedger (dir: TempDir) =
+    let storage = LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
     let sink = create "ledger-test" settings storage
     storage, sink
 
@@ -308,7 +308,8 @@ let private ledgerTests =
     testList "chained audit ledger — sink" [
         testCaseAsync "an unsigned ledger composes with zero configuration and verifies"
         <| async {
-            let storage, sink = newLedger ()
+            use storageDir = TempDir.create "chained-ledger-tests"
+            let storage, sink = newLedger storageDir
             do! seed sink 5
 
             let! count, signature = expectVerified storage "fresh ledger"
@@ -318,8 +319,10 @@ let private ledgerTests =
 
         testCaseAsync "the chain is deterministic — same records produce the same digests"
         <| async {
-            let storageA, sinkA = newLedger ()
-            let storageB, sinkB = newLedger ()
+            use storageADir = TempDir.create "chained-ledger-tests"
+            let storageA, sinkA = newLedger storageADir
+            use storageBDir = TempDir.create "chained-ledger-tests"
+            let storageB, sinkB = newLedger storageBDir
 
             do! seed sinkA 6
             do! seed sinkB 6
@@ -346,7 +349,8 @@ let private ledgerTests =
 
         testCaseAsync "records chain contiguously from genesis"
         <| async {
-            let storage, sink = newLedger ()
+            use storageDir = TempDir.create "chained-ledger-tests"
+            let storage, sink = newLedger storageDir
             do! seed sink 4
 
             let! names = segmentNames storage
@@ -364,7 +368,8 @@ let private ledgerTests =
 
         testCaseAsync "the stored payload decodes back to the original event"
         <| async {
-            let storage, sink = newLedger ()
+            use storageDir = TempDir.create "chained-ledger-tests"
+            let storage, sink = newLedger storageDir
             do! seed sink 1
 
             let! names = segmentNames storage
@@ -384,7 +389,8 @@ let private ledgerTests =
 
         testCaseAsync "PROBE: a tampered record is detected and positioned"
         <| async {
-            let storage, sink = newLedger ()
+            use storageDir = TempDir.create "chained-ledger-tests"
+            let storage, sink = newLedger storageDir
             do! seed sink 5
 
             let! count, _ = expectVerified storage "before tampering"
@@ -411,7 +417,8 @@ let private ledgerTests =
 
         testCaseAsync "PROBE: a dropped record is detected and positioned"
         <| async {
-            let storage, sink = newLedger ()
+            use storageDir = TempDir.create "chained-ledger-tests"
+            let storage, sink = newLedger storageDir
             do! seed sink 5
 
             let! count, _ = expectVerified storage "before the drop"
@@ -433,7 +440,8 @@ let private ledgerTests =
 
         testCaseAsync "PROBE: reordered records are detected and positioned"
         <| async {
-            let storage, sink = newLedger ()
+            use storageDir = TempDir.create "chained-ledger-tests"
+            let storage, sink = newLedger storageDir
             do! seed sink 5
 
             let! count, _ = expectVerified storage "before the reorder"
@@ -463,7 +471,8 @@ let private ledgerTests =
 
         testCaseAsync "PROBE: a torn tail is detected, not absorbed"
         <| async {
-            let storage, sink = newLedger ()
+            use storageDir = TempDir.create "chained-ledger-tests"
+            let storage, sink = newLedger storageDir
             do! seed sink 4
 
             let! count, _ = expectVerified storage "before the tear"
@@ -487,8 +496,10 @@ let private ledgerTests =
 
         testCaseAsync "a record spliced in from another chain breaks the link"
         <| async {
-            let storageA, sinkA = newLedger ()
-            let storageB, sinkB = newLedger ()
+            use storageADir = TempDir.create "chained-ledger-tests"
+            let storageA, sinkA = newLedger storageADir
+            use storageBDir = TempDir.create "chained-ledger-tests"
+            let storageB, sinkB = newLedger storageBDir
 
             do! seed sinkA 4
             // A different scope, so B's record 2 is a genuinely
@@ -528,7 +539,8 @@ let private ledgerTests =
 
         testCaseAsync "concurrent deliveries are serialised into one contiguous chain"
         <| async {
-            let storage, sink = newLedger ()
+            use storageDir = TempDir.create "chained-ledger-tests"
+            let storage, sink = newLedger storageDir
 
             // Eight writers, three records each, all in flight at once.
             let deliveries = [
@@ -556,7 +568,8 @@ let private ledgerTests =
 
         testCaseAsync "a second writer moving the head beneath the first is refused, not silently forked"
         <| async {
-            let dir = uniqueDir ()
+            use scratch = TempDir.create "chained-ledger-tests"
+            let dir = scratch.Path
             let storage = LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage
             let first = create "ledger-first" settings storage
             let second = create "ledger-second" settings storage
@@ -582,7 +595,8 @@ let private ledgerTests =
 
         testCaseAsync "a retried batch after a failed head write does not duplicate records"
         <| async {
-            let dir = uniqueDir ()
+            use scratch = TempDir.create "chained-ledger-tests"
+            let dir = scratch.Path
             let inner = LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage
             let failures = ref 1
             let storage = HeadWriteFailingStorage(inner, failures) :> IBlobStorage
@@ -616,7 +630,8 @@ let private ledgerTests =
 
         testCaseAsync "a signed head verifies COLD, from public key material alone"
         <| async {
-            let dir = uniqueDir ()
+            use scratch = TempDir.create "chained-ledger-tests"
+            let dir = scratch.Path
             let storage = LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage
             use key = ECDsa.Create(ECCurve.NamedCurves.nistP256)
 
@@ -645,7 +660,8 @@ let private ledgerTests =
 
         testCaseAsync "a head signed by a DIFFERENT key is reported invalid, not valid"
         <| async {
-            let dir = uniqueDir ()
+            use scratch = TempDir.create "chained-ledger-tests"
+            let dir = scratch.Path
             let storage = LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage
             use signingKey = ECDsa.Create(ECCurve.NamedCurves.nistP256)
             use otherKey = ECDsa.Create(ECCurve.NamedCurves.nistP256)
@@ -667,7 +683,8 @@ let private ledgerTests =
 
         testCaseAsync "a signed head with no verifier is UNVERIFIABLE, never a quiet pass"
         <| async {
-            let dir = uniqueDir ()
+            use scratch = TempDir.create "chained-ledger-tests"
+            let dir = scratch.Path
             let storage = LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage
             use key = ECDsa.Create(ECCurve.NamedCurves.nistP256)
 
@@ -686,7 +703,8 @@ let private ledgerTests =
 
         testCaseAsync "a signing failure fails the delivery rather than reporting an unsigned head as signed"
         <| async {
-            let dir = uniqueDir ()
+            use scratch = TempDir.create "chained-ledger-tests"
+            let dir = scratch.Path
             let storage = LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage
 
             let failingSigner =
@@ -709,7 +727,8 @@ let private ledgerTests =
 
         testCaseAsync "a rolled-back head pointer is caught even though the chain itself is sound"
         <| async {
-            let storage, sink = newLedger ()
+            use storageDir = TempDir.create "chained-ledger-tests"
+            let storage, sink = newLedger storageDir
             do! seed sink 3
 
             // Replay an older head over the current one — the records
@@ -766,9 +785,8 @@ let private alphaScope =
 
 /// A ledger over its own directory whose records are facet-tagged, and
 /// which alternates between the two parties' scopes.
-let private newTaggedLedger () = async {
-    let dir = uniqueDir ()
-    let storage = LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage
+let private newTaggedLedger (dir: TempDir) = async {
+    let storage = LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
     let sink = createScoped "ledger-scoped" settings storage facetTagger
 
     let batch = [
@@ -829,7 +847,8 @@ let private scopedExportTests =
 
         testCaseAsync "a party's export discloses its own records and withholds every other party's"
         <| async {
-            let! storage = newTaggedLedger ()
+            use storageDir = TempDir.create "chained-ledger-tests"
+            let! storage = newTaggedLedger storageDir
             let! export = exportForAlpha storage
 
             Expect.equal
@@ -874,7 +893,8 @@ let private scopedExportTests =
 
         testCaseAsync "a tampered disclosed record is reported as tampered, at its position"
         <| async {
-            let! storage = newTaggedLedger ()
+            use storageDir = TempDir.create "chained-ledger-tests"
+            let! storage = newTaggedLedger storageDir
             let! export = exportForAlpha storage
 
             Expect.isTrue
@@ -904,7 +924,8 @@ let private scopedExportTests =
 
         testCaseAsync "an in-scope record downgraded to a withheld witness is detected"
         <| async {
-            let! storage = newTaggedLedger ()
+            use storageDir = TempDir.create "chained-ledger-tests"
+            let! storage = newTaggedLedger storageDir
             let! export = exportForAlpha storage
 
             // The selective-omission attack the facet labels exist to
@@ -931,7 +952,8 @@ let private scopedExportTests =
 
         testCaseAsync "an in-scope record removed outright leaves a gap the walk names"
         <| async {
-            let! storage = newTaggedLedger ()
+            use storageDir = TempDir.create "chained-ledger-tests"
+            let! storage = newTaggedLedger storageDir
             let! export = exportForAlpha storage
 
             let removed = {
@@ -950,7 +972,8 @@ let private scopedExportTests =
 
         testCaseAsync "a truncated export contradicts the head's signed record count"
         <| async {
-            let! storage = newTaggedLedger ()
+            use storageDir = TempDir.create "chained-ledger-tests"
+            let! storage = newTaggedLedger storageDir
             let! export = exportForAlpha storage
 
             // Every remaining entry chains perfectly; what is missing is
@@ -972,7 +995,8 @@ let private scopedExportTests =
 
         testCaseAsync "an over-disclosed record is refused even though the chain is sound"
         <| async {
-            let! storage = newTaggedLedger ()
+            use storageDir = TempDir.create "chained-ledger-tests"
+            let! storage = newTaggedLedger storageDir
             let! export = exportForAlpha storage
 
             // The other direction: a beta record handed to alpha in
@@ -998,7 +1022,8 @@ let private scopedExportTests =
 
         testCaseAsync "an export is refused when checked as a different party"
         <| async {
-            let! storage = newTaggedLedger ()
+            use storageDir = TempDir.create "chained-ledger-tests"
+            let! storage = newTaggedLedger storageDir
             let! export = exportForAlpha storage
 
             let betaScope =
@@ -1016,7 +1041,8 @@ let private scopedExportTests =
             // ledger without a tagger produces records no scope reaches.
             // The export is honest about it — every position withheld,
             // none omitted.
-            let storage, sink = newLedger ()
+            use storageDir = TempDir.create "chained-ledger-tests"
+            let storage, sink = newLedger storageDir
             do! seed sink 3
 
             match! LedgerScopedExport.exportFor settings storage alphaScope with
@@ -1037,7 +1063,8 @@ let private scopedExportTests =
             // from the stored JSON, which is exactly the shape a
             // pre-Phase-677 ledger has on disk, and assert both the
             // chain digests and the export still hold.
-            let storage, sink = newLedger ()
+            use storageDir = TempDir.create "chained-ledger-tests"
+            let storage, sink = newLedger storageDir
             do! seed sink 3
 
             let! names = segmentNames storage
@@ -1069,7 +1096,8 @@ let private scopedExportTests =
 
         testCaseAsync "a broken source chain is refused rather than exported"
         <| async {
-            let storage, sink = newLedger ()
+            use storageDir = TempDir.create "chained-ledger-tests"
+            let storage, sink = newLedger storageDir
             do! seed sink 3
 
             do!
@@ -1091,7 +1119,8 @@ let private scopedExportTests =
 
         testCaseAsync "a scoped export round-trips through the stock DSSE path"
         <| async {
-            let! storage = newTaggedLedger ()
+            use storageDir = TempDir.create "chained-ledger-tests"
+            let! storage = newTaggedLedger storageDir
             let! export = exportForAlpha storage
 
             use key = ECDsa.Create(ECCurve.NamedCurves.nistP256)
@@ -1144,7 +1173,8 @@ let private scopedExportTests =
 
         testCaseAsync "a document of another predicate type is refused rather than read hopefully"
         <| async {
-            let! storage = newTaggedLedger ()
+            use storageDir = TempDir.create "chained-ledger-tests"
+            let! storage = newTaggedLedger storageDir
             let! export = exportForAlpha storage
 
             use key = ECDsa.Create(ECCurve.NamedCurves.nistP256)
@@ -1198,9 +1228,8 @@ let private closureRequest: LedgerClosureRequest = {
 
 /// A seeded ledger whose head is signed, plus the signing key: the shape
 /// a deployment that intends to decommission actually runs.
-let private newSignedLedger () = async {
-    let dir = uniqueDir ()
-    let storage = LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage
+let private newSignedLedger (dir: TempDir) = async {
+    let storage = LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
     let key = ECDsa.Create(ECCurve.NamedCurves.nistP256)
     let signer = EcdsaHeadSigner("ledger-key-1", key) :> ILedgerHeadSigner
     let sink = createSigned "ledger-decommission" settings storage signer
@@ -1237,7 +1266,8 @@ let private decommissionTests =
 
         testCaseAsync "the terminal op binds the head it closed, and is signed under the head-signing seam"
         <| async {
-            let! storage, signer, key, _sink = newSignedLedger ()
+            use storageDir = TempDir.create "chained-ledger-tests"
+            let! storage, signer, key, _sink = newSignedLedger storageDir
             let! count, _ = expectVerifiedWith storage key "before closing"
             let! op = expectClosed storage (Some signer)
 
@@ -1267,7 +1297,8 @@ let private decommissionTests =
 
         testCaseAsync "a closed ledger refuses every later append, and the refusal is not a chain break"
         <| async {
-            let! storage, signer, key, sink = newSignedLedger ()
+            use storageDir = TempDir.create "chained-ledger-tests"
+            let! storage, signer, key, sink = newSignedLedger storageDir
 
             match! ChainedLedger.appendRefusal settings storage with
             | Ok None -> ()
@@ -1307,7 +1338,8 @@ let private decommissionTests =
 
         testCaseAsync "a ledger cannot be closed twice, and a broken chain cannot be closed at all"
         <| async {
-            let! storage, signer, _key, _sink = newSignedLedger ()
+            use storageDir = TempDir.create "chained-ledger-tests"
+            let! storage, signer, _key, _sink = newSignedLedger storageDir
             let! _ = expectClosed storage (Some signer)
 
             match! ChainedLedger.close settings storage (Some signer) closureRequest with
@@ -1318,7 +1350,8 @@ let private decommissionTests =
 
             // The other refusal: a chain that does not walk. Closing it
             // would sign a head nobody can reproduce.
-            let dir = uniqueDir ()
+            use scratch = TempDir.create "chained-ledger-tests"
+            let dir = scratch.Path
             let broken = LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage
             let brokenSink = create "ledger-broken" settings broken
             do! seed brokenSink 3
@@ -1344,7 +1377,8 @@ let private decommissionTests =
 
         testCaseAsync "the certificate verifies cold, from the document and a public key alone"
         <| async {
-            let! storage, signer, key, _sink = newSignedLedger ()
+            use storageDir = TempDir.create "chained-ledger-tests"
+            let! storage, signer, key, _sink = newSignedLedger storageDir
             let! op = expectClosed storage (Some signer)
 
             let! certificate = async {
@@ -1398,7 +1432,8 @@ let private decommissionTests =
 
         testCaseAsync "a certificate whose retirement was edited is reported unbound, not unproven"
         <| async {
-            let! storage, signer, key, _sink = newSignedLedger ()
+            use storageDir = TempDir.create "chained-ledger-tests"
+            let! storage, signer, key, _sink = newSignedLedger storageDir
             let! _op = expectClosed storage (Some signer)
 
             let! certificate = async {
@@ -1445,7 +1480,8 @@ let private decommissionTests =
 
         testCaseAsync "an unsigned closure is unproven rather than verified"
         <| async {
-            let dir = uniqueDir ()
+            use scratch = TempDir.create "chained-ledger-tests"
+            let dir = scratch.Path
             let storage = LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage
             let sink = create "ledger-unsigned" settings storage
             do! seed sink 2
@@ -1466,7 +1502,8 @@ let private decommissionTests =
 
         testCaseAsync "a deployment that never decommissions is wholly unaffected"
         <| async {
-            let storage, sink = newLedger ()
+            use storageDir = TempDir.create "chained-ledger-tests"
+            let storage, sink = newLedger storageDir
             do! seed sink 3
 
             let! namesBefore = segmentNames storage
@@ -1491,7 +1528,8 @@ let private decommissionTests =
             // same envelopes through a ledger that knows nothing of
             // closure must produce the same digests, so an existing
             // deployment's stored ledger and head signature stay valid.
-            let control, controlSink = newLedger ()
+            use controlDir = TempDir.create "chained-ledger-tests"
+            let control, controlSink = newLedger controlDir
             do! seed controlSink 3
 
             let! controlNames = segmentNames control

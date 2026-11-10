@@ -16,6 +16,7 @@ open ToolUp.Platform.HealthChecks
 open ToolUp.Cli
 open ToolUp.Cli.Dispatch
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 194 — `k8s emit` ──────────────────────────────────────────
 //
@@ -137,19 +138,13 @@ let private manifestJson =
 }
 """
 
-let private tempDir () =
-    let path =
-        Path.Combine(Path.GetTempPath(), "toolup-k8s-test-" + Guid.NewGuid().ToString("N"))
+let private tempDir () = TempDir.create "k8s-test"
 
-    Directory.CreateDirectory path |> ignore
-    path
-
-/// Emit into a fresh directory and hand back (directory, exit code).
-let private emitInto (json: string) (args: string list) =
-    let dir = tempDir ()
-    let manifestPath = Path.Combine(dir, "deploy.json")
+/// Emit into `dir` and hand back (output directory, exit code).
+let private emitInto (dir: TempDir) (json: string) (args: string list) =
+    let manifestPath = dir.File "deploy.json"
     File.WriteAllText(manifestPath, json)
-    let outDir = Path.Combine(dir, "out")
+    let outDir = dir.File "out"
 
     let code =
         K8sEmitCommand.command.Run([ "--manifest"; manifestPath; "--out"; outDir ] @ args)
@@ -159,9 +154,9 @@ let private emitInto (json: string) (args: string list) =
 /// Emit for one format × profile set and return every emitted `.yaml`
 /// file as (relative path, parsed document) — helm templates rendered
 /// against the chart's values first.
-let private emitDocs (format: string) (profiles: string) =
+let private emitDocs (dir: TempDir) (format: string) (profiles: string) =
     let outDir, code =
-        emitInto manifestJson [ "--format"; format; "--profile"; profiles ]
+        emitInto dir manifestJson [ "--format"; format; "--profile"; profiles ]
 
     Expect.equal code ExitOk (sprintf "emit %s %s succeeds" format profiles)
 
@@ -274,7 +269,8 @@ let private expectedRoles (profiles: string) =
     |> List.ofArray
 
 let private assertStructure (format: string) (profiles: string) =
-    let _, files, docs = emitDocs format profiles
+    use dir = tempDir ()
+    let _, files, docs = emitDocs dir format profiles
     let selected = expectedRoles profiles
     let prefix = if format = "helm" then "templates/" else ""
 
@@ -584,8 +580,10 @@ let tests =
             }
 
             test "a manifest that is not on disk is a runtime error, not a usage error" {
+                use dir = tempDir ()
+
                 Expect.equal
-                    (K8sEmitCommand.command.Run [ "--manifest"; Path.Combine(tempDir (), "absent.json") ])
+                    (K8sEmitCommand.command.Run [ "--manifest"; dir.File "absent.json" ])
                     ExitRuntimeError
                     "re-printing the usage text would not help here"
             }
@@ -594,22 +592,26 @@ let tests =
                 let json =
                     manifestJson.Replace("\"slug\": \"acme-portal\"", "\"slug\": \"Acme Portal\"")
 
-                let outDir, code = emitInto json []
+                use dir = tempDir ()
+                let outDir, code = emitInto dir json []
                 Expect.equal code ExitRuntimeError "validation failure → 1"
                 Expect.isFalse (Directory.Exists outDir) "no output directory is created by a refused emit"
             }
 
             test "a manifest with no image and no --image is refused" {
                 let json = manifestJson.Replace("\"image\": \"ghcr.io/acme/portal:v1.4.2\",", "")
-                let _, code = emitInto json []
+                use dir = tempDir ()
+                let _, code = emitInto dir json []
                 Expect.equal code ExitRuntimeError "no image → 1"
             }
 
             test "--image supplies the reference a build-from-source manifest lacks" {
                 let json = manifestJson.Replace("\"image\": \"ghcr.io/acme/portal:v1.4.2\",", "")
 
+                use dir = tempDir ()
+
                 let outDir, code =
-                    emitInto json [ "--format"; "flat"; "--image"; "registry.local/acme:9" ]
+                    emitInto dir json [ "--format"; "flat"; "--image"; "registry.local/acme:9" ]
 
                 Expect.equal code ExitOk "with --image it emits"
 
@@ -620,15 +622,16 @@ let tests =
             }
 
             test "domains with no HTTP-serving role are refused rather than dropped" {
-                let _, code = emitInto manifestJson [ "--profile"; "WorkerOnly" ]
+                use dir = tempDir ()
+                let _, code = emitInto dir manifestJson [ "--profile"; "WorkerOnly" ]
                 Expect.equal code ExitRuntimeError "an unroutable domain set is a refusal, not silence"
             }
 
             test "emit refuses to overwrite without --force, then obeys --force" {
-                let dir = tempDir ()
-                let manifestPath = Path.Combine(dir, "deploy.json")
+                use dir = tempDir ()
+                let manifestPath = dir.File "deploy.json"
                 File.WriteAllText(manifestPath, manifestJson)
-                let outDir = Path.Combine(dir, "out")
+                let outDir = dir.File "out"
                 let args = [ "--manifest"; manifestPath; "--out"; outDir; "--format"; "flat" ]
                 Expect.equal (K8sEmitCommand.command.Run args) ExitOk "first emit"
                 Expect.equal (K8sEmitCommand.command.Run args) ExitRuntimeError "clash without --force → 1"
@@ -642,14 +645,16 @@ let tests =
                     test (sprintf "%s / %s" format profiles) { assertStructure format profiles }
 
             test "the helm chart carries Chart.yaml, values.yaml, .helmignore and NOTES.txt" {
-                let _, files, _ = emitDocs "helm" "WebOnly,WorkerOnly"
+                use dir = tempDir ()
+                let _, files, _ = emitDocs dir "helm" "WebOnly,WorkerOnly"
 
                 for expected in [ "Chart.yaml"; "values.yaml"; ".helmignore"; "templates/NOTES.txt" ] do
                     Expect.contains files expected (sprintf "%s emitted" expected)
             }
 
             test "Chart.yaml names the app and its image tag" {
-                let outDir, _, _ = emitDocs "helm" "AllInOne"
+                use dir = tempDir ()
+                let outDir, _, _ = emitDocs dir "helm" "AllInOne"
                 let chart = parseYaml (File.ReadAllText(Path.Combine(outDir, "Chart.yaml")))
                 Expect.equal (digStr chart "apiVersion") "v2" "Helm v2 chart"
                 Expect.equal (digStr chart "name") "acme-portal" "chart name is the slug"
@@ -657,7 +662,8 @@ let tests =
             }
 
             test "values.yaml carries exactly the knobs the templates reference" {
-                let outDir, _, _ = emitDocs "helm" "WebOnly,WorkerOnly"
+                use dir = tempDir ()
+                let outDir, _, _ = emitDocs dir "helm" "WebOnly,WorkerOnly"
                 let values = parseYaml (File.ReadAllText(Path.Combine(outDir, "values.yaml")))
                 Expect.equal (digStr values "image.repository") "ghcr.io/acme/portal" "repository"
                 Expect.equal (digStr values "image.tag") "v1.4.2" "tag"
@@ -667,7 +673,8 @@ let tests =
             }
 
             test "the flat format resolves every value in place — no template syntax survives" {
-                let outDir, files, _ = emitDocs "flat" "WebOnly,WorkerOnly"
+                use dir = tempDir ()
+                let outDir, files, _ = emitDocs dir "flat" "WebOnly,WorkerOnly"
 
                 for f in files do
                     let text =
@@ -679,7 +686,8 @@ let tests =
             }
 
             test "no emitted file contains secret material" {
-                let outDir, files, _ = emitDocs "flat" "AllInOne"
+                use dir = tempDir ()
+                let outDir, files, _ = emitDocs dir "flat" "AllInOne"
 
                 for f in files do
                     let text =
@@ -696,14 +704,16 @@ let tests =
                         ""
                     )
 
-                let outDir, code = emitInto json [ "--format"; "flat" ]
+                use dir = tempDir ()
+                let outDir, code = emitInto dir json [ "--format"; "flat" ]
                 Expect.equal code ExitOk "emits"
                 Expect.isFalse (File.Exists(Path.Combine(outDir, "ingress.yaml"))) "no domains, no Ingress"
             }
 
             test "a domain with no TLS mode emits no tls block" {
                 let json = manifestJson.Replace("\"tlsMode\": \"acme-le\"", "\"tlsMode\": \"\"")
-                let outDir, code = emitInto json [ "--format"; "flat" ]
+                use dir = tempDir ()
+                let outDir, code = emitInto dir json [ "--format"; "flat" ]
                 Expect.equal code ExitOk "emits"
                 let ing = parseYaml (File.ReadAllText(Path.Combine(outDir, "ingress.yaml")))
                 Expect.isNone (tryDig ing "spec.tls") "no tlsMode means no TLS entry, not an empty one"
@@ -720,7 +730,8 @@ let tests =
             | null
             | "" -> skiptest "TOOLUP_HELM_PATH is unset — no helm binary to lint with"
             | helm ->
-                let outDir, code = emitInto manifestJson [ "--format"; "helm" ]
+                use dir = tempDir ()
+                let outDir, code = emitInto dir manifestJson [ "--format"; "helm" ]
                 Expect.equal code ExitOk "emit succeeds"
 
                 let psi =

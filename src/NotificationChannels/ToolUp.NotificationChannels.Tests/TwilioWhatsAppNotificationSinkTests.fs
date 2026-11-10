@@ -23,6 +23,7 @@ open ToolUp.Platform.Tests.InProcess.TransactionalDispatcherTests
 open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Tests.InProcess
+open ToolUp.Platform.Testing
 
 // Phase 6f.B — the Twilio WhatsApp companion. Never live: the contract
 // pack runs against an unroutable endpoint (failures must classify, not
@@ -590,7 +591,7 @@ let tests =
                         [ sms; whatsApp ],
                         FakeConfigStore(Map.empty),
                         CapturingAuditLog(),
-                        CapturingLogger(),
+                        Logger.silent,
                         TransactionalRetryPolicy.defaults,
                         NoOpActivitySink() :> IActivitySink
                     )
@@ -614,7 +615,7 @@ let tests =
                                 [ fst (delivered ()); fst (delivered ()) ],
                                 FakeConfigStore(Map.empty),
                                 CapturingAuditLog(),
-                                CapturingLogger(),
+                                Logger.silent,
                                 TransactionalRetryPolicy.defaults,
                                 NoOpActivitySink() :> IActivitySink
                             )

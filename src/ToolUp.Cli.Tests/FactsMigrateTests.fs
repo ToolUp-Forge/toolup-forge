@@ -23,6 +23,7 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Infra.Metrics
 open ToolUp.Platform.Scope
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ── The verb ──────────────────────────────────────────────────────────
 
@@ -289,11 +290,8 @@ let private draft (member': string) (inputHash: string) (value: decimal) : FactD
 /// file blob backend, an event store, and the Postgres store as the
 /// composed `IFactStore`.
 let private composed (conn: string) =
-    let root =
-        Path.Combine(Path.GetTempPath(), "toolup-facts-migrate-" + Guid.NewGuid().ToString "N")
-
-    Directory.CreateDirectory root |> ignore
-    let storage = LocalFileStorage.LocalFileStorage(root) :> IBlobStorage
+    let dir = TempDir.create "facts-migrate"
+    let storage = LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
     let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
 
     let target =
@@ -311,7 +309,7 @@ let private composed (conn: string) =
     services.AddSingleton<IBlobStorage>(storage) |> ignore
     services.AddSingleton<IEventStore>(events) |> ignore
     services.AddSingleton<IFactStore>(target :> IFactStore) |> ignore
-    services.BuildServiceProvider(), storage, events, root
+    services.BuildServiceProvider(), storage, events, dir
 
 /// The resolved scope of the shard `scopeId`, as the platform's scope
 /// resolution mints it (container = shard id) — the pack stands in for the
@@ -346,45 +344,37 @@ let private seed (storage: IBlobStorage) (events: IEventStore) (scope: string) =
 let private blobOnlyTests =
     testCaseAsync "without a composed Postgres store only --ids runs, over the blob store"
     <| async {
-        let root =
-            Path.Combine(Path.GetTempPath(), "toolup-facts-migrate-" + Guid.NewGuid().ToString "N")
+        use scratch = TempDir.create "facts-migrate"
+        let root = scratch.Path
 
-        Directory.CreateDirectory root |> ignore
+        let storage = LocalFileStorage.LocalFileStorage(root) :> IBlobStorage
+        let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
+        let! source = seed storage events ScopeEnumeration.PlatformContainer
+        let services = ServiceCollection()
+        services.AddSingleton<IBlobStorage>(storage) |> ignore
+        services.AddSingleton<IEventStore>(events) |> ignore
+        services.AddSingleton<IFactStore>(source :> IFactStore) |> ignore
+        use provider = services.BuildServiceProvider()
 
-        try
-            let storage = LocalFileStorage.LocalFileStorage(root) :> IBlobStorage
-            let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
-            let! source = seed storage events ScopeEnumeration.PlatformContainer
-            let services = ServiceCollection()
-            services.AddSingleton<IBlobStorage>(storage) |> ignore
-            services.AddSingleton<IEventStore>(events) |> ignore
-            services.AddSingleton<IFactStore>(source :> IFactStore) |> ignore
-            use provider = services.BuildServiceProvider()
+        let! text, code = FactsMigrateTask.runComposed provider [ "--all-scopes"; "--ids"; "--dry-run" ]
+        Expect.equal code 0 text
 
-            let! text, code = FactsMigrateTask.runComposed provider [ "--all-scopes"; "--ids"; "--dry-run" ]
-            Expect.equal code 0 text
+        Expect.stringContains
+            text
+            (sprintf "blob %s: 24 facts read, would re-key 0" ScopeEnumeration.PlatformContainer)
+            "the well-known containers are enumerated, and freshly asserted ids are current"
 
-            Expect.stringContains
-                text
-                (sprintf "blob %s: 24 facts read, would re-key 0" ScopeEnumeration.PlatformContainer)
-                "the well-known containers are enumerated, and freshly asserted ids are current"
+        Expect.stringContains text (sprintf "blob %s: 0 facts read" ScopeEnumeration.DeploymentContainer) "both of them"
 
-            Expect.stringContains
-                text
-                (sprintf "blob %s: 0 facts read" ScopeEnumeration.DeploymentContainer)
-                "both of them"
+        Expect.stringContains text "the blob store only" "it says the table leg did not run"
 
-            Expect.stringContains text "the blob store only" "it says the table leg did not run"
+        let! refused, refusedCode = FactsMigrateTask.runComposed provider [ "--scope"; "team-a" ]
+        Expect.equal refusedCode 2 refused
+        Expect.stringContains refused "not a PostgresFactStore" "it names what is missing"
 
-            let! refused, refusedCode = FactsMigrateTask.runComposed provider [ "--scope"; "team-a" ]
-            Expect.equal refusedCode 2 refused
-            Expect.stringContains refused "not a PostgresFactStore" "it names what is missing"
-
-            let! usage, usageCode = FactsMigrateTask.runComposed provider [ "--dry-run" ]
-            Expect.equal usageCode 2 usage
-            Expect.stringContains usage "--all-scopes" "a usage error carries the usage"
-        finally
-            Directory.Delete(root, true)
+        let! usage, usageCode = FactsMigrateTask.runComposed provider [ "--dry-run" ]
+        Expect.equal usageCode 2 usage
+        Expect.stringContains usage "--all-scopes" "a usage error carries the usage"
     }
 
 let private liveTests (conn: string) =
@@ -403,7 +393,7 @@ let private liveTests (conn: string) =
         testCaseAsync
             "a seeded local-file scope migrates clean; a dry run first writes nothing; a second run is a no-op"
         <| async {
-            let provider, storage, events, root = composed conn
+            let provider, storage, events, dir = composed conn
 
             try
                 let scope = "team-" + Guid.NewGuid().ToString "N"
@@ -434,12 +424,12 @@ let private liveTests (conn: string) =
                 Expect.isFalse (again.Contains "audit record ") "nor audited"
             finally
                 (provider :> IDisposable).Dispose()
-                Directory.Delete(root, true)
+                (dir :> IDisposable).Dispose()
         }
 
         testCaseAsync "a target row altered after the copy fails the check, naming the fact"
         <| async {
-            let provider, storage, events, root = composed conn
+            let provider, storage, events, dir = composed conn
 
             try
                 let scope = "team-" + Guid.NewGuid().ToString "N"
@@ -468,12 +458,12 @@ let private liveTests (conn: string) =
                 Expect.stringContains text altered "the altered fact is named"
             finally
                 (provider :> IDisposable).Dispose()
-                Directory.Delete(root, true)
+                (dir :> IDisposable).Dispose()
         }
 
         testCaseAsync "--all-scopes lists the composition's scopes; --ids over a current scope moves nothing"
         <| async {
-            let provider, storage, events, root = composed conn
+            let provider, storage, events, dir = composed conn
 
             try
                 let! _ = seed storage events ScopeEnumeration.PlatformContainer
@@ -488,7 +478,7 @@ let private liveTests (conn: string) =
                 Expect.stringContains text "postgres " "the table leg runs when Postgres is composed"
             finally
                 (provider :> IDisposable).Dispose()
-                Directory.Delete(root, true)
+                (dir :> IDisposable).Dispose()
         }
     ]
 

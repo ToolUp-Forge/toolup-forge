@@ -28,6 +28,7 @@ open ToolUp.Cli.Dispatch
 open ToolUp.Cli.Commands
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ── Recording mock transport ────────────────────────────────────────
 
@@ -491,33 +492,29 @@ let tests =
             }
 
             test "the token is read from the file, trimmed, with the base url normalised" {
-                let path = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName())
+                use dir = TempDir.create "tenant-user-verbs"
+                let path = dir.File "token"
                 File.WriteAllText(path, "  bearer-value\r\n")
 
-                try
-                    match Tenants.resolveEndpoint (Some " https://app.example.com/ ") (Some path) with
-                    | Ok endpoint ->
-                        Expect.equal endpoint.Token "bearer-value" "trailing newline trimmed"
+                match Tenants.resolveEndpoint (Some " https://app.example.com/ ") (Some path) with
+                | Ok endpoint ->
+                    Expect.equal endpoint.Token "bearer-value" "trailing newline trimmed"
 
-                        Expect.equal
-                            endpoint.BaseUrl
-                            "https://app.example.com"
-                            "trailing slash stripped so route concatenation cannot double it"
-                    | Error e -> failtest e
-                finally
-                    File.Delete path
+                    Expect.equal
+                        endpoint.BaseUrl
+                        "https://app.example.com"
+                        "trailing slash stripped so route concatenation cannot double it"
+                | Error e -> failtest e
             }
 
             test "an empty or unreadable token file is refused, not sent as an empty credential" {
-                let empty = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName())
+                use dir = TempDir.create "tenant-user-verbs"
+                let empty = dir.File "empty-token"
                 File.WriteAllText(empty, "   \n")
 
-                try
-                    Expect.isError (Tenants.resolveEndpoint (Some "https://x") (Some empty)) "empty token file"
-                finally
-                    File.Delete empty
+                Expect.isError (Tenants.resolveEndpoint (Some "https://x") (Some empty)) "empty token file"
 
-                let missing = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName())
+                let missing = dir.File "absent-token"
                 Expect.isError (Tenants.resolveEndpoint (Some "https://x") (Some missing)) "absent token file"
             }
 

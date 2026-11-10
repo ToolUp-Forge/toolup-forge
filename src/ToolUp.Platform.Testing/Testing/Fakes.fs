@@ -12,7 +12,6 @@ open ToolUp.Platform.Auth
 open ToolUp.Platform.Scope.StorageScopeResolver
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Infra.Metrics
-open ToolUp.Platform.Compose
 
 // ─── Fakes for SDK interfaces ─────────────────────────────────────────
 //

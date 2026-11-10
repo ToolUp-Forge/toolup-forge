@@ -13,6 +13,9 @@
          there is one copy of each law and nothing to drift; the linked
          support files are the closure the moved cases compile against. -->
     <ItemGroup>
+        <Compile Include="..\..\ToolUp.Platform.Testing\Testing\Recording.fs" Link="Testing\Recording.fs" />
+        <Compile Include="..\..\ToolUp.Platform.Testing\Testing\TempDir.fs" Link="Testing\TempDir.fs" />
+        <Compile Include="..\..\ToolUp.Platform.Testing\Testing\Loggers.fs" Link="Testing\Loggers.fs" />
         <Compile Include="..\..\ToolUp.Platform.Tests\Contracts\IAuditSinkContract.fs" Link="Contracts\IAuditSinkContract.fs" />
         <Compile Include="CefAuditSinkTests.fs" />
         <Compile Include="ChainedAuditLedgerTests.fs" />

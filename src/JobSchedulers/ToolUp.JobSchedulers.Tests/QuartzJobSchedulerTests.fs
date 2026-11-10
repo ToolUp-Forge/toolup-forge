@@ -16,6 +16,7 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 9c.E — the Quartz companion binds BOTH contract packs ─────
 //
@@ -42,14 +43,6 @@ open ToolUp.Platform.Compose
 // case could pass over a companion that persisted correctly and
 // scheduled nothing.
 
-let private silentLogger =
-    { new ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn _ = ()
-        member _.Error(_, _) = ()
-    }
-
 let private silentChannel =
     { new INotificationChannel with
         member _.Publish(_, _) = async { return () }
@@ -60,12 +53,15 @@ let private silentChannel =
 let private uniqueSuffix () =
     Guid.NewGuid().ToString("N").Substring(0, 8)
 
-let private tempRoot () =
-    let root =
-        Path.Combine(Path.GetTempPath(), "toolup-quartz-tests-" + Guid.NewGuid().ToString("N"))
+/// Every directory a factory below roots a store at. The contract packs
+/// give a factory no per-case teardown, so the teardown case at the bottom
+/// of `tests` deletes them, after the companions over them are shut down.
+let private roots = System.Collections.Concurrent.ConcurrentBag<TempDir>()
 
-    Directory.CreateDirectory root |> ignore
-    root
+let private tempRoot () =
+    let root = TempDir.create "quartz-tests"
+    roots.Add root
+    root.Path
 
 /// A canonical store over `root`. A second call with the same root
 /// reaches the same persisted definitions through a brand-new
@@ -110,7 +106,7 @@ let private composeOver (store: IJobStore) (started: bool) =
     }
 
     let companion =
-        QuartzJobScheduler.create store silentChannel ServerConfig.defaults quartzConfig silentLogger
+        QuartzJobScheduler.create store silentChannel ServerConfig.defaults quartzConfig Logger.silent
         |> Async.RunSynchronously
 
     composed.Add companion
@@ -699,6 +695,9 @@ let private teardownTests =
                     stillLive <- stillLive + 1
 
             Expect.equal stillLive 0 $"%d{stillLive} of %d{all.Length} Quartz schedulers refused to shut down"
+
+            for root in roots.ToArray() do
+                (root :> IDisposable).Dispose()
         }
     ]
 

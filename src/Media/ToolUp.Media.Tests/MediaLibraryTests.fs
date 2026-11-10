@@ -29,6 +29,7 @@ open ToolUp.Platform.Infra.Usage
 open ToolUp.Platform.Config
 open ToolUp.Platform.Compose
 open ToolUp.Platform.Tests.InProcess
+open ToolUp.Platform.Testing
 
 // ─── Phase 88 — media library tests ───────────────────────────────────
 //
@@ -49,13 +50,6 @@ open ToolUp.Platform.Tests.InProcess
 // the implementation-agnostic pack.
 
 // ─── Test doubles ─────────────────────────────────────────────────────
-
-type private NullLogger() =
-    interface ILogger with
-        member _.Debug(_) = ()
-        member _.Info(_) = ()
-        member _.Warn(_) = ()
-        member _.Error(_, _) = ()
 
 /// Trivial in-memory `ISecretStore` — mirrors the `ShareTokenStoreTests`
 /// double; the signing key is generated on first use and persisted here.
@@ -99,7 +93,7 @@ let private makeLibraryOver
     let secrets = InMemorySecretStore() :> ISecretStore
     let signer = SignedUrl.MediaUrlSigner(secrets)
 
-    DefaultMediaLibrary(blob, signer, NoopMediaDerivation.create (), transcoder, None, options, NullLogger())
+    DefaultMediaLibrary(blob, signer, NoopMediaDerivation.create (), transcoder, None, options, Logger.silent)
     :> IMediaLibrary
 
 let private makeLibrary () : IMediaLibrary =
@@ -453,12 +447,12 @@ let private makeSessionsOver
             NoopMediaTranscoder.create (),
             notifications,
             options,
-            NullLogger()
+            Logger.silent
         )
         :> IMediaLibrary
 
     let sessions =
-        BlobUploadSessionStore(blob, lib, notifications, options, NullLogger(), now) :> IUploadSessionStore
+        BlobUploadSessionStore(blob, lib, notifications, options, Logger.silent, now) :> IUploadSessionStore
 
     sessions, lib
 
@@ -758,7 +752,7 @@ let private makeFixtureWith
     let blob = makeStore ()
     let secrets = InMemorySecretStore() :> ISecretStore
     let signer = SignedUrl.MediaUrlSigner(secrets)
-    let keys = HlsKeyDelivery.MediaHlsKeyStore(secrets, NullLogger(), options)
+    let keys = HlsKeyDelivery.MediaHlsKeyStore(secrets, Logger.silent, options)
 
     let lib =
         DefaultMediaLibrary(
@@ -768,7 +762,7 @@ let private makeFixtureWith
             transcoder,
             None,
             options,
-            NullLogger(),
+            Logger.silent,
             (if withKeyStore then Some keys else None),
             (edge |> Option.map (fun e -> e :> IEdgeCache)),
             delegated
@@ -2814,56 +2808,43 @@ let private beaconEndpointTests =
 // twins, so every positive case polls for the row rather than reading
 // straight after the call.
 
-/// Accumulates every recorded event. Deliberately never fails on its
-/// own — "exactly one row of this shape" is only a real assertion
-/// because this would happily record nothing.
-type private RecordingMediaAuditLog() =
-    let recorded = ResizeArray<string * AuditEvent>()
+/// The `MediaKeyDelivered` rows `log` recorded, each with the stream it
+/// was written under. The log never fails on its own — "exactly one row
+/// of this shape" is only a real assertion because it would happily
+/// record nothing.
+let private keyRowsOf (rows: AuditRecord list) =
+    rows
+    |> List.choose (fun row ->
+        match row.Event with
+        | MediaKeyDelivered p -> Some(row.StreamKey, p)
+        | _ -> None)
 
-    member _.Recorded = List.ofSeq recorded
-
-    member this.KeyRows =
-        this.Recorded
-        |> List.choose (function
-            | scope, MediaKeyDelivered p -> Some(scope, p)
-            | _ -> None)
-
-    interface IAuditLog with
-        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
-            recorded.Add((scopeId, audit))
-            return Ok()
-        }
-
-        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
-
-/// Poll to a deadline rather than sleeping a fixed interval: a fixed
-/// sleep is either flaky or slow, and this returns the moment the row
-/// lands. Returns whatever it has at the deadline instead of throwing,
+/// Wait on the log's own writes rather than sleeping a fixed interval: a
+/// fixed sleep is either flaky or slow, and this returns the moment the
+/// row lands. Returns whatever it has at the deadline instead of throwing,
 /// so a failure reads "expected 1 row, got 0" — which names the defect —
 /// rather than a timeout that does not.
-let private awaitKeyRows (log: RecordingMediaAuditLog) (expected: int) =
-    let deadline = DateTime.UtcNow.AddSeconds 5.0
+let private awaitKeyRows (log: TestAuditLog) (expected: int) =
+    log.Recording.WaitUntil((fun rows -> (keyRowsOf rows).Length >= expected), TimeSpan.FromSeconds 5.0)
+    |> ignore
 
-    while log.KeyRows.Length < expected && DateTime.UtcNow < deadline do
-        Thread.Sleep 10
-
-    log.KeyRows
+    keyRowsOf log.Records
 
 /// A negative case cannot poll for an absence, so it waits a fixed,
 /// generous slice and then asserts the log is still empty. Long enough
 /// that a row which WAS emitted has landed — the fail-once probe
 /// confirms these cases go red when the emission is defeated, which is
 /// what makes the wait long enough rather than merely hopeful.
-let private assertNoKeyRow (log: RecordingMediaAuditLog) (why: string) =
+let private assertNoKeyRow (log: TestAuditLog) (why: string) =
     Thread.Sleep 250
-    Expect.isEmpty log.KeyRows why
+    Expect.isEmpty (keyRowsOf log.Records) why
 
 /// `drive`, plus an `IAuditLog` and an optional resolved `Subject`, and
 /// with the key store made omittable so the "companion not composed"
 /// case can be driven through the same code path.
 let private driveAudited
     (f: EncryptedFixture)
-    (log: RecordingMediaAuditLog)
+    (log: TestAuditLog)
     (withKeyStore: bool)
     (subject: Subject option)
     (path: string)
@@ -2926,7 +2907,7 @@ let private mediaKeyGrantAuditTests =
         <| fun () ->
             let f = makeEncryptedFixture encryptingTranscoder true true
             let record = encryptedItem f
-            let log = RecordingMediaAuditLog()
+            let log = TestAuditLog()
 
             let status, body =
                 driveAudited f log true (Some(TeamMember("u1", "t1"))) (keyRoute record.Id) "" (Some encContainer)
@@ -2953,7 +2934,7 @@ let private mediaKeyGrantAuditTests =
         <| fun () ->
             let f = makeEncryptedFixture encryptingTranscoder true true
             let record = encryptedItem f
-            let log = RecordingMediaAuditLog()
+            let log = TestAuditLog()
 
             let scope: StorageScope = {
                 ScopeId = "u1"
@@ -3004,7 +2985,7 @@ let private mediaKeyGrantAuditTests =
 
             let f = makeFixtureWith encryptingTranscoder true quiet None None
             let record = encryptedItem f
-            let log = RecordingMediaAuditLog()
+            let log = TestAuditLog()
 
             let status, _ =
                 driveAudited f log true (Some(AuthenticatedUser "u9")) (keyRoute record.Id) "" (Some encContainer)
@@ -3017,7 +2998,7 @@ let private mediaKeyGrantAuditTests =
             let f = makeEncryptedFixture encryptingTranscoder true true
             let record = encryptedItem f
 
-            let anonLog = RecordingMediaAuditLog()
+            let anonLog = TestAuditLog()
             let anonStatus, _ = driveAudited f anonLog true None (keyRoute record.Id) "" None
             Expect.equal anonStatus 401 "unchanged from Phase 471"
             assertNoKeyRow anonLog "a 401 must never produce a DELIVERED row"
@@ -3033,7 +3014,7 @@ let private mediaKeyGrantAuditTests =
                 |> Async.RunSynchronously
                 |> Result.defaultWith (fun e -> failwithf "%A" e)
 
-            let expiredLog = RecordingMediaAuditLog()
+            let expiredLog = TestAuditLog()
 
             let expiredStatus, _ =
                 driveAudited f expiredLog true None (keyRoute record.Id) ("token=" + Uri.EscapeDataString stale) None
@@ -3045,7 +3026,7 @@ let private mediaKeyGrantAuditTests =
             // caller IS a good authenticated subject and the gate admits
             // the route. What refuses is the container lookup, and the
             // row must sit after THAT, not after the gate.
-            let foreignLog = RecordingMediaAuditLog()
+            let foreignLog = TestAuditLog()
 
             let foreignStatus, _ =
                 driveAudited
@@ -3067,7 +3048,7 @@ let private mediaKeyGrantAuditTests =
         <| fun () ->
             let f = makeEncryptedFixture encryptingTranscoder true true
             let record = encryptedItem f
-            let log = RecordingMediaAuditLog()
+            let log = TestAuditLog()
 
             let status, _ =
                 driveAudited

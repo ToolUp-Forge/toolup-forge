@@ -8,6 +8,7 @@ open System.IO
 open System.IO.Compression
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Testing
 
 // ─── Phase 182 — release SBOM gate + emission ──────────────────────────
 //
@@ -44,18 +45,8 @@ let private writeFakeNupkg (dir: string) (id: string) (version: string) =
     path
 
 let private withTempDir (f: string -> 'a) =
-    let dir =
-        Path.Combine(Path.GetTempPath(), "sbom-test-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory dir |> ignore
-
-    try
-        f dir
-    finally
-        try
-            Directory.Delete(dir, true)
-        with _ ->
-            ()
+    use scratch = TempDir.create "sbom-test"
+    f scratch.Path
 
 let private fixedNow () =
     DateTimeOffset(2026, 6, 19, 0, 0, 0, TimeSpan.Zero)

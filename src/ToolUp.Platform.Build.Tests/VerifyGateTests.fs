@@ -7,6 +7,7 @@ open System
 open System.Threading
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Testing
 open ToolUp.Forge
 open ToolUp.Forge.VerifyGate
 
@@ -608,8 +609,8 @@ let tests =
                 // for it here would wait on our own parent.
                 let name = uniqueName ()
 
-                let note =
-                    IO.Path.Combine(IO.Path.GetTempPath(), "toolup-verify-gate-test-" + Guid.NewGuid().ToString "N")
+                use scratch = TempDir.create "verify-gate-test"
+                let note = scratch.File "holder-note"
 
                 let lines = ResizeArray()
                 let seenDuring = ref ""
@@ -644,8 +645,8 @@ let tests =
             <| fun () ->
                 let name = uniqueName ()
 
-                let note =
-                    IO.Path.Combine(IO.Path.GetTempPath(), "toolup-verify-gate-test-" + Guid.NewGuid().ToString "N")
+                use scratch = TempDir.create "verify-gate-test"
+                let note = scratch.File "holder-note"
 
                 Expect.throws
                     (fun () ->

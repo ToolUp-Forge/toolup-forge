@@ -15,14 +15,9 @@ open ToolUp.AssetStore
 open ToolUp.Platform.Infra.Metrics
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
-let nullLogger =
-    { new ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn _ = ()
-        member _.Error(_, _) = ()
-    }
+let nullLogger = Logger.silent
 
 let nullAuditLog =
     { new IAuditLog with
