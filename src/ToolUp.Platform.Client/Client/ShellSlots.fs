@@ -278,7 +278,7 @@ module ShellSlots =
         authenticatedAdmin
             _.ExternalContactManager
             ExternalContactManagerUI.moduleId
-            ExternalContactManagerUI.create
+            (builtIn ExternalContactManagerUI.builtIn)
             None
             "ExternalContactManager"
 
