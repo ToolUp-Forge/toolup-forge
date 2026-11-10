@@ -103,15 +103,6 @@ type AuditEvent =
     /// Entity deleted (head version removed; historical
     /// versions remain available via `GetVersion`).
     | EntityDeleted of EntityLifecycleEventPayload
-    /// Forms submission committed (Submit). PII-free.
-    | FormSubmitted of FormSubmittedPayload
-    /// Forms submission edited in `Draft` state
-    /// (UpdateDraft). PII-free.
-    | FormSubmissionUpdated of FormSubmissionUpdatedPayload
-    /// Forms workflow state transition applied. Recorded
-    /// after the new state is persisted; the optional workflow
-    /// action runs afterwards but does not affect this event.
-    | WorkflowTransitioned of WorkflowTransitionedPayload
     /// Successful sink batch delivery. Emitted once per
     /// batch after `IAuditSink.Deliver` returns `Result.Ok`.
     | AuditSinkDelivered of AuditSinkDeliveredPayload
@@ -361,12 +352,6 @@ type AuditEvent =
     /// sweep observable so an operator can see (and re-issue) an invite
     /// that lapsed before the invitee signed in (GP 6).
     | TeamInviteExpired of TeamInviteExpiredPayload
-    /// Phase 21d — workflow-action invocation outcome (succeeded /
-    /// failed / skipped_replay / skipped_pending). Emitted by the
-    /// `WorkflowEngine` for every action the ledger resolves, so
-    /// operator triage can correlate metrics + audit + ledger rows
-    /// without inferring from the metric tag alone.
-    | WorkflowActionExecuted of WorkflowActionExecutedPayload
     /// Phase 59 — client recorded a consent decision via
     /// `IConsentProvider`; only emitted when
     /// `ServerConfig.ConsentAudit = FeatureMode.Enabled`. Reserved
@@ -889,9 +874,6 @@ module AuditEvent =
         | EntityCreated _ -> "EntityCreated"
         | EntityUpdated _ -> "EntityUpdated"
         | EntityDeleted _ -> "EntityDeleted"
-        | FormSubmitted _ -> "FormSubmitted"
-        | FormSubmissionUpdated _ -> "FormSubmissionUpdated"
-        | WorkflowTransitioned _ -> "WorkflowTransitioned"
         | AuditSinkDelivered _ -> "AuditSinkDelivered"
         | AuditSinkFailed _ -> "AuditSinkFailed"
         | AuditSinkDeadLettered _ -> "AuditSinkDeadLettered"
@@ -949,7 +931,6 @@ module AuditEvent =
         | TeamInviteRevoked _ -> "TeamInviteRevoked"
         | TeamInviteRedeemed _ -> "TeamInviteRedeemed"
         | TeamInviteExpired _ -> "TeamInviteExpired"
-        | WorkflowActionExecuted _ -> "WorkflowActionExecuted"
         | ConsentRecorded _ -> "ConsentRecorded"
         | AdImpressionRecorded _ -> "AdImpressionRecorded"
         | AdClickRecorded _ -> "AdClickRecorded"

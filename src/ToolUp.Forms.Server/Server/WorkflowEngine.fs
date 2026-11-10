@@ -2,6 +2,7 @@ module ToolUp.Forms.WorkflowEngine
 
 open System
 open ToolUp.Platform
+open ToolUp.Forms.FormsAuditEvents
 open ToolUp.Platform.Metrics
 open ToolUp.Forms.FormSubmission
 open ToolUp.Forms.Workflow
@@ -131,7 +132,7 @@ type WorkflowEngine
                 auditLog.Record(
                     AuditScope.shard scopeId,
                     AuditSubject.system "WorkflowEngine",
-                    AuditEvent.WorkflowActionExecuted payload
+                    FormsAuditEvent.event (WorkflowActionExecuted payload)
                 )
                 |> AuditRow.orRefuse
         }
@@ -309,7 +310,7 @@ type WorkflowEngine
                                                     auditLog.Record(
                                                         AuditScope.shard scopeId,
                                                         AuditSubject.system "WorkflowEngine",
-                                                        AuditEvent.WorkflowTransitioned payload
+                                                        FormsAuditEvent.event (WorkflowTransitioned payload)
                                                     )
                                                     |> AuditRow.orRefuse
 

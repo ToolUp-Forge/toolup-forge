@@ -39,11 +39,21 @@ open ToolUp.Platform.BlobStorage
 
 let private auditJsonOptions = PlatformJson.options
 
-let private toAuditJson (value: 'T) =
-    JsonSerializer.Serialize(value, auditJsonOptions)
+/// The one payload serialisation every audit kind's codec uses — the
+/// platform's and every companion family's — so a kind's bytes do not
+/// depend on which assembly declares it.
+module AuditPayloadJson =
+    /// A payload record's JSON, as stored.
+    let write (value: 'T) : string =
+        JsonSerializer.Serialize(value, auditJsonOptions)
 
-let private fromAuditJson<'T> (json: string) =
-    JsonSerializer.Deserialize<'T>(json, auditJsonOptions)
+    /// A stored payload back to its record.
+    let read<'T> (json: string) : 'T =
+        JsonSerializer.Deserialize<'T>(json, auditJsonOptions)
+
+let private toAuditJson (value: 'T) = AuditPayloadJson.write value
+
+let private fromAuditJson<'T> (json: string) = AuditPayloadJson.read<'T> json
 
 // Phase 1006 — a publication reader's `SurfaceDenied` row carries two
 // optional fields (`RouteClass`, `ReaderRoles`) that are `None` for every
@@ -221,9 +231,6 @@ let internal serialiseAuditEvent (audit: AuditEvent) : string =
     | EntityCreated p -> toAuditJson p
     | EntityUpdated p -> toAuditJson p
     | EntityDeleted p -> toAuditJson p
-    | FormSubmitted p -> toAuditJson p
-    | FormSubmissionUpdated p -> toAuditJson p
-    | WorkflowTransitioned p -> toAuditJson p
     | AuditSinkDelivered p -> toAuditJson p
     | AuditSinkFailed p -> toAuditJson p
     | AuditSinkDeadLettered p -> toAuditJson p
@@ -281,7 +288,6 @@ let internal serialiseAuditEvent (audit: AuditEvent) : string =
     | TeamInviteRevoked p -> toAuditJson p
     | TeamInviteRedeemed p -> toAuditJson p
     | TeamInviteExpired p -> toAuditJson p
-    | WorkflowActionExecuted p -> toAuditJson p
     | ConsentRecorded p -> toAuditJson p
     | AdImpressionRecorded p -> toAuditJson p
     | AdClickRecorded p -> toAuditJson p
@@ -463,9 +469,6 @@ let internal auditDecoderByType: Map<string, string -> AuditEvent> =
         "EntityCreated", (fun j -> EntityCreated(fromAuditJson<EntityLifecycleEventPayload> j))
         "EntityUpdated", (fun j -> EntityUpdated(fromAuditJson<EntityLifecycleEventPayload> j))
         "EntityDeleted", (fun j -> EntityDeleted(fromAuditJson<EntityLifecycleEventPayload> j))
-        "FormSubmitted", (fun j -> FormSubmitted(fromAuditJson<FormSubmittedPayload> j))
-        "FormSubmissionUpdated", (fun j -> FormSubmissionUpdated(fromAuditJson<FormSubmissionUpdatedPayload> j))
-        "WorkflowTransitioned", (fun j -> WorkflowTransitioned(fromAuditJson<WorkflowTransitionedPayload> j))
         "AuditSinkDelivered", (fun j -> AuditSinkDelivered(fromAuditJson<AuditSinkDeliveredPayload> j))
         "AuditSinkFailed", (fun j -> AuditSinkFailed(fromAuditJson<AuditSinkFailedPayload> j))
         "AuditSinkDeadLettered", (fun j -> AuditSinkDeadLettered(fromAuditJson<AuditSinkDeadLetteredPayload> j))
@@ -536,7 +539,6 @@ let internal auditDecoderByType: Map<string, string -> AuditEvent> =
         "TeamInviteRevoked", (fun j -> TeamInviteRevoked(fromAuditJson<TeamInviteRevokedPayload> j))
         "TeamInviteRedeemed", (fun j -> TeamInviteRedeemed(fromAuditJson<TeamInviteRedeemedPayload> j))
         "TeamInviteExpired", (fun j -> TeamInviteExpired(fromAuditJson<TeamInviteExpiredPayload> j))
-        "WorkflowActionExecuted", (fun j -> WorkflowActionExecuted(fromAuditJson<WorkflowActionExecutedPayload> j))
         "ConsentRecorded", (fun j -> ConsentRecorded(fromAuditJson<ConsentEvent> j))
         "AdImpressionRecorded", (fun j -> AdImpressionRecorded(fromAuditJson<AdImpression> j))
         "AdClickRecorded", (fun j -> AdClickRecorded(fromAuditJson<AdClick> j))
@@ -880,7 +882,6 @@ module AuditEventJson =
     let options: JsonSerializerOptions =
         let o = JsonSerializerOptions(PlatformJson.options)
         o.Converters.Insert(0, AuditEventConverter())
-        o.MakeReadOnly()
         o
 
 /// SDK-default `IAuditLog`. Wraps the DI-registered `IEventStore`

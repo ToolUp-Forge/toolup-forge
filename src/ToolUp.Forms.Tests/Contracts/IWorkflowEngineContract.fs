@@ -3,6 +3,7 @@ module ToolUp.Forms.Tests.Contracts.IWorkflowEngineContract
 open System
 open Expecto
 open ToolUp.Platform
+open ToolUp.Forms.FormsAuditEvents
 open ToolUp.Forms.FormSchema
 open ToolUp.Forms.FormSubmission
 open ToolUp.Forms.Workflow
@@ -161,8 +162,8 @@ let tests (label: string) (factory: EnvFactory) =
             let transitionedEvent =
                 auditEvents
                 |> List.tryPick (fun e ->
-                    match e with
-                    | WorkflowTransitioned p when p.SubmissionId = "s6" -> Some p
+                    match FormsAuditEvent.tryRead e with
+                    | Some(WorkflowTransitioned p) when p.SubmissionId = "s6" -> Some p
                     | _ -> None)
 
             match transitionedEvent with

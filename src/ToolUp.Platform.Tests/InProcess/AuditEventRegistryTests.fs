@@ -191,7 +191,7 @@ let private registrant (family: AuditEventFamily<'E>) : Registrant = {
 /// Every companion family in the tree. A companion that registers audit
 /// kinds is listed here, so the corpus proves its typed codec writes the
 /// bytes its kinds have always had.
-let private companionRegistrants: Registrant list = []
+let private companionRegistrants: Registrant list = [ registrant ToolUp.Forms.FormsAuditEvents.FormsAuditEvent.family ]
 
 /// Phase 625 — the wire discriminators that deliberately differ from
 /// their F# case identifier, pinned so a future "tidy the strings to
