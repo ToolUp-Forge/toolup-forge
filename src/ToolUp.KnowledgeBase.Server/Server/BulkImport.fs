@@ -22,7 +22,7 @@ open ToolUp.Platform.Compose
 // string>` (`IUrlContentFetcher.Fetch`). Opening it turns every one of
 // those into a type error. Same posture as `AICompose.fs`.
 
-// ─── Phase 511 — bulk import source expansion ─────────────────────
+// ─── Bulk import source expansion ─────────────────────
 //
 // Everything in this file turns *a source* into *items*. Nothing here
 // persists, chunks, embeds, dedups or checks a quota — the caller hands
@@ -366,7 +366,7 @@ type HttpUrlContentFetcher(client: HttpClient) =
     /// sockets); the per-request timeout rides a `CancellationToken`
     /// instead of the client's own, so one policy value cannot pin the
     /// shared instance.
-    /// Phase 772 — the redirect-refusing primary handler is wrapped by the
+    /// The redirect-refusing primary handler is wrapped by the
     /// platform client factory's egress handler; byte-identical under the
     /// default permit-all policy.
     static let shared =
@@ -457,7 +457,7 @@ let fetchUrl
 
 // ─── Compose-time registration ────────────────────────────────────
 
-// ─── Phase 725.D — bulk-import preflight ──────────────────────────
+// ─── Bulk-import preflight ──────────────────────────
 //
 // Every other KB policy ships an `IConfigValidator` that names a risky
 // posture at compose time (upload: uncapped in Team mode; quota:
@@ -527,14 +527,14 @@ let private urlIngestionValidator
                     )
     })
 
-/// Phase 511 — override the archive-expansion resource guards. A
+/// Override the archive-expansion resource guards. A
 /// deployment that never calls this gets `ArchiveImportPolicy.defaults`,
 /// which already carries real caps: bulk import is a new surface, and an
 /// uncapped archive expander is not a defensible default (see the type's
 /// remarks). The pre-511 single-file upload path is untouched either way
 /// (GP 11).
 ///
-/// Phase 725.D — also registers a preflight validator that warns when
+/// Also registers a preflight validator that warns when
 /// this policy leaves any expansion guard unbounded (the posture
 /// `ArchiveImportPolicy.unbounded` states in full).
 /// **Adds** its registrations through `ServerApp.addServiceConfig`; a later `withExtensions` keeps them.
@@ -546,7 +546,7 @@ let withArchiveImportPolicy (policy: ArchiveImportPolicy) (app: ServerApp) : Ser
     })
     |> ServerApp.withConfigValidator (archiveImportPolicyValidator policy)
 
-/// Phase 511 — enable fetch-by-URL ingestion for an explicit host
+/// Enable fetch-by-URL ingestion for an explicit host
 /// allowlist, and register the transport that performs it.
 ///
 /// **Not calling this leaves URL ingestion inert**, and that is the
@@ -561,7 +561,7 @@ let withArchiveImportPolicy (policy: ArchiveImportPolicy) (app: ServerApp) : Ser
 /// a deployment that wires this from configuration and gets an empty
 /// list back fails closed rather than open.
 ///
-/// Phase 725.D — also registers a preflight validator that names the
+/// Also registers a preflight validator that names the
 /// egress posture: a broad allowlist, or any allowlist at all in a
 /// Team / MultiTeam deployment where the fetch surface is shared across
 /// tenants. An empty (inert) allowlist warns about nothing.
@@ -573,7 +573,7 @@ let withUrlIngestion (policy: UrlIngestionPolicy) (app: ServerApp) : ServerApp =
         s.AddSingleton<IUrlContentFetcher>(HttpUrlContentFetcher() :> IUrlContentFetcher))
     |> ServerApp.withConfigValidator (urlIngestionValidator (app.Config, policy))
 
-/// Phase 511 — register a custom URL transport (an egress proxy, a
+/// Register a custom URL transport (an egress proxy, a
 /// signed-fetch service) without changing the allowlist semantics. The
 /// gate stays in `classifyUrl`; only the bytes arrive differently.
 /// **Adds** its registrations through `ServerApp.addServiceConfig`; a later `withExtensions` keeps them.

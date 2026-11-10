@@ -1025,7 +1025,7 @@ let composeRAG (options: RagOptions) (app: ServerApp) : ServerApp =
         if not active.IsEmpty then
             ragLogger.Info(sprintf "[RAGCompose] Dev endpoints registered: %s" (String.concat ", " active))
 
-    // Phase 6q follow-up — ICitationNormaliser seam. Always register the
+    // ICitationNormaliser seam. Always register the
     // rolling-window counter store (the dev endpoint resolves it
     // unconditionally); register the normaliser implementation only when the
     // policy isn't Off so the AI handler can resolve `null` and skip the pass
@@ -1691,7 +1691,7 @@ let composeRAG (options: RagOptions) (app: ServerApp) : ServerApp =
         )
         // Refuse (persistent) / warn (ephemeral) when RAG has no durable backing.
         ToolUp.RAG.RagConfigValidator.ragPersistenceValidator (config, b.Storage.IsSome, options.VectorStore.IsSome)
-        // Phase 9j follow-up — refuse the in-process ingestion queue under
+        // Refuse the in-process ingestion queue under
         // ReplicaCount > 1 (no leasing/redelivery ⇒ silent corpus loss).
         // The refusal is lifted when a DURABLE queue is
         // composed: the premise it rests on (process-local, no

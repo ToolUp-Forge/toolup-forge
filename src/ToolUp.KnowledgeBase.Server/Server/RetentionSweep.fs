@@ -15,7 +15,7 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Compose
 
-// ─── Phase 512 — per-scope age-based KB retention sweep ──────────────
+// ─── Per-scope age-based KB retention sweep ──────────────
 //
 // The purge half of Phase 512 (the quota half lives at the upload
 // boundary in `Api/Documents.fs`). A composed `KnowledgeRetentionPolicy`

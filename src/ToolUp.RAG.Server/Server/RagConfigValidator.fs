@@ -9,7 +9,7 @@ open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Compose
 
-// ─── RAG-specific config validators (Phase 4b commit 3) ─────────────
+// ─── RAG-specific config validators ─────────────
 //
 // Companion validators for RAG-specific config concerns. Auto-registered
 // by `composeWithRAG` against the resolved `ServerConfig` + active
@@ -43,7 +43,7 @@ open ToolUp.Platform.Compose
 /// accepted the trade-off silences the family with one flag rather
 /// than learning two.
 ///
-/// **Phase 14z — the lift, and why it is a RELAXATION rather than a
+/// **The lift, and why it is a RELAXATION rather than a
 /// removal.** `scopeKeyedEmbedder` is the composed-provider observation
 /// the validator could not previously make (the Phase 509 / Phase 633
 /// precedent). Phase 14z closes the leak structurally — one IDF
@@ -103,7 +103,7 @@ let teamModeLocalEmbedderValidator
 /// misconfiguration; ephemeral modes (Anonymous / AuthenticatedEphemeral)
 /// are non-persistent by design, so a Warning is sufficient there.
 ///
-/// **Phase 9m.B (2026-05-06 audit, Gap 3) — the escape hatch.** The
+/// **The escape hatch.** The
 /// refusal had no opt-out, so a deployment that *deliberately* runs an
 /// ephemeral index on a persistent surface — a build-time-seeded
 /// corpus re-ingested on boot, a sandbox, an integration-test harness —
@@ -128,7 +128,7 @@ let ragPersistenceValidator
 
             if DeploymentConfig.hasPersistentAuthenticatedStorage serverConfig then
                 if serverConfig.RiskAcknowledgements.AcceptEphemeralRagIndex then
-                    // Phase 9m.B — the operator has opted past the
+                    // The operator has opted past the
                     // refusal by name. Keep it visible (never silent)
                     // so `/dev/inspect` still shows the deployment is
                     // running an index that does not survive a restart.
@@ -164,7 +164,7 @@ let ragPersistenceValidator
 /// Returns `Warning` (not `Error`) — single-instance multi-team
 /// deployments (the common single-node shape) are fine.
 ///
-/// Phase 633 — `crossReplicaCache` is the composed-cache observation the
+/// `crossReplicaCache` is the composed-cache observation the
 /// validator could not previously make: built from `ServerConfig` alone it
 /// could only see that a deployment MIGHT diverge, never that the operator
 /// had already addressed it, so it warned at a deployment doing the right
@@ -290,7 +290,7 @@ let citationDevEndpointValidator (serverConfig: ServerConfig) : IConfigValidator
 [<Literal>]
 let RefuseSaturationThreshold = 5
 
-/// Phase 9j follow-up — refuses an in-process RAG ingestion queue
+/// Refuses an in-process RAG ingestion queue
 /// paired with `ReplicaCount > 1`. `composeWithRAG` builds a
 /// process-local `IngestionQueue` + `IngestionBackgroundService` per
 /// instance with no leasing/redelivery: only the replica that handled
@@ -299,9 +299,9 @@ let RefuseSaturationThreshold = 5
 /// silent corpus incompleteness. Single-instance deployments are
 /// unaffected; multi-instance deployments either accept best-effort
 /// per-instance ingestion via the explicit escape hatch or stay
-/// single-instance. Mirrors `JobSchedulerInstanceValidator` (Phase 6l.F).
+/// single-instance. Mirrors `JobSchedulerInstanceValidator`.
 ///
-/// **Phase 509 — the lift.** `durableQueue` is `true` when the
+/// **The lift.** `durableQueue` is `true` when the
 /// deployment composed an `IIngestionQueueStore`
 /// (`RagOptions.withDurableIngestionQueue`). The refusal exists
 /// entirely because the default queue is process-local with no
@@ -356,7 +356,7 @@ let ragIngestionInstanceValidator
             return Ok
     })
 
-/// Phase 14w — surfaces the steady-state-memory contract for tombstone
+/// Surfaces the steady-state-memory contract for tombstone
 /// vacuuming. `IVectorStore.DeleteChunk` is a soft-delete (stamps
 /// `_deletedAt`); those tombstones are only reclaimed when
 /// `IVectorStore.Vacuum` runs. `RagOptions.withVacuumSchedule` drives
@@ -389,7 +389,7 @@ let vacuumScheduleValidator (serverConfig: ServerConfig, vacuumScheduleEnabled: 
             return Ok
     })
 
-/// Phase 14y — warns when a RAG deployment that requires authentication
+/// Warns when a RAG deployment that requires authentication
 /// runs with no rate limiter configured (`RateLimit = RateLimitConfig.none`,
 /// the default). Retrieval embeds *every* query through the configured
 /// embedding provider, so the cost of a request is per-query, not per-
@@ -428,7 +428,7 @@ let ragRateLimitConfiguredValidator (serverConfig: ServerConfig) : IConfigValida
             return Ok
     })
 
-// ─── Phase 9m.B — the 2026-05-06 RAG gap audit, Gaps 4 / 6 / 7 ───────
+// ─── The 2026-05-06 RAG gap audit, Gaps 4 / 6 / 7 ───────
 //
 // Three validators closing the "silent default / unvalidated config
 // knob / single-instance assumption" classes the audit named, plus the
@@ -649,7 +649,7 @@ let ragConfigBoundsValidator (bounds: RagConfigBounds) : IConfigValidator =
             return Ok
     })
 
-// ─── /dev/inspect contributors (Phase 9m.B) ─────────────────────────
+// ─── /dev/inspect contributors ─────────────────────────
 
 /// Surfaces the deployment's RAG durability posture as a
 /// `/dev/inspect` panel — "ephemeral" when the corpus does not survive
@@ -716,7 +716,7 @@ type VectorisationHandlerContributor(dataTypeIds: string list, handlerDataTypeId
             return "Vectorisation handlers", box payload
         }
 
-/// Phase 893 — warns when more than one replica runs over an in-process
+/// Warns when more than one replica runs over an in-process
 /// vector store or an in-process keyword index. Each replica then holds
 /// its own index in its own memory, persisted asynchronously: a chunk
 /// ingested on one replica is invisible to another's retrieval until a

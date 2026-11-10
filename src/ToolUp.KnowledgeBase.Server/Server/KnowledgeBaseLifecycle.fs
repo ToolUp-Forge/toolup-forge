@@ -7,7 +7,7 @@ open KnowledgeBase.ServerIndexStorage
 open KnowledgeBase.ServerInventory
 open ToolUp.Platform.Compose
 
-// ─── Phase 54d — first-party Knowledge Base lifecycle hook ───────────
+// ─── First-party Knowledge Base lifecycle hook ───────────
 //
 // On `OnDeprovisioned`, purges the offboarded scope's Knowledge Base —
 // every document blob, the index, extracted artefacts, and the

@@ -11,7 +11,7 @@ open ToolUp.Remoting.Client
 open Fable.Core
 open Fable.Core.JsInterop
 
-// Alias for the neutral Platform-side knowledge types (Phase 102–107).
+// Alias for the neutral Platform-side knowledge types.
 // Not `open`ed because `SourceLocator` / `ChunkOrigin` case names
 // collide with the KB-side `SourceLocation` / `KnowledgeSource` DUs.
 module VK = ToolUp.Platform.VectorKnowledgeTypes
@@ -23,7 +23,7 @@ type NoteEditorTarget =
     | CreateNew
     | EditExisting of docId: string
 
-/// Phase 636 — the version-history drawer's state, held for exactly ONE
+/// The version-history drawer's state, held for exactly ONE
 /// document at a time.
 ///
 /// `Model.VersionHistory = None` is the closed drawer, and that is where
@@ -95,7 +95,7 @@ type Model = {
     PlatformDocsLoading: bool
     PlatformDocsLoadError: string option
 
-    // ── Bulk import (Phase 511) ──
+    // ── Bulk import ──
     /// True while an `ImportBatch` round-trip is in flight. Separate from
     /// `Uploading` so the single-file path's spinner semantics are
     /// untouched (GP 11).
@@ -107,7 +107,7 @@ type Model = {
     BulkReport: BulkImportReport option
     BulkImportError: string option
 
-    // ── Version history (Phase 636) ──
+    // ── Version history ──
     /// `None` = the drawer is closed and nothing has been fetched. This
     /// is the only state a single-version / unversioned deployment ever
     /// reaches, because the affordance that opens it is itself gated on
@@ -126,7 +126,7 @@ type Msg =
     | UploadCompleted of ApiCall<byte[] * string, KnowledgeDocument>
     | DeleteRequested of string
     | DocumentDeleted of string
-    /// Phase 502.C — replace a document's tag set. The server
+    /// Replace a document's tag set. The server
     /// normalises and re-stamps the document's chunks, so the returned
     /// document is authoritative for what the tags actually became (a
     /// client that echoed its own input would drift from the canonical
@@ -165,7 +165,7 @@ type Msg =
     | LoadPlatformDocuments of ApiCall<unit, KnowledgeDocument list>
     | PlatformDocumentsLoadFailed of string
 
-    // ── Bulk import (Phase 511) ──
+    // ── Bulk import ──
     /// Submit many sources — plain files, archives to expand, or URLs —
     /// as ONE `ImportBatch` call. The view reads the local files itself
     /// (a `FileReader` round-trip is ephemeral view work, exactly as the
@@ -176,7 +176,7 @@ type Msg =
     | BulkImportFailed of string
     | DismissBulkReport
 
-    // ── Version history (Phase 636) ──
+    // ── Version history ──
     /// Open the drawer for one document AND start its history fetch.
     /// The fetch is deliberately tied to the open rather than to the
     /// list load: a corpus of N documents would otherwise cost N extra
@@ -250,7 +250,7 @@ let private hasNonTerminal (docs: KnowledgeDocument list) =
 let private schedulePoll () =
     Cmd.OfAsync.perform (fun () -> Async.Sleep 2000) () (fun () -> PollStatuses)
 
-// ─── Original-bytes → browser (Phase 102–107 client tail) ──────────
+// ─── Original-bytes → browser ──────────
 //
 // Fetches an original through a scope-gated API and hands it to the
 // browser: a new tab where the popup is allowed, a download anchor
@@ -303,7 +303,7 @@ let private openOriginal (original: OriginalDocument) (location: VK.SourceLocato
 
     revokeOriginalUrlLater url
 
-/// Phase 636 — deliver a document's preserved original to the browser
+/// Deliver a document's preserved original to the browser
 /// through the **existing** Phase 108 delivery path, rather than through
 /// a second byte route invented for the drawer.
 ///
@@ -363,7 +363,7 @@ let update (msg: Msg) (model: Model) =
 
     | UploadCompleted(Finished doc) ->
         match doc.Status with
-        // Phase 119 — a policy rejection never persisted anything, so it
+        // A policy rejection never persisted anything, so it
         // must NOT join the document list. Surface the reason as an upload
         // error instead; no poll loop is needed (nothing is ingesting).
         | IngestionStatus.UploadRejected reason ->
@@ -394,7 +394,7 @@ let update (msg: Msg) (model: Model) =
         },
         Cmd.none
 
-    // ── Bulk import (Phase 511) ──
+    // ── Bulk import ──
 
     | BulkImportRequested sources ->
         {
@@ -456,7 +456,7 @@ let update (msg: Msg) (model: Model) =
         },
         Cmd.none
 
-    // ── Version history (Phase 636) ──
+    // ── Version history ──
 
     | OpenVersionHistory(docId, fileName) ->
         {
@@ -825,7 +825,7 @@ let update (msg: Msg) (model: Model) =
         },
         Cmd.none
 
-// ─── Narrative → KB commit handler (Phase 13a) ─────────────────────
+// ─── Narrative → KB commit handler ─────────────────────
 //
 // `narrativeCommitHandler` is a value the SDK reads from
 // `ClientConfig.Composition.Handlers.NarrativeCommitHandler` at boot. It brokers

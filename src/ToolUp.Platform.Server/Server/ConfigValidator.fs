@@ -7,7 +7,7 @@ open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.ConfigValidation
 open ToolUp.Platform.Secrets
 
-// ─── First-party config validators (Phase 9m) ────────────────────────
+// ─── First-party config validators ────────────────────────
 //
 // Two SDK-built-in validators against the abstract storage / secret
 // interfaces. Both register automatically in `compose` whenever the
@@ -127,7 +127,7 @@ type SecretStoreValidator(secretStore: ISecretStore, ?timeout: TimeSpan) =
                 return Error(sprintf "secret store read failed: %s" ex.Message)
         }
 
-/// Phase 1038 — the secret-store preflight's timeout, chosen by what kind of
+/// The secret-store preflight's timeout, chosen by what kind of
 /// store it probes. `storeSupplied` is whether the application supplied its
 /// own store (`ServerApp.withSecretStore`) rather than composing the SDK's
 /// in-process `FileSecretStore` default: a supplied store is taken to be

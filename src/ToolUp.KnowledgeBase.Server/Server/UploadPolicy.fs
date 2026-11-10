@@ -75,7 +75,7 @@ let private uploadPolicyValidator
             return ValidationResult.Ok
     })
 
-/// Compose-time Knowledge Base upload policy (Phase 119): size cap +
+/// Compose-time Knowledge Base upload policy: size cap +
 /// extension allowlist + unsupported-type handling, on top of the
 /// always-on filename sanitisation the upload boundary applies
 /// regardless. Registers the policy as a DI singleton (read per request
@@ -92,7 +92,7 @@ let withUploadPolicy (policy: KnowledgeUploadPolicy) (app: ServerApp) : ServerAp
     |> KnowledgePolicyRegistration.set (fun policies -> { policies with Upload = policy })
     |> ServerApp.withConfigValidator (uploadPolicyValidator (app.Config, policy))
 
-/// Phase 14x — compose-time lever for KB upload content-hash dedup.
+/// Compose-time lever for KB upload content-hash dedup.
 /// Dedup is ON by default (no call needed): `UploadDocument` SHA-256-
 /// hashes the raw uploaded bytes and a scope-local match returns the
 /// existing document — no re-chunk, no re-embed, no duplicate retrieval
@@ -109,7 +109,7 @@ let withDocumentDedup (enabled: bool) (app: ServerApp) : ServerApp =
     app
     |> KnowledgePolicyRegistration.set (fun policies -> { policies with Dedup = enabled })
 
-/// Phase 510 — compose-time lever for KB upload **versioning**. OFF by
+/// Compose-time lever for KB upload **versioning**. OFF by
 /// default: call `withDocumentVersioning true` and a re-upload of an
 /// EDITED file under a name the caller's scope already holds becomes the
 /// next version of that document — same document id, `Version + 1`, the
@@ -138,7 +138,7 @@ let withDocumentVersioning (enabled: bool) (app: ServerApp) : ServerApp =
     app
     |> KnowledgePolicyRegistration.set (fun policies -> { policies with Versioning = enabled })
 
-/// Phase 105 — compose-time lever for routing KB **original documents**
+/// Compose-time lever for routing KB **original documents**
 /// through `IDataObjectStore` rather than writing them as raw blobs at
 /// the `knowledge/{docId}/{fileName}` convention path. OFF by default.
 ///
@@ -172,7 +172,7 @@ let withObjectStoreRetention (enabled: bool) (app: ServerApp) : ServerApp =
             ObjectRetention = enabled
     })
 
-// ─── Phase 512 — per-scope quota + retention compose hooks ───────────
+// ─── Per-scope quota + retention compose hooks ───────────
 
 // ─── Quota preflight ─────────────────────────────────────────────────
 
@@ -194,7 +194,7 @@ let private quotaPolicyValidator
             return ValidationResult.Ok
     })
 
-/// Phase 512 — compose-time per-scope Knowledge Base **corpus** quota:
+/// Compose-time per-scope Knowledge Base **corpus** quota:
 /// a document-count ceiling and a total-bytes ceiling, enforced at the
 /// upload boundary before anything is persisted and surfaced through
 /// `KnowledgeApi.GetScopeUsage` (plus the `/dev/knowledge-base/usage`
@@ -275,7 +275,7 @@ let private devUsageHandler: HttpHandler =
         return! next ctx
     }
 
-/// Phase 512 — mount the read-only `/dev/knowledge-base/usage`
+/// Mount the read-only `/dev/knowledge-base/usage`
 /// diagnostics endpoint reporting the caller's scope usage against the
 /// composed quota. Gated on `ServerConfig.EnableDevEndpoints` (default
 /// `false`) exactly like `/dev/inspect` — a deployment that has not
@@ -299,7 +299,7 @@ let withKnowledgeUsageEndpoint (app: ServerApp) : ServerApp =
     else
         app
 
-/// Phase 512 — the common pairing: compose the quota AND mount its dev
+/// The common pairing: compose the quota AND mount its dev
 /// usage endpoint (the latter still gated on `EnableDevEndpoints`).
 /// **Adds** what `withKnowledgeQuota` and `withKnowledgeUsageEndpoint` add.
 let withKnowledgeQuotaAndUsageEndpoint (policy: KnowledgeQuotaPolicy) (app: ServerApp) : ServerApp =
@@ -307,7 +307,7 @@ let withKnowledgeQuotaAndUsageEndpoint (policy: KnowledgeQuotaPolicy) (app: Serv
 
 // ─── Retention sweep ─────────────────────────────────────────────────
 
-/// Phase 512 — compose-time per-scope age-based retention. Registers the
+/// Compose-time per-scope age-based retention. Registers the
 /// policy as a DI singleton and, when it can actually expire something,
 /// schedules the `knowledge-base.retention-sweep` job on the composed
 /// `IJobScheduler` for each scope in `scopes`.
@@ -328,7 +328,7 @@ let withKnowledgeQuotaAndUsageEndpoint (policy: KnowledgeQuotaPolicy) (app: Serv
 /// default — is byte-for-byte its pre-512 self (GP 11 / GP 13).
 ///
 /// Registration is deferred to `IHostedService.StartAsync` via
-/// `DeferredScheduledJobDeclaration` (Phase 623): the handler resolves
+/// `DeferredScheduledJobDeclaration`: the handler resolves
 /// `IBlobStorage` / `IIndexLifecycle` / `IAuditLog` from the built
 /// provider on every run, so nothing is captured at compose time and the
 /// handler stays stateless between invocations (GP 12 rule 4).
@@ -356,7 +356,7 @@ let withKnowledgeRetention (policy: KnowledgeRetentionPolicy) (scopes: string li
     |> KnowledgePolicyRegistration.set (fun policies -> { policies with Retention = policy })
     |> ServerApp.addServiceConfig register
 
-// ─── Phase 515 — content scanning at the upload boundary ─────────────
+// ─── Content scanning at the upload boundary ─────────────
 
 let private contentScanValidator
     (scanner: IContentScanner, policy: ContentScanPolicy)
@@ -373,7 +373,7 @@ let private contentScanValidator
                 )
     })
 
-/// Phase 515 — compose-time content scanning at the KB upload boundary.
+/// Compose-time content scanning at the KB upload boundary.
 /// Registers the scanner and its error policy as DI singletons (read per
 /// request by `KnowledgeApiDeps.resolve`), plus a preflight validator
 /// that warns when the deployment has chosen to fail open.
