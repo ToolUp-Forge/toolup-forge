@@ -43,12 +43,10 @@ open ToolUp.Platform.Compose
 // on the NEXT turn — a prompt-injection / history-forgery surface.
 // Hardening (no client-protocol change, doesn't break first-turn
 // fast paths which legitimately have no server blob yet):
-//   * The scope MUST come from `ScopeResolutionMiddleware`
-//     (the principal's `StorageScope`). The old code fell back to the
-//     the principal's caller id (`AccessContext.callerId`) item or the literal `"anonymous"`, which on
-//     any middleware-bypassed route silently bucketed every caller
-//     into one shared `user-anonymous` container — a cross-user
-//     injection vector. No resolved scope ⇒ 401, no writes.
+//   * The scope MUST be the one `ScopeResolutionMiddleware` resolved
+//     for the principal. A fallback to a placeholder owner would bucket
+//     every middleware-bypassed caller into one shared container — a
+//     cross-user injection vector. No resolved scope ⇒ 401, no writes.
 //   * `Instruction` / `SyntheticReply` / `JsonFragment` are length-
 //     bounded so a single beacon can't stuff an unbounded payload
 //     into the history the model subsequently reads.
@@ -258,23 +256,16 @@ type SequenceBeacon = {
 
 // ─── Storage scope resolution ───────────────────────────────────
 
-// Authoritative scope ONLY. No the principal's caller id (`AccessContext.callerId`) / `"anonymous"`
-// fallback — that silently funnelled middleware-bypassed callers
-// into one shared container. `None` ⇒ the request is rejected.
+// The scope the principal's resolution derived, and nothing else: no user
+// container is minted for a principal without one, and no request without a
+// principal is served. `None` rejects the beacon.
 let private tryResolveScope (ctx: HttpContext) : StorageScope option =
-    match AccessContext.scopeOf ctx.Items with
-    | Some s -> Some s
-    | _ -> None
+    AIRequest.access ctx |> Option.bind _.StorageScope
 
-// Caller identity for the ownership gate. Populated by
-// `ScopeResolutionMiddleware` in the same Items dictionary as the
-// storage scope. Returns `None` when the middleware did not run or
-// resolved no identity — the gate refuses unauthenticated callers
-// rather than admitting `"anonymous"` as a usable owner.
+// The caller for the ownership gate, or `None` for a request without a
+// principal: the gate refuses it rather than admitting a placeholder owner.
 let private tryResolveUserId (ctx: HttpContext) : string option =
-    match AccessContext.callerIdOf ctx.Items with
-    | Some id when id <> "" -> Some id
-    | _ -> None
+    AIRequest.callerId ctx |> Option.filter (System.String.IsNullOrEmpty >> not)
 
 let private resolveLogger (ctx: HttpContext) : ILogger option =
     match ctx.RequestServices.GetService(typeof<ILogger>) with
