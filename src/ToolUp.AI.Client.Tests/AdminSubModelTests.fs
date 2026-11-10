@@ -67,7 +67,99 @@ let private teamManagerTests = testList "TeamManagerUI" []
 
 // ── PlatformAdminUI ────────────────────────────────────────────────────
 
-let private platformAdminTests = testList "PlatformAdminUI" []
+let private platformAdminTests =
+    testList "PlatformAdminUI" [
+        testCase "AssignConfirm: confirm goes in flight, its result ends it as an outcome"
+        <| fun () ->
+            let opened = PlatformAdminUI.AssignConfirm.init "u1"
+            Expect.equal opened.Outcome PlatformAdminUI.AssignConfirm.Open "a fresh confirmation is open"
+
+            let inFlight, _ =
+                PlatformAdminUI.AssignConfirm.update PlatformAdminUI.AssignConfirm.Confirm opened
+
+            Expect.isTrue inFlight.InFlight "confirm issues the grant and goes busy"
+
+            let ignored, _ =
+                PlatformAdminUI.AssignConfirm.update PlatformAdminUI.AssignConfirm.Cancel inFlight
+
+            Expect.equal ignored inFlight "cancel is inert while the grant is in flight"
+
+            let failed, _ =
+                PlatformAdminUI.AssignConfirm.update (PlatformAdminUI.AssignConfirm.Resolved(Error "denied")) inFlight
+
+            Expect.equal
+                failed.Outcome
+                (PlatformAdminUI.AssignConfirm.Done(Error "denied"))
+                "the result is reported as the outcome"
+
+            let cancelled, _ =
+                PlatformAdminUI.AssignConfirm.update PlatformAdminUI.AssignConfirm.Cancel opened
+
+            Expect.equal cancelled.Outcome PlatformAdminUI.AssignConfirm.Cancelled "cancel at rest closes"
+
+        testCase "ConfirmDeleteTeam: confirm goes in flight, its result ends it as an outcome"
+        <| fun () ->
+            let opened = PlatformAdminUI.ConfirmDeleteTeam.init "t1" "Alpha"
+            Expect.equal opened.TeamName "Alpha" "the prompt echoes the team name"
+
+            let inFlight, _ =
+                PlatformAdminUI.ConfirmDeleteTeam.update PlatformAdminUI.ConfirmDeleteTeam.Confirm opened
+
+            Expect.isTrue inFlight.InFlight "confirm issues the delete and goes busy"
+
+            let again, _ =
+                PlatformAdminUI.ConfirmDeleteTeam.update PlatformAdminUI.ConfirmDeleteTeam.Confirm inFlight
+
+            Expect.equal again inFlight "a second confirm while in flight is inert"
+
+            let done', _ =
+                PlatformAdminUI.ConfirmDeleteTeam.update (PlatformAdminUI.ConfirmDeleteTeam.Resolved(Ok())) inFlight
+
+            Expect.equal
+                done'.Outcome
+                (PlatformAdminUI.ConfirmDeleteTeam.Done(Ok()))
+                "success is reported as the outcome"
+
+            Expect.isTrue (not done'.InFlight) "no longer busy once resolved"
+
+        testCase "the parent routes a sub-model message to the open confirmation"
+        <| fun () ->
+            let parent, _ = PlatformAdminUI.init ClientModuleContext.empty
+
+            let withAssign = {
+                parent with
+                    AssignConfirm = Some(PlatformAdminUI.AssignConfirm.init "u1")
+            }
+
+            let routed, _ =
+                PlatformAdminUI.update
+                    (PlatformAdminUI.AssignConfirmMsg PlatformAdminUI.AssignConfirm.Confirm)
+                    withAssign
+
+            Expect.equal
+                (routed.AssignConfirm |> Option.map _.InFlight)
+                (Some true)
+                "the grant confirmation went in flight through the parent"
+
+            let closed, _ =
+                PlatformAdminUI.update
+                    (PlatformAdminUI.AssignConfirmMsg(PlatformAdminUI.AssignConfirm.Resolved(Ok())))
+                    routed
+
+            Expect.isTrue closed.AssignConfirm.IsNone "the parent closes the confirmation on its outcome"
+
+            let withDelete = {
+                parent with
+                    ConfirmDeleteTeam = Some(PlatformAdminUI.ConfirmDeleteTeam.init "t1" "Alpha")
+            }
+
+            let cancelled, _ =
+                PlatformAdminUI.update
+                    (PlatformAdminUI.DeleteTeamMsg PlatformAdminUI.ConfirmDeleteTeam.Cancel)
+                    withDelete
+
+            Expect.isTrue cancelled.ConfirmDeleteTeam.IsNone "a cancelled delete confirmation closes"
+    ]
 
 // ── MappingDataManagerUI ───────────────────────────────────────────────
 
