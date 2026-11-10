@@ -3132,3 +3132,43 @@ module ClientModule =
         (m: ClientModule<'Model, 'Msg>)
         : ClientModule<'Model, 'Msg> =
         { m with Init = init }
+
+/// How a built-in module renders: one page, or several sharing the model.
+[<RequireQualifiedAccess>]
+type BuiltInView<'Model, 'Msg> =
+    /// One page (`ClientModule.withView`).
+    | Page of ('Model -> RenderContext<'Msg> -> PageContent)
+    /// Several pages (`ClientModule.withPages`).
+    | Pages of (PageConfig * ('Model -> RenderContext<'Msg> -> PageContent)) list
+
+/// A module the SDK ships, declared as one value: what it is, how it gates
+/// itself, and its program. `ShellSlots.builtIn` turns it into the module
+/// that fills its slot, under the slot's label — the one place the
+/// construction pipeline is written.
+///
+/// The gates (`NavRole`, `Visibility`) are the module's own declarations: a
+/// slot places and tiles whatever fills it but enforces no behaviour, so a
+/// deployment's replacement declares its own.
+type BuiltIn<'Model, 'Msg> = {
+    /// The reserved module id (`_sdk.*`), never a deployment's RBAC key.
+    Id: string
+    /// The sidebar name and icon when the slot is filled by `Default`.
+    Defaults: ModuleLabel
+    /// The sidebar group, `None` for an ungrouped entry.
+    Group: string option
+    /// The navigation-role gate, `None` for an ungated entry.
+    NavRole: NavRole option
+    /// The navigation area the entry sits in.
+    Area: ModuleArea
+    /// Which subjects see the entry.
+    Visibility: SubjectKind -> bool
+    /// The module's `init`, over the shell's context.
+    Init: ClientModuleContext -> 'Model * Cmd<'Msg>
+    /// The module's `update`.
+    Update: 'Msg -> 'Model -> 'Model * Cmd<'Msg>
+    /// The module's view.
+    View: BuiltInView<'Model, 'Msg>
+    /// The module's further declarations (processed data, inspectable
+    /// state), applied after the rest; `id` for none.
+    Extend: ClientModule<'Model, 'Msg> -> ClientModule<'Model, 'Msg>
+}

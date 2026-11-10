@@ -117,6 +117,44 @@ type ShellSlot = {
 /// The shell's slot table.
 module ShellSlots =
 
+    // ── Building a built-in ───────────────────────────────────────────
+
+    /// The module a built-in fills its slot with, under the slot's `label`
+    /// (`None` is the built-in's own `Defaults`). The one place the
+    /// construction of a built-in is written; each built-in exports the
+    /// `BuiltIn` value this reads.
+    let builtIn (b: BuiltIn<'Model, 'Msg>) (label: ModuleLabel option) : ErasedModule =
+        let label = defaultArg label b.Defaults
+
+        let module': ClientModule<'Model, 'Msg> =
+            ClientModule.create {
+                Init = fun () -> b.Init ClientModuleContext.empty
+                Update = b.Update
+                Name = label.Name
+                Icon = label.Icon
+            }
+            |> ClientModule.withId b.Id
+            |> ClientModule.withContextInit b.Init
+            |> ClientModule.withArea b.Area
+            |> ClientModule.withVisibility b.Visibility
+
+        let module' =
+            match b.View with
+            | BuiltInView.Page view -> ClientModule.withView view module'
+            | BuiltInView.Pages pages -> ClientModule.withPages pages module'
+
+        let module' =
+            match b.Group with
+            | Some group -> ClientModule.withGroup group module'
+            | None -> module'
+
+        let module' =
+            match b.NavRole with
+            | Some role -> ClientModule.withNavRole role module'
+            | None -> module'
+
+        module' |> b.Extend |> ClientModule.register
+
     // ── Building a slot ───────────────────────────────────────────────
 
     let private slot<'cfg>
