@@ -471,20 +471,22 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement * ReactEl
 
 // ─── Module registration ────────────────────────────────────────
 
-/// Create the Platform Admin AI keys module as an ErasedModule.
+/// The Platform Admin AI keys module (`ShellSlots.builtIn` builds it).
 /// Auto-appended by the AI slots (`AIClientConfig.slotExtensions`) alongside
 /// the assistant + settings modules; the sidebar role gate hides it
 /// from non-admin callers.
-let create () : ErasedModule =
-    ToolUp.Platform.ClientModule.create {
-        Init = init
-        Update = update
+let builtIn: BuiltIn<Model, Msg> = {
+    Id = "_ai.PlatformAIKeys"
+    Defaults = {
         Name = "AI Keys"
         Icon = ToolUp.AI.Icons.aiSettings
     }
-    |> ToolUp.Platform.ClientModule.withId "_ai.PlatformAIKeys"
-    |> ToolUp.Platform.ClientModule.withView (fun model ctx -> PageContent.SplitPanel(view model ctx.Dispatch))
-    |> ToolUp.Platform.ClientModule.withGroup "Platform Management"
-    |> ToolUp.Platform.ClientModule.withNavRole ToolUp.Platform.NavRole.PlatformAdminOnly
-    |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated
-    |> ToolUp.Platform.ClientModule.register
+    Group = Some "Platform Management"
+    NavRole = Some ToolUp.Platform.NavRole.PlatformAdminOnly
+    Area = Product
+    Visibility = ToolUp.Platform.Visibility.visibleToAuthenticated
+    Init = fun _ -> init ()
+    Update = update
+    View = BuiltInView.Page(fun model ctx -> PageContent.SplitPanel(view model ctx.Dispatch))
+    Extend = id
+}

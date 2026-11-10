@@ -437,15 +437,12 @@ let private sidePanelHeaderAction
 /// AI settings page (grouped "Admin") joins the trailing admin block rather
 /// than dragging it to the top of the sidebar.
 let slotExtensions (fills: AISlotFills) : SlotExtension list = [
-    SlotExtension.ofFill "AIAssistant" AIAssistantUI.create fills.AIAssistant
     SlotExtension.ofFill
-        "AISettings"
-        (fun label -> AISettingsUI.create () |> Option.foldBack SlotExtension.relabel label)
-        fills.AISettings
-    SlotExtension.ofFill
-        "PlatformAIKeys"
-        (fun label -> PlatformAIKeysAdminUI.create () |> Option.foldBack SlotExtension.relabel label)
-        fills.PlatformAIKeys
+        "AIAssistant"
+        (fun branding -> ShellSlots.builtIn (AIAssistantUI.builtIn branding) None)
+        fills.AIAssistant
+    SlotExtension.ofFill "AISettings" (ShellSlots.builtIn AISettingsUI.builtIn) fills.AISettings
+    SlotExtension.ofFill "PlatformAIKeys" (ShellSlots.builtIn PlatformAIKeysAdminUI.builtIn) fills.PlatformAIKeys
 ]
 
 /// Phase 1074 — `config` with the AI slots filled by `fills`, after any

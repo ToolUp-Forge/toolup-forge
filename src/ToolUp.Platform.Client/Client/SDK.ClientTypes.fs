@@ -767,17 +767,6 @@ module SlotExtension =
             | SlotFill.External replacement -> Some replacement
     }
 
-    /// A built-in module under a slot's label: the sidebar entry's name
-    /// and icon are the label's.
-    let relabel (label: ModuleLabel) (m: ErasedModule) : ErasedModule = {
-        m with
-            Definition = {
-                m.Definition with
-                    Name = label.Name
-                    Icon = label.Icon
-            }
-    }
-
 /// The SDK data manager's label and sidebar group — the data slot's
 /// configuration, the same for both managers (Phase 1074 made the two
 /// symmetric). Unlike a plain `ModuleLabel` it can also move the entry to

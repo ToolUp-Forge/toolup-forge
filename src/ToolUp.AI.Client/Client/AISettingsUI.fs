@@ -1139,23 +1139,22 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement * ReactEl
 
 // ─── Module registration ──────────────────────────────────────────
 
-/// Create the AI settings module as an ErasedModule. Mirrors the
-/// `AIAssistantUI.create` pattern; appended alongside the assistant
+/// The AI settings module, as a `BuiltIn` value like the assistant's;
+/// built by `ShellSlots.builtIn` and appended alongside the assistant
 /// module by the AI slots (`AIClientConfig.slotExtensions`) when AI is
 /// enabled.
-let create () : ErasedModule =
-    // Companion-provided built-in — `Id` is reserved under the `_ai.`
-    // namespace so it can never collide with an app's RBAC-managed
-    // `ServerConfig.ModuleNames` key.
-    ToolUp.Platform.ClientModule.create {
-        Init = init
-        Update = update
+let builtIn: BuiltIn<Model, Msg> = {
+    Id = "_ai.AISettings"
+    Defaults = {
         Name = "AI Settings"
         Icon = ToolUp.AI.Icons.aiSettings
     }
-    |> ToolUp.Platform.ClientModule.withId "_ai.AISettings"
-    |> ToolUp.Platform.ClientModule.withView (fun model ctx -> PageContent.SplitPanel(view model ctx.Dispatch))
-    |> ToolUp.Platform.ClientModule.withGroup "Team Management"
-    |> ToolUp.Platform.ClientModule.withNavRole ToolUp.Platform.NavRole.TeamOwnerAdmin
-    |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated
-    |> ToolUp.Platform.ClientModule.register
+    Group = Some "Team Management"
+    NavRole = Some ToolUp.Platform.NavRole.TeamOwnerAdmin
+    Area = Product
+    Visibility = ToolUp.Platform.Visibility.visibleToAuthenticated
+    Init = fun _ -> init ()
+    Update = update
+    View = BuiltInView.Page(fun model ctx -> PageContent.SplitPanel(view model ctx.Dispatch))
+    Extend = id
+}

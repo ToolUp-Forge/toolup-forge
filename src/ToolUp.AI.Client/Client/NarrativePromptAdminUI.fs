@@ -874,8 +874,7 @@ let private detailView (model: Model) (view: NarrativePromptView) (dispatch: Msg
         ]
     ]
 
-[<ReactComponent>]
-let private NarrativePromptBody (model: Model) (dispatch: Msg -> unit) =
+let private body (model: Model) (dispatch: Msg -> unit) =
     Html.div [
         prop.className "flex-1 p-6 overflow-y-auto"
         prop.children [
@@ -901,33 +900,38 @@ let private NarrativePromptBody (model: Model) (dispatch: Msg -> unit) =
         ]
     ]
 
-let private view (model: Model) (dispatch: Msg -> unit) : ReactElement =
-    Html.div [
-        prop.className "flex flex-col h-full"
-        prop.children [ NarrativePromptBody model dispatch ]
-    ]
+let private view (model: Model) (ctx: RenderContext<Msg>) : PageContent =
+    PageContent.FullWidth(
+        Html.div [
+            prop.className "flex flex-col h-full"
+            prop.children [ body model ctx.Dispatch ]
+        ]
+    )
 
 // ─── Module creation ────────────────────────────────────────────────
 
 /// This module's id.
 let moduleId = "_ai.NarrativePrompts"
 
-/// The module: Team Management, visible to a team Owner or Admin. Add it to
+/// The module: Team Management, visible to a team Owner or Admin. Add
+/// `ShellSlots.builtIn NarrativePromptAdminUI.builtIn None` to
 /// the module list of a deployment whose server composed
 /// `NarrativePromptHandler.withPromptAdmin`.
-let create () : ErasedModule =
-    ToolUp.Platform.ClientModule.create {
-        Init = init
-        Update = update
+let builtIn: BuiltIn<Model, Msg> = {
+    Id = moduleId
+    Defaults = {
         Name = "Report wording"
         Icon = ToolUp.AI.Icons.aiSettings
     }
-    |> ToolUp.Platform.ClientModule.withId moduleId
-    |> ToolUp.Platform.ClientModule.withView (fun model ctx -> PageContent.FullWidth(view model ctx.Dispatch))
-    |> ToolUp.Platform.ClientModule.withGroup "Team Management"
-    |> ToolUp.Platform.ClientModule.withNavRole ToolUp.Platform.NavRole.TeamOwnerAdmin
-    |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated
-    |> ToolUp.Platform.ClientModule.register
+    Group = Some "Team Management"
+    NavRole = Some ToolUp.Platform.NavRole.TeamOwnerAdmin
+    Area = Product
+    Visibility = ToolUp.Platform.Visibility.visibleToAuthenticated
+    Init = fun _ -> init ()
+    Update = update
+    View = BuiltInView.Page view
+    Extend = id
+}
 
 /// The "Report wording" administration tile — a value, as
 /// `JobsAdminUI.adminTile` is: the platform's shell owns the
