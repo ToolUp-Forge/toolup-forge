@@ -433,7 +433,7 @@ type internal HnswGraphStats = {
 /// overwrites retire the old node, and the scope rebuilds only when retired
 /// nodes pass `HnswParameters.TombstoneRebuildFraction`.
 ///
-/// A corrupt snapshot follows `corruptPolicy` (read from
+/// A corrupt snapshot follows `corruptPolicy` (resolved from
 /// `TOOLUP_RAG_REFUSE_ON_INDEX_CORRUPTION` when not supplied) and is reported
 /// through `telemetry`, `auditLog` and `notifications`, once per scope.
 ///
@@ -599,7 +599,9 @@ type HnswVectorStore
             (fun _ state -> Some(state.Entries.Values |> Seq.toList)),
             {
                 SnapshotPolicy.create {
-                    Policy = corruptPolicy |> Option.defaultWith CorruptPolicy.fromEnvironment
+                    Policy =
+                        corruptPolicy
+                        |> Option.defaultWith (fun () -> CorruptPolicy.resolveWith ConfigResolution.tryValue)
                     Telemetry = telemetry
                     AuditLog = defaultArg auditLog (NoOpAuditLog() :> IAuditLog)
                     Notifications = notifications

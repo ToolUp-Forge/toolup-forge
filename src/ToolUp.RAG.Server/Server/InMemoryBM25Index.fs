@@ -304,7 +304,7 @@ let private layout = SnapshotLayout.rag "bm25.json"
 /// an analyzer over an existing corpus does not leave the postings in one
 /// vocabulary and the queries in another.
 ///
-/// A corrupt snapshot follows `corruptPolicy` (read from
+/// A corrupt snapshot follows `corruptPolicy` (resolved from
 /// `TOOLUP_RAG_REFUSE_ON_INDEX_CORRUPTION` when not supplied) and is reported
 /// through `telemetry`, `auditLog` and `notifications`, once per scope.
 ///
@@ -368,7 +368,9 @@ type InMemoryBM25Index
             , materialise
             , snapshot
             , SnapshotPolicy.create {
-                Policy = corruptPolicy |> Option.defaultWith CorruptPolicy.fromEnvironment
+                Policy =
+                    corruptPolicy
+                    |> Option.defaultWith (fun () -> CorruptPolicy.resolveWith ConfigResolution.tryValue)
                 Telemetry = telemetry
                 AuditLog = defaultArg auditLog (NoOpAuditLog() :> IAuditLog)
                 Notifications = notifications

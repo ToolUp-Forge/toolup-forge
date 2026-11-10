@@ -113,7 +113,7 @@ let private rowsOf (scope: VectorScope) (live: ScopeEntries) : IndexEntry list =
 /// soon as `flushChunkThreshold` mutations (100 by default) have been marked,
 /// so a 10,000-chunk load costs a handful of persistence passes, not 10,000.
 ///
-/// A corrupt snapshot follows `corruptPolicy` (read from
+/// A corrupt snapshot follows `corruptPolicy` (resolved from
 /// `TOOLUP_RAG_REFUSE_ON_INDEX_CORRUPTION` when not supplied) and is reported
 /// through `telemetry`, `auditLog` and `notifications`, once per scope; each
 /// is optional, and the store logs either way.
@@ -148,7 +148,9 @@ type InMemoryVectorStore
         FlushChunkThreshold = Some(defaultArg flushChunkThreshold 100)
         FlushTelemetry = telemetry
         OnCorrupt = {
-            Policy = corruptPolicy |> Option.defaultWith CorruptPolicy.fromEnvironment
+            Policy =
+                corruptPolicy
+                |> Option.defaultWith (fun () -> CorruptPolicy.resolveWith ConfigResolution.tryValue)
             Telemetry = telemetry
             AuditLog = defaultArg auditLog (NoOpAuditLog() :> IAuditLog)
             Notifications = notifications

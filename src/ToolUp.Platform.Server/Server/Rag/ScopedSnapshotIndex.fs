@@ -111,14 +111,13 @@ module CorruptPolicy =
         else
             CorruptPolicy.StartEmpty
 
-    /// The policy the process environment names. A composition reads it once
-    /// and passes it to every store it builds; a store constructed without a
-    /// policy reads it here.
-    let fromEnvironment () : CorruptPolicy =
-        ofSetting (
-            Environment.GetEnvironmentVariable ConfigKeys.Names.ragRefuseOnIndexCorruption
-            |> Option.ofObj
-        )
+    /// The policy the configuration names, read through `tryValue` (the
+    /// configuration seam, `ConfigResolution.tryValue`, which honours a
+    /// deployment manifest and falls back to the environment). A composition
+    /// resolves it once and passes it to every store it builds; a store
+    /// constructed without a policy resolves it the same way.
+    let resolveWith (tryValue: string -> string option) : CorruptPolicy =
+        ofSetting (tryValue ConfigKeys.Names.ragRefuseOnIndexCorruption)
 
 /// The corruption policy and the observers a corrupt load reports to: a
 /// telemetry counter, a `KnowledgeIndexLoadFailed` audit row and an Error

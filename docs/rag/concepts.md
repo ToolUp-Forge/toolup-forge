@@ -127,8 +127,8 @@ memory and persist it as one blob per scope: `_rag/{scope}/index.json`, `_rag/{s
   set it is refused (`Fault = Corrupt`) on every access, searches included, until the blob is repaired; under the
   composition, a corrupt platform or deployment snapshot then fails the boot. Either way, every store reports it
   once per scope: the `IndexLoadErrors` telemetry counter, a `KnowledgeIndexLoadFailed` audit row and an Error
-  `SystemMessage` to platform admins. The composition reads the variable once and passes the policy to the stores it
-  constructs; a store you construct takes `corruptPolicy`, and reads the variable when you leave it out.
+  `SystemMessage` to platform admins. The composition resolves the variable once (through the configuration seam, so a deployment manifest may set it) and passes the policy to the stores it
+  constructs; a store you construct takes `corruptPolicy`, and resolves the variable the same way when you leave it out.
 - **Flushing.** A write marks its scope dirty and returns. A background loop flushes the dirty scopes every two
   seconds (`flushIntervalMs`); the vector store also flushes as soon as 100 writes are pending
   (`flushChunkThreshold`). `Dispose` flushes once more. A scope the keyword index holds no document for has no

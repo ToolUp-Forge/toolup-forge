@@ -566,8 +566,8 @@ ToolUp.Platform.Infra.CorruptPolicy+Tags (class)
 ToolUp.Platform.Infra.CorruptPolicy+Tags.Refuse : System.Int32 (literal)
 ToolUp.Platform.Infra.CorruptPolicy+Tags.StartEmpty : System.Int32 (literal)
 ToolUp.Platform.Infra.CorruptPolicyModule (class)
-ToolUp.Platform.Infra.CorruptPolicyModule.fromEnvironment() : ToolUp.Platform.Infra.CorruptPolicy
 ToolUp.Platform.Infra.CorruptPolicyModule.ofSetting(Microsoft.FSharp.Core.FSharpOption`1[System.String]) : ToolUp.Platform.Infra.CorruptPolicy
+ToolUp.Platform.Infra.CorruptPolicyModule.resolveWith(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]]) : ToolUp.Platform.Infra.CorruptPolicy
 ToolUp.Platform.Infra.CorruptionHandling (class)
 ToolUp.Platform.Infra.CorruptionHandling..ctor(ToolUp.Platform.Infra.CorruptPolicy, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.IRagTelemetry+IRagTelemetry], ToolUp.Platform.IAuditLog, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.INotificationChannel])
 ToolUp.Platform.Infra.CorruptionHandling.AuditLog : ToolUp.Platform.IAuditLog { get }

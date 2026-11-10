@@ -549,6 +549,12 @@ let private admitted: Admitted list = [
         Reason = "purgeWithRetry catches each attempt"
     }
     {
+        File = "Rag/ScopedSnapshotIndex.fs"
+        Anchor = "Flush loop error"
+        Reason =
+            "the in-process stores' flush loop catches every pass's failure and the cancellation that ends it at Dispose; it writes no audit row"
+    }
+    {
         File = "Remoting/Jobs.fs"
         Anchor = "The work runs under the job's own token"
         Reason = "the job runner's work runs under try/with recording Failed / Cancelled"

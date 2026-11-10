@@ -1349,9 +1349,9 @@ let composeRAG (options: RagOptions) (app: ServerApp) : ServerApp =
     // the flush service and the replica validator below all read it.
     let owned = ownedRetrievalStores options
 
-    // The corruption policy, read from the environment ONCE here and passed
-    // to every store the composition constructs.
-    let corruptPolicy = CorruptPolicy.fromEnvironment ()
+    // The corruption policy, resolved ONCE here (through the configuration
+    // seam) and passed to every store the composition constructs.
+    let corruptPolicy = CorruptPolicy.resolveWith ConfigResolution.tryValue
 
     // Default to a 60-second rolling-window telemetry sink so `/health/rag`
     // is meaningful out-of-the-box. Deployments wanting Prometheus / OTel

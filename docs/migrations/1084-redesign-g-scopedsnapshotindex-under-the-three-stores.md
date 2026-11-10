@@ -44,9 +44,9 @@ it and report it:
   composed store's). Before, a refused vector-store scope raised a bare `Exception` and emitted nothing; it now
   raises the typed exception and reports first.
 
-The composition (`RAGCompose.withRAG`) reads the variable once and passes the policy to the stores it builds. A
+The composition (`RAGCompose.withRAG`) resolves the variable once, through the configuration seam (a deployment manifest may set it), and passes the policy to the stores it builds. A
 store you construct yourself takes the new optional `corruptPolicy` argument (`CorruptPolicy.StartEmpty` or
-`CorruptPolicy.Refuse`), and reads the variable when you leave it out, so an `HnswVectorStore` you supply through
+`CorruptPolicy.Refuse`), and resolves the variable the same way when you leave it out, so an `HnswVectorStore` you supply through
 `withVectorStore` follows it too. Pgvector keeps its own reading of the variable: it has no snapshot to hydrate.
 
 ## 3. Constructors do no I/O
