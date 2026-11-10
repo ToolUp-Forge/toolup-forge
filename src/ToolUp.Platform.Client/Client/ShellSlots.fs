@@ -261,7 +261,7 @@ module ShellSlots =
         labelled id ShellSlotPosition.Trailing ShellSlotGate.Always fillOf moduleId create tile
 
     let private teamConfig =
-        authenticatedAdmin _.TeamConfig TeamConfigUI.moduleId TeamConfigUI.create None "TeamConfig"
+        authenticatedAdmin _.TeamConfig TeamConfigUI.moduleId (builtIn TeamConfigUI.builtIn) None "TeamConfig"
 
     let private webhookAdmin =
         authenticatedAdmin _.WebhookAdmin WebhookAdminUI.moduleId (builtIn WebhookAdminUI.builtIn) None "WebhookAdmin"

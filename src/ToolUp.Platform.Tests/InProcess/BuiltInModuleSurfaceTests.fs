@@ -330,7 +330,7 @@ let visibilityTests =
         }
 
         test "TeamConfigUI declares visibleToAuthenticated" {
-            let m = TeamConfigUI.create None
+            let m = ShellSlots.builtIn TeamConfigUI.builtIn None
             assertVisibleToAuthenticated "TeamConfigUI" m
         }
 
@@ -362,7 +362,7 @@ let visibilityTests =
                 "PermissionsAdminUI", ShellSlots.builtIn PermissionsAdminUI.builtIn None
                 "DataIngestionUI", ShellSlots.builtIn DataIngestionUI.builtIn None
                 "WebhookAdminUI", ShellSlots.builtIn WebhookAdminUI.builtIn None
-                "TeamConfigUI", TeamConfigUI.create None
+                "TeamConfigUI", (ShellSlots.builtIn TeamConfigUI.builtIn) None
                 "FileManagerUI", FileManagerUI.create [] DataManagerConfig.unlabelled
                 "DataSubjectRequestAdminUI", (ShellSlots.builtIn DataSubjectRequestAdminUI.builtIn) None
                 "NotificationPreferencesUI", ShellSlots.builtIn NotificationPreferencesUI.builtIn None
