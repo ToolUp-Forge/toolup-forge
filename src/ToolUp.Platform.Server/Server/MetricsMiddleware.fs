@@ -7,8 +7,9 @@ open ToolUp.Platform.Metrics
 open System
 open System.Diagnostics
 open Microsoft.AspNetCore.Http
+open ToolUp.Platform.Infra
 
-// ─── MetricsMiddleware — Phase 9e per-request emission ──────────────
+// ─── MetricsMiddleware — per-request emission ───────────────────────
 //
 // Records the SDK standard request-level metrics on every HTTP
 // request: counter, latency histogram, error counter. Sits in the
@@ -17,12 +18,11 @@ open Microsoft.AspNetCore.Http
 // different audiences — operator dashboards vs. log lines — and stay
 // independently togglable).
 //
-// **Bypass list.** Long-running endpoints (SSE, /health, /ready)
-// emit different metrics: SSE manages its own
+// **Excluded classes.** SSE streams, probes and the metrics scrape are
+// read off the request's stamped `RouteClass`: SSE manages its own
 // `toolup.sse.active_connections` gauge in `SSEConnectionManager`;
-// /health and /ready are too noisy at orchestrator-poll cadence to
-// usefully appear in latency histograms. Mirrors the bypass shape in
-// `RequestTimingMiddleware.IsLongRunningPath`.
+// probes and scrapes are too noisy at orchestrator-poll cadence to
+// usefully appear in latency histograms.
 //
 // **Tag bucketing.** Caller-controlled values (route, status code)
 // are bucketed before emission. `route` becomes `route_class` (the
@@ -61,7 +61,7 @@ module StandardMetrics =
     [<Literal>]
     let StorageBytesWritten = "toolup.storage.bytes_written"
 
-    /// Phase 10g — OAuth 1.0a per-call request-signing counters. Emitted
+    /// OAuth 1.0a per-call request-signing counters. Emitted
     /// by a connector's `IOAuth1aFlow.Sign` implementation, tagged by
     /// `provider` (the flow `Name`).
     [<Literal>]
@@ -173,7 +173,7 @@ module StandardMetrics =
                 Tags = [ "container_class" ]
             }
         }
-        // Phase 114 — audit-write failure counter. Incremented by
+        // Audit-write failure counter. Incremented by
         // `EventStoreAuditLog.Record` when an audit event fails to
         // persist (event-store write threw). Promotes the formerly
         // Warn-only loss signal to an alertable metric so silent audit
@@ -189,7 +189,7 @@ module StandardMetrics =
                 Tags = [ "event_type" ]
             }
         }
-        // Phase 553 — permission-chain head-unreadable counter. The
+        // Permission-chain head-unreadable counter. The
         // audit row still landed; what was lost is its tamper-evidence
         // link, which is why it is its own counter rather than a tag on
         // the write-failure one above. `reason` separates an outage
@@ -206,7 +206,7 @@ module StandardMetrics =
                 Tags = [ "reason" ]
             }
         }
-        // Phase 466 — the ad-analytics silent-degradation counters.
+        // The ad-analytics silent-degradation counters.
         // Both endpoints degrade without failing (rate-limit-store
         // outage fail-opens; a malformed payload is dropped to a 400),
         // so neither shows up in the request/error metrics above. The
@@ -237,13 +237,13 @@ module StandardMetrics =
     /// SDK standard registrations — registered unconditionally by
     /// `compose` when `MetricsEndpoint = FeatureMode.Enabled`.
     ///
-    /// Phase 740 — the edge-purge outcome counters are declared beside
+    /// The edge-purge outcome counters are declared beside
     /// their emission in `IEdgeCache.fs` (which compiles before this
     /// file) so each metric's tag allowlist sits next to the code that
     /// emits those tags, and spliced in here so a deployment with a
     /// metrics endpoint has them registered without composing anything
     /// — an unregistered series is silently dropped by the sink.
-    /// Phase 9w — the Datadog-readback counters are declared beside
+    /// The Datadog-readback counters are declared beside
     /// their emission for the same reason, in
     /// `Server/DatadogReadbackMetrics.fs` (which compiles before this
     /// file), and spliced in here so a deployment that mounts the
@@ -254,7 +254,7 @@ module StandardMetrics =
         @ ToolUp.Platform.Infra.EdgePurgeMetrics.registrations
         @ ToolUp.Platform.Infra.DatadogReadbackMetrics.registrations
 
-module private RouteClassifier =
+module private RouteBucket =
     /// Bucket the request path to a stable two-segment prefix to
     /// keep cardinality bounded. `/api/_platform/teams/team-abc/members/user-xyz`
     /// → `/api/_platform`. Health / metrics / SSE endpoints carry
@@ -286,19 +286,18 @@ module private RouteClassifier =
         elif status >= 500 && status < 600 then "5xx"
         else "other"
 
-    /// Endpoints excluded from request-level latency emission. SSE
-    /// streams report through `toolup.sse.active_connections`
-    /// instead; health probes are too high-cadence to be informative
-    /// in a latency histogram.
-    let isExcluded (path: string) =
-        if isNull path then
-            false
-        else
-            path.StartsWith("/api/notifications", StringComparison.OrdinalIgnoreCase)
-            || path.StartsWith("/api/ai/events", StringComparison.OrdinalIgnoreCase)
-            || path.StartsWith("/health", StringComparison.OrdinalIgnoreCase)
-            || path.StartsWith("/ready", StringComparison.OrdinalIgnoreCase)
-            || path.StartsWith("/metrics", StringComparison.OrdinalIgnoreCase)
+    /// Route classes excluded from request-level latency emission. SSE
+    /// streams report through `toolup.sse.active_connections` instead;
+    /// probes and scrapes are too high-cadence to be informative in a
+    /// latency histogram.
+    let isExcluded (routeClass: RouteClass) =
+        match routeClass with
+        | RouteClass.Sse
+        | RouteClass.Health
+        | RouteClass.Metrics -> true
+        | RouteClass.Api
+        | RouteClass.Dev
+        | RouteClass.Page -> false
 
 /// Per-request metrics middleware. Registered before
 /// `RequestTimingMiddleware` so the timer covers the same downstream
@@ -317,9 +316,9 @@ type MetricsMiddleware(next: RequestDelegate, sink: IMetricsSink) =
             try
                 let path = ctx.Request.Path.Value
 
-                if not (RouteClassifier.isExcluded path) then
-                    let routeClass = RouteClassifier.classify path
-                    let statusClass = RouteClassifier.statusClass ctx.Response.StatusCode
+                if not (RouteBucket.isExcluded (RouteClassifier.ofRequest ctx)) then
+                    let routeClass = RouteBucket.classify path
+                    let statusClass = RouteBucket.statusClass ctx.Response.StatusCode
                     let method = ctx.Request.Method
                     let elapsedMs = stopwatch.Elapsed.TotalMilliseconds
 

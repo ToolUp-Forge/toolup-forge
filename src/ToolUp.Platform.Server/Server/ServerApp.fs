@@ -49,7 +49,7 @@ type ServerModule = {
     DataTypes: DataType list
     VectorisationHandlers: VectorisationHandler list
     ConfigSchema: ModuleConfigSchema option
-    /// Phase 10b — forward migration steps for this module's persisted
+    /// Forward migration steps for this module's persisted
     /// config documents, one per `V_n` → `V_(n+1)` hop. Default `[]`.
     ///
     /// Fanned into `ServerConfig.ConfigMigrations` at `addModule` time
@@ -59,8 +59,8 @@ type ServerModule = {
     /// `ServerModule.withConfigMigration`, in the same commit that
     /// bumps `ModuleConfigSchema.SchemaVersion`.
     ConfigMigrations: IConfigMigrator list
-    /// Handlers this module exposes to the cross-module query bus
-    /// (Phase 6b). Accumulated across every registered `ServerModule`
+    /// Handlers this module exposes to the cross-module query bus.
+    /// Accumulated across every registered `ServerModule`
     /// at `compose` time and handed to `InMemoryModuleQueryBus`.
     /// Modules that don't expose queries leave the list empty.
     QueryHandlers: ModuleQueryHandler list
@@ -74,7 +74,7 @@ type ServerModule = {
     /// registered module and registers them with the `AIToolRegistry`.
     /// Modules that don't expose tools leave the list empty.
     AITools: (AIToolDefinition * (HttpContext -> string -> Async<string>)) list
-    /// Phase 9e — module-scoped metric declarations. Each
+    /// Module-scoped metric declarations. Each
     /// `MetricDefinition` is auto-namespaced to
     /// `toolup.{moduleName}.{name}` at `addModule` time (the module
     /// declares the post-namespace name only; the `toolup.` prefix is
@@ -95,7 +95,7 @@ type ServerModule = {
     /// at `run` time. Empty (the default) — modules without
     /// latency-sensitive endpoints leave it empty.
     SlowRequestThresholdOverrides: Map<string, TimeSpan>
-    /// Phase 66 Stream B.3 — module-level default for the
+    /// Module-level default for the
     /// `SurfaceEnforcementMiddleware` matrix. Applied to every route
     /// prefix this module declares via `RoutePrefixes`. Defaults to
     /// `SurfaceRequirement.userOrTeam` (the strict global fallback per
@@ -107,7 +107,7 @@ type ServerModule = {
     /// byte-identical for modules predating B.3. Per-endpoint
     /// overrides live on `RouteSurfaceRequirements`.
     DefaultSurfaceRequirement: SurfaceRequirement
-    /// Phase 66 Stream B.3 — route prefixes this module owns. Used by
+    /// Route prefixes this module owns. Used by
     /// `addModule` to register the module's `DefaultSurfaceRequirement`
     /// against each prefix in the `SurfaceRequirementRegistry`.
     /// Empty by default; modules that publish a `RouteSurfaceRequirements`
@@ -119,7 +119,7 @@ type ServerModule = {
     /// (typically paired with `DefaultSurfaceRequirement =
     /// SurfaceRequirement.claimBearerOnly`).
     RoutePrefixes: string list
-    /// Phase 66 Stream B.3 — exact `(method, path)` → `SurfaceRequirement`
+    /// Exact `(method, path)` → `SurfaceRequirement`
     /// overrides for this module. Win over any matching `RoutePrefixes`
     /// default at resolution time. Use for one-off public endpoints
     /// inside an otherwise-authenticated module (e.g. a single
@@ -127,7 +127,7 @@ type ServerModule = {
     /// is normalised to upper-case and path to lower-case in the
     /// registry — declarations match regardless of the casing used here.
     RouteSurfaceRequirements: ((string * string) * SurfaceRequirement) list
-    /// Phase 773 — exact `(method, path)` → `RouteEffectDeclaration` for
+    /// Exact `(method, path)` → `RouteEffectDeclaration` for
     /// this module: the effect envelope host-capability invocations made
     /// while the route runs are held to, and the egress grant its outbound
     /// calls are. Keyed and normalised exactly as `RouteSurfaceRequirements`
@@ -135,7 +135,7 @@ type ServerModule = {
     /// non-empty, so a module declaring nothing is byte-for-byte unchanged
     /// (GP 11). Declare with `ServerModule.withRouteEffect`.
     RouteEffects: ((string * string) * RouteEffectDeclaration) list
-    /// Phase 9b.B — compose-time declarations of recurring / event-driven
+    /// Compose-time declarations of recurring / event-driven
     /// background jobs this module owns. Each entry pairs an
     /// `IJobHandler` with a `Trigger`; `addModule` accumulates them onto
     /// `ServerApp.ScheduledJobs` and `ComposeJobs.registerScheduledJobDeclarations`
@@ -149,7 +149,7 @@ type ServerModule = {
     /// declaring jobs in an unscheduled deployment is a config mismatch,
     /// not a crash.
     JobHandlers: ScheduledJobDeclaration list
-    /// Phase 165 — optional opt-in module-binding stamp this module
+    /// Optional opt-in module-binding stamp this module
     /// presents to the `addModule` gate. `None` (the default) is an
     /// unstamped module: it loads unchanged unless a deployment-level
     /// policy requires stamps. A `Some` stamp must verify under a
@@ -157,7 +157,7 @@ type ServerModule = {
     /// module is dropped. Populated by a deploy-time stamper; forge only
     /// reads it here.
     BindingStamp: ModuleBindingStamp option
-    /// Phase 279 — optional explicit stable `ComponentId` for this
+    /// Optional explicit stable `ComponentId` for this
     /// module. `None` (the default) derives the id from `Name` at first
     /// registration (`ComponentId.ofModule Name`, GP 11) — byte-for-byte
     /// unchanged for a module that declares nothing. `Some id` (set via
@@ -167,7 +167,7 @@ type ServerModule = {
     /// the resolved id is accumulated onto `ServerApp` and checked for
     /// uniqueness at compose time.
     ComponentId: ComponentId option
-    /// Phase 519 — grounding **metric** declarations: the business
+    /// Grounding **metric** declarations: the business
     /// quantities this module computes (a KPI vocabulary), declared the
     /// way `DataType`s are. Distinct from the observability
     /// `MetricDefinitions` above (Prometheus counters) — a
@@ -178,7 +178,7 @@ type ServerModule = {
     /// compose). Empty (the default) — a module that computes no
     /// registered quantities composes byte-for-byte as before (GP 13).
     Metrics: Grounding.MetricDefinition list
-    /// Phase 519 — grounding **subject** declarations: the entity
+    /// Grounding **subject** declarations: the entity
     /// hierarchies this module computes its metrics over (product
     /// hierarchy, geography, org chart). Same fan-in + duplicate-id
     /// rejection as `Metrics`. Empty by default (GP 13).
@@ -191,7 +191,7 @@ type ServerModule = {
     /// default) — the composition is byte-for-byte unchanged (GP 13).
     /// Register via `ServerModule.describeSubjects`.
     SubjectDescriptions: Grounding.SubjectDescription list
-    /// Phase 551 — the module's own declared precondition on being
+    /// The module's own declared precondition on being
     /// granted to anyone. `AdminDiscretion` (the default) is byte-for-byte
     /// today: no registry is composed, no grant records are loaded, and
     /// the dispatch gate short-circuits (GP 11 / GP 13). Set it with
@@ -203,7 +203,7 @@ type ServerModule = {
     /// `AccessContext.ModulePermissions` uses — one axis, not two, so a
     /// policy cannot drift away from the module it governs.
     GrantPolicy: GrantPolicy
-    /// Phase 36.C — whether this module's data is reachable from the
+    /// Whether this module's data is reachable from the
     /// cross-module AI surface (`_platform.ai.*`, Phase 36.B).
     /// `None` — nothing declared — is the safer-by-default
     /// `ModuleAIExposure.NotQueryable`: the module is reported
@@ -225,7 +225,7 @@ type ServerModule = {
     /// surface for anyone. Both are consulted, in that order, at every
     /// `_platform.ai.*` site.
     AIExposure: ModuleAIExposure option
-    /// Phase 441 — the notification categories this module publishes
+    /// The notification categories this module publishes
     /// under (GP 9: modules declare, the SDK never enumerates). Fanned
     /// into `ServerConfig.NotificationCategories` by `addModule`; inert
     /// unless `ServerConfig.NotificationPreferences` is enabled, in which
@@ -233,7 +233,7 @@ type ServerModule = {
     /// send-path filter resolves. Declare via
     /// `ServerModule.withNotificationCategories`.
     NotificationCategories: NotificationCategory list
-    /// Phase 887 — the **fact tables** this module declares as part of its
+    /// The **fact tables** this module declares as part of its
     /// output contract: one row per subject at one level of a registered
     /// hierarchy, one column per registered metric, refreshed as one run
     /// through `IFactTableWriter`. The module names the table's logical
@@ -252,7 +252,7 @@ type ServerModule = {
     /// default) — the composition is byte-for-byte unchanged (GP 13).
     /// Register via `ServerModule.describeFactTables`.
     FactTableDescriptions: Grounding.FactTableDescription list
-    /// Phase 1042 — the work this module runs once a DELIVERY has
+    /// The work this module runs once a DELIVERY has
     /// completed: every table one request or one ingestion job attempt
     /// ingested has settled. `addModule` registers each with the app
     /// (`ServerApp.withDeliveryCompleted`). Empty (the default) — a module
@@ -317,7 +317,7 @@ module ServerModule =
             Classifications = m.Classifications @ classifications
     }
 
-    /// Phase 551 — declare the module's grant policy: the precondition
+    /// Declare the module's grant policy: the precondition
     /// that must hold before the module may be granted to anyone.
     ///
     /// **Narrowing-only (D15).** Calling this twice is legal and composes
@@ -343,7 +343,7 @@ module ServerModule =
         | Ok tightened -> { m with GrantPolicy = tightened }
         | Error refusal -> failwith (GrantRefusal.describe refusal)
 
-    /// Phase 36.C — declare whether this module's data is reachable from
+    /// Declare whether this module's data is reachable from
     /// the cross-module AI surface (`_platform.ai.*`).
     ///
     /// **Opt-in, default off.** A module that never calls this is
@@ -379,7 +379,7 @@ module ServerModule =
     /// module's `Name` as the RBAC key, so callers never duplicate it.
     /// **Adds** one handler to the module's handler list.
     ///
-    /// Phase 69d.tail — the module-access gate (`canAccessModule`) is
+    /// The module-access gate (`canAccessModule`) is
     /// module-level RBAC and survives per-method attribute adoption;
     /// the wrapped record's METHODS must each carry an authorisation
     /// attribute or the startup classifier refuses to start (default-on).
@@ -402,7 +402,7 @@ module ServerModule =
     /// module plus an authored addition) — Phase 1050.
     let withDataTypes (dts: DataType list) (m: ServerModule) : ServerModule = { m with DataTypes = dts }
 
-    /// Phase 1050 — register more data types on this module. **Adds** to
+    /// Register more data types on this module. **Adds** to
     /// the module's data-type list, keeping every type registered before
     /// it; `withDataTypes` is the replacing twin. Appending is all it
     /// does — it de-duplicates nothing, so a type registered by both
@@ -415,7 +415,7 @@ module ServerModule =
     /// ```
     let addDataTypes (dts: DataType list) (m: ServerModule) : ServerModule = { m with DataTypes = m.DataTypes @ dts }
 
-    /// Phase 441 — declare the notification categories this module
+    /// Declare the notification categories this module
     /// publishes under. **Adds** (appends), so a module may declare in several
     /// steps; a category id must be unique across the deployment and
     /// pass `NotificationCategory.isValidId`, and `Suppressible = false`
@@ -444,7 +444,7 @@ module ServerModule =
             VectorisationHandlers = vhs
     }
 
-    /// Phase 1050 — register more vectorisation handlers on this module.
+    /// Register more vectorisation handlers on this module.
     /// **Adds** to the module's handler list, keeping every handler
     /// registered before it; `withVectorisation` is the replacing twin.
     let addVectorisation (vhs: VectorisationHandler list) (m: ServerModule) : ServerModule = {
@@ -456,7 +456,7 @@ module ServerModule =
     /// schema; a later call replaces it.
     let withConfig (schema: ModuleConfigSchema) (m: ServerModule) : ServerModule = { m with ConfigSchema = Some schema }
 
-    /// Phase 10b — register one forward config-schema migration step.
+    /// Register one forward config-schema migration step.
     /// **Adds** (appends), so a module accumulates
     /// its chain by calling this once per hop, oldest first by
     /// convention though order does not matter: the chain is resolved
@@ -489,7 +489,7 @@ module ServerModule =
             ConfigMigrations = m.ConfigMigrations @ migrators
     }
 
-    /// Expose one or more cross-module query handlers (Phase 6b). Use
+    /// Expose one or more cross-module query handlers. Use
     /// `ModuleQueryHandler.typed` to keep request and
     /// response types strongly typed at the registration site. The
     /// module's `Name` becomes the routing key — callers ask for
@@ -502,7 +502,7 @@ module ServerModule =
     }
 
     /// Answer a cross-module query declared as a `ModuleQueryContract`
-    /// (Phase 584) — the recommended shape. The contract carries the
+    /// — the recommended shape. The contract carries the
     /// query key and both payload codecs as one value shared with every
     /// caller, so the key and the payload shape stop being two strings
     /// that must agree by hand: `handle` is typed against the contract's
@@ -551,7 +551,7 @@ module ServerModule =
         : ServerModule =
         { m with AITools = m.AITools @ tools }
 
-    /// Phase 9e — declare one or more module-scoped metrics. Each
+    /// Declare one or more module-scoped metrics. Each
     /// `MetricDefinition` is auto-namespaced to
     /// `toolup.{moduleName}.{name}` at `addModule` time (the module's
     /// `Name` is the namespace segment), so the module declares the
@@ -567,7 +567,7 @@ module ServerModule =
             MetricDefinitions = m.MetricDefinitions @ defs
     }
 
-    /// Phase 519 — declare one or more grounding **metrics** (business
+    /// Declare one or more grounding **metrics** (business
     /// quantities this module computes: a KPI vocabulary). Fanned into
     /// the app-level `IMetricRegistry` at compose; a metric id declared
     /// by two modules fails compose with a naming-both-modules
@@ -579,7 +579,7 @@ module ServerModule =
             Metrics = m.Metrics @ defs
     }
 
-    /// Phase 519 — declare one or more grounding **subject** hierarchies
+    /// Declare one or more grounding **subject** hierarchies
     /// (the entity dimensions this module computes its metrics over).
     /// Same fan-in + duplicate-id rejection as `declareMetrics`; **adds**.
     let declareSubjects (defs: Grounding.SubjectDefinition list) (m: ServerModule) : ServerModule = {
@@ -600,7 +600,7 @@ module ServerModule =
             SubjectDescriptions = m.SubjectDescriptions @ descriptions
     }
 
-    /// Phase 887 — declare one or more **fact tables** this module
+    /// Declare one or more **fact tables** this module
     /// produces: the population output it states as part of its contract,
     /// written through `IFactTableWriter` in one audited run per refresh.
     /// **Adds**, composing left to right beside `declareMetrics` / `declareSubjects`.
@@ -653,7 +653,7 @@ module ServerModule =
             SlowRequestThresholdOverrides = m.SlowRequestThresholdOverrides |> Map.add routePrefix threshold
     }
 
-    /// Phase 66 Stream B.3 — declare the module's default
+    /// Declare the module's default
     /// `SurfaceRequirement`. Applied (by `addModule`) to every prefix
     /// the module declares via `withRoutePrefix`. Use the named smart
     /// constructors on `SurfaceRequirement` (`public_`, `authenticated`,
@@ -668,7 +668,7 @@ module ServerModule =
             DefaultSurfaceRequirement = requirement
     }
 
-    /// Phase 66 Stream B.3 — register one route prefix this module
+    /// Register one route prefix this module
     /// owns. The module's `DefaultSurfaceRequirement` is applied to
     /// every request whose path matches the prefix
     /// (case-insensitive `StartsWith`). Longest-prefix wins at
@@ -684,7 +684,7 @@ module ServerModule =
             RoutePrefixes = m.RoutePrefixes @ [ prefix ]
     }
 
-    /// Phase 66 Stream B.3 — declare an exact-match
+    /// Declare an exact-match
     /// `SurfaceRequirement` override for one `(method, path)` pair.
     /// Wins over any matching `RoutePrefixes` default at resolution
     /// time. Method is normalised to upper-case and path to lower-case
@@ -707,7 +707,7 @@ module ServerModule =
                 RouteSurfaceRequirements = m.RouteSurfaceRequirements @ [ (httpMethod, path), requirement ]
         }
 
-    /// Phase 773 — declare what one `(method, path)` route of this module
+    /// Declare what one `(method, path)` route of this module
     /// may do: an effect envelope (a host-capability invocation beyond it
     /// is refused by the Phase 300 gate, with a `Pure` envelope refusing
     /// every invocation and every outbound call) and/or an egress grant
@@ -728,7 +728,7 @@ module ServerModule =
                 RouteEffects = m.RouteEffects @ [ (httpMethod, path), declaration ]
         }
 
-    /// Phase 9b.B — declare a recurring / event-driven background job
+    /// Declare a recurring / event-driven background job
     /// this module owns. The SDK's compose pipeline registers `handler`
     /// against `IJobScheduler` under `handlerName` and schedules a
     /// `JobDefinition` with the given `trigger` for the default scope
@@ -756,7 +756,7 @@ module ServerModule =
                 JobHandlers = m.JobHandlers @ [ declaration ]
         }
 
-    /// Phase 9b.B — declare a background job with full control over
+    /// Declare a background job with full control over
     /// every `JobRegistration` knob (`Scopes`, `Payload`, `RetryPolicy`,
     /// `ShardKey`, `Precision`, `Idempotency`, `Tags`). Construct via
     /// `ScheduledJobDeclaration.create` + the fluent `with*` helpers;
@@ -767,7 +767,7 @@ module ServerModule =
             JobHandlers = m.JobHandlers @ [ declaration ]
     }
 
-    /// Phase 1042 — run `callback` once each delivery completes: after the
+    /// Run `callback` once each delivery completes: after the
     /// response of a request that ingested data, or after an ingestion job
     /// attempt (a declared scheduled pull, a watched location's poll, a
     /// queued refresh) returns. It receives the application's services and
@@ -800,7 +800,7 @@ module ServerModule =
                     ]
         }
 
-    /// Phase 165 — attach an opt-in module-binding stamp. The stamp is
+    /// Attach an opt-in module-binding stamp. The stamp is
     /// checked at `addModule` time against the deployment's configured
     /// `IModuleBindingVerifier` (see `ServerApp.withModuleBindingVerifier`):
     /// a stamp that verifies under a trust anchor loads the module, an
@@ -811,7 +811,7 @@ module ServerModule =
             BindingStamp = Some stamp
     }
 
-    /// Phase 279 — declare an explicit stable `ComponentId` for this
+    /// Declare an explicit stable `ComponentId` for this
     /// module. `declaredId` is a bare token (e.g. `"orders-service"`); it
     /// is namespaced under the `module:` slot via `ComponentId.ofModule`,
     /// so the resolved id is independent of the module's display `Name`.
@@ -915,7 +915,7 @@ type ServerApp = {
     /// tools parameter) and registers them with the `AIToolRegistry`.
     /// Empty when no module exposes AI tools.
     AITools: (AIToolDefinition * (HttpContext -> string -> Async<string>)) list
-    /// Phase 6f — transactional notification sinks. Apps register
+    /// Transactional notification sinks. Apps register
     /// adapters for email / SMS / push via
     /// `ServerApp.withTransactionalSink`; `compose` validates that
     /// at most one sink is registered per `Kind`. Empty list (the
@@ -923,7 +923,7 @@ type ServerApp = {
     /// notification channel un-decorated, so deployments without
     /// out-of-band delivery pay zero runtime cost.
     TransactionalSinks: INotificationSink list
-    /// Phase 9k — companion-contributed health probes. Apps add one
+    /// Companion-contributed health probes. Apps add one
     /// per backend (Redis multiplexer, AI provider key resolution,
     /// vector store load state, etc.) via
     /// `ServerApp.withHealthCheck`. The SDK aggregator (run near
@@ -931,7 +931,7 @@ type ServerApp = {
     /// `MapHealthChecks` pipeline. Empty list = only the three
     /// first-party probes (storage, auth, event store) participate.
     HealthChecks: HealthChecks.IHealthCheck list
-    /// Phase 9m — companion-contributed startup config validators.
+    /// Companion-contributed startup config validators.
     /// Apps add one per remote dependency (OIDC issuer, Redis,
     /// SMTP, etc.) via `ServerApp.withConfigValidator`. The SDK
     /// aggregator (run near end-of-compose) walks every registered
@@ -940,7 +940,7 @@ type ServerApp = {
     /// validators (blob-storage round-trip, secret-store sentinel)
     /// participate.
     ConfigValidators: ConfigValidation.IConfigValidator list
-    /// Phase 22 — optional encryption-key resolver. When `Some`, the
+    /// Optional encryption-key resolver. When `Some`, the
     /// registered `IBlobStorage` is wrapped with `EncryptedBlobStorage`
     /// so every Upload / Download passes through AES-GCM envelope
     /// encryption transparently. The resolver chooses the security
@@ -949,7 +949,7 @@ type ServerApp = {
     /// default) leaves the storage layer un-decorated — deployments
     /// without app-level envelope encryption pay zero runtime cost.
     EncryptionKeyResolver: IBlobEncryptionKeyResolver option
-    /// Phase 19 — entity-type registrations. Each closure receives the
+    /// Entity-type registrations. Each closure receives the
     /// shared `EntityRegistry` and calls `Register<'T>(registration)`
     /// on it. The closure pattern preserves `'T` per registration
     /// without exposing erasure to consumers — they call
@@ -958,7 +958,7 @@ type ServerApp = {
     /// types declared; only meaningful when
     /// `ServerConfig.Stores.EntityStore = FeatureMode.Enabled`.
     EntityRegistrations: (EntityStore.EntityRegistry -> unit) list
-    /// Phase 447 — module-contributed seed / fixture packs. Apps (or
+    /// Module-contributed seed / fixture packs. Apps (or
     /// modules) register a deterministic `ISeedPack` via
     /// `ServerApp.withSeedPack`; `run` folds each into DI as an
     /// `ISeedPack` singleton, and `SeedDataLoader` applies them once per
@@ -968,7 +968,7 @@ type ServerApp = {
     /// meaningful when `SeedData = EnabledSeedData | ForcedSeedData`;
     /// `NoSeedData` never resolves the list.
     SeedPacks: ISeedPack list
-    /// Phase 9d — optional override for the per-team compute quota
+    /// Optional override for the per-team compute quota
     /// policy. When `None` (default), `compose` registers the SDK
     /// default — `BlobBackedTeamQuotaPolicy` reading from the reserved
     /// `_platform.usage` config schema when `UsageMetering =
@@ -980,7 +980,7 @@ type ServerApp = {
     QuotaPolicy: ITeamQuotaPolicy option
     /// Phase 42.B / 43.A — optional canonical platform-wide BYOK
     /// provider-profile store. The deferred 42.B composition seam: the
-    /// AI cutover (Phase 43.A) is its first real caller. When `Some`,
+    /// AI cutover is its first real caller. When `Some`,
     /// `run` registers it as the `IProviderProfile` DI singleton so any
     /// BYOK consumer (the AI assistant via `AIOptions`, a rental
     /// gateway, any future app) resolves "which provider / which key"
@@ -991,7 +991,7 @@ type ServerApp = {
     /// dependency there); non-AI BYOK consumers opt in via
     /// `ServerApp.withProviderProfile`.
     ProviderProfile: IProviderProfile option
-    /// Phase 9e — companion-contributed metrics sinks. Each companion
+    /// Companion-contributed metrics sinks. Each companion
     /// (OpenTelemetry exporter at `src/Metrics/OpenTelemetry/`, a
     /// future StatsD push companion, etc.) registers its sink via
     /// `ServerApp.withMetricsSink`; `compose` wraps the in-process
@@ -1002,7 +1002,7 @@ type ServerApp = {
     /// `ServerConfig.Observability.MetricsEndpoint = FeatureMode.Enabled`;
     /// `FeatureMode.Disabled` ignores the list.
     MetricsSinks: Metrics.IMetricsSink list
-    /// Phase 9g — audit-log external-export sinks. Apps register one
+    /// Audit-log external-export sinks. Apps register one
     /// per destination (Splunk HEC, Datadog Logs, S3 Object Lock
     /// archive, custom SIEM endpoint) via `ServerApp.withAuditSink`;
     /// `compose` rejects duplicate `Name`s with a fatal startup error.
@@ -1013,13 +1013,13 @@ type ServerApp = {
     /// regulated-sector deployments needing SOC 2 / HIPAA / GDPR
     /// Article 30 / SOX-compliant audit log replication add sinks here.
     AuditSinks: IAuditSink list
-    /// Phase 9g — optional override for the audit replicator's
+    /// Optional override for the audit replicator's
     /// retry / batching / catch-up tuning. When `None` (default),
     /// `compose` registers `AuditReplicatorOptions.defaults`.
     /// Deployments running multiple sinks with conflicting latency /
     /// throughput needs override per deployment.
     AuditReplicator: AuditReplicatorOptions option
-    /// Phase 9e — module-scoped metric registrations accumulated from
+    /// Module-scoped metric registrations accumulated from
     /// each `addModule` call whose `ServerModule` declared metrics via
     /// `ServerModule.withMetrics`. Each entry carries `Module = Some
     /// moduleName` so the sink auto-namespaces it to
@@ -1028,7 +1028,7 @@ type ServerApp = {
     /// `Metrics.StandardMetrics.registrations`. Empty (the default) =
     /// only the SDK standard metrics are registered.
     MetricRegistrations: Metrics.MetricRegistration list
-    /// Phase 519 — accumulated grounding **metric** registrations across
+    /// Accumulated grounding **metric** registrations across
     /// every registered `ServerModule` that declared metrics via
     /// `ServerModule.declareMetrics`. Each entry pairs the module name
     /// with a `MetricDefinition`; `run` folds them into an
@@ -1037,14 +1037,14 @@ type ServerApp = {
     /// registered, so composition is byte-for-byte the pre-519 graph
     /// (GP 13). Distinct from `MetricRegistrations` (observability).
     RegisteredMetrics: Grounding.MetricRegistration list
-    /// Phase 519 — accumulated grounding **subject** registrations, the
+    /// Accumulated grounding **subject** registrations, the
     /// hierarchy twin of `RegisteredMetrics`.
     RegisteredSubjects: Grounding.SubjectRegistration list
     /// Accumulated subject descriptions across every registered
     /// `ServerModule` (`ServerModule.describeSubjects`), each paired with
     /// its describing module. Empty (the default) — nothing changes.
     RegisteredSubjectDescriptions: Grounding.SubjectDescriptionRegistration list
-    /// Phase 887 — accumulated **fact-table** declarations across every
+    /// Accumulated **fact-table** declarations across every
     /// registered `ServerModule` (`ServerModule.declareFactTables`), each
     /// paired with its declaring module. Empty (the default) — no table
     /// registry is composed and no fact-table preflight is registered, so
@@ -1054,17 +1054,17 @@ type ServerApp = {
     /// `ServerModule` (`ServerModule.describeFactTables`), each paired with
     /// its describing module. Empty (the default) — nothing changes.
     RegisteredFactTableDescriptions: Grounding.FactTableDescriptionRegistration list
-    /// Phase 887 — where the composition binds declared tables
+    /// Where the composition binds declared tables
     /// (`ServerApp.bindFactTables`). The physical half of the logical
     /// declaration: a `Required` table no binding covers refuses to start.
     FactTableBindings: Grounding.FactTableBinding list
-    /// Phase 592 — the composition-declared disclosure purposes (the
+    /// The composition-declared disclosure purposes (the
     /// "declared why" facet), accumulated by the facts companion's
     /// purpose compose and projected into the manifest beside the 526
     /// grounding entries. Empty (the default) — a purpose-free
     /// composition is byte-for-byte unchanged (GP 13).
     RegisteredPurposes: RegisteredPurpose list
-    /// Phase 9l — optional distributed-tracing sink. `None` (default)
+    /// Optional distributed-tracing sink. `None` (default)
     /// registers `NoOpActivitySink` so every instrumented seam in the
     /// pipeline (`ScopeResolutionMiddleware`, `JobScheduler.dispatchOne`,
     /// `WebhookDispatcher.runDelivery`, `TransactionalDispatcher
@@ -1078,7 +1078,7 @@ type ServerApp = {
     /// implemented because the OpenTelemetry SDK already supports
     /// multiple exporters per `TracerProvider`.
     ActivitySink: IActivitySink option
-    /// Phase 9v — compose-time outbound rate-limit declarations. Each
+    /// Compose-time outbound rate-limit declarations. Each
     /// companion that issues calls to a quota-bearing upstream provider
     /// (data-source connector, AI provider, transactional sink,
     /// webhook dispatcher) registers one `RateLimitDescriptor` via
@@ -1092,7 +1092,7 @@ type ServerApp = {
     /// `ServerConfig.RateLimiter = FeatureMode.Enabled`;
     /// `FeatureMode.Disabled` ignores the list and resolves to a pass-through.
     RateLimitDescriptors: RateLimitDescriptor list
-    /// Phase 9o — companion-contributed post-deploy smoke tests. Apps
+    /// Companion-contributed post-deploy smoke tests. Apps
     /// add one per backend whose end-to-end integration needs deploy-
     /// time verification via `ServerApp.withSmokeTest`. The SDK
     /// dispatcher (`SmokeTestHandler`) feeds every registered probe
@@ -1102,7 +1102,7 @@ type ServerApp = {
     /// job scheduler, event store, data-object store, audit log)
     /// when `ServerConfig.SmokeTest = FeatureMode.Enabled`.
     SmokeTests: SmokeTests.ISmokeTest list
-    /// Phase 9h — DSR data exporters. Each per-store exporter
+    /// DSR data exporters. Each per-store exporter
     /// (`EventStoreErasureHandler.exporter`,
     /// `DataObjectStoreErasureHandler.exporter`, etc.) is added via
     /// `ServerApp.withDataExporter`. The IDataSubjectRequestApi mount
@@ -1114,7 +1114,7 @@ type ServerApp = {
     /// apps that enable the substrate without registering exporters
     /// have wiring drift, not a substrate bug.
     DataExporters: IDataExporter list
-    /// Phase 9h — DSR erasure handlers. Same shape as `DataExporters`:
+    /// DSR erasure handlers. Same shape as `DataExporters`:
     /// `ServerApp.withErasureHandler` accumulates per-store handlers;
     /// `compose` folds them into `Extensions.ServiceConfig`; the route
     /// handler resolves the list per-request. Empty list = preview
@@ -1133,13 +1133,13 @@ type ServerApp = {
     /// enables data-ingestion without registering a flow has wiring
     /// drift, not a substrate bug (mirrors the DataExporters gating note).
     OAuthCredentialFlows: IOAuthCredentialFlow list
-    /// Phase 10g — registered OAuth 1.0a flows (one per 1.0a provider).
+    /// Registered OAuth 1.0a flows (one per 1.0a provider).
     /// `run` folds each into DI as an `IOAuth1aFlow` singleton so the
     /// `/api/oauth1a/{flowName}/*` handlers resolve it by `Name`. Empty
     /// (the default) registers nothing (GP 13); only meaningful when
     /// `ServerConfig.OAuth1a = FeatureMode.Enabled`.
     OAuth1aFlows: IOAuth1aFlow list
-    /// Phase 5h — optional override for the email-keyed pending-invitation
+    /// Optional override for the email-keyed pending-invitation
     /// store (`IPendingInviteStore`). When `None` (default), `compose`
     /// registers `InMemoryPendingInviteStore` over the resolved
     /// `IBlobStorage` — the single-instance blob+lock+cache impl
@@ -1152,7 +1152,7 @@ type ServerApp = {
     /// interface is registered unconditionally so the team-invitation
     /// handler resolves it from DI without mode-conditional fallback.
     PendingInviteStore: IPendingInviteStore option
-    /// Phase 66 Stream C.1 — optional anonymous→user migration hook
+    /// Optional anonymous→user migration hook
     /// invoked on the first authenticated request that follows an
     /// anonymous session in the same browser. When `None` (default),
     /// `compose` registers `NoOpAnonymousSessionMigrator` so the
@@ -1170,11 +1170,11 @@ type ServerApp = {
     /// `withShareTokenStoreDecorator` call wraps the others. Empty list
     /// (the default) leaves the registered store un-decorated. The
     /// canonical first consumer is the `RevokeOnIssuerRemoved`
-    /// companion (Phase 66 Stream C.5) — additional decorators (per-
+    /// companion — additional decorators (per-
     /// token rate-limit, audit replication, etc.) compose via this
     /// list without restructuring the substrate registration.
     ShareTokenStoreDecorators: (IShareTokenStore -> IShareTokenStore) list
-    /// Phase 66 Stream B.3 — accumulated module-level surface defaults.
+    /// Accumulated module-level surface defaults.
     /// `(routePrefix, requirement)` pairs derived from each
     /// `ServerModule.RoutePrefixes × DefaultSurfaceRequirement` at
     /// `addModule` time. Folded into the per-process
@@ -1183,13 +1183,13 @@ type ServerApp = {
     /// default) leaves the registry's `ModulePrefixes` populated solely
     /// by `fromServerConfig`'s bridge — the pre-B.3 behaviour.
     ModuleSurfaceDefaults: (string * SurfaceRequirement) list
-    /// Phase 66 Stream B.3 — accumulated per-route exact-match
+    /// Accumulated per-route exact-match
     /// `SurfaceRequirement` overrides. `((method, path), requirement)`
     /// triples accumulated from each `ServerModule.RouteSurfaceRequirements`
     /// at `addModule` time. Folded into the per-process
     /// `SurfaceRequirementRegistry.Exact` map at `compose` time.
     RouteSurfaceOverrides: ((string * string) * SurfaceRequirement) list
-    /// Phase 637 — accumulated `(moduleId, routePrefix)` attribution.
+    /// Accumulated `(moduleId, routePrefix)` attribution.
     /// The SAME `ServerModule.RoutePrefixes` declarations
     /// `ModuleSurfaceDefaults` reads, paired with the module's `Name`
     /// instead of its `SurfaceRequirement` — because opt-in
@@ -1201,7 +1201,7 @@ type ServerApp = {
     /// costs one list append per module and the alternative is a
     /// compose-order dependency on when the knob is read.
     ModuleRoutePrefixes: (string * string) list
-    /// Phase 9b.B — accumulated scheduled-job declarations. Sourced from
+    /// Accumulated scheduled-job declarations. Sourced from
     /// each `ServerModule.JobHandlers` at `addModule` time and from
     /// direct `withScheduledJob` calls on the app (for composition-root-
     /// owned crons that aren't tied to a single module). `compose`
@@ -1223,7 +1223,7 @@ type ServerApp = {
     /// (typically with `EntraDirectory.fromManagedIdentity` from the
     /// `ToolUp.AuthProviders.EntraDirectory` companion).
     UserDirectory: IUserDirectory option
-    /// Phase 1h — dotted-name of every companion-set composition that
+    /// Dotted-name of every companion-set composition that
     /// opts into the duplicate-guard. Currently only
     /// `"ToolUp.Forms"` (see `FormsCompose.composeForms`). A second
     /// `withForms` on the same pipeline sees its own marker already
@@ -1239,7 +1239,7 @@ type ServerApp = {
     /// `ensureCompanionNotAlreadyComposed` at entry and
     /// `withCompanionMarker` before returning.
     ComposedCompanions: string list
-    /// Phase 165 — optional opt-in module-binding verifier. When `Some`,
+    /// Optional opt-in module-binding verifier. When `Some`,
     /// `addModule` consults it as a second gate after the module-name
     /// filter: a module presenting a `BindingStamp` is dropped unless the
     /// stamp verifies under one of the verifier's trust anchors, and a
@@ -1249,7 +1249,7 @@ type ServerApp = {
     /// `ServerApp.withModuleBindingVerifier` (e.g.
     /// `DefaultModuleBindingVerifier.create` from `ToolUp.ArtefactSigning`).
     ModuleBindingVerifier: IModuleBindingVerifier option
-    /// Phase 176 — opt-in transient-fault resilience for the resolved
+    /// Opt-in transient-fault resilience for the resolved
     /// `IBlobStorage`. `NoResilience` (the default) resolves to the bare
     /// storage — no decorator in the hot path, byte-for-byte unchanged
     /// (GP 13). `WithResiliencePolicy policy` wraps it in
@@ -1258,19 +1258,19 @@ type ServerApp = {
     /// record (GP 12 rule 3, retry-as-data). Wired via
     /// `ServerApp.withStorageResilience`.
     StorageResilience: ResilienceMode
-    /// Phase 176 — opt-in transient-fault resilience for the resolved
+    /// Opt-in transient-fault resilience for the resolved
     /// `ISecretStore`. Same shape as `StorageResilience`; `NoResilience`
     /// (the default) leaves the secret store un-decorated. Wired via
     /// `ServerApp.withSecretResilience`.
     SecretResilience: ResilienceMode
-    /// Phase 1001 — the application's own `ISecretStore` (a KMS-backed
+    /// The application's own `ISecretStore` (a KMS-backed
     /// companion, or whatever `SecretStore.fromEnv` selected). `None` (the
     /// default) composes the raw `FileSecretStore`, unchanged. When set,
     /// it is the ONE store every preflight validator and internal store
     /// receives, after `SecretResilience` is applied. Wired via
     /// `ServerApp.withSecretStore`.
     SecretStore: Secrets.ISecretStore option
-    /// Phase 1038 — the composition root's override of the secret-store
+    /// The composition root's override of the secret-store
     /// preflight timeout. `None` (the default) lets the store's kind choose:
     /// a supplied store gets `IConfigValidator.remoteSecretStoreTimeout`, the
     /// SDK's file store keeps `IConfigValidator.defaultTimeout`. Wired via
@@ -1281,12 +1281,12 @@ type ServerApp = {
     /// and the platform-admin store all take it. `None` (the default) is the
     /// in-process lock. Wired via `ServerApp.withDistributedLock`.
     DistributedLock: IDistributedLock option
-    /// Phase 169 — per-module load outcome, accumulated in `addModule`
+    /// Per-module load outcome, accumulated in `addModule`
     /// order and emitted through `Logger` at `run`. Empty until the first
     /// `addModule`; a stock deployment accumulates only `ModuleRegistered`
     /// entries that log at `Debug` (silent at the default level — GP 13).
     ModuleLoadOutcomes: (string * ModuleLoadOutcome) list
-    /// Phase 279 — resolved `(moduleName, ComponentId)` for every
+    /// Resolved `(moduleName, ComponentId)` for every
     /// registered module, accumulated in `addModule` order. The id is the
     /// module's explicit `ComponentId` when declared (via
     /// `ServerModule.withComponentId`), else the name-derived default
@@ -1295,7 +1295,7 @@ type ServerApp = {
     /// compose-time failure, not a runtime surprise. Empty until the
     /// first `addModule`.
     ModuleComponentIds: (string * ComponentId) list
-    /// Phase 551 — accumulated `(moduleName, declaredGrantPolicy)` pairs,
+    /// Accumulated `(moduleName, declaredGrantPolicy)` pairs,
     /// one per registered `ServerModule`. Projected at `run` time into a
     /// `ModuleGrantPolicyRegistry`, which is registered in DI **only when
     /// at least one module declares something other than
@@ -1307,7 +1307,7 @@ type ServerApp = {
     /// what makes the registry's keys a subset of the composed module set
     /// by construction rather than by convention.
     ModuleGrantPolicies: (string * GrantPolicy) list
-    /// Phase 36.C — accumulated `(moduleName, declaredAIExposure)` pairs
+    /// Accumulated `(moduleName, declaredAIExposure)` pairs
     /// for the modules that DECLARED one, in registration order. A module
     /// that declared nothing contributes no entry — undeclared and
     /// `NotQueryable` are the same thing, so the absence carries the
@@ -1331,7 +1331,7 @@ type ServerApp = {
     /// `IEgressGate`. `None` is `EgressGate.declaredDefaultPolicy`, never
     /// "no gate". Set via `ServerApp.withClassificationEgressPolicy`.
     ClassificationEgressPolicy: EgressPolicy option
-    /// Phase 556 — how grant-event notices to affected principals are
+    /// How grant-event notices to affected principals are
     /// rendered and delivered. `None` means the shipped defaults, NOT
     /// "no notices": the notice loop is the point of the phase, and a
     /// deployment that declared a `GrantPolicy` and assumed the notice
@@ -1345,7 +1345,7 @@ type ServerApp = {
     /// party reference is an opaque deployment string (GP 9), so absent
     /// a resolver the declared-party leg reaches nobody.
     GrantNotifications: GrantNotification.GrantNotificationSettings option
-    /// Phase 728 — the opt-in model-execution compose leg. `Some` registers
+    /// The opt-in model-execution compose leg. `Some` registers
     /// `IModelRegistry` (and optionally the scorer / executor policy /
     /// Phase 651 registration observers) into the DI graph; `None` — the
     /// default — appends no registration at all, so a deployment that does
@@ -1358,13 +1358,13 @@ type ServerApp = {
     ///
     /// Set it with `ServerApp.withModelExecution`.
     ModelExecutionCompose: ComposeModelExecution.ModelExecutionComposeOptions option
-    /// Phase 936 — the team output-visibility declaration (default level and
+    /// The team output-visibility declaration (default level and
     /// allowed set), recorded by `FactsCompose.withTeamOutputVisibility` so
     /// `compositionManifest` can project it. `None` — the default — means
     /// team output visibility is not composed, and the manifest carries no
     /// knob for it (byte-identical to before this field).
     TeamOutputVisibility: TeamOutputVisibilitySettings option
-    /// Phase 1052 — what companions and builders add to the deployment, as
+    /// What companions and builders add to the deployment, as
     /// data, in the order they were added. `run` folds the list through
     /// `ServiceConfig.append` after the consumer's `Extensions.ServiceConfig`,
     /// so a later `withExtensions` (which sets that record) no longer
@@ -1497,7 +1497,7 @@ module ServerApp =
             |> List.fold (fun acc tier -> tier.Apply acc) { app with Companions = [] }
             |> resolve
 
-    /// Phase 1052 — **adds** a contribution. Contributions are applied by
+    /// **adds** a contribution. Contributions are applied by
     /// `run` in the order they were added, after the consumer's
     /// `Extensions.ServiceConfig`; a later `withExtensions` keeps them. A
     /// companion root contributes under its own `ComponentId`
@@ -1551,7 +1551,7 @@ module ServerApp =
     /// the deployment's own composition (the reserved `_deployment` scope).
     let private deploymentOwner: ComponentId = ComponentId.ofModule "_deployment"
 
-    /// Phase 1052 — **adds** DI registrations: `register` runs after every
+    /// **adds** DI registrations: `register` runs after every
     /// registration added before it, in the order added, and survives a
     /// later `withExtensions` (the builder that **sets** the whole
     /// `ComposeExtensions` record). The registrations are owned by the
@@ -1596,7 +1596,7 @@ module ServerApp =
 
         services
 
-    /// Phase 1052 — the DI registrations `run` applies at the fixed point
+    /// The DI registrations `run` applies at the fixed point
     /// after the SDK's own: the consumer's `Extensions.ServiceConfig`, then
     /// every contribution's, in the order added. `None` when there are
     /// none. This is what a test that builds a provider from a composed
@@ -1677,7 +1677,7 @@ module ServerApp =
                | Validator check -> Some check
                | _ -> None))
 
-    /// Phase 728 — compose the model-execution leg: register
+    /// Compose the model-execution leg: register
     /// `IModelRegistry` (and optionally the `IModelScorer`, the Phase 640
     /// executor policy, and Phase 651 registration observers) so the
     /// `ModelExecutionApi` face resolves them instead of refusing with
@@ -1703,7 +1703,7 @@ module ServerApp =
             ModelExecutionCompose = Some options
     }
 
-    /// Phase 556 — tune the grant-event notice fan-out: supply the
+    /// Tune the grant-event notice fan-out: supply the
     /// deployment's `PartyRef` → user-id resolution, override the
     /// per-audience message shapes, or switch a delivery leg off.
     ///
@@ -1744,7 +1744,7 @@ module ServerApp =
                 companionName
                 companionName
 
-    /// Phase 1h — **add** a companion marker to `ComposedCompanions`
+    /// **add** a companion marker to `ComposedCompanions`
     /// after a successful compose emit. Paired with
     /// `ensureCompanionNotAlreadyComposed` at the top of the same
     /// compose seam.
@@ -1772,7 +1772,7 @@ module ServerApp =
     /// **Sets** the value; a later call replaces it.
     let withAuth (a: IAuthProvider) (app: ServerApp) : ServerApp = { app with Auth = Some a }
 
-    /// Phase 159 — select the durable per-subject consent-state store
+    /// Select the durable per-subject consent-state store
     /// mode. `EntityBackedConsentStateStore` registers the durable store
     /// over `IEntityStore` (requires `EntityStore = FeatureMode.Enabled`;
     /// the compose path registers the `ConsentRecord` entity type
@@ -1790,7 +1790,7 @@ module ServerApp =
                 }
         })
 
-    /// Phase 447 — register a deterministic seed / fixture pack. Modules
+    /// Register a deterministic seed / fixture pack. Modules
     /// contribute their own demo/fixture data (GP 9); `run` folds each
     /// pack into DI and `SeedDataLoader` applies them once per
     /// `Name@Version` at end-of-compose, gated on `ServerConfig.SeedData`.
@@ -1810,7 +1810,7 @@ module ServerApp =
             AuditEventRegistrations = app.AuditEventRegistrations @ [ registration ]
     }
 
-    /// Phase 447 — set the seed-data mode (`NoSeedData` default /
+    /// Set the seed-data mode (`NoSeedData` default /
     /// `EnabledSeedData` / `ForcedSeedData`). Sugar over
     /// `{ Config with SeedData = mode }`. `EnabledSeedData` refuses
     /// startup on a Team / multi-team shape; `ForcedSeedData` overrides
@@ -1820,7 +1820,7 @@ module ServerApp =
         app
         |> addOverride (nameof ServerConfig.defaults.SeedData) (fun config -> { config with SeedData = mode })
 
-    /// Phase 165 — opt into the module-binding gate. Once a verifier is
+    /// Opt into the module-binding gate. Once a verifier is
     /// configured, `addModule` drops any module whose `BindingStamp` does
     /// not verify under one of the verifier's trust anchors. Compose with
     /// `DefaultModuleBindingVerifier.create anchors` from
@@ -1836,7 +1836,7 @@ module ServerApp =
     /// **Sets** the value; a later call replaces it.
     let withStorage (s: IBlobStorage) (app: ServerApp) : ServerApp = { app with Storage = Some s }
 
-    /// Phase 37 — register a path prefix as a peer-bearer-auth route.
+    /// Register a path prefix as a peer-bearer-auth route.
     /// `PeerBearerAuthMiddleware` validates `Authorization: Bearer
     /// <token>` against `ISecretStore.GetSecret("_platform",
     /// $"peers/{peerName}/bearer")` for every request matching one of
@@ -1888,7 +1888,7 @@ module ServerApp =
             UserDirectory = Some directory
     }
 
-    /// Phase 6f — register an out-of-band transactional notification
+    /// Register an out-of-band transactional notification
     /// sink (email / SMS / push). Each sink advertises a `Kind`
     /// matching one of `NotificationKind.SinkKind` constants;
     /// duplicate-`Kind` registrations are caught at compose time and
@@ -1912,7 +1912,7 @@ module ServerApp =
             TransactionalSinks = app.TransactionalSinks @ [ sink ]
     }
 
-    /// Phase 178 — register a declarative alert rule. Each rule watches a
+    /// Register a declarative alert rule. Each rule watches a
     /// metric (`IMetricsSink` accumulator) or a health probe
     /// (`IHealthCheck`) and delivers a notification when its
     /// `ThresholdCondition` holds for `ForDuration`. Registering any rule
@@ -1933,7 +1933,7 @@ module ServerApp =
                 }
         })
 
-    /// Phase 178 — register several alert rules at once. **Adds** to any
+    /// Register several alert rules at once. **Adds** to any
     /// already registered; see `withAlertRule` for the hosting contract.
     let withAlertRules (rules: AlertRule list) (app: ServerApp) : ServerApp =
         app
@@ -1945,7 +1945,7 @@ module ServerApp =
                 }
         })
 
-    /// Phase 441 — declare a notification category at the composition
+    /// Declare a notification category at the composition
     /// root (an app-level category no single module owns, e.g. a
     /// non-suppressible `security.password-reset`). Same validation and
     /// the same inert-until-enabled rule as
@@ -1963,12 +1963,12 @@ module ServerApp =
                 NotificationCategories = config.NotificationCategories @ [ category ]
         })
 
-    /// Phase 441 — declare several app-level notification categories at
+    /// Declare several app-level notification categories at
     /// once; **adds**, like `withNotificationCategory`.
     let withNotificationCategories (categories: NotificationCategory list) (app: ServerApp) : ServerApp =
         categories |> List.fold (fun a c -> withNotificationCategory c a) app
 
-    /// Phase 9g — register an audit-log external-export sink (Splunk
+    /// Register an audit-log external-export sink (Splunk
     /// HEC, Datadog Logs, S3 Object Lock archive, custom SIEM
     /// endpoint). Each sink advertises a deployment-unique `Name`;
     /// duplicate-`Name` registrations are caught at compose time and
@@ -2001,7 +2001,7 @@ module ServerApp =
             ClassificationEgressPolicy = Some policy
     }
 
-    /// Phase 9g — override the default audit replicator tuning
+    /// Override the default audit replicator tuning
     /// (`AuditReplicatorOptions.defaults`). Deployments wanting larger
     /// batches, longer linger, faster catch-up sweeps, or tighter
     /// retry budgets supply their own `AuditReplicatorOptions` here.
@@ -2013,7 +2013,7 @@ module ServerApp =
             AuditReplicator = Some options
     }
 
-    /// Phase 9e — register a companion-contributed metrics sink
+    /// Register a companion-contributed metrics sink
     /// alongside the in-process Prometheus default. Each companion
     /// exposes its `IMetricsSink` instance via a small constructor
     /// (`OtelMetricsSink.create logger`, etc.) — the deployment wires
@@ -2031,7 +2031,7 @@ module ServerApp =
             MetricsSinks = app.MetricsSinks @ [ sink ]
     }
 
-    /// Phase 9e — register companion-contributed `MetricRegistration`s
+    /// Register companion-contributed `MetricRegistration`s
     /// alongside the module-scoped path (`ServerModule.withMetrics`). A
     /// first-party SDK companion (e.g. `ToolUp.AI` declaring latency
     /// histograms, `ToolUp.RAG` declaring retrieval counters) uses this
@@ -2051,7 +2051,7 @@ module ServerApp =
             MetricRegistrations = app.MetricRegistrations @ regs
     }
 
-    /// Phase 887 — bind declared fact tables to a store: the physical half
+    /// Bind declared fact tables to a store: the physical half
     /// of a module's logical table declaration. A companion that supplies
     /// an `IFactTableWriter` calls this for the tables it serves (the facts
     /// companion's `withFactTableWriter` binds every declared table). The
@@ -2064,7 +2064,7 @@ module ServerApp =
             FactTableBindings = app.FactTableBindings @ [ binding ]
     }
 
-    /// Phase 592 — accumulate composition-declared disclosure purposes
+    /// Accumulate composition-declared disclosure purposes
     /// for the manifest projection. Called by the facts companion's
     /// purpose compose (which owns the typed taxonomy + the gate
     /// enforcement); the platform carries only the generic, readable
@@ -2074,7 +2074,7 @@ module ServerApp =
             RegisteredPurposes = app.RegisteredPurposes @ purposes
     }
 
-    /// Phase 9l — register a distributed-tracing sink (peer to
+    /// Register a distributed-tracing sink (peer to
     /// `withMetricsSink`). Each companion exposes its `IActivitySink`
     /// instance via a small constructor (`OtelActivitySink.create ()`
     /// from the `ToolUp.Platform.Metrics.OpenTelemetry` companion) —
@@ -2090,7 +2090,7 @@ module ServerApp =
     /// **Sets** the value; a later call replaces it.
     let withActivitySink (sink: IActivitySink) (app: ServerApp) : ServerApp = { app with ActivitySink = Some sink }
 
-    /// Phase 9v — declare an outbound rate-limit window for one
+    /// Declare an outbound rate-limit window for one
     /// upstream provider. Each companion that issues calls to a
     /// quota-bearing service (data-source connector, AI provider,
     /// transactional sink, webhook dispatcher) registers one
@@ -2123,7 +2123,7 @@ module ServerApp =
             RateLimitDescriptors = app.RateLimitDescriptors @ [ descriptor ]
     }
 
-    /// Phase 9k — register a companion-contributed health probe.
+    /// Register a companion-contributed health probe.
     /// Each companion exposes its `IHealthCheck` instance via a small
     /// constructor (`RedisNotificationChannelHealth.create
     /// multiplexer`, `ClaudeAIProviderHealth.create secretStore`, etc.)
@@ -2138,7 +2138,7 @@ module ServerApp =
             HealthChecks = app.HealthChecks @ [ check ]
     }
 
-    /// Phase 1137 — mount the production-safe `GET /version` route: the
+    /// Mount the production-safe `GET /version` route: the
     /// entry assembly's version and the commit its informational version
     /// carries (`{ "version": ..., "commit": ... }`, `commit` omitted when
     /// the build carried none), `no-store`, and nothing else. **Off by
@@ -2166,7 +2166,7 @@ module ServerApp =
             }
             |> addPlatformServices register
 
-    /// Phase 9o — register a companion-contributed post-deploy smoke
+    /// Register a companion-contributed post-deploy smoke
     /// test. Each companion exposes its `ISmokeTest` instance via a
     /// small constructor (`RedisNotificationChannelSmoke.create
     /// multiplexer`, `S3StorageSmoke.create client`, etc.) — the
@@ -2182,7 +2182,7 @@ module ServerApp =
             SmokeTests = app.SmokeTests @ [ test ]
     }
 
-    /// Phase 9h — register a data-subject-request exporter. Each
+    /// Register a data-subject-request exporter. Each
     /// per-store implementation (`EventStoreErasureHandler.exporter`,
     /// `DataObjectStoreErasureHandler.exporter`,
     /// `ConversationExporter.exporter`, etc.) contributes one
@@ -2202,7 +2202,7 @@ module ServerApp =
             DataExporters = app.DataExporters @ [ exporter ]
     }
 
-    /// Phase 9h — register a data-subject-request erasure handler.
+    /// Register a data-subject-request erasure handler.
     /// Each per-store implementation
     /// (`EventStoreErasureHandler.erasureHandler`,
     /// `DataObjectStoreErasureHandler.erasureHandler`, etc.)
@@ -2233,7 +2233,7 @@ module ServerApp =
             OAuthCredentialFlows = app.OAuthCredentialFlows @ [ flow ]
     }
 
-    /// Phase 10g — register an OAuth 1.0a flow (one per 1.0a provider).
+    /// Register an OAuth 1.0a flow (one per 1.0a provider).
     /// `run` folds it into DI; the `/api/oauth1a/{name}/*` routes (mounted
     /// when `ServerConfig.OAuth1a = FeatureMode.Enabled`) resolve it by `Name`.
     /// **Adds** (append-only), so several providers each add their own.
@@ -2242,7 +2242,7 @@ module ServerApp =
             OAuth1aFlows = app.OAuth1aFlows @ [ flow ]
     }
 
-    /// Phase 9m — register a companion-contributed startup config
+    /// Register a companion-contributed startup config
     /// validator. Each companion exposes its `IConfigValidator`
     /// instance via a small constructor (`OidcAuthValidator.tryFromEnv`,
     /// `RedisValidator.create multiplexer`,
@@ -2258,7 +2258,7 @@ module ServerApp =
             ConfigValidators = app.ConfigValidators @ [ validator ]
     }
 
-    /// Phase 9j — set the HTTP-surface hardening mode. Shorthand for
+    /// Set the HTTP-surface hardening mode. Shorthand for
     /// `{ app with Config.SecurityHardening = mode }`. `NoSecurityHardening`
     /// (the default) leaves `CspMiddleware` / `CsrfMiddleware` inert and
     /// unmounts `/api/csrf-token`; `DefaultSecurityHardening` /
@@ -2276,7 +2276,7 @@ module ServerApp =
                 }
         })
 
-    /// Phase 9j — register a CSP contributor so its required origins
+    /// Register a CSP contributor so its required origins
     /// are folded into the aggregated `Content-Security-Policy` at
     /// compose time. Threads the singleton registration through the
     /// shared `ComposeExtensions.ServiceConfig` (the same seam
@@ -2292,7 +2292,7 @@ module ServerApp =
 
         app |> addPlatformServices register
 
-    /// Phase 156 — opt into a CSP source mode so the aggregated
+    /// Opt into a CSP source mode so the aggregated
     /// `Content-Security-Policy` can cover the deployment's own SSR-emitted
     /// inline `<script>` / `<style>` without `'unsafe-inline'`:
     ///
@@ -2319,7 +2319,7 @@ module ServerApp =
 
         app |> addPlatformServices register
 
-    /// Phase 22 — opt into AES-GCM envelope encryption for the
+    /// Opt into AES-GCM envelope encryption for the
     /// registered `IBlobStorage`. The resolver determines the
     /// security model:
     ///
@@ -2345,7 +2345,7 @@ module ServerApp =
             EncryptionKeyResolver = Some resolver
     }
 
-    /// Phase 176 — opt the resolved `IBlobStorage` into transient-fault
+    /// Opt the resolved `IBlobStorage` into transient-fault
     /// resilience. The resolved storage (after any envelope-encryption
     /// decorator) is wrapped with `ResilientBlobStorage policy`, so every
     /// method retries genuinely-transient thrown faults / trips the
@@ -2360,7 +2360,7 @@ module ServerApp =
             StorageResilience = WithResiliencePolicy policy
     }
 
-    /// Phase 176 — opt the resolved `ISecretStore` into transient-fault
+    /// Opt the resolved `ISecretStore` into transient-fault
     /// resilience. Same shape as `withStorageResilience`; the secret store
     /// is wrapped with `ResilientSecretStore policy`. Omitting this call
     /// leaves the secret store un-decorated (GP 13).
@@ -2370,7 +2370,7 @@ module ServerApp =
             SecretResilience = WithResiliencePolicy policy
     }
 
-    /// Phase 1001 — supply the deployment's `ISecretStore`. The supplied
+    /// Supply the deployment's `ISecretStore`. The supplied
     /// store replaces the SDK's `FileSecretStore` default EVERYWHERE the
     /// platform reads or writes a secret: the preflight validators, the
     /// webhook / notification / OAuth / provider-OAuth / data-ingestion
@@ -2397,7 +2397,7 @@ module ServerApp =
             SecretStore = Some store
     }
 
-    /// Phase 1038 — override the secret-store preflight timeout. Not needed
+    /// Override the secret-store preflight timeout. Not needed
     /// to boot on a cloud secret store: a store supplied through
     /// `withSecretStore` already gets `IConfigValidator.remoteSecretStoreTimeout`,
     /// sized for a cold managed-identity read, and the SDK's file store keeps
@@ -2432,7 +2432,7 @@ module ServerApp =
             DistributedLock = Some distributedLock
     }
 
-    /// Phase 9d — override the SDK default per-team compute quota
+    /// Override the SDK default per-team compute quota
     /// policy. Deployments supply a custom `ITeamQuotaPolicy` to plug
     /// in a SaaS-billing-aware policy, a per-tier subscription gate, or
     /// a custom rate-limit shape; the SDK's `BlobBackedTeamQuotaPolicy`
@@ -2464,7 +2464,7 @@ module ServerApp =
             ProviderProfile = Some store
     }
 
-    /// Phase 19 — register an entity type with the typed entity store.
+    /// Register an entity type with the typed entity store.
     /// Each call captures the typed `EntityRegistration<'T>` in a
     /// closure that runs at compose time against the shared
     /// `EntityRegistry`. Compose-time evaluation means modules can
@@ -2484,7 +2484,7 @@ module ServerApp =
                 @ [ (fun registry -> registry.Register<'T>(registration)) ]
     }
 
-    /// Phase 68d — opt into the entity→graph projection bridge. Flips
+    /// Opt into the entity→graph projection bridge. Flips
     /// `ServerConfig.EntityGraphProjection = FeatureMode.Enabled`,
     /// the flag the `ToolUp.Graph.Projection` bridge's
     /// `EntityGraphProjectionCompose.wire` reads to decide whether to run.
@@ -2523,7 +2523,7 @@ module ServerApp =
     let withPreMiddleware (f: IApplicationBuilder -> IApplicationBuilder) (app: ServerApp) : ServerApp =
         addContribution (Contribution.middleware deploymentOwner MiddlewarePosition.Pre f) app
 
-    /// Phase 855 — serve the remoting batch route (`POST /api/_batch`), so
+    /// Serve the remoting batch route (`POST /api/_batch`), so
     /// a client that calls `RemoteBatching.enable RemoteBatching.DefaultRoute`
     /// sends same-tick calls as one request. Composed at the pre-middleware
     /// seam: every element then runs through scope resolution, surface
@@ -2562,7 +2562,7 @@ module ServerApp =
     let withPostMiddleware (f: IApplicationBuilder -> IApplicationBuilder) (app: ServerApp) : ServerApp =
         addContribution (Contribution.middleware deploymentOwner MiddlewarePosition.Post f) app
 
-    /// Phase 5h — register a custom `IPendingInviteStore` implementation.
+    /// Register a custom `IPendingInviteStore` implementation.
     /// When omitted, `compose` auto-selects: `InMemoryPendingInviteStore`
     /// over the resolved `IBlobStorage` — the single-instance blob+lock+
     /// cache impl carried forward from Phase 3d — for one replica, and
@@ -2577,7 +2577,7 @@ module ServerApp =
             PendingInviteStore = Some store
     }
 
-    /// Phase 66 Stream C.1 — register an anonymous→user session
+    /// Register an anonymous→user session
     /// migrator invoked on the first authenticated request that
     /// follows an anonymous session in the same browser. When
     /// omitted, `compose` registers `NoOpAnonymousSessionMigrator` so
@@ -2599,7 +2599,7 @@ module ServerApp =
     /// **Adds**: every call appends to the chain; decorators apply
     /// outside-in so the LAST `withShareTokenStoreDecorator` call
     /// wraps the others. The canonical first consumer is the
-    /// `RevokeOnIssuerRemoved` companion (Phase 66 Stream C.5);
+    /// `RevokeOnIssuerRemoved` companion;
     /// further decorators (per-token rate-limit, audit replication,
     /// per-claim retention policies) compose via this list without
     /// restructuring the substrate registration.
@@ -2614,7 +2614,7 @@ module ServerApp =
             ShareTokenStoreDecorators = app.ShareTokenStoreDecorators @ [ decorator ]
     }
 
-    /// Phase 9b.B — declare a composition-root-owned background job
+    /// Declare a composition-root-owned background job
     /// (one not tied to a single module). Same shape as
     /// `ServerModule.withJobHandler` — the SDK's compose pipeline
     /// registers `handler` against `IJobScheduler` under `handlerName`
@@ -2639,7 +2639,7 @@ module ServerApp =
                 ScheduledJobs = app.ScheduledJobs @ [ declaration ]
         }
 
-    /// Phase 9b.B — declare a composition-root-owned background job
+    /// Declare a composition-root-owned background job
     /// with full control over every `JobRegistration` knob (`Scopes`,
     /// `Payload`, `RetryPolicy`, `ShardKey`, `Precision`, `Idempotency`,
     /// `Tags`). Construct via `ScheduledJobDeclaration.create` + the
@@ -2650,11 +2650,11 @@ module ServerApp =
             ScheduledJobs = app.ScheduledJobs @ [ declaration ]
     }
 
-    /// Phase 1042 — the key the delivery middleware marks the application
+    /// The key the delivery middleware marks the application
     /// builder with, so it is mounted once however many hooks register.
     let private deliveryMiddlewareMounted = "ToolUp.DeliveryCompleted.Mounted"
 
-    /// Phase 1042 — a request as a delivery: the runs it ingests are
+    /// A request as a delivery: the runs it ingests are
     /// delivered after its response is written, under the scope the platform
     /// resolved for it (read at completion, after scope resolution ran). A
     /// request already inside a delivery (a batch element) adds to it.
@@ -2678,7 +2678,7 @@ module ServerApp =
                 do! next.Invoke()
             }
 
-    /// Phase 1042 — run `callback` once each delivery completes: after the
+    /// Run `callback` once each delivery completes: after the
     /// response of a request that ingested data, or after an ingestion job
     /// attempt (a declared scheduled pull, a watched location's poll, a
     /// queued refresh) returns — every table of it settled, committed or
@@ -2710,7 +2710,7 @@ module ServerApp =
         |> addContribution (Contribution.middleware EgressPolicy.platformComponent MiddlewarePosition.Pre mount)
         |> addPlatformServices register
 
-    /// Phase 9b.A — opt into back-fill of `OnEvent`-triggered jobs on
+    /// Opt into back-fill of `OnEvent`-triggered jobs on
     /// detected scheduler tick drift. Default: off. When enabled, a
     /// detected drift (`now - expectedTickTime > 60s` on wake-up) re-
     /// fires each Active `OnEvent`-triggered job once after recording
@@ -2732,7 +2732,7 @@ module ServerApp =
                 BackfillMissedTicks = enabled
         })
 
-    /// Phase 598 — opt into the event-trigger catch-up watermark.
+    /// Opt into the event-trigger catch-up watermark.
     /// Default: off (`OnEvent` triggering stays at-most-once). When
     /// enabled alongside `JobScheduler = InProcessJobScheduler`, the
     /// scheduler persists a per-scope trigger cursor and replays — on
@@ -2752,7 +2752,7 @@ module ServerApp =
                 EventTriggerCatchUp = enabled
         })
 
-    /// Phase 9t — select what an audit-write failure does beyond the
+    /// Select what an audit-write failure does beyond the
     /// Phase 114 counter. Default `LogAndContinue` (prior behaviour —
     /// the action completes, the record is lost, the loss is counted
     /// + logged). Compliance-grade deployments opt into
@@ -2771,7 +2771,7 @@ module ServerApp =
                 AuditFailurePolicy = policy
         })
 
-    /// Phase 9t — override the `DegradeToFile` spill root (default:
+    /// Override the `DegradeToFile` spill root (default:
     /// `audit-fallback/` under the process working directory).
     /// **Sets** one `ServerConfig` field; a later call replaces it.
     let withAuditFallbackDirectory (directory: string) (app: ServerApp) : ServerApp =
@@ -2781,7 +2781,7 @@ module ServerApp =
                 AuditFallbackDirectory = Some directory
         })
 
-    /// Phase 599 — opt into the entity-write outbox. Default: off.
+    /// Opt into the entity-write outbox. Default: off.
     /// When enabled (requires
     /// `EntityStore = FeatureMode.Enabled`),
     /// `OutboxEntityStore.SaveWithEvents` durably couples an entity
@@ -2806,9 +2806,9 @@ module ServerApp =
                 }
         })
 
-    /// Phase 1027 — opt into durable lineage. Default: off, where a
+    /// Opt into durable lineage. Default: off, where a
     /// lineage link the store fails to record is logged with everything
-    /// needed to re-record it by hand, and dropped (Phase 1025). When
+    /// needed to re-record it by hand, and dropped. When
     /// enabled (requires `Lineage = FeatureMode.Enabled` and a result
     /// store), a result save's links are staged in the lineage outbox
     /// (the Phase 599 write-ahead shape) and the relay retries them —
@@ -2829,7 +2829,7 @@ module ServerApp =
                         FeatureMode.Disabled
         })
 
-    /// Phase 177 — opt into the deployment-readiness scorecard. Flips
+    /// Opt into the deployment-readiness scorecard. Flips
     /// `ServerConfig.DeploymentReadiness` to `FeatureMode.Enabled` so
     /// `compose` mounts the Platform-Admin-gated `IDeploymentReadinessApi`
     /// read that consolidates the `IConfigValidator` / `ISmokeTest` /
@@ -2845,7 +2845,7 @@ module ServerApp =
                 DeploymentReadiness = FeatureMode.Enabled
         })
 
-    /// Phase 771 — register the holder the boot observation of the
+    /// Register the holder the boot observation of the
     /// hardening baseline is kept in, so `run` probes the composed pipeline
     /// and the verification report renders what it found. `TryAdd`, so the
     /// route and a declared policy share one holder.
@@ -2862,7 +2862,7 @@ module ServerApp =
 
         app |> addPlatformServices register
 
-    /// Phase 686 — mount the Platform-Admin-gated deployment
+    /// Mount the Platform-Admin-gated deployment
     /// verification report. Flips `ServerConfig.DeploymentVerification`
     /// to `FeatureMode.Enabled` so `compose` mounts
     /// `IDeploymentVerificationApi`, the one read that composes the boot
@@ -2883,7 +2883,7 @@ module ServerApp =
     /// call: it needs no route, so a deployment can run the report in CI
     /// without exposing it on the wire at all.
     ///
-    /// Phase 771 — mounting the route also asks `run` to observe the
+    /// Mounting the route also asks `run` to observe the
     /// hardening baseline on the composed pipeline before it serves (two
     /// probe requests through the pipeline, at boot only), so the report's
     /// hardening-baseline section has something to say. Informational: with
@@ -2897,7 +2897,7 @@ module ServerApp =
         })
         |> registerHostingBaselineRecord
 
-    /// Phase 686 — register the evidence the deployment verification
+    /// Register the evidence the deployment verification
     /// report composes.
     ///
     /// **The composition root is the only place that can supply this, and
@@ -2940,7 +2940,7 @@ module ServerApp =
     /// composed no seal resolves nothing and the section reads
     /// `NotComposed`, with no action required of the root.
     ///
-    /// **The remoting-decoder member is derived too (Phase 801), from the
+    /// **The remoting-decoder member is derived too, from the
     /// records this process actually served.** `Api.make` records every
     /// mount, so a root that supplies no facet gets the served set
     /// classified against the registry under `CompositionProfile.Standard`
@@ -2989,7 +2989,7 @@ module ServerApp =
 
         app |> addPlatformServices register
 
-    /// Phase 771 — declare the hardening-baseline floor this deployment is
+    /// Declare the hardening-baseline floor this deployment is
     /// judged against.
     ///
     /// `run` observes the baseline on the composed pipeline after `compose`
@@ -3017,7 +3017,7 @@ module ServerApp =
 
         app |> addPlatformServices register |> registerHostingBaselineRecord
 
-    /// Phase 686 — map a boot verification outcome onto the report's
+    /// Map a boot verification outcome onto the report's
     /// tier-neutral `BootSealIntegrity`.
     ///
     /// **Takes the `Result` whole, and both arms carry a verdict.**
@@ -3039,7 +3039,7 @@ module ServerApp =
         | BootVerificationVerdict.Verified ->
             BootSealVerified(profile, policy, BootVerificationVerdict.describe result.Verdict, result.Level)
         | BootVerificationVerdict.VerifiedUnrecorded _ ->
-            // Phase 694 — affirmative, and carried as its own case. See
+            // Affirmative, and carried as its own case. See
             // `BootSealVerifiedUnrecorded`: rendering it as a plain
             // verification here would restate one tier up the blind spot
             // the verdict was split to surface.
@@ -3053,14 +3053,14 @@ module ServerApp =
         | BootVerificationVerdict.Unsealed reason -> BootSealUnsealed(profile, policy, reason)
         | BootVerificationVerdict.VerificationFailed _
         | BootVerificationVerdict.Drifted _
-        // Phase 678 — a retired deployment is a REJECTION in this
+        // A retired deployment is a REJECTION in this
         // report's vocabulary, not a second affirmative case: the verdict
         // already refused the start under every policy, and the section's
         // job here is to carry that refusal and its reason. The verdict's
         // own `describe` / `findings` name the retirement, so nothing is
         // lost by not giving it a fourth tier-neutral case.
         | BootVerificationVerdict.Retired _
-        // Phase 774 — below the declared verification-level floor is a
+        // Below the declared verification-level floor is a
         // rejection too; its finding names the level and the floor.
         | BootVerificationVerdict.BelowVerificationFloor _ ->
             BootSealRejected(
@@ -3071,7 +3071,7 @@ module ServerApp =
                 result.RefusedStart
             )
 
-    /// Phase 7c — compose the data-object orphan-blob sweep. Registers the
+    /// Compose the data-object orphan-blob sweep. Registers the
     /// policy as a DI singleton and, when it can actually reclaim
     /// something, schedules the `platform.data-object-orphan-sweep` job on
     /// the composed `IJobScheduler` for each scope in `policy.Scopes`.
@@ -3140,14 +3140,14 @@ module ServerApp =
     /// Honours `app.Config.ModuleFilter` — modules whose name doesn't match
     /// are skipped silently, so `withConfig` should run before `addModules`
     /// (the documented pipeline order).
-    /// Phase 169 — append a module-load outcome to the startup-observability
+    /// Append a module-load outcome to the startup-observability
     /// accumulator (emitted through `Logger` at `run`).
     let private recordOutcome (moduleId: string) (outcome: ModuleLoadOutcome) (app: ServerApp) : ServerApp = {
         app with
             ModuleLoadOutcomes = app.ModuleLoadOutcomes @ [ moduleId, outcome ]
     }
 
-    /// Phase 773 — register the route-effect refusal observer a module
+    /// Register the route-effect refusal observer a module
     /// with declared routes needs, unless the composition registered its
     /// own: the Phase 657 refusal row through the composition's
     /// `IAuditLog`, under the standard profile's label. A verified
@@ -3178,7 +3178,7 @@ module ServerApp =
         else
             app
 
-    /// Phase 777 — register the module's declared routes as verification
+    /// Register the module's declared routes as verification
     /// report evidence (`DeclaredRouteEffects`, one registration per module),
     /// so the trust-boundaries section can name them and the report can
     /// narrow its decision-point statement to the routes that are not. A
@@ -3215,13 +3215,13 @@ module ServerApp =
     /// **Adds** the module's contributions to every accumulating list.
     let addModule (m: ServerModule) (app: ServerApp) : ServerApp =
         if not (ModuleFilter.matches app.Config.ModuleFilter m.Name) then
-            // Phase 169 — a name-filtered module is dropped, but the drop is
+            // A name-filtered module is dropped, but the drop is
             // now observable: record the active filter so "why didn't my
             // module load?" is answerable from the startup log.
             let activeFilter = app.Config.ModuleFilter |> Option.defaultValue "(none)"
             recordOutcome m.Name (ModuleFiltered activeFilter) app
         else
-            // Phase 165 — opt-in module-binding gate, the second check after
+            // Opt-in module-binding gate, the second check after
             // the name filter. The common case (no verifier configured AND
             // no stamp present) is a single cheap match arm → byte-identical
             // to the pre-165 pipeline (GP 13). A present stamp fails closed
@@ -3251,7 +3251,7 @@ module ServerApp =
                 recordOutcome m.Name (ModuleBindingRejected reason) app
             else
 
-                // Phase 169 — registered vs. unbound-allowed. A configured
+                // Registered vs. unbound-allowed. A configured
                 // verifier admitting an unstamped module is the distinct
                 // "unbound-allowed" outcome; everything else loading is a
                 // plain "registered".
@@ -3276,7 +3276,7 @@ module ServerApp =
                 let queryRegistrations = m.QueryHandlers |> List.map (fun h -> m.Name, h)
                 let dataTypeRegistrations = m.DataTypes |> List.map (fun dt -> m.Name, dt)
 
-                // Phase 519 — fan the module's grounding metric / subject
+                // Fan the module's grounding metric / subject
                 // declarations into app-level registration lists, each
                 // tagged with the declaring module so the registry can
                 // answer `MetricsByModule` and the duplicate-id diagnostic
@@ -3303,7 +3303,7 @@ module ServerApp =
                         Description = d
                     })
 
-                // Phase 887 — the module's fact-table declarations, tagged
+                // The module's fact-table declarations, tagged
                 // with the declaring module the same way. Empty for a
                 // module that declares none (byte-identical, GP 13).
                 let factTableRegistrations: Grounding.FactTableRegistration list =
@@ -3320,7 +3320,7 @@ module ServerApp =
                         Description = d
                     })
 
-                // Phase 283 — permit the `component_id` correlation
+                // Permit the `component_id` correlation
                 // dimension on every module metric's tag allowlist so
                 // per-component telemetry can be keyed by the stable
                 // ComponentId across a display-name rename. Additive: the
@@ -3336,7 +3336,7 @@ module ServerApp =
                         Definition = Metrics.ComponentCorrelation.permitComponentIdDimension d
                     })
 
-                // Phase 66 Stream B.3 — fan a module's surface-requirement
+                // Fan a module's surface-requirement
                 // declarations into the app-level accumulators. A module
                 // with no `RoutePrefixes` contributes nothing to the
                 // `ModulePrefixes` registry (its `DefaultSurfaceRequirement`
@@ -3347,7 +3347,7 @@ module ServerApp =
                 let surfaceDefaultsForModule =
                     m.RoutePrefixes |> List.map (fun prefix -> prefix, m.DefaultSurfaceRequirement)
 
-                // Phase 279 — resolve the module's stable ComponentId
+                // Resolve the module's stable ComponentId
                 // (explicit when declared, else name-derived) and
                 // accumulate it for the compose-time uniqueness check in
                 // `run`. A module that declares nothing resolves to
@@ -3356,7 +3356,7 @@ module ServerApp =
                 let resolvedComponentId =
                     m.ComponentId |> Option.defaultValue (ComponentId.ofModule m.Name)
 
-                // Phase 437 — apply the module's declared resource envelope
+                // Apply the module's declared resource envelope
                 // at the two seams whose owning component is only knowable
                 // HERE: its job declarations gain a concurrency gate, and
                 // its route prefixes gain a per-component requests-per-minute
@@ -3378,14 +3378,14 @@ module ServerApp =
                         resolvedComponentId
                         m.JobHandlers
 
-                // Phase 770 — the module's route handlers and AI tools run
+                // The module's route handlers and AI tools run
                 // under the seam-aware service provider, keyed by the id
                 // resolved above. Built here, once per module, because this
                 // is the one place the code and its owner are known
                 // together; each wrapper is a passthrough until a
                 // composition registers an enforcing `SeamConfinement`.
                 //
-                // Phase 773 — inside that, each route the module declared
+                // Inside that, each route the module declared
                 // an effect for runs under its declaration. A module that
                 // declared none gets its handler list back unchanged.
                 let confinedHandlers =
@@ -3412,7 +3412,7 @@ module ServerApp =
                                                 (fun acc k v -> Map.add k v acc)
                                                 config.Observability.SlowRequestThresholdOverrides
                                 }
-                                // Phase 10b — fan the module's declared
+                                // Fan the module's declared
                                 // config-schema migration steps onto the
                                 // app-level set the compose-time registry
                                 // is built from. A module declaring none
@@ -3421,7 +3421,7 @@ module ServerApp =
                                 // (GP 11).
                                 ConfigMigrations = config.ConfigMigrations @ m.ConfigMigrations
                                 NotificationCategories = config.NotificationCategories @ m.NotificationCategories
-                                // Phase 437 — append-only; the empty list
+                                // Append-only; the empty list
                                 // when no envelope declares a request rate.
                                 RateLimits =
                                     config.RateLimits
@@ -3453,7 +3453,7 @@ module ServerApp =
                             app.RegisteredFactTableDescriptions @ factTableDescriptionRegistrations
                         ModuleSurfaceDefaults = app.ModuleSurfaceDefaults @ surfaceDefaultsForModule
                         RouteSurfaceOverrides = app.RouteSurfaceOverrides @ m.RouteSurfaceRequirements
-                        // Phase 637 — the same declarations, keyed by
+                        // The same declarations, keyed by
                         // module id, so route hardening can attribute a
                         // path to the module a profile has an opinion
                         // about. A module declaring no `RoutePrefixes`
@@ -3463,27 +3463,27 @@ module ServerApp =
                         ModuleRoutePrefixes =
                             app.ModuleRoutePrefixes
                             @ (m.RoutePrefixes |> List.map (fun prefix -> m.Name, prefix))
-                        // Phase 9b.B — fan module-level job declarations
+                        // Fan module-level job declarations
                         // onto the app's accumulator. Modules pre-9b.B
                         // declare no `JobHandlers`, so their contribution
                         // is the empty list and behaviour stays byte-
                         // identical.
-                        // Phase 437 — gated where a budget is declared,
+                        // Gated where a budget is declared,
                         // the same reference otherwise.
                         ScheduledJobs = app.ScheduledJobs @ gatedJobHandlers
-                        // Phase 169 — record the load outcome (registered /
+                        // Record the load outcome (registered /
                         // unbound-allowed) for the startup log.
                         ModuleLoadOutcomes = app.ModuleLoadOutcomes @ [ m.Name, loadOutcome ]
-                        // Phase 279 — accumulate the resolved stable id for
+                        // Accumulate the resolved stable id for
                         // the compose-time uniqueness check in `run`.
                         ModuleComponentIds = app.ModuleComponentIds @ [ m.Name, resolvedComponentId ]
-                        // Phase 551 — the module's declared grant policy,
+                        // The module's declared grant policy,
                         // keyed by the SAME `m.Name` this fold appends to
                         // `ModuleNames` and that `withGuardedApi` handed
                         // the dispatch gate. One naming axis, so a policy
                         // cannot drift away from its module.
                         ModuleGrantPolicies = app.ModuleGrantPolicies @ [ m.Name, m.GrantPolicy ]
-                        // Phase 36.C — the module's declared AI exposure,
+                        // The module's declared AI exposure,
                         // on the same naming axis, and only when it
                         // DECLARED one: an undeclared module contributes
                         // nothing, because absence already means
@@ -3501,7 +3501,7 @@ module ServerApp =
                 }
                 |> withRouteEffectObserver m
                 |> withDeclaredRouteEffects resolvedComponentId m
-                // Phase 1042 — the module's delivery-completed hooks.
+                // The module's delivery-completed hooks.
                 |> fun composed ->
                     m.DeliveryCompletedHooks
                     |> List.fold (fun a hook -> withDeliveryCompleted (hook.Name, hook.Callback) a) composed
@@ -3510,7 +3510,7 @@ module ServerApp =
     let addModules (modules: ServerModule list) (app: ServerApp) : ServerApp =
         modules |> List.fold (fun a m -> addModule m a) app
 
-    /// Phase 280 — project the live composition registry into a read-only,
+    /// Project the live composition registry into a read-only,
     /// machine-readable `CompositionManifest`: every registered module,
     /// companion slot, datatype, and tool by its stable Phase 279
     /// `ComponentId`, plus the config knobs that shaped composition.
@@ -3578,7 +3578,7 @@ module ServerApp =
         let configKnobs = [
             CompositionManifest.knob "ProcessProfile" (string app.Config.MultiInstance.ProcessProfile)
             CompositionManifest.featureKnob "ConfigDriftDetection" app.Config.ConfigDriftDetection
-            // Phase 1051 — the two payload-capable unions render their case
+            // The two payload-capable unions render their case
             // name only (`CompositionManifest.caseKnob`), never their `%A`.
             CompositionManifest.caseKnob "JobScheduler" app.Config.JobScheduler
             CompositionManifest.featureKnob "EntityStore" app.Config.Stores.EntityStore
@@ -3588,11 +3588,11 @@ module ServerApp =
             CompositionManifest.featureKnob "SmokeTest" app.Config.SmokeTest
             CompositionManifest.caseKnob "DataSubjectRequests" app.Config.DataSubjectRequests
             CompositionManifest.featureKnob "PeerSubstrate" app.Config.MultiInstance.PeerSubstrate
-            // Phase 526 — the resolved grounding fact-store kind.
+            // The resolved grounding fact-store kind.
             CompositionManifest.featureKnob "FactStore" app.Config.Stores.FactStore
         ]
 
-        // Phase 526 — registered grounding metrics / subjects, keyed by
+        // Registered grounding metrics / subjects, keyed by
         // `ComponentId.forMetric` / `forSubject`, deduplicated. Empty when no
         // module declared any (grounding-free composition unchanged).
         let metricEntries =
@@ -3605,7 +3605,7 @@ module ServerApp =
             |> List.map (fun r -> CompositionManifest.subjectEntry r.Definition.Id)
             |> List.distinct
 
-        // Phase 592 — composition-declared disclosure purposes beside the
+        // Composition-declared disclosure purposes beside the
         // grounding entries, plus the per-surface allowed sets as
         // `DisclosurePurposes.<Surface>` knobs — the whole purpose regime
         // is readable from the manifest before any data flows. Empty when
@@ -3625,7 +3625,7 @@ module ServerApp =
                     (sprintf "DisclosurePurposes.%s" surfaceName)
                     (pairs |> List.map snd |> List.distinct |> String.concat ", "))
 
-        // Phase 936 — the team output-visibility declaration, as
+        // The team output-visibility declaration, as
         // `TeamOutputVisibility.<Default|Allowed>` knobs; none when it is not
         // composed.
         let teamOutputVisibilityKnobs =
@@ -3641,7 +3641,7 @@ module ServerApp =
             (configKnobs @ purposeKnobs @ teamOutputVisibilityKnobs)
         |> CompositionManifest.withGrounding metricEntries subjectEntries
         |> CompositionManifest.withPurposes purposeEntries
-        // Phase 694 — the canonical-method selector each metric declared.
+        // The canonical-method selector each metric declared.
         // The one grounding declaration that changes what an already
         // enumerated metric MEANS, and the one the manifest was silent
         // about: `metricEntry` records the id and nothing else, so two
@@ -3650,7 +3650,7 @@ module ServerApp =
         // Phase 684's envelope now reads back out of the manifest rather
         // than computing a second time.
         |> CompositionManifest.withCanonicalMethods (CompositionManifest.canonicalMethodsOf app.RegisteredMetrics)
-        // Phase 860 — which composed tools are live-interface tools, from
+        // Which composed tools are live-interface tools, from
         // the same definitions `tools` above names, through the predicate
         // the tool-aware RAG framing uses. Not sealed.
         |> CompositionManifest.withLiveInterfaceTools (
@@ -3668,8 +3668,17 @@ module ServerApp =
             ConfigKeys.ConfigKeySeal.project ConfigResolution.tryValue ConfigKeys.keys
             |> List.map (fun (key, rendering) -> CompositionManifest.knob key rendering)
         )
+        // The HTTP pipeline's mounted stages, in order: a stage whose `When`
+        // changes moves the seal. A silo that mounts no HTTP pipeline records
+        // none.
+        |> CompositionManifest.withPipeline (
+            if ProcessProfileGate.shouldRegisterHttpPipeline app.Config then
+                ConfigurePipeline.mounted app.Config |> List.map _.Name
+            else
+                []
+        )
 
-    /// Phase 657 — run the boot verification preflight over the composition
+    /// Run the boot verification preflight over the composition
     /// THIS app derived, and decide whether it may serve.
     ///
     /// The one line a composition root adds between building its app and
@@ -3689,7 +3698,7 @@ module ServerApp =
         : Async<Result<BootVerificationResult, BootVerificationResult>> =
         BootVerificationPreflight.run options (compositionManifest app)
 
-    /// Phase 887 — the composition facts the fact-table preflight
+    /// The composition facts the fact-table preflight
     /// (`FactTablePreflight`) checks: every declared table, the metric and
     /// subject registrations its columns and level resolve against, and
     /// the composition's bindings. Pure and on demand.
@@ -3741,7 +3750,7 @@ module ServerApp =
                     app.RegisteredFactTableDescriptions
             )
 
-    /// Phase 583 — project the live registry into the reference edges the
+    /// Project the live registry into the reference edges the
     /// composition rules read but the `CompositionManifest` cannot carry.
     ///
     /// The manifest is keyed by `ComponentId`, and that keying *collapses*
@@ -3795,7 +3804,7 @@ module ServerApp =
         }
     }
 
-    /// Phase 283 — resolve a composed module's stable Phase 279 `ComponentId`
+    /// Resolve a composed module's stable Phase 279 `ComponentId`
     /// from its display name (the label its audit events carry as
     /// `SourceModule`, and the dimension its metrics namespace under). This
     /// is the correlation join for the audit + telemetry paths: declare an
@@ -3818,7 +3827,7 @@ module ServerApp =
         // builders left it; everything below reads the resolved deployment.
         let app = resolve app
 
-        // Phase 279 — fail fast on a duplicate module ComponentId before
+        // Fail fast on a duplicate module ComponentId before
         // anything binds. Identity collisions break every introspection /
         // telemetry-correlation surface that keys on the id, so they are a
         // compose-time error, not a runtime surprise. A pre-279 app whose
@@ -3826,7 +3835,7 @@ module ServerApp =
         // permission / sidebar key) passes silently (GP 11).
         ComponentId.ensureUnique "module composition" (app.ModuleComponentIds |> List.map snd)
 
-        // Phase 169 — emit the accumulated module-load outcomes through the
+        // Emit the accumulated module-load outcomes through the
         // startup logger. Registered / unbound-allowed log at Debug (silent
         // at the default Info level — GP 13); a name-filter drop logs Info,
         // a binding rejection logs Warn, so a "missing module" is visible.
@@ -3840,7 +3849,7 @@ module ServerApp =
                 | ModuleBindingRejected reason ->
                     logger.Warn(sprintf "module-load: %s binding-rejected: %s" moduleId reason))
 
-        // Phase 519 — metric/subject registration audit. Emit the composed
+        // Metric/subject registration audit. Emit the composed
         // grounding registry (ids + producing modules) through the startup
         // logger so a deploy-over-deploy change in what the app can be
         // planned against is visible in diagnostics (GP 6 at compose time).
@@ -3867,7 +3876,7 @@ module ServerApp =
                         (String.concat ", " subjectIds)
                 ))
 
-        // Phase 887 — the declared fact tables, logged beside the registry
+        // The declared fact tables, logged beside the registry
         // for the same reason. Silent when none is declared (GP 13).
         app.Logger
         |> Option.iter (fun logger ->
@@ -3884,7 +3893,7 @@ module ServerApp =
         // they were written.
         let config = effectiveConfig app
 
-        // Phase 43.A — when a canonical BYOK provider-profile store is
+        // When a canonical BYOK provider-profile store is
         // registered (via `withProviderProfile`, or mirrored from
         // `AIOptions.create` / `RagOptions.create`), fold its
         // `IProviderProfile` DI singleton into the extension's
@@ -3902,7 +3911,7 @@ module ServerApp =
             | None -> contributed
             | Some store -> {
                 contributed with
-                    // Phase 44 — mount the `IProviderProfileApi`
+                    // Mount the `IProviderProfileApi`
                     // transport on the SAME gate that registers the
                     // store, which is the shape every other optional
                     // route in `BuildRouteHandlers` uses: the flag
@@ -3919,7 +3928,7 @@ module ServerApp =
                         |> ServiceConfig.append (fun s -> s.AddSingleton<IProviderProfile>(store))
               }
 
-        // Phase 9h — DSR exporters / erasure handlers. Folded as
+        // DSR exporters / erasure handlers. Folded as
         // `services.AddSingleton<IDataExporter>(exp)` per registered
         // entry so `IDataSubjectRequestApiHandler` resolves
         // `seq<IDataExporter>` / `seq<IErasureHandler>` from
@@ -3955,7 +3964,7 @@ module ServerApp =
                         |> ServiceConfig.append (fun s -> s.AddSingleton<IOAuthCredentialFlow>(flow)))
                     withErasureHandlers
 
-            // Phase 10g — fold each registered OAuth 1.0a flow into DI so the
+            // Fold each registered OAuth 1.0a flow into DI so the
             // `/api/oauth1a/{flowName}/*` handlers resolve it per-request by
             // `Name`. Empty list appends nothing — byte-for-byte the pre-10g
             // graph (GP 13).
@@ -3978,7 +3987,7 @@ module ServerApp =
                     withOAuth1aFlows
                     |> ServiceConfig.append (fun s -> s.AddSingleton<IUserDirectory>(directory))
 
-            // Phase 519 — build the grounding metric & subject registry
+            // Build the grounding metric & subject registry
             // from the accumulated module declarations and fold
             // `IMetricRegistry` into DI (`metricRegistry`, which rejects a
             // duplicate metric/subject id declared by two modules with a
@@ -4011,7 +4020,7 @@ module ServerApp =
                     withRegistry
                     |> ServiceConfig.append (FactTablePreflight.serviceRegistration (factTableComposition app))
 
-            // Phase 447 — fold each registered seed pack into DI as an
+            // Fold each registered seed pack into DI as an
             // `ISeedPack` singleton so `SeedDataLoader` (invoked from
             // `ComposeBootstrap.buildAndRunHost` after the container is built)
             // resolves `seq<ISeedPack>` and applies them. Empty list appends
@@ -4022,7 +4031,7 @@ module ServerApp =
                     (fun acc pack -> acc |> ServiceConfig.append (fun s -> s.AddSingleton<ISeedPack>(pack)))
                     withFactTableRegistry
 
-            // Phase 551 — project the accumulated module grant-policy
+            // Project the accumulated module grant-policy
             // declarations into the `ModuleGrantPolicyRegistry` DI reads.
             //
             // Registered ONLY when a module declares something stricter
@@ -4073,7 +4082,7 @@ module ServerApp =
                         failwith
                             $"""Grant-policy registry names module(s) that are not registered: {String.Join(", ", orphans)}. A declared GrantPolicy must be keyed by a composed module's Name, or the policy silently stops being enforced."""
 
-            // Phase 36.C — project the accumulated AI-exposure
+            // Project the accumulated AI-exposure
             // declarations into the `ModuleAIExposureRegistry` the
             // `_platform.ai.*` gate reads.
             //
@@ -4105,7 +4114,7 @@ module ServerApp =
                         failwith
                             $"""AI-exposure registry names module(s) that are not registered: {String.Join(", ", orphans)}. A declared ModuleAIExposure must be keyed by a composed module's Name, or the module stays invisible to the _platform.ai.* tools with no diagnostic anywhere."""
 
-            // Phase 556 — the grant-notice settings the observer reads.
+            // The grant-notice settings the observer reads.
             // Registered only when a deployment supplied them AND a policy
             // is declared: with no registration the observer falls back to
             // `GrantNotificationSettings.defaults`, and with no registry it
@@ -4119,7 +4128,7 @@ module ServerApp =
                         s.AddSingleton<GrantNotification.GrantNotificationSettings>(settings))
                 | _ -> withAIExposures
 
-            // Phase 728 — the opt-in model-execution leg. `None` (the
+            // The opt-in model-execution leg. `None` (the
             // default) appends no registration, so a composition that does
             // not call `withModelExecution` produces byte-for-byte the
             // pre-728 graph (GP 13). `Some` lands the registry — and
@@ -4138,7 +4147,7 @@ module ServerApp =
                         ComposeModelExecution.register options s
                         s)
 
-            // Phase 281 — fold the composition well-formedness validator into
+            // Fold the composition well-formedness validator into
             // the Phase 9m preflight set. Built here (not in `compose`) because
             // the manifest projector + the AITools accumulator live on this
             // record, one compile-unit after `compose`; the `serviceRegistration`
@@ -4150,16 +4159,16 @@ module ServerApp =
             // was composed (duplicate ComponentId, companion-slot legality,
             // orphaned tool references). Non-security-class — `SkipPreflight`
             // bypasses it, and a well-formed app passes silently (GP 11).
-            // Phase 594 — the pinned data-vocabulary packs + declared
+            // The pinned data-vocabulary packs + declared
             // data-type schemas ride the same reference set, so the
             // vocabulary rules check exactly what the deployment pinned.
             // Both default empty (GP 11 / GP 13), so a deployment that pins
             // no pack is byte-for-byte unchanged.
-            // Phase 583 — the module-graph registration edges ride the same
+            // The module-graph registration edges ride the same
             // reference set (see `compositionReferences`), so the four
             // module-graph rules check exactly what was registered rather
             // than the `ComponentId`-collapsed manifest projection.
-            // Phase 593 — the composition inspector reads the SAME manifest
+            // The composition inspector reads the SAME manifest
             // and reference set, so both are bound once here rather than
             // projected twice off the same record.
             let inspectedManifest = compositionManifest app
@@ -4169,7 +4178,7 @@ module ServerApp =
                 withModelExecutionLeg
                 |> ServiceConfig.append (CompositionValidator.serviceRegistration inspectedManifest inspectedReferences)
 
-            // Phase 593 — register the composition-inspector snapshot for
+            // Register the composition-inspector snapshot for
             // `CompositionInspectorHandler` to serve. Registered HERE, beside
             // the validator above, for the same reason Phase 281 gives: the
             // manifest projector lives on this record, one compile unit after
@@ -4197,12 +4206,12 @@ module ServerApp =
                 )
                 |> ignore
 
-                // Phase 782 — the `--describe` startup mode's renderer, beside
+                // The `--describe` startup mode's renderer, beside
                 // the snapshot it reads, for the same compile-order reason.
                 services.AddSingleton<StartupModes.DescribeRenderer>(ReflectionTools.describeRenderer)
                 |> ignore
 
-                // Phase 860 — the readiness report's live-interface posture
+                // The readiness report's live-interface posture
                 // for a deployment without RAG, read from the manifest bound
                 // above (never re-projected per request); a RAG composition's
                 // own summary wins in either registration order.
@@ -4215,7 +4224,7 @@ module ServerApp =
                 ServiceConfig = registrations
         }
 
-        // Phase 593 — mount the composition-inspector route.
+        // Mount the composition-inspector route.
         //
         // Appended to the handler list rather than added in
         // `BuildRouteHandlers` beside every other admin surface, because the
@@ -4240,7 +4249,7 @@ module ServerApp =
                 )
             ]
 
-        // Phase 16 — `compose` returns `IServerHost`. Kestrel default
+        // `compose` returns `IServerHost`. Kestrel default
         // chains `RunBlocking()` to preserve `int` exit code semantics.
         let host =
             compose {
@@ -4322,7 +4331,7 @@ module ServerApp =
                         (RemotingDecoderFacet.inspectCodecs ())
                 ))
 
-        // Phase 771 — the hardening baseline, observed on the composed
+        // The hardening baseline, observed on the composed
         // pipeline after composition and before serving. A no-op unless the
         // verification route is mounted or a policy is declared (GP 13);
         // throws the Phase 657 refusal when a verified floor is not met.

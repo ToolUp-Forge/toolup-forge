@@ -4,6 +4,7 @@ open System
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
 open ToolUp.Platform.Config
+open ToolUp.Platform.Infra
 
 // ─── SurfaceEnforcementMiddleware — Phase 66 Stream A.5 + A.6 ────────
 //
@@ -32,12 +33,12 @@ open ToolUp.Platform.Config
 //   3. Else `SurfaceRequirement.userOrTeam` (strict global default,
 //      fail-closed per design §3.0 OQ6).
 //
-// **Path scoping.** The middleware only enforces against `/api/*`
-// paths. Static assets, the SPA shell, `/dev/*` diagnostics, and
-// health endpoints pass through unchanged — mirroring the retired
-// `AuthEnforcementMiddleware`'s scoping. `ScopeResolutionMiddleware`
-// also only stashes `Subject` for `/api/*` and `/dev/*`, so paths
-// outside that set arrive here with no Subject and fall through.
+// **Path scoping.** The middleware only enforces against the `/api`
+// surface — the request's stamped `RouteClass` is `Api` or `Sse`.
+// Static assets, the SPA shell, `/dev/*` diagnostics, probes and the
+// metrics scrape pass through unchanged, whatever principal
+// `ScopeResolutionMiddleware` resolved for them (it resolves one for
+// every route; page routes are gated by their own audience check).
 //
 // **Subject source.** Reads the stamped principal's subject
 // (`AccessContext.subjectOf`), stamped by `ScopeResolutionMiddleware` for every `/api/*`
@@ -46,7 +47,7 @@ open ToolUp.Platform.Config
 // returns `Error _` — keeps the matrix uniform across resolver
 // failure modes).
 //
-// **Missing-Subject is fail-CLOSED (Phase 336).** When the items
+// **Missing-Subject is fail-CLOSED.** When the items
 // entry is absent on an `/api/*` path the middleware synthesises a
 // fresh `AnonymousSession` subject and runs the SAME matrix against
 // it, rather than calling `next.Invoke`. The pre-336 fall-through
@@ -111,7 +112,7 @@ module SurfaceRequirementRegistry =
         ModulePrefixes = []
     }
 
-    /// Phase 66 Stream B.4 — explicit per-route overrides for the
+    /// Explicit per-route overrides for the
     /// SDK built-in `TeamApi`'s team-CRUD mutating endpoints. Per
     /// design §3.3 — the `PlatformApi` row's "Per-endpoint overrides:
     /// team-CRUD endpoints require `teamScoped`" caveat:
@@ -165,7 +166,7 @@ module SurfaceRequirementRegistry =
         ("POST", "/api/TeamApi/SetActiveTeam"), SurfaceRequirement.userOrTeam
     ]
 
-    /// Phase 66 Stream B.4 — exact-match overrides the SDK contributes
+    /// Exact-match overrides the SDK contributes
     /// to every deployment regardless of `ServerConfig` shape. Today
     /// only the `TeamApi` team-CRUD set ships here; future B.4
     /// continuations and Stream B.6 (Forms public-submit) extend the
@@ -174,12 +175,6 @@ module SurfaceRequirementRegistry =
     /// `fromServerConfig` private body.
     let sdkBuiltInRouteOverrides: ((string * string) * SurfaceRequirement) list =
         sdkTeamApiCrudOverrides
-
-    /// The SDK's two server-sent-event routes (both `GET`): the assistant's
-    /// stream and the notification stream. One list for the
-    /// `QueryParamFallback` carve-out below and for Phase 1006's reader
-    /// route class.
-    let internal sseRoutes: string list = [ "/api/ai/events"; "/api/notifications" ]
 
     /// Build a registry from the legacy `ServerConfig` carve-out
     /// fields (`Surfaces`, `PeerRoutePrefixes`, `SseAuthMode`). Used
@@ -222,7 +217,9 @@ module SurfaceRequirementRegistry =
 
         let exactSse =
             match config.SecurityPosture.SseAuthMode with
-            | QueryParamFallback -> sseRoutes |> List.map (fun p -> ("GET", p), SurfaceRequirement.public_)
+            | QueryParamFallback ->
+                RouteClassifier.prefixesOf RouteClass.Sse
+                |> List.map (fun p -> ("GET", p), SurfaceRequirement.public_)
             | CookieRequired -> []
 
         let peerPrefixBridge =
@@ -235,7 +232,7 @@ module SurfaceRequirementRegistry =
             else
                 [ "/api/", SurfaceRequirement.public_ ]
 
-        // Phase 66 Stream B.4 — SDK built-in per-route overrides
+        // SDK built-in per-route overrides
         // (today: TeamApi team-CRUD endpoints → `teamScoped`).
         // Normalised here so the keys land in the same shape the
         // resolver looks up against — method upper-cased, path
@@ -256,7 +253,7 @@ module SurfaceRequirementRegistry =
             ModulePrefixes = surfacesBridge @ peerPrefixBridge
         }
 
-    /// Phase 66 Stream B.3 — overlay per-module surface-requirement
+    /// Overlay per-module surface-requirement
     /// declarations on top of a base registry (typically the bridge
     /// returned by `fromServerConfig`). Module declarations win on
     /// exact-match overrides; module-prefix defaults append to the
@@ -324,7 +321,7 @@ module SurfaceRequirementRegistry =
             | Some(_, req) -> req
             | None -> strictDefault
 
-/// Phase 1006 — the class of `/api` route a publication reader was refused
+/// The class of `/api` route a publication reader was refused
 /// on, recorded on its `SurfaceDenied` row (`RouteClass`). A reader is
 /// refused every `/api` route, so the class is what tells a probe of the
 /// assistant from one of team management or an upload. It is derived from
@@ -387,7 +384,7 @@ module ReaderRouteClass =
 
         if
             String.Equals(httpMethod, "GET", StringComparison.OrdinalIgnoreCase)
-            && SurfaceRequirementRegistry.sseRoutes |> List.contains pathLower
+            && RouteClassifier.classify pathLower = RouteClass.Sse
         then
             Sse
         elif isMultipart then
@@ -455,12 +452,12 @@ module SurfaceEnforcement =
                 // an attack-surface probe). 403; no hint.
                 Reject(403, "claim_bearer_not_admitted", None)
             | PublicationReaderKind ->
-                // Phase 1002 — a publication reader is not an app user:
+                // A publication reader is not an app user:
                 // no requirement preset admits it, and it is refused with
                 // the same code `evaluateAdmitted` gives it.
                 Reject(403, "publication_reader_not_admitted", None)
 
-    /// Phase 1006 — whether the request is a publication reader's: its
+    /// Whether the request is a publication reader's: its
     /// admission says so, or its subject does (the subject is the authority
     /// when no admission was stashed). The one predicate the gate and the
     /// refusal audit share.
@@ -468,13 +465,13 @@ module SurfaceEnforcement =
         admission = ToolUp.Platform.Auth.PrincipalAdmission.PublicationReader
         || Subject.kind subject = PublicationReaderKind
 
-    /// Phase 996 — `evaluate`, with the principal's admission. A
+    /// `evaluate`, with the principal's admission. A
     /// `PublicationReader` (admitted to publication pages only, never an app
     /// user) is refused `403 publication_reader_not_admitted`. A `Member` is
     /// evaluated exactly as `evaluate` does, so a deployment with no
     /// publication audience is unchanged.
     ///
-    /// Phase 1002 — the reader is its own subject (`PublicationReader`)
+    /// The reader is its own subject (`PublicationReader`)
     /// whatever the deployment's Surfaces, and it is refused on EVERY `/api`
     /// route under every Surfaces list. Phase 996 let it through a route
     /// that admits anonymous callers; that is closed, because its subject
@@ -510,7 +507,7 @@ let private auditFailureWarner (ctx: HttpContext) : string -> exn -> unit =
 /// Skips emission for CSRF denials — `CsrfMiddleware` is upstream of
 /// this and emits its own observability when wired.
 ///
-/// Phase 1006 — a publication reader's row also carries the route class it
+/// A publication reader's row also carries the route class it
 /// was refused on and the roles it was admitted with (`readerEnrichment`);
 /// both are `None` for every other subject, and the codec then writes the
 /// row byte-identical to its pre-1006 form. A failed write is logged and
@@ -565,7 +562,7 @@ let private emitDenialAudit
     with ex ->
         warn "SurfaceDenied audit" ex
 
-/// Phase 120 — emit the uniform `AuthorizationDenied` row via
+/// Emit the uniform `AuthorizationDenied` row via
 /// `IAuthAuditHook` alongside the legacy `SurfaceDenied` row. The hook
 /// coalesces probing bursts (the per-`(route, subject)` flood guard) and
 /// feeds the generic `/dev/auth-denials` rollup. Best-effort: a missing
@@ -615,7 +612,7 @@ let private writeRejection
         // from the client.
         let warn = auditFailureWarner ctx
         emitDenialAudit ctx warn subject errorCode hint readerEnrichment
-        // Phase 120 — uniform structured denial row alongside SurfaceDenied.
+        // Uniform structured denial row alongside SurfaceDenied.
         emitAuthDenial ctx warn subject errorCode
 
         ctx.Response.StatusCode <- statusCode
@@ -629,7 +626,7 @@ let private writeRejection
         do! ctx.Response.WriteAsync body
     }
 
-/// Phase 336 — best-effort operator signal when an `/api/*` request
+/// Best-effort operator signal when an `/api/*` request
 /// reaches the gate with no stashed `Subject`. The request is still
 /// evaluated (fail-closed, see the module preamble); this only makes
 /// the condition visible, because the pre-336 fall-through was
@@ -663,10 +660,7 @@ let private warnUnresolvedSubject (ctx: HttpContext) : unit =
 type SurfaceEnforcementMiddleware(next: RequestDelegate, registry: SurfaceRequirementRegistry) =
     member _.InvokeAsync(ctx: HttpContext) =
         task {
-            let path = ctx.Request.Path
-            let isApi = path.StartsWithSegments(Microsoft.AspNetCore.Http.PathString "/api")
-
-            if not isApi then
+            if not (RouteClass.isApiSurface (RouteClassifier.ofRequest ctx)) then
                 // Static assets, SPA shell, /dev/*, /health, /ready,
                 // /metrics — all reach handlers without a
                 // SurfaceRequirement gate. Mirrors retired
@@ -681,7 +675,7 @@ type SurfaceEnforcementMiddleware(next: RequestDelegate, registry: SurfaceRequir
                 // pipeline arrangement), or the resolver threw and its
                 // catch continued without stashing.
                 //
-                // Phase 336 — the defensive ACTION is fail-closed: a
+                // The defensive ACTION is fail-closed: a
                 // fresh `AnonymousSession` is synthesised and the SAME
                 // matrix runs against it. `public_` routes still pass;
                 // everything the strict default covers now 401s instead
@@ -696,7 +690,7 @@ type SurfaceEnforcementMiddleware(next: RequestDelegate, registry: SurfaceRequir
                 let requirement =
                     SurfaceRequirementRegistry.resolve registry ctx.Request.Method ctx.Request.Path.Value
 
-                // Phase 996 — the provider's admission rides on the user
+                // The provider's admission rides on the user
                 // `ScopeResolutionMiddleware` stashed; absent, the request
                 // is a member's (or anonymous), evaluated as before.
                 let user =
@@ -712,7 +706,7 @@ type SurfaceEnforcementMiddleware(next: RequestDelegate, registry: SurfaceRequir
                 match SurfaceEnforcement.evaluateAdmitted subject admission requirement with
                 | Pass -> do! next.Invoke(ctx)
                 | Reject(statusCode, errorCode, hint) ->
-                    // Phase 1006 — a reader's refusal row names the route
+                    // A reader's refusal row names the route
                     // class and the roles it was admitted with.
                     let readerEnrichment =
                         if SurfaceEnforcement.isPublicationReader subject admission then

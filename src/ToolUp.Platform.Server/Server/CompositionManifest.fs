@@ -220,6 +220,19 @@ type CompositionManifest = {
     /// `compare` reports a key whose sealed rendering moved when both
     /// manifests record it.
     SealedConfigKeys: ConfigKnob list
+    /// The HTTP pipeline's mounted middleware stages, by name, in pipeline
+    /// order (`ConfigurePipeline.mounted`); empty for a silo that mounts no
+    /// HTTP pipeline.
+    ///
+    /// Read it through `CompositionManifest.pipeline`, and only when
+    /// `recordsPipeline` holds: below `PipelineSchemaVersion` the manifest
+    /// never carried the field.
+    ///
+    /// **Sealed.** `BootVerificationPreflight.compositionCanonicalForm`
+    /// frames it, in pipeline order, for a manifest that records it, and
+    /// `compare` reports a pipeline that changed when both manifests record
+    /// it.
+    Pipeline: string list
 }
 
 /// Element constructors + assembly for `CompositionManifest`. Each
@@ -233,7 +246,7 @@ module CompositionManifest =
 
     /// The schema every manifest this binary projects is stamped with.
     [<Literal>]
-    let SchemaVersion = 5
+    let SchemaVersion = 6
 
     /// The schema of every manifest projected before Phase 694 — the
     /// shape that carried no version field at all, and therefore
@@ -264,6 +277,11 @@ module CompositionManifest =
     /// recorded. Like the three above, a later schema step must not move it.
     [<Literal>]
     let ConfigKeySchemaVersion = 5
+
+    /// The schema at which the HTTP pipeline's mounted stages began to be
+    /// recorded. Like the four above, a later schema step must not move it.
+    [<Literal>]
+    let PipelineSchemaVersion = 6
 
     /// The schema a manifest was projected under, reading an absent or
     /// non-positive field as the pre-694 shape.
@@ -393,6 +411,24 @@ module CompositionManifest =
              manifest.SealedConfigKeys)
         |> List.distinctBy _.Name
         |> List.sortBy _.Name
+
+    // ─── The HTTP pipeline ───────────────────────────────────────────
+
+    /// Whether this manifest is new enough for its `Pipeline` to be
+    /// evidence. `false` means the manifest is SILENT on the middleware,
+    /// which a comparison must report as unrecorded rather than resolve as
+    /// unchanged.
+    let recordsPipeline (manifest: CompositionManifest) : bool =
+        effectiveSchemaVersion manifest >= PipelineSchemaVersion
+
+    /// The recorded mounted stages in pipeline order, with the null-list
+    /// coercion a manifest deserialised from a document predating the field
+    /// needs.
+    let pipeline (manifest: CompositionManifest) : string list =
+        if isNull (box manifest.Pipeline) then
+            []
+        else
+            manifest.Pipeline
 
     let private placementLabel =
         function
@@ -575,6 +611,7 @@ module CompositionManifest =
             LiveInterfaceTools = []
             Plan = []
             SealedConfigKeys = []
+            Pipeline = []
         }
 
     /// Phase 526 — attach registered grounding metric / subject entries to
@@ -643,6 +680,14 @@ module CompositionManifest =
         m with
             SchemaVersion = SchemaVersion
             SealedConfigKeys = (if isNull (box entries) then [] else entries)
+    }
+
+    /// Record the HTTP pipeline's mounted stages, the same way `withPlan`
+    /// records the plan: it stamps `SchemaVersion` as well as the list.
+    let withPipeline (stages: string list) (m: CompositionManifest) : CompositionManifest = {
+        m with
+            SchemaVersion = SchemaVersion
+            Pipeline = (if isNull (box stages) then [] else stages)
     }
 
     /// The empty manifest — what a pipeline that composed nothing (or was

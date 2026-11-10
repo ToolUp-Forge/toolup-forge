@@ -204,6 +204,9 @@ type CompositionDrift =
     /// A seal-relevant config key, recorded by both compositions, whose
     /// sealed rendering moved: the deployment states a different value.
     | ConfigKeyChanged of key: string * recorded: string * observed: string
+    /// The HTTP pipeline's mounted middleware stages moved: a stage was
+    /// mounted or unmounted, or the order changed. Both are named in order.
+    | PipelineChanged of recorded: string list * observed: string list
 
 [<RequireQualifiedAccess>]
 module CompositionDrift =
@@ -234,6 +237,9 @@ module CompositionDrift =
         | ContributionMoved(owner, kind, recordedPosition, observedPosition) ->
             $"contribution '{kind}' by '{owner}' runs at plan position {observedPosition}, recorded at {recordedPosition}"
         | ConfigKeyChanged(key, recorded, observed) -> $"config key {key} is '{observed}', recorded as '{recorded}'"
+        | PipelineChanged(recorded, observed) ->
+            let render (stages: string list) = String.concat ", " stages
+            $"the HTTP pipeline mounts [{render observed}], recorded as [{render recorded}]"
 
 // ─── What an older binding could not record ──────────────
 
@@ -263,6 +269,10 @@ type CompositionUnrecorded =
     /// binding predates config-key recording, or keys the registry gained
     /// since it was sealed. Named by key.
     | ConfigKeysUnrecorded of keys: string list
+    /// The sealed binding predates the manifest's pipeline field, so the
+    /// running middleware could not be compared. `observed` names each
+    /// mounted stage, in pipeline order.
+    | PipelineUnrecorded of observed: string list
 
 [<RequireQualifiedAccess>]
 module CompositionUnrecorded =
@@ -282,6 +292,10 @@ module CompositionUnrecorded =
             let listed = String.concat ", " keys
 
             $"the running composition states {keys.Length} seal-relevant config key(s) the sealed binding did not record ({listed}) — so they could not be compared, and are not evidence that they did not move"
+        | PipelineUnrecorded observed ->
+            let listed = String.concat ", " observed
+
+            $"the running composition mounts {observed.Length} HTTP pipeline stage(s) ({listed}), and the sealed binding predates pipeline recording — so the middleware could not be compared, and is not evidence that it did not move"
 
     /// Stable lowercase code for a payload / dashboard cut.
     let code =
@@ -289,6 +303,7 @@ module CompositionUnrecorded =
         | CanonicalMethodUnrecorded _ -> "canonical-method-unrecorded"
         | ContributionPlanUnrecorded _ -> "contribution-plan-unrecorded"
         | ConfigKeysUnrecorded _ -> "config-keys-unrecorded"
+        | PipelineUnrecorded _ -> "pipeline-unrecorded"
 
 // ─── Verdict ─────────────────────────────────────────────────────────
 
@@ -737,6 +752,11 @@ module BootVerificationPreflight =
     [<Literal>]
     let ConfigKeyFramingVersion = "toolup.compositionmanifest.configkeys.v1"
 
+    /// Framing version for the HTTP pipeline block, like
+    /// `ConfigKeyFramingVersion`.
+    [<Literal>]
+    let PipelineFramingVersion = "toolup.compositionmanifest.pipeline.v1"
+
     /// The schema version the canonical-method block frames: the newest
     /// schema whose additions the seal COVERS, never the manifest's own
     /// `SchemaVersion`.
@@ -752,7 +772,9 @@ module BootVerificationPreflight =
     let private sealedSchemaVersion (manifest: CompositionManifest) : int =
         let effective = CompositionManifest.effectiveSchemaVersion manifest
 
-        if CompositionManifest.recordsConfigKeys manifest then
+        if CompositionManifest.recordsPipeline manifest then
+            min effective CompositionManifest.PipelineSchemaVersion
+        elif CompositionManifest.recordsConfigKeys manifest then
             min effective CompositionManifest.ConfigKeySchemaVersion
         elif CompositionManifest.recordsPlan manifest then
             min effective CompositionManifest.PlanSchemaVersion
@@ -848,6 +870,15 @@ module BootVerificationPreflight =
             for entry in configKeys do
                 frame entry.Name
                 frame entry.Value
+
+        if CompositionManifest.recordsPipeline manifest then
+            let stages = CompositionManifest.pipeline manifest
+
+            frame PipelineFramingVersion
+            frame (string stages.Length)
+
+            for stage in stages do
+                frame stage
 
         builder.ToString()
 
@@ -1115,11 +1146,26 @@ module BootVerificationPreflight =
             else
                 []
 
+        // The mounted middleware, compared only when both manifests record
+        // it: one finding naming both orders when they differ.
+        let pipelineFindings =
+            if
+                CompositionManifest.recordsPipeline recorded
+                && CompositionManifest.recordsPipeline observed
+                && CompositionManifest.pipeline recorded <> CompositionManifest.pipeline observed
+            then
+                [
+                    PipelineChanged(CompositionManifest.pipeline recorded, CompositionManifest.pipeline observed)
+                ]
+            else
+                []
+
         componentFindings
         @ knobFindings
         @ canonicalMethodFindings
         @ contributionFindings
         @ configKeyFindings
+        @ pipelineFindings
 
     /// Every declaration the running composition makes that
     /// the sealed binding is too old to have recorded.
@@ -1191,7 +1237,21 @@ module BootVerificationPreflight =
             else
                 []
 
-        canonicalMethodItems @ planItems @ configKeyItems
+        // The mounted middleware, when the binding predates it and the
+        // running composition mounts at least one stage.
+        let pipelineItems =
+            let stages = CompositionManifest.pipeline observed
+
+            if
+                not stages.IsEmpty
+                && not (CompositionManifest.recordsPipeline recorded)
+                && CompositionManifest.recordsPipeline observed
+            then
+                [ PipelineUnrecorded stages ]
+            else
+                []
+
+        canonicalMethodItems @ planItems @ configKeyItems @ pipelineItems
 
     // ─── Verifying ───────────────────────────────────────────────────
 

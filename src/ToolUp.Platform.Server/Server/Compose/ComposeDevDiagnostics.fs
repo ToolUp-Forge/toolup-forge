@@ -11,7 +11,7 @@ open ToolUp.Platform.Audit
 
 // ─── compose phase: dev-diagnostics capture ──────────────────────────
 //
-// Phase 9a — capture the `IServiceCollection` descriptors before
+// Capture the `IServiceCollection` descriptors before
 // `Build()`. After `Build()` the collection is sealed, so the descriptor
 // snapshot has to happen here. Same pass also builds per-module
 // summaries from the flat `dataTypeRegistrations` and `config.ModuleConfigs`
@@ -56,7 +56,7 @@ let buildDevDiagnosticsCapture
     // The platform tier's own indexed stores. A companion's store (the
     // blob fact store, Phase 890) is not reachable from here; it registers
     // a `DevDiagnosticsHandler.IIndexConsistencyInspector`, which the
-    // handler runs beside these (Phase 946).
+    // handler runs beside these.
     let inspectors = [
         match persistentEventStore with
         | Some s -> yield (fun (scopeId: string) -> s.IndexConsistencyCheck(scopeId, 20))
@@ -67,7 +67,7 @@ let buildDevDiagnosticsCapture
         | None -> ()
     ]
 
-    // Phase 1g — composition audit panel. Each entry names a gateable
+    // Composition audit panel. Each entry names a gateable
     // feature, the resolved mode (after auto-detection), whether it's
     // currently active in this deployment, and the `ServerConfig` field
     // a deployment uses to change it. Single source of truth for
@@ -109,7 +109,7 @@ let buildDevDiagnosticsCapture
             match config.JobScheduler with
             | NoJobScheduler -> "NoJobScheduler"
             | InProcessJobScheduler -> "InProcessJobScheduler"
-            // Phase 9c.E — the Quartz companion. The scheduler NAME is
+            // The Quartz companion. The scheduler NAME is
             // part of the panel's answer: two deployments on this mode
             // differ by which Quartz instance they drive.
             | QuartzJobScheduler quartz -> $"QuartzJobScheduler({quartz.SchedulerName})"
@@ -184,5 +184,11 @@ let buildDevDiagnosticsCapture
         TotalRouteHandlers = handlers.Length
         IndexInspectors = inspectors
         LightweightFeatures = lightweightFeatures
+        PipelineStages =
+            ConfigurePipeline.stages
+            |> List.map (fun stage -> {
+                DevDiagnosticsHandler.PipelineStageEntry.Name = stage.Name
+                DevDiagnosticsHandler.PipelineStageEntry.Mounted = stage.When config
+            })
         CompositionSeam = compositionSeam
     }

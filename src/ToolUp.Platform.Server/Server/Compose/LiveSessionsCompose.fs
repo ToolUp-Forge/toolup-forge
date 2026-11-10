@@ -32,7 +32,7 @@ open Microsoft.Extensions.DependencyInjection
 // Phase 56 substrate) and the options set a budget, each subscribe is
 // counted per-scope per-minute; over-budget requests get the standard
 // 429 + `Retry-After`. No store registered → no limiting. A store that
-// fails is decided by `SubscribeStorePosture` (Phase 1068): `FailOpen`
+// fails is decided by `SubscribeStorePosture`: `FailOpen`
 // (the default) admits the subscribe, `FailClosed` refuses it with 503
 // and a `RateLimitRefused` audit row under the caller's scope.
 //
@@ -77,26 +77,15 @@ module LiveSessionHandler =
     [<Literal>]
     let FrameEventName = "live-frame"
 
-    /// The subscriber's scope id: the per-request `AccessContext`'s
-    /// active team when present, else its stable subject id — matching
-    /// the partition `ILiveSessionHost` sessions are opened under (the
-    /// team resolver's `StorageScope.ScopeId` is the team id; the user
-    /// resolver's is the user id). Falls back to the SSE-conventional
-    /// `X-User-Id` / `userId`-query resolution when no `AccessContext`
-    /// is registered (matching `NotificationHandler`).
-    let private scopeIdOf (ctx: HttpContext) : string =
-        match ctx.RequestServices.GetService(typeof<AccessContext>) with
-        | :? AccessContext as ac -> ac.TeamId |> Option.defaultValue ac.UserId
-        | _ ->
-            match AccessContext.callerIdOf ctx.Items with
-            | Some id when not (String.IsNullOrEmpty id) && id <> "anonymous" -> id
-            | _ ->
-                match ctx.Request.Query.TryGetValue "userId" with
-                | true, values when values.Count > 0 -> string values[0]
-                | _ ->
-                    match ctx.Request.Headers.TryGetValue "X-User-Id" with
-                    | true, values when values.Count > 0 -> string values[0]
-                    | _ -> "anonymous"
+    /// The partition a validated principal's live sessions are opened
+    /// under: its active team when present, else its user id (the team
+    /// resolver's `StorageScope.ScopeId` is the team id; the user
+    /// resolver's is the user id). The rest of the resolution — the
+    /// `CookieRequired` refusal, the `?userId=` mismatch audit, the
+    /// `QueryParamFallback` fallback — is `SseScopeResolution`'s, the one
+    /// resolver every SSE endpoint uses.
+    let private partitionOf (access: AccessContext) : string =
+        access.TeamId |> Option.defaultValue access.UserId
 
     let private write429 (ctx: HttpContext) (retryAfterSeconds: int) (message: string) = task {
         ctx.Response.StatusCode <- 429
@@ -108,8 +97,9 @@ module LiveSessionHandler =
 
     /// The SSE subscribe endpoint: `GET {Route}/{sessionId}`. Non-match
     /// paths skip to the next handler. Unknown session (or a session id
-    /// from another scope — structurally indistinguishable) → 404.
-    let handler (options: LiveSessionOptions) (host: ILiveSessionHost) : HttpHandler =
+    /// from another scope — structurally indistinguishable) → 404. A
+    /// connect with no validated principal under `CookieRequired` → 401.
+    let handler (sseAuthMode: SseAuthMode) (options: LiveSessionOptions) (host: ILiveSessionHost) : HttpHandler =
         let prefix = options.Route.TrimEnd('/') + "/"
 
         fun (_next: HttpFunc) (ctx: HttpContext) ->
@@ -127,188 +117,192 @@ module LiveSessionHandler =
                     if String.IsNullOrEmpty sessionId || sessionId.Contains '/' then
                         return! skipPipeline
                     else
-                        let scopeId = scopeIdOf ctx
+                        match SseScopeResolution.resolveWith partitionOf sseAuthMode ctx with
+                        | SseScopeResolution.SseUnauthenticated ->
+                            do! SseScopeResolution.refuseUnauthenticated ctx
+                            return Some ctx
+                        | SseScopeResolution.SseScope scopeId ->
 
-                        // Per-scope subscribe budget via the Phase 56
-                        // substrate, when both the store and a budget are
-                        // present.
-                        let! verdict = task {
-                            match options.SubscribesPerMinutePerScope with
-                            | None -> return None
-                            | Some budget ->
-                                match ctx.RequestServices.GetService(typeof<IRateLimitStore>) with
-                                | :? IRateLimitStore as store ->
-                                    let key = InboundComposite $"live-sessions:%s{scopeId}"
-                                    let! result = store.IncrementAndCheck(key, PerMinute, budget)
-                                    let verdict = RateLimitVerdict.ofResult options.SubscribeStorePosture result
+                            // Per-scope subscribe budget via the Phase 56
+                            // substrate, when both the store and a budget are
+                            // present.
+                            let! verdict = task {
+                                match options.SubscribesPerMinutePerScope with
+                                | None -> return None
+                                | Some budget ->
+                                    match ctx.RequestServices.GetService(typeof<IRateLimitStore>) with
+                                    | :? IRateLimitStore as store ->
+                                        let key = InboundComposite $"live-sessions:%s{scopeId}"
+                                        let! result = store.IncrementAndCheck(key, PerMinute, budget)
+                                        let verdict = RateLimitVerdict.ofResult options.SubscribeStorePosture result
 
-                                    match verdict, ctx.RequestServices.GetService(typeof<ILogger>) with
-                                    | RateLimitVerdict.AdmittedOnStoreFailure reason, (:? ILogger as l) ->
-                                        l.Warn
-                                            $"Live-session subscribe budget store failed for scope %s{scopeId}; admitting (StorePosture.FailOpen): %s{reason}"
+                                        match verdict, ctx.RequestServices.GetService(typeof<ILogger>) with
+                                        | RateLimitVerdict.AdmittedOnStoreFailure reason, (:? ILogger as l) ->
+                                            l.Warn
+                                                $"Live-session subscribe budget store failed for scope %s{scopeId}; admitting (StorePosture.FailOpen): %s{reason}"
+                                        | _ -> ()
+
+                                        return Some verdict
+                                    | _ -> return None
+                            }
+
+                            match verdict with
+                            | Some(RateLimitVerdict.Answered(Admission.Deny retryAfter)) ->
+                                return!
+                                    write429
+                                        ctx
+                                        (RateLimitedError.retryAfterSeconds retryAfter)
+                                        $"Live-session subscribe budget exceeded for scope %s{scopeId}."
+                            | Some(RateLimitVerdict.RefusedOnStoreFailure reason) ->
+                                do!
+                                    RateLimitVerdict.auditRefusal
+                                        (ToolUp.Platform.Config.Background.auditLogOf ctx)
+                                        scopeId
+                                        "live-sessions:subscribe"
+                                        reason
+
+                                ctx.Response.StatusCode <- 503
+                                ctx.Response.ContentType <- "text/plain; charset=utf-8"
+                                do! ctx.Response.WriteAsync "Live-session subscribe budget unavailable."
+                                return Some ctx
+                            | None
+                            | Some(RateLimitVerdict.Answered(Admission.Admit _))
+                            | Some(RateLimitVerdict.AdmittedOnStoreFailure _) ->
+                                // Every byte after the headers goes through ONE
+                                // writer: a bounded single-reader
+                                // queue drained by a loop that awaits each write
+                                // and flush — `SSEConnectionManager`'s
+                                // `ConnectionWriter`, reused rather than copied.
+                                // The handler is asynchronous now,
+                                // but awaiting it does not remove the need for
+                                // the queue: two concurrent pushes, and the
+                                // keepalive below, are still separate writers,
+                                // and Kestrel refuses a write issued while
+                                // another is in flight. The queue is what makes
+                                // them one; the handler only enqueues.
+                                let logger =
+                                    match ctx.RequestServices.GetService(typeof<ILogger>) with
+                                    | :? ILogger as l -> Some l
+                                    | _ -> None
+
+                                // Ends the keepalive wait below: the client
+                                // disconnecting (`RequestAborted`), or the writer
+                                // dying on a failed write or a full queue.
+                                use ended = CancellationTokenSource.CreateLinkedTokenSource ctx.RequestAborted
+
+                                // Set once this handler ends the subscription
+                                // itself; a writer stopped by us is not a fault.
+                                let stopping = ref 0
+                                let reported = ref 0
+                                let firstFault: exn ref = ref null
+
+                                let endSubscription (fault: string option) =
+                                    match fault with
+                                    | Some reason when
+                                        Volatile.Read(&stopping.contents) = 0
+                                        && not ctx.RequestAborted.IsCancellationRequested
+                                        && Interlocked.Exchange(&reported.contents, 1) = 0
+                                        ->
+                                        let detail =
+                                            match Volatile.Read(&firstFault.contents) with
+                                            | null -> ""
+                                            | ex -> $": %s{ex.GetType().Name}: %s{ex.Message}"
+
+                                        logger
+                                        |> Option.iter (fun l ->
+                                            l.Warn
+                                                $"Live session %s{sessionId} (scope %s{scopeId}): %s{reason}%s{detail}; the subscription is ended.")
                                     | _ -> ()
 
-                                    return Some verdict
-                                | _ -> return None
-                        }
+                                    try
+                                        ended.Cancel()
+                                    with :? ObjectDisposedException ->
+                                        ()
 
-                        match verdict with
-                        | Some(RateLimitVerdict.Answered(Admission.Deny retryAfter)) ->
-                            return!
-                                write429
-                                    ctx
-                                    (RateLimitedError.retryAfterSeconds retryAfter)
-                                    $"Live-session subscribe budget exceeded for scope %s{scopeId}."
-                        | Some(RateLimitVerdict.RefusedOnStoreFailure reason) ->
-                            do!
-                                RateLimitVerdict.auditRefusal
-                                    (ToolUp.Platform.Config.Background.auditLogOf ctx)
-                                    scopeId
-                                    "live-sessions:subscribe"
-                                    reason
+                                // Opens once the SSE headers and the ready comment
+                                // are on the wire, so a frame published between
+                                // `Subscribe` and that point waits in the queue
+                                // instead of writing a body ahead of the headers.
+                                let opened =
+                                    TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously)
 
-                            ctx.Response.StatusCode <- 503
-                            ctx.Response.ContentType <- "text/plain; charset=utf-8"
-                            do! ctx.Response.WriteAsync "Live-session subscribe budget unavailable."
-                            return Some ctx
-                        | None
-                        | Some(RateLimitVerdict.Answered(Admission.Admit _))
-                        | Some(RateLimitVerdict.AdmittedOnStoreFailure _) ->
-                            // Every byte after the headers goes through ONE
-                            // writer (Phase 870): a bounded single-reader
-                            // queue drained by a loop that awaits each write
-                            // and flush — `SSEConnectionManager`'s
-                            // `ConnectionWriter`, reused rather than copied.
-                            // The handler is asynchronous now,
-                            // but awaiting it does not remove the need for
-                            // the queue: two concurrent pushes, and the
-                            // keepalive below, are still separate writers,
-                            // and Kestrel refuses a write issued while
-                            // another is in flight. The queue is what makes
-                            // them one; the handler only enqueues.
-                            let logger =
-                                match ctx.RequestServices.GetService(typeof<ILogger>) with
-                                | :? ILogger as l -> Some l
-                                | _ -> None
+                                let response = SseConnectionSink.fromHttpResponse ctx.Response ctx.RequestAborted
 
-                            // Ends the keepalive wait below: the client
-                            // disconnecting (`RequestAborted`), or the writer
-                            // dying on a failed write or a full queue.
-                            use ended = CancellationTokenSource.CreateLinkedTokenSource ctx.RequestAborted
+                                let sink =
+                                    { new IConnectionSink with
+                                        member _.DisconnectToken = ctx.RequestAborted
 
-                            // Set once this handler ends the subscription
-                            // itself; a writer stopped by us is not a fault.
-                            let stopping = ref 0
-                            let reported = ref 0
-                            let firstFault: exn ref = ref null
-
-                            let endSubscription (fault: string option) =
-                                match fault with
-                                | Some reason when
-                                    Volatile.Read(&stopping.contents) = 0
-                                    && not ctx.RequestAborted.IsCancellationRequested
-                                    && Interlocked.Exchange(&reported.contents, 1) = 0
-                                    ->
-                                    let detail =
-                                        match Volatile.Read(&firstFault.contents) with
-                                        | null -> ""
-                                        | ex -> $": %s{ex.GetType().Name}: %s{ex.Message}"
-
-                                    logger
-                                    |> Option.iter (fun l ->
-                                        l.Warn
-                                            $"Live session %s{sessionId} (scope %s{scopeId}): %s{reason}%s{detail}; the subscription is ended.")
-                                | _ -> ()
-
-                                try
-                                    ended.Cancel()
-                                with :? ObjectDisposedException ->
-                                    ()
-
-                            // Opens once the SSE headers and the ready comment
-                            // are on the wire, so a frame published between
-                            // `Subscribe` and that point waits in the queue
-                            // instead of writing a body ahead of the headers.
-                            let opened =
-                                TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously)
-
-                            let response = SseConnectionSink.fromHttpResponse ctx.Response ctx.RequestAborted
-
-                            let sink =
-                                { new IConnectionSink with
-                                    member _.DisconnectToken = ctx.RequestAborted
-
-                                    member _.WriteFrame(bytes, ct) = async {
-                                        try
-                                            do! opened.Task.WaitAsync(ct) |> Async.AwaitTask
-                                            do! response.WriteFrame(bytes, ct)
-                                        with ex ->
-                                            Interlocked.CompareExchange(&firstFault.contents, ex, null) |> ignore
-                                            return raise ex
+                                        member _.WriteFrame(bytes, ct) = async {
+                                            try
+                                                do! opened.Task.WaitAsync(ct) |> Async.AwaitTask
+                                                do! response.WriteFrame(bytes, ct)
+                                            with ex ->
+                                                Interlocked.CompareExchange(&firstFault.contents, ex, null) |> ignore
+                                                return raise ex
+                                        }
                                     }
+
+                                let writer =
+                                    ConnectionWriter(
+                                        sink,
+                                        ConnectionWriterDefaults.QueueCapacity,
+                                        ConnectionWriterDefaults.PerWriteTimeoutMs,
+                                        fun () -> endSubscription (Some "a frame write failed")
+                                    )
+
+                                // A disconnecting client stops the writer at once —
+                                // its queue is dropped and an in-flight write is
+                                // cancelled — without waiting for this handler to
+                                // wake and unsubscribe.
+                                use _ = ctx.RequestAborted.Register(fun () -> writer.Stop())
+
+                                let enqueue (bytes: byte[]) =
+                                    if not (writer.TryEnqueue bytes) then
+                                        endSubscription (Some "the frame queue is full")
+
+                                // Subscribe inside the caller's own scope
+                                // partition — a cross-scope session id resolves
+                                // to None here, structurally (GP 4).
+                                let writeFrame (payload: string) = async {
+                                    if not ctx.RequestAborted.IsCancellationRequested then
+                                        enqueue (SSE.namedFrame FrameEventName payload)
                                 }
 
-                            let writer =
-                                ConnectionWriter(
-                                    sink,
-                                    ConnectionWriterDefaults.QueueCapacity,
-                                    ConnectionWriterDefaults.PerWriteTimeoutMs,
-                                    fun () -> endSubscription (Some "a frame write failed")
-                                )
+                                let stopWriter () = task {
+                                    Volatile.Write(&stopping.contents, 1)
+                                    writer.Stop()
+                                    do! writer.Completion
+                                }
 
-                            // A disconnecting client stops the writer at once —
-                            // its queue is dropped and an in-flight write is
-                            // cancelled — without waiting for this handler to
-                            // wake and unsubscribe.
-                            use _ = ctx.RequestAborted.Register(fun () -> writer.Stop())
+                                let! subscription = host.Subscribe(scopeId, sessionId, writeFrame)
 
-                            let enqueue (bytes: byte[]) =
-                                if not (writer.TryEnqueue bytes) then
-                                    endSubscription (Some "the frame queue is full")
+                                match subscription with
+                                | None ->
+                                    do! stopWriter ()
+                                    ctx.Response.StatusCode <- 404
+                                    ctx.Response.ContentType <- "text/plain; charset=utf-8"
+                                    do! ctx.Response.WriteAsync "Unknown live session."
+                                    return Some ctx
+                                | Some subscriptionId ->
+                                    try
+                                        do! SSE.writeReadyResponse ctx.Response
+                                        opened.TrySetResult() |> ignore
 
-                            // Subscribe inside the caller's own scope
-                            // partition — a cross-scope session id resolves
-                            // to None here, structurally (GP 4).
-                            let writeFrame (payload: string) = async {
-                                if not ctx.RequestAborted.IsCancellationRequested then
-                                    enqueue (SSE.namedFrame FrameEventName payload)
-                            }
+                                        // Keepalives ride the same queue as frames,
+                                        // so they cannot interleave with one either.
+                                        while not ended.IsCancellationRequested do
+                                            do! Task.Delay(15000, ended.Token)
+                                            enqueue SSE.keepaliveBytes
+                                    with
+                                    | :? OperationCanceledException -> ()
+                                    | ex ->
+                                        Interlocked.CompareExchange(&firstFault.contents, ex, null) |> ignore
+                                        endSubscription (Some "opening the stream failed")
 
-                            let stopWriter () = task {
-                                Volatile.Write(&stopping.contents, 1)
-                                writer.Stop()
-                                do! writer.Completion
-                            }
-
-                            let! subscription = host.Subscribe(scopeId, sessionId, writeFrame)
-
-                            match subscription with
-                            | None ->
-                                do! stopWriter ()
-                                ctx.Response.StatusCode <- 404
-                                ctx.Response.ContentType <- "text/plain; charset=utf-8"
-                                do! ctx.Response.WriteAsync "Unknown live session."
-                                return Some ctx
-                            | Some subscriptionId ->
-                                try
-                                    do! SSE.writeReadyResponse ctx.Response
-                                    opened.TrySetResult() |> ignore
-
-                                    // Keepalives ride the same queue as frames,
-                                    // so they cannot interleave with one either.
-                                    while not ended.IsCancellationRequested do
-                                        do! Task.Delay(15000, ended.Token)
-                                        enqueue SSE.keepaliveBytes
-                                with
-                                | :? OperationCanceledException -> ()
-                                | ex ->
-                                    Interlocked.CompareExchange(&firstFault.contents, ex, null) |> ignore
-                                    endSubscription (Some "opening the stream failed")
-
-                                Volatile.Write(&stopping.contents, 1)
-                                do! host.Unsubscribe(scopeId, sessionId, subscriptionId)
-                                do! stopWriter ()
-                                return Some ctx
+                                    Volatile.Write(&stopping.contents, 1)
+                                    do! host.Unsubscribe(scopeId, sessionId, subscriptionId)
+                                    do! stopWriter ()
+                                    return Some ctx
                 }
 
 module LiveSessionsCompose =
@@ -339,6 +333,10 @@ module LiveSessionsCompose =
 
         {
             app with
-                Extensions.Handlers = app.Extensions.Handlers @ [ LiveSessionHandler.handler options host ]
+                Extensions.Handlers =
+                    app.Extensions.Handlers
+                    @ [
+                        LiveSessionHandler.handler app.Config.SecurityPosture.SseAuthMode options host
+                    ]
         }
         |> ServerApp.addServiceConfig registerHost

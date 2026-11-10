@@ -6,6 +6,7 @@ module ToolUp.Platform.Scope.SessionRevocation
 open System
 open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.Caching.Memory
+open ToolUp.Platform.Infra
 open ToolUp.Platform
 open ToolUp.Platform.Auth
 open ToolUp.Platform.Config
@@ -136,7 +137,7 @@ type SessionRevocationMiddleware(next: RequestDelegate, config: ServerConfig) =
             // whose store is not composed (GP 11).
             do! next.Invoke ctx
         | Some options ->
-            let isApi = ctx.Request.Path.StartsWithSegments(PathString "/api")
+            let isApi = RouteClass.isApiSurface (RouteClassifier.ofRequest ctx)
 
             let derived =
                 if not isApi then

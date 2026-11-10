@@ -9,10 +9,12 @@ open Microsoft.AspNetCore.Http
 open ToolUp.Platform
 open ToolUp.Platform.Config
 
-// ─── Phase 117 — shared SSE scope resolution ─────────────────────────
+// ─── Shared SSE scope resolution ─────────────────────────────────────
 //
 // One scope-resolution path for every SSE endpoint (`/api/notifications`
-// here in ToolUp.Platform.Server; `/api/ai/events` in ToolUp.AI.Server).
+// here in ToolUp.Platform.Server; `/api/ai/events` in ToolUp.AI.Server;
+// the live-session stream, which names its own partition through
+// `resolveWith`).
 // The two handlers previously carried hand-copied variants of this logic
 // and drifted: the AI handler gained the `SseAuthMode` gate
 // (`CookieRequired` → 401, no client-trusted fallback) while the
@@ -40,13 +42,11 @@ let mismatchDenialCode = "sse_userid_principal_mismatch"
 
 /// Emit the principal/param-mismatch audit row + Warn. Best-effort and
 /// fire-and-forget — observability must not stall or fail the connect: the
-/// row is started through `Background.startAudit` (Phase 1026), so a
+/// row is started through `Background.startAudit`, so a
 /// failing sink is a Warning, never a failed connect or a crashed host.
 /// Mirrors `SurfaceEnforcementMiddleware.emitDenialAudit`: a
 /// `SurfaceDenied` row on scope `_platform` with a distinct
-/// `DenialCode`. Phase 120's generic authz-denial hook will consume
-/// this event as one of its inputs; a dedicated `AuditEvent` case can
-/// land there if the mismatch row needs richer structure.
+/// `DenialCode`.
 let private emitMismatchAudit (ctx: HttpContext) (principalId: string) (assertedId: string) : unit =
     let logger = Background.requestLogger ctx
 
@@ -93,7 +93,7 @@ let private emitMismatchAudit (ctx: HttpContext) (principalId: string) (asserted
                 Hint = Some(sprintf "asserted=%s" assertedId)
                 CorrelationId = ToolUp.Remoting.Server.CallContext.correlationId ()
                 OccurredAt = DateTimeOffset.UtcNow
-                // Phase 1006 — the reader enrichment belongs to surface
+                // The reader enrichment belongs to surface
                 // enforcement's refusal row, not this mismatch row.
                 RouteClass = None
                 ReaderRoles = None
@@ -108,19 +108,20 @@ let private emitMismatchAudit (ctx: HttpContext) (principalId: string) (asserted
             warn "SurfaceDenied audit" ex
     | _ -> ()
 
-/// Resolve the subscriber scope for an SSE connect.
+/// Resolve the subscriber scope for an SSE connect, naming the scope a
+/// validated principal subscribes under with `scopeOf`.
 ///
-/// The middleware-resolved identity (`AccessContext.callerIdOf ctx.Items`,
-/// populated by `ScopeResolutionMiddleware`) always wins. The guard
-/// excludes `"anonymous"` so EventSource connections (which cannot set
+/// The middleware-resolved identity (the stamped `AccessContext`, populated
+/// by `ScopeResolutionMiddleware`) always wins when its caller id is a
+/// validated principal. The guard excludes `"anonymous"` (an anonymous
+/// session's caller id) so EventSource connections (which cannot set
 /// custom headers) fall through to the `?userId=` query param in
-/// Anonymous-mode deployments — the middleware writes `"anonymous"`
-/// when no header is present, which would otherwise register the
-/// connection under one shared scope and drop notifications destined
-/// for the per-tab session id.
+/// Anonymous-mode deployments — otherwise every anonymous tab would
+/// register under one shared scope and drop notifications destined for
+/// its per-tab session id.
 ///
-/// When a validated principal is present and `?userId=` mismatches it,
-/// the param is ignored *and* audited (`SurfaceDenied` +
+/// When a validated principal is present and `?userId=` mismatches its
+/// caller id, the param is ignored *and* audited (`SurfaceDenied` +
 /// `sse_userid_principal_mismatch`) — probing must be visible (GP 6).
 ///
 /// The `?userId=` / `X-User-Id` fallback is honoured ONLY under
@@ -129,20 +130,28 @@ let private emitMismatchAudit (ctx: HttpContext) (principalId: string) (asserted
 /// explicitly opted in). Under `CookieRequired` a missing /
 /// `"anonymous"` resolved identity yields `SseUnauthenticated` → the
 /// caller refuses with 401.
-let resolve (sseAuthMode: SseAuthMode) (ctx: HttpContext) : SseScopeResult =
+let resolveWith (scopeOf: AccessContext -> string) (sseAuthMode: SseAuthMode) (ctx: HttpContext) : SseScopeResult =
     let queryUserId =
         match ctx.Request.Query.TryGetValue "userId" with
         | true, values when values.Count > 0 -> Some(string values[0])
         | _ -> None
 
-    match AccessContext.callerIdOf ctx.Items with
-    | Some id when not (String.IsNullOrEmpty id) && id <> "anonymous" ->
+    let principal =
+        AccessContext.ofItems ctx.Items
+        |> Option.filter (fun access ->
+            let id = AccessContext.callerId access
+            not (String.IsNullOrEmpty id) && id <> "anonymous")
+
+    match principal with
+    | Some access ->
+        let id = AccessContext.callerId access
+
         match queryUserId with
         | Some asserted when asserted <> id -> emitMismatchAudit ctx id asserted
         | _ -> ()
 
-        SseScope id
-    | _ ->
+        SseScope(scopeOf access)
+    | None ->
         match sseAuthMode with
         | CookieRequired -> SseUnauthenticated
         | QueryParamFallback ->
@@ -152,6 +161,12 @@ let resolve (sseAuthMode: SseAuthMode) (ctx: HttpContext) : SseScopeResult =
                 match ctx.Request.Headers.TryGetValue "X-User-Id" with
                 | true, values when values.Count > 0 -> SseScope(string values[0])
                 | _ -> SseScope "anonymous"
+
+/// Resolve the subscriber scope for a per-user SSE stream (the notification
+/// and assistant streams): a validated principal subscribes under its own
+/// caller id.
+let resolve (sseAuthMode: SseAuthMode) (ctx: HttpContext) : SseScopeResult =
+    resolveWith AccessContext.callerId sseAuthMode ctx
 
 /// Write the `CookieRequired`-mode 401 refusal. Shared so the two SSE
 /// endpoints answer an unauthenticated connect byte-for-byte the same.

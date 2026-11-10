@@ -45,6 +45,26 @@ let private validate (config: ServerConfig) : ValidationResult =
 
     v.Validate() |> Async.RunSynchronously
 
+/// Every `Notification` case with the route it takes. The payloads are
+/// irrelevant to routing, so the transactional envelopes are defaults.
+let private routeTable: (Notification * NotificationKind.Route) list = [
+    Notification.SystemMessage(SystemMessageLevel.Info, "hi"), NotificationKind.Route.SseFanOut
+    Notification.JobCompleted(System.Guid.Empty, "done", None), NotificationKind.Route.SseFanOut
+    Notification.DataRefreshed("dt", "scope"), NotificationKind.Route.SseFanOut
+    Notification.TeamActivity("kind", "summary"), NotificationKind.Route.SseFanOut
+    Notification.ModuleAction("module", "action", "{}"), NotificationKind.Route.SseFanOut
+    Notification.CustomNotification("key", "{}"), NotificationKind.Route.SseFanOut
+    Notification.MembershipChanged Unchecked.defaultof<MembershipChangedPayload>, NotificationKind.Route.SseFanOut
+    Notification.TransactionalEmail Unchecked.defaultof<EmailEnvelope>,
+    NotificationKind.Route.Sink NotificationKind.SinkKind.Email
+    Notification.TransactionalSms Unchecked.defaultof<SmsEnvelope>,
+    NotificationKind.Route.Sink NotificationKind.SinkKind.Sms
+    Notification.MobilePush Unchecked.defaultof<PushEnvelope>,
+    NotificationKind.Route.Sink(NotificationKind.SinkKind.Push NotificationKind.PushVariant.WebPush)
+    Notification.TransactionalWhatsApp Unchecked.defaultof<WhatsAppEnvelope>,
+    NotificationKind.Route.Sink NotificationKind.SinkKind.WhatsApp
+]
+
 [<Tests>]
 let tests =
     testList "Phase 58 — NoNotificationsExplicit composition" [
@@ -128,5 +148,48 @@ let tests =
                 (validate (cfg Surfaces.team 3 (RedisNotifications "localhost:6379")))
                 Ok
                 "Redis is the lone distributed mode"
+        }
+
+        // ── One routing decision per notification ──────────────────────
+        // `NotificationKind.route` is the one function every consumer
+        // reads (the transactional decorator, the dispatcher's sink lookup,
+        // the SSE handler's filter). One pin per case, and the table is
+        // held complete against the union.
+        test "route sends each of the eleven notification cases to exactly one place" {
+            for notification, expected in routeTable do
+                Expect.equal
+                    (NotificationKind.route notification)
+                    expected
+                    $"{NotificationKind.ofNotification notification} routes where it always did"
+
+                Expect.equal
+                    (NotificationKind.isTransactional notification)
+                    (expected <> NotificationKind.Route.SseFanOut)
+                    $"{NotificationKind.ofNotification notification}: isTransactional is a projection of route"
+
+                Expect.equal
+                    (NotificationKind.sinkKindOf notification)
+                    (match expected with
+                     | NotificationKind.Route.Sink kind -> Some kind
+                     | NotificationKind.Route.SseFanOut -> None)
+                    $"{NotificationKind.ofNotification notification}: sinkKindOf is a projection of route"
+        }
+
+        test "the route table pins every case of the union" {
+            let cases =
+                Microsoft.FSharp.Reflection.FSharpType.GetUnionCases typeof<Notification>
+                |> Array.map _.Name
+                |> Set.ofArray
+
+            let pinned =
+                routeTable
+                |> List.map (fun (n, _) ->
+                    (Microsoft.FSharp.Reflection.FSharpValue.GetUnionFields(n, typeof<Notification>)
+                     |> fst)
+                        .Name)
+                |> Set.ofList
+
+            Expect.equal cases.Count 11 "eleven notification cases"
+            Expect.equal pinned cases "every case is pinned"
         }
     ]

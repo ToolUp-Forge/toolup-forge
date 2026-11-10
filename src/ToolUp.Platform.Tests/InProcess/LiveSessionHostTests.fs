@@ -14,6 +14,7 @@ open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Config
 
 // ─── Phase 112 — live-session host + endpoint tests ──────────────────
 //
@@ -88,7 +89,10 @@ let private endpointTests =
         testCase "non-matching path falls through to the next handler"
         <| fun _ ->
             let host = LiveSessionHost.createInMemory None
-            let handler = LiveSessionHandler.handler LiveSessionOptions.defaults host
+
+            let handler =
+                LiveSessionHandler.handler QueryParamFallback LiveSessionOptions.defaults host
+
             let ctx, _ = mkContext (ServiceCollection()) "/api/other" cancelled
 
             let result = (handler finalFunc ctx).GetAwaiter().GetResult()
@@ -107,7 +111,8 @@ let private endpointTests =
                 | Ok d -> d
                 | Error r -> failtestf "open failed: %A" r
 
-            let handler = LiveSessionHandler.handler LiveSessionOptions.defaults host
+            let handler =
+                LiveSessionHandler.handler QueryParamFallback LiveSessionOptions.defaults host
 
             let ctx, _ =
                 mkContext (ServiceCollection()) $"/api/live-sessions/%s{d.SessionId}" cancelled
@@ -125,7 +130,7 @@ let private endpointTests =
                     SubscribesPerMinutePerScope = Some 1
             }
 
-            let handler = LiveSessionHandler.handler options host
+            let handler = LiveSessionHandler.handler QueryParamFallback options host
             let services = ServiceCollection()
 
             services.AddSingleton<IRateLimitStore>(InMemoryRateLimitStore.create ())
@@ -152,7 +157,9 @@ let private endpointTests =
                 | Ok d -> d
                 | Error r -> failtestf "open failed: %A" r
 
-            let handler = LiveSessionHandler.handler LiveSessionOptions.defaults host
+            let handler =
+                LiveSessionHandler.handler QueryParamFallback LiveSessionOptions.defaults host
+
             use cts = new CancellationTokenSource()
 
             let ctx, body =
@@ -240,7 +247,7 @@ let private postureTests =
         services.AddSingleton<IAuditLog>(audit) |> ignore
         let ctx, _ = mkContext services "/api/live-sessions/nope" cancelled
 
-        (LiveSessionHandler.handler options host finalFunc ctx).GetAwaiter().GetResult()
+        (LiveSessionHandler.handler QueryParamFallback options host finalFunc ctx).GetAwaiter().GetResult()
         |> ignore
 
         ctx, audit
@@ -270,6 +277,93 @@ let private postureTests =
                 Expect.equal row.Provider "live-sessions:subscribe" "names the budget that could not be counted"
                 Expect.stringContains row.Reason "simulated outage" "carries the store's reason"
             | other -> failtestf "expected one RateLimitRefused row, got %A" other
+    ]
+
+// ─── The live-session route resolves its scope through the one SSE resolver
+
+let private resolverTests =
+    testList "LiveSessionHandler — the one SSE scope resolver" [
+        testCase "CookieRequired: a connect with no validated principal is refused with 401"
+        <| fun _ ->
+            let host = LiveSessionHost.createInMemory None
+
+            let d =
+                match host.OpenSession(scope "anonymous") |> run with
+                | Ok d -> d
+                | Error r -> failtestf "open failed: %A" r
+
+            let handler =
+                LiveSessionHandler.handler CookieRequired LiveSessionOptions.defaults host
+
+            let ctx, body =
+                mkContext (ServiceCollection()) $"/api/live-sessions/%s{d.SessionId}" cancelled
+
+            ctx.Request.QueryString <- QueryString "?userId=anonymous"
+            (handler finalFunc ctx).GetAwaiter().GetResult() |> ignore
+
+            Expect.equal ctx.Response.StatusCode 401 "no client-asserted id opens a stream under CookieRequired"
+            body.Position <- 0L
+            let text = (new StreamReader(body)).ReadToEnd()
+            Expect.stringContains text "SseAuthMode = CookieRequired" "the shared refusal body"
+
+        testCase "a mismatching ?userId= on the live-session route is audited, and the principal's partition wins"
+        <| fun _ ->
+            let host = LiveSessionHost.createInMemory None
+            let audit = RecordingAuditLog()
+            let services = ServiceCollection()
+            services.AddSingleton<IAuditLog>(audit) |> ignore
+
+            let handler =
+                LiveSessionHandler.handler QueryParamFallback LiveSessionOptions.defaults host
+
+            let ctx, _ = mkContext services "/api/live-sessions/nope" cancelled
+            ctx.Request.QueryString <- QueryString "?userId=mallory"
+            AccessContext.stamp ctx.Items (AccessContexts.teamMember "alice" "team-42")
+
+            (handler finalFunc ctx).GetAwaiter().GetResult() |> ignore
+
+            Expect.equal ctx.Response.StatusCode 404 "no such session in the team partition"
+
+            let deadline = DateTime.UtcNow.AddSeconds 5.0
+
+            while List.isEmpty audit.Rows && DateTime.UtcNow < deadline do
+                Thread.Sleep 5
+
+            match audit.Rows with
+            | [ _, AuditEvent.SurfaceDenied row ] ->
+                Expect.equal row.DenialCode SseScopeResolution.mismatchDenialCode "the mismatch denial code"
+                Expect.equal row.Hint (Some "asserted=mallory") "names the asserted id"
+            | other -> failtestf "expected one SurfaceDenied row, got %A" other
+
+        testCase "a validated team member subscribes under its team partition"
+        <| fun _ ->
+            let host = LiveSessionHost.createInMemory None
+
+            let d =
+                match host.OpenSession(scope "team-42") |> run with
+                | Ok d -> d
+                | Error r -> failtestf "open failed: %A" r
+
+            let handler =
+                LiveSessionHandler.handler CookieRequired LiveSessionOptions.defaults host
+
+            use cts = new CancellationTokenSource()
+
+            let ctx, body =
+                mkContext (ServiceCollection()) $"/api/live-sessions/%s{d.SessionId}" cts.Token
+
+            AccessContext.stamp ctx.Items (AccessContexts.teamMember "alice" "team-42")
+            let serving = handler finalFunc ctx
+            let mutable waited = 0
+
+            while (body.Length = 0L) && waited < 200 do
+                Thread.Sleep 10
+                waited <- waited + 1
+
+            cts.Cancel()
+            serving.GetAwaiter().GetResult() |> ignore
+
+            Expect.equal ctx.Response.StatusCode 200 "the stream opened under the team partition"
     ]
 
 let private burstTests =
@@ -307,7 +401,9 @@ let private burstTests =
                                 | Ok d -> d
                                 | Error r -> failtestf "open failed: %A" r
 
-                            let handler = LiveSessionHandler.handler LiveSessionOptions.defaults host
+                            let handler =
+                                LiveSessionHandler.handler QueryParamFallback LiveSessionOptions.defaults host
+
                             use cts = new CancellationTokenSource()
 
                             let ctx, _ =
@@ -351,4 +447,11 @@ let private burstTests =
     ]
 
 let tests =
-    testList "LiveSessionHost (Phase 112)" [ contractTests; capTests; endpointTests; postureTests; burstTests ]
+    testList "LiveSessionHost (Phase 112)" [
+        contractTests
+        capTests
+        endpointTests
+        postureTests
+        resolverTests
+        burstTests
+    ]

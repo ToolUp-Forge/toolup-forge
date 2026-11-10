@@ -41,7 +41,7 @@ open Microsoft.AspNetCore.Http
 // `UseStaticFiles` isn't registered when `PublicPath` doesn't exist —
 // so the SPA fallback's `next.Invoke` path is never reached.
 
-// Phase 988 — precedence against server-rendered routes. The shell-first
+// Precedence against server-rendered routes. The shell-first
 // order above is right for a pure SPA: every extensionless path is the
 // client router's. It is wrong once the deployment also serves pages from
 // the server — SSR slugs, gated pages, a server-side sign-in callback —
@@ -55,7 +55,7 @@ open Microsoft.AspNetCore.Http
 // and paths with an extension are excluded in both orders, and static
 // files are served upstream of this middleware in both.
 
-/// Phase 988 — which answers an extensionless GET first: the SPA shell or
+/// Which answers an extensionless GET first: the SPA shell or
 /// the server's router. Registered in DI by a composition that serves
 /// server-rendered routes (`ToolUp.PublicRendering`, the interactive SSR
 /// sign-in); absent means `ShellFirst`.
@@ -76,7 +76,7 @@ module SpaFallbackPrecedence =
         services.RemoveAll<SpaFallbackPrecedence>() |> ignore
         services.AddSingleton<SpaFallbackPrecedence>(RouterFirst)
 
-/// Phase 1137 — a path the SPA fallback must leave to the server's router
+/// A path the SPA fallback must leave to the server's router
 /// in BOTH precedence orders, registered in DI by a composition that mounts
 /// a server-answered route which is neither under `/api` nor `/dev`
 /// (`ServerApp.withBuildIdentity` registers `/version`). Absent, the
@@ -92,13 +92,16 @@ type SpaFallbackMiddleware
     let publicPath = Path.GetFullPath config.PublicPath
     let indexPath = Path.Combine(publicPath, "index.html")
 
-    let isExcluded (path: string) =
-        path.StartsWith("/api/", StringComparison.OrdinalIgnoreCase)
-        || path.Equals("/api", StringComparison.OrdinalIgnoreCase)
-        || path.Equals("/health", StringComparison.OrdinalIgnoreCase)
-        || path.Equals("/ready", StringComparison.OrdinalIgnoreCase)
-        || path.StartsWith("/dev/", StringComparison.OrdinalIgnoreCase)
-        || path.Equals("/dev", StringComparison.OrdinalIgnoreCase)
+    /// The route classes the server's router answers: the `/api` surface,
+    /// `/dev` and the probes, read off the request's stamped class.
+    let isExcluded (routeClass: RouteClass) =
+        match routeClass with
+        | RouteClass.Api
+        | RouteClass.Sse
+        | RouteClass.Dev
+        | RouteClass.Health -> true
+        | RouteClass.Metrics
+        | RouteClass.Page -> false
 
     let excludedPaths = excluded |> Seq.map _.Path |> Array.ofSeq
 
@@ -106,7 +109,7 @@ type SpaFallbackMiddleware
         excludedPaths
         |> Array.exists (fun e -> path.Equals(e, StringComparison.OrdinalIgnoreCase))
 
-    /// No registered exclusions: the fixed list above, exactly as before.
+    /// No registered exclusions: the fixed classes above, exactly as before.
     new(next: RequestDelegate, config: ServerConfig) = SpaFallbackMiddleware(next, config, Seq.empty)
 
     member _.InvokeAsync(ctx: HttpContext) = task {
@@ -116,7 +119,7 @@ type SpaFallbackMiddleware
         let shouldServe =
             isGet
             && not (String.IsNullOrEmpty path)
-            && not (isExcluded path)
+            && not (isExcluded (RouteClassifier.ofRequest ctx))
             && not (isRegisteredExclusion path)
             && not (Path.HasExtension path)
             && File.Exists indexPath

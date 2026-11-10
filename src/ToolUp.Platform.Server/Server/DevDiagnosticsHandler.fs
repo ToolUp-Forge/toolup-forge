@@ -17,7 +17,7 @@ open ToolUp.Platform.Compose.ConfigValidatorAggregator
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
 
-// ─── Dev diagnostics endpoint (Phase 9a) ─────────────────────────────
+// ─── Dev diagnostics endpoint ─────────────────────────────
 //
 // Debug-only `/dev/inspect` endpoint that surfaces registered modules,
 // the caller's resolved `AccessContext` / `StorageScope`, a snapshot of
@@ -89,7 +89,7 @@ type ServiceEntry = {
     Implementation: string option
 }
 
-/// One row in the "Lightweight profile" panel (Phase 1g). Lists every
+/// One row in the "Lightweight profile" panel. Lists every
 /// gateable feature, the resolved mode (after `NotificationsAuto`
 /// auto-detection has run), whether the feature is currently active in
 /// this deployment, and the `ServerConfig` field a deployment uses to
@@ -102,7 +102,7 @@ type LightweightFeatureEntry = {
     ConfigPath: string
 }
 
-/// One row in the "Health checks" panel (Phase 9k). Lists every
+/// One row in the "Health checks" panel. Lists every
 /// registered `IHealthCheck` with its current outcome — operators
 /// reading `/dev/inspect` see the same probe results that back
 /// `/ready` without making a second HTTP round-trip. Probes are
@@ -116,7 +116,7 @@ type HealthCheckSummary = {
     Message: string
 }
 
-/// One row in the "Config preflight" panel (Phase 9m). Surfaces the
+/// One row in the "Config preflight" panel. Surfaces the
 /// snapshot captured at compose end — operators see whether the
 /// deployment passed startup-time preflight without grepping the
 /// startup log. Snapshot, not live re-run: validators are heavier
@@ -168,6 +168,10 @@ type ProcessProfileSummary = {
     Units: ProcessProfileUnitEntry list
 }
 
+/// One middleware stage of the HTTP pipeline, in pipeline order, with its
+/// `When` evaluated against the deployment's configuration.
+type PipelineStageEntry = { Name: string; Mounted: bool }
+
 type DevDiagnosticsReport = {
     Generated: string
     BuildMode: string
@@ -182,25 +186,25 @@ type DevDiagnosticsReport = {
     /// registered. Sampled for the caller's resolved scope only —
     /// never enumerates across teams.
     IndexConsistency: SecondaryIndex.IndexConsistencyEntry list
-    /// Phase 1g — lightweight composition profile. Lists every
+    /// Lightweight composition profile. Lists every
     /// gateable feature, its resolved mode, and whether it's currently
     /// active. Source of truth for "what's running in this
     /// deployment?" diagnostics; future phases use it to confirm GP 13
     /// compliance without trawling DI dumps.
     LightweightFeatures: LightweightFeatureEntry list
-    /// Phase 1f — composition-seam summary. Hook counts and the
+    /// Composition-seam summary. Hook counts and the
     /// configured `SecurityHeaders` keys (values redacted) so the
     /// dev panel shows what the consumer wired through
     /// `withPreMiddleware` / `withPostMiddleware` /
     /// `ServerConfig.SecurityPosture.SecurityHeaders` / `ServerConfig.SecurityPosture.Cors`.
     CompositionSeam: CompositionSeamSummary
-    /// Phase 9k — per-probe health-check status. Empty when no
+    /// Per-probe health-check status. Empty when no
     /// probes are registered; otherwise one entry per `IHealthCheck`
     /// resolved from the caller's `HttpContext.RequestServices`.
     /// Probes are invoked in parallel with their declared timeout,
     /// mirroring the BCL aggregator behind `/ready`.
     HealthChecks: HealthCheckSummary list
-    /// Phase 9m — config preflight outcomes from the most recent
+    /// Config preflight outcomes from the most recent
     /// startup. Empty when no validators are registered or
     /// `ServerConfig.SkipPreflight = true`. Snapshot captured at
     /// end-of-compose; this endpoint does NOT re-run validators on
@@ -209,7 +213,7 @@ type DevDiagnosticsReport = {
     /// amplify side effects).
     Validators: ValidatorSummary list
 
-    /// Phase 6h follow-up — Workstream B. Open extension surface for
+    /// Workstream B. Open extension surface for
     /// `IDevDiagnosticsContributor` registrations. Each entry is one
     /// contributor's `(panelName, payload)` return; `payload` is
     /// already serialised to a JSON string so the wire DTO is
@@ -223,9 +227,11 @@ type DevDiagnosticsReport = {
     /// whether this silo admits it. Appended at the end of the report so
     /// existing JSON consumers continue to find every field they expect.
     ProcessProfile: ProcessProfileSummary
+    /// The HTTP pipeline's stages in order, each marked mounted or not.
+    Pipeline: PipelineStageEntry list
 }
 
-/// Phase 9a follow-up — the `/dev/version` payload. Answers "is this
+/// The `/dev/version` payload. Answers "is this
 /// deployment running the build I think it is?" from one request:
 /// the SDK version, the commit it was built from, every loaded
 /// `ToolUp.*` assembly's version, and the two timestamps an operator
@@ -286,7 +292,7 @@ type ServiceDescriptorSnapshot = {
     ImplementationTypeName: string option
 }
 
-/// Phase 946 — an indexed store's consistency inspector, registered
+/// An indexed store's consistency inspector, registered
 /// through DI by a companion whose store this tier cannot reference (the
 /// fact store lives in the facts companion). `/dev/inspect` runs every
 /// registered inspector beside the compose-time ones in
@@ -307,15 +313,17 @@ type DevDiagnosticsCapture = {
     /// instance at compose time so the handler doesn't need to
     /// service-locate. Empty when no indexed store is registered.
     IndexInspectors: (string -> Async<SecondaryIndex.IndexConsistencyEntry list>) list
-    /// Phase 1g — composition audit. One entry per gateable feature
+    /// Composition audit. One entry per gateable feature
     /// with the resolved mode (after auto-detection) and whether it's
     /// active in this deployment. Built by `compose` and surfaced via
     /// `/dev/inspect`'s "Lightweight profile" panel.
     LightweightFeatures: LightweightFeatureEntry list
-    /// Phase 1f — composition-seam summary captured at compose time.
+    /// Composition-seam summary captured at compose time.
     /// Hook counts (pre/post middleware), `SecurityHeaders` keys
     /// (values redacted), CORS active flag.
     CompositionSeam: CompositionSeamSummary
+    /// The HTTP pipeline's stages in order, each `When` evaluated at compose.
+    PipelineStages: PipelineStageEntry list
 }
 
 // ─── Snapshot helpers ────────────────────────────────────────────────
@@ -360,7 +368,7 @@ let snapshotServices (services: IServiceCollection) : ServiceDescriptorSnapshot 
 
 // ─── Per-request builders ────────────────────────────────────────────
 
-/// Phase 946 — every index inspector `/dev/inspect` runs: the compose-time
+/// Every index inspector `/dev/inspect` runs: the compose-time
 /// ones (`DevDiagnosticsCapture.IndexInspectors`), then every
 /// `IIndexConsistencyInspector` the request's services resolve.
 let indexInspectors
@@ -561,7 +569,7 @@ let private buildDataCatalog (ctx: HttpContext) = async {
         return entries |> List.ofArray
 }
 
-/// Phase 6h follow-up — Workstream B. Resolve every DI-registered
+/// Workstream B. Resolve every DI-registered
 /// `IDevDiagnosticsContributor`, await each one's `Contribute()`, and
 /// JSON-serialise the returned payload. Failures in individual
 /// contributors are isolated — one slow / throwing contributor cannot
@@ -724,6 +732,7 @@ let buildReport
             Validators = validators
             Contributors = contributors
             ProcessProfile = processProfile
+            Pipeline = capture.PipelineStages
         }
     }
 
@@ -756,7 +765,7 @@ let private assemblyVersionString (asm: System.Reflection.Assembly) : string =
 /// The build identity of one assembly: its informational version with the
 /// `+<metadata>` suffix removed, and the commit that suffix carries. The
 /// single reader behind both `/dev/version` (the Sdk and Commit slots) and
-/// the production `/version` route (Phase 1137), so the two cannot disagree
+/// the production `/version` route, so the two cannot disagree
 /// about what a build's commit is.
 type BuildIdentity = {
     /// The informational version without its `+<metadata>` suffix.
@@ -991,6 +1000,29 @@ let private renderHtml (report: DevDiagnosticsReport) : string =
 
     sb.AppendLine "</table>" |> ignore
 
+    // The pipeline's stages in order; an unmounted stage costs nothing and
+    // is listed so the order reads whole.
+    sb.AppendLine "<h3>Pipeline stages</h3>" |> ignore
+
+    sb.AppendLine "<table><tr><th>#</th><th>Stage</th><th>Mounted</th></tr>"
+    |> ignore
+
+    report.Pipeline
+    |> List.iteri (fun index stage ->
+        sb.AppendLine(
+            sprintf
+                "<tr><td>%d</td><td><code>%s</code></td><td>%s</td></tr>"
+                (index + 1)
+                (encode stage.Name)
+                (if stage.Mounted then
+                     okTick
+                 else
+                     """<span class="muted">not mounted</span>""")
+        )
+        |> ignore)
+
+    sb.AppendLine "</table>" |> ignore
+
     sb.AppendLine
         """<p class="muted">See <code>technical-guide/13-deployment-shapes.md</code> for the three pure-Kestrel deployment shapes and the cross-silo coordination contract. Each unit declares its placement; the one rule that admits it lives in <code>Server/Compose/Hosting.fs</code>.</p>"""
     |> ignore
@@ -1115,7 +1147,7 @@ let private renderHtml (report: DevDiagnosticsReport) : string =
 
         sb.AppendLine "</table>" |> ignore
 
-    // Composition seam (Phase 1f)
+    // Composition seam
     sb.AppendLine "<h2>Composition seam</h2>" |> ignore
     sb.AppendLine "<table>" |> ignore
 
@@ -1165,11 +1197,11 @@ let private renderHtml (report: DevDiagnosticsReport) : string =
         """<p class="muted">Hook values are not dereferenced; security-header values are redacted (CSP / Permissions-Policy may carry deployment-private data).</p>"""
     |> ignore
 
-    // Health checks (Phase 9k)
+    // Health checks
     sb.AppendLine(sprintf "<h2>Health checks (%d)</h2>" report.HealthChecks.Length)
     |> ignore
 
-    // Phase 9p — cross-link to the production-safe operator UI. Same
+    // Cross-link to the production-safe operator UI. Same
     // per-probe data, accessible to Owner/Admin without enabling
     // `EnableDevEndpoints` in production.
     sb.AppendLine
@@ -1213,13 +1245,13 @@ let private renderHtml (report: DevDiagnosticsReport) : string =
 
         sb.AppendLine "</table>" |> ignore
 
-    // Config preflight (Phase 9m) — snapshot captured at compose end,
+    // Config preflight — snapshot captured at compose end,
     // not re-run on dev-page hit. Status reflects the most recent
     // startup; restart the deployment to refresh.
     sb.AppendLine(sprintf "<h2>Config preflight (%d)</h2>" report.Validators.Length)
     |> ignore
 
-    // Phase 9p — cross-link to the production-safe operator UI.
+    // Cross-link to the production-safe operator UI.
     // Same snapshot, accessible to Owner/Admin without enabling
     // `EnableDevEndpoints` in production.
     sb.AppendLine
@@ -1262,7 +1294,7 @@ let private renderHtml (report: DevDiagnosticsReport) : string =
 
         sb.AppendLine "</table>" |> ignore
 
-    // Lightweight profile (Phase 1g)
+    // Lightweight profile
     sb.AppendLine(sprintf "<h2>Lightweight profile (%d)</h2>" report.LightweightFeatures.Length)
     |> ignore
 
@@ -1317,7 +1349,7 @@ let private renderHtml (report: DevDiagnosticsReport) : string =
 
     sb.AppendLine "</table>" |> ignore
 
-    // Phase 6h follow-up — Workstream B. Contributor panels.
+    // Workstream B. Contributor panels.
     if not (Map.isEmpty report.Contributors) then
         sb.AppendLine "<hr><h2>Contributor panels</h2>" |> ignore
 
@@ -1367,7 +1399,7 @@ let private versionHandler: HttpHandler =
         return! next ctx
     }
 
-/// The production-safe `/version` route (Phase 1137). Answers the ENTRY
+/// The production-safe `/version` route. Answers the ENTRY
 /// assembly's version and commit and nothing else: no assembly list, no
 /// path, no timestamp. It is NOT part of `routes`, so `EnableDevEndpoints`
 /// does not govern it; a deployment mounts it with

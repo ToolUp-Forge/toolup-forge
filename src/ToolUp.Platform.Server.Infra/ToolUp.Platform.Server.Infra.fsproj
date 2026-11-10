@@ -446,6 +446,10 @@
         <Compile Include="..\ToolUp.Platform.Server\Server\TelemetryApiHandler.fs" />
         <Compile Include="..\ToolUp.Platform.Server\Server\PlatformAdmin\RateLimitEventApi.fs" />
         <Compile Include="..\ToolUp.Platform.Server\Server\DatadogReadbackHandlers.fs" />
+        <!-- The route class: one table, stamped once by RequestIdMiddleware and read by
+             every middleware that used to keep its own prefix list. Before
+             RequestTimingMiddleware.fs and RateLimiting.fs, its first readers. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\RouteClass.fs" />
         <Compile Include="..\ToolUp.Platform.Server\Server\RequestTimingMiddleware.fs" />
         <Compile Include="..\ToolUp.Platform.Server\Server\MetricsEndpoint.fs" />
         <!-- Prerendered-routes middleware. Maps GET /route to

@@ -65,6 +65,7 @@ let private emptyCapture: DevDiagnosticsHandler.DevDiagnosticsCapture = {
         CorsConfigured = false
         NotificationConsumers = []
     }
+    PipelineStages = []
 }
 
 /// The dev-diagnostics route list exactly as `compose` mounts it: the
@@ -261,5 +262,37 @@ let tests =
             Expect.isTrue
                 resp.Headers.CacheControl.NoStore
                 "Cache-Control: no-store — a cached build id is worse than none"
+        }
+
+        test "/dev/inspect's capture lists the pipeline's stages in order, each When evaluated" {
+            let config = {
+                ServerConfig.defaults with
+                    EnableDevEndpoints = true
+            }
+
+            let capture =
+                ComposeDevDiagnostics.buildDevDiagnosticsCapture
+                    config
+                    []
+                    []
+                    ComposeExtensions.empty
+                    NoNotifications
+                    None
+                    None
+                    (ServiceCollection())
+
+            Expect.equal
+                (capture.PipelineStages |> List.map _.Name)
+                (ConfigurePipeline.stages |> List.map _.Name)
+                "every stage, in pipeline order"
+
+            Expect.equal
+                (capture.PipelineStages |> List.filter _.Mounted |> List.map _.Name)
+                (ConfigurePipeline.mounted config |> List.map _.Name)
+                "mounted exactly where its When holds"
+
+            Expect.isFalse
+                (capture.PipelineStages |> List.find (fun s -> s.Name = "HttpsRedirection")).Mounted
+                "a stage whose When is false shows as unmounted"
         }
     ]

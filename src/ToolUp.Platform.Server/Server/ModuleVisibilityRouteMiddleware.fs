@@ -118,7 +118,7 @@ type ModuleVisibilityRouteMiddleware(next: RequestDelegate, registry: ModuleRout
         task {
             let path = ctx.Request.Path
 
-            if not (path.StartsWithSegments(PathString "/api")) then
+            if not (RouteClass.isApiSurface (RouteClassifier.ofRequest ctx)) then
                 do! next.Invoke ctx
             else
                 match ModuleRouteRegistry.owningModule registry (string path) with

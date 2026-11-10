@@ -72,7 +72,7 @@ module SubjectRequestExtractor =
         // the only sanctioned construction path.
         let! user = authProvider.GetUser(ToolUp.Platform.Scope.RequestContextBuilder.ofHttpContext ctx)
 
-        // Phase 337 — the sealed binding cookie is the ONLY source of a
+        // The sealed binding cookie is the ONLY source of a
         // verified anonymous session id. When it is present the id it
         // carries wins outright, including over a differing `X-User-Id`:
         // the server-issued value is authoritative and the header is an
@@ -155,9 +155,9 @@ module StorageScopeDerivation =
                         (DeploymentConfig.surfacesLabel config)
                 )
 
-    /// Phase 1060 — the scope key a subject holds, if it holds one: a
-    /// session, a user, a team or a claim. `None` for a `PublicationReader`
-    /// (Phase 1002), which holds no scope of its own — no `user-<id>`,
+    /// The scope key a subject holds, if it holds one: a
+    /// session, a user, a team or a claim. `None` for a `PublicationReader`,
+    /// which holds no scope of its own — no `user-<id>`,
     /// `team-<id>` or session container.
     let tryKeyFromSubject (subject: Subject) : ScopeKey option =
         match subject with
@@ -174,7 +174,7 @@ module StorageScopeDerivation =
     /// ephemeral). `logger` (best-effort) receives the one-time diagnostic
     /// when that default fires.
     ///
-    /// Phase 1002 — `None` for a `PublicationReader`: the middleware stashes
+    /// `None` for a `PublicationReader`: the middleware stashes
     /// no `StorageScope` for it and every scope read fails closed. It reads
     /// a publishing scope only through the audience gate of a `Publication`
     /// page that names its readers.
@@ -189,7 +189,7 @@ module StorageScopeDerivation =
             StorageScope.ofKey persistence.Persist key)
 
     /// Derive the storage scope for a subject that holds one. Raises for a
-    /// `PublicationReader` (Phase 1002), which holds none — a caller that
+    /// `PublicationReader`, which holds none — a caller that
     /// can meet a reader uses `tryFromSubject`; inventing a container for
     /// it would hand a non-member a scope of its own.
     let fromSubject (logger: ILogger option) (config: ServerConfig) (subject: Subject) : StorageScope =
@@ -210,7 +210,7 @@ module SubjectResolutionErrorBridge =
         | SubjectResolutionError.NotTeamMember teamId -> NotTeamMember teamId
         | SubjectResolutionError.SubjectResolutionFailed msg -> ScopeResolutionFailed msg
 
-/// Phase 246 — observe an authorization-shaped scope-resolution
+/// Observe an authorization-shaped scope-resolution
 /// downgrade. When `ISubjectResolver.Resolve` returns `Error err`, the
 /// middleware synthesises an anonymous fallback; pre-246 that was silent
 /// (`| Error _ -> ()`), so a user who was removed from their team
@@ -303,7 +303,7 @@ let private observeResolverErrorDowngrade
         with ex ->
             warn "scope-downgrade audit" ex
 
-/// Phase 1002 — a publication reader's sign-in audit. The reader holds no
+/// A publication reader's sign-in audit. The reader holds no
 /// scope, so the member's login audit (which runs where a scope was
 /// derived) never fires for it; this is its counterpart. One
 /// `PublicationReaderSignedIn` row per reader per session window (the same
@@ -340,7 +340,7 @@ let internal recordPublicationReaderSignIn
                     PublicationReaderSignedIn {
                         SubjectKind = AuditSubject.kindString ReaderAuditKind
                         ReaderId = readerId
-                        // Phase 1107 — plus the roles granted in the platform.
+                        // Plus the roles granted in the platform.
                         ReaderRoles = AuthenticatedUser.pageRoles user @ (grants |> List.map _.Role) |> List.distinct
                         AuthProvider = authProv.GetType().Name
                         OccurredAt = DateTimeOffset.UtcNow
@@ -478,7 +478,7 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
     /// the resulting Subject's storage scope is stable across the
     /// request's downstream calls.
     ///
-    /// Phase 337 — the same server-verification gate as the resolver's
+    /// The same server-verification gate as the resolver's
     /// step 3. This path is reached on a resolver `Error`, i.e. exactly
     /// when something has already gone wrong, so honouring an unverified
     /// claimed id here would hand an attacker the victim's scope via a
@@ -551,25 +551,25 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
 
     member _.InvokeAsync(ctx: HttpContext) =
         task {
-            // Phase 9a: also resolve scope for `/dev/*` so the dev
-            // diagnostics endpoint sees the same `AccessContext` /
-            // `StorageScope` an API handler would for this request.
-            // `SurfaceEnforcementMiddleware` deliberately does *not*
-            // gate `/dev/*` — diagnosing auth failures is the
-            // endpoint's job.
-            let path = ctx.Request.Path
-            let isApi = path.StartsWithSegments(PathString "/api")
-            let isDev = path.StartsWithSegments(PathString "/dev")
+            // Every route's principal is resolved: `/api` (and its SSE
+            // streams), `/dev` (so the diagnostics endpoint sees the same
+            // `AccessContext` an API handler would; `SurfaceEnforcementMiddleware`
+            // deliberately does not gate it) and every other path, a page
+            // route, the SPA shell or a probe — an audience-gated SSR page
+            // decides 401 / 403 / 200 from the `AccessContext` built out of
+            // what this middleware writes. A page route differs only in how
+            // an unsupported anonymous subject and a team member's user are
+            // read below. The class is the one `RequestIdMiddleware` stamped.
+            let isPageRoute =
+                match RouteClassifier.ofRequest ctx with
+                | RouteClass.Api
+                | RouteClass.Sse
+                | RouteClass.Dev -> false
+                | RouteClass.Health
+                | RouteClass.Metrics
+                | RouteClass.Page -> true
 
-            // Phase 989 — every other path is a page route (or the SPA
-            // shell / a health probe). Its principal is resolved too: an
-            // audience-gated SSR page decides 401 / 403 / 200 from the
-            // `AccessContext` built out of what this middleware writes, so
-            // a page route that skipped resolution was judged against no
-            // principal at all.
-            let isPageRoute = not (isApi || isDev)
-
-            // Phase 9l — root activity for the request. Inherits parent
+            // Root activity for the request. Inherits parent
             // context from the incoming W3C `traceparent` header so a
             // calling system that already runs OTel (peer service /
             // gateway / external client SDK) shows this request as a
@@ -626,7 +626,7 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
 
                     let! resolvedByResolver = runAsync (resolver.Resolve request)
 
-                    // Phase 1002 — a publication reader's subject does not
+                    // A publication reader's subject does not
                     // depend on the composed resolver or on the deployment's
                     // Surfaces: the same rule `DefaultSubjectResolver` applies
                     // at step 1b, enforced here so a custom resolver can
@@ -646,7 +646,7 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                         | :? ILogger as l -> Some l
                         | _ -> None
 
-                    // Phase 1024 — every fire-and-forget write below is
+                    // Every fire-and-forget write below is
                     // started through `startAudit` with this warner, built
                     // while the request is live.
                     let warn = Background.writeFailureWarner "ScopeResolutionMiddleware" loggerOpt ctx
@@ -656,7 +656,7 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                         | Ok s ->
                             match StorageScopeDerivation.tryFromSubject loggerOpt config s with
                             | Some scope -> s, Ok scope
-                            // Phase 1002 — a publication reader: no scope is
+                            // A publication reader: no scope is
                             // stashed, so every scope read fails closed. The
                             // legacy result says the caller is not an
                             // authenticated app user; the subject stays the
@@ -665,12 +665,12 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                         | Error err ->
                             let fallback = fallbackAnonymous request
                             let bridged = SubjectResolutionErrorBridge.toScopeError err
-                            // Phase 246 — make the silent authorization-shaped
+                            // Make the silent authorization-shaped
                             // downgrade observable (distinct from a normal
                             // anonymous request). user.UserId is the resolved
                             // identity whose scope was refused.
                             //
-                            // Phase 989 — on a page route an anonymous
+                            // On a page route an anonymous
                             // visitor to a deployment with no anonymous
                             // surface is the ordinary case (a public page
                             // on an authenticated deployment), not a
@@ -682,7 +682,7 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                             fallback, Error bridged
 
 
-                    // Phase 1107 — the principal's in-platform publication
+                    // The principal's in-platform publication
                     // reader grants, read per request so a revocation bites
                     // at the next one. Only the `Publication` page audience
                     // reads them, so a member's are read on page routes
@@ -703,7 +703,7 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                         | _ -> System.Threading.Tasks.Task.FromResult []
 
 
-                    // Phase 337 — seal whatever anonymous session the
+                    // Seal whatever anonymous session the
                     // request actually resolved to into the binding
                     // cookie, so this browser arrives verified (and
                     // therefore continuous) next time. This is what
@@ -717,14 +717,14 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                     // are bound — an authenticated request neither
                     // needs nor receives one (GP 11 / GP 13).
                     //
-                    // Phase 989 — not on a page route: a page needs no
+                    // Not on a page route: a page needs no
                     // anonymous storage scope, and a `Set-Cookie` on every
                     // public page would make it uncacheable downstream.
                     match subject with
                     | AnonymousSession sid when not isPageRoute -> AnonymousSessionBinding.ensureBound ctx sid
                     | _ -> ()
 
-                    // Phase 1002 — a publication reader's sign-in is audited
+                    // A publication reader's sign-in is audited
                     // under `_platform`: it holds no scope for the member's
                     // login audit below to run under.
                     match subject with
@@ -736,7 +736,7 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                     | Ok scope ->
                         resolvedScope.Value <- Some scope
 
-                        // Phase 797 — the fact tier's typed scope is
+                        // The fact tier's typed scope is
                         // minted HERE and nowhere else: the resolver's
                         // output becomes a `ResolvedScope` at the one
                         // point the platform resolved it. The fact
@@ -770,7 +770,7 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                                     entryOpts.SlidingExpiration <- Nullable(TimeSpan.FromMinutes 20.0)
                                     cache.Set(cacheKey, true, entryOpts) |> ignore
 
-                                    // Phase 1024 — fire-and-forget, but
+                                    // Fire-and-forget, but
                                     // observed: `Record` is contractually
                                     // best-effort, yet a sink that breaks
                                     // the contract must not kill the host
@@ -795,7 +795,7 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                         // the team configured any. For
                         // non-Team scopes no RBAC applies and the
                         // principal is stamped `Unrestricted`.
-                        // Phase 1060 — "is this a team scope" is read
+                        // "is this a team scope" is read
                         // through the one parser, not a prefix test.
                         let isTeamScope =
                             match ScopeKey.tryParseContainer scope.Container with
@@ -824,7 +824,7 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
 
                                     permissions.Value <- refusedOn perms
 
-                                    // Phase 245 — the team's per-module exposure
+                                    // The team's per-module exposure
                                     // (tri-state) map, alongside the permission
                                     // map, so the AccessContext factory sees a
                                     // populated `ModuleExposure`.
@@ -832,7 +832,7 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
 
                                     exposure.Value <- refusedOn exposureRead
 
-                                    // Phase 551 — the subject's grant
+                                    // The subject's grant
                                     // records, so the module-access gate
                                     // can re-verify a declared
                                     // `GrantPolicy` ON USE rather than
@@ -863,7 +863,7 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
 
                                         ctx.Items[GrantPolicyGuard.ModuleGrantsItemsKey] <- box subjectGrants
 
-                                        // Phase 552 — resolve the consent
+                                        // Resolve the consent
                                         // verdict for each module the
                                         // subject holds a grant record on
                                         // that declares
@@ -954,7 +954,7 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                                         )
                             | _ -> ()
 
-                        // Phase 4b — resolve PlatformRole per request.
+                        // Resolve PlatformRole per request.
                         // Anonymous callers cannot hold the role
                         // (Platform Admin requires authenticated
                         // identity). For authenticated users the
@@ -1032,7 +1032,7 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
         }
         :> System.Threading.Tasks.Task
 
-// Phase 69a — `emptyArrayJsonBytes` removed along with the retired
+// `emptyArrayJsonBytes` removed along with the retired
 // `RemotingBodyNormalizationMiddleware`. The buffer was only used by
 // that middleware; the equivalent is now inside ToolUp.Remoting.Giraffe.
 
@@ -1095,6 +1095,10 @@ type RequestIdMiddleware(next: RequestDelegate) =
                     | None -> Guid.NewGuid().ToString("N")
 
             ctx.Items[ContextItemKey] <- box requestId
+
+            // The route's class, computed once from the one prefix table and
+            // read by every later middleware instead of a list of its own.
+            RouteClassifier.stamp ctx.Items (RouteClassifier.classify ctx.Request.Path.Value)
 
             // Stamp BOTH headers on the response so consumers of either
             // name see the same value. Legacy `X-Request-Id` readers
