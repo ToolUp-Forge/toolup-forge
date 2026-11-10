@@ -86,6 +86,10 @@ type CodemodMigration =
     /// `Result<unit, AuditWriteError>`, `IAuditLog option` and the `schedule`
     /// parameters are gone, and `IPermissionStore`'s reads answer a `Result`.
     | AuditFailureAsData
+    /// Audit events are an open registry: a companion's events left Core's
+    /// `AuditEvent` for the companion's own family, and an archive is read
+    /// with the audit options.
+    | OpenAuditRegistry
 
 /// Helpers over `CodemodMigration`.
 module CodemodMigration =
@@ -119,6 +123,7 @@ module CodemodMigration =
         | CodemodMigration.FailureAsData -> "docs/migrations/873-portable-infrastructure-interfaces.md"
         | CodemodMigration.AuditFailureAsData ->
             "docs/migrations/1062-redesign-c-audit-failure-as-data-and-permission-store-result.md"
+        | CodemodMigration.OpenAuditRegistry -> "docs/migrations/874-open-audit-event-registry.md"
 
     /// The phase label the renderings print.
     let label migration =
@@ -145,6 +150,7 @@ module CodemodMigration =
         | CodemodMigration.ConnectorKernel -> "Phase 1079"
         | CodemodMigration.FailureAsData -> "Phase 873"
         | CodemodMigration.AuditFailureAsData -> "Phase 1062"
+        | CodemodMigration.OpenAuditRegistry -> "Phase 874"
 
 /// Which files a rule applies to. The Phase 11.C.5 Tier 2 renames are
 /// PACKAGE ids — they live in `.fsproj` / `Directory.Packages.props` —
@@ -1637,6 +1643,20 @@ module Codemod =
             CodemodFileClass.Source
             @"\bmatch\s+\w*[aA]udit\w*\s+with\b"
             "if this matches an audit log's `Some` / `None`, the log is no longer optional: keep the `Some` arm over the value (over `NoOpAuditLog` it does what the `None` arm did)"
+        // A companion's audit events left Core's union for its own family.
+        review
+            "874-moved-audit-case"
+            CodemodMigration.OpenAuditRegistry
+            CodemodFileClass.Source
+            @"(?<!["".])\b(?:AuditEvent\.)?(?:FormSubmitted|FormSubmissionUpdated|WorkflowTransitioned|WorkflowActionExecuted|PlatformDocumentUploaded|PlatformDocumentDeleted|KnowledgeOriginalRetrieved|KnowledgeOriginalRetrievalDenied|KnowledgeScopeErased|KnowledgeDocumentDeduplicated|KnowledgeDocumentsPurged|ContentScanned|AssetUploaded|AssetDeleted|PasskeyCredentialRegistered|PasskeyCredentialRemoved|FactImportAccepted|FactImportRefused|CertificateIssued|KnowledgeIngestionDropped|ArtefactSigned|SigningKeyRotated|ConversationExported|BeaconRejected|ConversationReplayed|AnswerVerificationPassed|AnswerVerificationFlagged|CrossModuleRead|ConversationsPurged|PeerCallCompleted|PeerJobCompleted|PeerCleanRoomDecision|FederationRoundCompleted|FederationParticipantDropped|FederationRunAborted)\b(?!"")"
+            "if this is an `AuditEvent` case, the companion that emits it declares it now: open its `*AuditEvents` module, construct with its family's `event` (`FormsAuditEvent.event (FormSubmitted p)`), and match with its active pattern (`FormsAudit(FormSubmitted p)`) or `tryRead`; Core carries it as `AuditEvent.Opaque`"
+        // An archive or a ledger is read with the audit options.
+        review
+            "874-archive-read"
+            CodemodMigration.OpenAuditRegistry
+            CodemodFileClass.Source
+            @"\bDeserialize<[^>]*(?:AuditEvent|AuditEnvelope|Archive\w*|Ledger\w*)>\s*\(.*\bPlatformJson\.options\b"
+            "if this reads an audit archive, a ledger or a sink payload, read it with `AuditLog.AuditEventJson.options`: a companion's event is archived under its kind, which `PlatformJson.options` cannot decode"
     ]
 
 
