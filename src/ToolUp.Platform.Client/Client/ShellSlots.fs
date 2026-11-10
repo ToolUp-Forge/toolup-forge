@@ -270,7 +270,7 @@ module ShellSlots =
         authenticatedAdmin
             _.ServiceAccountAdmin
             ServiceAccountUI.moduleId
-            ServiceAccountUI.create
+            (builtIn ServiceAccountUI.builtIn)
             None
             "ServiceAccountAdmin"
 
