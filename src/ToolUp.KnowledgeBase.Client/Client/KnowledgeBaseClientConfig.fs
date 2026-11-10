@@ -22,7 +22,7 @@ module ToolUp.KnowledgeBase.Client.KnowledgeBaseClientConfig
 // point):
 //
 //     let config, modules = KnowledgeBaseClientConfig.withKnowledgeBase kbMode config modules
-//     AIClientConfig.run aiMode config modules
+//     AIClientConfig.run aiSlots config modules
 //
 // Swapping in a custom Knowledge Base is then a one-line change —
 // `ExternalKnowledgeBase (MyConfluenceKb.register ())` — with the props

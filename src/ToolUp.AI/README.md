@@ -157,7 +157,7 @@ open ToolUp.Elmish
 open ToolUp.Elmish.React
 open ToolUp.Platform
 
-let aiMode =
+let aiSlots =
     AISlotFills.configured {
         Name = "Claude"
         Icon = Icon.ofUrl "/svg/claude.svg"
@@ -167,7 +167,7 @@ let aiMode =
 let config = { ClientConfig.defaults with (* ... *) }
 let modules = [ (* module registrations *) ]
 
-AIClientConfig.run aiMode config modules
+AIClientConfig.run aiSlots config modules
 ```
 
 Apps without AI drop the `ToolUp.AI.Client.props` import (step 1) and call `Client.run config modules` instead — zero AI surface, zero AI types leaked into shell state.

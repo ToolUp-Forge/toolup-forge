@@ -964,7 +964,7 @@ open ToolUp.Elmish
 open ToolUp.Elmish.React
 open ToolUp.Platform
 
-AIClientConfig.run aiMode config modules
+AIClientConfig.run aiSlots config modules
 ```
 
 (The in-tree Elmish fork ships under `namespace ToolUp.Elmish` / `ToolUp.Elmish.React` inside `ToolUp.Platform.Client` — same classical Elm Architecture surface, distinct namespace, so a consumer can hold upstream `Elmish` alongside it.)

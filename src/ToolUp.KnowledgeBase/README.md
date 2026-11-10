@@ -123,7 +123,7 @@ open ToolUp.KnowledgeBase.Client   // KnowledgeBaseClientConfig
 let clientConfig, modules =
     KnowledgeBaseClientConfig.withKnowledgeBase DefaultKnowledgeBase clientConfig modules
 
-Client.run clientConfig modules      // or: AIClientConfig.run aiMode clientConfig modules
+Client.run clientConfig modules      // or: AIClientConfig.run aiSlots clientConfig modules
 ```
 
 | Case | Sidebar module | `Handlers.NarrativeCommitHandler` |

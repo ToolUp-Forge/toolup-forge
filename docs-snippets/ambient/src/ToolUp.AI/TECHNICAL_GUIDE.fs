@@ -86,7 +86,7 @@ module PageAmbient =
 
     /// The AI mode / client config / module list the shell is run with,
     /// built earlier in the consumer's own `Client.fs`.
-    let aiMode: AISlotFills = failwith "ambient"
+    let aiSlots: AISlotFills = failwith "ambient"
 
     let config: ClientConfig = failwith "ambient"
 

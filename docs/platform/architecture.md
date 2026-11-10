@@ -89,8 +89,8 @@ For AI, run the shell through `AIClientConfig.run` instead of `Client.run`:
 open ToolUp.AI
 open ToolUp.AI.Client
 
-let aiMode = AISlotFills.configured { Name = "Aria"; Icon = sparkIcon; ShowSidePanel = true }
-AIClientConfig.run aiMode { ClientConfig.defaults with AppName = "MyApp"; Surfaces = Surfaces.individual } modules
+let aiSlots = AISlotFills.configured { Name = "Aria"; Icon = sparkIcon; ShowSidePanel = true }
+AIClientConfig.run aiSlots { ClientConfig.defaults with AppName = "MyApp"; Surfaces = Surfaces.individual } modules
 ```
 
 `AISlotFills.configured` carries the **client-side** branding record

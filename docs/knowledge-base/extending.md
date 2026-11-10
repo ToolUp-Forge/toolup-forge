@@ -85,7 +85,7 @@ let kbMode = ExternalKnowledgeBase(MyConfluenceKb.register ())
 let clientConfig, modules =
     KnowledgeBaseClientConfig.withKnowledgeBase kbMode clientConfig modules
 
-Client.run clientConfig modules      // or: AIClientConfig.run aiMode clientConfig modules
+Client.run clientConfig modules      // or: AIClientConfig.run aiSlots clientConfig modules
 ```
 
 | Case | Sidebar module | `Handlers.NarrativeCommitHandler` |

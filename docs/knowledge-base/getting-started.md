@@ -72,7 +72,7 @@ let modules = [
 let clientConfig, modules =
     KnowledgeBaseClientConfig.withKnowledgeBase DefaultKnowledgeBase clientConfig modules
 
-AIClientConfig.program aiMode clientConfig modules
+AIClientConfig.program aiSlots clientConfig modules
 |> Program.withReactSynchronous "elmish-app"
 |> Program.run
 ```

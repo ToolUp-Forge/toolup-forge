@@ -338,7 +338,7 @@ let visibilityTests =
             // FileManagerUI is the SDK's `_sdk.DataManager` built-in.
             // Empty `displays` is fine here — `create` only stores the
             // list; the view function is never invoked.
-            let m = FileManagerUI.create [] None
+            let m = FileManagerUI.create [] DataManagerConfig.unlabelled
             assertVisibleToAuthenticated "FileManagerUI" m
         }
 
@@ -363,7 +363,7 @@ let visibilityTests =
                 "DataIngestionUI", DataIngestionUI.create None
                 "WebhookAdminUI", WebhookAdminUI.create None
                 "TeamConfigUI", TeamConfigUI.create None
-                "FileManagerUI", FileManagerUI.create [] None
+                "FileManagerUI", FileManagerUI.create [] DataManagerConfig.unlabelled
                 "DataSubjectRequestAdminUI", DataSubjectRequestAdminUI.create None
                 "NotificationPreferencesUI", NotificationPreferencesUI.create None
             ]

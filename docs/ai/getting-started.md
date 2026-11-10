@@ -108,7 +108,7 @@ open ToolUp.Platform
 open ToolUp.AI
 open ToolUp.AI.Client
 
-let aiMode =
+let aiSlots =
     AISlotFills.configured {
         Name = "Aria"
         Icon = Icon.ofUrl "/svg/spark.svg"
@@ -119,7 +119,7 @@ let clientConfig = { ClientConfig.defaults with AppName = "MyApp" }
 let modules = [ (* your module registrations *) ]
 
 // `run` owns the whole Elmish program — mounting included.
-AIClientConfig.run aiMode clientConfig modules
+AIClientConfig.run aiSlots clientConfig modules
 ```
 
 `ClientConfig` carries no `Mode` field; deployment shape is expressed server-side by `ServerConfig.Surfaces`.
