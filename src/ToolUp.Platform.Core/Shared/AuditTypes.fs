@@ -14,21 +14,32 @@ open System
 // surface: each `AuditEvent` is serialised to a `ModuleEvent` with
 // `SourceModule = AuditSourceModule` so audit events flow through the
 // same blob layout, retention policy, and webhook hooks as every other
-// platform event. The DU is the typed F# surface; the wire format is
+// platform event. The union is the typed F# surface; the wire format is
 // `ModuleEvent`.
 //
-// Phase 347 — the payload records this union registers were carved into
-// Shared/Audit/*AuditPayloads.fs (declaration order preserved) and the
-// envelope / IAuditLog seam into Shared/Audit/AuditEnvelope.fs; this file
-// keeps the `AuditEvent` union and its `eventTypeName` projection — the
-// documented irreducible core (one union type plus its companion module).
-// The union stays append-only: new payload records land in the lane file
-// that owns their subsystem, new cases at the end of the union.
+// The union holds the PLATFORM's own events. A companion or a module
+// declares its events in its own assembly as an `AuditEventFamily` (see
+// `AuditEventRegistry.fs`) and records them as `Opaque` values: Core
+// knows their kind and their payload bytes, never their type. The payload
+// records the platform's cases carry live in the Shared/Audit/*AuditPayloads.fs
+// lane files.
 
-/// SDK-standard audit event types. The DU case name is the wire-format
-/// `EventType` discriminator string; payload records are JSON-serialised
-/// into `ModuleEvent.Payload` via `FableConverters` (matches the
-/// existing `WebhookApiHandler` / `KnowledgeBase` audit emission idiom).
+/// An event of a kind the platform does not declare: its stable wire id
+/// and its payload JSON, exactly as stored. A companion's family builds
+/// one from its own typed event (`AuditEventFamily.event`) and reads it
+/// back (`AuditEventFamily.tryRead`); a stored row whose kind no
+/// registrant on this deployment declares decodes to one too, so it stays
+/// readable and re-exportable rather than failing.
+type OpaqueAuditEvent = {
+    /// The kind's stable wire id — the persisted `EventType`.
+    Kind: string
+    /// The payload JSON, byte-for-byte as the kind's codec wrote it.
+    Payload: string
+}
+
+/// SDK-standard audit event types. The wire `EventType` discriminator is
+/// `AuditEvent.eventTypeName`; the payload records are JSON-serialised
+/// into `ModuleEvent.Payload`.
 type AuditEvent =
     | UserLoggedIn of UserLoggedInPayload
     | TeamCreated of TeamCreatedPayload
@@ -841,6 +852,9 @@ type AuditEvent =
     /// A write to the page store was refused, recorded under the caller's
     /// own scope.
     | PageWriteRefused of PageWriteRefusedPayload
+    /// An event of a kind a companion or a module registers, or a stored
+    /// kind no registrant on this deployment declares.
+    | Opaque of OpaqueAuditEvent
 
 module AuditEvent =
     /// Wire-format `EventType` discriminator for the given event. The
@@ -1066,3 +1080,4 @@ module AuditEvent =
         | PageReseeded _ -> "PageReseeded"
         | PageDetached _ -> "PageDetached"
         | PageWriteRefused _ -> "PageWriteRefused"
+        | Opaque o -> o.Kind

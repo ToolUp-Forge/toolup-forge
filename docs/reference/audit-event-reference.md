@@ -2,10 +2,10 @@
 
 <!-- GENERATED FILE — do not edit by hand. Regenerate with `dev-scripts/generate-audit-event-reference.ps1`
      (or `TOOLUP_REGEN_AUDIT_EVENT_REFERENCE=1 dotnet run --project src/ToolUp.Platform.Tests`). The
-     sources of truth are the `AuditEvent` union in src/ToolUp.Platform.Core/Shared/AuditTypes.fs and
-     the codec registry `auditEventCodecs` in src/ToolUp.Platform.Server/Server/AuditLog.fs. -->
+     sources of truth are the platform's `AuditEvent` union in src/ToolUp.Platform.Core/Shared/AuditTypes.fs,
+     its codec in src/ToolUp.Platform.Server/Server/AuditLog.fs, and each companion's `AuditEventFamily`. -->
 
-Every audit event the SDK emits (206 cases). All of them are recorded under the reserved `_platform.audit` source module, and every one is decodable for external replication — that is a build gate, not a convention (see [PLATFORM-SECURITY-RULES.md](../security/PLATFORM-SECURITY-RULES.md) AU-2).
+Every audit event the platform emits (206 cases). All of them are recorded under the reserved `_platform.audit` source module, and every one is decodable for external replication — that is a build gate, not a convention (see [PLATFORM-SECURITY-RULES.md](../security/PLATFORM-SECURITY-RULES.md) AU-2).
 
 **Read the first column when you are writing a SIEM rule or querying an archive.** The wire `EventType` is what is persisted and replicated; the F# case identifier is what you pattern-match on in SDK code. They are equal for almost every event, and the exceptions are listed below — they are pinned deliberately, because a wire string that has already left for a third-party sink cannot be migrated.
 

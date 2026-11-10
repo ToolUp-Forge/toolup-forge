@@ -1383,6 +1383,11 @@ type ServerApp = {
     /// was added. A companion is `ServerApp -> ServerApp`; it never wraps
     /// the record.
     Companions: CompanionTier list
+    /// The audit-event kinds companions and modules declare, each through
+    /// its own `AuditEventFamily` (`withAuditEvents`). `run` composes them
+    /// with the platform's kinds into the `AuditEventRegistry` and refuses
+    /// a kind two registrants declare.
+    AuditEventRegistrations: AuditEventRegistration list
 }
 
 /// One companion composed onto a deployment: its identity, and what it
@@ -1461,6 +1466,7 @@ module ServerApp =
         Contributions = []
         Overrides = []
         Companions = []
+        AuditEventRegistrations = []
     }
 
     /// **Sets** the companion `owner` composes: `apply` runs once, when the
@@ -1794,6 +1800,14 @@ module ServerApp =
     let withSeedPack (pack: ISeedPack) (app: ServerApp) : ServerApp = {
         app with
             SeedPacks = app.SeedPacks @ [ pack ]
+    }
+
+    /// Register a companion's or a module's audit-event kinds, from its
+    /// compose step. **Adds**: each registrant adds its own family; `run`
+    /// refuses the composition when two registrants declare one kind.
+    let withAuditEvents (registration: AuditEventRegistration) (app: ServerApp) : ServerApp = {
+        app with
+            AuditEventRegistrations = app.AuditEventRegistrations @ [ registration ]
     }
 
     /// Phase 447 — set the seed-data mode (`NoSeedData` default /
@@ -4028,16 +4042,31 @@ module ServerApp =
             // there stopped enforcement without any symptom. A structural
             // guarantee nobody checks is one refactor from being a
             // convention.
+            // The composed audit-event registry: the platform's kinds and
+            // every companion's, one registrant per kind. A kind declared
+            // twice refuses the composition here, naming both registrants.
+            let withAuditEventRegistry =
+                match
+                    AuditEventRegistry.build (
+                        ToolUp.Platform.Audit.AuditLog.platformAuditRegistration
+                        :: app.AuditEventRegistrations
+                    )
+                with
+                | Ok registry ->
+                    withSeedPacks
+                    |> ServiceConfig.append (fun s -> s.AddSingleton<AuditEventRegistry>(registry))
+                | Error error -> failwith (AuditEventRegistry.describeError error)
+
             let withGrantPolicies =
                 let registry =
                     GrantPolicyGuard.ModuleGrantPolicyRegistry.ofDeclarations app.ModuleGrantPolicies
 
                 if GrantPolicyGuard.ModuleGrantPolicyRegistry.isEmpty registry then
-                    withSeedPacks
+                    withAuditEventRegistry
                 else
                     match GrantPolicyGuard.ModuleGrantPolicyRegistry.orphans registry app.ModuleNames with
                     | [] ->
-                        withSeedPacks
+                        withAuditEventRegistry
                         |> ServiceConfig.append (fun s ->
                             s.AddSingleton<GrantPolicyGuard.ModuleGrantPolicyRegistry>(registry))
                     | orphans ->

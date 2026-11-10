@@ -77,7 +77,7 @@ module S3ArchiveSettings =
         PathPrefix = None
     }
 
-let private archiveJsonOptions = PlatformJson.options
+let private archiveJsonOptions = ToolUp.Platform.Audit.AuditLog.AuditEventJson.options
 
 /// Wire-format wrapper for one persisted JSONL line. Each line of the
 /// archive is one of these records — `Subject`, `OccurredAt`, `ScopeId`

@@ -571,13 +571,14 @@
              same names — only file boundaries moved). Audit\AuditSubject.fs holds
              the reserved source-module name + the AuditSubject attribution DU;
              the *AuditPayloads.fs files hold the payload records, one lane each;
-             AuditTypes.fs keeps the AuditEvent union + its eventTypeName
-             projection (the documented irreducible core, append-only); and
-             Audit\AuditEnvelope.fs holds the envelope / schema-version contract,
-             IAuditLog, IAuthAuditHook and BlobStorageAuthAudit. A new payload
-             record lands in the lane file that owns its subsystem, BEFORE
-             AuditTypes.fs; every file is Fable-safe exactly as the monolith was
-             and ships under fable/ via the **\*.fs glob. -->
+             AuditTypes.fs keeps the platform's AuditEvent union + its
+             eventTypeName projection; Audit\AuditEnvelope.fs holds the envelope /
+             schema-version contract, IAuditLog, IAuthAuditHook and
+             BlobStorageAuthAudit; and AuditEventRegistry.fs holds the open
+             registry a companion declares its own kinds through. A new platform
+             payload record lands in the lane file that owns its subsystem, BEFORE
+             AuditTypes.fs; a companion's events never enter Core. Every file is
+             Fable-safe and ships under fable/ via the **\*.fs glob. -->
         <Compile Include="Shared\Audit\AuditSubject.fs" />
         <Compile Include="Shared\Audit\PlatformAuditPayloads.fs" />
         <Compile Include="Shared\Audit\KnowledgeAuditPayloads.fs" />
@@ -591,6 +592,7 @@
         <Compile Include="Shared\Audit\EvidenceAuditPayloads.fs" />
         <Compile Include="Shared\AuditTypes.fs" />
         <Compile Include="Shared\Audit\AuditEnvelope.fs" />
+        <Compile Include="Shared\AuditEventRegistry.fs" />
         <Compile Include="Shared\Interfaces\ISubjectResolver.fs" />
         <Compile Include="Shared\Interfaces\IAnonymousSessionMigrator.fs" />
         <Compile Include="Shared\IShareTokenRateLimiter.fs" />

@@ -73,7 +73,7 @@ module DatadogLogsSettings =
         Host = None
     }
 
-let private logsJsonOptions = PlatformJson.options
+let private logsJsonOptions = ToolUp.Platform.Audit.AuditLog.AuditEventJson.options
 
 // Phase 9g shipped a 132-arm `extractEventScopeId` here, mapping each
 // `AuditEvent` case to a payload-level scope id. Phase 66 Stream B.7

@@ -336,19 +336,14 @@ type AuditReplicator
                         if cmp <> 0 then cmp else a.Id.CompareTo b.Id)
 
                 // Decode each `ModuleEvent` back into an `AuditEvent` for
-                // the sink via the Phase 114 codec registry shared with
-                // `AuditLog` (`AuditLog.tryDecodeAuditEvent`). Pre-114 this
-                // was a hand-maintained 21-case inline match with a silent
-                // `| _ -> None` fallthrough that dropped 59 of ~80 event
-                // types from external SIEM/archive sinks WITHOUT recording
-                // a decode failure — the compliance trail looked complete
-                // while missing every admin grant, denial, and share-token
-                // use (Gap C1). The registry decoder covers every union
-                // case by construction (enforced by the exhaustiveness
-                // test), and BOTH failure modes — unknown/future event
-                // type AND malformed payload — now land in `decodeFailures`
-                // so they surface in the `AuditEventDecodeFailed` summary
-                // row rather than advancing the cursor silently.
+                // the sink through the codec `AuditLog` writes with. A kind
+                // the platform does not declare — a companion's, or one no
+                // registrant on this deployment declares any more — decodes
+                // to `Opaque` (its id and raw payload) and is forwarded like
+                // any other row. Only a malformed payload of a platform kind
+                // lands in `decodeFailures`, so it surfaces in the
+                // `AuditEventDecodeFailed` summary row rather than advancing
+                // the cursor silently.
                 let decodeFailures = ResizeArray<Guid * string>()
 
                 let decodedPairs =
