@@ -427,7 +427,7 @@ module ShellSlots =
     /// gate hides it from non-admins, and on `FeatureMode.Disabled` its
     /// API 404s and the panel shows its empty state (GP 13).
     let private tenantLifecycleAdmin =
-        chrome _.TenantLifecycle TenantLifecycleAdminUI.create
+        chrome _.TenantLifecycle (fun () -> builtIn TenantLifecycleAdminUI.builtIn None)
 
     let private platformUsers =
         chrome _.PlatformUsers (fun () -> builtIn PlatformUsersUI.builtIn None)
