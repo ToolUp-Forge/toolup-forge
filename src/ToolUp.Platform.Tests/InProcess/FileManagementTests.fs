@@ -158,13 +158,6 @@ type private GatedListing(inner: IBlobStorage, gate: Threading.Tasks.Task) =
         member _.ComposeFrom(c, t, s) = inner.ComposeFrom(c, t, s)
         member _.Erase(c, p, policy, dryRun) = inner.Erase(c, p, policy, dryRun)
 
-let private tempDir () =
-    let dir =
-        Path.Combine(Path.GetTempPath(), "toolup-fm-test-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory dir |> ignore
-    dir
-
 let tests =
     testList "FileManagement" [
 
@@ -546,7 +539,8 @@ let tests =
         testCaseAsync "two requests during hydration both wait on the one hydration and neither holds a thread"
         <| async {
             let gate = Threading.Tasks.TaskCompletionSource()
-            let blobs = GatedListing(LocalFileStorage.LocalFileStorage(tempDir ()), gate.Task)
+            use dir = TempDir.create "fm-hydration"
+            let blobs = GatedListing(LocalFileStorage.LocalFileStorage(dir.Path), gate.Task)
             let dos = DataObjectStore(blobs) :> IDataObjectStore
             let stores = new SessionFileStores.SessionFileStores(60.0) :> ISessionFileStores
 
