@@ -766,6 +766,74 @@ let navRoleTests =
                 []
                 "holding the nav role does not override the module's own SubjectKind predicate"
         }
+
+        test "the gate's finding reads a module as the fallback does" {
+            // `reliesOnGroupFallback` is the rule; the gate's
+            // `effectiveNavRole` finding reads module SOURCES. The two must
+            // agree on the same modules, in both directions.
+            let teamGroupUndeclared =
+                facts "LegacyTeamTool" (Some "Team Management") Visibility.visibleToAll
+
+            Expect.isTrue (SidebarVisibility.reliesOnGroupFallback fallbackOnly) "a platform group, undeclared"
+            Expect.isFalse (SidebarVisibility.reliesOnGroupFallback gatedByRole) "a declared nav role"
+            Expect.isFalse (SidebarVisibility.reliesOnGroupFallback teamGroupUndeclared) "a team group"
+
+            let root =
+                let assemblyDir =
+                    System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location)
+
+                System.IO.Path.GetFullPath(System.IO.Path.Combine(assemblyDir, "..", "..", "..", "..", ".."))
+
+            let rule =
+                System.IO.File.ReadAllText(
+                    System.IO.Path.Combine(root, ToolUp.Forge.NavRoleFinding.sidebarVisibilityPath)
+                )
+
+            let groups =
+                match ToolUp.Forge.NavRoleFinding.platformGroups rule with
+                | Ok groups -> groups
+                | Error why -> failtest why
+
+            Expect.isNonEmpty groups "the finding reads the rule's groups"
+
+            for g in groups do
+                Expect.isTrue
+                    (SidebarVisibility.isPlatformAdminSidebarGroup (Some g))
+                    $"the finding reads \"{g}\", which the rule does not treat as platform-scoped"
+
+            Expect.contains groups "Platform Admin" "the pre-568 label is read"
+
+            let moduleSource (group: string) (navRole: string) =
+                String.concat "\n" [
+                    "let moduleId = \"Legacy.Admin\""
+                    "let create () ="
+                    "    ClientModule.create spec"
+                    $"    |> ClientModule.withGroup \"{group}\""
+                    navRole
+                    "    |> ClientModule.register"
+                ]
+
+            let read group navRole =
+                ToolUp.Forge.NavRoleFinding.read groups "Legacy.fs" (moduleSource group navRole)
+
+            Expect.equal
+                (read "Platform Admin" "" |> Option.map _.ModuleId)
+                (Some "Legacy.Admin")
+                "an undeclared platform-group module is named by its id"
+
+            Expect.isNone
+                (read "Platform Admin" "    |> ClientModule.withNavRole NavRole.PlatformAdminOnly")
+                "a declared nav role is not reliance"
+
+            Expect.isNone (read "Team Management" "") "a team group is not reliance"
+
+            Expect.equal
+                (ToolUp.Forge.NavRoleFinding.render [])
+                [
+                    "effectiveNavRole fallback: none — every module in the tree declares its nav role."
+                ]
+                "an empty finding still prints"
+        }
     ]
 
 // ─── Filter-order pins (Phase 570.C) ─────────────────────────────────

@@ -4039,6 +4039,10 @@ let main args =
                     "▶ VerifyAll: ServiceConfigFold (the closure-fold's one home, via VerifyServiceConfigFold)"
 
                 Gate.verdictOfExit (runVerifyServiceConfigFold __SOURCE_DIRECTORY__)
+        NavRoleFinding =
+            fun () ->
+                Trace.tracefn "▶ VerifyAll: NavRoleFinding (modules gated by the group-name fallback)"
+                NavRoleFinding.leg (Trace.tracefn "%s") __SOURCE_DIRECTORY__
         FuaranCoResolution =
             fun () ->
                 Trace.tracefn "▶ VerifyAll: FuaranCoResolution (Fuaran floors beside the published Fuaran.UI)"

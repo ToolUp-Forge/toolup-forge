@@ -37,6 +37,7 @@ type Bodies = {
     Analyzers: unit -> Verdict
     ScopeLiterals: unit -> Verdict
     ServiceConfigFold: unit -> Verdict
+    NavRoleFinding: unit -> Verdict
     FuaranCoResolution: unit -> Verdict
     FuaranCoBuild: unit -> Verdict
     MergeDrivers: unit -> Verdict
@@ -66,6 +67,7 @@ let unbound: Bodies =
         Analyzers = unboundBody
         ScopeLiterals = unboundBody
         ServiceConfigFold = unboundBody
+        NavRoleFinding = unboundBody
         FuaranCoResolution = unboundBody
         FuaranCoBuild = unboundBody
         MergeDrivers = unboundBody
@@ -455,6 +457,10 @@ let rows (b: Bodies) : GateLeg<Lane> list = [
     |> seed (seconds 6.)
     leg "ScopeLiterals" b.ScopeLiterals readingLanes [ Input.Tree ]
     leg "ServiceConfigFold" b.ServiceConfigFold readingLanes [ Input.Tree ]
+    // Prints the modules gated by the deprecated group-name fallback, or
+    // "none"; the fallback and this row go together at 1.0.
+    leg "NavRoleFinding" b.NavRoleFinding readingLanes [ Input.Tree ]
+    |> seed (seconds 2.)
     leg "FuaranCoResolution" b.FuaranCoResolution readingLanes [ Input.Tree ]
     // Restores the published Fuaran.UI from nuget.org and Fable-compiles
     // the fact tier beside it: the full lane only.

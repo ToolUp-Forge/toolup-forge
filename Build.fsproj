@@ -152,6 +152,7 @@
          implementation. -->
     <Compile Include="FuaranCoResolution.fs" />
     <Compile Include="src\ToolUp.Platform.Testing\Testing\TempDir.fs" Link="TempDir.fs" />
+    <Compile Include="NavRoleFinding.fs" />
     <Compile Include="Build.fs" />
   </ItemGroup>
   <ItemGroup>
