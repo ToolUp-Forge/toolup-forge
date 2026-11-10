@@ -723,6 +723,7 @@ ToolUp.AI.AIRequest.access(Microsoft.AspNetCore.Http.HttpContext) : Microsoft.FS
 ToolUp.AI.AIRequest.accessOrUnresolved(System.String, Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.AccessContext
 ToolUp.AI.AIRequest.callerId(Microsoft.AspNetCore.Http.HttpContext) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.AI.AIRequest.carry(Microsoft.AspNetCore.Http.HttpContext, Microsoft.AspNetCore.Http.HttpContext) : System.Void
+ToolUp.AI.AIRequest.principal(Microsoft.AspNetCore.Http.HttpContext) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AccessContext]
 ToolUp.AI.AIRequest.scope(Microsoft.AspNetCore.Http.HttpContext) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.StorageScope]
 ToolUp.AI.AIRequest.scopeOf(ToolUp.Platform.AccessContext) : ToolUp.Platform.StorageScope
 ToolUp.AI.AISettingsHandler (class)

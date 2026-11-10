@@ -49,7 +49,7 @@ let exportAuditHandler: HttpHandler =
             let! body = reader.ReadToEndAsync()
             let req = JsonSerializer.Deserialize<ExportAuditRequest>(body, jsonOptions)
 
-            match AIRequest.access ctx with
+            match AIRequest.principal ctx with
             | _ when isNull (box req) ->
                 ctx.Response.StatusCode <- 400
                 return! next ctx

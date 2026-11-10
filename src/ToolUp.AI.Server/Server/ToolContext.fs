@@ -12,11 +12,15 @@ open ToolUp.Platform
 /// resolved principal refuses instead of falling back to a scope of its own.
 [<RequireQualifiedAccess>]
 module AIRequest =
+    /// The principal the request's scoped factory yields, or `None`.
+    let private ofServices (ctx: HttpContext) : AccessContext option =
+        AccessContext.tryResolve ctx.RequestServices
+
     /// The request's principal: the scoped DI value when the factory ran, else
     /// the one stamped on its items (a background context carries it there).
     /// `None` when neither holds one.
     let access (ctx: HttpContext) : AccessContext option =
-        match AccessContext.tryResolve ctx.RequestServices with
+        match ofServices ctx with
         | Some access -> Some access
         | None -> AccessContext.ofItems ctx.Items
 
@@ -38,12 +42,21 @@ module AIRequest =
             Persist = true
           }
 
+    /// The principal `ScopeResolutionMiddleware` stamped on the request's
+    /// items, else the scoped DI value: the source of the request's identity
+    /// and scope. (`access` reads the DI value first, the source of its
+    /// authority; in a composed request the two are one principal.)
+    let principal (ctx: HttpContext) : AccessContext option =
+        match AccessContext.ofItems ctx.Items with
+        | Some stamped -> Some stamped
+        | None -> ofServices ctx
+
     /// The storage scope of the request's principal (`scopeOf`), or `None`
     /// when no principal was resolved.
-    let scope (ctx: HttpContext) : StorageScope option = access ctx |> Option.map scopeOf
+    let scope (ctx: HttpContext) : StorageScope option = principal ctx |> Option.map scopeOf
 
     /// The request principal's identity, or `None` when none was resolved.
-    let callerId (ctx: HttpContext) : string option = access ctx |> Option.map _.UserId
+    let callerId (ctx: HttpContext) : string option = principal ctx |> Option.map _.UserId
 
     /// Carry `request`'s principal, its grant and consent verdicts and its
     /// resolved scope onto `background`, a context with its own services that
@@ -165,7 +178,9 @@ module ToolContext =
     /// The context a string executor's request stands for: the principal
     /// stamped on it (or the unresolved one), its scope, and the carry.
     let ofRequest (ctx: HttpContext) : ToolContext =
-        let access = AIRequest.accessOrUnresolved "ToolContext" ctx
+        let access =
+            AIRequest.principal ctx
+            |> Option.defaultWith (fun () -> AccessContext.unresolved "ToolContext")
 
         {
             Request = ctx
@@ -206,7 +221,7 @@ module ToolContext =
     /// `AIToolDefinition.EmitsActions`); `payloadJson` the serialised payload.
     /// Best-effort: no channel composed, or no resolved caller, is a no-op, and a transport failure is swallowed.
     let emitAction (ctx: HttpContext) (moduleId: string) (actionKey: string) (payloadJson: string) : Async<unit> = async {
-        match ctx.RequestServices.GetService(typeof<INotificationChannel>), AIRequest.access ctx with
+        match ctx.RequestServices.GetService(typeof<INotificationChannel>), AIRequest.principal ctx with
         | :? INotificationChannel as channel, Some access when not (String.IsNullOrEmpty access.UserId) ->
             try
                 do! channel.Publish(access.UserId, Notification.ModuleAction(moduleId, actionKey, payloadJson))

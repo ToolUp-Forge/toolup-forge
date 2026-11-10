@@ -260,7 +260,7 @@ type SequenceBeacon = {
 // container is minted for a principal without one, and no request without a
 // principal is served. `None` rejects the beacon.
 let private tryResolveScope (ctx: HttpContext) : StorageScope option =
-    AIRequest.access ctx |> Option.bind _.StorageScope
+    AIRequest.principal ctx |> Option.bind _.StorageScope
 
 // The caller for the ownership gate, or `None` for a request without a
 // principal: the gate refuses it rather than admitting a placeholder owner.

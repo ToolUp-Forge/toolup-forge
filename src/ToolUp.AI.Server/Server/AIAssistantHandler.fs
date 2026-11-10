@@ -1429,8 +1429,12 @@ let aiAssistantApi
     // without a principal is served unresolved — no module, no role — in the
     // anonymous principal's own shard, never another scope's.
     let accessContext = AIRequest.accessOrUnresolved "AIAssistantHandler" ctx
-    let scope = AIRequest.scopeOf accessContext
-    let userId = accessContext.UserId
+
+    let scope =
+        AIRequest.scope ctx
+        |> Option.defaultWith (fun () -> AIRequest.scopeOf accessContext)
+
+    let userId = AIRequest.callerId ctx |> Option.defaultValue accessContext.UserId
 
     let promptBuilder = config |> Option.bind _.SystemPrompt
 

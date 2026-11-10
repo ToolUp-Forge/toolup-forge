@@ -264,7 +264,7 @@ let requireConsent
     : Async<ConsentOutcome> =
     async {
         let mode = resolveMode ctx
-        let access = AIRequest.access ctx
+        let access = AIRequest.principal ctx
 
         match mode with
         | TrustEverything -> return ConsentGranted
