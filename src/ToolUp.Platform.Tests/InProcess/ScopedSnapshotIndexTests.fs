@@ -21,6 +21,7 @@ open ToolUp.Platform.Infra.IVectorStore
 open ToolUp.Platform.Infra.ISparseIndex
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Infra
+open ToolUp.Platform.Testing
 
 // ─── Fakes ────────────────────────────────────────────────────────────
 
@@ -84,18 +85,6 @@ type private ProbeStorage() =
         member _.Erase(container, prefix, policy, dryRun) =
             inner.Erase(container, prefix, policy, dryRun)
 
-type private RecordingAuditLog() =
-    let rows = ConcurrentQueue<AuditSubject * AuditEvent>()
-    member _.Rows = List.ofSeq rows
-
-    interface IAuditLog with
-        member _.Record(_, actor, audit) = async {
-            rows.Enqueue(actor, audit)
-            return Ok()
-        }
-
-        member _.GetAuditTrail(_, _, _) = async { return [] }
-
 type private RecordingChannel() =
     let published = ConcurrentQueue<string * Notification>()
     member _.Published = List.ofSeq published
@@ -105,17 +94,10 @@ type private RecordingChannel() =
         member _.Subscribe(_, _) = async { return Guid.NewGuid() }
         member _.Unsubscribe(_) = async { return () }
 
-type private SilentLogger() =
-    interface ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn _ = ()
-        member _.Error(_, _) = ()
-
 /// The observers a corrupt load reports to, and what each saw.
 type private Observers() =
     member val Telemetry = ToolUp.RAG.RagTelemetry.RollingRagTelemetry()
-    member val Audit = RecordingAuditLog()
+    member val Audit = TestAuditLog()
     member val Channel = RecordingChannel()
 
     member this.Handling(policy: CorruptPolicy) : CorruptionHandling = {
@@ -130,8 +112,8 @@ type private Observers() =
         (telemetry.Snapshot() |> Async.RunSynchronously).IndexLoadErrors
 
     member this.LoadFailedRows =
-        this.Audit.Rows
-        |> List.choose (fun (_, audit) ->
+        this.Audit.Events
+        |> List.choose (fun audit ->
             match audit with
             | KnowledgeIndexLoadFailed payload -> Some payload
             | _ -> None)
@@ -172,7 +154,7 @@ let private newIndex
         snapshot,
         configure (SnapshotPolicy.create handling),
         "ProbeIndex",
-        SilentLogger()
+        Logger.silent
     )
 
 let private plainMaterialise (_: VectorScope) (rows: (string * string) list) =
@@ -580,7 +562,7 @@ let private stores: StoreUnderTest list = [
             fun storage handling ->
                 new ToolUp.RAG.InMemoryVectorStore.InMemoryVectorStore(
                     storage,
-                    SilentLogger(),
+                    Logger.silent,
                     telemetry = handling.Telemetry.Value,
                     auditLog = handling.AuditLog,
                     notifications = handling.Notifications.Value,
@@ -601,7 +583,7 @@ let private stores: StoreUnderTest list = [
             fun storage handling ->
                 new ToolUp.RAG.InMemoryBM25Index.InMemoryBM25Index(
                     storage,
-                    SilentLogger(),
+                    Logger.silent,
                     telemetry = handling.Telemetry.Value,
                     auditLog = handling.AuditLog,
                     notifications = handling.Notifications.Value,
@@ -622,7 +604,7 @@ let private stores: StoreUnderTest list = [
             fun storage handling ->
                 new ToolUp.RAG.VectorStores.Hnsw.HnswVectorStore.HnswVectorStore(
                     storage,
-                    SilentLogger(),
+                    Logger.silent,
                     telemetry = handling.Telemetry.Value,
                     auditLog = handling.AuditLog,
                     notifications = handling.Notifications.Value,
@@ -720,7 +702,7 @@ let private legacySnapshotTests =
                     use store =
                         new ToolUp.RAG.InMemoryVectorStore.InMemoryVectorStore(
                             storage,
-                            SilentLogger(),
+                            Logger.silent,
                             corruptPolicy = CorruptPolicy.Refuse
                         )
 
@@ -734,7 +716,7 @@ let private legacySnapshotTests =
                     use store =
                         new ToolUp.RAG.VectorStores.Hnsw.HnswVectorStore.HnswVectorStore(
                             storage,
-                            SilentLogger(),
+                            Logger.silent,
                             corruptPolicy = CorruptPolicy.Refuse
                         )
 
@@ -748,7 +730,7 @@ let private legacySnapshotTests =
                     use store =
                         new ToolUp.RAG.InMemoryBM25Index.InMemoryBM25Index(
                             storage,
-                            SilentLogger(),
+                            Logger.silent,
                             corruptPolicy = CorruptPolicy.Refuse
                         )
 
@@ -777,7 +759,7 @@ let private searchTests =
             use store =
                 new ToolUp.RAG.InMemoryVectorStore.InMemoryVectorStore(
                     storage,
-                    SilentLogger(),
+                    Logger.silent,
                     corruptPolicy = CorruptPolicy.StartEmpty
                 )
 

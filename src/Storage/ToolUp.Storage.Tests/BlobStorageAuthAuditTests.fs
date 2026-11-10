@@ -7,6 +7,7 @@ open ToolUp.Platform
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Audit
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 2c — the credential-rejection trail ───────────────────────
 //
@@ -34,22 +35,7 @@ open ToolUp.Platform.Compose
 // the Phase 733 wrapper defects were finally measured — and the unit
 // here is what makes it cheap to reason about when it runs.
 
-// ─── Recording sink ──────────────────────────────────────────────────
-
-/// Records every `(scopeId, event)` handed to it. Same shape as the
-/// `RecordingAuditLog` several other packs carry; kept local rather than
-/// shared because those are each private to their pack.
-type private RecordingAuditLog() =
-    let recorded = ResizeArray<string * AuditEvent>()
-    member _.Recorded = List.ofSeq recorded
-
-    interface IAuditLog with
-        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
-            recorded.Add(scopeId, audit)
-            return Ok()
-        }
-
-        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
+// ─── Failing sink ────────────────────────────────────────────────────
 
 /// A sink that fails on every write. `record`'s contract is that a
 /// failing sink is swallowed — audit emission must never turn a storage
@@ -62,11 +48,11 @@ type private ThrowingAuditLog() =
 
 let private run (work: Async<unit>) = Async.RunSynchronously work
 
-let private authRows (sink: RecordingAuditLog) =
-    sink.Recorded
-    |> List.choose (fun (scope, evt) ->
-        match evt with
-        | BlobStorageAuthFailed payload -> Some(scope, payload)
+let private authRows (sink: TestAuditLog) =
+    sink.Records
+    |> List.choose (fun row ->
+        match row.Event with
+        | BlobStorageAuthFailed payload -> Some(row.StreamKey, payload)
         | _ -> None)
 
 // ─── Real SDK exception instances ────────────────────────────────────
@@ -173,7 +159,7 @@ let tests =
 
         testList "record" [
             test "emits exactly one row, under _platform, carrying every queryable axis" {
-                let sink = RecordingAuditLog()
+                let sink = TestAuditLog()
 
                 run (BlobStorageAuthAudit.record (sink :> IAuditLog) "aws-s3" "acme-bucket" "Upload" 403 "denied")
 
@@ -194,7 +180,7 @@ let tests =
             }
 
             test "sanitises the reason on the way onto the row" {
-                let sink = RecordingAuditLog()
+                let sink = TestAuditLog()
 
                 run (
                     BlobStorageAuthAudit.record
@@ -241,115 +227,60 @@ let tests =
         // ─── Per-companion classification ────────────────────────────
 
         testList "authFailureStatus" [
-            testList "AwsS3Storage" [
-                test "401 and 403 classify; 404 does not" {
-                    Expect.equal
-                        (ToolUp.Storage.AwsS3Storage.authFailureStatus (awsException HttpStatusCode.Unauthorized))
-                        (Some 401)
-                        "401 is a credential fact"
+            // Each companion's classifier over its own SDK's exception, built from
+            // a status code. `notAuth` lists the codes that must NOT classify,
+            // with why: Azure adds 412, which only an authenticated caller gets.
+            let companions: (string * string * (exn -> int option) * (int -> exn) * (int * string) list) list = [
+                "AwsS3Storage",
+                "401 and 403 classify; 404 does not",
+                ToolUp.Storage.AwsS3Storage.authFailureStatus,
+                (fun code -> awsException (enum<HttpStatusCode> code)),
+                [ 404, "404 is an absence, not a credential fact" ]
 
-                    Expect.equal
-                        (ToolUp.Storage.AwsS3Storage.authFailureStatus (awsException HttpStatusCode.Forbidden))
-                        (Some 403)
-                        "403 is a credential fact"
+                "AzureBlobStorage",
+                "401 and 403 classify; 404 and 412 do not",
+                ToolUp.Storage.AzureBlobStorage.authFailureStatus,
+                azureException,
+                [
+                    404, "404 is an absence"
+                    412, "412 is a refused precondition, and the credential authenticated to get it"
+                ]
 
-                    Expect.equal
-                        (ToolUp.Storage.AwsS3Storage.authFailureStatus (awsException HttpStatusCode.NotFound))
-                        None
-                        "404 is an absence, not a credential fact"
-                }
-
-                test "classifies THROUGH an AggregateException wrapper" {
-                    // The shape an awaited Task actually delivers. A
-                    // direct type test on the wrapper never fires, which
-                    // is how this file's 416 arm sat dead until an armed
-                    // run measured it.
-                    Expect.equal
-                        (ToolUp.Storage.AwsS3Storage.authFailureStatus (wrapped (awsException HttpStatusCode.Forbidden)))
-                        (Some 403)
-                        "the wrapped 403 must classify identically to the bare one"
-                }
-
-                test "an unrelated exception classifies as not-a-credential-fact" {
-                    Expect.equal
-                        (ToolUp.Storage.AwsS3Storage.authFailureStatus (InvalidOperationException "boom"))
-                        None
-                        "a non-SDK exception is never an auth failure"
-                }
+                "GoogleCloudStorage",
+                "401 and 403 classify; 404 does not",
+                ToolUp.Storage.GoogleCloudStorage.authFailureStatus,
+                (fun code -> gcsException (enum<HttpStatusCode> code)),
+                [ 404, "404 is an absence" ]
             ]
 
-            testList "AzureBlobStorage" [
-                test "401 and 403 classify; 404 and 412 do not" {
-                    Expect.equal
-                        (ToolUp.Storage.AzureBlobStorage.authFailureStatus (azureException 401))
-                        (Some 401)
-                        "401 is a credential fact"
+            for companion, classifyName, authFailureStatus, raise', notAuth in companions do
+                testList companion [
+                    test classifyName {
+                        Expect.equal (authFailureStatus (raise' 401)) (Some 401) "401 is a credential fact"
+                        Expect.equal (authFailureStatus (raise' 403)) (Some 403) "403 is a credential fact"
 
-                    Expect.equal
-                        (ToolUp.Storage.AzureBlobStorage.authFailureStatus (azureException 403))
-                        (Some 403)
-                        "403 is a credential fact"
+                        for code, why in notAuth do
+                            Expect.equal (authFailureStatus (raise' code)) None why
+                    }
 
-                    Expect.equal
-                        (ToolUp.Storage.AzureBlobStorage.authFailureStatus (azureException 404))
-                        None
-                        "404 is an absence"
+                    test "classifies THROUGH an AggregateException wrapper" {
+                        // The shape an awaited Task actually delivers. A direct
+                        // type test on the wrapper never fires, which is how
+                        // the S3 companion's 416 arm sat dead until an armed
+                        // run measured it.
+                        Expect.equal
+                            (authFailureStatus (wrapped (raise' 403)))
+                            (Some 403)
+                            "the wrapped 403 must classify identically to the bare one"
+                    }
 
-                    Expect.equal
-                        (ToolUp.Storage.AzureBlobStorage.authFailureStatus (azureException 412))
-                        None
-                        "412 is a refused precondition, and the credential authenticated to get it"
-                }
-
-                test "classifies THROUGH an AggregateException wrapper" {
-                    Expect.equal
-                        (ToolUp.Storage.AzureBlobStorage.authFailureStatus (wrapped (azureException 403)))
-                        (Some 403)
-                        "the wrapped 403 must classify identically to the bare one"
-                }
-
-                test "an unrelated exception classifies as not-a-credential-fact" {
-                    Expect.equal
-                        (ToolUp.Storage.AzureBlobStorage.authFailureStatus (InvalidOperationException "boom"))
-                        None
-                        "a non-SDK exception is never an auth failure"
-                }
-            ]
-
-            testList "GoogleCloudStorage" [
-                test "401 and 403 classify; 404 does not" {
-                    Expect.equal
-                        (ToolUp.Storage.GoogleCloudStorage.authFailureStatus (gcsException HttpStatusCode.Unauthorized))
-                        (Some 401)
-                        "401 is a credential fact"
-
-                    Expect.equal
-                        (ToolUp.Storage.GoogleCloudStorage.authFailureStatus (gcsException HttpStatusCode.Forbidden))
-                        (Some 403)
-                        "403 is a credential fact"
-
-                    Expect.equal
-                        (ToolUp.Storage.GoogleCloudStorage.authFailureStatus (gcsException HttpStatusCode.NotFound))
-                        None
-                        "404 is an absence"
-                }
-
-                test "classifies THROUGH an AggregateException wrapper" {
-                    Expect.equal
-                        (ToolUp.Storage.GoogleCloudStorage.authFailureStatus (
-                            wrapped (gcsException HttpStatusCode.Forbidden)
-                        ))
-                        (Some 403)
-                        "the wrapped 403 must classify identically to the bare one"
-                }
-
-                test "an unrelated exception classifies as not-a-credential-fact" {
-                    Expect.equal
-                        (ToolUp.Storage.GoogleCloudStorage.authFailureStatus (InvalidOperationException "boom"))
-                        None
-                        "a non-SDK exception is never an auth failure"
-                }
-            ]
+                    test "an unrelated exception classifies as not-a-credential-fact" {
+                        Expect.equal
+                            (authFailureStatus (InvalidOperationException "boom"))
+                            None
+                            "a non-SDK exception is never an auth failure"
+                    }
+                ]
 
             test "every companion records under the id its health probe uses" {
                 // The join key. If either side is renamed without the

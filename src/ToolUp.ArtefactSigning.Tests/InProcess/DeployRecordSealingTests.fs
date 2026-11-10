@@ -9,6 +9,7 @@ open ToolUp.Platform.Secrets
 open ToolUp.ArtefactSigning
 open ToolUp.ArtefactSigning.Tests.Support.InMemoryStores
 open ToolUp.Platform.Infra
+open ToolUp.Platform.Testing
 
 // ─── Deploy-record sealing over the application signer ───────────────
 //
@@ -18,7 +19,7 @@ open ToolUp.Platform.Infra
 // purpose binding, and the key lifecycle.
 
 let private newProvider () =
-    let secrets = InMemorySecretStore() :> ISecretStore
+    let secrets = TestSecretStore() :> ISecretStore
     let audit = InMemoryAuditLog()
 
     ApplicationSigning.inProcess secrets audit "deploy-key-v1" EcdsaP256 "system"

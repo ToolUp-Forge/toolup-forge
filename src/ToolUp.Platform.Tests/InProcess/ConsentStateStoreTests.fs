@@ -1,7 +1,6 @@
 module ToolUp.Platform.Tests.InProcess.ConsentStateStoreTests
 
 open System
-open System.IO
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
@@ -11,6 +10,7 @@ open ToolUp.Platform.Infra.IEntityStore
 open ToolUp.Platform.Audit.Consent.ConsentStateStore
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Infra
+open ToolUp.Platform.Testing
 
 // ─── Phase 159 — IConsentStateStore in-process bindings ──────────────
 //
@@ -53,11 +53,8 @@ let private buildEntityStore (tempDir: string) : IEntityStore =
 
 let entityBackedTests =
     let factory () =
-        let tempDir =
-            Path.Combine(Path.GetTempPath(), "toolup-consent-test-" + Guid.NewGuid().ToString("N"))
-
-        Directory.CreateDirectory tempDir |> ignore
-        let entityStore = buildEntityStore tempDir
+        let tempDir = TempDir.forRun "consent-test"
+        let entityStore = buildEntityStore tempDir.Path
         let store = EntityBackedConsentStateStore(entityStore) :> IConsentStateStore
         let scopeA, scopeB = freshScopes ()
         store, scopeA, scopeB
@@ -70,16 +67,13 @@ let restartPersistenceTests =
     testList "EntityBackedConsentStateStore — durability across restart" [
         testCaseAsync "a subject's consent survives a fresh store instance over the same substrate"
         <| async {
-            let tempDir =
-                Path.Combine(Path.GetTempPath(), "toolup-consent-restart-" + Guid.NewGuid().ToString("N"))
-
-            Directory.CreateDirectory tempDir |> ignore
+            use tempDir = TempDir.create "consent-restart"
             let scope = "team-restart"
             let at = DateTimeOffset(2026, 6, 22, 0, 0, 0, TimeSpan.Zero)
 
             // First "process": write the decision, then drop the store.
             let store1 =
-                EntityBackedConsentStateStore(buildEntityStore tempDir) :> IConsentStateStore
+                EntityBackedConsentStateStore(buildEntityStore tempDir.Path) :> IConsentStateStore
 
             let input =
                 ConsentRecord.create
@@ -94,7 +88,7 @@ let restartPersistenceTests =
             // Second "process": brand-new store + registry over the
             // SAME on-disk substrate. No in-memory state carries over.
             let store2 =
-                EntityBackedConsentStateStore(buildEntityStore tempDir) :> IConsentStateStore
+                EntityBackedConsentStateStore(buildEntityStore tempDir.Path) :> IConsentStateStore
 
             let! fetched = store2.Get(scope, "subject-restart")
 

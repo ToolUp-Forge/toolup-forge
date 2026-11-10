@@ -4,25 +4,13 @@ open System.Collections.Generic
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Audit
+open ToolUp.Platform.Testing
 
 // Contract for the field-classification egress / DLP gate.
 // Proves the three load-bearing properties from the phase acceptance:
 //   * permissive default ⇒ byte-for-byte pass-through, zero audit noise;
 //   * an opt-in deny rule redacts / blocks exactly the matching level;
 //   * every non-Allow decision emits exactly one EgressBlocked audit row.
-
-/// Records every `Record` call so a test can assert audit shape + count.
-type private RecordingAuditLog() =
-    let recorded = ResizeArray<string * AuditEvent>()
-    member _.Events = List.ofSeq recorded
-
-    interface IAuditLog with
-        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
-            recorded.Add(scopeId, audit)
-            return Ok()
-        }
-
-        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return recorded |> Seq.map snd |> List.ofSeq }
 
 let private classifierFor (classifications: FieldClassification list) : IFieldClassifier =
     DefaultFieldClassifier.create classifications
@@ -43,18 +31,15 @@ let private customerFields =
     ]
 
 /// Only the egress payloads from a recorded audit trail.
-let private egressBlocks (audit: RecordingAuditLog) =
+let private egressBlocks (audit: TestAuditLog) =
     audit.Events
-    |> List.choose (
-        snd
-        >> function
-            | EgressBlocked p -> Some p
-            | _ -> None
-    )
+    |> List.choose (function
+        | EgressBlocked p -> Some p
+        | _ -> None)
 
 /// A gate over `customerClassifications` with `policy`, plus the JSON door over it.
 let private jsonDoor (policy: EgressPolicy) (classifications: FieldClassification list) (entities: string list) =
-    let audit = RecordingAuditLog()
+    let audit = TestAuditLog()
     let classifier = classifierFor classifications
     let gate = EgressGate.make classifier policy audit
     let crossing = EgressContext.create EgressBoundary.aiToolResult "alice"
@@ -185,7 +170,7 @@ let tests =
 
         testCaseAsync "Permissive default passes every field through unchanged"
         <| async {
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
 
             let gate =
                 EgressGate.make (classifierFor customerClassifications) EgressGate.permissiveEgressPolicy audit
@@ -199,7 +184,7 @@ let tests =
 
         testCaseAsync "Permissive default emits zero audit rows"
         <| async {
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
 
             let gate =
                 EgressGate.make (classifierFor customerClassifications) EgressGate.permissiveEgressPolicy audit
@@ -213,7 +198,7 @@ let tests =
 
         testCaseAsync "Block rule drops exactly the matching level + audits once"
         <| async {
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
             // Deny rule: Block Pii on export, Allow everything else.
             let policy: EgressPolicy =
                 fun level _ ->
@@ -243,7 +228,7 @@ let tests =
 
         testCaseAsync "Redact rule replaces the value with the placeholder + audits once"
         <| async {
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
 
             let policy: EgressPolicy =
                 fun level _ ->
@@ -268,7 +253,7 @@ let tests =
 
         testCaseAsync "Destination label flows onto the audit row"
         <| async {
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
             let policy: EgressPolicy = fun _ _ -> EgressDecision.Block
 
             let gate = EgressGate.make (classifierFor customerClassifications) policy audit
@@ -287,7 +272,7 @@ let tests =
 
         testCaseAsync "forExport binding point tags the ExportPayload boundary"
         <| async {
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
             let policy: EgressPolicy = fun _ _ -> EgressDecision.Block
 
             let! _ =

@@ -4,7 +4,6 @@
 module ToolUp.Platform.Tests.InProcess.FactImportTests
 
 open System
-open System.Collections.Concurrent
 open System.Text
 open System.Text.Json.Nodes
 open Expecto
@@ -19,6 +18,7 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Infra.Metrics
 open ToolUp.Platform.Audit
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Certificate-verified fact import ────────────────────────────────────
 //
@@ -39,56 +39,10 @@ open ToolUp.Platform.Compose
 // store is still EMPTY afterwards. "Refused" and "refused, and nothing
 // landed" are different claims, and only the second one is worth anything.
 
-/// Minimal in-memory `ISecretStore`. Each deployment gets its own — which
-/// is the point: no key material is shared, and the importing side never
-/// sees anything but a public key.
-type private InMemorySecretStore() =
-    let store = ConcurrentDictionary<string * string, string>()
-
-    interface ISecretStore with
-        member _.GetSecret(scopeId, key) = async {
-            match store.TryGetValue((scopeId, key)) with
-            | true, v -> return Some v
-            | false, _ -> return None
-        }
-
-        member _.SetSecret(scopeId, key, value) = async {
-            store[(scopeId, key)] <- value
-            return Ok()
-        }
-
-        member _.DeleteSecret(scopeId, key) = async {
-            store.TryRemove((scopeId, key)) |> ignore
-            return Ok()
-        }
-
-        member _.ListKeys(scopeId) = async {
-            return
-                store.Keys
-                |> Seq.filter (fun (s, _) -> s = scopeId)
-                |> Seq.map snd
-                |> List.ofSeq
-        }
-
-/// Records what the import door audited, so the trail can be asserted on
-/// rather than assumed.
-type private RecordingAuditLog() =
-    let recorded = ConcurrentQueue<AuditEvent>()
-
-    member _.Events = recorded |> List.ofSeq
-
-    member this.OfType(name: string) =
-        this.Events |> List.filter (fun e -> AuditEvent.eventTypeName e = name)
-
-    interface IAuditLog with
-        member _.Record(AuditScope.StreamKey _scopeId, _actor, audit) = async {
-            recorded.Enqueue audit
-            return Ok()
-        }
-
-        member _.GetAuditTrail(AuditScope.StreamKey _scopeId, _dateRange, _eventType) = async {
-            return recorded |> List.ofSeq
-        }
+/// The events of one kind the import door audited, so the trail can be
+/// asserted on rather than assumed.
+let private auditedAs (audit: TestAuditLog) (name: string) =
+    audit.Events |> List.filter (fun e -> AuditEvent.eventTypeName e = name)
 
 let private scopeA = "team-issuer"
 let private scopeB = "team-importer"
@@ -137,7 +91,10 @@ type private Deployment = {
 /// door — which is what makes the peer's own restriction observable on the
 /// importing side.
 let private deploymentWith (keyId: string) (gateFor: IFactStore -> IEventStore -> IFactDisclosureGate) = async {
-    let secrets = InMemorySecretStore() :> ISecretStore
+    // Each deployment gets its own secret store — which is the point: no key
+    // material is shared, and the importing side never sees anything but a
+    // public key.
+    let secrets = Fakes.TestSecretStore() :> ISecretStore
     let audit = NoOpAuditLog() :> IAuditLog
     let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
     let store = BlobFactStore.create (InMemoryBlobStorage.InMemoryBlobStorage()) events
@@ -215,7 +172,7 @@ let private bodyWith (keyId: string) (root: string) (nodes: CertificateNode list
 }
 
 /// An importing deployment's door, over its own store.
-let private doorFor (d: Deployment) (anchors: PeerTrustAnchor list) (audit: RecordingAuditLog) =
+let private doorFor (d: Deployment) (anchors: PeerTrustAnchor list) (audit: TestAuditLog) =
     FactImport.create d.Store anchors (audit :> IAuditLog)
 
 /// Nothing landed: the definitive half of every refusal probe.
@@ -387,7 +344,7 @@ let tests =
         <| async {
             let! a = deployment "deployment-a-v1"
             let! b = deployment "deployment-b-v1"
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
 
             let! original = seed a scopeA "revenue" 1250m Surfaceable
             let! certificate, json = certificateJsonFor a (TestScope.resolved scopeA) original.FactId
@@ -456,7 +413,7 @@ let tests =
                             "the method identity states the origin rather than laundering it"
 
                 // One accepted row, recording both stances.
-                match audit.OfType "FactImportAccepted" with
+                match auditedAs audit "FactImportAccepted" with
                 | [ FactsAudit(FactImportAccepted payload) ] ->
                     Expect.equal payload.PeerId "deployment-a" "the row names the peer the caller stated"
                     Expect.equal payload.PeerKeyId a.KeyId "and the key its anchor holds"
@@ -468,7 +425,7 @@ let tests =
                     Expect.equal payload.Reason "" "an accepted import states no reason"
                 | other -> failtestf "expected exactly one accepted row; got %A" other
 
-                Expect.isEmpty (audit.OfType "FactImportRefused") "and no refusal beside it"
+                Expect.isEmpty (auditedAs audit "FactImportRefused") "and no refusal beside it"
         }
 
         // ── disclosure mapping, both directions ─────────────────────────
@@ -477,7 +434,7 @@ let tests =
         <| async {
             let! a = deployment "deployment-a-v1"
             let! b = deployment "deployment-b-v1"
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
 
             let! original = seed a scopeA "revenue" 1250m Surfaceable
             let! _, json = certificateJsonFor a (TestScope.resolved scopeA) original.FactId
@@ -497,7 +454,7 @@ let tests =
                     (Restricted "policy:third-party")
                     "the importing deployment's ceiling narrows what a peer offered freely"
 
-                match audit.OfType "FactImportAccepted" with
+                match auditedAs audit "FactImportAccepted" with
                 | [ FactsAudit(FactImportAccepted payload) ] ->
                     Expect.equal payload.DeclaredDisclosure "Surfaceable" "the trail records what the peer declared"
 
@@ -516,7 +473,7 @@ let tests =
             // is that the stance is read out of the signed certificate.
             let! a = deploymentWith "deployment-a-v1" exportPermittingGate
             let! b = deployment "deployment-b-v1"
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
 
             let! original = seed a scopeA "margin" 42m (Restricted restrictedPolicy)
             let! _, json = certificateJsonFor a (TestScope.resolved scopeA) original.FactId
@@ -550,7 +507,7 @@ let tests =
         <| async {
             let! a = deployment "deployment-a-v1"
             let! b = deployment "deployment-b-v1"
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
 
             let! original = seed a scopeA "revenue" 1250m Surfaceable
             let! _, json = certificateJsonFor a (TestScope.resolved scopeA) original.FactId
@@ -568,7 +525,7 @@ let tests =
             | Ok _ -> failtest "a peer with no composed key material must never import"
 
             do! expectStoreEmpty b
-            Expect.equal (List.length (audit.OfType "FactImportRefused")) 1 "the refusal is audited"
+            Expect.equal (List.length (auditedAs audit "FactImportRefused")) 1 "the refusal is audited"
         }
 
         testCaseAsync "a certificate signed by another deployment's key is refused for this peer"
@@ -576,7 +533,7 @@ let tests =
             let! a = deployment "deployment-a-v1"
             let! b = deployment "deployment-b-v1"
             let! c = deployment "deployment-c-v1"
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
 
             let! original = seed a scopeA "revenue" 1250m Surfaceable
             let! _, json = certificateJsonFor a (TestScope.resolved scopeA) original.FactId
@@ -598,7 +555,7 @@ let tests =
         <| async {
             let! a = deployment "deployment-a-v1"
             let! b = deployment "deployment-b-v1"
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
 
             let! original = seed a scopeA "revenue" 1250m Surfaceable
             let! other = seed a scopeA "cost" 900m Surfaceable
@@ -623,7 +580,7 @@ let tests =
         <| async {
             let! a = deployment "deployment-a-v1"
             let! b = deployment "deployment-b-v1"
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
 
             let! certified = seed a scopeA "revenue" 1250m Surfaceable
             let! uncertified = seed a scopeA "cost" 900m Surfaceable
@@ -653,7 +610,7 @@ let tests =
             // as a mismatch rather than in the store.
             let! a = deployment "deployment-a-v1"
             let! b = deployment "deployment-b-v1"
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
 
             let! original = seed a scopeA "revenue" 1250m Surfaceable
             let! _, json = certificateJsonFor a (TestScope.resolved scopeA) original.FactId
@@ -704,7 +661,7 @@ let tests =
             do! expectStoreEmpty b
 
             Expect.equal
-                (List.length (audit.OfType "FactImportRefused"))
+                (List.length (auditedAs audit "FactImportRefused"))
                 (List.length mutations)
                 "every attempt is audited, one row each"
         }
@@ -713,7 +670,7 @@ let tests =
         <| async {
             let! a = deployment "deployment-a-v1"
             let! b = deployment "deployment-b-v1"
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
 
             // The peer classified this Internal, so its own gate withheld
             // the node when it issued the certificate: id, stance and
@@ -748,7 +705,7 @@ let tests =
             // this door is entitled to import.
             let! a = deployment "deployment-a-v1"
             let! b = deployment "deployment-b-v1"
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
 
             let! original = seed a scopeA "revenue" 1250m Surfaceable
             let offer = ImportedFactOffer.ofFact original
@@ -801,7 +758,7 @@ let tests =
             // unrecognised-scheme refusal takes.
             let! a = deployment "deployment-a-v1"
             let! b = deployment "deployment-b-v1"
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
 
             let! original = seed a scopeA "revenue" 1250m Surfaceable
             let offer = ImportedFactOffer.ofFact original
@@ -838,7 +795,7 @@ let tests =
         <| async {
             let! a = deployment "deployment-a-v1"
             let! b = deployment "deployment-b-v1"
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
 
             let! original = seed a scopeA "revenue" 1250m Surfaceable
 
@@ -881,7 +838,7 @@ let tests =
             // nothing at all. An auditor can tell them apart.
             let! a = deployment "deployment-a-v1"
             let! b = deployment "deployment-b-v1"
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
 
             let! original = seed a scopeA "revenue" 1250m Surfaceable
             let! _, json = certificateJsonFor a (TestScope.resolved scopeA) original.FactId
@@ -896,7 +853,7 @@ let tests =
 
             do! expectStoreEmpty b
 
-            match audit.OfType "FactImportRefused" with
+            match auditedAs audit "FactImportRefused" with
             | [ FactsAudit(FactImportRefused payload) ] ->
                 Expect.equal payload.ImportedFactId "" "a refusal claims no local fact"
                 Expect.stringContains payload.Reason "no key material" "and states why"
@@ -915,7 +872,7 @@ let tests =
         <| async {
             let! a = deployment "deployment-a-v1"
             let! b = deployment "deployment-b-v1"
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
 
             let! original = seed a scopeA "revenue" 1250m Surfaceable
 
@@ -943,7 +900,7 @@ let tests =
                 | Imported ref' -> Expect.equal ref' expectedRef "the import carries the verified certificate's own ref"
                 | other -> failtestf "an imported fact must carry Imported provenance; got %A" other
 
-                match audit.OfType "FactImportAccepted" with
+                match auditedAs audit "FactImportAccepted" with
                 | [ FactsAudit(FactImportAccepted payload) ] ->
                     Expect.equal
                         payload.AttestationLevel
@@ -967,7 +924,7 @@ let tests =
             // defaulting this door refuses everywhere else.
             let! a = deployment "deployment-a-v1"
             let! b = deployment "deployment-b-v1"
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
 
             let! original = seed a scopeA "revenue" 1250m Surfaceable
             let! _, json = certificateJsonFor a (TestScope.resolved scopeA) original.FactId
@@ -985,7 +942,7 @@ let tests =
             | Error refusal ->
                 failtestf "the direct path must be unchanged by a level policy: %s" (FactImportRefusal.describe refusal)
             | Ok _ ->
-                match audit.OfType "FactImportAccepted" with
+                match auditedAs audit "FactImportAccepted" with
                 | [ FactsAudit(FactImportAccepted payload) ] ->
                     Expect.equal payload.AttestationLevel "" "a document claiming no level records none"
                 | other -> failtestf "expected exactly one accepted row; got %A" other
@@ -1007,7 +964,7 @@ let tests =
                 // A fresh importer per arm, so "nothing landed" stays a
                 // statement about this arm alone.
                 let! b = deployment "deployment-b-v1"
-                let audit = RecordingAuditLog()
+                let audit = TestAuditLog()
                 let! _, json = attestedCertificateJsonFor a (TestScope.resolved scopeA) original.FactId level
 
                 let anchor =
@@ -1040,7 +997,7 @@ let tests =
                     IsolatedSigner, []
                 ] do
                 let! b = deployment "deployment-b-v1"
-                let audit = RecordingAuditLog()
+                let audit = TestAuditLog()
                 let! _, json = attestedCertificateJsonFor a (TestScope.resolved scopeA) original.FactId level
 
                 let anchor =
@@ -1067,7 +1024,7 @@ let tests =
 
                 do! expectStoreEmpty b
 
-                match audit.OfType "FactImportRefused" with
+                match auditedAs audit "FactImportRefused" with
                 | [ FactsAudit(FactImportRefused payload) ] ->
                     Expect.equal
                         payload.AttestationLevel
@@ -1101,7 +1058,7 @@ let tests =
                     []
                 ] do
                 let! b = deployment "deployment-b-v1"
-                let audit = RecordingAuditLog()
+                let audit = TestAuditLog()
 
                 let anchor =
                     PeerTrustAnchor.create "deployment-a" a.PublicKey
@@ -1128,7 +1085,7 @@ let tests =
             // one of a pair it is not a member of.
             let! a = deployment "deployment-a-v1"
             let! b = deployment "deployment-b-v1"
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
 
             let! original = seed a scopeA "revenue" 1250m Surfaceable
             let offer = ImportedFactOffer.ofFact original
@@ -1171,7 +1128,7 @@ let tests =
             // incompatible things and cannot be read at all.
             let! a = deployment "deployment-a-v1"
             let! b = deployment "deployment-b-v1"
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
 
             let! original = seed a scopeA "revenue" 1250m Surfaceable
             let offer = ImportedFactOffer.ofFact original
@@ -1219,7 +1176,7 @@ let tests =
 
             do! expectStoreEmpty b
 
-            match audit.OfType "FactImportRefused" with
+            match auditedAs audit "FactImportRefused" with
             | [ FactsAudit(FactImportRefused payload) ] ->
                 Expect.equal
                     payload.AttestationLevel
@@ -1238,7 +1195,7 @@ let tests =
             // been applied to a level no signature covered.
             let! a = deployment "deployment-a-v1"
             let! b = deployment "deployment-b-v1"
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
 
             let! certified = seed a scopeA "revenue" 1250m Surfaceable
             let! other = seed a scopeA "cost" 900m Surfaceable

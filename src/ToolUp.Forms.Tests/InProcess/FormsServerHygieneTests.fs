@@ -1,20 +1,18 @@
 module ToolUp.Forms.Tests.InProcess.FormsServerHygieneTests
 
 open System
-open System.Collections.Concurrent
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.EntityTypes
 open ToolUp.Platform.EntityQueryTypes
 open ToolUp.Platform.Infra.IEntityStore
-open ToolUp.Platform.Metrics
 open ToolUp.Forms.FormSchema
 open ToolUp.Forms.IFormStore
 open ToolUp.Forms.FormStore
 open ToolUp.Forms.FormsCompose
 open ToolUp.Forms.Tests.InProcess.InMemoryEntityStore
 open ToolUp.Platform.Infra
-open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Testing
 
 // ─── Forms server-side defensive hygiene tidy-up ────────────────────
 //
@@ -36,19 +34,6 @@ open ToolUp.Platform.Infra.Metrics
 //        the offending key(s) and field positions.
 
 // ─── M3 — ListSchemas error-surfacing fixtures ──────────────────────
-
-/// Test-only counting metrics sink. Increment / Record / SetGauge each
-/// append to an internal list so assertions can inspect per-tag counts
-/// without depending on the production Prometheus / Otel sinks.
-type private RecordingMetricsSink() =
-    let increments = ResizeArray<string * Map<string, string>>()
-
-    interface IMetricsSink with
-        member _.Record(_, _, _) = ()
-        member _.Increment(name, tags) = increments.Add(name, tags)
-        member _.SetGauge(_, _, _) = ()
-
-    member _.Increments = increments :> seq<_>
 
 /// `IEntityStore` decorator that wraps an inner store and refuses to
 /// `Get` entities whose id sits in the `failIds` set. `ListAll` still
@@ -116,7 +101,7 @@ let private listSchemasErrorSurfacingTests =
         <| async {
             let inner = InMemoryEntityStore() :> IEntityStore
             let warnLog = ResizeArray<string>()
-            let metrics = RecordingMetricsSink()
+            let metrics = Fakes.TestMetricsSink()
             let store = FormStore(inner, warnLog.Add, metrics) :> IFormStore
             let scopeId = freshScope ()
 
@@ -149,7 +134,7 @@ let private listSchemasErrorSurfacingTests =
                 FaultingGetEntityStore(inner, Set.ofList [ "alpha"; "charlie" ]) :> IEntityStore
 
             let warnLog = ResizeArray<string>()
-            let metrics = RecordingMetricsSink()
+            let metrics = Fakes.TestMetricsSink()
             let faultingFormStore = FormStore(faulting, warnLog.Add, metrics) :> IFormStore
 
             let! listed = faultingFormStore.ListSchemas scopeId

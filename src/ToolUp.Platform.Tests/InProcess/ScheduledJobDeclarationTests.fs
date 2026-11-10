@@ -2,7 +2,6 @@ module ToolUp.Platform.Tests.InProcess.ScheduledJobDeclarationTests
 
 open System
 open System.Collections.Concurrent
-open System.IO
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
@@ -12,6 +11,7 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 9b.B — ComposeJobs.registerScheduledJobDeclarations ────────
 //
@@ -22,23 +22,6 @@ open ToolUp.Platform.Compose
 // rooted in a fresh temp directory per test, plus a logger spy that
 // captures the `Warn` lines emitted under `NoJobScheduler` /
 // `Schedule` errors.
-
-/// `ILogger` test double that captures every level into thread-safe
-/// queues. Mirrors the pattern in adjacent tests that need to assert on
-/// warn / error output without colour-coded console noise.
-type private CapturingLogger() =
-    let warns = ConcurrentQueue<string>()
-    let errors = ConcurrentQueue<string>()
-
-    member _.Warns = warns |> Seq.toList
-    member _.Errors = errors |> Seq.toList
-
-    interface ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn msg = warns.Enqueue(msg)
-
-        member _.Error(msg, _) = errors.Enqueue(msg)
 
 /// Stub `INotificationChannel` — the scheduler constructor requires
 /// one; `Schedule` does not publish through it.
@@ -64,22 +47,10 @@ type private RecordingHandler() =
             return JobResult.Success
         }
 
-let private freshScheduler () =
-    let root =
-        Path.Combine(Path.GetTempPath(), "toolup-sjd-tests-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory(root) |> ignore
+let private freshScheduler (root: string) =
     let storage = LocalFileStorage.LocalFileStorage(root) :> IBlobStorage
     let eventStore = InMemoryEventStore.InMemoryEventStore() :> IEventStore
     let jobStore = JobStore.create storage eventStore
-
-    let silentLogger =
-        { new ILogger with
-            member _.Debug _ = ()
-            member _.Info _ = ()
-            member _.Warn _ = ()
-            member _.Error(_, _) = ()
-        }
 
     let scheduler =
         JobScheduler.create
@@ -88,7 +59,7 @@ let private freshScheduler () =
                 EventStore = eventStore
                 NotificationChannel = silentChannel
                 Config = ServerConfig.defaults
-                Logger = silentLogger
+                Logger = Logger.silent
                 ActivitySink = (NoOpActivitySink() :> IActivitySink)
             }
             : JobScheduler.SchedulerDeps)
@@ -102,15 +73,17 @@ let tests =
 
         testCase "empty declarations under NoJobScheduler is a silent no-op"
         <| fun _ ->
-            let logger = CapturingLogger()
+            let logger = Logger.recording ()
             registerScheduledJobDeclarations None [] (logger :> ILogger)
 
-            Expect.isEmpty logger.Warns "no warn emitted for empty declarations under NoJobScheduler"
-            Expect.isEmpty logger.Errors "no error emitted"
+            let warns = logger.MessagesAt LogSeverity.Warn
+            Expect.isEmpty warns "no warn emitted for empty declarations under NoJobScheduler"
+            let errors = logger.MessagesAt LogSeverity.Error
+            Expect.isEmpty errors "no error emitted"
 
         testCase "non-empty declarations under NoJobScheduler emit a single warn"
         <| fun _ ->
-            let logger = CapturingLogger()
+            let logger = Logger.recording ()
             let handler = RecordingHandler() :> IJobHandler
 
             let declarations = [
@@ -120,18 +93,20 @@ let tests =
 
             registerScheduledJobDeclarations None declarations (logger :> ILogger)
 
-            Expect.equal logger.Warns.Length 1 "exactly one warn for the whole declaration list"
+            let warns = logger.MessagesAt LogSeverity.Warn
+            Expect.equal warns.Length 1 "exactly one warn for the whole declaration list"
 
-            Expect.stringContains logger.Warns[0] "Phase 9b.B" "warn cites the phase that surfaces the contract"
+            Expect.stringContains warns[0] "Phase 9b.B" "warn cites the phase that surfaces the contract"
 
-            Expect.stringContains logger.Warns[0] "test.scan-a" "warn names the skipped handler(s)"
-            Expect.stringContains logger.Warns[0] "test.scan-b" "warn names every skipped handler"
-            Expect.stringContains logger.Warns[0] "NoJobScheduler" "warn diagnoses the root cause"
+            Expect.stringContains warns[0] "test.scan-a" "warn names the skipped handler(s)"
+            Expect.stringContains warns[0] "test.scan-b" "warn names every skipped handler"
+            Expect.stringContains warns[0] "NoJobScheduler" "warn diagnoses the root cause"
 
         testCase "single declaration registers handler and schedules under default _platform scope"
         <| fun _ ->
-            let scheduler = freshScheduler ()
-            let logger = CapturingLogger()
+            use dir = TempDir.create "sjd-tests"
+            let scheduler = freshScheduler dir.Path
+            let logger = Logger.recording ()
             let handler = RecordingHandler() :> IJobHandler
 
             let declarations = [
@@ -140,7 +115,8 @@ let tests =
 
             registerScheduledJobDeclarations (Some scheduler) declarations (logger :> ILogger)
 
-            Expect.isEmpty logger.Warns "no warn emitted on the happy path"
+            let warns = logger.MessagesAt LogSeverity.Warn
+            Expect.isEmpty warns "no warn emitted on the happy path"
 
             let jobs = scheduler.ListJobs "_platform" |> Async.RunSynchronously
             Expect.equal jobs.Length 1 "exactly one job persisted under the default scope"
@@ -162,8 +138,9 @@ let tests =
 
         testCase "Scopes list fans out per scope with distinct idempotency keys"
         <| fun _ ->
-            let scheduler = freshScheduler ()
-            let logger = CapturingLogger()
+            use dir = TempDir.create "sjd-tests"
+            let scheduler = freshScheduler dir.Path
+            let logger = Logger.recording ()
             let handler = RecordingHandler() :> IJobHandler
 
             let declaration =
@@ -186,8 +163,9 @@ let tests =
 
         testCase "re-registering the same declaration is idempotent (no duplicate JobDefinition)"
         <| fun _ ->
-            let scheduler = freshScheduler ()
-            let logger = CapturingLogger()
+            use dir = TempDir.create "sjd-tests"
+            let scheduler = freshScheduler dir.Path
+            let logger = Logger.recording ()
             let handler = RecordingHandler() :> IJobHandler
 
             let declarations = [
@@ -206,8 +184,9 @@ let tests =
 
         testCase "explicit Idempotency override is preserved"
         <| fun _ ->
-            let scheduler = freshScheduler ()
-            let logger = CapturingLogger()
+            use dir = TempDir.create "sjd-tests"
+            let scheduler = freshScheduler dir.Path
+            let logger = Logger.recording ()
             let handler = RecordingHandler() :> IJobHandler
 
             let customKey: IdempotencyKey = {
@@ -228,8 +207,9 @@ let tests =
 
         testCase "compose-time source tag is stamped on every scheduled job"
         <| fun _ ->
-            let scheduler = freshScheduler ()
-            let logger = CapturingLogger()
+            use dir = TempDir.create "sjd-tests"
+            let scheduler = freshScheduler dir.Path
+            let logger = Logger.recording ()
             let handler = RecordingHandler() :> IJobHandler
 
             let declarations = [
@@ -247,8 +227,9 @@ let tests =
 
         testCase "invalid cron expression logs warn but does not abort the loop"
         <| fun _ ->
-            let scheduler = freshScheduler ()
-            let logger = CapturingLogger()
+            use dir = TempDir.create "sjd-tests"
+            let scheduler = freshScheduler dir.Path
+            let logger = Logger.recording ()
             let handler = RecordingHandler() :> IJobHandler
 
             let declarations = [
@@ -270,6 +251,7 @@ let tests =
 
             Expect.isTrue (Set.contains "test.also-valid" scheduledHandlers) "valid after-invalid still scheduled"
 
-            Expect.equal logger.Warns.Length 1 "exactly one warn for the failed schedule"
-            Expect.stringContains logger.Warns[0] "test.invalid" "warn names the failing handler"
+            let warns = logger.MessagesAt LogSeverity.Warn
+            Expect.equal warns.Length 1 "exactly one warn for the failed schedule"
+            Expect.stringContains warns[0] "test.invalid" "warn names the failing handler"
     ]

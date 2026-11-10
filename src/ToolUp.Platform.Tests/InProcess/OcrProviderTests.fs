@@ -24,6 +24,7 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Audit
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 500 — OCR companion + "OCR unavailable" signal ────────────
 //
@@ -502,26 +503,14 @@ let private tesseractFailLoud =
         }
 
         test "a tessdata directory missing the language file fails at create, naming the file" {
-            let empty =
-                Path.Combine(Path.GetTempPath(), "toolup-tessdata-" + Guid.NewGuid().ToString("N"))
+            use empty = TempDir.create "tessdata"
 
-            Directory.CreateDirectory empty |> ignore
-
-            try
-                expectRaisesNaming
-                    "deu.traineddata"
-                    "create must name the specific language file that is absent"
-                    (fun () ->
-                        create {
-                            TesseractOcrOptions.forTessData empty with
-                                Language = "deu"
-                        }
-                        |> ignore)
-            finally
-                try
-                    Directory.Delete(empty, true)
-                with _ ->
-                    ()
+            expectRaisesNaming "deu.traineddata" "create must name the specific language file that is absent" (fun () ->
+                create {
+                    TesseractOcrOptions.forTessData empty.Path with
+                        Language = "deu"
+                }
+                |> ignore)
         }
 
         test "invalid options fail at create, before any filesystem or native probe" {
@@ -562,14 +551,6 @@ let private tesseractMime =
 // `uploadDocument` handler, reading the terminal status back off the
 // persisted index exactly as the client's status poll does.
 
-let private noopLogger =
-    { new ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn _ = ()
-        member _.Error(_, _) = ()
-    }
-
 let private noopNotifications =
     { new INotificationChannel with
         member _.Publish(_, _) = async.Return()
@@ -586,7 +567,7 @@ let private mkDeps (storage: IBlobStorage) (ocr: IOcrProvider) (container: strin
     OcrProvider = ocr
     TableExtractor = noOpTables
     Notifications = noopNotifications
-    Logger = noopLogger
+    Logger = Logger.silent
     Scope = {
         ScopeId = container
         Container = container

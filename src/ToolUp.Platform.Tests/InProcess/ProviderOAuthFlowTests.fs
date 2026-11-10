@@ -11,6 +11,7 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 43.B — the Claude + OpenAI reference provider flows ─────
 //
@@ -211,7 +212,7 @@ let tests =
             let flow = claudeFlow rejectingPost
             let secrets = SeededSecrets [ ClaudeOAuth.FlowName ] :> ISecretStore
             let profiles = ProviderOAuthTestSupport.memoryProviderProfile ()
-            let audit = ProviderOAuthTestSupport.RecordingAuditLog()
+            let audit = TestAuditLog()
             let correlation = OAuthCorrelationKey.providerEntry "anthropic"
 
             let credentials: OAuthCredentials = {
@@ -264,7 +265,7 @@ let tests =
                 "the entry's health says reconnect"
 
             Expect.isTrue
-                (audit.Recorded
+                (audit.Events
                  |> List.exists (fun e -> AuditEvent.eventTypeName e = "OAuthRefreshFailed"))
                 "an audit event was emitted — a silent reauthorization requirement is one nobody acts on"
         }

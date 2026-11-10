@@ -29,39 +29,15 @@ open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ── fixtures ──────────────────────────────────────────────────────────
 
-type private RecordingAuditLog() =
-    let recorded = ResizeArray<string * AuditEvent>()
-    let gate = obj ()
-    member _.Events = lock gate (fun () -> List.ofSeq recorded)
-
-    /// The default observer writes fire-and-forget, so a probe asserting
-    /// on rows waits for them; capped, and loud on timeout.
-    member _.WaitFor(count: int) =
-        let cap = TimeSpan.FromSeconds 30.0
-        let sw = Diagnostics.Stopwatch.StartNew()
-
-        lock gate (fun () ->
-            while recorded.Count < count && sw.Elapsed < cap do
-                Threading.Monitor.Wait(gate, cap - sw.Elapsed) |> ignore
-
-            if recorded.Count < count then
-                failtestf "audit wait: %d of %d expected row(s) arrived" recorded.Count count)
-
-    interface IAuditLog with
-        member _.Record(AuditScope.StreamKey scope, _actor, audit) = async {
-            lock gate (fun () ->
-                recorded.Add((scope, audit))
-                Threading.Monitor.PulseAll gate)
-
-            return Ok()
-        }
-
-        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async {
-            return lock gate (fun () -> recorded |> Seq.map snd |> List.ofSeq)
-        }
+/// The default observer writes fire-and-forget, so a probe asserting on
+/// rows waits for them; capped, and loud on timeout.
+let private waitForRows (audit: TestAuditLog) (count: int) =
+    if not (audit.Recording.WaitUntil((fun rows -> List.length rows >= count), TimeSpan.FromSeconds 30.0)) then
+        failtestf "audit wait: %d of %d expected row(s) arrived" audit.Recording.Count count
 
 /// A primary handler that never opens a socket and records what reached it.
 type private RecordingHandler() =
@@ -149,9 +125,9 @@ let private run (handler: Giraffe.Core.HttpHandler) (ctx: HttpContext) =
 let private outcomeOf (ctx: HttpContext) =
     ctx.Items["outcome"] :?> HostCapabilityOutcome
 
-let private refusedRows (audit: RecordingAuditLog) =
+let private refusedRows (audit: TestAuditLog) =
     audit.Events
-    |> List.choose (fun (_, event) ->
+    |> List.choose (fun event ->
         match event with
         | AuditEvent.CompositionCapabilityRefused p -> Some p
         | _ -> None)
@@ -164,7 +140,7 @@ let private effectAxis =
         testCase "a Pure route invoking an effecting capability is refused by the Phase 300 gate, with an audit row"
         <| fun _ ->
             let registry, ran = registryWithCounter ()
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
 
             let app =
                 ServerApp.empty
@@ -188,7 +164,7 @@ let private effectAxis =
             | other -> failtestf "a Pure route must be refused the invocation, got %A" other
 
             Expect.equal ran.Value 0 "the capability must never run"
-            audit.WaitFor 1
+            waitForRows audit 1
 
             match refusedRows audit with
             | [ row ] ->
@@ -200,7 +176,7 @@ let private effectAxis =
         testCase "the same route undeclared behaves as today"
         <| fun _ ->
             let registry, ran = registryWithCounter ()
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
             let m = invokingModule registry
             let app = ServerApp.empty |> ServerApp.addModule m
 
@@ -294,7 +270,7 @@ let private effectAxis =
         testCase "a registered RouteEffectObserver receives the refusal instead of the default audit"
         <| fun _ ->
             let registry, _ = registryWithCounter ()
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
             let observed = ResizeArray<CapabilityDenial>()
 
             let app =
@@ -390,7 +366,7 @@ let private egressAxis =
         testCase "a declared egress grant permits exactly its origins"
         <| fun _ ->
             isolated (fun () ->
-                let audit = RecordingAuditLog()
+                let audit = TestAuditLog()
                 EgressEnforcement.bindAudit audit
                 let inner = new RecordingHandler()
                 use client = PlatformHttpClient.createWith EgressSurface.ModuleHandler inner
@@ -424,7 +400,7 @@ let private egressAxis =
 
                 match
                     audit.Events
-                    |> List.choose (fun (_, e) ->
+                    |> List.choose (fun e ->
                         match e with
                         | EgressDenied p -> Some p
                         | _ -> None)

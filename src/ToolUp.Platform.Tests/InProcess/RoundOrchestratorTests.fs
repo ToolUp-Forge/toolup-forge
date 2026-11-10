@@ -10,6 +10,7 @@ open ToolUp.InterPlatform.PeerAuditEvents
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Infra
+open ToolUp.Platform.Testing
 
 // ─── Phase 483 — multi-round protocol orchestrator ───────────────────
 //
@@ -35,22 +36,6 @@ let private target id = {
 let private scope = "_platform"
 
 // ─── Test doubles ─────────────────────────────────────────────────────
-
-/// Records every audit row the observer writes. `GetAuditTrail` is never
-/// exercised by the orchestrator — the observer is write-only — so it
-/// answers from the same list rather than pretending to filter.
-type private RecordingAuditLog() =
-    let recorded = ConcurrentQueue<AuditEvent>()
-
-    member _.Events = recorded |> List.ofSeq
-
-    interface IAuditLog with
-        member _.Record(AuditScope.StreamKey _scopeId, _actor, audit) = async {
-            recorded.Enqueue audit
-            return Ok()
-        }
-
-        member this.GetAuditTrail(AuditScope.StreamKey _scopeId, _dateRange, _eventType) = async { return this.Events }
 
 /// Records every notification published. Subscribe / Unsubscribe are
 /// inert — the orchestrator only ever publishes.
@@ -539,7 +524,7 @@ let tests =
 
         testCaseAsync "every dropout decision is audited, alongside the round and the abort"
         <| async {
-            let auditLog = RecordingAuditLog()
+            let auditLog = TestAuditLog()
             let channel = RecordingNotificationChannel()
             let store = InMemoryRoundStateStore() :> IRoundStateStore
 
@@ -608,7 +593,7 @@ let tests =
 
         testCaseAsync "an aborted run emits a RunAborted audit row naming the reason"
         <| async {
-            let auditLog = RecordingAuditLog()
+            let auditLog = TestAuditLog()
             let store = InMemoryRoundStateStore() :> IRoundStateStore
 
             let orchestrator =

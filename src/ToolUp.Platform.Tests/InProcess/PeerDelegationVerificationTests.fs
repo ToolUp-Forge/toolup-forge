@@ -16,6 +16,7 @@ open ToolUp.Platform.Secrets
 open ToolUp.InterPlatform
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 330 — delegation assertions are verified before dispatch ──
 //
@@ -78,34 +79,6 @@ let private contractId = "ledger"
 let private honestSubject = "analyst@origin"
 
 let private impersonatedSubject = "admin@victim"
-
-type private InMemorySecretStore() =
-    let store = ConcurrentDictionary<string * string, string>()
-
-    interface ISecretStore with
-        member _.GetSecret(scopeId, key) = async {
-            match store.TryGetValue((scopeId, key)) with
-            | true, v -> return Some v
-            | false, _ -> return None
-        }
-
-        member _.SetSecret(scopeId, key, value) = async {
-            store[(scopeId, key)] <- value
-            return Ok()
-        }
-
-        member _.DeleteSecret(scopeId, key) = async {
-            store.TryRemove((scopeId, key)) |> ignore
-            return Ok()
-        }
-
-        member _.ListKeys(scopeId) = async {
-            return
-                store.Keys
-                |> Seq.filter (fun (s, _) -> s = scopeId)
-                |> Seq.map snd
-                |> List.ofSeq
-        }
 
 /// Seed a peer's symmetric HS256 signing key at the exact reserved
 /// location `JwtPeerAuthProvider` reads on every issue / validate /
@@ -220,10 +193,10 @@ let private originKey = "origin-signing-key-0123456789abcdefghijkl"
 /// `origin`, so the outer bearer token always validates and the only
 /// thing any case below varies is the delegation leg.
 let private callAs (admitEverything: bool) (user: UserContext) = async {
-    let brokerSecrets = InMemorySecretStore() :> ISecretStore
+    let brokerSecrets = Fakes.TestSecretStore() :> ISecretStore
     seedSigningKey brokerSecrets brokerId.PeerId brokerKey
 
-    let sellerSecrets = InMemorySecretStore() :> ISecretStore
+    let sellerSecrets = Fakes.TestSecretStore() :> ISecretStore
     seedSigningKey sellerSecrets brokerId.PeerId brokerKey
     seedSigningKey sellerSecrets "origin" originKey
 
@@ -464,7 +437,7 @@ let userContextClaimTests =
     let issuer = brokerId.PeerId
 
     let receiver () =
-        let s = InMemorySecretStore() :> ISecretStore
+        let s = Fakes.TestSecretStore() :> ISecretStore
         seedSigningKey s issuer signingKey
         JwtPeerAuthProvider(s) :> IPeerAuthProvider
 

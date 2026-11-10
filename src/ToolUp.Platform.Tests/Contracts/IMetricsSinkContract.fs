@@ -7,6 +7,7 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Metrics
 open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Testing
 
 // ─── IMetricsSink contract pack ──────────────────────────────────────
 //
@@ -30,30 +31,6 @@ open ToolUp.Platform.Infra.Metrics
 //   7. Concurrent emission safety
 //   8. Module namespace prefixing (`Module = Some "MyMod"`)
 //   9. Reserved-prefix protection (module declaring `toolup.*` rejected)
-
-let private noopLogger =
-    { new ILogger with
-        member _.Debug(_: string) = ()
-        member _.Info(_: string) = ()
-        member _.Warn(_: string) = ()
-        member _.Error(_: string, _: exn option) = ()
-    }
-
-/// Simple recording logger so test 5 can assert "exactly one Warn
-/// per cardinality overflow."
-type private RecordingLogger() =
-    let warnings = ResizeArray<string>()
-
-    member _.Warnings = warnings |> List.ofSeq
-
-    interface ILogger with
-        member _.Debug(_: string) = ()
-        member _.Info(_: string) = ()
-
-        member _.Warn(message: string) =
-            lock warnings (fun () -> warnings.Add message)
-
-        member _.Error(_: string, _: exn option) = ()
 
 let tests
     (name: string)
@@ -79,7 +56,7 @@ let tests
                 }
             ]
 
-            let sink, render = factory MetricsSinkConfig.defaults regs noopLogger
+            let sink, render = factory MetricsSinkConfig.defaults regs Logger.silent
             sink.Increment("toolup.foo.total", Map.empty)
             sink.Increment("toolup.foo.total", Map.empty)
             sink.Increment("toolup.foo.total", Map.empty)
@@ -105,7 +82,7 @@ let tests
                 }
             ]
 
-            let sink, render = factory MetricsSinkConfig.defaults regs noopLogger
+            let sink, render = factory MetricsSinkConfig.defaults regs Logger.silent
             sink.SetGauge("toolup.foo.gauge", 42.0, Map.empty)
             sink.SetGauge("toolup.foo.gauge", 17.0, Map.empty)
             let output = render ()
@@ -131,7 +108,7 @@ let tests
                 }
             ]
 
-            let sink, render = factory MetricsSinkConfig.defaults regs noopLogger
+            let sink, render = factory MetricsSinkConfig.defaults regs Logger.silent
             sink.Record("toolup.foo.dur_ms", 75.0, Map.empty)
             let output = render ()
 
@@ -158,7 +135,7 @@ let tests
                 }
             ]
 
-            let sink, render = factory MetricsSinkConfig.defaults regs noopLogger
+            let sink, render = factory MetricsSinkConfig.defaults regs Logger.silent
             sink.Increment("toolup.foo.tagged", Map.ofList [ "allowed", "yes"; "forbidden", "no" ])
             let output = render ()
 
@@ -189,7 +166,7 @@ let tests
                 }
             ]
 
-            let logger = RecordingLogger()
+            let logger = Logger.recording ()
             let sink, render = factory cfg regs (logger :> ILogger)
 
             for i in 1 .. (cap + 5) do
@@ -197,7 +174,11 @@ let tests
 
             let output = render ()
             Expect.stringContains output "_overflow=\"true\"" "overflow series rendered"
-            Expect.equal (List.length logger.Warnings) 1 "exactly one Warn for cardinality overflow"
+
+            Expect.equal
+                (List.length (logger.MessagesAt LogSeverity.Warn))
+                1
+                "exactly one Warn for cardinality overflow"
 
         // ─── 6. Per-metric override raises the cap ──────────────
 
@@ -231,7 +212,7 @@ let tests
                 }
             ]
 
-            let sink, render = factory cfg regs noopLogger
+            let sink, render = factory cfg regs Logger.silent
 
             for i in 1..10 do
                 sink.Increment("toolup.low.total", Map.ofList [ "id", string i ])
@@ -279,7 +260,7 @@ let tests
                 }
             ]
 
-            let sink, render = factory MetricsSinkConfig.defaults regs noopLogger
+            let sink, render = factory MetricsSinkConfig.defaults regs Logger.silent
             let threads = 8
             let perThread = 1000
 
@@ -312,7 +293,7 @@ let tests
                 }
             ]
 
-            let sink, render = factory MetricsSinkConfig.defaults regs noopLogger
+            let sink, render = factory MetricsSinkConfig.defaults regs Logger.silent
             // The post-namespace name is `toolup.mymod.foo.total`.
             sink.Increment("toolup.mymod.foo.total", Map.empty)
             let output = render ()
@@ -345,7 +326,7 @@ let tests
             ]
 
             Expect.throws
-                (fun () -> factory MetricsSinkConfig.defaults regs noopLogger |> ignore)
+                (fun () -> factory MetricsSinkConfig.defaults regs Logger.silent |> ignore)
                 "module-scoped registration with the reserved toolup. prefix must be rejected at construction"
 
             // A None-module (SDK-owned) registration legitimately
@@ -363,6 +344,6 @@ let tests
                 }
             ]
 
-            let _sink, _render = factory MetricsSinkConfig.defaults sdkRegs noopLogger
+            let _sink, _render = factory MetricsSinkConfig.defaults sdkRegs Logger.silent
             ()
     ]

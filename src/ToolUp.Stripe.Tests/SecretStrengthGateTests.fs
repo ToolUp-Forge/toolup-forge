@@ -1,7 +1,6 @@
 module ToolUp.Stripe.Tests.SecretStrengthGateTests
 
 open System
-open System.Collections.Concurrent
 open System.Security.Cryptography
 open System.Text
 open Expecto
@@ -11,6 +10,7 @@ open ToolUp.Stripe.Server
 open ToolUp.Platform.Secrets
 open ToolUp.InterPlatform
 open ToolUp.Platform.Infra
+open ToolUp.Platform.Testing
 
 // Aliased, NOT opened: `ValidationResult.Ok`/`Error` would otherwise shadow
 // `Result.Ok`/`Error` and break the `| Error …` matches on the webhook /
@@ -41,37 +41,6 @@ let private signHeader (now: DateTimeOffset) (secret: string) (body: string) : s
 
     sprintf "t=%d,v1=%s" ts hex
 
-/// Minimal in-memory `ISecretStore` for the peer-auth guard tests.
-type private InMemorySecretStore() =
-    let store = ConcurrentDictionary<string * string, string>()
-
-    member _.Seed(scopeId, key, value) = store[(scopeId, key)] <- value
-
-    interface ISecretStore with
-        member _.GetSecret(scopeId, key) = async {
-            match store.TryGetValue((scopeId, key)) with
-            | true, v -> return Some v
-            | false, _ -> return None
-        }
-
-        member _.SetSecret(scopeId, key, value) = async {
-            store[(scopeId, key)] <- value
-            return Result.Ok()
-        }
-
-        member _.DeleteSecret(scopeId, key) = async {
-            store.TryRemove((scopeId, key)) |> ignore
-            return Result.Ok()
-        }
-
-        member _.ListKeys(scopeId) = async {
-            return
-                store.Keys
-                |> Seq.filter (fun (s, _) -> s = scopeId)
-                |> Seq.map snd
-                |> List.ofSeq
-        }
-
 let private peerA: PeerIdentity = {
     PeerId = "peer-a"
     DisplayName = "Peer A"
@@ -84,7 +53,7 @@ let private peerB: PeerIdentity = {
 
 /// Seed a peer's signing key at the exact scope/key `JwtPeerAuthProvider`
 /// reads on every issue / validate.
-let private seedKey (store: InMemorySecretStore) (peerId: string) (key: string) =
+let private seedKey (store: Fakes.TestSecretStore) (peerId: string) (key: string) =
     store.Seed("_platform", $"peers/{peerId}/signing-key", key)
 
 /// Run the boot-time Stripe validator against a config, synchronously.
@@ -207,7 +176,7 @@ let tests =
         // ─── JwtPeerAuthProvider — per-call key read fails closed ────
         testList "JwtPeerAuthProvider" [
             test "empty peer signing key: IssuePeerToken fails closed" {
-                let store = InMemorySecretStore()
+                let store = Fakes.TestSecretStore()
                 seedKey store peerA.PeerId ""
                 let provider = JwtPeerAuthProvider(store) :> IPeerAuthProvider
 
@@ -221,7 +190,7 @@ let tests =
             test "too-short peer signing key: ValidatePeerToken fails closed" {
                 // Mint a genuine token under a strong key, then swap the stored
                 // key for a too-short one: validation must refuse the read.
-                let strongStore = InMemorySecretStore()
+                let strongStore = Fakes.TestSecretStore()
                 seedKey strongStore peerA.PeerId "peer-a-signing-key-0123456789abcdef" // 35 bytes
                 let issuer = JwtPeerAuthProvider(strongStore) :> IPeerAuthProvider
 
@@ -233,7 +202,7 @@ let tests =
                     | Ok t -> t
                     | Error e -> failwithf "setup: strong-key issue must succeed, got %A" e
 
-                let weakStore = InMemorySecretStore()
+                let weakStore = Fakes.TestSecretStore()
                 seedKey weakStore peerA.PeerId "short" // 5 bytes
                 let validator = JwtPeerAuthProvider(weakStore) :> IPeerAuthProvider
 
@@ -242,7 +211,7 @@ let tests =
                 | other -> failwithf "short key must fail closed with PeerUnauthorized, got %A" other
             }
             test "well-formed peer key issues + validates (GP 11)" {
-                let store = InMemorySecretStore()
+                let store = Fakes.TestSecretStore()
                 seedKey store peerA.PeerId "peer-a-signing-key-0123456789abcdef" // 35 bytes
                 let provider = JwtPeerAuthProvider(store) :> IPeerAuthProvider
 

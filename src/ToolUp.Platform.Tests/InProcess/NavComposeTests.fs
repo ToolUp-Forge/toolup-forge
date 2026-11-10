@@ -3,9 +3,9 @@
 
 module ToolUp.Platform.Tests.InProcess.NavComposeTests
 
-open System
 open System.IO
 open Expecto
+open ToolUp.Platform.Testing
 open ToolUp.PublicRendering
 open ToolUp.PublicRendering.PublicRenderingCompose
 
@@ -34,8 +34,8 @@ let tests =
         }
 
         test "withNav parses a nav.yaml file into the nav tree" {
-            let path =
-                Path.Combine(Path.GetTempPath(), sprintf "nav-%s.yaml" (Guid.NewGuid().ToString("N")))
+            use dir = TempDir.create "nav"
+            let path = dir.File "nav.yaml"
 
             File.WriteAllText(
                 path,
@@ -45,13 +45,10 @@ let tests =
                  \x20 slug: services"
             )
 
-            try
-                let app = PublicRenderingOptions.create () |> PublicRenderingOptions.withNav path
+            let app = PublicRenderingOptions.create () |> PublicRenderingOptions.withNav path
 
-                Expect.equal (List.length app.Nav) 2 "two top-level nodes parsed"
-                Expect.equal (List.head app.Nav).Label "Home" "first node parsed"
-            finally
-                File.Delete path
+            Expect.equal (List.length app.Nav) 2 "two top-level nodes parsed"
+            Expect.equal (List.head app.Nav).Label "Home" "first node parsed"
         }
 
         test "withNav on a missing file registers an empty nav (no error)" {

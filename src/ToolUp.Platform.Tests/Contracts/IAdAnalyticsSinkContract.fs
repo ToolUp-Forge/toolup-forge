@@ -122,20 +122,4 @@ let tests
             verifyDelivered sink [ impression ] [ click ]
         }
 
-        // ─── Identity by value (rule 1) ───────────────────────────
-
-        testCaseAsync "AdImpression carries only value-shaped identity fields"
-        <| async {
-            let impression = mkImpression "slot-id-1" 0
-            // The record's compile-time shape is the contract; reach for
-            // string-typed fields to assert the audit's "identity by value"
-            // claim is not a docstring lie. Any future field that adds a
-            // live handle would fail this at compile time, not at runtime.
-            Expect.isFalse (String.IsNullOrEmpty impression.SlotId) "SlotId is a string"
-            Expect.isFalse (String.IsNullOrEmpty impression.AdClientId) "AdClientId is a string"
-            Expect.isFalse (String.IsNullOrEmpty impression.PathAtImpression) "PathAtImpression is a string"
-            // Force evaluation to silence "unused" warnings; assertions
-            // above are the substantive part.
-            do! async.Return()
-        }
     ]

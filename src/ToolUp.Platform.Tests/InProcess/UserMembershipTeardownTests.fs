@@ -13,6 +13,7 @@ open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 545 — user-scope offboard completeness (`PurgeUser`) ───────
 //
@@ -50,19 +51,6 @@ let private seedTeam (ts: TeamStore) (name: string) (members: (string * TeamRole
 
     return teamId
 }
-
-/// Audit collector recording (scopeId, event) pairs.
-type private RecordingAuditLog() =
-    let events = ConcurrentBag<string * AuditEvent>()
-    member _.Events = events |> List.ofSeq
-
-    interface IAuditLog with
-        member _.Record(AuditScope.StreamKey scopeId, _actor, event) = async {
-            events.Add(scopeId, event)
-            return Ok()
-        }
-
-        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
 
 /// Email-set-backed `IPendingInviteStore` stub — tracks which emails
 /// hold a pending entry without constructing `PendingInviteByEmail`
@@ -287,7 +275,7 @@ let tests =
             let! team1 = seedTeam ts "Audit-One" [ "owner1", Owner; "victim", Member ]
             let! team2 = seedTeam ts "Audit-Two" [ "owner2", Owner; "victim", Member ]
 
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
             let directory = MapUserDirectory(Map [ "victim", "victim@example.com" ])
             let invites = EmailSetInviteStore [ "victim@example.com" ]
 
@@ -307,10 +295,10 @@ let tests =
             Expect.isEmpty victimTeams "membership rows stripped"
 
             let removedAudits =
-                audit.Events
-                |> List.choose (fun (scope, e) ->
-                    match e with
-                    | MemberRemoved p -> Some(scope, p.TeamId, p.AffectedUserId, p.UserId)
+                audit.Records
+                |> List.choose (fun row ->
+                    match row.Event with
+                    | MemberRemoved p -> Some(row.StreamKey, p.TeamId, p.AffectedUserId, p.UserId)
                     | _ -> None)
                 |> Set.ofList
 

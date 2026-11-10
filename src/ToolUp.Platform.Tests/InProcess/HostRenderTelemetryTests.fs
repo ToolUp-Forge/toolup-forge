@@ -2,6 +2,7 @@ module ToolUp.Platform.Tests.InProcess.HostRenderTelemetryTests
 
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Testing
 
 // ─── Phase 268 — hosted-tree render-failure telemetry tests ───────────
 //
@@ -27,18 +28,6 @@ type private CapturingSink() =
 
     interface IHostRenderTelemetrySink with
         member _.Capture(fault: HostRenderFault) = faults.Add fault
-
-/// A capturing logger — records every `Warn` line so the forwarding-default
-/// test can assert the fault was forwarded.
-type private CapturingLogger() =
-    let warns = ResizeArray<string>()
-    member _.Warns = List.ofSeq warns
-
-    interface ILogger with
-        member _.Debug(_: string) = ()
-        member _.Info(_: string) = ()
-        member _.Warn(message: string) = warns.Add message
-        member _.Error(_: string, _: exn option) = ()
 
 let tests =
     testList "HostRenderTelemetry (Phase 268)" [
@@ -124,11 +113,11 @@ let tests =
 
         testCase "the forwarding default writes each fault to its ILogger"
         <| fun _ ->
-            let logger = CapturingLogger()
+            let logger = Logger.recording ()
             let sink = HostRenderTelemetry.forwardingToLogger (logger :> ILogger)
             sink.Capture(HostRenderFault.render "node-9" "renderer threw")
 
-            match logger.Warns with
+            match logger.MessagesAt LogSeverity.Warn with
             | [ line ] ->
                 Expect.stringContains line "node-9" "the forwarded log line names the faulting node"
                 Expect.stringContains line "renderer threw" "the forwarded log line carries the message"

@@ -13,6 +13,7 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── InProcessJobScheduler — IJobScheduler contract binding ──────
 //
@@ -30,14 +31,6 @@ open ToolUp.Platform.Compose
 // portability rules are about the interface shape, not the dispatch
 // runtime.
 
-let private silentLogger =
-    { new ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn _ = ()
-        member _.Error(_, _) = ()
-    }
-
 /// Stub `INotificationChannel` that swallows publishes — the
 /// scheduler only publishes a `SystemMessage` on dead-letter, which
 /// the contract pack does not exercise.
@@ -50,12 +43,9 @@ let private silentChannel =
         member _.Unsubscribe(_) = async { return () }
     }
 
-let private buildScheduler () =
-    let root =
-        Path.Combine(Path.GetTempPath(), "toolup-jobsched-tests-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory(root) |> ignore
-    let storage = LocalFileStorage.LocalFileStorage(root) :> IBlobStorage
+/// A scheduler over a job store rooted in `dir`; the caller owns `dir`.
+let private buildScheduler (dir: TempDir) =
+    let storage = LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
     let eventStore = InMemoryEventStore.InMemoryEventStore() :> IEventStore
     let jobStore = JobStore.create storage eventStore
     let config = ServerConfig.defaults
@@ -66,7 +56,7 @@ let private buildScheduler () =
             EventStore = eventStore
             NotificationChannel = silentChannel
             Config = config
-            Logger = silentLogger
+            Logger = Logger.silent
             ActivitySink = (NoOpActivitySink() :> IActivitySink)
         }
         : JobScheduler.SchedulerDeps)
@@ -83,7 +73,8 @@ let private buildScheduler () =
 let private telemetryTests =
     testList "InProcessJobScheduler — IJobSchedulerTelemetry" [
         test "fresh scheduler reports zero missed ticks and no last-drift" {
-            let scheduler = buildScheduler () :> IJobSchedulerTelemetry
+            let dir = TempDir.forRun "jobsched-tests"
+            let scheduler = buildScheduler dir :> IJobSchedulerTelemetry
             let snap = scheduler.Snapshot()
 
             Expect.equal snap.TickMissedCount60Min 0 "no missed ticks at start"
@@ -92,16 +83,18 @@ let private telemetryTests =
         }
 
         test "consecutive snapshots advance GeneratedAt" {
-            let scheduler = buildScheduler () :> IJobSchedulerTelemetry
+            let dir = TempDir.forRun "jobsched-tests"
+            let scheduler = buildScheduler dir :> IJobSchedulerTelemetry
             let first = scheduler.Snapshot()
-            System.Threading.Thread.Sleep 5
+            Clock.system.Delay(TimeSpan.FromMilliseconds 5.0) |> Async.RunSynchronously
             let second = scheduler.Snapshot()
 
             Expect.isGreaterThanOrEqual second.GeneratedAt first.GeneratedAt "GeneratedAt monotonic across calls"
         }
 
         test "InProcessJobScheduler upcasts to IJobSchedulerTelemetry" {
-            let scheduler = buildScheduler ()
+            let dir = TempDir.forRun "jobsched-tests"
+            let scheduler = buildScheduler dir
 
             match (scheduler :> obj) with
             | :? IJobSchedulerTelemetry -> ()
@@ -145,25 +138,32 @@ type private RecordingHandler() =
 // it generous costs nothing, and a run that exhausts it has genuinely
 // lost the signal rather than merely been slow.
 
-/// Poll `predicate` until it holds or `timeoutMs` elapses. The wait
-/// ends the moment the predicate holds; the timeout is spent only by a
-/// genuine failure (see the rule above).
-let private waitFor (timeoutMs: int) (predicate: unit -> bool) : bool =
-    let deadline = DateTime.UtcNow.AddMilliseconds(float timeoutMs)
-    let mutable ok = predicate ()
+/// How often a wait re-reads the production path's state.
+let private pollEvery = TimeSpan.FromMilliseconds 25.0
 
-    while not ok && DateTime.UtcNow < deadline do
-        System.Threading.Thread.Sleep 25
-        ok <- predicate ()
+/// Wait until `predicate` holds over the production path's own state. The
+/// wait ends the moment it holds; the backstop (`Recording.defaultBackstop`)
+/// is a hang guard a loaded machine never reaches, not a schedule.
+let private waitFor (predicate: unit -> bool) : bool =
+    Clock.waitUntil Clock.system pollEvery Recording.defaultBackstop predicate
+    |> Async.RunSynchronously
 
-    ok
+/// A negative assertion needs a window: `true` when `predicate` stayed
+/// false for the whole of `window`.
+let private staysFalseFor (window: TimeSpan) (predicate: unit -> bool) : bool =
+    not (
+        Clock.waitUntil Clock.system pollEvery window predicate
+        |> Async.RunSynchronously
+    )
 
-let private buildCatchUpFixture () =
-    let root =
-        Path.Combine(Path.GetTempPath(), "toolup-jobsched-catchup-" + Guid.NewGuid().ToString("N"))
+/// Let the dispatch path settle for `window` before asserting that nothing
+/// more happened (a quiet-period read, never a wait for a positive event).
+let private settle (window: TimeSpan) =
+    Clock.system.Delay window |> Async.RunSynchronously
 
-    Directory.CreateDirectory root |> ignore
-    let storage = LocalFileStorage.LocalFileStorage(root) :> IBlobStorage
+/// The catch-up fixture over a store rooted in `dir`; the caller owns `dir`.
+let private buildCatchUpFixture (dir: TempDir) =
+    let storage = LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
     let eventStore = InMemoryEventStore.InMemoryEventStore() :> IEventStore
     let jobStore = JobStore.create storage eventStore
 
@@ -173,7 +173,7 @@ let private buildCatchUpFixture () =
             EventTriggerCatchUp = true
     }
 
-    let watermark = JobTriggerWatermark.JobTriggerWatermark(storage, silentLogger)
+    let watermark = JobTriggerWatermark.JobTriggerWatermark(storage, Logger.silent)
 
     let scheduler =
         JobScheduler.create
@@ -182,7 +182,7 @@ let private buildCatchUpFixture () =
                 EventStore = eventStore
                 NotificationChannel = silentChannel
                 Config = config
-                Logger = silentLogger
+                Logger = Logger.silent
                 ActivitySink = (NoOpActivitySink() :> IActivitySink)
             }
             : JobScheduler.SchedulerDeps)
@@ -250,7 +250,8 @@ let private catchUpTests =
         }
 
         test "watermark advance is monotonic and round-trips through flush + load" {
-            let storage, _, _, watermark = buildCatchUpFixture ()
+            use dir = TempDir.create "jobsched-catchup"
+            let storage, _, _, watermark = buildCatchUpFixture dir
             let scope = freshScope ()
             let newer = eventAt scope "e" DateTime.UtcNow
             let older = eventAt scope "e" (DateTime.UtcNow.AddMinutes -5.0)
@@ -265,7 +266,7 @@ let private catchUpTests =
             watermark.FlushDirty() |> Async.RunSynchronously
 
             // Fresh instance over the same storage = restarted process.
-            let reloaded = JobTriggerWatermark.JobTriggerWatermark(storage, silentLogger)
+            let reloaded = JobTriggerWatermark.JobTriggerWatermark(storage, Logger.silent)
 
             match reloaded.LoadPersisted scope |> Async.RunSynchronously with
             | JobTriggerWatermark.Loaded c -> Expect.equal c.LastDispatchedEventId newer.Id "cursor round-tripped"
@@ -273,7 +274,8 @@ let private catchUpTests =
         }
 
         test "corrupt cursor blob loads as Unreadable, never Missing" {
-            let storage, _, _, watermark = buildCatchUpFixture ()
+            use dir = TempDir.create "jobsched-catchup"
+            let storage, _, _, watermark = buildCatchUpFixture dir
             let scope = freshScope ()
 
             storage.Upload("_platform", $"job-triggers/{scope}.cursor", Encoding.UTF8.GetBytes "not-json{")
@@ -286,7 +288,8 @@ let private catchUpTests =
         }
 
         test "startup scan dispatches the actual missed event past the persisted cursor" {
-            let _, eventStore, scheduler, watermark = buildCatchUpFixture ()
+            use dir = TempDir.create "jobsched-catchup"
+            let _, eventStore, scheduler, watermark = buildCatchUpFixture dir
             let scope = freshScope ()
             let handler = RecordingHandler()
             scheduleOnEventJob (scheduler :> IJobScheduler) handler scope "inventory.moved"
@@ -301,7 +304,7 @@ let private catchUpTests =
 
             scheduler.RunCatchUpScan true |> Async.RunSynchronously
 
-            Expect.isTrue (waitFor 5000 (fun () -> handler.Executed.Length >= 1)) "missed trigger dispatched"
+            Expect.isTrue (waitFor (fun () -> handler.Executed.Length >= 1)) "missed trigger dispatched"
 
             match (handler.Executed |> List.head).TriggerSource with
             | ScheduledByEvent(et, id) ->
@@ -311,7 +314,8 @@ let private catchUpTests =
         }
 
         test "first enable seeds the cursor to now and replays no history" {
-            let storage, eventStore, scheduler, _ = buildCatchUpFixture ()
+            use dir = TempDir.create "jobsched-catchup"
+            let storage, eventStore, scheduler, _ = buildCatchUpFixture dir
             let scope = freshScope ()
             let handler = RecordingHandler()
             scheduleOnEventJob (scheduler :> IJobScheduler) handler scope "inventory.moved"
@@ -322,9 +326,11 @@ let private catchUpTests =
 
             scheduler.RunCatchUpScan true |> Async.RunSynchronously
 
-            Expect.isFalse (waitFor 1500 (fun () -> handler.Executed.Length >= 1)) "history not replayed"
+            Expect.isTrue
+                (staysFalseFor (TimeSpan.FromMilliseconds 1500.0) (fun () -> handler.Executed.Length >= 1))
+                "history not replayed"
 
-            let reloaded = JobTriggerWatermark.JobTriggerWatermark(storage, silentLogger)
+            let reloaded = JobTriggerWatermark.JobTriggerWatermark(storage, Logger.silent)
 
             match reloaded.LoadPersisted scope |> Async.RunSynchronously with
             | JobTriggerWatermark.Loaded c ->
@@ -336,7 +342,8 @@ let private catchUpTests =
         }
 
         test "events behind the cursor beyond the overlap window are not replayed" {
-            let _, eventStore, scheduler, watermark = buildCatchUpFixture ()
+            use dir = TempDir.create "jobsched-catchup"
+            let _, eventStore, scheduler, watermark = buildCatchUpFixture dir
             let scope = freshScope ()
             let handler = RecordingHandler()
             scheduleOnEventJob (scheduler :> IJobScheduler) handler scope "inventory.moved"
@@ -351,13 +358,14 @@ let private catchUpTests =
 
             scheduler.RunCatchUpScan true |> Async.RunSynchronously
 
-            Expect.isFalse
-                (waitFor 1500 (fun () -> handler.Executed.Length >= 1))
+            Expect.isTrue
+                (staysFalseFor (TimeSpan.FromMilliseconds 1500.0) (fun () -> handler.Executed.Length >= 1))
                 "already-dispatched event not replayed"
         }
 
         test "sweep dispatches settled events past the in-memory cursor and skips fresh ones" {
-            let _, eventStore, scheduler, watermark = buildCatchUpFixture ()
+            use dir = TempDir.create "jobsched-catchup"
+            let _, eventStore, scheduler, watermark = buildCatchUpFixture dir
             let scope = freshScope ()
             let handler = RecordingHandler()
             scheduleOnEventJob (scheduler :> IJobScheduler) handler scope "sweep.event"
@@ -374,8 +382,8 @@ let private catchUpTests =
 
             scheduler.RunCatchUpScan false |> Async.RunSynchronously
 
-            Expect.isTrue (waitFor 5000 (fun () -> handler.Executed.Length >= 1)) "settled event dispatched"
-            System.Threading.Thread.Sleep 500
+            Expect.isTrue (waitFor (fun () -> handler.Executed.Length >= 1)) "settled event dispatched"
+            settle (TimeSpan.FromMilliseconds 500.0)
 
             let dispatchedIds =
                 handler.Executed
@@ -491,13 +499,17 @@ type private DedupingExternalDispatcher() =
 /// invocation, which is how the tests prove attempts are not
 /// double-counted.
 type private HandOffHandler(dispatcher: IExternalComputeDispatcher, idempotencyKey: string option) =
-    let attempts = System.Collections.Concurrent.ConcurrentQueue<int>()
+    let attempts = Recording<int>()
 
-    member _.Attempts = attempts |> List.ofSeq
+    member _.Attempts = attempts.Snapshot()
+
+    /// Block until the handler has been entered `count` times: a wait on the
+    /// dispatch itself, which wakes at the attempt that satisfies it.
+    member _.WaitForAttempts(count: int) = Recording.waitForCount count attempts
 
     interface IJobHandler with
         member _.Execute ctx = async {
-            attempts.Enqueue ctx.Attempt
+            attempts.Add ctx.Attempt
 
             // Built through the smart constructor, never a record
             // literal — the spec gains fields over time and a literal
@@ -528,22 +540,26 @@ type private RecordingChannel() =
         member _.Subscribe(_, _) = async { return Guid.NewGuid() }
         member _.Unsubscribe(_) = async { return () }
 
+/// Disposing the fixture deletes its directory. Two fixtures built over one
+/// directory (the restart device) share it, and disposing either deletes it.
 type private HandoffFixture = {
-    Root: string
+    Dir: TempDir
     Store: IJobStore
     EventStore: IEventStore
     Channel: RecordingChannel
     Lock: IDistributedLock
     Scheduler: JobScheduler.InProcessJobScheduler
-}
+} with
 
-/// Construct a scheduler wired to `dispatcher` over `root`. Passing an
+    interface IDisposable with
+        member fixture.Dispose() = (fixture.Dir :> IDisposable).Dispose()
+
+/// Construct a scheduler wired to `dispatcher` over `dir`. Passing an
 /// explicit `IDistributedLock` (rather than letting the scheduler default
 /// to the process-wide `InProcessDistributedLock.shared`) keeps the lease
 /// assertions below about THIS scheduler and nothing else in the pack.
-let private buildHandoffAt (root: string) (dispatcher: IExternalComputeDispatcher) : HandoffFixture =
-    Directory.CreateDirectory root |> ignore
-    let storage = LocalFileStorage.LocalFileStorage(root) :> IBlobStorage
+let private buildHandoffAt (dir: TempDir) (dispatcher: IExternalComputeDispatcher) : HandoffFixture =
+    let storage = LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
     let eventStore = InMemoryEventStore.InMemoryEventStore() :> IEventStore
     let jobStore = JobStore.create storage eventStore
     let channel = RecordingChannel()
@@ -556,7 +572,7 @@ let private buildHandoffAt (root: string) (dispatcher: IExternalComputeDispatche
                 EventStore = eventStore
                 NotificationChannel = channel
                 Config = ServerConfig.defaults
-                Logger = silentLogger
+                Logger = Logger.silent
                 ActivitySink = NoOpActivitySink() :> IActivitySink
             }
             : JobScheduler.SchedulerDeps)
@@ -567,7 +583,7 @@ let private buildHandoffAt (root: string) (dispatcher: IExternalComputeDispatche
             }
 
     {
-        Root = root
+        Dir = dir
         Store = jobStore
         EventStore = eventStore
         Channel = channel
@@ -576,9 +592,7 @@ let private buildHandoffAt (root: string) (dispatcher: IExternalComputeDispatche
     }
 
 let private buildHandoff (dispatcher: IExternalComputeDispatcher) : HandoffFixture =
-    buildHandoffAt
-        (Path.Combine(Path.GetTempPath(), "toolup-jobsched-handoff-" + Guid.NewGuid().ToString("N")))
-        dispatcher
+    buildHandoffAt (TempDir.forRun "jobsched-handoff") dispatcher
 
 /// Register `handler` and schedule a `Manual` job, so dispatch happens
 /// exactly when the test calls `TriggerOnce` — no wall-clock dependency.
@@ -629,6 +643,18 @@ let private runStatusIs (fixture: HandoffFixture) scope jobId (status: JobRunSta
     | Some r -> r.Status = status
     | None -> false
 
+/// The newest run is awaiting AND listed by `AwaitingExternalRuns`, the
+/// index `ReconcileAwaitingExternal` reads. The awaiting row is written
+/// before the index, so a reconcile synchronised only on the row can find
+/// nothing to poll and dispatch nothing: wait on what the reconcile reads.
+let private awaitingIndexed (fixture: HandoffFixture) scope jobId () =
+    match latestRun fixture scope jobId with
+    | Some run when run.Status = AwaitingExternal ->
+        fixture.Store.AwaitingExternalRuns(scope, 50)
+        |> Async.RunSynchronously
+        |> List.exists (fun awaiting -> awaiting.RunId = run.RunId)
+    | _ -> false
+
 let private eventTypes (fixture: HandoffFixture) (scope: string) =
     fixture.EventStore.ReadAll scope
     |> Async.RunSynchronously
@@ -648,14 +674,16 @@ let private eventTypes (fixture: HandoffFixture) (scope: string) =
 let private handOffAndSettle (fixture: HandoffFixture) scope jobId : JobRun =
     triggerOnce fixture scope jobId
 
-    Expect.isTrue (waitFor 5000 (runStatusIs fixture scope jobId AwaitingExternal)) "the run reached AwaitingExternal"
+    Expect.isTrue (waitFor (runStatusIs fixture scope jobId AwaitingExternal)) "the run reached AwaitingExternal"
 
     Expect.isTrue
-        (waitFor 5000 (fun () ->
+        (waitFor (fun () ->
             fixture.Store.Get(scope, jobId)
             |> Async.RunSynchronously
             |> Option.exists (fun j -> j.LastRunStatus = Some AwaitingExternal)))
         "the dispatch finished settling the hand-off (definition updated)"
+
+    Expect.isTrue (waitFor (awaitingIndexed fixture scope jobId)) "the awaiting run is listed for reconciliation"
 
     (latestRun fixture scope jobId).Value
 
@@ -667,7 +695,7 @@ let private handoffTests =
 
         test "319.A/B — HandedOff parks the run in AwaitingExternal with the handle persisted" {
             let dispatcher = FakeExternalDispatcher("gpu-pool")
-            let fixture = buildHandoff dispatcher
+            use fixture = buildHandoff dispatcher
             let handler = HandOffHandler(dispatcher, None)
             let scope, jobId = scheduleManualJob fixture handler 3
 
@@ -709,7 +737,7 @@ let private handoffTests =
 
         test "319.B — the hand-off releases the dispatch lease immediately (the slot is freed)" {
             let dispatcher = FakeExternalDispatcher("gpu-pool")
-            let fixture = buildHandoff dispatcher
+            use fixture = buildHandoff dispatcher
             let handler = HandOffHandler(dispatcher, None)
             let scope, jobId = scheduleManualJob fixture handler 3
 
@@ -736,7 +764,7 @@ let private handoffTests =
             let mutable acquired: Lease option = None
 
             Expect.isTrue
-                (waitFor 5000 (fun () ->
+                (waitFor (fun () ->
                     acquired <-
                         fixture.Lock.TryAcquire(lockId, TimeSpan.FromSeconds 5.0)
                         |> Async.RunSynchronously
@@ -759,7 +787,7 @@ let private handoffTests =
 
         test "319.C — Succeeded reconciles to JobCompleted, identically to an in-process success" {
             let dispatcher = FakeExternalDispatcher("gpu-pool")
-            let fixture = buildHandoff dispatcher
+            use fixture = buildHandoff dispatcher
             let handler = HandOffHandler(dispatcher, None)
             let scope, jobId = scheduleManualJob fixture handler 3
 
@@ -810,7 +838,7 @@ let private handoffTests =
 
         test "319.C — Pending/Running leaves the run awaiting and writes nothing" {
             let dispatcher = FakeExternalDispatcher("gpu-pool")
-            let fixture = buildHandoff dispatcher
+            use fixture = buildHandoff dispatcher
             let handler = HandOffHandler(dispatcher, None)
             let scope, jobId = scheduleManualJob fixture handler 3
 
@@ -844,7 +872,7 @@ let private handoffTests =
 
         test "319.C — a non-retriable Failed dead-letters immediately, skipping remaining attempts" {
             let dispatcher = FakeExternalDispatcher("gpu-pool")
-            let fixture = buildHandoff dispatcher
+            use fixture = buildHandoff dispatcher
             let handler = HandOffHandler(dispatcher, None)
             // Three attempts available — none of which may be used.
             let scope, jobId = scheduleManualJob fixture handler 3
@@ -888,7 +916,7 @@ let private handoffTests =
 
         test "319.C — a retriable Failed continues the SAME retry sequence, then dead-letters" {
             let dispatcher = FakeExternalDispatcher("gpu-pool")
-            let fixture = buildHandoff dispatcher
+            use fixture = buildHandoff dispatcher
             let handler = HandOffHandler(dispatcher, None)
             let maxAttempts = 3
             let scope, jobId = scheduleManualJob fixture handler maxAttempts
@@ -902,21 +930,17 @@ let private handoffTests =
             // and hands off again.
             reconcile fixture
 
-            Expect.isTrue
-                (waitFor 5000 (fun () -> handler.Attempts.Length >= 2))
-                "the retriable failure re-dispatched the job"
+            Expect.isTrue (handler.WaitForAttempts 2) "the retriable failure re-dispatched the job"
 
-            Expect.isTrue
-                (waitFor 5000 (runStatusIs fixture scope jobId AwaitingExternal))
-                "attempt 2 handed off in turn"
+            Expect.isTrue (waitFor (awaitingIndexed fixture scope jobId)) "attempt 2 handed off in turn"
 
             Expect.equal handler.Attempts [ 1; 2 ] "attempt NUMBER advanced — the counter continued, it did not reset"
 
             // Round 2: attempt 2 fails retriably → attempt 3.
             reconcile fixture
-            Expect.isTrue (waitFor 5000 (fun () -> handler.Attempts.Length >= 3)) "attempt 3 dispatched"
+            Expect.isTrue (handler.WaitForAttempts 3) "attempt 3 dispatched"
 
-            Expect.isTrue (waitFor 5000 (runStatusIs fixture scope jobId AwaitingExternal)) "attempt 3 handed off"
+            Expect.isTrue (waitFor (awaitingIndexed fixture scope jobId)) "attempt 3 handed off"
 
             Expect.equal handler.Attempts [ 1; 2; 3 ] "three attempts, numbered 1..3"
 
@@ -925,10 +949,10 @@ let private handoffTests =
             reconcile fixture
 
             Expect.isTrue
-                (waitFor 5000 (runStatusIs fixture scope jobId DeadLettered))
+                (waitFor (runStatusIs fixture scope jobId DeadLettered))
                 "the retry budget is spent — dead-letter"
 
-            System.Threading.Thread.Sleep 400
+            settle (TimeSpan.FromMilliseconds 400.0)
 
             // THE assertion of this test. A reconciliation that restarted
             // the retry loop at attempt 1 would keep re-submitting
@@ -952,7 +976,7 @@ let private handoffTests =
 
         test "319.C — a retriable Failed with no attempts left dead-letters rather than retrying" {
             let dispatcher = FakeExternalDispatcher("gpu-pool")
-            let fixture = buildHandoff dispatcher
+            use fixture = buildHandoff dispatcher
             let handler = HandOffHandler(dispatcher, None)
             // One attempt only: the hand-off consumed it.
             let scope, jobId = scheduleManualJob fixture handler 1
@@ -962,18 +986,16 @@ let private handoffTests =
             dispatcher.SetOutcome(ExternalOutcome.Failed(ExternalComputeError.retriable "still saturated"))
             reconcile fixture
 
-            Expect.isTrue
-                (waitFor 5000 (runStatusIs fixture scope jobId DeadLettered))
-                "retriable + no budget = dead-letter"
+            Expect.isTrue (waitFor (runStatusIs fixture scope jobId DeadLettered)) "retriable + no budget = dead-letter"
 
-            System.Threading.Thread.Sleep 400
+            settle (TimeSpan.FromMilliseconds 400.0)
             Expect.equal handler.Attempts [ 1 ] "no re-dispatch beyond MaxAttempts"
             Expect.equal dispatcher.SubmitCount 1 "no second submission"
         }
 
         test "319.C — Cancelled is terminal but not a failure" {
             let dispatcher = FakeExternalDispatcher("gpu-pool")
-            let fixture = buildHandoff dispatcher
+            use fixture = buildHandoff dispatcher
             let handler = HandOffHandler(dispatcher, None)
             let scope, jobId = scheduleManualJob fixture handler 3
 
@@ -1007,12 +1029,11 @@ let private handoffTests =
         }
 
         test "319.D — a handle persisted before a restart is polled to completion after it" {
-            let root =
-                Path.Combine(Path.GetTempPath(), "toolup-jobsched-restart-" + Guid.NewGuid().ToString("N"))
+            let dir = TempDir.forRun "jobsched-restart"
 
             // ─── Instance 1: submit and hand off. ───
             let dispatcher1 = FakeExternalDispatcher("gpu-pool")
-            let first = buildHandoffAt root dispatcher1
+            let first = buildHandoffAt dir dispatcher1
             let handler1 = HandOffHandler(dispatcher1, None)
             let scope, jobId = scheduleManualJob first handler1 3
             let awaiting = handOffAndSettle first scope jobId
@@ -1026,7 +1047,7 @@ let private handoffTests =
             // handle were not durable there would be nothing at all to
             // resume from. ───
             let dispatcher2 = FakeExternalDispatcher("gpu-pool")
-            let second = buildHandoffAt root dispatcher2
+            let second = buildHandoffAt dir dispatcher2
 
             // The store on the new instance can see the awaiting run and
             // its handle — the precondition reconciliation depends on.
@@ -1061,7 +1082,7 @@ let private handoffTests =
 
         test "319.E — a dispatch while a hand-off is outstanding does not submit twice" {
             let dispatcher = FakeExternalDispatcher("gpu-pool")
-            let fixture = buildHandoff dispatcher
+            use fixture = buildHandoff dispatcher
             let handler = HandOffHandler(dispatcher, Some "daily-fit")
             let scope, jobId = scheduleManualJob fixture handler 3
 
@@ -1076,7 +1097,7 @@ let private handoffTests =
             // submission — this asserts the scheduler refused to enter it.
             triggerOnce fixture scope jobId
             triggerOnce fixture scope jobId
-            System.Threading.Thread.Sleep 800
+            settle (TimeSpan.FromMilliseconds 800.0)
 
             Expect.equal dispatcher.SubmitCount 1 "still exactly one external submission"
             Expect.equal handler.Attempts [ 1 ] "the handler was not re-entered while awaiting"
@@ -1099,12 +1120,12 @@ let private handoffTests =
             // reason.
             dispatcher.SetOutcome(ExternalOutcome.Succeeded "done")
             reconcile fixture
-            Expect.isTrue (waitFor 5000 (runStatusIs fixture scope jobId Succeeded)) "the hand-off resolved"
+            Expect.isTrue (waitFor (runStatusIs fixture scope jobId Succeeded)) "the hand-off resolved"
 
             triggerOnce fixture scope jobId
 
             Expect.isTrue
-                (waitFor 5000 (fun () -> dispatcher.SubmitCount >= 2))
+                (waitFor (fun () -> dispatcher.SubmitCount >= 2))
                 "with nothing outstanding, the job dispatches and submits again"
         }
 
@@ -1163,11 +1184,8 @@ let private handoffTests =
             // The default for every existing deployment. Reconciliation
             // must be entirely inert: no store query, no behaviour change,
             // and an ordinary handler unaffected.
-            let root =
-                Path.Combine(Path.GetTempPath(), "toolup-jobsched-nodispatcher-" + Guid.NewGuid().ToString("N"))
-
-            Directory.CreateDirectory root |> ignore
-            let storage = LocalFileStorage.LocalFileStorage(root) :> IBlobStorage
+            use dir = TempDir.create "jobsched-nodispatcher"
+            let storage = LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
             let eventStore = InMemoryEventStore.InMemoryEventStore() :> IEventStore
             let jobStore = JobStore.create storage eventStore
 
@@ -1179,7 +1197,7 @@ let private handoffTests =
                         EventStore = eventStore
                         NotificationChannel = silentChannel
                         Config = ServerConfig.defaults
-                        Logger = silentLogger
+                        Logger = Logger.silent
                         ActivitySink = (NoOpActivitySink() :> IActivitySink)
                     }
                     : JobScheduler.SchedulerDeps)
@@ -1216,7 +1234,7 @@ let private handoffTests =
             | Ok() -> ()
             | Error e -> failtestf "TriggerOnce failed: %A" e
 
-            Expect.isTrue (waitFor 5000 (fun () -> handler.Executed.Length >= 1)) "the in-process handler ran"
+            Expect.isTrue (waitFor (fun () -> handler.Executed.Length >= 1)) "the in-process handler ran"
 
             // "The handler ran" is NOT "the run is terminal": the
             // `Succeeded` row is written by the fire-and-forget dispatch
@@ -1230,9 +1248,7 @@ let private handoffTests =
                 |> List.tryHead
                 |> Option.map _.Status
 
-            Expect.isTrue
-                (waitFor 5000 (fun () -> latestStatus () = Some Succeeded))
-                "and succeeded, unchanged by Phase 319"
+            Expect.isTrue (waitFor (fun () -> latestStatus () = Some Succeeded)) "and succeeded, unchanged by Phase 319"
 
             let runs = jobStore.GetRecentRuns(scope, jobId, 10) |> Async.RunSynchronously
 
@@ -1368,11 +1384,8 @@ let private defect1064Tests =
     testList "InProcessJobScheduler — Phase 1064 defects" [
 
         test "defect 5 — an outcome whose claim succeeded and whose row write did not is completed by the next poll" {
-            let root =
-                Path.Combine(Path.GetTempPath(), "toolup-jobsched-1064-" + Guid.NewGuid().ToString("N"))
-
-            Directory.CreateDirectory root |> ignore
-            let storage = LocalFileStorage.LocalFileStorage(root) :> IBlobStorage
+            let dir = TempDir.create "jobsched-1064"
+            let storage = LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
             let eventStore = InMemoryEventStore.InMemoryEventStore() :> IEventStore
             let store = FailOnceRunStore(JobStore.create storage eventStore)
             let channel = RecordingChannel()
@@ -1387,7 +1400,7 @@ let private defect1064Tests =
                         EventStore = eventStore
                         NotificationChannel = channel
                         Config = ServerConfig.defaults
-                        Logger = silentLogger
+                        Logger = Logger.silent
                         ActivitySink = NoOpActivitySink() :> IActivitySink
                     }
                     : JobScheduler.SchedulerDeps)
@@ -1398,8 +1411,8 @@ let private defect1064Tests =
                             ExternalHandleStore = Some handleStore
                     }
 
-            let fixture = {
-                Root = root
+            use fixture = {
+                Dir = dir
                 Store = store
                 EventStore = eventStore
                 Channel = channel
@@ -1437,7 +1450,7 @@ let private defect1064Tests =
         }
 
         test "defect 6 — Cancel on a job sleeping in its retry backoff returns inside the ceiling, refused as busy" {
-            let fixture = buildHandoff (FakeExternalDispatcher("unused"))
+            use fixture = buildHandoff (FakeExternalDispatcher("unused"))
             let ijs = fixture.Scheduler :> IJobScheduler
             let handler = AlwaysTransient()
             ijs.RegisterHandler("backoff-handler", handler)
@@ -1470,7 +1483,7 @@ let private defect1064Tests =
 
             // The first attempt failed and recorded its row; the dispatch is
             // now asleep in a two-minute backoff, holding the job's lease.
-            Expect.isTrue (waitFor 5000 (runStatusIs fixture scope jobId Failed)) "the first attempt failed"
+            Expect.isTrue (waitFor (runStatusIs fixture scope jobId Failed)) "the first attempt failed"
 
             let sw = Diagnostics.Stopwatch.StartNew()
             let outcome = Async.Catch(ijs.Cancel(scope, jobId)) |> Async.StartAsTask
@@ -1525,7 +1538,7 @@ let private defect1064Tests =
                     member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async.Return []
                 }
 
-            ComposeJobs.registerProviderOAuth services None secretStore auditLog silentLogger
+            ComposeJobs.registerProviderOAuth services None secretStore auditLog Logger.silent
         }
     ]
 
@@ -1540,15 +1553,14 @@ let private defect1064Tests =
 /// dispatches directly — so disposal is the whole of the teardown.
 let private restartBindingWith (bindRing: bool) =
     let factory () =
-        let root =
-            Path.Combine(Path.GetTempPath(), "toolup-jobsched-restart-" + Guid.NewGuid().ToString("N"))
-
-        Directory.CreateDirectory root |> ignore
+        // Run-owned: the contract pack opens and closes schedulers over
+        // this binding and has no teardown for the binding itself.
+        let dir = TempDir.forRun "jobsched-restart"
 
         let binding: IJobSchedulerContract.RestartableScheduler = {
             Open =
                 fun () ->
-                    let storage = LocalFileStorage.LocalFileStorage(root) :> IBlobStorage
+                    let storage = LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
                     let eventStore = InMemoryEventStore.InMemoryEventStore() :> IEventStore
                     let jobStore = JobStore.create storage eventStore
 
@@ -1559,7 +1571,7 @@ let private restartBindingWith (bindRing: bool) =
                                 EventStore = eventStore
                                 NotificationChannel = silentChannel
                                 Config = ServerConfig.defaults
-                                Logger = silentLogger
+                                Logger = Logger.silent
                                 ActivitySink = (NoOpActivitySink() :> IActivitySink)
                             }
                             : JobScheduler.SchedulerDeps)
@@ -1773,21 +1785,22 @@ type private HidingJobStore(inner: IJobStore) =
         member _.ListScopesWithJobs() = inner.ListScopesWithJobs()
 
 type private PinFixture = {
+    Dir: TempDir
     Store: HidingJobStore
     EventStore: IEventStore
     Channel: RecordingChannel
     Dispatcher: FakeExternalDispatcher
     Scheduler: JobScheduler.InProcessJobScheduler
-}
+} with
+
+    interface IDisposable with
+        member fixture.Dispose() = (fixture.Dir :> IDisposable).Dispose()
 
 let private pinStore (fixture: PinFixture) = fixture.Store :> IJobStore
 
 let private buildPin () : PinFixture =
-    let root =
-        Path.Combine(Path.GetTempPath(), "toolup-jobsched-pin-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory root |> ignore
-    let storage = LocalFileStorage.LocalFileStorage(root) :> IBlobStorage
+    let dir = TempDir.create "jobsched-pin"
+    let storage = LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
     let eventStore = InMemoryEventStore.InMemoryEventStore() :> IEventStore
     let store = HidingJobStore(JobStore.create storage eventStore)
     let channel = RecordingChannel()
@@ -1800,7 +1813,7 @@ let private buildPin () : PinFixture =
                 EventStore = eventStore
                 NotificationChannel = channel
                 Config = ServerConfig.defaults
-                Logger = silentLogger
+                Logger = Logger.silent
                 ActivitySink = NoOpActivitySink() :> IActivitySink
             }
             : JobScheduler.SchedulerDeps)
@@ -1811,6 +1824,7 @@ let private buildPin () : PinFixture =
             }
 
     {
+        Dir = dir
         Store = store
         EventStore = eventStore
         Channel = channel
@@ -1892,14 +1906,14 @@ let private pinRender (fixture: PinFixture) (scope: string) (jobId: JobId) : str
 
 let private settledAt (fixture: PinFixture) scope jobId (status: JobRunStatus) =
     Expect.isTrue
-        (waitFor 10000 (fun () ->
+        (waitFor (fun () ->
             (pinStore fixture).Get(scope, jobId)
             |> Async.RunSynchronously
             |> Option.exists (fun j -> j.LastRunStatus = Some status)))
         (sprintf "the run settled at %A" status)
 
     // The fold is the last write; give the lease release its tail.
-    Threading.Thread.Sleep 50
+    settle (TimeSpan.FromMilliseconds 50.0)
 
 /// Schedule a manual job whose attempts answer `script` (the last entry
 /// repeating), trigger it, and wait until its definition records `settled`.
@@ -1960,7 +1974,7 @@ let private handOff (fixture: PinFixture) : JobContext -> Async<JobResult> =
     }
 
 let private pinScenario (name: string) (drive: PinFixture -> string * JobId) : string =
-    let fixture = buildPin ()
+    use fixture = buildPin ()
     let scope, jobId = drive fixture
     sprintf "== %s\n%s" name (pinRender fixture scope jobId)
 
@@ -2002,7 +2016,7 @@ let private pinCapture () : string =
             f.Dispatcher.SetOutcome ExternalOutcome.Pending
 
             Expect.isTrue
-                (waitFor 10000 (fun () ->
+                (waitFor (fun () ->
                     (pinStore f).GetRecentRuns(scope, jobId, 10)
                     |> Async.RunSynchronously
                     |> List.exists (fun r -> r.Attempt = 2 && r.Status = AwaitingExternal)))
@@ -2347,7 +2361,7 @@ let sharedLockTests =
                     ServerConfig.defaults with
                         JobProgress = progress
                 }
-                Logger = silentLogger
+                Logger = Logger.silent
                 ActivitySink = NoOpActivitySink() :> IActivitySink
             }
 
@@ -2361,18 +2375,15 @@ let sharedLockTests =
 
 let tests =
     let factory () =
-        let scheduler = buildScheduler () :> IJobScheduler
+        let scheduler = buildScheduler (TempDir.forRun "jobsched-tests") :> IJobScheduler
         let suffix = Guid.NewGuid().ToString("N").Substring(0, 8)
         scheduler, "team-a-" + suffix, "team-b-" + suffix
 
     testList "InProcessJobScheduler" [
         IJobSchedulerContract.tests "InProcessJobScheduler" factory
         IJobSchedulerContract.failingStoreTests "InProcessJobScheduler" (fun decorate handler ->
-            let root =
-                Path.Combine(Path.GetTempPath(), "toolup-jobsched-tests-" + Guid.NewGuid().ToString("N"))
-
-            Directory.CreateDirectory root |> ignore
-            let storage = LocalFileStorage.LocalFileStorage(root) :> IBlobStorage
+            let dir = TempDir.forRun "jobsched-tests"
+            let storage = LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
             let eventStore = InMemoryEventStore.InMemoryEventStore() :> IEventStore
 
             let scheduler =
@@ -2382,7 +2393,7 @@ let tests =
                         EventStore = eventStore
                         NotificationChannel = silentChannel
                         Config = ServerConfig.defaults
-                        Logger = silentLogger
+                        Logger = Logger.silent
                         ActivitySink = (NoOpActivitySink() :> IActivitySink)
                     }
                     : JobScheduler.SchedulerDeps)

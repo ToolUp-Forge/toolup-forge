@@ -7,37 +7,6 @@ open System.Collections.Concurrent
 open ToolUp.Platform
 open ToolUp.Platform.Secrets
 
-/// Trivial in-memory `ISecretStore`. Mirrors the inline doubles used
-/// across the other test packs — kept local so each pack owns its
-/// isolated state.
-type InMemorySecretStore() =
-    let store = ConcurrentDictionary<string * string, string>()
-
-    interface ISecretStore with
-        member _.GetSecret(scopeId, key) = async {
-            match store.TryGetValue((scopeId, key)) with
-            | true, v -> return Some v
-            | false, _ -> return None
-        }
-
-        member _.SetSecret(scopeId, key, value) = async {
-            store[(scopeId, key)] <- value
-            return Ok()
-        }
-
-        member _.DeleteSecret(scopeId, key) = async {
-            store.TryRemove((scopeId, key)) |> ignore
-            return Ok()
-        }
-
-        member _.ListKeys(scopeId) = async {
-            return
-                store.Keys
-                |> Seq.filter (fun (s, _) -> s = scopeId)
-                |> Seq.map snd
-                |> List.ofSeq
-        }
-
 /// Read-only `ISecretStore` that rejects every write — models an
 /// env-var-only / KMS-fronted store where the signer cannot auto-
 /// provision a key. Used to assert the `KeyUnavailable` failure path.

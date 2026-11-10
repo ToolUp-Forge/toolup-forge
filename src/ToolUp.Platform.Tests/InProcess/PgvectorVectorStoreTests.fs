@@ -11,6 +11,7 @@ open ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 507 — Pgvector IVectorStore test pack ─────────────────────
 //
@@ -61,14 +62,6 @@ let private liveConnectionString =
     | null
     | "" -> None
     | s -> Some s
-
-/// Silences the companion's own warn-level output during the live arm.
-type private SilentLogger() =
-    interface ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn _ = ()
-        member _.Error(_, _) = ()
 
 let private chunk content tag : TextChunk = {
     Content = content
@@ -885,7 +878,7 @@ let private makeStoreWith (connectionString: string) (dimensions: int) () : IVec
             Table = table
     }
 
-    let store = create connectionString options (Some(SilentLogger() :> ILogger))
+    let store = create connectionString options (Some Logger.silent)
 
     let cleanup =
         { new IDisposable with
@@ -915,8 +908,7 @@ let private makeTunedStore
             AnnIndex = annIndex
     }
 
-    let store =
-        createTuned connectionString options tuning (Some(SilentLogger() :> ILogger))
+    let store = createTuned connectionString options tuning (Some Logger.silent)
 
     let cleanup =
         { new IDisposable with
@@ -1329,7 +1321,7 @@ let private phase892LiveTests (connectionString: string) =
                             Table = table
                     }
                     PgvectorTuning.unchanged
-                    (Some(SilentLogger() :> ILogger))
+                    (Some Logger.silent)
 
             try
                 let scopes = [ for s in 1..6 -> Team(sprintf "t%d" s) ]
@@ -1402,7 +1394,7 @@ let private phase939LiveTests (connectionString: string) =
                     AnnIndex = HnswAnnIndex(16, 64)
             }
 
-            let store = create steered options (Some(SilentLogger() :> ILogger))
+            let store = create steered options (Some Logger.silent)
 
             try
                 do!
@@ -1448,7 +1440,7 @@ let private phase939LiveTests (connectionString: string) =
                     AnnIndex = HnswAnnIndex(16, 64)
             }
 
-            let logger = Some(SilentLogger() :> ILogger)
+            let logger = Some Logger.silent
             let owned = create connectionString options logger
             use dataSource = NpgsqlDataSource.Create connectionString
             let borrowed = createWithDataSource dataSource options logger
@@ -1615,7 +1607,7 @@ let private phase964LiveTests (connectionString: string) =
                                 AnnIndex = IvfFlatAnnIndex lists
                         }
                         probesOne
-                        (Some(SilentLogger() :> ILogger))
+                        (Some Logger.silent)
 
                 try
                     Expect.isTrue (ivfIndexExists connectionString table) "a restart over the loaded table builds it"
@@ -1666,7 +1658,7 @@ let private phase968LiveTests (connectionString: string) =
                     Table = table
             }
 
-            let logger = Some(SilentLogger() :> ILogger)
+            let logger = Some Logger.silent
             // AutoMigrate provisions the table, as an out-of-band migration would.
             (create connectionString options logger :?> IDisposable).Dispose()
 
@@ -1694,7 +1686,7 @@ let private phase968LiveTests (connectionString: string) =
             }
 
             expectRaisesNaming table "a missing table is refused at create, naming it" (fun () ->
-                create connectionString options (Some(SilentLogger() :> ILogger)) |> ignore)
+                create connectionString options (Some Logger.silent) |> ignore)
     ]
 
 let private liveTests (connectionString: string) =
@@ -1943,7 +1935,7 @@ let private liveTests (connectionString: string) =
                     Table = table
             }
 
-            let logger = Some(SilentLogger() :> ILogger)
+            let logger = Some Logger.silent
             let replicaA = create connectionString options logger
             // The second store migrates against the same table — the
             // migration is idempotent, which is itself part of the claim.

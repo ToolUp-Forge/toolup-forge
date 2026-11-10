@@ -4,8 +4,6 @@
 module ToolUp.Platform.Tests.InProcess.CertificateIssuanceTransparencyTests
 
 open System
-open System.Collections.Concurrent
-open System.IO
 open System.Text
 open System.Text.Json
 open Expecto
@@ -21,6 +19,7 @@ open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Infra.Metrics
 open ToolUp.Platform.Audit
+open ToolUp.Platform.Testing
 
 // ─── Phase 685 — certificate issuance transparency ───────────────────────
 //
@@ -45,65 +44,6 @@ open ToolUp.Platform.Audit
 //     like evidence against the certificate. The 658 probe below holds both
 //     ends: the chain verifier positions the drop, and the integrity-gated
 //     log refuses to answer at all.
-
-/// Minimal in-memory `ISecretStore` — the signer auto-provisions its key
-/// into it and the verifier resolves the public half back out.
-type private InMemorySecretStore() =
-    let store = ConcurrentDictionary<string * string, string>()
-
-    interface ISecretStore with
-        member _.GetSecret(scopeId, key) = async {
-            match store.TryGetValue((scopeId, key)) with
-            | true, v -> return Some v
-            | false, _ -> return None
-        }
-
-        member _.SetSecret(scopeId, key, value) = async {
-            store[(scopeId, key)] <- value
-            return Ok()
-        }
-
-        member _.DeleteSecret(scopeId, key) = async {
-            store.TryRemove((scopeId, key)) |> ignore
-            return Ok()
-        }
-
-        member _.ListKeys(scopeId) = async {
-            return
-                store.Keys
-                |> Seq.filter (fun (s, _) -> s = scopeId)
-                |> Seq.map snd
-                |> List.ofSeq
-        }
-
-/// An `IAuditLog` that honours BOTH the scope and the event-type filter.
-///
-/// A fake that ignored the filters would let the scope-isolation probe pass
-/// against a read path that does not isolate, which is the one thing that
-/// probe exists to establish.
-type private RecordingAuditLog() =
-    let recorded = ConcurrentQueue<string * AuditEvent>()
-
-    member _.All = recorded |> Seq.map snd |> List.ofSeq
-
-    interface IAuditLog with
-        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
-            recorded.Enqueue((scopeId, audit))
-            return Ok()
-        }
-
-        member _.GetAuditTrail(AuditScope.StreamKey scopeId, _dateRange, eventType) = async {
-            return
-                recorded
-                |> Seq.filter (fun (s, _) -> s = scopeId)
-                |> Seq.map snd
-                |> Seq.filter (fun e ->
-                    match eventType with
-                    | None -> true
-                    | Some wanted -> AuditEvent.eventTypeName e = wanted)
-                |> List.ofSeq
-                |> List.rev // most recent first, matching IEventStore.ReadAll
-        }
 
 let private scopeA = "team-issuer"
 let private scopeB = "team-other"
@@ -175,11 +115,7 @@ let private ledgerSettings: ChainedLedgerSettings = {
     PathPrefix = Some "issuance"
 }
 
-let private newLedgerStorage () =
-    let dir =
-        Path.Combine(Path.GetTempPath(), "toolup-issuance-transparency", Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory dir |> ignore
+let private newLedgerStorage (dir: string) =
     LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage
 
 let private segmentName (storage: IBlobStorage) = async {
@@ -265,9 +201,9 @@ let tests =
 
         testCaseAsync "an issuance appends ONE identifier-only row — digest, subject, key id, and no body"
         <| async {
-            let secrets = InMemorySecretStore() :> ISecretStore
+            let secrets = Fakes.TestSecretStore() :> ISecretStore
             let signer = signerOver secrets
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
             let graph, store, gate, events = substrate ()
 
             let issuer =
@@ -285,7 +221,7 @@ let tests =
             let certificate = issued result
 
             let rows =
-                audit.All
+                audit.Events
                 |> List.choose (function
                     | FactsAudit(CertificateIssued p) -> Some p
                     | _ -> None)
@@ -321,9 +257,9 @@ let tests =
 
         testCaseAsync "the issuance is found on the log — and a certificate from elsewhere is not"
         <| async {
-            let secrets = InMemorySecretStore() :> ISecretStore
+            let secrets = Fakes.TestSecretStore() :> ISecretStore
             let signer = signerOver secrets
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
             let graph, store, gate, events = substrate ()
 
             let issuer =
@@ -348,7 +284,7 @@ let tests =
             // The same certificate against a deployment that never issued
             // it. This is the probe's own falsifier — an inclusion check
             // that cannot report absence proves nothing about presence.
-            let elsewhere = GroundingCertificate.auditTrailLog (RecordingAuditLog())
+            let elsewhere = GroundingCertificate.auditTrailLog (TestAuditLog())
 
             match! GroundingCertificate.checkInclusion elsewhere scopeA certificate with
             | CertificateNotIssued -> ()
@@ -360,7 +296,7 @@ let tests =
 
         testCaseAsync "offline verification is byte-for-byte unaffected and needs no log at all"
         <| async {
-            let secrets = InMemorySecretStore() :> ISecretStore
+            let secrets = Fakes.TestSecretStore() :> ISecretStore
             let signer = signerOver secrets
             let verifier = DefaultArtefactVerifier.create secrets
 
@@ -377,7 +313,7 @@ let tests =
                 return issued result
             }
 
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
             let! logged = issueWith ((audit :> IAuditLog))
             let! plain = issueWith (NoOpAuditLog())
 
@@ -393,7 +329,7 @@ let tests =
             | Error e -> failtestf "offline verification must not need the log: %s" (VerificationError.describe e)
 
             Expect.isEmpty
-                (audit.All
+                (audit.Events
                  |> List.filter (fun e -> AuditEvent.eventTypeName e = "CertificateIssued")
                  |> List.skip 1)
                 "the unlogged issuer recorded nothing on the logged issuer's trail"
@@ -401,9 +337,9 @@ let tests =
 
         testCaseAsync "the enumeration surface lists what was issued, scope-filtered by the audit read path"
         <| async {
-            let secrets = InMemorySecretStore() :> ISecretStore
+            let secrets = Fakes.TestSecretStore() :> ISecretStore
             let signer = signerOver secrets
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
             let graph, store, gate, events = substrate ()
 
             let issuer =
@@ -444,9 +380,9 @@ let tests =
 
         testCaseAsync "a log whose integrity cannot be established refuses to answer, rather than reporting not-issued"
         <| async {
-            let secrets = InMemorySecretStore() :> ISecretStore
+            let secrets = Fakes.TestSecretStore() :> ISecretStore
             let signer = signerOver secrets
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
             let graph, store, gate, events = substrate ()
 
             let issuer =
@@ -490,9 +426,9 @@ let tests =
 
         testCaseAsync "PROBE: an issuance dropped from a chained ledger reports not-issued, against a chain 658 flags"
         <| async {
-            let secrets = InMemorySecretStore() :> ISecretStore
+            let secrets = Fakes.TestSecretStore() :> ISecretStore
             let signer = signerOver secrets
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
             let graph, store, gate, events = substrate ()
 
             let issuer =
@@ -517,7 +453,8 @@ let tests =
             // which the 658 verifier reports as an untrusted head — a real
             // finding, but a different one, and it would let this probe
             // claim the drop class without ever exercising it.
-            let storage = newLedgerStorage ()
+            use ledgerDir = TempDir.create "issuance-transparency"
+            let storage = newLedgerStorage ledgerDir.Path
             let! trail = (audit :> IAuditLog).GetAuditTrail(AuditScope.shard scopeA, None, Some "CertificateIssued")
             do! writeToLedger storage (trail |> List.rev |> List.map (fun e -> scopeA, e))
 
@@ -593,13 +530,13 @@ let tests =
 
         testCaseAsync "the attested issue path logs too — the log does not depend on which seal was used"
         <| async {
-            let secrets = InMemorySecretStore() :> ISecretStore
+            let secrets = Fakes.TestSecretStore() :> ISecretStore
 
             let signer =
                 ApplicationSigning.inProcess secrets (NoOpAuditLog() :> IAuditLog) keyId EcdsaP256 "system"
                 |> ApplicationSigning.create
 
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
             let graph, store, gate, events = substrate ()
 
             let issuer =
@@ -629,7 +566,7 @@ let tests =
 
         testCaseAsync "a refused issuance appends nothing — the log lists only documents that exist"
         <| async {
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
             let graph, store, gate, events = substrate ()
 
             // No signing substrate composed: issuance refuses (GP 13).
@@ -644,7 +581,7 @@ let tests =
             | Error e -> failtestf "unexpected refusal: %s" (CertificateError.describe e)
 
             Expect.isEmpty
-                (audit.All
+                (audit.Events
                  |> List.filter (fun e -> AuditEvent.eventTypeName e = "CertificateIssued"))
                 "a certificate that was never sealed is not on the issuance log"
         }

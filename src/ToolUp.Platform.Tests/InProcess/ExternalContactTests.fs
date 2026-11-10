@@ -13,6 +13,7 @@ open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Jobs
+open ToolUp.Platform.Testing
 
 // ─── Phase 6f.A — external contacts ──────────────────────────────────
 //
@@ -88,13 +89,6 @@ type private CapturingAuditLog() =
         }
 
         member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
-
-type private SilentLogger() =
-    interface ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn _ = ()
-        member _.Error(_, _) = ()
 
 // ─── Fixtures ────────────────────────────────────────────────────────
 
@@ -596,7 +590,7 @@ let tests =
                         inner,
                         Some store,
                         (audit :> IAuditLog),
-                        SilentLogger(),
+                        Logger.silent,
                         fun () -> DateTime.UtcNow
                     )
                     :> INotificationChannel
@@ -632,7 +626,7 @@ let tests =
                 let inner = CapturingChannel "inner"
 
                 let filter =
-                    ExternalContactConsentFilter(inner, Some store, (audit :> IAuditLog), SilentLogger())
+                    ExternalContactConsentFilter(inner, Some store, (audit :> IAuditLog), Logger.silent)
                     :> INotificationChannel
 
                 let! contact = seedContact store "Unconsented" None (Some "+447700900502") None
@@ -656,7 +650,7 @@ let tests =
                 let inner = CapturingChannel "inner"
 
                 let filter =
-                    ExternalContactConsentFilter(inner, Some store, (audit :> IAuditLog), SilentLogger())
+                    ExternalContactConsentFilter(inner, Some store, (audit :> IAuditLog), Logger.silent)
                     :> INotificationChannel
 
                 let! contact =
@@ -675,7 +669,7 @@ let tests =
                 let inner = CapturingChannel "inner"
 
                 let filter =
-                    ExternalContactConsentFilter(inner, Some store, (audit :> IAuditLog), SilentLogger())
+                    ExternalContactConsentFilter(inner, Some store, (audit :> IAuditLog), Logger.silent)
                     :> INotificationChannel
 
                 let! yes = seedContact store "Yes" None (Some "+447700900504") (Some NotificationKind.SinkKind.Sms)
@@ -709,7 +703,7 @@ let tests =
                 let inner = CapturingChannel "inner"
 
                 let filter =
-                    ExternalContactConsentFilter(inner, Some store, (audit :> IAuditLog), SilentLogger())
+                    ExternalContactConsentFilter(inner, Some store, (audit :> IAuditLog), Logger.silent)
                     :> INotificationChannel
 
                 let! contact =
@@ -738,7 +732,7 @@ let tests =
                 let inner = CapturingChannel "inner"
 
                 let filter =
-                    ExternalContactConsentFilter(inner, Some store, (audit :> IAuditLog), SilentLogger())
+                    ExternalContactConsentFilter(inner, Some store, (audit :> IAuditLog), Logger.silent)
                     :> INotificationChannel
 
                 let! contact =
@@ -774,7 +768,7 @@ let tests =
                         inner,
                         Some store,
                         (audit :> IAuditLog),
-                        SilentLogger(),
+                        Logger.silent,
                         fun () -> clock.Value
                     )
                     :> INotificationChannel
@@ -843,7 +837,7 @@ let tests =
                 let inner = CapturingChannel "inner"
 
                 let filter =
-                    ExternalContactConsentFilter(inner, Some failing, (audit :> IAuditLog), SilentLogger())
+                    ExternalContactConsentFilter(inner, Some failing, (audit :> IAuditLog), Logger.silent)
                     :> INotificationChannel
 
                 do! filter.Publish(scope, smsTo [ RecipientId.External "whoever" ])
@@ -859,7 +853,7 @@ let tests =
                 let inner = CapturingChannel "inner"
 
                 let filter =
-                    ExternalContactConsentFilter(inner, Some store, (audit :> IAuditLog), SilentLogger())
+                    ExternalContactConsentFilter(inner, Some store, (audit :> IAuditLog), Logger.silent)
                     :> INotificationChannel
 
                 do! filter.Publish(scope, smsTo [ RecipientId.User(UserId "alice"); RecipientId.User(UserId "bob") ])
@@ -880,7 +874,7 @@ let tests =
                 let inner = CapturingChannel "inner"
 
                 let filter =
-                    ExternalContactConsentFilter(inner, Some store, NoOpAuditLog(), SilentLogger())
+                    ExternalContactConsentFilter(inner, Some store, NoOpAuditLog(), Logger.silent)
                     :> INotificationChannel
 
                 do! filter.Publish(scope, SystemMessage(SystemMessageLevel.Info, "hello"))
@@ -908,7 +902,7 @@ let tests =
 
                 // Inner: Phase 441, untouched.
                 let preference =
-                    NotificationPreferenceFilter(sink, prefStore, categories, (audit :> IAuditLog), SilentLogger())
+                    NotificationPreferenceFilter(sink, prefStore, categories, (audit :> IAuditLog), Logger.silent)
                     :> INotificationChannel
 
                 // The probe, then the outer consent gate over it.
@@ -928,7 +922,7 @@ let tests =
                         probeOverPreference,
                         Some contacts,
                         (audit :> IAuditLog),
-                        SilentLogger()
+                        Logger.silent
                     )
                     :> INotificationChannel
 
@@ -1025,7 +1019,7 @@ let tests =
                 let categories = [ NotificationCategory.create "reports.summary" "Report summaries" ]
 
                 let preference =
-                    NotificationPreferenceFilter(sink, spying, categories, NoOpAuditLog(), SilentLogger())
+                    NotificationPreferenceFilter(sink, spying, categories, NoOpAuditLog(), Logger.silent)
                     :> INotificationChannel
 
                 do!

@@ -97,6 +97,20 @@ ToolUp.Platform.Testing.Accessibility+SurfaceState (class)
 ToolUp.Platform.Testing.Accessibility+SurfaceState..ctor(System.String, ToolUp.Platform.Testing.Accessibility+A11yNode)
 ToolUp.Platform.Testing.Accessibility+SurfaceState.Node : ToolUp.Platform.Testing.Accessibility+A11yNode { get }
 ToolUp.Platform.Testing.Accessibility+SurfaceState.State : System.String { get }
+ToolUp.Platform.Testing.AuditRecord (class)
+ToolUp.Platform.Testing.AuditRecord..ctor(System.String, ToolUp.Platform.AuditScope, ToolUp.Platform.AuditSubject, ToolUp.Platform.AuditEvent)
+ToolUp.Platform.Testing.AuditRecord.Actor : ToolUp.Platform.AuditSubject { get }
+ToolUp.Platform.Testing.AuditRecord.Event : ToolUp.Platform.AuditEvent { get }
+ToolUp.Platform.Testing.AuditRecord.Scope : ToolUp.Platform.AuditScope { get }
+ToolUp.Platform.Testing.AuditRecord.StreamKey : System.String { get }
+ToolUp.Platform.Testing.Clock (class)
+ToolUp.Platform.Testing.Clock..ctor(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset], Microsoft.FSharp.Core.FSharpFunc`2[System.TimeSpan, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]])
+ToolUp.Platform.Testing.Clock.Delay : Microsoft.FSharp.Core.FSharpFunc`2[System.TimeSpan, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]] { get }
+ToolUp.Platform.Testing.Clock.Now : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset] { get }
+ToolUp.Platform.Testing.ClockModule (class)
+ToolUp.Platform.Testing.ClockModule.fixedAt(System.DateTimeOffset) : ToolUp.Platform.Testing.Clock
+ToolUp.Platform.Testing.ClockModule.system : ToolUp.Platform.Testing.Clock { get }
+ToolUp.Platform.Testing.ClockModule.waitUntil(ToolUp.Platform.Testing.Clock, System.TimeSpan, System.TimeSpan, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.Boolean]) : Microsoft.FSharp.Control.FSharpAsync`1[System.Boolean]
 ToolUp.Platform.Testing.DataTypeTestKit (class)
 ToolUp.Platform.Testing.DataTypeTestKit.expectDetect(ToolUp.Platform.FileProcessor+DataType, System.String) : System.Void
 ToolUp.Platform.Testing.DataTypeTestKit.expectNotDetect(ToolUp.Platform.FileProcessor+DataType, System.String) : System.Void
@@ -116,9 +130,11 @@ ToolUp.Platform.Testing.Fakes+TestBlobStorage (class)
 ToolUp.Platform.Testing.Fakes+TestBlobStorage..ctor()
 ToolUp.Platform.Testing.Fakes+TestEventStore (class)
 ToolUp.Platform.Testing.Fakes+TestEventStore..ctor()
-ToolUp.Platform.Testing.Fakes+TestSecretStore (class)
-ToolUp.Platform.Testing.Fakes+TestSecretStore..ctor()
-ToolUp.Platform.Testing.Fakes+TestSecretStore.Seed(System.String, System.String, System.String) : System.Void
+ToolUp.Platform.Testing.Fakes+TestMetricsSink (class)
+ToolUp.Platform.Testing.Fakes+TestMetricsSink..ctor()
+ToolUp.Platform.Testing.Fakes+TestMetricsSink.Gauges : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`3[System.String, System.Double, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]]] { get }
+ToolUp.Platform.Testing.Fakes+TestMetricsSink.Increments : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]]] { get }
+ToolUp.Platform.Testing.Fakes+TestMetricsSink.Observations : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`3[System.String, System.Double, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]]] { get }
 ToolUp.Platform.Testing.Fakes+TestSubjectResolver (class)
 ToolUp.Platform.Testing.Fakes+TestSubjectResolver..ctor(ToolUp.Platform.Subject)
 ToolUp.Platform.Testing.FaultInjectingBlobStorage (class)
@@ -224,6 +240,29 @@ ToolUp.Platform.Testing.HydrationParity+ParityResult+Divergence.message : System
 ToolUp.Platform.Testing.HydrationParity+ParityResult+Tags (class)
 ToolUp.Platform.Testing.HydrationParity+ParityResult+Tags.Divergence : System.Int32 (literal)
 ToolUp.Platform.Testing.HydrationParity+ParityResult+Tags.Parity : System.Int32 (literal)
+ToolUp.Platform.Testing.LogLine (class)
+ToolUp.Platform.Testing.LogLine..ctor(ToolUp.Platform.Testing.LogSeverity, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Exception])
+ToolUp.Platform.Testing.LogLine.Exception : Microsoft.FSharp.Core.FSharpOption`1[System.Exception] { get }
+ToolUp.Platform.Testing.LogLine.Message : System.String { get }
+ToolUp.Platform.Testing.LogLine.Severity : ToolUp.Platform.Testing.LogSeverity { get }
+ToolUp.Platform.Testing.LogSeverity (class)
+ToolUp.Platform.Testing.LogSeverity.Debug : ToolUp.Platform.Testing.LogSeverity { get }
+ToolUp.Platform.Testing.LogSeverity.Error : ToolUp.Platform.Testing.LogSeverity { get }
+ToolUp.Platform.Testing.LogSeverity.Info : ToolUp.Platform.Testing.LogSeverity { get }
+ToolUp.Platform.Testing.LogSeverity.IsDebug : System.Boolean { get }
+ToolUp.Platform.Testing.LogSeverity.IsError : System.Boolean { get }
+ToolUp.Platform.Testing.LogSeverity.IsInfo : System.Boolean { get }
+ToolUp.Platform.Testing.LogSeverity.IsWarn : System.Boolean { get }
+ToolUp.Platform.Testing.LogSeverity.Tag : System.Int32 { get }
+ToolUp.Platform.Testing.LogSeverity.Warn : ToolUp.Platform.Testing.LogSeverity { get }
+ToolUp.Platform.Testing.LogSeverity+Tags (class)
+ToolUp.Platform.Testing.LogSeverity+Tags.Debug : System.Int32 (literal)
+ToolUp.Platform.Testing.LogSeverity+Tags.Error : System.Int32 (literal)
+ToolUp.Platform.Testing.LogSeverity+Tags.Info : System.Int32 (literal)
+ToolUp.Platform.Testing.LogSeverity+Tags.Warn : System.Int32 (literal)
+ToolUp.Platform.Testing.Logger (class)
+ToolUp.Platform.Testing.Logger.recording() : ToolUp.Platform.Testing.TestLogger
+ToolUp.Platform.Testing.Logger.silent : ToolUp.Platform.ILogger { get }
 ToolUp.Platform.Testing.ModuleHarness (class)
 ToolUp.Platform.Testing.ModuleHarness.fromClientModule`2(ToolUp.Platform.ClientModule`2[Model, Msg]) : ToolUp.Platform.Testing.ModuleHarness+ModuleHarness`2[Model, Msg]
 ToolUp.Platform.Testing.ModuleHarness.fromContextInit`2(ToolUp.Platform.ClientModuleContext, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientModuleContext, System.Tuple`2[Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]], Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.FSharpFunc`2[Model, System.Tuple`2[Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]]]) : ToolUp.Platform.Testing.ModuleHarness+ModuleHarness`2[Model, Msg]
@@ -247,6 +286,17 @@ ToolUp.Platform.Testing.ModuleHotReload (class)
 ToolUp.Platform.Testing.ModuleHotReload.watch(System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit]) : ToolUp.Platform.Testing.ModuleHotReload+WatcherHandle
 ToolUp.Platform.Testing.ModuleHotReload+WatcherHandle (class)
 ToolUp.Platform.Testing.ModuleHotReload+WatcherHandle..ctor(System.IO.FileSystemWatcher)
+ToolUp.Platform.Testing.Recording (class)
+ToolUp.Platform.Testing.Recording.create`1() : ToolUp.Platform.Testing.Recording`1[T]
+ToolUp.Platform.Testing.Recording.defaultBackstop : System.TimeSpan { get }
+ToolUp.Platform.Testing.Recording.waitForCount`1(System.Int32, ToolUp.Platform.Testing.Recording`1[T]) : System.Boolean
+ToolUp.Platform.Testing.Recording`1 (class)
+ToolUp.Platform.Testing.Recording`1..ctor()
+ToolUp.Platform.Testing.Recording`1.Add(T) : System.Void
+ToolUp.Platform.Testing.Recording`1.Clear() : System.Void
+ToolUp.Platform.Testing.Recording`1.Count : System.Int32 { get }
+ToolUp.Platform.Testing.Recording`1.Snapshot() : Microsoft.FSharp.Collections.FSharpList`1[T]
+ToolUp.Platform.Testing.Recording`1.WaitUntil(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[T], System.Boolean], System.TimeSpan) : System.Boolean
 ToolUp.Platform.Testing.ServerHarness (class)
 ToolUp.Platform.Testing.ServerHarness.createDefaultFakes() : ToolUp.Platform.Testing.ServerHarness+ServerFakes
 ToolUp.Platform.Testing.ServerHarness.createWithFakes`1(ToolUp.Platform.Testing.ServerHarness+ServerFakes, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.Testing.ServerHarness+ServerFakes, Api]) : ToolUp.Platform.Testing.ServerHarness+ServerHarness`1[Api]
@@ -266,3 +316,29 @@ ToolUp.Platform.Testing.ServerHarness+ServerHarness`1 (class)
 ToolUp.Platform.Testing.ServerHarness+ServerHarness`1..ctor(ToolUp.Platform.Testing.ServerHarness+ServerFakes, Api)
 ToolUp.Platform.Testing.ServerHarness+ServerHarness`1.Api : Api { get }
 ToolUp.Platform.Testing.ServerHarness+ServerHarness`1.Fakes : ToolUp.Platform.Testing.ServerHarness+ServerFakes { get }
+ToolUp.Platform.Testing.TempDir (class)
+ToolUp.Platform.Testing.TempDir.Family : System.String { get }
+ToolUp.Platform.Testing.TempDir.File(System.String) : System.String
+ToolUp.Platform.Testing.TempDir.Path : System.String { get }
+ToolUp.Platform.Testing.TempDir.Sub(System.String) : System.String
+ToolUp.Platform.Testing.TempDir.ToString() : System.String
+ToolUp.Platform.Testing.TempDirModule (class)
+ToolUp.Platform.Testing.TempDirModule.Prefix : System.String (literal)
+ToolUp.Platform.Testing.TempDirModule.create(System.String) : ToolUp.Platform.Testing.TempDir
+ToolUp.Platform.Testing.TempDirModule.familyOf(System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.Platform.Testing.TempDirModule.forRun(System.String) : ToolUp.Platform.Testing.TempDir
+ToolUp.Platform.Testing.TempDirModule.withDir`1(System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[T]]) : Microsoft.FSharp.Control.FSharpAsync`1[T]
+ToolUp.Platform.Testing.TestAuditLog (class)
+ToolUp.Platform.Testing.TestAuditLog..ctor()
+ToolUp.Platform.Testing.TestAuditLog.Events : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AuditEvent] { get }
+ToolUp.Platform.Testing.TestAuditLog.Recording : ToolUp.Platform.Testing.Recording`1[ToolUp.Platform.Testing.AuditRecord] { get }
+ToolUp.Platform.Testing.TestAuditLog.Records : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Testing.AuditRecord] { get }
+ToolUp.Platform.Testing.TestLogger (class)
+ToolUp.Platform.Testing.TestLogger..ctor()
+ToolUp.Platform.Testing.TestLogger.Contains(System.String) : System.Boolean
+ToolUp.Platform.Testing.TestLogger.Lines : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Testing.LogLine] { get }
+ToolUp.Platform.Testing.TestLogger.MessagesAt(ToolUp.Platform.Testing.LogSeverity) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Platform.Testing.TestLogger.Recording : ToolUp.Platform.Testing.Recording`1[ToolUp.Platform.Testing.LogLine] { get }
+ToolUp.Platform.Testing.TestSecretStore (class)
+ToolUp.Platform.Testing.TestSecretStore..ctor()
+ToolUp.Platform.Testing.TestSecretStore.Seed(System.String, System.String, System.String) : System.Void

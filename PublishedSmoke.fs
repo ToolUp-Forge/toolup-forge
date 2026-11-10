@@ -190,12 +190,10 @@ let private propsVersionPattern =
 /// the repo's single declared `<Version>` in `Directory.Build.props`,
 /// which is exactly what a dispatch packs.
 ///
-/// Deliberately NOT a constant of its own. The repo already carries two
-/// version knobs that must be kept in step by hand (`<Version>` and
-/// `<ToolUpSdkVersion>`, per `publish-nuget.yml`'s header) and
-/// `VerifyPackagedModuleTemplate`'s `--sdk-version` is a third thing that
-/// has to move at each release. A fourth would be one more chance for the
-/// gate to probe a version nobody released.
+/// Deliberately NOT a constant of its own. The repo carries one version
+/// knob (`<Version>`), and `VerifyPackagedModuleTemplate`'s `--sdk-version`
+/// is a second thing that has to move at each release. A third would be one
+/// more chance for the gate to probe a version nobody released.
 let versionUnderTest (gitRef: string option) (propsText: string) : Result<string, string> =
     match gitRef with
     | Some ref when not (String.IsNullOrWhiteSpace ref) ->

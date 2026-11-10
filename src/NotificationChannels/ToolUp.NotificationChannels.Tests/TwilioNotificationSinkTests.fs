@@ -8,6 +8,7 @@ open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Tests.InProcess
+open ToolUp.Platform.Testing
 
 /// Bind `INotificationSinkContract` to the Twilio SMS sink. Same
 /// no-live-backend pattern as the SendGrid binding — vendor failures
@@ -18,10 +19,7 @@ let tests =
             NotificationAddressBook.NoOpNotificationAddressBook() :> INotificationAddressBook
 
         let secretStore =
-            let root =
-                Path.Combine(Path.GetTempPath(), "toolup-tests-twilio-" + System.Guid.NewGuid().ToString("N"))
-
-            Directory.CreateDirectory root |> ignore
+            let root = (TempDir.forRun "tests-twilio").Path
             FileSecretStore.FileSecretStore(root) :> ISecretStore
 
         let settings: TwilioSettings = {

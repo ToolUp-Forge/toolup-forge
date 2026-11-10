@@ -81,7 +81,6 @@ let private registeredTests =
         GoogleDirectoryTests.tests
         WithRequestHeadersPassthroughTests.tests
         ConsentProviderTests.tests
-        ConsentProviderTests.subscriptionFiringTests
         ConsentGatedScriptTests.tests
         AdAnalyticsSinkTests.tests
         AdAnalyticsSinkTests.noOpTests

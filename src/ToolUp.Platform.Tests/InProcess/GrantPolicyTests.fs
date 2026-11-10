@@ -38,7 +38,6 @@ module ToolUp.Platform.Tests.InProcess.GrantPolicyTests
 // tautology over an empty list.
 
 open System
-open System.IO
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
@@ -46,6 +45,7 @@ open ToolUp.Platform.Scope.PermissionStore
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Scope
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 /// A log that records nothing and never refuses — the test's "no audit".
 let private noAudit =
@@ -71,25 +71,12 @@ let private Write = ModulePermission.Write
 /// A fresh blob-backed store over a private temp dir, so the write-guard
 /// cases exercise the REAL serialisation path (including the grant-record
 /// round trip) rather than a stub that cannot lose a field.
-let private freshStore () =
-    let dir =
-        Path.Combine(Path.GetTempPath(), "toolup-grantpolicy-" + Guid.NewGuid().ToString("N"))
+let private freshStore (dir: TempDir) =
+    PermissionStore(LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage) :> IPermissionStore
 
-    Directory.CreateDirectory dir |> ignore
-    PermissionStore(LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage) :> IPermissionStore
-
-/// Accumulates every recorded event so a test can assert the exact row.
-type private RecordingAuditLog() =
-    let recorded = ResizeArray<string * AuditEvent>()
-    member _.Recorded = List.ofSeq recorded
-
-    interface IAuditLog with
-        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
-            recorded.Add(scopeId, audit)
-            return Ok()
-        }
-
-        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
+/// Every recorded row as `(stream key, event)`, so a test can assert the exact row.
+let private recorded (audit: TestAuditLog) =
+    audit.Records |> List.map (fun r -> r.StreamKey, r.Event)
 
 /// An inner store whose document cannot be read: every read answers
 /// `Unreadable` and every write refuses. Before Phase 1062 the read RAISED
@@ -341,8 +328,9 @@ let tests =
 
             testCaseAsync "RequiresAcknowledgement refuses a grant with no confirmation, then no justification"
             <| async {
+                use dir = TempDir.create "grantpolicy"
                 let registry = registryOf [ "Partner", GrantPolicy.RequiresAcknowledgement ]
-                let store = freshStore ()
+                let store = freshStore dir
 
                 let request: GrantPolicyGuard.ModuleGrantRequest = {
                     TeamId = TeamId "t1"
@@ -378,8 +366,9 @@ let tests =
 
             testCaseAsync "RequiresAcknowledgement admits an acknowledged, justified grant and it is live"
             <| async {
+                use dir = TempDir.create "grantpolicy"
                 let registry = registryOf [ "Partner", GrantPolicy.RequiresAcknowledgement ]
-                let store = freshStore ()
+                let store = freshStore dir
 
                 let! outcome =
                     GrantPolicyGuard.PermissionGrants.grantModuleAccess store registry {
@@ -410,8 +399,9 @@ let tests =
 
             testCaseAsync "RequiresSubjectConsent records the grant PENDING and it is inert until accepted"
             <| async {
+                use dir = TempDir.create "grantpolicy"
                 let registry = registryOf [ "Partner", GrantPolicy.RequiresSubjectConsent ]
-                let store = freshStore ()
+                let store = freshStore dir
 
                 let! outcome =
                     GrantPolicyGuard.PermissionGrants.grantModuleAccess store registry {
@@ -467,9 +457,10 @@ let tests =
 
             testCaseAsync "acceptGrant refuses when there is nothing to accept"
             <| async {
+                use dir = TempDir.create "grantpolicy"
                 // Otherwise a subject could manufacture their own
                 // authority by consenting to a grant nobody made.
-                let store = freshStore ()
+                let store = freshStore dir
 
                 match! GrantPolicyGuard.PermissionGrants.acceptGrant store "t1" "mallory" "Partner" with
                 | Error msg -> Expect.stringContains msg "GRANT-POLICY-NO-PENDING-GRANT" "typed, greppable refusal"
@@ -478,12 +469,13 @@ let tests =
 
             testCaseAsync "RequiresCounterpartyApproval refuses every grant until Phase 552"
             <| async {
+                use dir = TempDir.create "grantpolicy"
                 let party = PartyRef.create "acme-dpo"
 
                 let registry =
                     registryOf [ "Partner", GrantPolicy.RequiresCounterpartyApproval party ]
 
-                let store = freshStore ()
+                let store = freshStore dir
 
                 match!
                     GrantPolicyGuard.PermissionGrants.grantModuleAccess store registry {
@@ -505,13 +497,14 @@ let tests =
 
             testCaseAsync "revocation is always admitted, whatever the policy"
             <| async {
+                use dir = TempDir.create "grantpolicy"
                 // A policy constrains the CREATION of authority, never
                 // its removal. A policy that could block a revocation
                 // would be a liability, not a control.
                 let registry =
                     registryOf [ "Partner", GrantPolicy.RequiresCounterpartyApproval(PartyRef.create "acme") ]
 
-                let store = freshStore ()
+                let store = freshStore dir
 
                 let! outcome =
                     GrantPolicyGuard.PermissionGrants.grantModuleAccess store registry {
@@ -528,15 +521,16 @@ let tests =
 
             testCaseAsync "the legacy SetMemberPermissions path cannot write a policy-bearing grant"
             <| async {
+                use dir = TempDir.create "grantpolicy"
                 // Its signature has nowhere to put acknowledgement or
                 // justification, so it refuses by construction rather
                 // than writing an unevidenced grant.
                 let registry = registryOf [ "Partner", GrantPolicy.RequiresAcknowledgement ]
-                let audit = RecordingAuditLog()
+                let audit = TestAuditLog()
 
                 let store =
                     GrantPolicyGuard.GrantPolicyPermissionStore(
-                        freshStore (),
+                        freshStore dir,
                         registry,
                         audit,
                         (AccessContext.ofSubject ModulePermissions.Unrestricted (Subject.AuthenticatedUser "admin"))
@@ -561,6 +555,7 @@ let tests =
 
             testCaseAsync "a policy-bearing module cannot be handed out through team DEFAULTS"
             <| async {
+                use dir = TempDir.create "grantpolicy"
                 // A default applies to every member who lacks an explicit
                 // entry, so there is no subject to acknowledge or consent
                 // — refused rather than silently ineffective.
@@ -568,7 +563,7 @@ let tests =
 
                 let store =
                     GrantPolicyGuard.GrantPolicyPermissionStore(
-                        freshStore (),
+                        freshStore dir,
                         registry,
                         noAudit,
                         (AccessContext.system "test")
@@ -586,12 +581,13 @@ let tests =
 
             testCaseAsync "the write guard emits GrantPolicyRefused"
             <| async {
+                use dir = TempDir.create "grantpolicy"
                 let registry = registryOf [ "Partner", GrantPolicy.RequiresAcknowledgement ]
-                let audit = RecordingAuditLog()
+                let audit = TestAuditLog()
 
                 let store =
                     GrantPolicyGuard.GrantPolicyPermissionStore(
-                        freshStore (),
+                        freshStore dir,
                         registry,
                         audit,
                         (AccessContext.ofSubject ModulePermissions.Unrestricted (Subject.AuthenticatedUser "admin-7"))
@@ -606,11 +602,11 @@ let tests =
                 // and a permanently-absent row still fails.
                 let mutable waited = 0
 
-                while List.isEmpty audit.Recorded && waited < 100 do
+                while List.isEmpty (recorded audit) && waited < 100 do
                     do! Async.Sleep 20
                     waited <- waited + 1
 
-                match audit.Recorded with
+                match recorded audit with
                 | [ scope, GrantPolicyRefused payload ] ->
                     Expect.equal scope "t1" "recorded under the team audit stream (the bare id)"
                     Expect.equal payload.ActorId "admin-7" "attributes the acting administrator"
@@ -636,7 +632,7 @@ let tests =
                         "Partner", GrantPolicy.RequiresCounterpartyApproval(PartyRef.create "acme-dpo")
                     ]
 
-                let audit = RecordingAuditLog()
+                let audit = TestAuditLog()
 
                 let outcome =
                     GrantPolicyGuard.guardDispatch registry Map.empty audit "team-t1" "mallory" "Partner"
@@ -654,7 +650,7 @@ let tests =
                     Expect.equal payload.InertReason "counterparty-approval-unavailable" "and why the grant is inert"
                 | Ok() -> failtest "an unconsented grant row must be refused at dispatch"
 
-                match audit.Recorded with
+                match recorded audit with
                 | [ scope, UnconsentedGrantRefused payload ] ->
                     Expect.equal scope "team-t1" "recorded under the team scope"
                     Expect.equal payload.ModuleName "Partner" "the row names the module"
@@ -770,7 +766,7 @@ let tests =
             }
 
             test "an empty registry short-circuits before grants or audit are touched" {
-                let audit = RecordingAuditLog()
+                let audit = TestAuditLog()
 
                 let outcome =
                     GrantPolicyGuard.guardDispatch
@@ -782,12 +778,13 @@ let tests =
                         "Anything"
 
                 Expect.equal outcome (Ok()) "every module passes"
-                Expect.isEmpty audit.Recorded "and nothing is recorded"
+                Expect.isEmpty (recorded audit) "and nothing is recorded"
             }
 
             testCaseAsync "a document written with no policy round-trips with an empty grant map"
             <| async {
-                let store = freshStore ()
+                use dir = TempDir.create "grantpolicy"
+                let store = freshStore dir
 
                 match! store.SetMemberPermissions(TeamId "t1", UserId "alice", "Ordinary", [ Read; Write ]) with
                 | Error e -> failtestf "SetMemberPermissions failed: %s" e
@@ -812,11 +809,8 @@ let tests =
                 // entirely and must read back as "no policy applies"
                 // rather than as anything stricter — otherwise an upgrade
                 // would lock every team out of every module.
-                let dir =
-                    Path.Combine(Path.GetTempPath(), "toolup-grantpolicy-legacy-" + Guid.NewGuid().ToString("N"))
-
-                Directory.CreateDirectory dir |> ignore
-                let storage = LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage
+                use dir = TempDir.create "grantpolicy-legacy"
+                let storage = LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
 
                 let legacy =
                     """{"defaults":{"M1":["Read"]},"members":{"alice":{"M1":["Admin"]}},"hidden":["M2"]}"""

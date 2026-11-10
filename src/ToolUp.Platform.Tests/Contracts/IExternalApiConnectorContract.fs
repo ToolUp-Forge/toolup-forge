@@ -21,6 +21,7 @@ open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Audit
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 128 — outbound API connector kit contract ─────────────
 //
@@ -287,15 +288,13 @@ let private secretStore (scope: string) (key: string) (value: string) : ISecretS
 /// A fresh blob-backed entity store with the cursor entity registered —
 /// the "durable" store a restarted process re-opens by directory.
 let private openCursorStore (directory: string) : IEntityStore =
-    Directory.CreateDirectory directory |> ignore
     let blob = LocalFileStorage.LocalFileStorage(directory) :> IBlobStorage
     let dos = DataObjectStore(blob) :> IDataObjectStore
     let registry = EntityRegistry()
     registry.Register<SyncCursorEntity>(SyncCursor.registration)
     BlobEntityStore(dos, blob, registry, (NoOpAuditLog())) :> IEntityStore
 
-let private tempDir () =
-    Path.Combine(Path.GetTempPath(), "toolup-sync-cursor-" + Guid.NewGuid().ToString("N"))
+let private tempDir () = TempDir.create "sync-cursor"
 
 let private source: DataSourceConfig = {
     Id = "src-1"
@@ -408,7 +407,8 @@ let tests<'Row when 'Row: equality>
         testCaseAsync "an incremental sync resumes after a restart and ingests every row exactly once"
         <| async {
             let connector, transport, call = factory ()
-            let directory = tempDir ()
+            use cursorDir = tempDir ()
+            let directory = cursorDir.Path
             let sink = ResizeArray<'Row>()
 
             let source = {
@@ -714,8 +714,10 @@ let private declaredRetryTests =
         <| async {
             let provider = MockProvider(MockStyle.Token, 10)
 
+            use cursorDir = tempDir ()
+
             let deps = {
-                depsFor provider (openCursorStore (tempDir ())) (ResizeArray()) None with
+                depsFor provider (openCursorStore cursorDir.Path) (ResizeArray()) None with
                     Connector = declaring (Some { declared with MaxAttempts = 0 })
                     Options = PagedFetchOptions.defaults
             }
@@ -1032,7 +1034,8 @@ let private cursorTests =
     testList "SyncCursor + IncrementalSync" [
         testCaseAsync "a cursor round-trips through the entity store by value"
         <| async {
-            let store = openCursorStore (tempDir ())
+            use cursorDir = tempDir ()
+            let store = openCursorStore cursorDir.Path
 
             let cursor = {
                 SyncCursor.initial "mockapi" "src-1" "items" with
@@ -1056,7 +1059,8 @@ let private cursorTests =
 
         testCaseAsync "a stale write is a Conflict, not a silent overwrite"
         <| async {
-            let store = openCursorStore (tempDir ())
+            use cursorDir = tempDir ()
+            let store = openCursorStore cursorDir.Path
             let actor = EntityPrincipal.ofPrincipal "t"
             let fresh = SyncCursor.initial "mockapi" "src-1" "items"
             let! first = SyncCursor.save store "team-a" actor fresh
@@ -1081,7 +1085,8 @@ let private cursorTests =
 
         testCaseAsync "an incremental sync resumes after a restart with no duplicate ingestion"
         <| async {
-            let directory = tempDir ()
+            use cursorDir = tempDir ()
+            let directory = cursorDir.Path
             let provider = MockProvider(MockStyle.Token, 2)
             provider.Add(rowsUpTo 5)
             let sink = ResizeArray<MockRow>()
@@ -1113,7 +1118,8 @@ let private cursorTests =
 
         testCaseAsync "a sink failure stops the pass and leaves the page to be offered again"
         <| async {
-            let directory = tempDir ()
+            use cursorDir = tempDir ()
+            let directory = cursorDir.Path
             let provider = MockProvider(MockStyle.Offset, 2)
             provider.Add(rowsUpTo 4)
             let sink = ResizeArray<MockRow>()
@@ -1153,7 +1159,8 @@ let private cursorTests =
 
         testCaseAsync "a full-refresh endpoint ignores the watermark"
         <| async {
-            let directory = tempDir ()
+            use cursorDir = tempDir ()
+            let directory = cursorDir.Path
             let provider = MockProvider(MockStyle.Token, 10)
             provider.Add(rowsUpTo 3)
             let sink = ResizeArray<MockRow>()
@@ -1166,7 +1173,8 @@ let private cursorTests =
         testCaseAsync "an unknown endpoint or a missing credential fails before any call"
         <| async {
             let provider = MockProvider(MockStyle.Token, 10)
-            let deps = depsFor provider (openCursorStore (tempDir ())) (ResizeArray()) None
+            use cursorDir = tempDir ()
+            let deps = depsFor provider (openCursorStore cursorDir.Path) (ResizeArray()) None
             let! unknown = IncrementalSync.run deps "team-a" { request with Endpoint = "nope" }
 
             match unknown with
@@ -1189,7 +1197,8 @@ let private cursorTests =
 
         testCaseAsync "the job handler is stateless: payload in, cursor re-read, verdict out"
         <| async {
-            let directory = tempDir ()
+            use cursorDir = tempDir ()
+            let directory = cursorDir.Path
             let provider = MockProvider(MockStyle.NextLink, 2)
             provider.Add(rowsUpTo 3)
             let sink = ResizeArray<MockRow>()

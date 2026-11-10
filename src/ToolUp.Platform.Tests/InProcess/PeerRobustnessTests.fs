@@ -1,7 +1,6 @@
 module ToolUp.Platform.Tests.InProcess.PeerRobustnessTests
 
 open System
-open System.Collections.Concurrent
 open System.Net
 open System.Net.Http
 open System.Net.Http.Headers
@@ -21,6 +20,7 @@ open ToolUp.Platform.Secrets
 open ToolUp.InterPlatform
 open ToolUp.InterPlatform.PeerCompose
 open ToolUp.Platform.Infra
+open ToolUp.Platform.Testing
 
 // ─── Phase 343 — peer robustness roundup ─────────────────────────────
 //
@@ -52,34 +52,6 @@ open ToolUp.Platform.Infra
 // the last list below asserts that rather than assuming it.
 
 // ─── Fixtures ────────────────────────────────────────────────────────
-
-type private InMemorySecretStore() =
-    let store = ConcurrentDictionary<string * string, string>()
-
-    interface ISecretStore with
-        member _.GetSecret(scopeId, key) = async {
-            match store.TryGetValue((scopeId, key)) with
-            | true, v -> return Some v
-            | false, _ -> return None
-        }
-
-        member _.SetSecret(scopeId, key, value) = async {
-            store[(scopeId, key)] <- value
-            return Ok()
-        }
-
-        member _.DeleteSecret(scopeId, key) = async {
-            store.TryRemove((scopeId, key)) |> ignore
-            return Ok()
-        }
-
-        member _.ListKeys(scopeId) = async {
-            return
-                store.Keys
-                |> Seq.filter (fun (s, _) -> s = scopeId)
-                |> Seq.map snd
-                |> List.ofSeq
-        }
 
 let private seed (store: ISecretStore) (key: string) (value: string) =
     store.SetSecret("_platform", key, value) |> Async.RunSynchronously |> ignore
@@ -217,7 +189,7 @@ let base64UrlSignatureTests =
 
         testCaseAsync "the provider returns a typed refusal rather than throwing"
         <| async {
-            let secrets = InMemorySecretStore() :> ISecretStore
+            let secrets = Fakes.TestSecretStore() :> ISecretStore
             seed secrets $"peers/{callerId.PeerId}/signing-key" hs256Key
             let provider = JwtPeerAuthProvider(secrets) :> IPeerAuthProvider
 
@@ -240,7 +212,7 @@ let base64UrlSignatureTests =
             // The oracle, closed. A 500-vs-401 split (or two different
             // messages) tells an unauthenticated caller which of its two
             // guesses was closer, before any credential was accepted.
-            let secrets = InMemorySecretStore() :> ISecretStore
+            let secrets = Fakes.TestSecretStore() :> ISecretStore
             seed secrets $"peers/{callerId.PeerId}/signing-key" hs256Key
             let provider = JwtPeerAuthProvider(secrets) :> IPeerAuthProvider
 
@@ -259,7 +231,7 @@ let base64UrlSignatureTests =
 
         testCaseAsync "CONTROL — the untouched token still validates"
         <| async {
-            let secrets = InMemorySecretStore() :> ISecretStore
+            let secrets = Fakes.TestSecretStore() :> ISecretStore
             seed secrets $"peers/{callerId.PeerId}/signing-key" hs256Key
             let provider = JwtPeerAuthProvider(secrets) :> IPeerAuthProvider
 
@@ -273,7 +245,7 @@ let base64UrlSignatureTests =
 
         testCaseAsync "the HOST answers 401, not 500, for a malformed signature"
         <| async {
-            let secrets = InMemorySecretStore() :> ISecretStore
+            let secrets = Fakes.TestSecretStore() :> ISecretStore
             seed secrets $"peers/{callerId.PeerId}/signing-key" hs256Key
             let auth = JwtPeerAuthProvider(secrets) :> IPeerAuthProvider
 
@@ -305,7 +277,7 @@ let base64UrlSignatureTests =
             // envelope, so a request that authenticates lands on the
             // parse failure (400) — which is exactly the evidence wanted:
             // it got further than the credential check.
-            let secrets = InMemorySecretStore() :> ISecretStore
+            let secrets = Fakes.TestSecretStore() :> ISecretStore
             seed secrets $"peers/{callerId.PeerId}/signing-key" hs256Key
             let auth = JwtPeerAuthProvider(secrets) :> IPeerAuthProvider
 
@@ -538,10 +510,10 @@ let private newRsaKeyPair (bits: int) =
 /// asymmetry is the whole claim under test, so it is expressed in the
 /// fixture rather than asserted about a shared store.
 let private keyedPair (privatePem: string) (publicPem: string) =
-    let callerStore = InMemorySecretStore() :> ISecretStore
+    let callerStore = Fakes.TestSecretStore() :> ISecretStore
     seed callerStore $"peers/{callerId.PeerId}/signing-private-key" privatePem
 
-    let receiverStore = InMemorySecretStore() :> ISecretStore
+    let receiverStore = Fakes.TestSecretStore() :> ISecretStore
     seed receiverStore $"peers/{callerId.PeerId}/signing-public-key" publicPem
 
     callerStore, receiverStore
@@ -597,7 +569,7 @@ let asymmetricProviderTests =
             let _, otherPublicPem = newEcKeyPair ()
             let callerStore, _ = keyedPair privatePem ""
 
-            let receiverStore = InMemorySecretStore() :> ISecretStore
+            let receiverStore = Fakes.TestSecretStore() :> ISecretStore
             seed receiverStore $"peers/{callerId.PeerId}/signing-public-key" otherPublicPem
 
             let caller = AsymmetricPeerAuthProvider(callerStore, PeerEs256) :> IPeerAuthProvider
@@ -643,7 +615,7 @@ let asymmetricProviderTests =
             let callerStore, receiverStore = keyedPair privatePem publicPem
             seed receiverStore $"peers/{callerId.PeerId}/signing-key" hs256Key
 
-            let symmetricStore = InMemorySecretStore() :> ISecretStore
+            let symmetricStore = Fakes.TestSecretStore() :> ISecretStore
             seed symmetricStore $"peers/{callerId.PeerId}/signing-key" hs256Key
 
             let symmetricCaller = JwtPeerAuthProvider(symmetricStore) :> IPeerAuthProvider
@@ -741,7 +713,7 @@ let asymmetricProviderTests =
 
             // A receiver that trusts nobody.
             let receiver =
-                AsymmetricPeerAuthProvider(InMemorySecretStore() :> ISecretStore, receiverId.PeerId, PeerEs256)
+                AsymmetricPeerAuthProvider(Fakes.TestSecretStore() :> ISecretStore, receiverId.PeerId, PeerEs256)
                 :> IPeerAuthProvider
 
             let caller = AsymmetricPeerAuthProvider(callerStore, PeerEs256) :> IPeerAuthProvider
@@ -772,7 +744,7 @@ let defaultCompositionUnchangedTests =
 
         testCaseAsync "the symmetric provider still mints and validates an HS256 token end to end"
         <| async {
-            let secrets = InMemorySecretStore() :> ISecretStore
+            let secrets = Fakes.TestSecretStore() :> ISecretStore
             seed secrets $"peers/{callerId.PeerId}/signing-key" hs256Key
 
             let provider = JwtPeerAuthProvider(secrets, receiverId.PeerId) :> IPeerAuthProvider

@@ -10,7 +10,7 @@ open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Secrets
 open ToolUp.Platform.Auth
 open ToolUp.Platform.Infra
-open ToolUp.Platform.Compose
+open ToolUp.Platform.Infra.Metrics
 
 // ─── Fakes for SDK interfaces ─────────────────────────────────────────
 //
@@ -19,6 +19,15 @@ open ToolUp.Platform.Compose
 // disk, no network, no clock dependency beyond `DateTime.UtcNow` for
 // metadata stamps. Pass each fake through the matching contract pack
 // in `ToolUp.Platform.Tests.Contracts.*Contract` to verify portability.
+//
+// These are the doubles the SDK's own test packs use: a pack does not
+// re-declare a secret store (`CoreFakes.fs`), an audit log
+// (`Recording.fs`), a metrics sink or a logger (`Loggers.fs`) that this
+// package ships. A recording double records
+// into a `Recording<'T>`, so the code under test may write it from any
+// thread while the test reads a snapshot. A test that needs a different
+// assertion shape adapts the snapshot at the call site rather than
+// widening the double.
 
 /// In-memory `IBlobStorage`. Per-(container,blob) byte buffer in a
 /// concurrent dictionary; `List` is a prefix scan within a container.
@@ -117,41 +126,32 @@ type TestEventStore() =
         member _.Erase(scopeId, subjectUserId, policy, dryRun) =
             (inner :> IEventStore).Erase(scopeId, subjectUserId, policy, dryRun)
 
-/// In-memory `ISecretStore`. Per-(scope,key) string entries in a
-/// concurrent dictionary; writes always succeed, deletes are
-/// idempotent.
-type TestSecretStore() =
-    let secrets = ConcurrentDictionary<string * string, string>()
+/// In-memory `ISecretStore`: the Core-only double, defined in
+/// `CoreFakes.fs` so a pack that may not reference this package can
+/// compile it by source link. The name here is the one the fakes have
+/// always been reached by.
+type TestSecretStore = ToolUp.Platform.Testing.TestSecretStore
 
-    /// Pre-seed a secret without going through `SetSecret`. Useful for
-    /// arrange-act-assert flows that don't want to assert on the write
-    /// path.
-    member _.Seed(scopeId: string, key: string, value: string) = secrets[(scopeId, key)] <- value
+/// Recording `IMetricsSink`: every observation, increment and gauge set,
+/// in order, as `(name, value, tags)` / `(name, tags)` tuples.
+type TestMetricsSink() =
+    let observations = Recording<string * float * Map<string, string>>()
+    let increments = Recording<string * Map<string, string>>()
+    let gauges = Recording<string * float * Map<string, string>>()
 
-    interface ISecretStore with
-        member _.GetSecret(scopeId, key) = async {
-            match secrets.TryGetValue((scopeId, key)) with
-            | true, v -> return Some v
-            | false, _ -> return None
-        }
+    /// Every `Record` so far, oldest first.
+    member _.Observations = observations.Snapshot()
 
-        member _.SetSecret(scopeId, key, value) = async {
-            secrets[(scopeId, key)] <- value
-            return Ok()
-        }
+    /// Every `Increment` so far, oldest first.
+    member _.Increments = increments.Snapshot()
 
-        member _.DeleteSecret(scopeId, key) = async {
-            secrets.TryRemove((scopeId, key)) |> ignore
-            return Ok()
-        }
+    /// Every `SetGauge` so far, oldest first.
+    member _.Gauges = gauges.Snapshot()
 
-        member _.ListKeys(scopeId) = async {
-            return
-                secrets.Keys
-                |> Seq.filter (fun (s, _) -> s = scopeId)
-                |> Seq.map snd
-                |> List.ofSeq
-        }
+    interface IMetricsSink with
+        member _.Record(name, value, tags) = observations.Add((name, value, tags))
+        member _.Increment(name, tags) = increments.Add((name, tags))
+        member _.SetGauge(name, value, tags) = gauges.Add((name, value, tags))
 
 /// Configurable `IAuthProvider`. Constructed with a fixed authenticated
 /// user; `GetUser` returns it unconditionally, `ValidateRequest`

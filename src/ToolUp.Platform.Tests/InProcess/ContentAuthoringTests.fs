@@ -25,6 +25,7 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Scope
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 89 — content-type bridge (FormSchema/Submission → PublicPage)
 //
@@ -96,42 +97,8 @@ let private pageWith (status: PublishStatus) (slug: string) : PublicPage = {
     Audience = PageAudience.Public
 }
 
-type private NullLogger() =
-    interface ILogger with
-        member _.Debug(_) = ()
-        member _.Info(_) = ()
-        member _.Warn(_) = ()
-        member _.Error(_, _) = ()
-
-type private InMemorySecretStore() =
-    let d =
-        System.Collections.Concurrent.ConcurrentDictionary<string * string, string>()
-
-    interface ISecretStore with
-        member _.GetSecret(c, n) = async {
-            match d.TryGetValue((c, n)) with
-            | true, v -> return Some v
-            | _ -> return None
-        }
-
-        member _.SetSecret(c, n, v) = async {
-            d[(c, n)] <- v
-            return Ok()
-        }
-
-        member _.DeleteSecret(c, n) = async {
-            d.TryRemove((c, n)) |> ignore
-            return Ok()
-        }
-
-        member _.ListKeys(_) = async { return [] }
-
-let private mkPageStore () : IEntityStore =
-    let dir =
-        Path.Combine(Path.GetTempPath(), "toolup-cms-test-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory dir |> ignore
-    let blob = LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage
+let private mkPageStore (dir: TempDir) : IEntityStore =
+    let blob = LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
     let dos = DataObjectStore(blob) :> IDataObjectStore
     let registry = EntityRegistry()
     registry.Register<PublicPageEntity>(PublicPageEntity.registration)
@@ -141,8 +108,8 @@ let private mkPageStore () : IEntityStore =
 
 let private mkShareTokenStore () : IShareTokenStore =
     let blob = InMemoryBlobStorage.InMemoryBlobStorage() :> IBlobStorage
-    let secrets = InMemorySecretStore() :> ISecretStore
-    BlobShareTokenStore(blob, secrets, (NoOpAuditLog()), NullLogger()) :> IShareTokenStore
+    let secrets = Fakes.TestSecretStore() :> ISecretStore
+    BlobShareTokenStore(blob, secrets, (NoOpAuditLog()), Logger.silent) :> IShareTokenStore
 
 let private previewScope = "team-x"
 let private previewBaseUrl = "https://cms.example.test"
@@ -407,7 +374,8 @@ let tests =
 
         testCaseAsync "runScheduledPublishSweep promotes only due scheduled pages"
         <| async {
-            let store = mkPageStore ()
+            use dir = TempDir.create "cms-test"
+            let store = mkPageStore dir
             let scope = PublicPageEntity.PublicScope
 
             let! _ =
@@ -446,7 +414,8 @@ let tests =
         // ─── Versioning (Phase 89) ────────────────────────────────────
         testCaseAsync "page revisions list, read, and restore append-only"
         <| async {
-            let store = mkPageStore ()
+            use dir = TempDir.create "cms-test"
+            let store = mkPageStore dir
             let scope = PublicPageEntity.PublicScope
 
             // Two edits of the same slug → two versions.
@@ -492,10 +461,10 @@ let tests =
         testCaseAsync "a preview token grants PublicPage access for its slug"
         <| async {
             let blob = InMemoryBlobStorage.InMemoryBlobStorage() :> IBlobStorage
-            let secrets = InMemorySecretStore() :> ISecretStore
+            let secrets = Fakes.TestSecretStore() :> ISecretStore
 
             let store =
-                BlobShareTokenStore(blob, secrets, (NoOpAuditLog()), NullLogger()) :> IShareTokenStore
+                BlobShareTokenStore(blob, secrets, (NoOpAuditLog()), Logger.silent) :> IShareTokenStore
 
             match! ContentPreview.issuePreviewToken store "team-x" "about" "u1" (TimeSpan.FromHours 1.0) with
             | Error e -> failtestf "issue failed: %A" e
@@ -513,7 +482,8 @@ let tests =
         // ─── Authoring admin API (Phase 89) ───────────────────────────
         testCaseAsync "content admin API saves, lists, and transitions pages"
         <| async {
-            let store = mkPageStore ()
+            use dir = TempDir.create "cms-test"
+            let store = mkPageStore dir
             let api = ContentAdminApiImpl.create store (EntityPrincipal.ofPrincipal "admin")
 
             let! _ = api.SavePage(pageWith PublishStatus.Draft "intro")

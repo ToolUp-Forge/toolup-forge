@@ -4,7 +4,6 @@
 module ToolUp.Platform.Tests.InProcess.ModelExecutionComposeTests
 
 open System
-open System.IO
 open Expecto
 open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
@@ -15,6 +14,7 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 728 — the model-execution compose leg ────────────────────────
 //
@@ -31,40 +31,16 @@ open ToolUp.Platform.Compose
 // fixtures deleted is exactly the acceptance criterion; a test that reused
 // them would prove the thing that was already true.
 
-let private silentLogger =
-    { new ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn _ = ()
-        member _.Error(_, _) = ()
-    }
-
-type private RecordingAuditLog() =
-    let recorded = ResizeArray<string * AuditEvent>()
-    member _.Events = List.ofSeq recorded
-
-    interface IAuditLog with
-        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
-            recorded.Add((scopeId, audit))
-            return Ok()
-        }
-
-        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return recorded |> Seq.map snd |> List.ofSeq }
-
 /// The substrate forge composes for every deployment — nothing
 /// model-execution-specific, which is the point.
-let private composedSubstrate () : IServiceCollection =
-    let root =
-        Path.Combine(Path.GetTempPath(), "toolup-modelexec-compose-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory root |> ignore
-    let blob = LocalFileStorage.LocalFileStorage(root) :> IBlobStorage
+let private composedSubstrate (root: TempDir) : IServiceCollection =
+    let blob = LocalFileStorage.LocalFileStorage(root.Path) :> IBlobStorage
     let dataObjects = DataObjectStore(blob) :> IDataObjectStore
 
     let services = ServiceCollection() :> IServiceCollection
     services.AddSingleton<IDataObjectStore>(dataObjects) |> ignore
-    services.AddSingleton<IAuditLog>(RecordingAuditLog() :> IAuditLog) |> ignore
-    services.AddSingleton<ILogger>(silentLogger) |> ignore
+    services.AddSingleton<IAuditLog>(TestAuditLog() :> IAuditLog) |> ignore
+    services.AddSingleton<ILogger>(Logger.silent) |> ignore
     services
 
 /// An `HttpContext` over a built graph, carrying the caller's resolved
@@ -100,7 +76,8 @@ let tests =
 
         testCase "composed leg — ModelExecutionApi resolves IModelRegistry with no hand-registration"
         <| fun _ ->
-            let services = composedSubstrate ()
+            use dir = TempDir.create "modelexec-compose"
+            let services = composedSubstrate dir
             ComposeModelExecution.register ComposeModelExecution.ModelExecutionComposeOptions.defaults services
 
             let ctx = ctxOver services "alice"
@@ -118,7 +95,8 @@ let tests =
 
         testCase "composed leg — the registry is the blob-backed default over composed substrate"
         <| fun _ ->
-            let services = composedSubstrate ()
+            use dir = TempDir.create "modelexec-compose"
+            let services = composedSubstrate dir
             ComposeModelExecution.register ComposeModelExecution.ModelExecutionComposeOptions.defaults services
 
             let provider = services.BuildServiceProvider()
@@ -139,7 +117,8 @@ let tests =
 
         testCase "not composed — the graph is unchanged and the API refuses exactly as before"
         <| fun _ ->
-            let services = composedSubstrate ()
+            use dir = TempDir.create "modelexec-compose"
+            let services = composedSubstrate dir
             let before = countRegistrations services typeof<IModelRegistry>
 
             let ctx = ctxOver services "alice"
@@ -180,7 +159,8 @@ let tests =
 
         testCase "validator — mounted API with no registry composed warns and names the builder"
         <| fun _ ->
-            let services = composedSubstrate ()
+            use dir = TempDir.create "modelexec-compose"
+            let services = composedSubstrate dir
 
             let config = {
                 ServerConfig.defaults with
@@ -199,7 +179,8 @@ let tests =
 
         testCase "validator — composed leg silences the finding"
         <| fun _ ->
-            let services = composedSubstrate ()
+            use dir = TempDir.create "modelexec-compose"
+            let services = composedSubstrate dir
             ComposeModelExecution.register ComposeModelExecution.ModelExecutionComposeOptions.defaults services
 
             let config = {
@@ -211,7 +192,8 @@ let tests =
 
         testCase "validator — a hand-registered registry also silences it"
         <| fun _ ->
-            let services = composedSubstrate ()
+            use dir = TempDir.create "modelexec-compose"
+            let services = composedSubstrate dir
             let provider = services.BuildServiceProvider()
 
             let hand =
@@ -233,7 +215,8 @@ let tests =
 
         testCase "validator — an unmounted API validates clean whatever is composed"
         <| fun _ ->
-            let services = composedSubstrate ()
+            use dir = TempDir.create "modelexec-compose"
+            let services = composedSubstrate dir
 
             Expect.equal
                 (validate ServerConfig.defaults services)
@@ -244,7 +227,8 @@ let tests =
 
         testCase "options — a supplied registry is registered as-is"
         <| fun _ ->
-            let services = composedSubstrate ()
+            use dir = TempDir.create "modelexec-compose"
+            let services = composedSubstrate dir
             let provider = services.BuildServiceProvider()
 
             let mine =
@@ -266,7 +250,8 @@ let tests =
 
         testCase "options — TryAdd never overrides a pre-registered registry"
         <| fun _ ->
-            let services = composedSubstrate ()
+            use dir = TempDir.create "modelexec-compose"
+            let services = composedSubstrate dir
             let provider = services.BuildServiceProvider()
 
             let pre =
@@ -286,7 +271,8 @@ let tests =
 
         testCase "options — declared and DI-registered observers are merged, deduplicated by name"
         <| fun _ ->
-            let services = composedSubstrate ()
+            use dir = TempDir.create "modelexec-compose"
+            let services = composedSubstrate dir
             let seen = ResizeArray<string>()
 
             services.AddSingleton<IModelRegistrationObserver>(observerNamed "from-di" seen)
@@ -334,7 +320,8 @@ let tests =
 
         testCase "options — the scorer and policy are registered only when declared"
         <| fun _ ->
-            let bare = composedSubstrate ()
+            use bareDir = TempDir.create "modelexec-compose"
+            let bare = composedSubstrate bareDir
             ComposeModelExecution.register ComposeModelExecution.ModelExecutionComposeOptions.defaults bare
 
             Expect.equal
@@ -347,7 +334,8 @@ let tests =
                 0
                 "an undeclared policy leaves the handler's permissive fallback (GP 11)"
 
-            let declared = composedSubstrate ()
+            use declaredDir = TempDir.create "modelexec-compose"
+            let declared = composedSubstrate declaredDir
 
             ComposeModelExecution.ModelExecutionComposeOptions.defaults
             |> ComposeModelExecution.ModelExecutionComposeOptions.withPolicy ModelExecutionPolicy.refuseGateFailures

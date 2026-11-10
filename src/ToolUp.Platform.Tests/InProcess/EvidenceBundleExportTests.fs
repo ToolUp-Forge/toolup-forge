@@ -7,7 +7,6 @@ module ToolUp.Platform.Tests.InProcess.EvidenceBundleExportTests
 // broken one. The nested-attestation ruling is pinned here.
 
 open System
-open System.Collections.Concurrent
 open System.IO
 open System.Text
 open System.Text.Json
@@ -17,6 +16,7 @@ open ToolUp.Platform
 open ToolUp.Platform.Secrets
 open ToolUp.ArtefactSigning
 open ToolUp.Platform.Audit
+open ToolUp.Platform.Testing
 
 // ─── The joined evidence bundle as a signed statement ────────────────
 //
@@ -50,36 +50,6 @@ open ToolUp.Platform.Audit
 // a fixture written by these tests. It is not run from inside this pack,
 // because adding an external binary to the suite would make a green
 // depend on a toolchain a fresh checkout does not have.
-
-/// Minimal in-memory `ISecretStore` — signing keys are auto-provisioned
-/// into it on first use.
-type private InMemorySecretStore() =
-    let store = ConcurrentDictionary<string * string, string>()
-
-    interface ISecretStore with
-        member _.GetSecret(scopeId, key) = async {
-            match store.TryGetValue((scopeId, key)) with
-            | true, v -> return Some v
-            | false, _ -> return None
-        }
-
-        member _.SetSecret(scopeId, key, value) = async {
-            store[(scopeId, key)] <- value
-            return Ok()
-        }
-
-        member _.DeleteSecret(scopeId, key) = async {
-            store.TryRemove((scopeId, key)) |> ignore
-            return Ok()
-        }
-
-        member _.ListKeys(scopeId) = async {
-            return
-                store.Keys
-                |> Seq.filter (fun (s, _) -> s = scopeId)
-                |> Seq.map snd
-                |> List.ofSeq
-        }
 
 let private keyId = "bundle-v1"
 let private observer = "deployment-under-test"
@@ -482,7 +452,7 @@ let nestedAttestationRulingTests =
 
         test "the export adds exactly one signature and re-asserts nothing" {
             async {
-                let secrets = InMemorySecretStore() :> ISecretStore
+                let secrets = Fakes.TestSecretStore() :> ISecretStore
                 let signer = DsseEnvelopeSigning.fromSecretStore secrets keyId Ed25519
 
                 match! EvidenceBundleExport.export signer cleanBundle with
@@ -729,7 +699,7 @@ let claimBoundaryTests =
 
         test "the verify command prints the boundary and exits zero on a pass" {
             async {
-                let secrets = InMemorySecretStore() :> ISecretStore
+                let secrets = Fakes.TestSecretStore() :> ISecretStore
                 let signer = DsseEnvelopeSigning.fromSecretStore secrets keyId Ed25519
 
                 match! EvidenceBundleExport.export signer cleanBundle with
@@ -762,7 +732,7 @@ let signedRoundTripTests =
         for algorithm, name in [ Ed25519, "Ed25519"; EcdsaP256, "ECDSA P-256" ] do
             test $"a bundle exported under {name} verifies and reads back" {
                 async {
-                    let secrets = InMemorySecretStore() :> ISecretStore
+                    let secrets = Fakes.TestSecretStore() :> ISecretStore
                     let signer = DsseEnvelopeSigning.fromSecretStore secrets keyId algorithm
 
                     let audit = NoOpAuditLog() :> IAuditLog
@@ -795,7 +765,7 @@ let signedRoundTripTests =
 
         test "a payload altered after signing fails the signature check" {
             async {
-                let secrets = InMemorySecretStore() :> ISecretStore
+                let secrets = Fakes.TestSecretStore() :> ISecretStore
                 let signer = DsseEnvelopeSigning.fromSecretStore secrets keyId Ed25519
 
                 let audit = NoOpAuditLog() :> IAuditLog
@@ -899,7 +869,7 @@ let fixtureEmissionTests =
             // an envelope a stock verifier can consume, a blob whose
             // digest is the subject it claim-checks, and the public key.
             async {
-                let secrets = InMemorySecretStore() :> ISecretStore
+                let secrets = Fakes.TestSecretStore() :> ISecretStore
                 let signer = DsseEnvelopeSigning.fromSecretStore secrets keyId EcdsaP256
 
                 let audit = NoOpAuditLog() :> IAuditLog
@@ -918,10 +888,14 @@ let fixtureEmissionTests =
                         | path when String.IsNullOrWhiteSpace path -> None
                         | path -> Some path
 
-                    let dir =
+                    // A kept directory is the caller's to keep; otherwise the
+                    // fixture lives in a temp directory released below.
+                    let dir, scratch =
                         match kept with
-                        | Some path -> path
-                        | None -> Path.Combine(Path.GetTempPath(), $"toolup-bundle-fixture-{Guid.NewGuid():N}")
+                        | Some path -> path, None
+                        | None ->
+                            let temp = TempDir.create "bundle-fixture"
+                            temp.Path, Some(temp :> IDisposable)
 
                     Directory.CreateDirectory dir |> ignore
 
@@ -956,13 +930,7 @@ let fixtureEmissionTests =
                             )
                         | None -> ()
                     finally
-                        match kept with
-                        | Some _ -> ()
-                        | None ->
-                            try
-                                Directory.Delete(dir, true)
-                            with _ ->
-                                ()
+                        scratch |> Option.iter (fun temp -> temp.Dispose())
             }
             |> Async.RunSynchronously
         }

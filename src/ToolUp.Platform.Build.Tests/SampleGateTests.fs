@@ -7,6 +7,7 @@ open System
 open System.IO
 open Expecto
 open ToolUp.Forge
+open ToolUp.Platform.Testing
 
 // ─── Phase 904 — every sample builds under a gate ────────────────────
 //
@@ -109,28 +110,24 @@ let tests =
         }
 
         test "discover skips build output and package folders" {
-            let root =
-                Path.Combine(Path.GetTempPath(), "toolup-sg-" + Guid.NewGuid().ToString "N")
+            use scratch = TempDir.create "sg"
+            let root = scratch.Path
 
-            try
-                for rel in
-                    [
-                        "samples/A/A.fsproj"
-                        "samples/A/obj/Copy.fsproj"
-                        "samples/A/node_modules/pkg/Pkg.fsproj"
-                        "samples/B/src/B.fsproj"
-                    ] do
-                    let full = Path.Combine(root, rel)
-                    Directory.CreateDirectory(Path.GetDirectoryName full) |> ignore
-                    File.WriteAllText(full, "<Project />")
+            for rel in
+                [
+                    "samples/A/A.fsproj"
+                    "samples/A/obj/Copy.fsproj"
+                    "samples/A/node_modules/pkg/Pkg.fsproj"
+                    "samples/B/src/B.fsproj"
+                ] do
+                let full = Path.Combine(root, rel)
+                Directory.CreateDirectory(Path.GetDirectoryName full) |> ignore
+                File.WriteAllText(full, "<Project />")
 
-                Expect.equal
-                    (SampleGate.discover root (Path.Combine(root, "samples")))
-                    [ "samples/A/A.fsproj"; "samples/B/src/B.fsproj" ]
-                    "only real projects, relative and forward-slashed"
-            finally
-                if Directory.Exists root then
-                    Directory.Delete(root, true)
+            Expect.equal
+                (SampleGate.discover root (Path.Combine(root, "samples")))
+                [ "samples/A/A.fsproj"; "samples/B/src/B.fsproj" ]
+                "only real projects, relative and forward-slashed"
         }
 
         // The real tree: the count the gate asserts is the count on disk,

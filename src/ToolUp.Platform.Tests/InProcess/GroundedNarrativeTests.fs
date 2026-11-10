@@ -74,6 +74,7 @@ open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Audit
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ── Document builders ─────────────────────────────────────────────
 
@@ -333,34 +334,6 @@ let pureGateTests =
 
 // ── B. The fact-tier gate over a real store ───────────────────────
 
-type private InMemorySecretStore() =
-    let store = ConcurrentDictionary<string * string, string>()
-
-    interface ISecretStore with
-        member _.GetSecret(scopeId, key) = async {
-            match store.TryGetValue((scopeId, key)) with
-            | true, v -> return Some v
-            | false, _ -> return None
-        }
-
-        member _.SetSecret(scopeId, key, value) = async {
-            store[(scopeId, key)] <- value
-            return Ok()
-        }
-
-        member _.DeleteSecret(scopeId, key) = async {
-            store.TryRemove((scopeId, key)) |> ignore
-            return Ok()
-        }
-
-        member _.ListKeys(scopeId) = async {
-            return
-                store.Keys
-                |> Seq.filter (fun (s, _) -> s = scopeId)
-                |> Seq.map snd
-                |> List.ofSeq
-        }
-
 let private september: TemporalExtent = {
     From = DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
     To = DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc)
@@ -419,7 +392,7 @@ let private gateFixture () : GateFixture =
     let graph =
         ProvenanceGraph.createWithFacts lineage (FactStoreEvidenceSource.create store)
 
-    let secrets = InMemorySecretStore() :> ISecretStore
+    let secrets = Fakes.TestSecretStore() :> ISecretStore
     let audit = NoOpAuditLog() :> IAuditLog
     let signer = DefaultArtefactSigner.createSystem secrets audit "grounding-v1" Ed25519
 
@@ -698,14 +671,6 @@ let private constantEmbedder =
         member _.Dimensions = 8
     }
 
-let private silentLogger =
-    { new ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn _ = ()
-        member _.Error(_, _) = ()
-    }
-
 /// A knowledge base that records what it was asked to index.
 type private RecordingIngestor() =
     let ingested = ConcurrentQueue<NarrativeDocument>()
@@ -851,11 +816,11 @@ let private deployShaped
     let narratives = InMemoryNarrativeStore() :> INarrativeStore
     let ingestor = RecordingIngestor()
     let scheduler = DispatchingScheduler()
-    let secrets = InMemorySecretStore() :> ISecretStore
+    let secrets = Fakes.TestSecretStore() :> ISecretStore
 
     services.AddSingleton<IBlobStorage>(storage) |> ignore
     services.AddSingleton<IEventStore>(events) |> ignore
-    services.AddSingleton<ILogger>(silentLogger) |> ignore
+    services.AddSingleton<ILogger>(Logger.silent) |> ignore
     services.AddSingleton<IMetricRegistry>(metrics) |> ignore
     services.AddSingleton<INarrativeStore>(narratives) |> ignore
     services.AddSingleton<INarrativeIngestor>(ingestor) |> ignore
@@ -878,7 +843,7 @@ let private deployShaped
     )
     |> ignore
 
-    services.AddSingleton<IDataObjectStore>(DataObjectStore.DataObjectStore(storage, silentLogger) :> IDataObjectStore)
+    services.AddSingleton<IDataObjectStore>(DataObjectStore.DataObjectStore(storage, Logger.silent) :> IDataObjectStore)
     |> ignore
 
     let services =
@@ -1521,7 +1486,7 @@ type private RecordingFactory(inner: IAIProviderFactory) =
 type private Funding(policy: AIFallbackPolicy, platformKey: string option) =
     let keys = ConcurrentQueue<string>()
     let profiles = BlobProviderProfile.create (InMemoryBlobStorage())
-    let secrets = InMemorySecretStore() :> ISecretStore
+    let secrets = Fakes.TestSecretStore() :> ISecretStore
     let mutable recording: RecordingFactory option = None
 
     /// The keys providers were built with, in order.
@@ -1951,7 +1916,7 @@ let budgetTests =
                 StreamingFor(replyOnly "A reply that takes seventy seconds to write.", seventySeconds)
 
             let services = ServiceCollection()
-            services.AddSingleton<ILogger>(silentLogger) |> ignore
+            services.AddSingleton<ILogger>(Logger.silent) |> ignore
             let ctx = DefaultHttpContext()
             ctx.RequestServices <- services.BuildServiceProvider()
             let messages = [ AIProviderMessage.text "user" "hello" ]
@@ -2051,7 +2016,7 @@ let budgetTests =
                                 member _.Unsubscribe(_) = async { return () }
                             }
                         Config = ServerConfig.defaults
-                        Logger = silentLogger
+                        Logger = Logger.silent
                         ActivitySink =
                             ToolUp.Platform.Infra.Tracing.NoOpActivitySink()
                             :> ToolUp.Platform.Infra.Tracing.IActivitySink
@@ -2169,7 +2134,7 @@ let private deployRecording () =
         TeamManagement.TeamStore(
             InMemoryBlobStorage() :> IBlobStorage,
             NotificationChannel.InMemoryNotificationChannel(None) :> INotificationChannel,
-            silentLogger
+            Logger.silent
         )
         :> TeamManagement.ITeamStore
 
@@ -2747,7 +2712,7 @@ let doubleRunTests =
                                 member _.Unsubscribe(_) = async { return () }
                             }
                         Config = ServerConfig.defaults
-                        Logger = silentLogger
+                        Logger = Logger.silent
                         ActivitySink =
                             ToolUp.Platform.Infra.Tracing.NoOpActivitySink()
                             :> ToolUp.Platform.Infra.Tracing.IActivitySink
@@ -3366,7 +3331,7 @@ let triggerNameTests =
                                 member _.Unsubscribe(_) = async { return () }
                             }
                         Config = ServerConfig.defaults
-                        Logger = silentLogger
+                        Logger = Logger.silent
                         ActivitySink =
                             ToolUp.Platform.Infra.Tracing.NoOpActivitySink()
                             :> ToolUp.Platform.Infra.Tracing.IActivitySink

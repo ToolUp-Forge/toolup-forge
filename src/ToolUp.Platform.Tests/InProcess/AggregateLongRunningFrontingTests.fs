@@ -24,6 +24,7 @@ open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Audit
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 630 — long-running methods through the aggregate surface ──
 //
@@ -216,52 +217,12 @@ type private DeferredScheduler() =
         member _.NotifyEventWritten(_scopeId, _eventType, _eventId) =
             failwith "DeferredScheduler.NotifyEventWritten must not be invoked"
 
-type private RecordingAuditLog() =
-    let recorded = ResizeArray<string * AuditEvent>()
-
-    member _.PeerJobRows =
-        recorded
-        |> List.ofSeq
-        |> List.choose (fun (_, e) ->
-            match e with
-            | PeerAudit(PeerJobCompleted p) -> Some p
-            | _ -> None)
-
-    interface IAuditLog with
-        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
-            lock recorded (fun () -> recorded.Add((scopeId, audit)))
-            return Ok()
-        }
-
-        member _.GetAuditTrail(AuditScope.StreamKey _scopeId, _dateRange, _eventType) = async { return [] }
-
-type private InMemorySecretStore() =
-    let store = ConcurrentDictionary<string * string, string>()
-
-    interface ISecretStore with
-        member _.GetSecret(scopeId, key) = async {
-            match store.TryGetValue((scopeId, key)) with
-            | true, v -> return Some v
-            | false, _ -> return None
-        }
-
-        member _.SetSecret(scopeId, key, value) = async {
-            store[(scopeId, key)] <- value
-            return Ok()
-        }
-
-        member _.DeleteSecret(scopeId, key) = async {
-            store.TryRemove((scopeId, key)) |> ignore
-            return Ok()
-        }
-
-        member _.ListKeys(scopeId) = async {
-            return
-                store.Keys
-                |> Seq.filter (fun (s, _) -> s = scopeId)
-                |> Seq.map snd
-                |> List.ofSeq
-        }
+/// The peer-job completion rows a recording audit log holds, in order.
+let private peerJobRows (audit: TestAuditLog) =
+    audit.Events
+    |> List.choose (function
+        | PeerAudit(PeerJobCompleted p) -> Some p
+        | _ -> None)
 
 let private seedSigningKey (store: ISecretStore) (peerId: string) (key: string) =
     store.SetSecret("_platform", $"peers/{peerId}/signing-key", key)
@@ -546,11 +507,11 @@ let tests =
         <| async {
             let f = fixture ()
 
-            let secrets = InMemorySecretStore() :> ISecretStore
+            let secrets = Fakes.TestSecretStore() :> ISecretStore
             seedSigningKey secrets callerPeer.PeerId callerKey
             let receiverAuth = JwtPeerAuthProvider(secrets) :> IPeerAuthProvider
 
-            let callerSecrets = InMemorySecretStore() :> ISecretStore
+            let callerSecrets = Fakes.TestSecretStore() :> ISecretStore
             seedSigningKey callerSecrets callerPeer.PeerId callerKey
             let callerAuth = JwtPeerAuthProvider(callerSecrets) :> IPeerAuthProvider
 
@@ -625,15 +586,15 @@ let tests =
         <| async {
             let f = fixture ()
 
-            let secrets = InMemorySecretStore() :> ISecretStore
+            let secrets = Fakes.TestSecretStore() :> ISecretStore
             seedSigningKey secrets callerPeer.PeerId callerKey
             seedSigningKey secrets intruderPeer.PeerId intruderKey
             let receiverAuth = JwtPeerAuthProvider(secrets) :> IPeerAuthProvider
 
-            let callerSecrets = InMemorySecretStore() :> ISecretStore
+            let callerSecrets = Fakes.TestSecretStore() :> ISecretStore
             seedSigningKey callerSecrets callerPeer.PeerId callerKey
 
-            let intruderSecrets = InMemorySecretStore() :> ISecretStore
+            let intruderSecrets = Fakes.TestSecretStore() :> ISecretStore
             seedSigningKey intruderSecrets intruderPeer.PeerId intruderKey
 
             use host =
@@ -688,11 +649,11 @@ let tests =
 
             let f = fixtureWith retention
 
-            let secrets = InMemorySecretStore() :> ISecretStore
+            let secrets = Fakes.TestSecretStore() :> ISecretStore
             seedSigningKey secrets callerPeer.PeerId callerKey
             let receiverAuth = JwtPeerAuthProvider(secrets) :> IPeerAuthProvider
 
-            let callerSecrets = InMemorySecretStore() :> ISecretStore
+            let callerSecrets = Fakes.TestSecretStore() :> ISecretStore
             seedSigningKey callerSecrets callerPeer.PeerId callerKey
 
             use host =
@@ -743,11 +704,11 @@ let tests =
         <| async {
             let f = fixture ()
 
-            let secrets = InMemorySecretStore() :> ISecretStore
+            let secrets = Fakes.TestSecretStore() :> ISecretStore
             seedSigningKey secrets callerPeer.PeerId callerKey
             let receiverAuth = JwtPeerAuthProvider(secrets) :> IPeerAuthProvider
 
-            let callerSecrets = InMemorySecretStore() :> ISecretStore
+            let callerSecrets = Fakes.TestSecretStore() :> ISecretStore
             seedSigningKey callerSecrets callerPeer.PeerId callerKey
 
             use host =
@@ -807,13 +768,13 @@ let tests =
         testCaseAsync "a brokered long-running call lands one PeerJobCompleted row on the gateway"
         <| async {
             let f = fixture ()
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
 
-            let secrets = InMemorySecretStore() :> ISecretStore
+            let secrets = Fakes.TestSecretStore() :> ISecretStore
             seedSigningKey secrets callerPeer.PeerId callerKey
             let receiverAuth = JwtPeerAuthProvider(secrets) :> IPeerAuthProvider
 
-            let callerSecrets = InMemorySecretStore() :> ISecretStore
+            let callerSecrets = Fakes.TestSecretStore() :> ISecretStore
             seedSigningKey callerSecrets callerPeer.PeerId callerKey
 
             use host =
@@ -828,13 +789,13 @@ let tests =
             // A poll while the work is still running concludes nothing, so
             // it must record nothing.
             let! _ = pollRaw httpClient token reconcileId groupJobId
-            Expect.isEmpty audit.PeerJobRows "a Pending poll is not an outcome, so no terminal row is filed"
+            Expect.isEmpty (peerJobRows audit) "a Pending poll is not an outcome, so no terminal row is filed"
 
             do! f.Alpha.Scheduler.RunPending()
 
             let! _ = pollRaw httpClient token reconcileId groupJobId
 
-            match audit.PeerJobRows with
+            match peerJobRows audit with
             | [ row ] ->
                 Expect.equal row.ContractId reconcileId "the row names the fronted contract"
                 Expect.equal row.MethodName "Reconcile" "…and the method whose job resolved"
@@ -864,7 +825,7 @@ let tests =
             let! _ = pollRaw httpClient token reconcileId groupJobId
 
             Expect.equal
-                (List.length audit.PeerJobRows)
+                (List.length (peerJobRows audit))
                 1
                 "the row is claimed once per handle, however many times the caller polls"
         }

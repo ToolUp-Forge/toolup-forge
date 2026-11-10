@@ -12,6 +12,7 @@ open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Audit
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 6p — session-store reset transition ──────────────────
 //
@@ -44,19 +45,6 @@ open ToolUp.Platform.Compose
 // Each case builds its own `SessionFileStores` (the registry is a service,
 // not module state), so no case shares a store, a marker or a TTL with
 // another; a process restart is a fresh instance.
-
-/// Records every `Record` call so a test can assert audit shape + count.
-type private RecordingAuditLog() =
-    let recorded = ConcurrentQueue<string * AuditEvent>()
-    member _.Events = List.ofSeq recorded
-
-    interface IAuditLog with
-        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
-            recorded.Enqueue(scopeId, audit)
-            return Ok()
-        }
-
-        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return recorded |> Seq.map snd |> List.ofSeq }
 
 /// Records every `Publish` so a test can assert the notification's key,
 /// payload and scope. Deliberately NOT the in-tree
@@ -116,12 +104,12 @@ type private Rig = {
     Stores: SessionFileStores ref
     Scope: StorageScope
     Runtime: FileManagementRuntime
-    Audit: RecordingAuditLog
+    Audit: TestAuditLog
     Channel: RecordingChannel
 }
 
 let private mkRig () =
-    let audit = RecordingAuditLog()
+    let audit = TestAuditLog()
     let channel = RecordingChannel()
 
     let runtime = {
@@ -157,10 +145,10 @@ let private resetNotifications (rig: Rig) =
         | _ -> None)
 
 let private resetAudits (rig: Rig) =
-    rig.Audit.Events
-    |> List.choose (fun (scopeId, event) ->
-        match event with
-        | SessionStoreReset payload -> Some(scopeId, payload)
+    rig.Audit.Records
+    |> List.choose (fun row ->
+        match row.Event with
+        | SessionStoreReset payload -> Some(row.StreamKey, payload)
         | _ -> None)
 
 let tests =
@@ -337,7 +325,7 @@ let tests =
             // notification (or composing no channel at all) must not
             // silence the audit trail. Audit answers a compliance
             // question about data loss; it is not a UX preference.
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
 
             let runtime = {
                 FileManagementRuntime.empty with
@@ -357,7 +345,7 @@ let tests =
 
             let rows =
                 audit.Events
-                |> List.choose (fun (_, event) ->
+                |> List.choose (fun event ->
                     match event with
                     | SessionStoreReset payload -> Some payload
                     | _ -> None)

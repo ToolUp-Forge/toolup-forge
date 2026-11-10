@@ -23,6 +23,7 @@ open ToolUp.Platform.Tests.InProcess.TransactionalDispatcherTests
 open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Tests.InProcess
+open ToolUp.Platform.Testing
 
 // Phase 6f.B — the Twilio WhatsApp companion. Never live: the contract
 // pack runs against an unroutable endpoint (failures must classify, not
@@ -161,10 +162,7 @@ let private send (sink: INotificationSink) (whatsApp: WhatsAppEnvelope) =
 
 let private unroutableFactory () =
     let secretStore =
-        let root =
-            Path.Combine(Path.GetTempPath(), "toolup-tests-twilio-wa-" + Guid.NewGuid().ToString("N"))
-
-        Directory.CreateDirectory root |> ignore
+        let root = (TempDir.forRun "tests-twilio-wa").Path
         FileSecretStore.FileSecretStore(root) :> ISecretStore
 
     TwilioWhatsAppNotificationSink.create
@@ -590,7 +588,7 @@ let tests =
                         [ sms; whatsApp ],
                         FakeConfigStore(Map.empty),
                         CapturingAuditLog(),
-                        CapturingLogger(),
+                        Logger.silent,
                         TransactionalRetryPolicy.defaults,
                         NoOpActivitySink() :> IActivitySink
                     )
@@ -614,7 +612,7 @@ let tests =
                                 [ fst (delivered ()); fst (delivered ()) ],
                                 FakeConfigStore(Map.empty),
                                 CapturingAuditLog(),
-                                CapturingLogger(),
+                                Logger.silent,
                                 TransactionalRetryPolicy.defaults,
                                 NoOpActivitySink() :> IActivitySink
                             )

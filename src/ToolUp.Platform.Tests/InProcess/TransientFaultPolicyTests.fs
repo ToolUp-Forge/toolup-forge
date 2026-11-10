@@ -1,7 +1,6 @@
 module ToolUp.Platform.Tests.InProcess.TransientFaultPolicyTests
 
 open System
-open System.Collections.Concurrent
 open System.Diagnostics
 open Expecto
 open ToolUp.Platform.BlobStorage
@@ -11,6 +10,7 @@ open ToolUp.Platform.Infra.ResilientBlobStorage
 open ToolUp.Platform.Infra.ResilientSecretStore
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Infra
+open ToolUp.Platform.Testing
 
 // ─── Phase 176 — transient-fault decorator substrate ─────────────────
 //
@@ -57,35 +57,6 @@ let private countingOp (failFirst: int) (ex: exn) (value: 'T) =
 
 // ─── in-memory test doubles ──────────────────────────────────────────
 
-/// Minimal in-memory ISecretStore (the writable contract subject).
-type private InMemorySecretStore() =
-    let store = ConcurrentDictionary<string * string, string>()
-
-    interface ISecretStore with
-        member _.GetSecret(scopeId, key) = async {
-            match store.TryGetValue((scopeId, key)) with
-            | true, v -> return Some v
-            | false, _ -> return None
-        }
-
-        member _.SetSecret(scopeId, key, value) = async {
-            store[(scopeId, key)] <- value
-            return Ok()
-        }
-
-        member _.DeleteSecret(scopeId, key) = async {
-            store.TryRemove((scopeId, key)) |> ignore
-            return Ok()
-        }
-
-        member _.ListKeys(scopeId) = async {
-            return
-                store.Keys
-                |> Seq.filter (fun (s, _) -> s = scopeId)
-                |> Seq.map snd
-                |> List.ofSeq
-        }
-
 /// Wraps an inner IBlobStorage and throws `TransientFailure` on the first
 /// `failFirst` Upload calls (then delegates). Records Upload call count so
 /// a test can assert the decorator retried.
@@ -128,7 +99,7 @@ let private identityBlobFactory () : IBlobStorage =
     ResilientBlobStorage(InMemoryBlobStorage.InMemoryBlobStorage(), TransientFaultPolicy.identity) :> IBlobStorage
 
 let private identitySecretFactory () : ISecretStore =
-    ResilientSecretStore(InMemorySecretStore(), TransientFaultPolicy.identity) :> ISecretStore
+    ResilientSecretStore(TestSecretStore(), TransientFaultPolicy.identity) :> ISecretStore
 
 let tests =
     testList "TransientFaultPolicy (Phase 176)" [

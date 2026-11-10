@@ -14,6 +14,7 @@ open ToolUp.PublicRendering
 open ToolUp.PublicRendering.PublicRenderingCompose
 open ToolUp.Platform.Config
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 114 — multi-host site registry ────────────────────────────
 //
@@ -24,15 +25,14 @@ open ToolUp.Platform.Compose
 
 // ─── Fixtures ────────────────────────────────────────────────────────
 
+/// A content root holding one home page. Sites built over it outlive any
+/// one scope here, so the directory lives until the test process exits.
 let private mkSiteRoot (title: string) : string =
-    let dir =
-        Path.Combine(Path.GetTempPath(), "toolup-multisite-tests", Guid.NewGuid().ToString("N"))
+    let dir = TempDir.forRun "multisite-tests"
 
-    Directory.CreateDirectory dir |> ignore
+    File.WriteAllText(dir.File "index.md", sprintf "---\ntitle: %s\nlayout: page\n---\n\nHome body." title)
 
-    File.WriteAllText(Path.Combine(dir, "index.md"), sprintf "---\ntitle: %s\nlayout: page\n---\n\nHome body." title)
-
-    dir
+    dir.Path
 
 let private sharedLayouts: Map<LayoutName, PublicPage -> XmlNode> =
     Map[(LayoutName "page", (fun (p: PublicPage) -> html [] [ body [] [ str p.Title ] ]))]
@@ -409,8 +409,8 @@ let private exportTests =
                     PublicRendering = EnabledPublicRendering(ContentRoot defaultRoot)
             }
 
-            let outDir =
-                Path.Combine(Path.GetTempPath(), "toolup-multisite-tests", "export-" + Guid.NewGuid().ToString("N"))
+            use exportRoot = TempDir.create "multisite-export"
+            let outDir = exportRoot.File "export"
 
             let app =
                 ServerApp.empty |> ServerApp.withConfig config,
@@ -450,8 +450,8 @@ let private exportTests =
                     PublicRendering = EnabledPublicRendering(ContentRoot defaultRoot)
             }
 
-            let outDir =
-                Path.Combine(Path.GetTempPath(), "toolup-multisite-tests", "export-" + Guid.NewGuid().ToString("N"))
+            use exportRoot = TempDir.create "multisite-export"
+            let outDir = exportRoot.File "export"
 
             let app =
                 ServerApp.empty |> ServerApp.withConfig config,

@@ -14,6 +14,7 @@ open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Audit
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 287 — composition golden-file CI gate ──────────────────────
 //
@@ -554,10 +555,7 @@ let private platformSpecific (d: Microsoft.Extensions.DependencyInjection.Servic
     || closureMentionsWindowsOnly d.ImplementationInstance
 
 let private defaultDeploymentDescriptors () : string list =
-    let publicDir =
-        Path.Combine(Path.GetTempPath(), "toolup-descriptor-baseline", Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory publicDir |> ignore
+    use publicDir = TempDir.create "descriptor-baseline"
 
     let port =
         let listener = new Net.Sockets.TcpListener(Net.IPAddress.Loopback, 0)
@@ -597,20 +595,12 @@ let private defaultDeploymentDescriptors () : string list =
                 }
         )
 
-    let quiet: ILogger =
-        { new ILogger with
-            member _.Debug _ = ()
-            member _.Info _ = ()
-            member _.Warn _ = ()
-            member _.Error(_, _) = ()
-        }
-
     let app =
         ServerApp.empty
         |> ServerApp.withConfig {
             ServerConfig.defaults with
                 Port = port
-                PublicPath = publicDir
+                PublicPath = publicDir.Path
                 SecurityPosture = {
                     ServerConfig.defaults.SecurityPosture with
                         TrustForwardedHeaders = false
@@ -620,8 +610,8 @@ let private defaultDeploymentDescriptors () : string list =
             ComposeExtensions.empty with
                 ServiceConfig = Some capture
         }
-        |> ServerApp.withStorage (ToolUp.Platform.Testing.Fakes.standardBlobStorage ())
-        |> ServerApp.withLogger quiet
+        |> ServerApp.withStorage (Fakes.standardBlobStorage ())
+        |> ServerApp.withLogger Logger.silent
 
     let culture = Globalization.CultureInfo.DefaultThreadCurrentCulture
     let uiCulture = Globalization.CultureInfo.DefaultThreadCurrentUICulture
@@ -662,11 +652,6 @@ let private defaultDeploymentDescriptors () : string list =
 
         Globalization.CultureInfo.DefaultThreadCurrentCulture <- culture
         Globalization.CultureInfo.DefaultThreadCurrentUICulture <- uiCulture
-
-        try
-            Directory.Delete(publicDir, true)
-        with _ ->
-            ()
 
 let private defaultDescriptorsGate = test "a default deployment's service descriptors match the committed baseline" {
     let lines = defaultDeploymentDescriptors ()

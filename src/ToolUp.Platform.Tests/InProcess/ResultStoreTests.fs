@@ -1,13 +1,13 @@
 module ToolUp.Platform.Tests.InProcess.ResultStoreTests
 
 open System
-open System.IO
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
+open ToolUp.Platform.Testing
 
 /// Bind the `IResultStore` contract test pack to both shipped
 /// implementations: `InMemoryResultStore` (in-process dictionary,
@@ -21,11 +21,8 @@ let tests =
         store, "team-a-" + suffix, "team-b-" + suffix
 
     let persistentFactory () =
-        let tempDir =
-            Path.Combine(Path.GetTempPath(), "toolup-rs-test-" + Guid.NewGuid().ToString("N"))
-
-        Directory.CreateDirectory tempDir |> ignore
-        let blob = LocalFileStorage.LocalFileStorage(tempDir) :> IBlobStorage
+        let tempDir = TempDir.forRun "rs-test"
+        let blob = LocalFileStorage.LocalFileStorage(tempDir.Path) :> IBlobStorage
         let objectStore = DataObjectStore.DataObjectStore(blob) :> IDataObjectStore
         let store = ResultStore.PersistentResultStore(objectStore) :> IResultStore
         let suffix = Guid.NewGuid().ToString("N").Substring(0, 8)

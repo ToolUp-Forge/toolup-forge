@@ -17,6 +17,7 @@ open ToolUp.Platform.Config
 open ToolUp.Platform.Scope
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Test-fixture wiring ────────────────────────────────────────────
 //
@@ -34,12 +35,11 @@ let private writeFile (path: string) (contents: string) =
 
     File.WriteAllText(path, contents)
 
+/// A fixture root for a value that outlives this call (an API handed to a
+/// contract pack, a content root handed to a composition), so its directory
+/// lives until the test process exits. A test body scopes its own with `use`.
 let private mkFixtureDir () : string =
-    let dir =
-        Path.Combine(Path.GetTempPath(), "toolup-publicrendering-tests", Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory dir |> ignore
-    dir
+    (TempDir.forRun "publicrendering-tests").Path
 
 let private seedCanonicalFixture (root: string) : unit =
     writeFile
@@ -165,7 +165,8 @@ let private implTests =
 
         testCase "MarkdownContentLoader: slug frontmatter overrides path-derived slug"
         <| fun _ ->
-            let dir = mkFixtureDir ()
+            use fixture = TempDir.create "publicrendering-tests"
+            let dir = fixture.Path
             // A README that uses the slug override to land at the folder
             // URL instead of `docs/forms/README`.
             writeFile
@@ -186,7 +187,8 @@ let private implTests =
 
         testCase "MarkdownContentLoader: slug override accepts leading / and trims whitespace"
         <| fun _ ->
-            let dir = mkFixtureDir ()
+            use fixture = TempDir.create "publicrendering-tests"
+            let dir = fixture.Path
 
             writeFile
                 (Path.Combine(dir, "pages/source.md"))
@@ -278,7 +280,8 @@ let private implTests =
 
         testCase "MarkdownContentLoader: empty slug override falls back to path-derived slug"
         <| fun _ ->
-            let dir = mkFixtureDir ()
+            use fixture = TempDir.create "publicrendering-tests"
+            let dir = fixture.Path
 
             writeFile (Path.Combine(dir, "pages/keep.md")) "---\ntitle: T\nlayout: page\nslug: \n---\n\nBody."
 
@@ -289,7 +292,8 @@ let private implTests =
 
         testCase "MarkdownContentLoader: Reload() picks up new content"
         <| fun _ ->
-            let dir = mkFixtureDir ()
+            use fixture = TempDir.create "publicrendering-tests"
+            let dir = fixture.Path
             seedCanonicalFixture dir
             let logger = ConsoleLogger.ConsoleLogger() :> ILogger
             use loader = new MarkdownContentLoader(ContentRoot dir, logger, hotReload = false)
@@ -696,36 +700,21 @@ let private contentSourceImplTests =
 
 // ─── Phase 93 — render observability (RenderMetrics) ────────────────
 
-/// An `IMetricsSink` that records every emission for assertion.
-type private RecordingSink() =
-    let counters = System.Collections.Generic.List<string * Map<string, string>>()
-
-    let records =
-        System.Collections.Generic.List<string * float * Map<string, string>>()
-
-    member _.Counters = List.ofSeq counters
-    member _.Records = List.ofSeq records
-
-    interface IMetricsSink with
-        member _.Increment(name, tags) = counters.Add((name, tags))
-        member _.Record(name, value, tags) = records.Add((name, value, tags))
-        member _.SetGauge(_, _, _) = ()
-
 let private renderMetricsTests =
     testList "PublicRendering — Phase 93 render metrics" [
 
         testCase "emitRender emits a render count + duration tagged by outcome"
         <| fun _ ->
-            let sink = RecordingSink()
+            let sink = Fakes.TestMetricsSink()
             RenderMetrics.emitRender sink RenderMetrics.OutcomeRendered 12.5
 
             Expect.contains
-                sink.Counters
+                sink.Increments
                 (RenderMetrics.RenderCount, Map["outcome", RenderMetrics.OutcomeRendered])
                 "render counter is incremented with the outcome tag"
 
             Expect.contains
-                sink.Records
+                sink.Observations
                 (RenderMetrics.RenderMs, 12.5, Map["outcome", RenderMetrics.OutcomeRendered])
                 "render duration histogram records the elapsed ms"
 
@@ -763,7 +752,7 @@ let private renderMetricsTests =
 
         testCase "instrumentSource records per-source resolve latency and delegates the result"
         <| fun _ ->
-            let sink = RecordingSink()
+            let sink = Fakes.TestMetricsSink()
             let ctx = AccessContexts.forSubject (AnonymousSession "s")
 
             let inner =
@@ -775,14 +764,14 @@ let private renderMetricsTests =
             Expect.isSome result "the wrapper delegates the inner result"
 
             Expect.isTrue
-                (sink.Records
+                (sink.Observations
                  |> List.exists (fun (name, _, tags) ->
                      name = RenderMetrics.SourceResolveMs && tags = Map["source", "my-source"]))
                 "a source_resolve_ms record is emitted tagged with the source label"
 
         testCase "instrumentSource preserves IEnumerableContentSource enumeration"
         <| fun _ ->
-            let sink = RecordingSink()
+            let sink = Fakes.TestMetricsSink()
 
             // An enumerable source: its routes must still be discovered
             // through the timing wrapper.
@@ -867,7 +856,8 @@ let private staticExportTests =
 
         testCase "checkLinks flags a dead internal reference and passes a resolving one"
         <| fun _ ->
-            let dir = mkFixtureDir ()
+            use fixture = TempDir.create "publicrendering-tests"
+            let dir = fixture.Path
             writeFile (Path.Combine(dir, "index.html")) """<a href="/about">ok</a><a href="/missing">dead</a>"""
             writeFile (Path.Combine(dir, "about", "index.html")) "<p>about</p>"
 
@@ -877,7 +867,8 @@ let private staticExportTests =
 
         testCase "runWith writes per-locale trees, excludes gated pages, and emits host-config"
         <| fun _ ->
-            let dir = mkFixtureDir ()
+            use fixture = TempDir.create "publicrendering-tests"
+            let dir = fixture.Path
             writeFile (Path.Combine(dir, "pages/about.md")) "---\ntitle: About\nlayout: page\n---\n\nBody."
 
             writeFile
@@ -895,7 +886,8 @@ let private staticExportTests =
                     PublicBaseUrl = Some "https://x.test"
             }
 
-            let outDir = mkFixtureDir ()
+            use outFixture = TempDir.create "publicrendering-tests"
+            let outDir = outFixture.Path
 
             let options =
                 StaticExportOptions.defaults
@@ -942,7 +934,8 @@ let private staticExportTests =
 
         testCase "runWith default options reproduce the single-tree export (GP 11)"
         <| fun _ ->
-            let dir = mkFixtureDir ()
+            use fixture = TempDir.create "publicrendering-tests"
+            let dir = fixture.Path
             writeFile (Path.Combine(dir, "pages/home.md")) "---\ntitle: Home\nlayout: page\n---\n\nBody."
 
             let layouts: Map<LayoutName, PublicPage -> XmlNode> =
@@ -953,7 +946,8 @@ let private staticExportTests =
                     PublicRendering = EnabledPublicRendering(ContentRoot dir)
             }
 
-            let outDir = mkFixtureDir ()
+            use outFixture = TempDir.create "publicrendering-tests"
+            let outDir = outFixture.Path
 
             let count =
                 StaticExport.run config layouts None [] None outDir |> Async.RunSynchronously
@@ -991,19 +985,6 @@ let private runHandler (handler: Giraffe.Core.HttpHandler) (ctx: HttpContext) : 
 
     let result = handler next ctx |> Async.AwaitTask |> Async.RunSynchronously
     bodyRan, result
-
-/// `IMetricsSink` recording every `Increment(name, tags)` — for the
-/// `cacheableWithMetrics` (Phase 153 reachability) assertions.
-type private RecordingMetricsSink() =
-    let increments =
-        System.Collections.Concurrent.ConcurrentBag<string * Map<string, string>>()
-
-    member _.Increments = increments |> List.ofSeq
-
-    interface IMetricsSink with
-        member _.Record(_n, _v, _t) = ()
-        member _.Increment(name, tags) = increments.Add(name, tags)
-        member _.SetGauge(_n, _v, _t) = ()
 
 let private conditionalGetTests =
     testList "PublicRendering — conditional-GET primitive (Phase 155 + 147)" [
@@ -1125,7 +1106,7 @@ let private conditionalGetTests =
 
         testCase "cacheableWithMetrics emits conditional_get=304 + request_by_agent on a 304"
         <| fun _ ->
-            let sink = RecordingMetricsSink()
+            let sink = Fakes.TestMetricsSink()
 
             let ctx =
                 mkCtxWith [
@@ -1163,7 +1144,7 @@ let private conditionalGetTests =
 
         testCase "cacheableWithMetrics emits conditional_get=200 on a fresh request; wire identical to cacheable"
         <| fun _ ->
-            let sink = RecordingMetricsSink()
+            let sink = Fakes.TestMetricsSink()
             let lm = DateTimeOffset(2026, 5, 22, 10, 0, 0, TimeSpan.Zero)
 
             // Bare cacheable and the metrics variant must emit byte-identical
@@ -1390,29 +1371,29 @@ let private renderMetrics153Tests =
 
         testCase "emit helpers tag conditional_get / request_by_agent / page_not_found"
         <| fun _ ->
-            let sink = RecordingSink()
+            let sink = Fakes.TestMetricsSink()
             RenderMetrics.emitConditionalGet sink RenderMetrics.CondGet304
             RenderMetrics.emitAgent sink RenderMetrics.AgentGooglebot
             RenderMetrics.emitNotFound sink
 
             Expect.contains
-                sink.Counters
+                sink.Increments
                 (RenderMetrics.ConditionalGet, Map["outcome", "304"])
                 "conditional_get tagged by outcome"
 
             Expect.contains
-                sink.Counters
+                sink.Increments
                 (RenderMetrics.RequestByAgent, Map["agent", "googlebot"])
                 "request_by_agent tagged by bounded agent class"
 
             Expect.contains
-                sink.Counters
+                sink.Increments
                 (RenderMetrics.PageNotFound, Map.empty)
                 "page_not_found is an untagged counter"
 
         testCase "page handler counts 200 / 304 / agent class / not-found via a live sink"
         <| fun _ ->
-            let sink = RecordingSink()
+            let sink = Fakes.TestMetricsSink()
 
             let provider =
                 mkProvider [
@@ -1432,21 +1413,21 @@ let private renderMetrics153Tests =
             runPage provider "/no-such-page" [ "User-Agent", "Googlebot/2.1" ] |> ignore
 
             Expect.contains
-                sink.Counters
+                sink.Increments
                 (RenderMetrics.ConditionalGet, Map["outcome", "200"])
                 "fresh crawl → conditional_get{outcome=200}"
 
             Expect.contains
-                sink.Counters
+                sink.Increments
                 (RenderMetrics.ConditionalGet, Map["outcome", "304"])
                 "conditional re-crawl → conditional_get{outcome=304}"
 
             Expect.contains
-                sink.Counters
+                sink.Increments
                 (RenderMetrics.RequestByAgent, Map["agent", "googlebot"])
                 "requests bucketed by bounded agent class"
 
-            Expect.contains sink.Counters (RenderMetrics.PageNotFound, Map.empty) "missing slug → page_not_found"
+            Expect.contains sink.Increments (RenderMetrics.PageNotFound, Map.empty) "missing slug → page_not_found"
 
         testCase "NoOp sink emits no crawler/SEO counters (GP 13)"
         <| fun _ ->
@@ -1977,14 +1958,6 @@ let private ragStubEmbedder =
         member _.Dimensions = 8
     }
 
-let private coHostLogger: ILogger =
-    { new ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn _ = ()
-        member _.Error(_, _) = ()
-    }
-
 let private coHostIssuer =
     lazy (MockOidcServer.start MockOidcServer.MockOidcConfig.defaults)
 
@@ -2060,7 +2033,7 @@ let private coHostApp (port: int) (contentRoot: string) (publicDir: string) (ext
     |> ServerApp.withConfig config
     |> ServerApp.withExtensions extensions
     |> ServerApp.withStorage (ToolUp.Platform.Testing.Fakes.standardBlobStorage ())
-    |> ServerApp.withLogger coHostLogger
+    |> ServerApp.withLogger Logger.silent
     |> ServerApp.withAuth auth
     |> ToolUp.RAG.RAGCompose.withRAG (
         ToolUp.RAG.RAGCompose.RagOptions.create ragStubFactory ragStubProfile ragStubEmbedder
@@ -2075,8 +2048,10 @@ let private coHostApp (port: int) (contentRoot: string) (publicDir: string) (ext
 /// on its port; the host is stopped, and the process-wide culture
 /// `compose` sets is restored, whatever `body` does.
 let private withCoHost (body: Net.Http.HttpClient -> Async<unit>) = async {
-    let contentRoot = mkFixtureDir ()
-    let publicDir = mkFixtureDir ()
+    use contentFixture = TempDir.create "publicrendering-tests"
+    let contentRoot = contentFixture.Path
+    use publicFixture = TempDir.create "publicrendering-tests"
+    let publicDir = publicFixture.Path
     seedCoHostContent contentRoot
     seedBundle publicDir
     let port = freePort ()
@@ -2178,11 +2153,13 @@ let private ragCoHostTests =
 
         testCase "the companion-marker guard holds when both composers run"
         <| fun _ ->
-            let contentRoot = mkFixtureDir ()
+            use contentFixture = TempDir.create "publicrendering-tests"
+            let contentRoot = contentFixture.Path
             seedCoHostContent contentRoot
+            use publicFixture = TempDir.create "publicrendering-tests"
 
             let composed =
-                coHostApp 5000 contentRoot (mkFixtureDir ()) ComposeExtensions.empty
+                coHostApp 5000 contentRoot publicFixture.Path ComposeExtensions.empty
                 |> ServerApp.resolve
 
             Expect.isTrue
@@ -2318,7 +2295,8 @@ let private ragCoHostTests =
 /// is the rest of the pipeline (it sets a status and may write a body), and
 /// `precedence` is what DI holds. Returns (status, body, downstream ran).
 let private runSpaFallback (precedence: SpaFallbackPrecedence option) (downstream: int * string option) (path: string) =
-    let publicDir = mkFixtureDir ()
+    use publicFixture = TempDir.create "publicrendering-tests"
+    let publicDir = publicFixture.Path
     seedBundle publicDir
 
     let services = ServiceCollection()
@@ -2487,7 +2465,8 @@ let private layoutResolution1039Tests =
 
         testCase "a page naming an unregistered layout is refused at request time, never framed by another layout"
         <| fun _ ->
-            let dir = mkFixtureDir ()
+            use fixture = TempDir.create "publicrendering-tests"
+            let dir = fixture.Path
             seedLayoutCases dir
 
             let status, body = serveWith (layoutCasesApi dir) twoLayouts "/ghosted"
@@ -2499,7 +2478,8 @@ let private layoutResolution1039Tests =
 
         testCase "an unnamed page with two layouts and no declared default is refused, not framed alphabetically"
         <| fun _ ->
-            let dir = mkFixtureDir ()
+            use fixture = TempDir.create "publicrendering-tests"
+            let dir = fixture.Path
             seedLayoutCases dir
 
             let status, body = serveWith (layoutCasesApi dir) twoLayouts "/plain"
@@ -2509,7 +2489,8 @@ let private layoutResolution1039Tests =
 
         testCase "a page naming a registered layout renders in exactly that layout"
         <| fun _ ->
-            let dir = mkFixtureDir ()
+            use fixture = TempDir.create "publicrendering-tests"
+            let dir = fixture.Path
             seedLayoutCases dir
 
             let status, body = serveWith (layoutCasesApi dir) twoLayouts "/named"
@@ -2519,7 +2500,8 @@ let private layoutResolution1039Tests =
 
         testCase "static export refuses a page naming an unregistered layout instead of writing another frame"
         <| fun _ ->
-            let dir = mkFixtureDir ()
+            use fixture = TempDir.create "publicrendering-tests"
+            let dir = fixture.Path
             seedLayoutCases dir
 
             let config = {
@@ -2527,7 +2509,8 @@ let private layoutResolution1039Tests =
                     PublicRendering = EnabledPublicRendering(ContentRoot dir)
             }
 
-            let outDir = mkFixtureDir ()
+            use outFixture = TempDir.create "publicrendering-tests"
+            let outDir = outFixture.Path
 
             let raised =
                 try
@@ -2548,7 +2531,8 @@ let private layoutResolution1039Tests =
 
         testCase "an unnamed page takes the declared default, not the alphabetically first layout"
         <| fun _ ->
-            let dir = mkFixtureDir ()
+            use fixture = TempDir.create "publicrendering-tests"
+            let dir = fixture.Path
             seedLayoutCases dir
 
             let app =
@@ -2569,7 +2553,8 @@ let private layoutResolution1039Tests =
 
         testCase "with one layout registered it is the default implicitly (single-layout apps unchanged)"
         <| fun _ ->
-            let dir = mkFixtureDir ()
+            use fixture = TempDir.create "publicrendering-tests"
+            let dir = fixture.Path
             seedLayoutCases dir
 
             let single =
@@ -2688,7 +2673,8 @@ let private layoutResolution1039Tests =
 
         testCase "the startup validator refuses a markdown page naming an unregistered layout"
         <| fun _ ->
-            let dir = mkFixtureDir ()
+            use fixture = TempDir.create "publicrendering-tests"
+            let dir = fixture.Path
             seedLayoutCases dir
 
             let composed =
@@ -2716,7 +2702,8 @@ let private layoutResolution1039Tests =
 
         testCase "static export frames an unnamed page in the declared default"
         <| fun _ ->
-            let dir = mkFixtureDir ()
+            use fixture = TempDir.create "publicrendering-tests"
+            let dir = fixture.Path
             writeFile (Path.Combine(dir, "pages/plain.md")) "---\ntitle: Plain\n---\n\nBody."
 
             let app =
@@ -2729,7 +2716,8 @@ let private layoutResolution1039Tests =
                 |> zetaThenAlpha
                 |> PublicRenderingOptions.withDefaultLayout (LayoutName "zeta")
 
-            let outDir = mkFixtureDir ()
+            use outFixture = TempDir.create "publicrendering-tests"
+            let outDir = outFixture.Path
 
             let count =
                 PublicRenderingCompose.PublicRenderingExport.exportStatic outDir app

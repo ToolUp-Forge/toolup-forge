@@ -17,6 +17,7 @@ open ToolUp.Platform.Infra.TransientFault
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 1001 — an app supplies ServerApp its secret store ─────────
 //
@@ -63,10 +64,8 @@ let private withCleanSecretEnv (body: unit -> 'a) : 'a =
 /// a fresh empty directory, so any `secrets*.json` a FileSecretStore wrote
 /// would land where the case can see it.
 let private inEmptyCwd (body: string -> 'a) : 'a =
-    let dir =
-        Path.Combine(Path.GetTempPath(), "toolup-1001-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory dir |> ignore
+    use scratch = TempDir.create "server-app-secret-store"
+    let dir = scratch.Path
     let saved = Directory.GetCurrentDirectory()
 
     try
@@ -75,11 +74,6 @@ let private inEmptyCwd (body: string -> 'a) : 'a =
         withEnv ConfigKeys.Names.secretsPath None (fun () -> body dir)
     finally
         Directory.SetCurrentDirectory saved
-
-        try
-            Directory.Delete(dir, true)
-        with _ ->
-            ()
 
 let private secretsFilesUnder (dir: string) =
     Directory.GetFiles(dir, "secrets*.json", SearchOption.AllDirectories)
@@ -172,18 +166,6 @@ let private policy: TransientFaultPolicy = TransientFaultPolicy.identity
 
 // ─── The composed app ────────────────────────────────────────────────
 
-/// Records every line the composition logs, so a case can read the real
-/// preflight's verdict on each validator (`[preflight] <name>: Ok …`).
-type private CapturingLogger() =
-    let lines = ConcurrentQueue<string>()
-    member _.Lines = List.ofSeq lines
-
-    interface ILogger with
-        member _.Debug m = lines.Enqueue m
-        member _.Info m = lines.Enqueue m
-        member _.Warn m = lines.Enqueue m
-        member _.Error(m, _) = lines.Enqueue m
-
 type private Composed = {
     /// Every line the composition logged, the preflight's included.
     Log: string list
@@ -204,7 +186,9 @@ let private composeWithPreflightTimeout
     (resilience: ResilienceMode)
     (preflightTimeout: TimeSpan option)
     : Composed =
-    let logger = CapturingLogger()
+    // Records every line the composition logs, so a case can read the real
+    // preflight's verdict on each validator (`[preflight] <name>: Ok …`).
+    let logger = Logger.recording ()
     let mutable captured: IServiceCollection option = None
 
     let extensions = {
@@ -234,7 +218,7 @@ let private composeWithPreflightTimeout
         ()
 
     {
-        Log = logger.Lines
+        Log = logger.Lines |> List.map _.Message
         Services =
             captured
             |> Option.defaultWith (fun () -> failtest "compose never reached the companion hook")
@@ -497,9 +481,11 @@ let tests =
 
         test "a supplied plaintext store is not lifted by the seam (the declaration decides)" {
             withCleanSecretEnv (fun () ->
+                use dir = TempDir.create "server-app-secret-store"
+
                 let supplied =
                     ToolUp.Platform.Compose.Server.composeSecretStore
-                        (Some(FileSecretStore.FileSecretStore(baseDir = Path.GetTempPath()) :> ISecretStore))
+                        (Some(FileSecretStore.FileSecretStore(baseDir = dir.Path) :> ISecretStore))
                         (WithResiliencePolicy policy)
 
                 let results = validatorsOver (authConfig ()) supplied |> List.map run

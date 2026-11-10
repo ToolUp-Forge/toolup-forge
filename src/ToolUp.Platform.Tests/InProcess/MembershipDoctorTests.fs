@@ -9,6 +9,7 @@ open ToolUp.Platform.Config.NotificationChannel
 open ToolUp.Platform.Scope.MembershipDoctor
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Scope
+open ToolUp.Platform.Testing
 
 // ─── Phase 546 — membership-integrity doctor ─────────────────────────
 //
@@ -54,19 +55,6 @@ let private downloadText (storage: IBlobStorage) (blobName: string) =
     match storage.Download("_platform", blobName) |> Async.RunSynchronously with
     | Ok bytes -> Some(Encoding.UTF8.GetString bytes)
     | Error _ -> None
-
-/// Audit collector recording (scopeId, event) pairs.
-type private RecordingAuditLog() =
-    let events = ConcurrentBag<string * AuditEvent>()
-    member _.Events = events |> List.ofSeq
-
-    interface IAuditLog with
-        member _.Record(AuditScope.StreamKey scopeId, _actor, event) = async {
-            events.Add(scopeId, event)
-            return Ok()
-        }
-
-        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
 
 let private diagnoseNow (storage: IBlobStorage) =
     diagnose (MembershipDoctorStorage.reads storage) |> Async.RunSynchronously
@@ -199,15 +187,15 @@ let tests =
             seedTeam storage "team-a"
             seedMemberships storage "user-1" [ "team-a"; "purged-x"; "purged-y" ]
             seedMemberships storage "user-2" [ "purged-x" ]
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
 
             let _ = repairWith storage ((audit :> IAuditLog)) None
 
             let removed =
-                audit.Events
-                |> List.choose (fun (scope, e) ->
-                    match e with
-                    | MemberRemoved p -> Some(scope, p.TeamId, p.AffectedUserId, p.UserId)
+                audit.Records
+                |> List.choose (fun r ->
+                    match r.Event with
+                    | MemberRemoved p -> Some(r.StreamKey, p.TeamId, p.AffectedUserId, p.UserId)
                     | _ -> None)
 
             Expect.equal

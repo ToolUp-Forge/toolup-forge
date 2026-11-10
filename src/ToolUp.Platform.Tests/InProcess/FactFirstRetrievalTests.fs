@@ -4,7 +4,6 @@
 module ToolUp.Platform.Tests.InProcess.FactFirstRetrievalTests
 
 open System
-open System.IO
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
@@ -17,6 +16,7 @@ open ToolUp.RAG
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Scope
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 522 — fact-first retrieval ────────────────────────────────
 //
@@ -29,13 +29,6 @@ open ToolUp.Platform.Compose
 // boost, and the `RAGPromptBuilder` facts block + source projection.
 
 // ── Shared harness (mirrors KnowledgeUserScopeIsolationTests) ──
-
-type private SilentLogger() =
-    interface ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn _ = ()
-        member _.Error(_, _) = ()
 
 let private unitVec: float32 array =
     Array.init 8 (fun i -> if i = 0 then 1.0f else 0.0f)
@@ -69,21 +62,22 @@ let private chunkWith (meta: (string * string) list) (content: string) : TextChu
     Metadata = Map.ofList meta
 }
 
+/// The store and what releases it: the store first, then its directory.
 let private newStore () =
-    let tempDir =
-        Path.Combine(Path.GetTempPath(), "toolup-fact-first-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory tempDir |> ignore
-    let storage = LocalFileStorage.LocalFileStorage(tempDir) :> IBlobStorage
+    let tempDir = TempDir.create "fact-first"
+    let storage = LocalFileStorage.LocalFileStorage(tempDir.Path) :> IBlobStorage
 
     let store =
-        new ToolUp.RAG.InMemoryVectorStore.InMemoryVectorStore(
-            storage,
-            logger = SilentLogger(),
-            flushIntervalMs = 60000
-        )
+        new ToolUp.RAG.InMemoryVectorStore.InMemoryVectorStore(storage, logger = Logger.silent, flushIntervalMs = 60000)
 
-    store :> IVectorStore, store :> IDisposable
+    let release =
+        { new IDisposable with
+            member _.Dispose() =
+                (store :> IDisposable).Dispose()
+                (tempDir :> IDisposable).Dispose()
+        }
+
+    store :> IVectorStore, release
 
 let private pipelineWith (store: IVectorStore) (resolver: IFactResolver option) : IRetrievalPipeline =
     match resolver with

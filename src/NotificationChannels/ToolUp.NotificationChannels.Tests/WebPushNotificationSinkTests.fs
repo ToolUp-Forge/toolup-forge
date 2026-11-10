@@ -8,6 +8,7 @@ open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Tests.InProcess
+open ToolUp.Platform.Testing
 
 /// Bind `INotificationSinkContract` to the WebPush sink. The factory
 /// uses test-only VAPID key material — the sink will fail to dispatch
@@ -22,10 +23,7 @@ let tests =
             NotificationAddressBook.NoOpNotificationAddressBook() :> INotificationAddressBook
 
         let secretStore =
-            let root =
-                Path.Combine(Path.GetTempPath(), "toolup-tests-webpush-" + System.Guid.NewGuid().ToString("N"))
-
-            Directory.CreateDirectory root |> ignore
+            let root = (TempDir.forRun "tests-webpush").Path
             FileSecretStore.FileSecretStore(root) :> ISecretStore
 
         // VAPID public + private keys are base64url-encoded byte

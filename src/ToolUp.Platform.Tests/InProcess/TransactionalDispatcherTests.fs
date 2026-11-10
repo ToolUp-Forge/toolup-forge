@@ -11,6 +11,7 @@ open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Test doubles ────────────────────────────────────────────────
 //
@@ -52,27 +53,6 @@ type FakeConfigStore(prefs: Map<string, string>) =
                     Note = None
                 }
         }
-
-/// Fake `ILogger` capturing all entries for later assertion. Errors
-/// are recorded in plain string form; the optional exn is
-/// stringified onto the same record.
-type CapturingLogger() =
-    let entries = ConcurrentQueue<string * string>()
-
-    member _.Entries = entries |> Seq.toList
-
-    interface ILogger with
-        member _.Debug(message) = entries.Enqueue("Debug", message)
-        member _.Info(message) = entries.Enqueue("Info", message)
-        member _.Warn(message) = entries.Enqueue("Warn", message)
-
-        member _.Error(message, ex) =
-            let suffix =
-                match ex with
-                | Some e -> $" :: {e.GetType().Name}: {e.Message}"
-                | None -> ""
-
-            entries.Enqueue("Error", message + suffix)
 
 /// Fake `IAuditLog` capturing every recorded event. Phase 6f step
 /// (b) — the dispatcher emits `NotificationSent` /
@@ -177,12 +157,12 @@ let private makeFixture
           TransactionalDispatcher.TransactionalDispatcher *
           FakeSink *
           INotificationChannel *
-          CapturingLogger *
+          TestLogger *
           CapturingAuditLog
        >
     =
     async {
-        let logger = CapturingLogger() :> ILogger
+        let logger = Logger.recording ()
 
         let resultsQueue = ConcurrentQueue<SinkResult>()
         results |> List.iter resultsQueue.Enqueue
@@ -204,7 +184,7 @@ let private makeFixture
                 [ sink :> INotificationSink ],
                 configStore,
                 auditLog :> IAuditLog,
-                logger,
+                logger :> ILogger,
                 retry,
                 NoOpActivitySink() :> IActivitySink
             )
@@ -218,7 +198,7 @@ let private makeFixture
         let wrapping =
             TransactionalDispatcher.DispatchingNotificationChannel(baseChannel, dispatcher) :> INotificationChannel
 
-        return dispatcher, sink, wrapping, (logger :?> CapturingLogger), auditLog
+        return dispatcher, sink, wrapping, logger, auditLog
     }
 
 [<Tests>]
@@ -307,7 +287,7 @@ let tests =
                         [ sink :> INotificationSink ],
                         FakeConfigStore(prefsAllowingEmail) :> IConfigStore,
                         CapturingAuditLog() :> IAuditLog,
-                        CapturingLogger() :> ILogger,
+                        Logger.silent,
                         TransactionalRetryPolicy.defaults,
                         NoOpActivitySink() :> IActivitySink
                     )
@@ -443,9 +423,6 @@ let tests =
 
             let s2 =
                 FakeSink(NotificationKind.SinkKind.Email, "FakeB", resultsQueue) :> INotificationSink
-
-            let configStore = FakeConfigStore(prefsAllowingEmail) :> IConfigStore
-            let logger = CapturingLogger() :> ILogger
 
             // Direct call to validateSinkRegistration since the
             // duplicate-detection sits in front of the constructor.

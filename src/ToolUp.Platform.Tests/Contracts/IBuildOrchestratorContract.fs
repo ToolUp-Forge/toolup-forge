@@ -261,15 +261,6 @@ let tests (name: string) (factory: unit -> IBuildOrchestrator) =
 
         // ─── Six-rule portability audit (Phase 9c, GP 12) ─────────
 
-        testCaseAsync "Rule 1 — identity-by-value: BuildId / AppSlug are string aliases"
-        <| async {
-            let bid: BuildId = "b-1"
-            let slug: string = "alpha"
-            Expect.equal bid "b-1" "BuildId is a string"
-            Expect.equal slug "alpha" "AppSlug is a string"
-            do! async.Return()
-        }
-
         testCaseAsync "Rule 2 — async at every boundary: every method returns Async<_>"
         <| async {
             let orch = factory ()

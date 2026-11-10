@@ -45,7 +45,6 @@ module ToolUp.Platform.Tests.InProcess.GrantConsentTests
 // type" is a real claim and not a tautology over an empty list.
 
 open System
-open System.IO
 open System.Security.Cryptography
 open System.Text
 open Expecto
@@ -55,6 +54,7 @@ open ToolUp.Platform.Scope.PermissionStore
 open ToolUp.Platform.Scope.GrantConsentStore
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Scope
+open ToolUp.Platform.Testing
 
 /// A log that records nothing and never refuses — the test's "no audit".
 let private noAudit =
@@ -104,20 +104,12 @@ let private keyring = [
 
 let private verifier = verifierOver keyring
 
-type private RecordingAuditLog() =
-    let recorded = ResizeArray<string * AuditEvent>()
-    member _.Recorded = List.ofSeq recorded
+/// Every recorded row as (audit stream, event).
+let private recorded (audit: TestAuditLog) =
+    audit.Records |> List.map (fun r -> r.StreamKey, r.Event)
 
-    member _.EventTypes =
-        recorded |> Seq.map (snd >> AuditEvent.eventTypeName) |> List.ofSeq
-
-    interface IAuditLog with
-        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
-            recorded.Add(scopeId, audit)
-            return Ok()
-        }
-
-        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
+let private eventTypes (audit: TestAuditLog) =
+    audit.Events |> List.map AuditEvent.eventTypeName
 
 
 let private registry =
@@ -159,19 +151,15 @@ let private revokedRecord id supersedes =
 let private freshConsentStore () =
     InMemoryGrantConsentStore() :> IGrantConsentStore
 
-let private freshPermissionStore () =
-    let dir =
-        Path.Combine(Path.GetTempPath(), "toolup-grantconsent-perm-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory dir |> ignore
-    PermissionStore(LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage) :> IPermissionStore
+let private freshPermissionStore (dir: TempDir) =
+    PermissionStore(LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage) :> IPermissionStore
 
 /// The shipped write chain: the Phase 551 grant-policy decorator over a
 /// real blob-backed store, with the Phase 552 oracle wired in. Composed
 /// here exactly as `ComposeTeamRuntime` composes it, so a write in these
 /// cases travels the same path a request does.
-let private guardedStore (consentStore: IGrantConsentStore option) (auditLog: IAuditLog) =
-    let inner = freshPermissionStore ()
+let private guardedStore (dir: TempDir) (consentStore: IGrantConsentStore option) (auditLog: IAuditLog) =
+    let inner = freshPermissionStore dir
 
     let oracle =
         StoreCounterpartyConsentOracle(consentStore, verifier, (fun () -> now), auditLog)
@@ -552,7 +540,7 @@ let tests =
                 "propose → approve → live; revoke → denied at once"
                 (async {
                     let store = freshConsentStore ()
-                    let audit = RecordingAuditLog()
+                    let audit = TestAuditLog()
                     let auditLog = audit :> IAuditLog
 
                     let! proposed = GrantConsents.propose store verifier auditLog (proposedRecord "c-proposed")
@@ -592,7 +580,7 @@ let tests =
                     // The whole ceremony is on the trail, in order, one row per
                     // act — not one row with an outcome field.
                     Expect.equal
-                        audit.EventTypes
+                        (eventTypes audit)
                         [ "GrantConsentProposed"; "GrantConsentApproved"; "GrantConsentRevoked" ]
                         "three acts, three rows"
                 })
@@ -603,7 +591,7 @@ let tests =
                     // Verified BEFORE the write, so the registry cannot hold a
                     // record that could never be honoured.
                     let store = freshConsentStore ()
-                    let audit = RecordingAuditLog()
+                    let audit = TestAuditLog()
                     let record = approvedRecord "c1" None
 
                     let tampered = {
@@ -631,7 +619,7 @@ let tests =
                     | Error e -> failtestf "list failed: %s" e
 
                     Expect.equal
-                        audit.EventTypes
+                        (eventTypes audit)
                         [ "GrantConsentVerificationDenied" ]
                         "the tamper alert fired, and no lifecycle row did"
                 })
@@ -685,10 +673,11 @@ let tests =
             testCaseAsync
                 "a counterparty grant is refused with no consent"
                 (async {
-                    let audit = RecordingAuditLog()
+                    let audit = TestAuditLog()
                     let auditLog = audit :> IAuditLog
                     let store = freshConsentStore ()
-                    let inner, guarded = guardedStore (Some store) auditLog
+                    use dir = TempDir.create "grantconsent-perm"
+                    let inner, guarded = guardedStore dir (Some store) auditLog
 
                     let! result =
                         grantWithCounterpartyApproval
@@ -713,13 +702,14 @@ let tests =
             testCaseAsync
                 "a counterparty grant lands once consent is live"
                 (async {
-                    let audit = RecordingAuditLog()
+                    let audit = TestAuditLog()
                     let auditLog = audit :> IAuditLog
                     let store = freshConsentStore ()
 
                     let! _ = GrantConsents.approve store verifier auditLog (approvedRecord "c-approved" None)
 
-                    let inner, guarded = guardedStore (Some store) auditLog
+                    use dir = TempDir.create "grantconsent-perm"
+                    let inner, guarded = guardedStore dir (Some store) auditLog
 
                     let! result =
                         grantWithCounterpartyApproval
@@ -765,10 +755,11 @@ let tests =
                     // recorded this exact shape as refusable-while-552-is-
                     // unshipped; it stays refusable AFTER 552, because the
                     // registry is the other half and nothing was lodged in it.
-                    let audit = RecordingAuditLog()
+                    let audit = TestAuditLog()
                     let auditLog = audit :> IAuditLog
                     let store = freshConsentStore ()
-                    let _, guarded = guardedStore (Some store) auditLog
+                    use dir = TempDir.create "grantconsent-perm"
+                    let _, guarded = guardedStore dir (Some store) auditLog
 
                     let! written =
                         guarded.SetTeamPermissions(
@@ -788,19 +779,20 @@ let tests =
                     // and a permanently-absent row still fails.
                     let mutable waited = 0
 
-                    while List.isEmpty audit.Recorded && waited < 100 do
+                    while List.isEmpty (recorded audit) && waited < 100 do
                         do! Async.Sleep 20
                         waited <- waited + 1
 
-                    Expect.contains audit.EventTypes "GrantPolicyRefused" "and the refusal is audited (GP 6)"
+                    Expect.contains (eventTypes audit) "GrantPolicyRefused" "and the refusal is audited (GP 6)"
                 })
 
             testCaseAsync
                 "with no consent registry composed, the arm behaves exactly as Phase 551 shipped"
                 (async {
-                    let audit = RecordingAuditLog()
+                    let audit = TestAuditLog()
                     let auditLog = audit :> IAuditLog
-                    let _, guarded = guardedStore None auditLog
+                    use dir = TempDir.create "grantconsent-perm"
+                    let _, guarded = guardedStore dir None auditLog
 
                     let! written =
                         guarded.SetTeamPermissions(
@@ -850,7 +842,7 @@ let tests =
             }
 
             test "both halves present ⇒ allowed, with no refusal row" {
-                let audit = RecordingAuditLog()
+                let audit = TestAuditLog()
 
                 let result =
                     guardDispatchWithConsent
@@ -863,11 +855,11 @@ let tests =
                         moduleName
 
                 Expect.equal result (Ok()) "a live consent plus an Active record is the whole condition"
-                Expect.isEmpty audit.Recorded "an admission emits nothing"
+                Expect.isEmpty (recorded audit) "an admission emits nothing"
             }
 
             test "a revoked consent refuses the very next call, naming the revocation" {
-                let audit = RecordingAuditLog()
+                let audit = TestAuditLog()
 
                 let result =
                     guardDispatchWithConsent
@@ -891,11 +883,11 @@ let tests =
 
                 // The decision AND the row from one call — a guard that
                 // refused without auditing fails here.
-                Expect.equal audit.EventTypes [ "UnconsentedGrantRefused" ] "exactly one refusal row"
+                Expect.equal (eventTypes audit) [ "UnconsentedGrantRefused" ] "exactly one refusal row"
             }
 
             test "a forged Active record with no consent is refused" {
-                let audit = RecordingAuditLog()
+                let audit = TestAuditLog()
 
                 let result =
                     guardDispatchWithConsent
@@ -917,7 +909,7 @@ let tests =
                 // "the counterparty agreed and nobody wrote the grant" and
                 // "the grant exists and consent was withdrawn" are opposite
                 // operator actions.
-                let audit = RecordingAuditLog()
+                let audit = TestAuditLog()
 
                 let result =
                     guardDispatchWithConsent
@@ -936,7 +928,7 @@ let tests =
             }
 
             test "a grant record satisfying a DIFFERENT counterparty does not carry over" {
-                let audit = RecordingAuditLog()
+                let audit = TestAuditLog()
 
                 let forOtherParty = {
                     liveGrantRecord with
@@ -960,7 +952,7 @@ let tests =
                 // The shape a misconfiguration takes: the registry declares
                 // a counterparty arm and the middleware stamped nothing.
                 // Absence must be a denial.
-                let audit = RecordingAuditLog()
+                let audit = TestAuditLog()
 
                 let result =
                     guardDispatchWithConsent
@@ -990,7 +982,7 @@ let tests =
                     ConsentedBy = None
                 }
 
-                let audit = RecordingAuditLog()
+                let audit = TestAuditLog()
 
                 // Allowed, and — the point — allowed WITHOUT any consent
                 // verdict, so Phase 552 has not made the other arms depend
@@ -1032,7 +1024,7 @@ let tests =
                     // forgery alert, the alert's rate would be dominated by
                     // routine operations and nobody would read it.
                     let store = freshConsentStore ()
-                    let audit = RecordingAuditLog()
+                    let audit = TestAuditLog()
                     let auditLog = audit :> IAuditLog
 
                     let! _ = GrantConsents.approve store verifier noAudit (approvedRecord "c1" None)
@@ -1043,7 +1035,7 @@ let tests =
                     Expect.equal resolved (Error ConsentDenial.Revoked) "denied"
 
                     Expect.isEmpty
-                        audit.EventTypes
+                        (eventTypes audit)
                         "a lifecycle denial is already described by the dispatch refusal row"
                 })
 
@@ -1051,7 +1043,7 @@ let tests =
                 "a forged signature DOES raise the tamper alert, with its evidence"
                 (async {
                     let store = freshConsentStore ()
-                    let audit = RecordingAuditLog()
+                    let audit = TestAuditLog()
                     let auditLog = audit :> IAuditLog
 
                     // Land a valid approval, then swap its signature under it —
@@ -1072,7 +1064,7 @@ let tests =
 
                     Expect.equal resolved (Error ConsentDenial.SignatureInvalid) "denied"
 
-                    match audit.Recorded with
+                    match recorded audit with
                     | [ _, GrantConsentVerificationDenied payload ] ->
                         Expect.equal payload.DenialCode "consent-signature-invalid" "names the ground"
                         Expect.equal payload.ConsentId "c1" "names the record"

@@ -63,208 +63,157 @@ let private decoderReturning (c: GoogleCredentialClaims) : string -> GoogleCrede
 
 let private undecodable: string -> GoogleCredentialClaims option = fun _ -> None
 
-let private evaluate credential decoder =
-    evaluateCredentialWith cfg None nowSeconds credential decoder
+let private google = "https://accounts.google.com"
 
-let private evaluateWithNonce expected credential decoder =
-    evaluateCredentialWith cfg expected nowSeconds credential decoder
+/// A decoder answering the given claims, the stubbed GIS callback.
+let private carrying iss aud exp nonce =
+    decoderReturning (claims iss aud exp nonce)
 
 let private bridgeTests =
+    // name, configured nonce, credential on the callback, decoder, expected, why
+    let cases = [
+        "healthy credential → AcceptCredential carrying the id_token",
+        None,
+        Some jwtShaped,
+        decoderReturning goodClaims,
+        AcceptCredential jwtShaped,
+        "a credential whose iss / aud / exp all match the configuration is the session bearer"
+
+        "no credential on the callback payload → MissingCode",
+        None,
+        None,
+        decoderReturning goodClaims,
+        RejectCredential MissingCode,
+        "an absent credential is the GIS analogue of a missing code"
+
+        "empty / whitespace credential → MissingCode",
+        None,
+        Some "   ",
+        decoderReturning goodClaims,
+        RejectCredential MissingCode,
+        "a blank credential string is absent, not malformed — the callback fired with nothing in it"
+
+        "credential that is not JWT-shaped → MalformedIdToken",
+        None,
+        Some "not-a-jwt",
+        decoderReturning goodClaims,
+        RejectCredential MalformedIdToken,
+        "fewer than three dot-segments cannot be a JWS"
+
+        // Deliberately the OPPOSITE call from `classifyStoredToken`, which
+        // defers an undecodable 3-segment token to the server as
+        // `OpaqueToken`. Here we are deciding what to MAKE the bearer, and a
+        // value whose claims cannot be read cannot be bound to this
+        // application at all.
+        "JWT-shaped but undecodable payload → MalformedIdToken, NOT accepted",
+        None,
+        Some jwtShaped,
+        undecodable,
+        RejectCredential MalformedIdToken,
+        "an unreadable credential is refused rather than deferred — the bridge is admitting, not classifying"
+
+        "issuer from another provider → IdTokenIssuerInvalid",
+        None,
+        Some jwtShaped,
+        carrying (Some "https://login.microsoftonline.com/tenant/v2.0") (Some clientId) (Some futureExp) None,
+        RejectCredential IdTokenIssuerInvalid,
+        "a credential minted by a different IdP is never this session's bearer"
+
+        "missing iss claim → IdTokenIssuerInvalid",
+        None,
+        Some jwtShaped,
+        carrying None (Some clientId) (Some futureExp) None,
+        RejectCredential IdTokenIssuerInvalid,
+        "absent is not the same as matching — an unstated issuer fails the check"
+
+        // Google emits BOTH forms depending on surface and vintage, and
+        // documents both as correct. A scheme-strict comparison here would
+        // reject live, valid credentials.
+        "bare-host `accounts.google.com` iss is accepted",
+        None,
+        Some jwtShaped,
+        carrying (Some "accounts.google.com") (Some clientId) (Some futureExp) None,
+        AcceptCredential jwtShaped,
+        "the schemeless issuer form Google also emits must not be treated as a foreign issuer"
+
+        "trailing slash on iss is tolerated",
+        None,
+        Some jwtShaped,
+        carrying (Some(google + "/")) (Some clientId) (Some futureExp) None,
+        AcceptCredential jwtShaped,
+        "a trailing slash is not a different issuer"
+
+        "credential addressed to a different client id → IdTokenAudienceInvalid",
+        None,
+        Some jwtShaped,
+        carrying (Some google) (Some "someone-elses-client-id") (Some futureExp) None,
+        RejectCredential IdTokenAudienceInvalid,
+        "a Google-issued credential for ANOTHER application is the case audience binding exists to catch"
+
+        "expired credential → IdTokenExpired",
+        None,
+        Some jwtShaped,
+        carrying (Some google) (Some clientId) (Some pastExp) None,
+        RejectCredential IdTokenExpired,
+        "a dead credential never becomes a live session"
+
+        "credential expiring inside the clock-skew window is still accepted",
+        None,
+        Some jwtShaped,
+        carrying (Some google) (Some clientId) (Some(nowSeconds - 30.0)) None,
+        AcceptCredential jwtShaped,
+        "60s skew tolerance matches the redirect flow — the two entries must not disagree about the same token"
+
+        "missing exp claim → IdTokenExpired",
+        None,
+        Some jwtShaped,
+        carrying (Some google) (Some clientId) None None,
+        RejectCredential IdTokenExpired,
+        "a credential with no stated lifetime is not treated as immortal"
+
+        "nonce configured and matched → accepted",
+        Some "n-abc123",
+        Some jwtShaped,
+        carrying (Some google) (Some clientId) (Some futureExp) (Some "n-abc123"),
+        AcceptCredential jwtShaped,
+        "a matched nonce binds the credential to this attempt"
+
+        "nonce configured and mismatched → NonceMismatch",
+        Some "n-abc123",
+        Some jwtShaped,
+        carrying (Some google) (Some clientId) (Some futureExp) (Some "n-stale"),
+        RejectCredential NonceMismatch,
+        "a credential minted against a different nonce is a replay against this app"
+
+        "nonce configured but absent from the credential → NonceMismatch",
+        Some "n-abc123",
+        Some jwtShaped,
+        decoderReturning goodClaims,
+        RejectCredential NonceMismatch,
+        "asking for a nonce and getting none back is a failed binding, not an unchecked one"
+
+        "no nonce configured → the credential's nonce claim is not consulted",
+        None,
+        Some jwtShaped,
+        carrying (Some google) (Some clientId) (Some futureExp) (Some "whatever"),
+        AcceptCredential jwtShaped,
+        "Google does not require a nonce for the credential flow; not asking for one is a supported configuration"
+
+        // Both wrong: the reported error must be stable, so an operator
+        // reading the console sees one cause rather than whichever the
+        // implementation happened to test first.
+        "issuer check precedes audience check",
+        None,
+        Some jwtShaped,
+        carrying (Some "https://evil.example") (Some "someone-else") (Some futureExp) None,
+        RejectCredential IdTokenIssuerInvalid,
+        "the wrong-provider diagnosis outranks the wrong-audience one"
+    ]
+
     testList "GoogleIdentityClient.evaluateCredentialWith" [
-
-        testCase "healthy credential → AcceptCredential carrying the id_token"
-        <| fun () ->
-            let result = evaluate (Some jwtShaped) (decoderReturning goodClaims)
-
-            Expect.equal
-                result
-                (AcceptCredential jwtShaped)
-                "a credential whose iss / aud / exp all match the configuration is the session bearer"
-
-        testCase "no credential on the callback payload → MissingCode"
-        <| fun () ->
-            let result = evaluate None (decoderReturning goodClaims)
-
-            Expect.equal
-                result
-                (RejectCredential MissingCode)
-                "an absent credential is the GIS analogue of a missing code"
-
-        testCase "empty / whitespace credential → MissingCode"
-        <| fun () ->
-            let result = evaluate (Some "   ") (decoderReturning goodClaims)
-
-            Expect.equal
-                result
-                (RejectCredential MissingCode)
-                "a blank credential string is absent, not malformed — the callback fired with nothing in it"
-
-        testCase "credential that is not JWT-shaped → MalformedIdToken"
-        <| fun () ->
-            let result = evaluate (Some "not-a-jwt") (decoderReturning goodClaims)
-
-            Expect.equal result (RejectCredential MalformedIdToken) "fewer than three dot-segments cannot be a JWS"
-
-        testCase "JWT-shaped but undecodable payload → MalformedIdToken, NOT accepted"
-        <| fun () ->
-            // Deliberately the OPPOSITE call from `classifyStoredToken`,
-            // which defers an undecodable 3-segment token to the server as
-            // `OpaqueToken`. Here we are deciding what to MAKE the bearer,
-            // and a value whose claims cannot be read cannot be bound to
-            // this application at all.
-            let result = evaluate (Some jwtShaped) undecodable
-
-            Expect.equal
-                result
-                (RejectCredential MalformedIdToken)
-                "an unreadable credential is refused rather than deferred — the bridge is admitting, not classifying"
-
-        testCase "issuer from another provider → IdTokenIssuerInvalid"
-        <| fun () ->
-            let wrong =
-                claims (Some "https://login.microsoftonline.com/tenant/v2.0") (Some clientId) (Some futureExp) None
-
-            let result = evaluate (Some jwtShaped) (decoderReturning wrong)
-
-            Expect.equal
-                result
-                (RejectCredential IdTokenIssuerInvalid)
-                "a credential minted by a different IdP is never this session's bearer"
-
-        testCase "missing iss claim → IdTokenIssuerInvalid"
-        <| fun () ->
-            let wrong = claims None (Some clientId) (Some futureExp) None
-            let result = evaluate (Some jwtShaped) (decoderReturning wrong)
-
-            Expect.equal
-                result
-                (RejectCredential IdTokenIssuerInvalid)
-                "absent is not the same as matching — an unstated issuer fails the check"
-
-        testCase "bare-host `accounts.google.com` iss is accepted"
-        <| fun () ->
-            // Google emits BOTH forms depending on surface and vintage,
-            // and documents both as correct. A scheme-strict comparison
-            // here would reject live, valid credentials.
-            let bareHost =
-                claims (Some "accounts.google.com") (Some clientId) (Some futureExp) None
-
-            let result = evaluate (Some jwtShaped) (decoderReturning bareHost)
-
-            Expect.equal
-                result
-                (AcceptCredential jwtShaped)
-                "the schemeless issuer form Google also emits must not be treated as a foreign issuer"
-
-        testCase "trailing slash on iss is tolerated"
-        <| fun () ->
-            let trailing =
-                claims (Some "https://accounts.google.com/") (Some clientId) (Some futureExp) None
-
-            let result = evaluate (Some jwtShaped) (decoderReturning trailing)
-            Expect.equal result (AcceptCredential jwtShaped) "a trailing slash is not a different issuer"
-
-        testCase "credential addressed to a different client id → IdTokenAudienceInvalid"
-        <| fun () ->
-            let wrong =
-                claims (Some "https://accounts.google.com") (Some "someone-elses-client-id") (Some futureExp) None
-
-            let result = evaluate (Some jwtShaped) (decoderReturning wrong)
-
-            Expect.equal
-                result
-                (RejectCredential IdTokenAudienceInvalid)
-                "a Google-issued credential for ANOTHER application is the case audience binding exists to catch"
-
-        testCase "expired credential → IdTokenExpired"
-        <| fun () ->
-            let stale =
-                claims (Some "https://accounts.google.com") (Some clientId) (Some pastExp) None
-
-            let result = evaluate (Some jwtShaped) (decoderReturning stale)
-            Expect.equal result (RejectCredential IdTokenExpired) "a dead credential never becomes a live session"
-
-        testCase "credential expiring inside the clock-skew window is still accepted"
-        <| fun () ->
-            let borderline =
-                claims (Some "https://accounts.google.com") (Some clientId) (Some(nowSeconds - 30.0)) None
-
-            let result = evaluate (Some jwtShaped) (decoderReturning borderline)
-
-            Expect.equal
-                result
-                (AcceptCredential jwtShaped)
-                "60s skew tolerance matches the redirect flow — the two entries must not disagree about the same token"
-
-        testCase "missing exp claim → IdTokenExpired"
-        <| fun () ->
-            let noExp = claims (Some "https://accounts.google.com") (Some clientId) None None
-            let result = evaluate (Some jwtShaped) (decoderReturning noExp)
-
-            Expect.equal
-                result
-                (RejectCredential IdTokenExpired)
-                "a credential with no stated lifetime is not treated as immortal"
-
-        testCase "nonce configured and matched → accepted"
-        <| fun () ->
-            let bound =
-                claims (Some "https://accounts.google.com") (Some clientId) (Some futureExp) (Some "n-abc123")
-
-            let result =
-                evaluateWithNonce (Some "n-abc123") (Some jwtShaped) (decoderReturning bound)
-
-            Expect.equal result (AcceptCredential jwtShaped) "a matched nonce binds the credential to this attempt"
-
-        testCase "nonce configured and mismatched → NonceMismatch"
-        <| fun () ->
-            let replayed =
-                claims (Some "https://accounts.google.com") (Some clientId) (Some futureExp) (Some "n-stale")
-
-            let result =
-                evaluateWithNonce (Some "n-abc123") (Some jwtShaped) (decoderReturning replayed)
-
-            Expect.equal
-                result
-                (RejectCredential NonceMismatch)
-                "a credential minted against a different nonce is a replay against this app"
-
-        testCase "nonce configured but absent from the credential → NonceMismatch"
-        <| fun () ->
-            let result =
-                evaluateWithNonce (Some "n-abc123") (Some jwtShaped) (decoderReturning goodClaims)
-
-            Expect.equal
-                result
-                (RejectCredential NonceMismatch)
-                "asking for a nonce and getting none back is a failed binding, not an unchecked one"
-
-        testCase "no nonce configured → the credential's nonce claim is not consulted"
-        <| fun () ->
-            let carriesOne =
-                claims (Some "https://accounts.google.com") (Some clientId) (Some futureExp) (Some "whatever")
-
-            let result = evaluate (Some jwtShaped) (decoderReturning carriesOne)
-
-            Expect.equal
-                result
-                (AcceptCredential jwtShaped)
-                "Google does not require a nonce for the credential flow; not asking for one is a supported configuration"
-
-        testCase "issuer check precedes audience check"
-        <| fun () ->
-            // Both wrong: the reported error must be stable, so an
-            // operator reading the console sees one cause rather than
-            // whichever the implementation happened to test first.
-            let bothWrong =
-                claims (Some "https://evil.example") (Some "someone-else") (Some futureExp) None
-
-            let result = evaluate (Some jwtShaped) (decoderReturning bothWrong)
-
-            Expect.equal
-                result
-                (RejectCredential IdTokenIssuerInvalid)
-                "the wrong-provider diagnosis outranks the wrong-audience one"
+        for name, nonce, credential, decoder, expected, why in cases do
+            testCase name
+            <| fun () -> Expect.equal (evaluateCredentialWith cfg nonce nowSeconds credential decoder) expected why
     ]
 
 let private configProjectionTests =

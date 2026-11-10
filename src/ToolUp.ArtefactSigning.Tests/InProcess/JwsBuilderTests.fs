@@ -7,8 +7,8 @@ open System
 open System.Security.Cryptography
 open Expecto
 open ToolUp.Platform.Secrets
+open ToolUp.Platform.Testing
 open ToolUp.ArtefactSigning
-open ToolUp.ArtefactSigning.Tests.Support.InMemoryStores
 
 // ─── Phase 40 / 22a — JwsBuilder offline tests ──────────────────────────
 //
@@ -79,7 +79,7 @@ let tests =
             let spki = ec.ExportSubjectPublicKeyInfo()
             let keyId = "kms-test-v1"
 
-            let secrets = InMemorySecretStore()
+            let secrets = TestSecretStore()
 
             do!
                 (secrets :> ISecretStore).SetSecret("_platform", $"signing/{keyId}", storedKeyJson pkcs8 spki)

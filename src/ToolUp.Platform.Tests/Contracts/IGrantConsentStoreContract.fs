@@ -32,12 +32,12 @@ module ToolUp.Platform.Tests.Contracts.IGrantConsentStoreContract
 //     blip becomes "no consent was ever given".
 
 open System
-open System.IO
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Scope.GrantConsentStore
 open ToolUp.Platform.Infra
+open ToolUp.Platform.Testing
 
 let private subject = ConsentSubject.create "team-a" "alice" "SkuAnalysis"
 let private otherSubject = ConsentSubject.create "team-a" "bob" "SkuAnalysis"
@@ -176,11 +176,8 @@ let contractTests (name: string) (factory: unit -> IGrantConsentStore) =
     ]
 
 let private freshBlobStore () =
-    let dir =
-        Path.Combine(Path.GetTempPath(), "toolup-grantconsent-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory dir |> ignore
-    BlobGrantConsentStore(LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage) :> IGrantConsentStore
+    let dir = TempDir.forRun "grantconsent"
+    BlobGrantConsentStore(LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage) :> IGrantConsentStore
 
 let tests =
     testList "IGrantConsentStore contract" [

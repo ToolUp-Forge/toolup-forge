@@ -1,7 +1,6 @@
 module ToolUp.Platform.Tests.InProcess.CertificateEnvelopeTests
 
 open System
-open System.Collections.Concurrent
 open System.Security.Cryptography
 open System.Text
 open System.Text.Json.Nodes
@@ -12,6 +11,7 @@ open ToolUp.Facts
 open ToolUp.ArtefactSigning
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Audit
+open ToolUp.Platform.Testing
 
 // ─── Grounding-certificate envelope export (standard-statement interop) ─
 //
@@ -35,36 +35,6 @@ open ToolUp.Platform.Audit
 //      specification text in this file, using only BCL primitives — it
 //      re-derives the PAE by hand rather than calling the shipped helper,
 //      so a defect in the shipped encoder cannot make it pass.
-
-/// Minimal in-memory `ISecretStore` — signing keys are auto-provisioned
-/// into it on first use, and the pinned-vector tests pre-seed one.
-type private InMemorySecretStore() =
-    let store = ConcurrentDictionary<string * string, string>()
-
-    interface ISecretStore with
-        member _.GetSecret(scopeId, key) = async {
-            match store.TryGetValue((scopeId, key)) with
-            | true, v -> return Some v
-            | false, _ -> return None
-        }
-
-        member _.SetSecret(scopeId, key, value) = async {
-            store[(scopeId, key)] <- value
-            return Ok()
-        }
-
-        member _.DeleteSecret(scopeId, key) = async {
-            store.TryRemove((scopeId, key)) |> ignore
-            return Ok()
-        }
-
-        member _.ListKeys(scopeId) = async {
-            return
-                store.Keys
-                |> Seq.filter (fun (s, _) -> s = scopeId)
-                |> Seq.map snd
-                |> List.ofSeq
-        }
 
 let private keyId = "grounding-v1"
 
@@ -297,7 +267,7 @@ let tests =
         }
 
         testAsync "a pinned Ed25519 key produces the pinned signature over the spec PAE" {
-            let secrets = InMemorySecretStore() :> ISecretStore
+            let secrets = Fakes.TestSecretStore() :> ISecretStore
 
             do!
                 secrets.SetSecret(
@@ -322,7 +292,7 @@ let tests =
         // ── round trip ───────────────────────────────────────────────────
 
         testAsync "an exported certificate verifies offline against the public key alone (Ed25519)" {
-            let secrets = InMemorySecretStore() :> ISecretStore
+            let secrets = Fakes.TestSecretStore() :> ISecretStore
             let! certificate, publicKey, envelope = exportEnvelope secrets Ed25519
 
             match CertificateEnvelope.verifyAndRead publicKey (Some root) envelope with
@@ -333,7 +303,7 @@ let tests =
         }
 
         testAsync "an exported certificate verifies offline against the public key alone (ECDSA P-256)" {
-            let secrets = InMemorySecretStore() :> ISecretStore
+            let secrets = Fakes.TestSecretStore() :> ISecretStore
             let! _, publicKey, envelope = exportEnvelope secrets EcdsaP256
 
             match CertificateEnvelope.verifyAndRead publicKey (Some root) envelope with
@@ -342,7 +312,7 @@ let tests =
         }
 
         testAsync "the envelope survives its JSON wire form" {
-            let secrets = InMemorySecretStore() :> ISecretStore
+            let secrets = Fakes.TestSecretStore() :> ISecretStore
             let! _, publicKey, envelope = exportEnvelope secrets Ed25519
             let json = DsseEnvelope.toJson envelope
 
@@ -356,7 +326,7 @@ let tests =
         }
 
         testAsync "the statement carries the in-toto shape the predicate type promises" {
-            let secrets = InMemorySecretStore() :> ISecretStore
+            let secrets = Fakes.TestSecretStore() :> ISecretStore
             let! _, _, envelope = exportEnvelope secrets Ed25519
 
             Expect.equal envelope.PayloadType DsseEnvelope.InTotoPayloadType "payload type is the in-toto media type"
@@ -389,7 +359,7 @@ let tests =
         }
 
         testAsync "the certificate round-trips through the envelope with its sealed bytes intact" {
-            let secrets = InMemorySecretStore() :> ISecretStore
+            let secrets = Fakes.TestSecretStore() :> ISecretStore
             let! certificate, publicKey, envelope = exportEnvelope secrets Ed25519
 
             match CertificateEnvelope.verifyAndRead publicKey (Some root) envelope with
@@ -408,7 +378,7 @@ let tests =
         // ── refusals, each distinct ──────────────────────────────────────
 
         testAsync "any byte change to the payload fails verification" {
-            let secrets = InMemorySecretStore() :> ISecretStore
+            let secrets = Fakes.TestSecretStore() :> ISecretStore
             let! _, publicKey, envelope = exportEnvelope secrets Ed25519
 
             let original =
@@ -431,7 +401,7 @@ let tests =
         }
 
         testAsync "a correctly-signed statement about a different artefact is refused on the subject" {
-            let secrets = InMemorySecretStore() :> ISecretStore
+            let secrets = Fakes.TestSecretStore() :> ISecretStore
             let! _, publicKey, envelope = exportEnvelope secrets Ed25519
             let otherRoot = DsseEnvelope.sha256Hex (Encoding.UTF8.GetBytes "a different fact")
 
@@ -443,7 +413,7 @@ let tests =
         }
 
         testAsync "the signature is checked before the subject, so a structural verdict implies a valid signature" {
-            let secrets = InMemorySecretStore() :> ISecretStore
+            let secrets = Fakes.TestSecretStore() :> ISecretStore
             let! _, publicKey, envelope = exportEnvelope secrets Ed25519
 
             let original =
@@ -474,7 +444,7 @@ let tests =
         }
 
         testAsync "a signature block transplanted from another key is refused as unsigned for this key" {
-            let secrets = InMemorySecretStore() :> ISecretStore
+            let secrets = Fakes.TestSecretStore() :> ISecretStore
             let! _, publicKey, envelope = exportEnvelope secrets Ed25519
 
             let transplanted = {
@@ -494,7 +464,7 @@ let tests =
         }
 
         testAsync "a signature transplanted from another envelope under the SAME key still fails" {
-            let secrets = InMemorySecretStore() :> ISecretStore
+            let secrets = Fakes.TestSecretStore() :> ISecretStore
             let! _, publicKey, envelope = exportEnvelope secrets Ed25519
 
             // A statement about a different root, signed by the same
@@ -540,7 +510,7 @@ let tests =
         }
 
         testAsync "a statement of another predicate type is refused rather than parsed hopefully" {
-            let secrets = InMemorySecretStore() :> ISecretStore
+            let secrets = Fakes.TestSecretStore() :> ISecretStore
             let! certificate, publicKey = issueCertificate secrets Ed25519
             let envelopeSigner = DsseEnvelopeSigning.fromSecretStore secrets keyId Ed25519
 
@@ -565,7 +535,7 @@ let tests =
         }
 
         testAsync "a malformed envelope is refused as malformed, never as a signature failure" {
-            let secrets = InMemorySecretStore() :> ISecretStore
+            let secrets = Fakes.TestSecretStore() :> ISecretStore
             let! _, publicKey, envelope = exportEnvelope secrets Ed25519
 
             let broken = {
@@ -600,7 +570,7 @@ let tests =
         // ── disclosure ───────────────────────────────────────────────────
 
         testAsync "a withheld node contributes id and policy ref only — never its method" {
-            let secrets = InMemorySecretStore() :> ISecretStore
+            let secrets = Fakes.TestSecretStore() :> ISecretStore
             let! _, _, envelope = exportEnvelope secrets Ed25519
 
             let statement =
@@ -635,7 +605,7 @@ let tests =
         // ── independent verification path ────────────────────────────────
 
         testAsync "an envelope verifies through a path written from the specification, not from our helper" {
-            let secrets = InMemorySecretStore() :> ISecretStore
+            let secrets = Fakes.TestSecretStore() :> ISecretStore
             let! _, publicKey, envelope = exportEnvelope secrets EcdsaP256
 
             // Everything below is derived from the DSSE / in-toto
@@ -685,7 +655,7 @@ let tests =
             // ── round trip ───────────────────────────────────────────────
 
             testAsync "an exported attested certificate verifies offline against the public key alone (Ed25519)" {
-                let secrets = InMemorySecretStore() :> ISecretStore
+                let secrets = Fakes.TestSecretStore() :> ISecretStore
                 let! certificate, publicKey, envelope, _ = exportAttestedEnvelope secrets Ed25519 Attribution
 
                 match CertificateEnvelope.verifyAndReadAttested publicKey (Some root) envelope with
@@ -701,7 +671,7 @@ let tests =
             }
 
             testAsync "an exported attested certificate verifies offline against the public key alone (ECDSA P-256)" {
-                let secrets = InMemorySecretStore() :> ISecretStore
+                let secrets = Fakes.TestSecretStore() :> ISecretStore
                 let! _, publicKey, envelope, _ = exportAttestedEnvelope secrets EcdsaP256 Attribution
 
                 match CertificateEnvelope.verifyAndReadAttested publicKey (Some root) envelope with
@@ -710,7 +680,7 @@ let tests =
             }
 
             testAsync "the attested envelope survives its JSON wire form" {
-                let secrets = InMemorySecretStore() :> ISecretStore
+                let secrets = Fakes.TestSecretStore() :> ISecretStore
                 let! _, publicKey, envelope, _ = exportAttestedEnvelope secrets Ed25519 Attribution
                 let json = DsseEnvelope.toJson envelope
 
@@ -723,7 +693,7 @@ let tests =
             // ── what the predicate surfaces ──────────────────────────────
 
             testAsync "the predicate publishes the attestation level, purpose and key id as plain strings" {
-                let secrets = InMemorySecretStore() :> ISecretStore
+                let secrets = Fakes.TestSecretStore() :> ISecretStore
                 let! _, _, envelope, _ = exportAttestedEnvelope secrets Ed25519 Attribution
 
                 let node = JsonNode.Parse(statementTextOf envelope)
@@ -765,7 +735,7 @@ let tests =
                 // hardcoded string would pass every test above and this one
                 // is what makes the surfaced value evidence rather than
                 // decoration.
-                let secrets = InMemorySecretStore() :> ISecretStore
+                let secrets = Fakes.TestSecretStore() :> ISecretStore
                 let! _, _, envelope, _ = exportAttestedEnvelope secrets Ed25519 IsolatedSigner
 
                 let node = JsonNode.Parse(statementTextOf envelope)
@@ -781,7 +751,7 @@ let tests =
                 // `AttestationLevel.parse` promises a reserved label
                 // round-trips; the projection must not be where that
                 // promise is quietly broken.
-                let secrets = InMemorySecretStore() :> ISecretStore
+                let secrets = Fakes.TestSecretStore() :> ISecretStore
                 let level = Reserved "hardware-quote"
                 let! _, publicKey, envelope, _ = exportAttestedEnvelope secrets Ed25519 level
 
@@ -804,7 +774,7 @@ let tests =
                 // This is the consequence a holder actually uses: one root
                 // id claim-checks either document, with nothing to
                 // translate.
-                let secrets = InMemorySecretStore() :> ISecretStore
+                let secrets = Fakes.TestSecretStore() :> ISecretStore
                 let! _, _, direct = exportEnvelope secrets Ed25519
                 let! _, _, attested, _ = exportAttestedEnvelope secrets Ed25519 Attribution
 
@@ -821,7 +791,7 @@ let tests =
             }
 
             testAsync "the attested certificate round-trips with the bytes its application seal covers intact" {
-                let secrets = InMemorySecretStore() :> ISecretStore
+                let secrets = Fakes.TestSecretStore() :> ISecretStore
                 let! certificate, publicKey, envelope, signer = exportAttestedEnvelope secrets Ed25519 Attribution
 
                 match CertificateEnvelope.verifyAndReadAttested publicKey (Some root) envelope with
@@ -846,7 +816,7 @@ let tests =
             // ── refusals, each distinct (the Phase 681 triple) ───────────
 
             testAsync "any byte change to the attested payload fails verification" {
-                let secrets = InMemorySecretStore() :> ISecretStore
+                let secrets = Fakes.TestSecretStore() :> ISecretStore
                 let! _, publicKey, envelope, _ = exportAttestedEnvelope secrets Ed25519 Attribution
 
                 let original =
@@ -869,7 +839,7 @@ let tests =
             }
 
             testAsync "a correctly-signed attested statement about a different artefact is refused on the subject" {
-                let secrets = InMemorySecretStore() :> ISecretStore
+                let secrets = Fakes.TestSecretStore() :> ISecretStore
                 let! _, publicKey, envelope, _ = exportAttestedEnvelope secrets Ed25519 Attribution
                 let otherRoot = DsseEnvelope.sha256Hex (Encoding.UTF8.GetBytes "a different fact")
 
@@ -881,7 +851,7 @@ let tests =
             }
 
             testAsync "an attested signature block from another key is refused as unsigned for this key" {
-                let secrets = InMemorySecretStore() :> ISecretStore
+                let secrets = Fakes.TestSecretStore() :> ISecretStore
                 let! _, publicKey, envelope, _ = exportAttestedEnvelope secrets Ed25519 Attribution
 
                 let transplanted = {
@@ -901,7 +871,7 @@ let tests =
             }
 
             testAsync "the signature is checked before the shape on the attested path too" {
-                let secrets = InMemorySecretStore() :> ISecretStore
+                let secrets = Fakes.TestSecretStore() :> ISecretStore
                 let! _, publicKey, envelope, _ = exportAttestedEnvelope secrets Ed25519 Attribution
 
                 let original =
@@ -938,7 +908,7 @@ let tests =
                 // claims. Reading one as the other would hand a holder a
                 // document with no level in it while they believed they
                 // had checked one.
-                let secrets = InMemorySecretStore() :> ISecretStore
+                let secrets = Fakes.TestSecretStore() :> ISecretStore
                 let! _, publicKey, direct = exportEnvelope secrets Ed25519
                 let! _, _, attested, _ = exportAttestedEnvelope secrets Ed25519 Attribution
 
@@ -965,7 +935,7 @@ let tests =
                 // signed perfectly by the deployment's own envelope key. A
                 // reader who trusted the surfaced field would be trusting
                 // a claim the seal never made.
-                let secrets = InMemorySecretStore() :> ISecretStore
+                let secrets = Fakes.TestSecretStore() :> ISecretStore
                 let! certificate, publicKey, _ = issueAttested secrets Ed25519 Attribution
                 let envelopeSigner = DsseEnvelopeSigning.fromSecretStore secrets keyId Ed25519
 
@@ -1002,7 +972,7 @@ let tests =
             }
 
             testAsync "a predicate omitting a surfaced field is refused rather than read as far as it goes" {
-                let secrets = InMemorySecretStore() :> ISecretStore
+                let secrets = Fakes.TestSecretStore() :> ISecretStore
                 let! certificate, publicKey, _ = issueAttested secrets Ed25519 Attribution
                 let envelopeSigner = DsseEnvelopeSigning.fromSecretStore secrets keyId Ed25519
 
@@ -1036,7 +1006,7 @@ let tests =
             // ── disclosure ───────────────────────────────────────────────
 
             testAsync "the attested projection carries a withheld node's disclosure unchanged" {
-                let secrets = InMemorySecretStore() :> ISecretStore
+                let secrets = Fakes.TestSecretStore() :> ISecretStore
                 let! _, _, envelope, _ = exportAttestedEnvelope secrets Ed25519 Attribution
                 let statement = statementTextOf envelope
 
@@ -1063,7 +1033,7 @@ let tests =
             // ── reference vector ─────────────────────────────────────────
 
             testAsync "the pinned attested certificate projects to the pinned statement and signature" {
-                let secrets = InMemorySecretStore() :> ISecretStore
+                let secrets = Fakes.TestSecretStore() :> ISecretStore
 
                 do!
                     secrets.SetSecret(
@@ -1094,7 +1064,7 @@ let tests =
             }
 
             testAsync "an attested envelope verifies through a path written from the specification, not from our helper" {
-                let secrets = InMemorySecretStore() :> ISecretStore
+                let secrets = Fakes.TestSecretStore() :> ISecretStore
                 let! _, publicKey, envelope, _ = exportAttestedEnvelope secrets EcdsaP256 Attribution
 
                 // Derived from the DSSE specification text and BCL

@@ -1,7 +1,6 @@
 module ToolUp.Platform.Tests.InProcess.StoreIdSanitisingTests
 
 open System
-open System.IO
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
@@ -13,6 +12,7 @@ open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
 open ToolUp.Platform.Scope
+open ToolUp.Platform.Testing
 
 // ─── Phase 131 — store-seam id sanitisation ─────────────────────────
 //
@@ -108,25 +108,17 @@ type private RecordingPermissionStore() =
 // proven to fire before any blob write/read reaches the store + its
 // blob backend (the gap the decorator-double tests above cannot close).
 
-let private silentLogger =
-    { new ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn _ = ()
-        member _.Error(_, _) = ()
-    }
-
 let private buildStores (storage: IBlobStorage) : StoreIdSanitisingContract.SanitisedStores =
     let nc =
         NotificationChannel.InMemoryNotificationChannel(None) :> INotificationChannel
 
-    let secrets = ShareTokenStoreTests.InMemorySecretStore() :> ISecretStore
+    let secrets = Fakes.TestSecretStore() :> ISecretStore
 
     {
         Team = SanitisingTeamStore(TeamStore(storage, nc) :> ITeamStore) :> ITeamStore
-        Permission = SanitisingPermissionStore(PermissionStore(storage, silentLogger)) :> IPermissionStore
+        Permission = SanitisingPermissionStore(PermissionStore(storage, Logger.silent)) :> IPermissionStore
         ShareToken =
-            SanitisingShareTokenStore(ShareTokenStore.create storage secrets (NoOpAuditLog()) silentLogger)
+            SanitisingShareTokenStore(ShareTokenStore.create storage secrets (NoOpAuditLog()) Logger.silent)
             :> IShareTokenStore
     }
 
@@ -136,11 +128,8 @@ let private inMemoryBackedContract =
 
 let private localFileBackedContract =
     StoreIdSanitisingContract.tests "local-file blob backend" (fun () ->
-        let root =
-            Path.Combine(Path.GetTempPath(), "toolup-storeseam-" + Guid.NewGuid().ToString("N"))
-
-        Directory.CreateDirectory(root) |> ignore
-        buildStores (LocalFileStorage.LocalFileStorage(root) :> IBlobStorage))
+        let root = TempDir.forRun "storeseam"
+        buildStores (LocalFileStorage.LocalFileStorage(root.Path) :> IBlobStorage))
 
 [<Tests>]
 let tests =

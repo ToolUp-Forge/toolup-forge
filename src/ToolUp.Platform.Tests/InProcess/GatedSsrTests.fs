@@ -31,6 +31,7 @@ open ToolUp.Platform.Scope
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Audit
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 86 — gated / tenant-scoped / audience-targeted SSR ────────
 //
@@ -300,11 +301,8 @@ let private exclusionTests =
         <| async {
             // A real blob-backed entity store; save a PublicPageEntity under
             // team A's scope and confirm only a team-A principal resolves it.
-            let tempDir =
-                Path.Combine(Path.GetTempPath(), "toolup-gated-ssr-" + Guid.NewGuid().ToString("N"))
-
-            Directory.CreateDirectory tempDir |> ignore
-            let blob = LocalFileStorage.LocalFileStorage(tempDir) :> IBlobStorage
+            use tempDir = TempDir.create "gated-ssr"
+            let blob = LocalFileStorage.LocalFileStorage(tempDir.Path) :> IBlobStorage
             let dos = DataObjectStore(blob) :> IDataObjectStore
             let registry = EntityRegistry()
             registry.Register<PublicPageEntity>(PublicPageEntity.registration)
@@ -327,7 +325,7 @@ let private exclusionTests =
             let logger = ConsoleLogger.ConsoleLogger() :> ILogger
 
             let loader =
-                new MarkdownContentLoader(ContentRoot tempDir, logger, hotReload = false)
+                new MarkdownContentLoader(ContentRoot tempDir.Path, logger, hotReload = false)
 
             let api = PublicContentApiImpl.create loader (Some store) []
 
@@ -419,14 +417,6 @@ let private authProvider () : IAuthProvider =
         member _.IsCryptographicallyVerified = true
     }
 
-let private silentLogger: ILogger =
-    { new ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn _ = ()
-        member _.Error(_, _) = ()
-    }
-
 /// The pages of the probe: one per audience.
 let private pipelinePages =
     [
@@ -464,7 +454,7 @@ let private startHostWithApi
         let hasTeams = DeploymentConfig.hasTeamScope config
         let blob = ToolUp.Platform.Testing.Fakes.standardBlobStorage ()
         let notifications = InMemoryNotificationChannel(None) :> INotificationChannel
-        let teamStore = TeamManagement.TeamStore(blob, notifications, silentLogger)
+        let teamStore = TeamManagement.TeamStore(blob, notifications, Logger.silent)
 
         let permissionStore =
             PermissionStore.PermissionStore(blob) :> PermissionStore.IPermissionStore
@@ -505,7 +495,7 @@ let private startHostWithApi
                         .ConfigureServices(fun services ->
                             services.AddGiraffe() |> ignore
                             services.AddDataProtection() |> ignore
-                            services.AddSingleton<ILogger>(silentLogger) |> ignore
+                            services.AddSingleton<ILogger>(Logger.silent) |> ignore
                             services.AddSingleton<IAuthProvider>(auth) |> ignore
 
                             if hasTeams then
@@ -521,7 +511,7 @@ let private startHostWithApi
                                 config
                                 (if hasTeams then Some teamStore else None)
                                 notifications
-                                silentLogger
+                                Logger.silent
                                 []
                                 []
                                 []
@@ -2091,21 +2081,9 @@ let private anonymousOpenApiRoutes: HttpHandler list = [
     GET >=> route "/api/ai/events" >=> text "assistant stream"
 ]
 
-/// Phase 1002 — an `IAuditLog` that keeps every row it is handed.
-let private recordingAuditLog () =
-    let rows = System.Collections.Concurrent.ConcurrentQueue<string * AuditEvent>()
-
-    let log =
-        { new IAuditLog with
-            member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
-                rows.Enqueue((scopeId, audit))
-                return Ok()
-            }
-
-            member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
-        }
-
-    rows, log
+/// The `(stream, event)` rows an audit log has been handed so far.
+let private rowsOf (audit: TestAuditLog) =
+    audit.Records |> List.map (fun r -> r.StreamKey, r.Event)
 
 let private readerConfinementTests =
     testList "Phase 1002 — a reader is refused on every /api route, and its sign-in is audited" [
@@ -2151,7 +2129,7 @@ let private readerConfinementTests =
         testCaseAsync "a reader's sign-in writes one PublicationReaderSignedIn row under _platform, and no member login"
         <| async {
             let s = issuer.Force()
-            let rows, auditLog = recordingAuditLog ()
+            let auditLog = TestAuditLog()
 
             let register (services: IServiceCollection) =
                 services.AddMemoryCache() |> ignore
@@ -2173,7 +2151,7 @@ let private readerConfinementTests =
 
             // `Record` is fire-and-forget; wait (bounded) for both rows.
             let rec settle attempt = async {
-                let snapshot = rows.ToArray() |> List.ofArray
+                let snapshot = rowsOf auditLog
 
                 let landed =
                     snapshot
@@ -2256,12 +2234,9 @@ let private probeRequest
 
 /// Wait (bounded) until the recorded rows satisfy `landed` — `Record` is
 /// fire-and-forget.
-let private settleRows
-    (rows: System.Collections.Concurrent.ConcurrentQueue<string * AuditEvent>)
-    (landed: (string * AuditEvent) list -> bool)
-    =
+let private settleRows (audit: TestAuditLog) (landed: (string * AuditEvent) list -> bool) =
     let rec go attempt = async {
-        let snapshot = rows.ToArray() |> List.ofArray
+        let snapshot = rowsOf audit
 
         if landed snapshot || attempt >= 60 then
             return snapshot
@@ -2308,20 +2283,6 @@ let private failingAuthAuditHook =
     { new IAuthAuditHook with
         member _.RecordDenial _ = async { return failwith "denial trail unavailable" }
     }
-
-/// Phase 1006 — a logger that keeps its warnings.
-let private warningLogger () =
-    let warnings = System.Collections.Concurrent.ConcurrentQueue<string>()
-
-    let log =
-        { new ILogger with
-            member _.Debug _ = ()
-            member _.Info _ = ()
-            member _.Warn message = warnings.Enqueue message
-            member _.Error(_, _) = ()
-        }
-
-    warnings, log
 
 let private readerRefusalAuditTests =
     testList "Phase 1006 — a reader's /api refusals are audited" [
@@ -2418,7 +2379,7 @@ let private readerRefusalAuditTests =
             "a reader refused on each route class writes one SurfaceDenied row naming the class, and no request content"
         <| async {
             let s = issuer.Force()
-            let rows, auditLog = recordingAuditLog ()
+            let auditLog = TestAuditLog()
 
             let register (services: IServiceCollection) =
                 services.AddMemoryCache() |> ignore
@@ -2433,7 +2394,8 @@ let private readerRefusalAuditTests =
                 Expect.equal status 403 $"{routeClass} {path}: refused"
                 Expect.stringContains body "publication_reader_not_admitted" $"{routeClass} {path}: as a reader"
 
-            let! snapshot = settleRows rows (fun snapshot -> (surfaceDenials snapshot).Length >= readerProbes.Length)
+            let! snapshot =
+                settleRows auditLog (fun snapshot -> (surfaceDenials snapshot).Length >= readerProbes.Length)
 
             do! host.StopAsync() |> Async.AwaitTask
 
@@ -2467,13 +2429,13 @@ let private readerRefusalAuditTests =
             "repeated refusals inside the window: one row each, coalesced into one AuthorizationDenied plus a counted summary"
         <| async {
             let s = issuer.Force()
-            let rows, auditLog = recordingAuditLog ()
+            let auditLog = TestAuditLog()
             let now = ref (DateTimeOffset(2026, 10, 17, 9, 0, 0, TimeSpan.Zero))
 
             let hook =
                 ToolUp.Platform.Audit.AuthAuditHook.AuthAuditHook(
                     auditLog,
-                    silentLogger,
+                    Logger.silent,
                     TimeSpan.FromSeconds 60.0,
                     fun () -> now.Value
                 )
@@ -2498,7 +2460,7 @@ let private readerRefusalAuditTests =
             Expect.equal status 403 "refused after the window"
 
             let! snapshot =
-                settleRows rows (fun snapshot ->
+                settleRows auditLog (fun snapshot ->
                     (surfaceDenials snapshot).Length >= 6
                     && (authorizationDenials snapshot |> List.sumBy _.DedupCount) >= 6)
 
@@ -2523,7 +2485,7 @@ let private readerRefusalAuditTests =
         testCaseAsync "an app member's 403 writes no reader kind, class or roles"
         <| async {
             let s = issuer.Force()
-            let rows, auditLog = recordingAuditLog ()
+            let auditLog = TestAuditLog()
 
             let register (services: IServiceCollection) =
                 services.AddMemoryCache() |> ignore
@@ -2539,7 +2501,7 @@ let private readerRefusalAuditTests =
             Expect.equal status 403 "the member is refused"
             Expect.stringContains body "team_required" "as a member"
 
-            let! snapshot = settleRows rows (fun snapshot -> not (List.isEmpty (surfaceDenials snapshot)))
+            let! snapshot = settleRows auditLog (fun snapshot -> not (List.isEmpty (surfaceDenials snapshot)))
             do! host.StopAsync() |> Async.AwaitTask
 
             match surfaceDenials snapshot with
@@ -2570,18 +2532,18 @@ let private readerRefusalAuditTests =
                 "asynchronous",
                 "AuthorizationDenied audit write failed",
                 fun services ->
-                    let _, auditLog = recordingAuditLog ()
+                    let auditLog = TestAuditLog()
                     services.AddSingleton<IAuditLog>(auditLog) |> ignore
                     services.AddSingleton<IAuthAuditHook>(failingAuthAuditHook) |> ignore
             ]
 
             for label, expectedWarning, arm in arms do
-                let warnings, logger = warningLogger ()
+                let logger = Logger.recording ()
 
                 let register (services: IServiceCollection) =
                     services.AddMemoryCache() |> ignore
                     arm services
-                    services.AddSingleton<ILogger>(logger) |> ignore
+                    services.AddSingleton<ILogger>(logger :> ILogger) |> ignore
 
                 use! host = startHostWith authenticatedSurface (oidcProviderWith publicationMapping) register []
                 use client = host.GetTestClient()
@@ -2592,7 +2554,7 @@ let private readerRefusalAuditTests =
                 Expect.stringContains body "publication_reader_not_admitted" $"{label}: with the same code"
 
                 let rec settle attempt = async {
-                    let logged = warnings.ToArray() |> List.ofArray
+                    let logged = logger.MessagesAt LogSeverity.Warn
 
                     if logged |> List.exists (fun w -> w.Contains expectedWarning) || attempt >= 60 then
                         return logged
@@ -2869,13 +2831,13 @@ let private inPlatformGrantTests =
             let notifications = InMemoryNotificationChannel(None) :> INotificationChannel
 
             let teams =
-                TeamManagement.TeamStore(blob, notifications, silentLogger) :> TeamManagement.ITeamStore
+                TeamManagement.TeamStore(blob, notifications, Logger.silent) :> TeamManagement.ITeamStore
 
             let! _ = teams.CreateTeam(TeamId "team-a", "Team A")
             let! _ = teams.AddMember(TeamId "team-a", UserId "olive", TeamRole.Owner)
             let! _ = teams.AddMember(TeamId "team-a", UserId "mo", TeamRole.Member)
             let store = freshGrantStore ()
-            let rows, auditLog = recordingAuditLog ()
+            let auditLog = TestAuditLog()
 
             let apiFor (subject: Subject) (platformAdmin: bool) =
                 let services = ServiceCollection()
@@ -2946,7 +2908,7 @@ let private inPlatformGrantTests =
             Expect.isEmpty held "the grant is gone"
 
             let audited =
-                rows
+                rowsOf auditLog
                 |> Seq.choose (fun (scope, evt) ->
                     match evt with
                     | PublicationReaderGranted p -> Some(scope, "granted", p.ActorId, p.ReaderId, p.Role)
@@ -3126,7 +3088,7 @@ let private teamAdmissionTests =
     let resolve (admit: bool) (invites: (string * DateTime) list) subject claims = async {
         let s = issuer.Force()
         let entries, store = invitesFor invites
-        let _, auditLog = recordingAuditLog ()
+        let auditLog = TestAuditLog()
 
         let register (services: IServiceCollection) =
             services.AddMemoryCache() |> ignore

@@ -1,7 +1,6 @@
 module ToolUp.Platform.Tests.InProcess.DataMigrationTests
 
 open System
-open System.IO
 open System.Text
 open Expecto
 open ToolUp.Platform
@@ -10,6 +9,7 @@ open ToolUp.Platform.Infra.DataObjectStore
 open ToolUp.Platform.FileProcessor
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
+open ToolUp.Platform.Testing
 
 // ─── Phase 10a — module data-migration framework ─────────────────
 //
@@ -30,13 +30,6 @@ open ToolUp.Platform.Config
 //      the rest of the scope still migrates.
 
 // ─── Fixtures ────────────────────────────────────────────────────
-
-type private SilentLogger() =
-    interface ILogger with
-        member _.Debug(_) = ()
-        member _.Info(_) = ()
-        member _.Warn(_) = ()
-        member _.Error(_, _) = ()
 
 /// A migrator built from a plain byte-array function, so a test states
 /// only the version pair and the transformation.
@@ -91,12 +84,8 @@ let private dataType (id: string) (version: int) (migrations: IDataMigrator list
 let private text (bytes: byte[]) = Encoding.UTF8.GetString bytes
 let private bytes (s: string) = Encoding.UTF8.GetBytes s
 
-let private tempStorage () =
-    let dir =
-        Path.Combine(Path.GetTempPath(), "toolup-migration-test-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory dir |> ignore
-    LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage
+let private tempStorage (dir: TempDir) =
+    LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
 
 /// Full runner harness over real blob-backed stores — the same
 /// `DataObjectStore` a deployment runs, not a stub, so the stamp /
@@ -109,13 +98,13 @@ type private Harness = {
     Scope: string
 }
 
-let private harness (dataTypes: DataType list) =
-    let storage = tempStorage ()
+let private harness (dir: TempDir) (dataTypes: DataType list) =
+    let storage = tempStorage dir
     let objects = DataObjectStore(storage) :> IDataObjectStore
     let statusStore = MigrationStatusStore.create storage
     let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
     let registry = MigrationRegistry(dataTypes, [])
-    let logger = SilentLogger() :> ILogger
+    let logger = Logger.silent
 
     {
         Runner = MigrationRunner(registry, statusStore, objects, events, logger)
@@ -282,7 +271,8 @@ let private statusStoreTests =
         }
 
         testAsync "round-trips a status and keeps teams apart" {
-            let store = MigrationStatusStore.create (tempStorage ())
+            use dir = TempDir.create "migration-test"
+            let store = MigrationStatusStore.create (tempStorage dir)
 
             let mine = {
                 MigrationStatus.idle "team-a" "SalesData" 3 with
@@ -306,7 +296,8 @@ let private statusStoreTests =
         }
 
         testAsync "an unsafe key is refused rather than written outside the prefix" {
-            let store = MigrationStatusStore.create (tempStorage ())
+            use dir = TempDir.create "migration-test"
+            let store = MigrationStatusStore.create (tempStorage dir)
 
             let! result =
                 store.Write {
@@ -350,7 +341,8 @@ let private runnerTests =
                 TestMigrator("T", 1, 2, (fun b -> bytes (text b + "-v2"))) :> IDataMigrator
 
             let dt = dataType "T" 2 [ upgrade ]
-            let h = harness [ dt ]
+            use dir = TempDir.create "migration-test"
+            let h = harness dir [ dt ]
 
             let! _ = seed h "T" "obj-1" "payload"
             let! status = h.Runner.RunForTeam(h.Scope, dt)
@@ -381,7 +373,8 @@ let private runnerTests =
             let one = TestMigrator("T", 1, 2, (fun b -> bytes (text b + "-a"))) :> IDataMigrator
             let two = TestMigrator("T", 2, 3, (fun b -> bytes (text b + "-b"))) :> IDataMigrator
             let dt = dataType "T" 3 [ one; two ]
-            let h = harness [ dt ]
+            use dir = TempDir.create "migration-test"
+            let h = harness dir [ dt ]
 
             let! _ = seed h "T" "obj-1" "x"
             let! status = h.Runner.RunForTeam(h.Scope, dt)
@@ -398,7 +391,8 @@ let private runnerTests =
                 TestMigrator("T", 1, 2, (fun b -> bytes (text b + "!"))) :> IDataMigrator
 
             let dt = dataType "T" 2 [ upgrade ]
-            let h = harness [ dt ]
+            use dir = TempDir.create "migration-test"
+            let h = harness dir [ dt ]
 
             let! _ = seed h "T" "obj-1" "a"
             let! _ = seed h "T" "obj-2" "b"
@@ -421,7 +415,8 @@ let private runnerTests =
 
             let dt = dataType "T" 2 [ upgrade ]
             let other = dataType "OTHER" 1 []
-            let h = harness [ dt; other ]
+            use dir = TempDir.create "migration-test"
+            let h = harness dir [ dt; other ]
 
             let! _ = seed h "T" "mine" "a"
             let! _ = seed h "OTHER" "theirs" "b"
@@ -439,7 +434,8 @@ let private runnerTests =
             let poison = ThrowingMigrator("T", 1, 2, (fun b -> text b = "bad")) :> IDataMigrator
 
             let dt = dataType "T" 2 [ poison ]
-            let h = harness [ dt ]
+            use dir = TempDir.create "migration-test"
+            let h = harness dir [ dt ]
 
             let! _ = seed h "T" "good-1" "fine"
             let! _ = seed h "T" "bad-1" "bad"
@@ -475,7 +471,8 @@ let private runnerTests =
             let dt1 =
                 dataType "T" 2 [ ThrowingMigrator("T", 1, 2, (fun b -> text b = "bad")) :> IDataMigrator ]
 
-            let h1 = harness [ dt1 ]
+            use dir1 = TempDir.create "migration-test"
+            let h1 = harness dir1 [ dt1 ]
             let! _ = seed h1 "T" "good-1" "fine"
             let! _ = seed h1 "T" "bad-1" "bad"
             let! _ = h1.Runner.RunForTeam(h1.Scope, dt1)
@@ -485,7 +482,7 @@ let private runnerTests =
             let registry = MigrationRegistry([ dt2 ], [])
 
             let repaired =
-                MigrationRunner(registry, h1.StatusStore, h1.Objects, h1.Events, SilentLogger() :> ILogger)
+                MigrationRunner(registry, h1.StatusStore, h1.Objects, h1.Events, Logger.silent)
 
             let! second = repaired.RunForTeam(h1.Scope, dt2)
             Expect.equal second.MigratedObjects 1 "only the previously-failed object had work left"
@@ -496,7 +493,8 @@ let private runnerTests =
 
         testAsync "a migrator returning an unusable payload fails that object rather than writing it" {
             let dt = dataType "T" 2 [ BadPayloadMigrator("T", 1, 2) :> IDataMigrator ]
-            let h = harness [ dt ]
+            use dir = TempDir.create "migration-test"
+            let h = harness dir [ dt ]
 
             let! _ = seed h "T" "obj-1" "a"
             let! status = h.Runner.RunForTeam(h.Scope, dt)
@@ -511,7 +509,8 @@ let private runnerTests =
         testAsync "an object with no migrator for its version fails alone, without blocking the pass" {
             // `obj-1` sits at V1 with only a 2→3 step registered.
             let dt = dataType "T" 3 [ TestMigrator("T", 2, 3, id) :> IDataMigrator ]
-            let h = harness [ dt ]
+            use dir = TempDir.create "migration-test"
+            let h = harness dir [ dt ]
 
             let! _ = seed h "T" "obj-1" "a"
             let! status = h.Runner.RunForTeam(h.Scope, dt)
@@ -525,7 +524,8 @@ let private runnerTests =
             let a = TestMigrator("T", 1, 2, (fun b -> bytes (text b + "!"))) :> IDataMigrator
             let b = TestMigrator("T", 1, 3, (fun b -> bytes (text b + "?"))) :> IDataMigrator
             let dt = dataType "T" 3 [ a; b ]
-            let h = harness [ dt ]
+            use dir = TempDir.create "migration-test"
+            let h = harness dir [ dt ]
 
             let! _ = seed h "T" "obj-1" "a"
             let! status = h.Runner.RunForTeam(h.Scope, dt)
@@ -544,7 +544,8 @@ let private runnerTests =
 
         testAsync "the status blob records the pass, so the admin table reads it back" {
             let dt = dataType "T" 2 [ TestMigrator("T", 1, 2, id) :> IDataMigrator ]
-            let h = harness [ dt ]
+            use dir = TempDir.create "migration-test"
+            let h = harness dir [ dt ]
 
             let! _ = seed h "T" "obj-1" "a"
             let! _ = h.Runner.RunForTeam(h.Scope, dt)
@@ -559,7 +560,8 @@ let private runnerTests =
 
         testAsync "a scope with nothing to migrate completes without writing anything" {
             let dt = dataType "T" 2 [ TestMigrator("T", 1, 2, id) :> IDataMigrator ]
-            let h = harness [ dt ]
+            use dir = TempDir.create "migration-test"
+            let h = harness dir [ dt ]
 
             let! status = h.Runner.RunForTeam(h.Scope, dt)
             Expect.equal status.TotalObjects 0 "empty scope"

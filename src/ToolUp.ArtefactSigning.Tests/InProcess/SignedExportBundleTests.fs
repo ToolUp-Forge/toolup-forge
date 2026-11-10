@@ -7,6 +7,7 @@ open System
 open System.Text
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Testing
 open ToolUp.ArtefactSigning
 open ToolUp.ArtefactSigning.Tests.Support.InMemoryStores
 
@@ -39,7 +40,7 @@ let private toArtefactSignature (sig_: ExportSignature) : ArtefactSignature = {
 }
 
 let private newBundle () =
-    let secrets = InMemorySecretStore()
+    let secrets = TestSecretStore()
     let audit = InMemoryAuditLog()
 
     let signer =

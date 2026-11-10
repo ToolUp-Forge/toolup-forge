@@ -6,6 +6,7 @@
         <IsPackable>false</IsPackable>
     </PropertyGroup>
     <ItemGroup>
+        <Compile Include="..\ToolUp.Platform.Testing\Testing\CoreFakes.fs" Link="Testing\CoreFakes.fs" />
         <Compile Include="Support\InMemoryStores.fs" />
         <Compile Include="Support\KeyManagedStandIn.fs" />
         <Compile Include="Contracts\IArtefactSignerContract.fs" />

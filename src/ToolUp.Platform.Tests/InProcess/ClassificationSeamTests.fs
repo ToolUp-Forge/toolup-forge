@@ -18,28 +18,18 @@ open ToolUp.Platform.Compose
 open ToolUp.AI
 open ToolUp.AI.AIToolRegistry
 open ToolUp.Platform.Providers
+open ToolUp.Platform.Testing
 
 // A module's declared classifications are the whole of what a
 // deployment writes: the compose chain registers the classifier and the egress
 // gate, and the doors to a model consult them. Phase 1251.
 
-type private RecordingAuditLog() =
-    let recorded = ResizeArray<AuditEvent>()
-
-    member _.Blocked =
-        recorded
-        |> Seq.choose (function
-            | EgressBlocked p -> Some p
-            | _ -> None)
-        |> List.ofSeq
-
-    interface IAuditLog with
-        member _.Record(AuditScope.StreamKey _, _actor, audit) = async {
-            lock recorded (fun () -> recorded.Add audit)
-            return Ok()
-        }
-
-        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return List.ofSeq recorded }
+/// The egress refusals a recording audit log holds, in order.
+let private blocked (audit: TestAuditLog) =
+    audit.Events
+    |> List.choose (function
+        | EgressBlocked p -> Some p
+        | _ -> None)
 
 /// Answers every entity read with the rows it was built with.
 let private entityStoreOf (rows: string list) : IEntityStore =
@@ -96,7 +86,7 @@ let private ordersModule =
 
 /// The provider a composed app's own registrations produce, over a recording
 /// audit log and whatever the door under test reads.
-let private providerOf (audit: RecordingAuditLog) (substrate: IServiceCollection -> unit) (app: ServerApp) =
+let private providerOf (audit: TestAuditLog) (substrate: IServiceCollection -> unit) (app: ServerApp) =
     let services = ServiceCollection()
     services.AddSingleton<IAuditLog>(audit) |> ignore
     substrate services
@@ -239,7 +229,7 @@ let tests =
             let provider =
                 composed [ ServerModule.create "Other" ]
                 |> ServerApp.addServiceConfig id
-                |> providerOf (RecordingAuditLog()) ignore
+                |> providerOf (TestAuditLog()) ignore
 
             Expect.isNull (box (provider.GetService<IFieldClassifier>())) "no classifier"
             Expect.isNull (box (provider.GetService<IEgressGate>())) "no gate"
@@ -252,7 +242,7 @@ let tests =
                     ServerModule.create "Billing"
                     |> ServerModule.withClassifications [ FieldClassification.create "Invoice" "Iban" Spi ]
                 ]
-                |> providerOf (RecordingAuditLog()) ignore
+                |> providerOf (TestAuditLog()) ignore
 
             let classifier = provider.GetRequiredService<IFieldClassifier>()
             let! order = classifier.IsClassified("Order", "CustomerEmail")
@@ -277,7 +267,7 @@ let tests =
 
         testCaseAsync "a declaring module is refused on the forbidden surface and admitted on the permitted one"
         <| async {
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
 
             let gate =
                 (composed [ ordersModule ] |> providerOf audit ignore).GetRequiredService<IEgressGate>()
@@ -290,7 +280,7 @@ let tests =
             Expect.equal (toModel.TryFind "CustomerEmail") None "refused at the model boundary"
             Expect.equal (toModel.TryFind "Total") (Some "12") "an unclassified field passes"
             Expect.equal toResponse fields "admitted on a response"
-            Expect.equal (audit.Blocked |> List.map _.FieldPath) [ "CustomerEmail" ] "the refusal is audited, once"
+            Expect.equal (blocked audit |> List.map _.FieldPath) [ "CustomerEmail" ] "the refusal is audited, once"
         }
 
         testCaseAsync "the deployment's policy replaces the default"
@@ -298,7 +288,7 @@ let tests =
             let provider =
                 composed [ ordersModule ]
                 |> ServerApp.withClassificationEgressPolicy EgressGate.permissiveEgressPolicy
-                |> providerOf (RecordingAuditLog()) ignore
+                |> providerOf (TestAuditLog()) ignore
 
             let fields = Map.ofList [ "CustomerEmail", "a@b.example" ]
 
@@ -318,7 +308,7 @@ let tests =
             let provider =
                 composed [ ordersModule ]
                 |> ServerApp.addServiceConfig (fun s -> s.AddSingleton<IFieldClassifier>(hostClassifier))
-                |> providerOf (RecordingAuditLog()) ignore
+                |> providerOf (TestAuditLog()) ignore
 
             Expect.isTrue
                 (obj.ReferenceEquals(provider.GetRequiredService<IFieldClassifier>(), hostClassifier))
@@ -345,14 +335,14 @@ let tests =
                     s.AddSingleton<IFieldClassifier>(
                         DefaultFieldClassifier.create [ FieldClassification.create "Order" "Total" Financial ]
                     ))
-                |> providerOf (RecordingAuditLog()) ignore
+                |> providerOf (TestAuditLog()) ignore
 
             Expect.isNotNull (box (provider.GetService<IEgressGate>())) "the gate stands over the host's classifier"
         }
 
         testCaseAsync "query_entity withholds a classified field, names it and audits it"
         <| async {
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
 
             let provider =
                 composed [ ordersModule ]
@@ -364,13 +354,13 @@ let tests =
             Expect.equal (withheldFields result) [ "Order.CustomerEmail" ] "the field path is named"
             Expect.isFalse (result.Contains "a@b.example") "the value did not cross"
             Expect.stringContains result "\"Total\":12" "the other fields did"
-            Expect.equal (audit.Blocked |> List.map _.Actor) [ "alice" ] "the refusal is audited against the caller"
-            Expect.equal (audit.Blocked |> List.map _.Boundary) [ "AiToolResult" ] "at the model boundary"
+            Expect.equal (blocked audit |> List.map _.Actor) [ "alice" ] "the refusal is audited against the caller"
+            Expect.equal (blocked audit |> List.map _.Boundary) [ "AiToolResult" ] "at the model boundary"
         }
 
         testCaseAsync "query_entity refuses a predicate over a classified field before it reads"
         <| async {
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
 
             let provider =
                 composed [ ordersModule ]
@@ -388,14 +378,14 @@ let tests =
                 "ClassifiedFieldInPredicate"
                 "a filter on the field answers questions about it"
 
-            Expect.equal (audit.Blocked |> List.map _.FieldPath) [ "CustomerEmail" ] "and is audited as a refusal"
+            Expect.equal (blocked audit |> List.map _.FieldPath) [ "CustomerEmail" ] "and is audited as a refusal"
         }
 
         testCaseAsync "query_entity admits a predicate over an unclassified field"
         <| async {
             let provider =
                 composed [ ordersModule ]
-                |> providerOf (RecordingAuditLog()) (fun s -> s.AddSingleton(entityStoreOf [ orderRow ]) |> ignore)
+                |> providerOf (TestAuditLog()) (fun s -> s.AddSingleton(entityStoreOf [ orderRow ]) |> ignore)
 
             let! result =
                 (builtIn "_platform.ai.query_entity").Execute
@@ -409,7 +399,7 @@ let tests =
         <| async {
             let provider =
                 composed [ ordersModule ]
-                |> providerOf (RecordingAuditLog()) (fun s -> s.AddSingleton(entityStoreOf [ orderRow ]) |> ignore)
+                |> providerOf (TestAuditLog()) (fun s -> s.AddSingleton(entityStoreOf [ orderRow ]) |> ignore)
 
             let! result =
                 (builtIn "_platform.ai.query_entity").Execute (requestOver provider) """{"entityType":"Shipment"}"""
@@ -420,7 +410,7 @@ let tests =
 
         testCaseAsync "a module's tool result is gated, as Execute and as Answer"
         <| async {
-            let provider = composed [ ordersModule ] |> providerOf (RecordingAuditLog()) ignore
+            let provider = composed [ ordersModule ] |> providerOf (TestAuditLog()) ignore
             let ctx = requestOver provider
             let tool = moduleTool """{"orders":[{"customer_email":"a@b.example","total":12}]}"""
 
@@ -449,9 +439,9 @@ let tests =
             let tool = moduleTool text
 
             let! gated =
-                tool.Execute (requestOver (composed [ ordersModule ] |> providerOf (RecordingAuditLog()) ignore)) "{}"
+                tool.Execute (requestOver (composed [ ordersModule ] |> providerOf (TestAuditLog()) ignore)) "{}"
 
-            let! ungated = tool.Execute (requestOver (composed [] |> providerOf (RecordingAuditLog()) ignore)) "{}"
+            let! ungated = tool.Execute (requestOver (composed [] |> providerOf (TestAuditLog()) ignore)) "{}"
 
             Expect.equal gated text "a declaring module, an untouched result"
             Expect.equal ungated text "a composition with no classification"
@@ -461,7 +451,7 @@ let tests =
         <| async {
             let provider =
                 composed [ ordersModule ]
-                |> providerOf (RecordingAuditLog()) (fun s ->
+                |> providerOf (TestAuditLog()) (fun s ->
                     s.AddSingleton(queryBusOf orderRow) |> ignore
 
                     s.AddSingleton(ModuleAIExposureRegistry.ofDeclarations [ "Orders", ModuleAIExposure.Queryable ])
@@ -483,7 +473,7 @@ let tests =
 
             let provider =
                 composed [ ordersModule ]
-                |> providerOf (RecordingAuditLog()) (fun s ->
+                |> providerOf (TestAuditLog()) (fun s ->
                     s.AddSingleton(resultStoreOf padded) |> ignore
 
                     s.AddSingleton(ModuleAIExposureRegistry.ofDeclarations [ "Orders", ModuleAIExposure.Queryable ])
@@ -501,7 +491,7 @@ let tests =
         testCaseAsync "a client-resident tool's result is gated before the model reads it"
         <| async {
             let toolName = "orders.client"
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
             let ctx = requestOver (composed [ ordersModule ] |> providerOf audit ignore)
             let dispatch = ClientToolDispatch.ClientToolDispatchRegistry()
 
@@ -557,7 +547,7 @@ let tests =
                 |> composed
                 |> AICompose.withAI (AICompose.AIOptions.create (StubProviderFactory()) (StubProviderProfile()))
 
-            let provider = app |> providerOf (RecordingAuditLog()) ignore
+            let provider = app |> providerOf (TestAuditLog()) ignore
             let registry = provider.GetRequiredService<AIToolRegistry.AIToolRegistry>()
 
             let tool =
